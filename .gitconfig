@@ -2,7 +2,7 @@
 	name = FridrichMethod
 	email = zhaoyangli@stanford.edu
 [core]
-	excludesfile = /Users/zhaoyangli/.gitignore_global
+	excludesfile = ~/.gitignore_global
 [filter "lfs"]
 	smudge = git-lfs smudge --skip -- %f
 	process = git-lfs filter-process --skip
