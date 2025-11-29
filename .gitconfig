@@ -1,0 +1,14 @@
+[user]
+	name = FridrichMethod
+	email = zhaoyangli@stanford.edu
+[core]
+	excludesfile = /Users/zhaoyangli/.gitignore_global
+[filter "lfs"]
+	smudge = git-lfs smudge --skip -- %f
+	process = git-lfs filter-process --skip
+	required = true
+	clean = git-lfs clean -- %f
+[init]
+	defaultbranch = main
+[rerere]
+	enabled = true
