@@ -1,0 +1,3 @@
+[submodule "PyMOLScripts"]
+	path = PyMOLScripts
+	url = https://github.com/FridrichMethod/PyMOLScripts.git
