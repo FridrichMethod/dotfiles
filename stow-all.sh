@@ -6,11 +6,13 @@ set -euo pipefail
 # Example: ./stow-all.sh wsl-ubuntu
 HOST="${1:-}"
 if [[ -z "$HOST" ]]; then
-  echo "Usage: $0 <host-dir>   (e.g., ubuntu | wsl-ubuntu | mac | lab-ubuntu)" >&2
+  echo "Usage: $0 <host-dir>   (e.g., mac | ubuntu | wsl-ubuntu | lab-ubuntu)" >&2
   exit 2
 fi
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+echo "Stowing from $REPO_ROOT"
+
 COMMON_DIR="${REPO_ROOT}/common"
 HOST_DIR="${REPO_ROOT}/${HOST}"
 
@@ -23,21 +25,12 @@ if [[ ! -d "$HOST_DIR" ]]; then
   exit 1
 fi
 
-list_pkgs() {
-  # Stow packages are direct subdirectories of the stow directory;
-  # package names cannot contain '/'.
-  find "$1" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
-}
-
 cd "$REPO_ROOT" # ensures ./.stowrc is picked up
 
-mapfile -t COMMON_PKGS < <(list_pkgs "$COMMON_DIR")
-mapfile -t HOST_PKGS < <(list_pkgs "$HOST_DIR")
+echo "Stowing common packages:"
+# shellcheck disable=SC2046
+stow -d "$COMMON_DIR" $(basename -a "${COMMON_DIR}"/*/)
 
-# Common packages (installed on every machine)
-echo "Stowing common packages: ${COMMON_PKGS[*]}"
-stow -d "$COMMON_DIR" "${COMMON_PKGS[@]}"
-
-# Host-specific packages
-echo "Stowing host-specific packages: ${HOST_PKGS[*]}"
-stow -d "$HOST_DIR" "${HOST_PKGS[@]}"
+echo "Stowing host-specific packages:"
+# shellcheck disable=SC2046
+stow -d "$HOST_DIR" $(basename -a "${HOST_DIR}"/*/)
