@@ -1,6 +1,6 @@
 [credential]
 	helper = "/mnt/c/Program Files/Git/mingw64/bin/git-credential-manager.exe"
-	credentialStore = dpapi
+	credentialstore = dpapi
 
 [credential "https://github.com"]
 	username = FridrichMethod
