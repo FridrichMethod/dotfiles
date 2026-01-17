@@ -1,0 +1,4 @@
+[submodule "common/pymol/PyMOLScripts"]
+	path = common/pymol/PyMOLScripts
+	url = https://github.com/FridrichMethod/PyMOLScripts.git
+	branch = main

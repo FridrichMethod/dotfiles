@@ -1,0 +1,54 @@
+Host *
+    AddKeysToAgent yes
+    IdentitiesOnly yes
+    StrictHostKeyChecking accept-new
+    IdentityFile ~/.ssh/id_ed25519
+
+Host pku
+    HostName 10.100.1.88
+    User lhlai_lzy
+    IdentityFile ~/.ssh/id_rsa
+    HostKeyAlgorithms +ssh-rsa
+    PubkeyAcceptedAlgorithms +ssh-rsa
+
+Host sherlock
+    HostName sherlock.stanford.edu
+    User zyli2002
+
+Host marlowe
+    HostName login.marlowe.stanford.edu
+    User zyli2002
+
+Host github.com
+    HostName github.com
+    User git
+
+Host lambda-*
+    User ubuntu
+
+Host win
+    HostName 100.74.222.41
+    Port 22
+    User zhaoyangli
+
+Host mac
+    HostName 100.66.224.12
+    Port 22
+    User zhaoyangli
+
+Host wsl-ubuntu
+    HostName 100.70.61.96
+    Port 2222
+    User fridrichmethod
+
+Host lab-ubuntu
+    HostName 100.102.189.70
+    Port 22
+    User fridrichmethod
+
+Host lab-ubuntu-tinglab
+    HostName 100.102.189.70
+    Port 22
+    User tinglab
+
+Include ~/.ssh/config.d/*.conf
