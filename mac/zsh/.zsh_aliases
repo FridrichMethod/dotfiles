@@ -1,0 +1,14 @@
+#!/bin/zsh
+
+# tar alias
+alias targz='tar -czvf'
+alias untargz='tar -xzvf'
+
+# python alias
+alias python='python3'
+
+# nvim alias
+alias vi='nvim'
+
+# ssh for kitty
+alias ssh='TERM=xterm-256color ssh'
