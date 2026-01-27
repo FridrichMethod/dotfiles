@@ -119,12 +119,12 @@ plugins=(
 export BAT_THEME="Catppuccin Mocha"
 
 # Plugin configuration below are automatically loaded in $ZSH_CUSTOM/...
+# conda-zsh-completion
 # fzf
 # fzf-tab
-# zsh-autosuggestions
-# conda-zsh-completion
-# ssh-agent
 # nvm
+# ssh-agent
+# zsh-autosuggestions
 
 # Load the zsh-completions plugin
 # See https://github.com/zsh-users/zsh-completions/blob/master/README.md
