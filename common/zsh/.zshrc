@@ -38,6 +38,9 @@ setopt HIST_IGNORE_DUPS  # ignore duplicate commands
 # Oh My Zsh setup
 export ZSH="$HOME/.oh-my-zsh"
 
+# Disable compinit to suppress insecure warnings
+ZSH_DISABLE_COMPFIX=true
+
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time Oh My Zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
