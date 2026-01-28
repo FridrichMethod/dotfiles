@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-# --------------- Interactive Session Settings ---------------
+# --------------- Interactive Shell Settings ---------------
 
 # Enable the subsequent settings only in interactive sessions
 case $- in
@@ -32,6 +32,8 @@ setopt HIST_IGNORE_DUPS  # ignore duplicate commands
 
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
+# --------------- Oh My Zsh ---------------
 
 # Oh My Zsh setup
 export ZSH="$HOME/.oh-my-zsh"
@@ -107,7 +109,7 @@ plugins=(
     zoxide
 )
 
-# Load host-specific plugin additions (if any) before order-sensitive plugins.
+# Host-specific interactive config (plugins, fpath filters, etc.)
 if [[ -r "$HOME/.config/zsh/.zshrc" ]]; then
     source "$HOME/.config/zsh/.zshrc"
 fi
@@ -140,7 +142,7 @@ source $ZSH/oh-my-zsh.sh
 
 # source alias file if it exists
 if [[ -r "$HOME/.zsh_aliases" ]]; then
-    source ~/.zsh_aliases
+    source "$HOME/.zsh_aliases"
 fi
 
 # Disable special dirs
