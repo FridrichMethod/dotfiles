@@ -28,6 +28,3 @@ export PATH=$HOME/bin:$HOME/.local/bin:$PATH
 if [[ -r "$HOME/.config/zsh/.zprofile" ]]; then
     source "$HOME/.config/zsh/.zprofile"
 fi
-
-# Oh My Zsh setup
-export ZSH="$HOME/.oh-my-zsh"

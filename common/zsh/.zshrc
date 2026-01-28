@@ -33,6 +33,9 @@ setopt HIST_IGNORE_DUPS  # ignore duplicate commands
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
+# Oh My Zsh setup
+export ZSH="$HOME/.oh-my-zsh"
+
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time Oh My Zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
@@ -138,10 +141,6 @@ source $ZSH/oh-my-zsh.sh
 # source alias file if it exists
 if [[ -r "$HOME/.zsh_aliases" ]]; then
     source ~/.zsh_aliases
-fi
-
-if [[ -r "$HOME/.config/zsh/.zsh_aliases" ]]; then
-    source "$HOME/.config/zsh/.zsh_aliases"
 fi
 
 # Disable special dirs

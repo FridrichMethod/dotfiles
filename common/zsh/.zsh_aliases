@@ -9,3 +9,8 @@ alias vi='nvim'
 
 # ssh for terminal
 alias ssh='TERM=xterm-256color ssh'
+
+# Load host-specific alias additions (if any)
+if [[ -r "$HOME/.config/zsh/.zsh_aliases" ]]; then
+    source "$HOME/.config/zsh/.zsh_aliases"
+fi
