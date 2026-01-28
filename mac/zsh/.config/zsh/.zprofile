@@ -1,16 +1,5 @@
 #!/bin/zsh
 
-# Recursive globbing: "**" works by default in zsh
-setopt extended_glob
-setopt globstarshort
-setopt glob_dots
-
-# User configuration
-export MANPATH=/usr/local/man:$MANPATH
-
-# You may need to manually set your language environment
-export LANG=en_US.UTF-8
-
 # This command sets the DYLD_LIBRARY_PATH environment variable.
 # The DYLD_LIBRARY_PATH is used by the dynamic linker on macOS to find dynamic libraries (.dylib files) at runtime.
 if [ -z "$DYLD_LIBRARY_PATH" ]; then
@@ -18,9 +7,6 @@ if [ -z "$DYLD_LIBRARY_PATH" ]; then
 else
     export DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH
 fi
-
-# set PATH so it includes user's private bin
-export PATH=$HOME/bin:$HOME/.local/bin:$PATH
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
@@ -46,6 +32,3 @@ export MATLAB=/Applications/MATLAB_R2025b.app/bin
 
 # Schrodinger suite setup
 export SCHRODINGER=/opt/schrodinger/suites2025-2
-
-# Oh My Zsh setup
-export ZSH="$HOME/.oh-my-zsh"

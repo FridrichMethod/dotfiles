@@ -5,18 +5,6 @@ setopt extended_glob
 setopt globstarshort
 setopt glob_dots
 
-# User configuration
-export MANPATH=/usr/local/man:$MANPATH
-
-# You may need to manually set your language environment
-export LANG=en_US.UTF-8
-
-# homebrew setup
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
-# set PATH so it includes user's private bin
-export PATH=$HOME/bin:$HOME/.local/bin:$PATH
-
 # >>> juliaup initialize >>>
 
 # !! Contents within this block are managed by juliaup !!
@@ -45,16 +33,10 @@ unset __conda_setup
 # mamba is installed and initialized via conda
 export MAMBA_ROOT_PREFIX=$HOME/miniconda3
 
-# cuda setup
-export PATH=/usr/local/cuda/bin:$PATH
-
 # texlive setup
 export PATH=/usr/local/texlive/2024/bin/x86_64-linux:$PATH
 export MANPATH=/usr/local/texlive/2024/texmf-dist/doc/man:$MANPATH
 export INFOPATH=/usr/local/texlive/2024/texmf-dist/doc/info:$INFOPATH
-
-# Oh My Zsh setup
-export ZSH="$HOME/.oh-my-zsh"
 
 # GROMACS setup
 GMXRC="/usr/local/gromacs/bin/GMXRC"

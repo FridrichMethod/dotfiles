@@ -136,8 +136,12 @@ fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 source $ZSH/oh-my-zsh.sh
 
 # source alias file if it exists
-if [ -f ~/.zsh_aliases ]; then
+if [[ -r "$HOME/.zsh_aliases" ]]; then
     source ~/.zsh_aliases
+fi
+
+if [[ -r "$HOME/.config/zsh/.zsh_aliases" ]]; then
+    source "$HOME/.config/zsh/.zsh_aliases"
 fi
 
 # Disable special dirs

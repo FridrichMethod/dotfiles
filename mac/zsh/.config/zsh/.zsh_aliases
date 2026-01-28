@@ -1,0 +1,4 @@
+#!/bin/zsh
+
+# python alias
+alias python='python3'
