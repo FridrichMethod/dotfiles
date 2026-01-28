@@ -33,11 +33,6 @@ setopt HIST_IGNORE_DUPS  # ignore duplicate commands
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
-# set variable identifying the chroot you work in (used in the prompt below)
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-  debian_chroot=$(cat /etc/debian_chroot)
-fi
-
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time Oh My Zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
@@ -57,11 +52,10 @@ zstyle ':omz:update' mode auto
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(
-    # debian
     # fzf-tab-source  # config manually
     # gitfast  # deprecated?
     # thefuck  # for fun
-    # timer  # p10k has built-in timer
+    # timer  # p10k has builtin timer
     # z  # conflicts with zoxide
     # zsh-completions  # configured below using manual fpath addition
     # zsh-history-substring-search  # fzf provides better functionality
@@ -88,7 +82,6 @@ plugins=(
     github
     gitignore
     golang
-    gpg-agent
     history
     kitty
     man
@@ -99,21 +92,25 @@ plugins=(
     python
     rsync
     rust
-    snap
     ssh
-    ssh-agent
     sudo
     tailscale
     tldr
     tmux
-    ubuntu
     uv
     vscode
     web-search
     you-should-use
     zoxide
+)
 
-    # Keep the order of following plugins
+# Load host-specific plugin additions (if any) before order-sensitive plugins.
+if [[ -r "$HOME/.config/zsh/.zshrc" ]]; then
+    source "$HOME/.config/zsh/.zshrc"
+fi
+
+# Keep the order of following plugins
+plugins+=(
     fzf
     fzf-tab
     zsh-autosuggestions
