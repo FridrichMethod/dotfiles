@@ -2,11 +2,6 @@
 
 # --------------- Login Shell Settings ---------------
 
-# Recursive globbing: "**" works by default in zsh
-setopt extended_glob
-setopt globstarshort
-setopt glob_dots
-
 # Locale and base paths
 export LANG="en_US.UTF-8"
 export MANPATH="/usr/local/man:${MANPATH}"

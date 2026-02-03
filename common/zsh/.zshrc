@@ -20,6 +20,11 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-$(print -P %n).zsh
     source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-$(print -P %n).zsh"
 fi
 
+# Recursive globbing: "**" works by default in zsh
+setopt extended_glob
+setopt globstarshort
+setopt glob_dots
+
 # History settings (zsh)
 HISTFILE=~/.zsh_history
 HISTSIZE=1000 # in-memory history size
