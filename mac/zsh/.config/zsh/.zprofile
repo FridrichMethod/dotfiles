@@ -8,10 +8,6 @@ else
     export DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH
 fi
 
-# Set mamba root prefix
-# mamba is installed and initialized via conda
-export MAMBA_ROOT_PREFIX=$HOME/miniconda3
-
 # MATLAB setup
 export MATLAB=/Applications/MATLAB_R2025b.app/bin
 

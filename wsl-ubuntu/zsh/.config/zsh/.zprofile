@@ -14,10 +14,6 @@ export PATH
 
 # <<< juliaup initialize <<<
 
-# Set mamba root prefix
-# mamba is installed and initialized via conda
-export MAMBA_ROOT_PREFIX=$HOME/miniconda3
-
 # texlive setup
 export PATH=/usr/local/texlive/2024/bin/x86_64-linux:$PATH
 export MANPATH=/usr/local/texlive/2024/texmf-dist/doc/man:$MANPATH
