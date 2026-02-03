@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# set variable identifying the chroot you work in (used in the prompt below)
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-    debian_chroot=$(cat /etc/debian_chroot)
-fi
-
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
 __conda_setup="$('/users/zyli2002/miniconda3/bin/conda' 'shell.bash' 'hook' 2>/dev/null)"
@@ -32,3 +27,8 @@ else
 fi
 unset __mamba_setup
 # <<< mamba initialize <<<
+
+# set variable identifying the chroot you work in (used in the prompt below)
+if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
+    debian_chroot=$(cat /etc/debian_chroot)
+fi
