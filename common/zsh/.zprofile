@@ -4,7 +4,7 @@
 
 # Locale and base paths
 export LANG="en_US.UTF-8"
-export MANPATH="/usr/local/man:${MANPATH}"
+export MANPATH="/usr/local/man${MANPATH:+:${MANPATH}}"
 
 # Homebrew (Linuxbrew) environment
 if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
