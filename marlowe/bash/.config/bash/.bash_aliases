@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# SLURM aliases
+alias sq='squeue -u $USER -l'
+alias sqp='squeue -p $GROUP -l'
+alias sc='scancel -u $USER'
+alias sjob='squeue -j -l'
