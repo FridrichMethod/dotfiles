@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/sh
 
 # Scratch
 export PROJECT_ID=m000191

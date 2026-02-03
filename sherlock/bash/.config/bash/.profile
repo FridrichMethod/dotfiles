@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/sh
 
 # Scratch groups
 export ALICE=/scratch/groups/ayting
