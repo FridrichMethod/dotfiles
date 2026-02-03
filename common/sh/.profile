@@ -20,14 +20,6 @@ fi
 export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
 
 # Load host-specific login configuration
-if [ -r "$HOME/.config/bash/.profile" ]; then
-    . "$HOME/.config/bash/.profile"
-fi
-
-# if running bash
-if [ -n "$BASH_VERSION" ]; then
-    # include .bashrc if it exists
-    if [ -f "$HOME/.bashrc" ]; then
-        . "$HOME/.bashrc"
-    fi
+if [ -r "$HOME/.config/sh/.profile" ]; then
+    . "$HOME/.config/sh/.profile"
 fi
