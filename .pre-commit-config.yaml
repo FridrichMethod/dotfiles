@@ -21,7 +21,7 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=error]
-        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|aliases)$)
 
   - repo: https://github.com/scop/pre-commit-shfmt
     rev: v3.12.0-2
@@ -29,6 +29,9 @@ repos:
       - id: shfmt
         args: [-i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
+      - id: shfmt
+        args: [-i, "4", -ci, -ln, posix]
+        files: ((^|/)\.(profile|aliases)$)
       - id: shfmt
         args: [-i, "4", -ci, -ln, zsh]
         files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$)
