@@ -117,6 +117,11 @@ plugins=(
     zoxide
 )
 
+# Homebrew (Linuxbrew) environment
+if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
 # Host-specific interactive config (plugins, fpath filters, etc.)
 if [[ -r "$HOME/.config/zsh/.zshrc" ]]; then
     source "$HOME/.config/zsh/.zshrc"

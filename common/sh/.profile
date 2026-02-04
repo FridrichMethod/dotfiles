@@ -6,11 +6,6 @@
 export LANG="en_US.UTF-8"
 export MANPATH="/usr/local/man${MANPATH:+:${MANPATH}}"
 
-# Homebrew (Linuxbrew) environment
-if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-fi
-
 # CUDA setup
 if [ -d /usr/local/cuda/bin ]; then
     export PATH="/usr/local/cuda/bin:$PATH"
