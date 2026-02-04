@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # tar alias
 alias targz='tar -czvf'
@@ -11,6 +11,6 @@ alias vi='nvim'
 alias ssh='TERM=xterm-256color ssh'
 
 # Load host-specific alias additions (if any)
-if [[ -r "$HOME/.config/sh/.aliases" ]]; then
+if [ -r "$HOME/.config/sh/.aliases" ]; then
     . "$HOME/.config/sh/.aliases"
 fi

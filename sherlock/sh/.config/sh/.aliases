@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # SLURM aliases
 alias sq='squeue -u $USER -l'
