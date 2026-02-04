@@ -1,0 +1,40 @@
+# Pre-commit hooks for basic hygiene + shell scripts.
+exclude: |
+  (^|/)common/zsh/\.p10k\.zsh$
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: (^|/)\.p10k\.zsh$
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=40000, --enforce-all]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=error]
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
+    hooks:
+      - id: shfmt
+        args: [-i, "4", -ci, -ln, bash]
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
+      - id: shfmt
+        args: [-i, "4", -ci, -ln, zsh]
+        files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$)
+
+  - repo: https://github.com/JohnnyMorganz/StyLua
+    rev: v2.0.2
+    hooks:
+      - id: stylua
+        files: \.(lua|luau)$

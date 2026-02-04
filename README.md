@@ -1,7 +1,7 @@
 # dotfiles
 
 Personal dotfiles managed with GNU Stow. `common/` holds shared defaults and
-OS folders layer overrides.
+host folders layer overrides.
 
 ## Structure
 
@@ -11,26 +11,44 @@ dotfiles/
 ├─ mac/           # macOS overrides
 ├─ wsl-ubuntu/    # WSL Ubuntu overrides
 ├─ lab-ubuntu/    # lab Ubuntu overrides
+├─ marlowe/       # host overrides
+├─ sherlock/      # host overrides
+├─ win/           # Windows-side config (e.g. WSL)
 └─ stow-all.sh    # optional helper
 ```
 
 ## Packages
 
-- Zsh (`.zshenv`, `.zprofile`, `.zshrc`, aliases, custom plugins)
+- Zsh, Bash, POSIX sh, tcsh, xonsh
 - Git + SSH
-- Kitty, Vim, Conda
+- Kitty + WezTerm
+- Vim, Conda
 - PyMOL scripts (submodule)
+- Windows WSL config (`win/wsl/.wslconfig`)
 
 ## Usage
 
-```
+```bash
 git clone <repo> ~/dotfiles
 cd ~/dotfiles
-stow common
-stow mac   # or wsl-ubuntu / lab-ubuntu
+./stow-all.sh <host-dir>
 ```
 
 `.stowrc` sets `--target=~`, so stow links into your home directory.
+
+## Pre-commit
+
+Optional hooks for formatting/linting before commit:
+
+```bash
+pip install pre-commit  # or: brew install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+Hooks include `shellcheck` for `.sh`/`.bash*`, `shfmt` for `.sh`/`.bash*`/`.zsh*`,
+`stylua` for `*.lua`, plus basic whitespace, EOF, merge-conflict, YAML, JSON,
+and TOML checks.
 
 ## Extras
 
