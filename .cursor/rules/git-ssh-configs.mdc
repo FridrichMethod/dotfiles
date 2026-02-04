@@ -1,0 +1,18 @@
+---
+description: Git and SSH config conventions
+globs:
+  - "**/.gitconfig"
+  - "**/.gitconfig_local"
+  - "**/.gitignore"
+  - "**/.gitmodules"
+  - "**/.ssh/config"
+  - "**/.ssh/config.d/*.conf"
+alwaysApply: false
+---
+
+# Git and SSH configs
+
+- Keep shared git settings in `common/git/.gitconfig`; put machine-specific overrides in `*/git/.gitconfig_local`.
+- Prefer include/includeIf blocks over duplicating settings across hosts.
+- Do not commit secrets; SSH config should reference key paths only.
+- Keep `.gitmodules` in sync with submodule paths and URLs.

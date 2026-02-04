@@ -1,0 +1,12 @@
+---
+description: Core conventions for this dotfiles repo
+alwaysApply: true
+---
+
+# Dotfiles conventions
+
+- This repo is managed with GNU Stow; keep packages as top-level folders.
+- Mirror `$HOME` paths inside packages (e.g., `.config/...`, `.ssh/...`).
+- Put shared defaults in `common/`; host-specific overrides live in host folders.
+- Avoid absolute paths and secrets in committed configs.
+- Update `stow-all.sh` and README when adding packages or changing usage.

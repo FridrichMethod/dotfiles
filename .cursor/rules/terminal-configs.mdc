@@ -1,0 +1,14 @@
+---
+description: Terminal config conventions (kitty, wezterm)
+globs:
+  - "**/kitty.conf"
+  - "**/current-theme.conf"
+  - "**/.wezterm.lua"
+alwaysApply: false
+---
+
+# Terminal configs
+
+- Keep shared settings in `common/`; host-specific overrides belong in host folders.
+- Group related options and keep key mappings together for readability.
+- For wezterm Lua, use explicit tables and avoid side effects at load time.

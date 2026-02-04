@@ -1,0 +1,11 @@
+---
+description: GitHub workflow conventions
+globs: ".github/workflows/*.yml"
+alwaysApply: false
+---
+
+# GitHub workflows
+
+- Keep workflows minimal and deterministic; pin action versions.
+- Use repo tooling (`shellcheck`, `shfmt`, `stylua`) when adding workflow steps that run scripts.
+- Update README when CI behavior or required checks change.

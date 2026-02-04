@@ -1,0 +1,18 @@
+---
+description: Shell config and script conventions
+globs:
+  - "**/.zsh*"
+  - "**/.bash*"
+  - "**/.profile"
+  - "**/*.sh"
+  - "**/*.zsh"
+alwaysApply: false
+---
+
+# Shell configs
+
+- Keep POSIX sh compatible logic in `sh/` packages; use bash/zsh features only in their files.
+- Prefer aliases in `.zsh_aliases` / `.bash_aliases`; keep `*.rc` focused on options and sourcing.
+- Place host-specific logic in host folders, guarded by OS/host checks if needed.
+- For scripts in `common/zsh/.local/bin`, include a shebang and keep output quiet by default.
+- Keep formatting compatible with `shfmt` and avoid shellcheck violations.
