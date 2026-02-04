@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# Homebrew (Linuxbrew) environment
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
 __conda_setup="$('/home/fridrichmethod/miniconda3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
@@ -30,7 +33,7 @@ unset __mamba_setup
 
 # set variable identifying the chroot you work in (used in the prompt below)
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-  debian_chroot=$(cat /etc/debian_chroot)
+    debian_chroot=$(cat /etc/debian_chroot)
 fi
 
 typeset -ga plugins

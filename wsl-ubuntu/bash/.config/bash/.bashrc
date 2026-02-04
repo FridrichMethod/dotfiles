@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Homebrew (Linuxbrew) environment
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
 __conda_setup="$('/home/fridrichmethod/miniconda3/bin/conda' 'shell.bash' 'hook' 2>/dev/null)"
