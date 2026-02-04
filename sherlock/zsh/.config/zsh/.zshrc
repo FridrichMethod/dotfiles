@@ -27,3 +27,5 @@ else
 fi
 unset __mamba_setup
 # <<< mamba initialize <<<
+
+export PATH="$MAMBA_ROOT_PREFIX/envs/login/bin:$PATH"
