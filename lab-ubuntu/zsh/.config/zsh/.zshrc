@@ -18,6 +18,7 @@ fi
 unset __conda_setup
 # <<< conda initialize <<<
 
+# shfmt: off
 # >>> mamba initialize >>>
 # !! Contents within this block are managed by 'mamba shell init' !!
 export MAMBA_EXE='/apps/miniconda3/bin/mamba';
@@ -30,6 +31,7 @@ else
 fi
 unset __mamba_setup
 # <<< mamba initialize <<<
+# shfmt: on
 
 # set variable identifying the chroot you work in (used in the prompt below)
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then

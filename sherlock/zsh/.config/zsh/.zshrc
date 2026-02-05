@@ -15,6 +15,7 @@ fi
 unset __conda_setup
 # <<< conda initialize <<<
 
+# shfmt: off
 # >>> mamba initialize >>>
 # !! Contents within this block are managed by 'micromamba shell init' !!
 export MAMBA_EXE='/home/users/zyli2002/.local/bin/micromamba';
@@ -27,5 +28,6 @@ else
 fi
 unset __mamba_setup
 # <<< mamba initialize <<<
+# shfmt: on
 
 export PATH="$MAMBA_ROOT_PREFIX/envs/login/bin:$PATH"

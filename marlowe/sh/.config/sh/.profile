@@ -29,28 +29,27 @@ export XDG_CACHE_HOME="$SCRATCH/.cache/$USER"
 
 # Ensure cache/temp dirs exist
 for dir in \
-  "$APPTAINER_CACHEDIR" \
-  "$CCACHE_DIR" \
-  "$CCACHE_TEMPDIR" \
-  "$CONDA_PKGS_DIRS" \
-  "$CUDA_CACHE_PATH" \
-  "$CUPY_CACHE_DIR" \
-  "$GITSTATUS_CACHE_DIR" \
-  "$HF_DATASETS_CACHE" \
-  "$HF_HOME" \
-  "$HF_HUB_CACHE" \
-  "$PIP_CACHE_DIR" \
-  "$TEMP" \
-  "$TMP" \
-  "$TMPDIR" \
-  "$TORCHINDUCTOR_CACHE_DIR" \
-  "$TORCH_EXTENSIONS_DIR" \
-  "$TORCH_HOME" \
-  "$TRITON_CACHE_DIR" \
-  "$UV_CACHE_DIR" \
-  "$XDG_CACHE_HOME"
-do
-  if [ -n "$dir" ] && [ ! -d "$dir" ]; then
-    mkdir -p "$dir"
-  fi
+    "$APPTAINER_CACHEDIR" \
+    "$CCACHE_DIR" \
+    "$CCACHE_TEMPDIR" \
+    "$CONDA_PKGS_DIRS" \
+    "$CUDA_CACHE_PATH" \
+    "$CUPY_CACHE_DIR" \
+    "$GITSTATUS_CACHE_DIR" \
+    "$HF_DATASETS_CACHE" \
+    "$HF_HOME" \
+    "$HF_HUB_CACHE" \
+    "$PIP_CACHE_DIR" \
+    "$TEMP" \
+    "$TMP" \
+    "$TMPDIR" \
+    "$TORCHINDUCTOR_CACHE_DIR" \
+    "$TORCH_EXTENSIONS_DIR" \
+    "$TORCH_HOME" \
+    "$TRITON_CACHE_DIR" \
+    "$UV_CACHE_DIR" \
+    "$XDG_CACHE_HOME"; do
+    if [ -n "$dir" ] && [ ! -d "$dir" ]; then
+        mkdir -p "$dir"
+    fi
 done

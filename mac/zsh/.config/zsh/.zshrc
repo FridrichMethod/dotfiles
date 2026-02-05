@@ -15,6 +15,7 @@ fi
 unset __conda_setup
 # <<< conda initialize <<<
 
+# shfmt: off
 # >>> mamba initialize >>>
 # !! Contents within this block are managed by 'mamba shell init' !!
 export MAMBA_EXE='/Users/zhaoyangli/miniconda3/bin/mamba';
@@ -27,3 +28,4 @@ else
 fi
 unset __mamba_setup
 # <<< mamba initialize <<<
+# shfmt: on
