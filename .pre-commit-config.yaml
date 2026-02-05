@@ -1,6 +1,5 @@
 # Pre-commit hooks for basic hygiene + shell scripts.
-exclude: |
-  (^|/)common/zsh/\.p10k\.zsh$
+exclude: (^|/)(common/zsh/\.p10k\.zsh|common/zsh/\.local/bin/my-fzf-preview\.sh)$
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -21,19 +20,21 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=error]
-        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|aliases)$)
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|alias|aliases)$)
+        types: [file]
 
   - repo: https://github.com/scop/pre-commit-shfmt
     rev: v3.12.0-2
     hooks:
       - id: shfmt
-        args: [-i, "4", -ci, -ln, bash]
+        args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
       - id: shfmt
-        args: [-i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|aliases)$)
+        args: [-w, -i, "4", -ci, -ln, posix]
+        files: ((^|/)\.(profile|alias|aliases)$)
+        types: [file]
       - id: shfmt
-        args: [-i, "4", -ci, -ln, zsh]
+        args: [-w, -i, "4", -ci, -ln, zsh]
         files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$)
 
   - repo: https://github.com/JohnnyMorganz/StyLua
