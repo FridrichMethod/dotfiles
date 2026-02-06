@@ -15,6 +15,7 @@ export POSSU_HOME=/home/groups/possu
 # Cache
 if [ -n "$SCRATCH" ]; then
     export APPTAINER_CACHEDIR="$SCRATCH/apptainercache"
+    export APPTAINER_TMPDIR="$SCRATCH/apptainertmp"
     export CCACHE_DIR="$SCRATCH/.cache/ccache"
     export CCACHE_TEMPDIR="$SCRATCH/.cache/ccache/tmp"
     export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"
@@ -38,6 +39,7 @@ if [ -n "$SCRATCH" ]; then
     # Ensure cache/temp dirs exist
     for dir in \
         "$APPTAINER_CACHEDIR" \
+        "$APPTAINER_TMPDIR" \
         "$CCACHE_DIR" \
         "$CCACHE_TEMPDIR" \
         "$CONDA_PKGS_DIRS" \
