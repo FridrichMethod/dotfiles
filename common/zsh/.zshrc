@@ -55,10 +55,14 @@ download() {
     # NOTE:
     # - Destination 'Downloads/' is interpreted on the RECEIVING side (your local machine).
     # - Do NOT use ~/Downloads here; it will be expanded on the remote and may map to /home/... on local.
+    local -a transfer_opts
+    transfer_opts=(--transmit-deltas --compress=auto)
+    if [[ -n "${KITTY_PUBLIC_KEY:-}" ]]; then
+        transfer_opts+=(--permissions-bypass yes)
+    fi
+
     kitten transfer \
-        --permissions-bypass yes \
-        --transmit-deltas \
-        --compress=auto \
+        "${transfer_opts[@]}" \
         "$@" \
         Downloads/
 }
