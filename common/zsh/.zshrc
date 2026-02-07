@@ -56,7 +56,7 @@ download() {
     # - Destination 'Downloads/' is interpreted on the RECEIVING side (your local machine).
     # - Do NOT use ~/Downloads here; it will be expanded on the remote and may map to /home/... on local.
     kitten transfer \
-        --permissions-bypass "" \
+        --permissions-bypass yes \
         --transmit-deltas \
         --compress=auto \
         --confirm-paths=no \
