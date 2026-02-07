@@ -59,7 +59,6 @@ download() {
         --permissions-bypass yes \
         --transmit-deltas \
         --compress=auto \
-        --confirm-paths=no \
         "$@" \
         Downloads/
 }
