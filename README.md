@@ -23,6 +23,7 @@ dotfiles/
 - Git + SSH
 - Kitty + WezTerm
 - Vim, Conda
+- Aria2
 - PyMOL scripts (submodule)
 - Windows WSL config (`win/wsl/.wslconfig`)
 
