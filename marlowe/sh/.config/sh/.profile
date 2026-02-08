@@ -7,8 +7,8 @@ export SCRATCH=/scratch/$PROJECT_ID
 
 # Cache
 if [ -n "$SCRATCH" ]; then
-    export APPTAINER_CACHEDIR="$SCRATCH/apptainercache/$USER"
-    export APPTAINER_TMPDIR="$SCRATCH/apptainertmp/$USER"
+    export APPTAINER_CACHEDIR="$SCRATCH/.cache/apptainercache/$USER"
+    export APPTAINER_TMPDIR="$SCRATCH/.cache/apptainertmp/$USER"
     export CCACHE_DIR="$SCRATCH/.cache/ccache/$USER"
     export CCACHE_TEMPDIR="$SCRATCH/.cache/ccache/tmp/$USER"
     export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs/$USER"
