@@ -26,9 +26,6 @@ if [ -n "$SCRATCH" ]; then
     export HF_HOME="$SCRATCH/.cache/huggingface"
     export HF_HUB_CACHE="$SCRATCH/.cache/huggingface/hub"
     export PIP_CACHE_DIR="$SCRATCH/.cache/pip"
-    export TEMP="$SCRATCH/.tmp"
-    export TMP="$SCRATCH/.tmp"
-    export TMPDIR="$SCRATCH/.tmp"
     export TORCHINDUCTOR_CACHE_DIR="$SCRATCH/.cache/torchinductor"
     export TORCH_EXTENSIONS_DIR="$SCRATCH/.cache/torch_extensions"
     export TORCH_HOME="$SCRATCH/.cache/torch"
@@ -50,9 +47,6 @@ if [ -n "$SCRATCH" ]; then
         "$HF_HOME" \
         "$HF_HUB_CACHE" \
         "$PIP_CACHE_DIR" \
-        "$TEMP" \
-        "$TMP" \
-        "$TMPDIR" \
         "$TORCHINDUCTOR_CACHE_DIR" \
         "$TORCH_EXTENSIONS_DIR" \
         "$TORCH_HOME" \
