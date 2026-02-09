@@ -3,7 +3,7 @@
 # Download files/dirs from remote -> local ~/Downloads/
 download() {
     if (( $# == 0 )); then
-        print -u2 "usage: download <file_or_dir> [more_files_or_dirs...]"
+        print -u2 "Usage: download <file_or_dir> [more_files_or_dirs...]"
         return 2
     fi
 
