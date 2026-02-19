@@ -30,7 +30,7 @@ if compgen -G "${COMMON_DIR}"'/*/' >/dev/null; then
     # shellcheck disable=SC2086
     echo $common_pkgs
     # shellcheck disable=SC2086
-    stow --restow -d "$COMMON_DIR" $common_pkgs
+    stow --restow --no-folding -d "$COMMON_DIR" $common_pkgs
 fi
 
 if [[ -n "$HOST" ]]; then
@@ -40,6 +40,6 @@ if [[ -n "$HOST" ]]; then
         # shellcheck disable=SC2086
         echo $host_pkgs
         # shellcheck disable=SC2086
-        stow --restow -d "$HOST_DIR" $host_pkgs
+        stow --restow --no-folding -d "$HOST_DIR" $host_pkgs
     fi
 fi
