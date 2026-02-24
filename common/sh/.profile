@@ -18,3 +18,10 @@ fi
 if [ -r "$HOME/.config/sh/.profile" ]; then
     . "$HOME/.config/sh/.profile"
 fi
+
+# Dotfiles auto-update check
+_df_update="${DOTFILES_DIR:-$HOME/dotfiles}/dotfiles-update.sh"
+if [ -r "$_df_update" ]; then
+    . "$_df_update"
+fi
+unset _df_update
