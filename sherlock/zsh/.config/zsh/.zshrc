@@ -3,20 +3,8 @@
 # Initialize Lmod module system for zsh.
 # Bash gets this from /etc/profile → /etc/profile.d/*.sh, but zsh
 # does not source /etc/profile so the `module` function is undefined.
-if (( ! $+functions[module] )); then
-    if [[ -n "$LMOD_DIR" && -f "$LMOD_DIR/../init/zsh" ]]; then
-        source "$LMOD_DIR/../init/zsh"
-    else
-        for _lmod_init in \
-            /usr/share/lmod/lmod/init/zsh \
-            /opt/apps/lmod/lmod/init/zsh; do
-            if [[ -f "$_lmod_init" ]]; then
-                source "$_lmod_init"
-                break
-            fi
-        done
-        unset _lmod_init
-    fi
+if (( ! $+functions[module] )) && [[ -f "$LMOD_DIR/../init/zsh" ]]; then
+    source "$LMOD_DIR/../init/zsh"
 fi
 
 # >>> conda initialize >>>
