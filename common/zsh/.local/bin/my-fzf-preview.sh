@@ -63,8 +63,10 @@ elif ! [[ $KITTY_WINDOW_ID ]] && ((FZF_PREVIEW_TOP + FZF_PREVIEW_LINES == $(stty
 fi
 
 # 1. Use icat (from Kitty) if kitten is installed
-if { [[ -n $KITTY_WINDOW_ID ]] || [[ -n $GHOSTTY_RESOURCES_DIR ]]; } &&
-  command -v kitten >/dev/null; then
+# if { [[ -n $KITTY_WINDOW_ID ]] || [[ -n $GHOSTTY_RESOURCES_DIR ]]; } &&
+# NOTE: Here we ignore the Kitty window ID and the Ghostty resources directory
+# for HPC environments that may not allow kitty ssh.
+if command -v kitten >/dev/null; then
   # 1. 'memory' is the fastest option but if you want the image to be scrollable,
   #    you have to use 'stream'.
   #
