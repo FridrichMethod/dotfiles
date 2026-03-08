@@ -24,7 +24,7 @@ dotfiles/
 - Kitty + WezTerm
 - Vim, Conda
 - Aria2
-- PyMOL scripts (submodule)
+- PyMOL scripts (submodule; auto-updated daily by [Actions](.github/workflows/update-pymolscripts-submodule.yml))
 - Windows WSL config (`win/wsl/.wslconfig`)
 
 ## Usage

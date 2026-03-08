@@ -1,0 +1,37 @@
+name: update PyMOLScripts submodule
+
+on:
+  schedule:
+    # Run daily at 04:00 UTC
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-submodule:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          fetch-depth: 0
+
+      - name: Update PyMOLScripts submodule to latest
+        run: |
+          git submodule update --remote --merge common/pymol/PyMOLScripts
+
+      - name: Check for changes and push
+        run: |
+          if git diff --quiet common/pymol/PyMOLScripts; then
+            echo "Submodule already up to date, nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add common/pymol/PyMOLScripts
+          git commit -m "chore(deps): update PyMOLScripts submodule to latest"
+          git push
