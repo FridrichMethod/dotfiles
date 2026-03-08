@@ -34,6 +34,7 @@ _dotfiles_update_check() {
 
     printf '\033[1;33m[dotfiles]\033[0m %s new commit(s) available — pulling...\n' "$_df_behind"
     if git -C "$_df_dir" pull --ff-only --quiet 2>/dev/null; then
+        git -C "$_df_dir" submodule update --init --recursive --quiet 2>/dev/null || true
         printf '\033[1;32m[dotfiles]\033[0m Pulled successfully.\n'
         printf '\033[1;33m[dotfiles]\033[0m Run \033[1mstow-all.sh\033[0m to re-stow and apply changes.\n'
     else
