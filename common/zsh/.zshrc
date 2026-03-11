@@ -170,3 +170,8 @@ zstyle ':completion:*' special-dirs false
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 ! _is_agent_session && [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+
+# Dotfiles auto-update check (runs at end so ssh-agent/env is ready; run stow-all.sh and restart shell to apply)
+_df_update="${DOTFILES_DIR:-$HOME/dotfiles}/dotfiles-update.sh"
+[[ -r "$_df_update" ]] && source "$_df_update"
+unset _df_update
