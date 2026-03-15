@@ -1,9 +1,13 @@
 ---
 description: Shell config and script conventions
 globs:
+  - "**/.aliases"
   - "**/.zsh*"
   - "**/.bash*"
   - "**/.profile"
+  - "**/.config/sh/**"
+  - "**/.config/bash/**"
+  - "**/.config/zsh/**"
   - "**/*.sh"
   - "**/*.zsh"
 alwaysApply: false
@@ -11,8 +15,9 @@ alwaysApply: false
 
 # Shell configs
 
-- Keep POSIX sh compatible logic in `sh/` packages; use bash/zsh features only in their files.
-- Prefer aliases in `.zsh_aliases` / `.bash_aliases`; keep `*.rc` focused on options and sourcing.
-- Place host-specific logic in host folders, guarded by OS/host checks if needed.
-- For scripts in `common/zsh/.local/bin`, include a shebang and keep output quiet by default.
-- Keep formatting compatible with `shfmt` and avoid shellcheck violations.
+- Keep POSIX-compatible logic in `common/sh/` and `*/sh/`; use Bash/Zsh-only features only in their shell-specific files.
+- Preserve the override chain: shared `common/sh/.aliases` and `common/sh/.profile` source host files from `~/.config/sh/` when present.
+- Keep `*.rc` files focused on options and sourcing; prefer aliases/functions in `.bash_aliases`, `.zsh_aliases`, and `~/.config/sh/.aliases`.
+- Keep dotfiles update integration consistent: shell startup files may source `dotfiles-update.sh`, but the script itself remains POSIX `sh`.
+- Match pre-commit formatting: `shfmt -i 4 -ci` with dialect-specific `-ln bash`, `-ln posix`, or `-ln zsh`.
+- Avoid shellcheck violations; if a suppression is required, scope it to a single line with a brief reason.

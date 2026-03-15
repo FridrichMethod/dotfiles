@@ -9,6 +9,8 @@ alwaysApply: false
 
 # Terminal configs
 
-- Keep shared settings in `common/`; host-specific overrides belong in host folders.
-- Group related options and keep key mappings together for readability.
-- For wezterm Lua, use explicit tables and avoid side effects at load time.
+- Keep shared terminal defaults in `common/`; host-specific overrides belong in host folders only.
+- Group related settings (font, appearance, keymaps, shell integration) in contiguous blocks.
+- For `common/kitty/.config/kitty/current-theme.conf`, keep it theme-only (no unrelated behavior settings).
+- For `.wezterm.lua`, prefer explicit tables and pure setup logic (no stateful side effects at import time).
+- Keep comments short and task-oriented; remove stale commented-out settings.

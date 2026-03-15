@@ -1,0 +1,17 @@
+---
+description: Stow helper and update script conventions
+globs:
+  - "stow-all.sh"
+  - "dotfiles-update.sh"
+  - ".stowrc"
+alwaysApply: false
+---
+
+# Stow and update scripts
+
+- Keep `stow-all.sh` as the canonical entrypoint: stow `common/` first, then optional host packages.
+- Preserve `stow --restow --no-folding` behavior unless there is a repo-wide migration plan.
+- Keep `.stowrc` as the source of global Stow target/ignore defaults (`--target=~` and ignore patterns).
+- Use `set -euo pipefail` in Bash scripts like `stow-all.sh`; keep POSIX `sh` scripts (`dotfiles-update.sh`) portable.
+- For startup-update logic, keep the `_DOTFILES_CHECKED` session-marker pattern so checks run once per login session.
+- If setup flow changes, update both script comments and `README.md` usage examples together.

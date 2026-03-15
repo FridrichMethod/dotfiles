@@ -5,8 +5,9 @@ alwaysApply: true
 
 # Dotfiles conventions
 
-- This repo is managed with GNU Stow; keep packages as top-level folders.
-- Mirror `$HOME` paths inside packages (e.g., `.config/...`, `.ssh/...`).
-- Put shared defaults in `common/`; host-specific overrides live in host folders.
-- Avoid absolute paths and secrets in committed configs.
-- Update `stow-all.sh` and README when adding packages or changing usage.
+- Manage links with GNU Stow; package directories must mirror `$HOME` paths (for example `.config/...`, `.ssh/...`).
+- Keep shared defaults in `common/`; host overlays belong in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, `fedora/`, `ubuntu/`, or `win/`.
+- Follow the layering model: stow `common/` first, then one host folder via `./stow-all.sh [host]`.
+- Keep `.stowrc`, `stow-all.sh`, and `README.md` consistent whenever package layout or setup commands change.
+- Base configs in `common/` should source host extension files from `~/.config/...` when per-host behavior is needed.
+- Never commit secrets, private keys, or machine-specific absolute paths.
