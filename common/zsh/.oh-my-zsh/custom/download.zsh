@@ -8,12 +8,15 @@ download() {
     fi
 
     if ! command -v kitten >/dev/null 2>&1; then
-        print -u2 "download: 'kitten' not found. Tip: login using 'kitten ssh user@host' (recommended) or install kitty/kitten on this remote."
+        print -u2 "download: 'kitten' not found. Install kitty/kitten on this remote."
         return 127
     fi
 
     local -a transfer_opts
-    transfer_opts=(--transmit-deltas --compress=auto --permissions-bypass yes)
+    transfer_opts=(--transmit-deltas --compress=auto)
+    if [[ -n "${KITTY_PUBLIC_KEY:-}" ]]; then
+        transfer_opts+=(--permissions-bypass yes)
+    fi
 
     # NOTE:
     # - Destination 'Downloads/' is interpreted on the RECEIVING side (your local machine).
