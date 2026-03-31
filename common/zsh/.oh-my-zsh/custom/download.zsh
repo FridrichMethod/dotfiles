@@ -12,12 +12,8 @@ download() {
         return 127
     fi
 
-    # If a public key is set, use it to bypass permissions.
     local -a transfer_opts
-    transfer_opts=(--transmit-deltas --compress=auto)
-    if [[ -n "${KITTY_PUBLIC_KEY:-}" ]]; then
-        transfer_opts+=(--permissions-bypass yes)
-    fi
+    transfer_opts=(--transmit-deltas --compress=auto --permissions-bypass yes)
 
     # NOTE:
     # - Destination 'Downloads/' is interpreted on the RECEIVING side (your local machine).
