@@ -20,6 +20,10 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 - Initialize submodule: `git submodule update --init --recursive`
 - Run checks: `pre-commit run --all-files`
 
+## Verification
+
+After modifying any file, run `pre-commit run --all-files` to ensure changes pass CI checks before committing.
+
 ## Topic docs
 
 - Shell conventions: `.cursor/shared/shell.md`

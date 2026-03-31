@@ -11,3 +11,4 @@ alwaysApply: true
 - Keep `.stowrc`, `stow-all.sh`, and `README.md` consistent whenever package layout or setup commands change.
 - Base configs in `common/` should source host extension files from `~/.config/...` when per-host behavior is needed.
 - Never commit secrets, private keys, or machine-specific absolute paths.
+- After modifying any file, run `pre-commit run --all-files` to ensure changes pass CI checks before committing.
