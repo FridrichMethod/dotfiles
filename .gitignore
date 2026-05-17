@@ -58,3 +58,6 @@ build/
 coverage/
 .coverage
 coverage.xml
+
+# Cursor (local-only AI assistant config)
+.cursor/

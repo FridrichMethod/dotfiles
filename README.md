@@ -15,6 +15,7 @@
 - [Hosts](#hosts)
 - [How It Works](#how-it-works)
 - [Pre-commit Hooks](#pre-commit-hooks)
+- [AI Assistant Guides](#ai-assistant-guides)
 - [Adding a New Package](#adding-a-new-package)
 - [License](#license)
 
@@ -118,6 +119,13 @@ pre-commit run --all-files
 | **shfmt** | `.sh`, `.bash*`, `.zsh*` |
 | **stylua** | `*.lua` |
 | **built-in** | whitespace, EOF, merge conflicts, YAML, JSON, TOML |
+
+## AI Assistant Guides
+
+- [`CLAUDE.md`](CLAUDE.md) — guidance for Claude Code.
+- [`AGENTS.md`](AGENTS.md) — guidance for OpenAI Codex and other agents following the `AGENTS.md` convention.
+
+Both files are self-contained and cover repo scope, required conventions, working commands, verification, and per-topic conventions (shell, Git/SSH, Stow, workflows). Editor-specific tooling configs (such as `.cursor/`) are local-only and not tracked.
 
 ## Adding a New Package
 
