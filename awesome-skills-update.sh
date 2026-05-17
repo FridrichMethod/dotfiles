@@ -14,11 +14,14 @@
 #   AWESOME_SKILLS_BG            set to 0 to run synchronously (default: 1, run in background)
 #   AWESOME_SKILLS_INSTALLER_URL override the install.sh URL
 
-# Only run in interactive shells
-case $- in
-    *i*) ;;
-    *) return 2>/dev/null || exit 0 ;;
-esac
+# Only run in interactive shells (FORCE=1 bypasses, so the `sync-skills`
+# alias works even when expanded into a non-interactive `sh` subprocess).
+if [ "${AWESOME_SKILLS_FORCE:-0}" != "1" ]; then
+    case $- in
+        *i*) ;;
+        *) return 2>/dev/null || exit 0 ;;
+    esac
+fi
 
 # Skip if already checked in this session
 [ -z "$_AWESOME_SKILLS_CHECKED" ] || return 2>/dev/null || exit 0
