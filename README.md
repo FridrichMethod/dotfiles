@@ -14,6 +14,7 @@
 - [Packages](#packages)
 - [Hosts](#hosts)
 - [How It Works](#how-it-works)
+- [Auto-update Hooks](#auto-update-hooks)
 - [Pre-commit Hooks](#pre-commit-hooks)
 - [AI Assistant Guides](#ai-assistant-guides)
 - [Adding a New Package](#adding-a-new-package)
@@ -63,9 +64,10 @@ dotfiles/
 ├── marlowe/         host overrides
 ├── win/             Windows-side config (WezTerm, .wslconfig)
 │
-├── stow-all.sh      one-command installer
-├── dotfiles-update.sh
-└── .stowrc          Stow defaults (target = ~)
+├── stow-all.sh             one-command installer
+├── dotfiles-update.sh      session-once auto-pull on shell startup
+├── awesome-skills-update.sh weekly Claude/Codex skill sync from github.com/FridrichMethod/awesome-skills
+└── .stowrc                 Stow defaults (target = ~)
 ```
 
 ## Packages
@@ -102,6 +104,45 @@ mac/git/.gitconfig ──stow──▶  ~/.gitconfig   (overrides common)
 1. **`common/`** is stowed first — shared baseline for every machine.
 2. **`<host>/`** is stowed second — host-specific files override or extend common.
 3. Stow runs with `--no-folding`, so individual files are linked (not entire directories).
+
+## Auto-update Hooks
+
+Two small shell hooks run automatically on each interactive shell login — both are session-throttled, so they don't slow down every subshell or tmux pane.
+
+### `dotfiles-update.sh`
+
+Fetches this repo and fast-forwards when behind, then nudges you to re-stow and reload the shell. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells).
+
+Disable with `export DOTFILES_AUTO_UPDATE=0`.
+
+### `awesome-skills-update.sh`
+
+Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [github.com/FridrichMethod/awesome-skills](https://github.com/FridrichMethod/awesome-skills) — a curated collection of ~1,668 Claude Code / Codex skills for AI4Protein, bioinformatics, AI development, and academic writing.
+
+| Behavior | Default |
+|---|---|
+| First-time install | Foreground (you see the curl progress) |
+| Refresh interval | Every **7 days** |
+| Subsequent refreshes | **Background** — never blocks shell startup |
+| Lockfile | `$XDG_CACHE_HOME/awesome-skills/in-progress.pid` prevents parallel syncs from concurrent shells |
+| Log | `$XDG_CACHE_HOME/awesome-skills/last.log` (or `~/.cache/awesome-skills/last.log`) |
+| Manual trigger | `sync-skills` alias |
+
+Env knobs:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `AWESOME_SKILLS_AUTO_UPDATE` | `1` | set to `0` to disable entirely |
+| `AWESOME_SKILLS_REFRESH_DAYS` | `7` | change the throttle window |
+| `AWESOME_SKILLS_FORCE` | `0` | set to `1` to bypass throttle once |
+| `AWESOME_SKILLS_BG` | `1` | set to `0` to run synchronously |
+| `AWESOME_SKILLS_INSTALLER_URL` | upstream `install.sh` | point at a fork or branch |
+
+Run a manual sync any time:
+
+```bash
+sync-skills
+```
 
 ## Pre-commit Hooks
 

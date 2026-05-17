@@ -175,3 +175,8 @@ zstyle ':completion:*' special-dirs false
 _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/dotfiles-update.sh"
 [[ -r "$_df_update" ]] && source "$_df_update"
 unset _df_update
+
+# Awesome-skills weekly sync (Claude Code / Codex skill library); see awesome-skills-update.sh
+_as_update="${DOTFILES_DIR:-$HOME/dotfiles}/awesome-skills-update.sh"
+[[ -r "$_as_update" ]] && source "$_as_update"
+unset _as_update

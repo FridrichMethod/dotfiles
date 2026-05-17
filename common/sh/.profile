@@ -37,4 +37,11 @@ if [ -z "${ZSH_VERSION:-}" ]; then
         . "$_df_update"
     fi
     unset _df_update
+
+    # Awesome-skills weekly sync (bash/sh only; zsh sources from .zshrc tail)
+    _as_update="${DOTFILES_DIR:-$HOME/dotfiles}/awesome-skills-update.sh"
+    if [ -r "$_as_update" ]; then
+        . "$_as_update"
+    fi
+    unset _as_update
 fi
