@@ -4,14 +4,24 @@
 
 # Locale and base paths
 export LANG="en_US.UTF-8"
-export MANPATH="/usr/local/man${MANPATH:+:${MANPATH}}"
+
+case ":${MANPATH-}:" in
+    *:/usr/local/man:*) ;;
+    *) export MANPATH="/usr/local/man${MANPATH:+:${MANPATH}}" ;;
+esac
 
 # User binaries first in PATH
-export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
+case ":$PATH:" in
+    *":$HOME/bin:$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/bin:$HOME/.local/bin:$PATH" ;;
+esac
 
 # CUDA setup
 if [ -d /usr/local/cuda/bin ]; then
-    export PATH="/usr/local/cuda/bin:$PATH"
+    case ":$PATH:" in
+        *:/usr/local/cuda/bin:*) ;;
+        *) export PATH="/usr/local/cuda/bin:$PATH" ;;
+    esac
 fi
 
 # Load host-specific login configuration
@@ -23,6 +33,7 @@ fi
 if [ -z "${ZSH_VERSION:-}" ]; then
     _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/dotfiles-update.sh"
     if [ -r "$_df_update" ]; then
+        # shellcheck source=/dev/null
         . "$_df_update"
     fi
     unset _df_update

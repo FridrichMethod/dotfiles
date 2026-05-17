@@ -27,6 +27,7 @@ __mamba_setup="$("$MAMBA_EXE" shell hook --shell bash --root-prefix "$MAMBA_ROOT
 if [ $? -eq 0 ]; then
     eval "$__mamba_setup"
 else
+    # shellcheck disable=SC2139 # intentional: bake MAMBA_EXE into alias at definition time
     alias mamba="$MAMBA_EXE" # Fallback on help from mamba activate
 fi
 unset __mamba_setup

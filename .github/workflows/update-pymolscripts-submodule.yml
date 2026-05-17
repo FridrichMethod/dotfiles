@@ -30,8 +30,8 @@ jobs:
             echo "Submodule already up to date, nothing to commit."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git add common/pymol/PyMOLScripts
           git commit -m "chore(deps): update PyMOLScripts submodule to latest"
           git push

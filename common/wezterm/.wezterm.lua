@@ -14,6 +14,8 @@ local act = wezterm.action
 
 local config = wezterm.config_builder()
 
+local is_windows = wezterm.target_triple:find("windows") ~= nil
+
 -- ── Updates ──────────────────────────────────────────────────────────────────
 
 config.check_for_updates = true
@@ -37,7 +39,9 @@ config.inactive_pane_hsb = { saturation = 0.95, brightness = 0.95 }
 
 config.window_background_opacity = 0.6
 config.text_background_opacity = 0.95
-config.win32_system_backdrop = "Acrylic"
+if is_windows then
+	config.win32_system_backdrop = "Acrylic"
+end
 
 config.window_decorations = "INTEGRATED_BUTTONS|RESIZE"
 config.window_padding = { left = 0, right = 0, top = 0, bottom = 0 }
@@ -112,48 +116,32 @@ config.status_update_interval = 1000
 
 -- ── Domains ───────────────────────────────────────────────────────────────────
 
-config.wsl_domains = wezterm.default_wsl_domains()
-config.default_domain = "WSL:Ubuntu"
+if is_windows then
+	config.wsl_domains = wezterm.default_wsl_domains()
+	config.default_domain = "WSL:Ubuntu"
 
-config.launch_menu = {
-	{
-		label = "PowerShell",
-		domain = { DomainName = "local" },
-		args = { "pwsh", "-NoLogo" },
-	},
-	{
-		label = "Ubuntu",
-		domain = { DomainName = "WSL:Ubuntu" },
-	},
-	{
-		label = "Debian",
-		domain = { DomainName = "WSL:Debian" },
-	},
-}
+	config.launch_menu = {
+		{
+			label = "PowerShell",
+			domain = { DomainName = "local" },
+			args = { "pwsh", "-NoLogo" },
+		},
+		{
+			label = "Ubuntu",
+			domain = { DomainName = "WSL:Ubuntu" },
+		},
+		{
+			label = "Debian",
+			domain = { DomainName = "WSL:Debian" },
+		},
+	}
+end
 
 -- ── Key bindings ──────────────────────────────────────────────────────────────
 
 config.treat_left_ctrlalt_as_altgr = false
 
 config.keys = {
-	{
-		key = "p",
-		mods = "CTRL|ALT",
-		action = act.SpawnCommandInNewTab({
-			domain = { DomainName = "local" },
-			args = { "pwsh", "-NoLogo" },
-		}),
-	},
-	{
-		key = "u",
-		mods = "CTRL|ALT",
-		action = act.SpawnTab({ DomainName = "WSL:Ubuntu" }),
-	},
-	{
-		key = "d",
-		mods = "CTRL|ALT",
-		action = act.SpawnTab({ DomainName = "WSL:Debian" }),
-	},
 	{
 		key = "w",
 		mods = "ALT",
@@ -165,6 +153,27 @@ config.keys = {
 		action = act.ShowLauncherArgs({ flags = "LAUNCH_MENU_ITEMS" }),
 	},
 }
+
+if is_windows then
+	table.insert(config.keys, {
+		key = "p",
+		mods = "CTRL|ALT",
+		action = act.SpawnCommandInNewTab({
+			domain = { DomainName = "local" },
+			args = { "pwsh", "-NoLogo" },
+		}),
+	})
+	table.insert(config.keys, {
+		key = "u",
+		mods = "CTRL|ALT",
+		action = act.SpawnTab({ DomainName = "WSL:Ubuntu" }),
+	})
+	table.insert(config.keys, {
+		key = "d",
+		mods = "CTRL|ALT",
+		action = act.SpawnTab({ DomainName = "WSL:Debian" }),
+	})
+end
 
 config.mouse_bindings = {
 	{

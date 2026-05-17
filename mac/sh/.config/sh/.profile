@@ -9,7 +9,11 @@ else
 fi
 
 # MATLAB setup
-export MATLAB=/Applications/MATLAB_R2025b.app/bin
+if [ -d /Applications/MATLAB_R2025b.app/bin ]; then
+    export MATLAB=/Applications/MATLAB_R2025b.app/bin
+fi
 
 # Schrodinger suite setup
-export SCHRODINGER=/opt/schrodinger/suites2025-2
+if [ -d /opt/schrodinger/suites2025-2 ]; then
+    export SCHRODINGER=/opt/schrodinger/suites2025-2
+fi

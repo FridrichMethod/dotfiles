@@ -5,3 +5,6 @@
 
 --ignore='(^|/)\.Trash-[0-9]+(/.*)?'
 --ignore='(^|/)\.Trash(/.*)?'
+
+--ignore='(^|/)__pycache__(/.*)?'
+--ignore='\.py[cod]$'
