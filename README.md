@@ -119,16 +119,40 @@ Disable with `export DOTFILES_AUTO_UPDATE=0`.
 
 Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [github.com/FridrichMethod/awesome-skills](https://github.com/FridrichMethod/awesome-skills) — a curated collection of ~1,668 Claude Code / Codex skills for AI4Protein, bioinformatics, AI development, and academic writing.
 
-| Behavior | Default |
+#### Requirements
+
+The upstream installer is `curl … | bash`, so the host needs `bash`, `curl`, `tar`, and `rsync`. The hook is defensive: it silently no-ops when `curl` is missing, and the upstream installer prints a clear "Missing required tool: X" if `tar` or `rsync` is missing — failed runs do **not** advance the stamp, so the sync retries automatically once the dep is installed.
+
+All four are pre-installed on macOS and most Linux desktop distros. The one tool you might need to add on a minimal Linux box is `rsync`:
+
+| Platform | Install command |
+|---|---|
+| Debian / Ubuntu / WSL Ubuntu | `sudo apt-get install -y curl tar rsync` |
+| Fedora / RHEL | `sudo dnf install -y curl tar rsync` |
+| Arch | `sudo pacman -S --needed curl tar rsync` |
+| macOS (Homebrew) | `brew install rsync` (curl/tar/bash are built-in) |
+| Stanford Sherlock | `module load system rsync` (curl/tar are in base PATH) |
+| Conda envs | `conda install -c conda-forge rsync curl tar` |
+
+After install, force a sync to confirm everything works:
+
+```bash
+sync-skills
+```
+
+#### Behavior
+
+| Aspect | Default |
 |---|---|
 | First-time install | Foreground (you see the curl progress) |
 | Refresh interval | Every **7 days** |
 | Subsequent refreshes | **Background** — never blocks shell startup |
 | Lockfile | `$XDG_CACHE_HOME/awesome-skills/in-progress.pid` prevents parallel syncs from concurrent shells |
 | Log | `$XDG_CACHE_HOME/awesome-skills/last.log` (or `~/.cache/awesome-skills/last.log`) |
+| Failure handling | Stamp not advanced → retries next shell session |
 | Manual trigger | `sync-skills` alias |
 
-Env knobs:
+#### Env knobs
 
 | Variable | Default | Effect |
 |---|---|---|
