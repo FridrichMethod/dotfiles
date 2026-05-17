@@ -41,6 +41,7 @@ if [ -z "${ZSH_VERSION:-}" ]; then
     # Awesome-skills weekly sync (bash/sh only; zsh sources from .zshrc tail)
     _as_update="${DOTFILES_DIR:-$HOME/dotfiles}/awesome-skills-update.sh"
     if [ -r "$_as_update" ]; then
+        # shellcheck source=/dev/null
         . "$_as_update"
     fi
     unset _as_update
