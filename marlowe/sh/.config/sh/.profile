@@ -26,16 +26,23 @@ if [ -n "$SCRATCH" ]; then
     export UV_CACHE_DIR="$SCRATCH/.cache/uv/$USER"
     export XDG_CACHE_HOME="$SCRATCH/.cache/$USER"
 
+    export CARGO_HOME="$SCRATCH/.cargo/$USER"
+    export GOMODCACHE="$SCRATCH/.cache/go/mod/$USER"
+    export GOPATH="$SCRATCH/.cache/go/path/$USER"
+
     # Ensure cache/temp dirs exist
     for dir in \
         "$APPTAINER_CACHEDIR" \
         "$APPTAINER_TMPDIR" \
+        "$CARGO_HOME" \
         "$CCACHE_DIR" \
         "$CCACHE_TEMPDIR" \
         "$CONDA_PKGS_DIRS" \
         "$CUDA_CACHE_PATH" \
         "$CUPY_CACHE_DIR" \
         "$GITSTATUS_CACHE_DIR" \
+        "$GOMODCACHE" \
+        "$GOPATH" \
         "$HF_DATASETS_CACHE" \
         "$HF_HOME" \
         "$HF_HUB_CACHE" \
