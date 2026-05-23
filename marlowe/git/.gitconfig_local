@@ -1,0 +1,6 @@
+[credential "https://github.com"]
+	helper =
+	helper = !/users/zyli2002/micromamba/envs/login/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !/users/zyli2002/micromamba/envs/login/bin/gh auth git-credential
