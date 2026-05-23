@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# Initialize Lmod module system for zsh
+source /usr/share/lmod/lmod/init/zsh
+
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
 __conda_setup="$('/users/zyli2002/miniconda3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
