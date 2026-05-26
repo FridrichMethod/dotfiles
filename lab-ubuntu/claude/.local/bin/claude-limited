@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLAUDE_BIN="$(command -v claude)"
+
+exec systemd-run --user --scope \
+    --same-dir \
+    --collect \
+    -p MemoryAccounting=yes \
+    -p MemoryHigh=160G \
+    -p MemoryMax=180G \
+    -p MemorySwapMax=4G \
+    "$CLAUDE_BIN" "$@"
