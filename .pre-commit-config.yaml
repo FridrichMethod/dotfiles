@@ -1,5 +1,5 @@
 # Pre-commit hooks for basic hygiene + shell scripts.
-exclude: (^|/)(common/zsh/\.p10k\.zsh|common/zsh/\.local/bin/my-fzf-preview\.sh)$
+exclude: (^|/)(common/zsh/\.p10k\.zsh|common/zsh/\.local/bin/my-fzf-preview\.sh|sherlock/terminfo/\.terminfo/.*)$
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

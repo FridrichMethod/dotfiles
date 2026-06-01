@@ -192,7 +192,7 @@ dotfiles/
 | [`mac/`](mac/) | macOS | `bash`, `git`, `sh`, `ssh`, `zsh` | 7 |
 | [`wsl-ubuntu/`](wsl-ubuntu/) | WSL 2 | `bash`, `git`, `sh`, `ssh`, `zsh` | 6 |
 | [`lab-ubuntu/`](lab-ubuntu/) | Ubuntu (lab) | `bash`, `fcitx5`, `git`, `sh`, `ssh`, `zsh` | 9 |
-| [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `zsh` | 4 |
+| [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `terminfo`, `zsh` | 5 |
 | [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `sh`, `zsh` | 4 |
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
