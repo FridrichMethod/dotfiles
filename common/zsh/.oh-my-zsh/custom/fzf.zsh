@@ -2,7 +2,7 @@
 
 # Options for default fzf behavior
 export FZF_DEFAULT_OPTS=$(
-  cat <<'EOF'
+    cat <<'EOF'
 --tmux center,80%
 --border
 --height 60%
@@ -44,7 +44,7 @@ EOF
 
 # Options for Ctrl-R
 export FZF_CTRL_R_OPTS=$(
-  cat <<'EOF'
+    cat <<'EOF'
 --ansi
 --scheme history
 --header-label ' Command '
@@ -69,7 +69,7 @@ EOF
 # Options for Ctrl-T
 export FZF_CTRL_T_COMMAND='fd -u --max-depth 1 --strip-cwd-prefix --exclude .git --color=always'
 export FZF_CTRL_T_OPTS=$(
-  cat <<'EOF'
+    cat <<'EOF'
 --ansi
 --scheme path
 EOF
@@ -78,7 +78,7 @@ EOF
 # Options for Alt-C
 export FZF_ALT_C_COMMAND='fd --type d -u --follow --strip-cwd-prefix --exclude .git --color=always'
 export FZF_ALT_C_OPTS=$(
-  cat <<'EOF'
+    cat <<'EOF'
 --ansi
 --scheme path
 EOF

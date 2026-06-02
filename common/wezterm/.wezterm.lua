@@ -179,7 +179,7 @@ config.mouse_bindings = {
 	{
 		event = { Down = { streak = 1, button = "Right" } },
 		mods = "NONE",
-		action = act({ PasteFrom = "Clipboard" }),
+		action = act.PasteFrom("Clipboard"),
 	},
 }
 

@@ -2,7 +2,7 @@
 
 # Upload local files/dirs -> remote ~/Downloads/
 upload() {
-    if (( $# < 2 )); then
+    if (($# < 2)); then
         print -u2 "Usage: upload <file_or_dir> [more_files...] <remote_host>"
         return 2
     fi
