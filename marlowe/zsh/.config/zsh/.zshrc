@@ -1,7 +1,11 @@
 #!/bin/zsh
 
-# Initialize Lmod module system for zsh
-source /usr/share/lmod/lmod/init/zsh
+# Initialize Lmod module system for zsh.
+# Bash gets this from /etc/profile → /etc/profile.d/*.sh, but zsh
+# does not source /etc/profile so the `module` function is undefined.
+if (( ! $+functions[module] )) && [[ -f /usr/share/lmod/lmod/init/zsh ]]; then
+    source /usr/share/lmod/lmod/init/zsh
+fi
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!

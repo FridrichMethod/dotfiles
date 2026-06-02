@@ -29,7 +29,11 @@ fi
 
 # Handle directories
 if [[ -d "$file" ]]; then
-  eza --color=always --tree --level=1 --icons --git --show-symlinks -- "$file" | head -200
+  if command -v eza >/dev/null; then
+    eza --color=always --tree --level=1 --icons --git --show-symlinks -- "$file" | head -200
+  else
+    ls -A -- "$file" | head -200
+  fi
   exit
 fi
 

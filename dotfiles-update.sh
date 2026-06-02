@@ -21,6 +21,7 @@ esac
 
 _dotfiles_update_check() {
     [ "${DOTFILES_AUTO_UPDATE:-1}" != "0" ] || return 0
+    command -v git >/dev/null 2>&1 || return 0
 
     _df_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
 
