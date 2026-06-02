@@ -147,6 +147,7 @@ dotfiles/
 │   ├── sh/                       POSIX .profile + .aliases (sourced by bash/zsh)
 │   ├── ssh/                      minimal ~/.ssh/config + Include config.d/*.conf
 │   ├── tcsh/                     .tcshrc
+│   ├── tmux/                     .tmux.conf
 │   ├── vim/                      .vimrc
 │   ├── wezterm/                  .wezterm.lua
 │   ├── xonsh/                    .xonshrc
@@ -154,7 +155,7 @@ dotfiles/
 │
 ├── mac/                          macOS overrides
 ├── wsl-ubuntu/                   WSL 2 Ubuntu overrides
-├── lab-ubuntu/                   lab Ubuntu (includes Fcitx5 IME config)
+├── lab-ubuntu/                   lab Ubuntu (Fcitx5 IME + claude helper)
 ├── sherlock/                     Stanford Sherlock HPC
 ├── marlowe/                      Marlowe HPC
 ├── fedora/                       Fedora overrides
@@ -191,13 +192,13 @@ dotfiles/
 |---|---|---|---:|
 | [`mac/`](mac/) | macOS | `bash`, `git`, `sh`, `ssh`, `zsh` | 7 |
 | [`wsl-ubuntu/`](wsl-ubuntu/) | WSL 2 | `bash`, `git`, `sh`, `ssh`, `zsh` | 6 |
-| [`lab-ubuntu/`](lab-ubuntu/) | Ubuntu (lab) | `bash`, `fcitx5`, `git`, `sh`, `ssh`, `zsh` | 9 |
+| [`lab-ubuntu/`](lab-ubuntu/) | Ubuntu (lab) | `bash`, `claude`, `fcitx5`, `git`, `sh`, `ssh`, `zsh` | 10 |
 | [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `terminfo`, `zsh` | 5 |
-| [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `sh`, `zsh` | 4 |
+| [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `git`, `sh`, `zsh` | 5 |
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
 | [`win/`](win/) | Windows | `wezterm`, `wsl` | 3 |
-| [`common/`](common/) | _shared baseline_ | 13 packages | 37 |
+| [`common/`](common/) | _shared baseline_ | 14 packages | 42 |
 
 ## How Stow Layering Works
 
