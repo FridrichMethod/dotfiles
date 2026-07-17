@@ -3,6 +3,10 @@
 --ignore='\.DS_Store'
 --ignore='\._.*'
 
+# common/codex/.codex/config.toml is a portable merge source, not a symlink
+# target. Codex Desktop owns the mutable regular file at ~/.codex/config.toml.
+--ignore='(^|/)\.codex/config\.toml$'
+
 --ignore='(^|/)\.Trash-[0-9]+(/.*)?'
 --ignore='(^|/)\.Trash(/.*)?'
 

@@ -24,6 +24,21 @@ fi
 
 cd "$REPO_ROOT" # ensures ./.stowrc is picked up
 
+CODEX_SYNC="$COMMON_DIR/codex/.local/bin/codex-config-sync"
+CODEX_PORTABLE="$COMMON_DIR/codex/.codex/config.toml"
+if [[ -n "$HOST" && -f "$HOST_DIR/codex/.codex/config.toml" ]]; then
+    CODEX_PORTABLE="$HOST_DIR/codex/.codex/config.toml"
+fi
+if [[ -x "$CODEX_SYNC" && -f "$CODEX_PORTABLE" ]]; then
+    echo "Synchronizing portable Codex settings"
+    "$CODEX_SYNC" "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
+fi
+
+# Remove the obsolete repository-local filter from the previous layout.
+if git config --local --get-regexp '^filter\.codex-portable\.' >/dev/null 2>&1; then
+    git config --local --remove-section filter.codex-portable
+fi
+
 echo "Stowing common packages:"
 if compgen -G "${COMMON_DIR}"'/*/' >/dev/null; then
     common_pkgs=$(basename -a "${COMMON_DIR}"/*/)

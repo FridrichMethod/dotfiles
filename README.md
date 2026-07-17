@@ -143,7 +143,7 @@ dotfiles/
 │   ├── aria2/                    download client
 │   ├── bash/                     .bashrc, .bash_aliases, .bash_profile
 │   ├── claude/                   ~/.claude/CLAUDE.md + settings.json
-│   ├── codex/                    ~/.codex/AGENTS.md + config.toml
+│   ├── codex/                    ~/.codex/AGENTS.md + portable config sync
 │   ├── conda/                    .condarc
 │   ├── git/                      .gitconfig (with [include] ~/.gitconfig_local)
 │   ├── kitty/                    Kitty terminal
@@ -203,7 +203,7 @@ dotfiles/
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
 | [`win/`](win/) | Windows | `wezterm`, `wsl` | 3 |
-| [`common/`](common/) | _shared baseline_ | 16 packages | 46 |
+| [`common/`](common/) | _shared baseline_ | 16 packages | 47 |
 
 ## How Stow Layering Works
 
@@ -331,13 +331,19 @@ These root files describe how agents should work **inside this repository**. The
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | `~/.claude/settings.json` | Auto mode, permission allowlist, `xhigh`, fullscreen TUI, portable plugin declarations |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
-| [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | `~/.codex/config.toml` | `workspace-write`, `auto_review`, network access, `xhigh`, multi-agent, memories |
+| [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `workspace-write`, `auto_review`, network access, `xhigh`, multi-agent, memories |
 
-The four files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
+The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
 - Claude Code `auto` mode, fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
 - Codex `auto_review`, multi-agent, memories, and network access can be constrained by the installed Codex version, selected model, account entitlement, sandbox implementation, or organization policy.
 - `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical.
+
+#### Mutable Codex Desktop state
+
+Codex Desktop also writes host-local values such as plugin state, MCP commands, runtime marketplace paths, notification helpers, and UI preferences into the live `~/.codex/config.toml`. That live file is intentionally a regular machine-local file rather than a Stow symlink.
+
+[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/codex/.local/bin/codex-config-sync`](common/codex/.local/bin/codex-config-sync), which merges the portable allowlist into the live file while preserving runtime-only top-level keys, table entries, and tables. The helper also migrates the previous symlink layout without creating a backup and fails closed if a required portable key disappears. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
 
 The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
 
@@ -372,6 +378,7 @@ stow --restow --no-folding -d common newtool
 - **Keep secrets out** of version control — use `*_local` files referenced by `[include]` chains.
 - **Stow order is sacred**: `common/` first, host second.
 - **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
+- **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist aligned whenever shared Codex settings change.
 - **One Stow owner per target**: a host-specific AI config must replace, not duplicate, the corresponding file in `common/`.
 - **POSIX vs Bash vs Zsh**: shared logic lives in `common/sh/`; Bash/Zsh-specific syntax stays in matching shell files.
 - **CI mirrors local**: every commit is checked with the same `shellcheck`/`shfmt`/`stylua` you run via `pre-commit`.
