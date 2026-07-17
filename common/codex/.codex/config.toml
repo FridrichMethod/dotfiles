@@ -1,0 +1,18 @@
+model_reasoning_effort = "xhigh"
+personality = "pragmatic"
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+multi_agent = true
+memories = true
+js_repl = false
+
+[memories]
+generate_memories = true
+use_memories = true

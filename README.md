@@ -37,6 +37,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 
 - **One command** to install everything on a fresh machine — `./stow-all.sh <host>`.
 - **Layered configs**: `common/` is the baseline; `<host>/` overrides where machines differ.
+- **Cross-host AI defaults**: global Claude Code and Codex instructions, permissions, reasoning effort, and portable plugin declarations live in `common/`.
 - **No templating, no conditionals** — Stow symlinks the right files into `$HOME`.
 - **Self-healing**: a shell hook checks for upstream changes once per login session and fast-forwards behind branches.
 - **Skill sync**: a weekly background hook keeps `~/.claude/skills/` and `~/.codex/skills/` aligned with [awesome-skills](https://github.com/FridrichMethod/awesome-skills) (~1,668 skills).
@@ -63,7 +64,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 
 </td><td>
 
-- [AI Assistant Guides](#ai-assistant-guides)
+- [AI Assistant Configuration](#ai-assistant-configuration)
 - [Adding a New Package](#adding-a-new-package)
 - [Conventions](#conventions)
 - [License](#license)
@@ -103,6 +104,7 @@ exec $SHELL -l
 | **Shells** | Zsh, Bash, POSIX sh, tcsh, xonsh |
 | **Terminals** | WezTerm, Kitty |
 | **Editor** | Vim |
+| **AI Assistants** | Claude Code and OpenAI Codex global defaults |
 | **Submodule** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) — auto-updated daily by GitHub Actions |
 | **Install** | One command: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
@@ -140,6 +142,8 @@ dotfiles/
 ├── common/                       shared defaults (stowed first)
 │   ├── aria2/                    download client
 │   ├── bash/                     .bashrc, .bash_aliases, .bash_profile
+│   ├── claude/                   ~/.claude/CLAUDE.md + settings.json
+│   ├── codex/                    ~/.codex/AGENTS.md + config.toml
 │   ├── conda/                    .condarc
 │   ├── git/                      .gitconfig (with [include] ~/.gitconfig_local)
 │   ├── kitty/                    Kitty terminal
@@ -183,6 +187,7 @@ dotfiles/
 | **Editor** | Vim |
 | **Version Control** | Git, SSH |
 | **Science** | Conda (`.condarc`), PyMOL scripts (submodule) |
+| **AI Assistants** | Claude Code (`CLAUDE.md`, `settings.json`), OpenAI Codex (`AGENTS.md`, `config.toml`) |
 | **Utilities** | Aria2 |
 | **Input (Linux)** | Fcitx5 (lab-ubuntu only) |
 
@@ -198,13 +203,15 @@ dotfiles/
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
 | [`win/`](win/) | Windows | `wezterm`, `wsl` | 3 |
-| [`common/`](common/) | _shared baseline_ | 14 packages | 42 |
+| [`common/`](common/) | _shared baseline_ | 16 packages | 46 |
 
 ## How Stow Layering Works
 
 ```text
    common/zsh/.zshrc        ──stow──▶  ~/.zshrc            (baseline)
    common/git/.gitconfig    ──stow──▶  ~/.gitconfig        (baseline)
+   common/claude/.claude/*  ──stow──▶  ~/.claude/*         (AI baseline)
+   common/codex/.codex/*    ──stow──▶  ~/.codex/*          (AI baseline)
    mac/git/.gitconfig_local ──stow──▶  ~/.gitconfig_local  (host override, [include]'d)
    mac/ssh/.ssh/config.d/*  ──stow──▶  ~/.ssh/config.d/*   (host-specific endpoints)
 ```
@@ -216,6 +223,8 @@ dotfiles/
 
 > **Git overrides** flow through `[include] path = ~/.gitconfig_local` — the shared `.gitconfig` includes the host file if it exists.
 > **SSH overrides** flow through `Include ~/.ssh/config.d/*.conf` — the shared root config delegates to per-concern fragments.
+>
+> Stow does not merge two files that target the same path. If a host needs a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define the same target in both layers.
 
 ## Auto-update Hooks
 
@@ -304,14 +313,43 @@ pre-commit run --all-files
 | **stylua** | `*.lua`, `*.luau` |
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
 
-## AI Assistant Guides
+## AI Assistant Configuration
+
+### Repository guides
 
 | File | Audience |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | [Claude Code](https://claude.com/claude-code) |
 | [`AGENTS.md`](AGENTS.md) | OpenAI Codex and any agent following the [`AGENTS.md`](https://agents.md) convention |
 
-Both files are self-contained and cover repo scope, required conventions, working commands, verification, and per-topic conventions (shell, Git/SSH, Stow, workflows). Editor-specific tooling configs (such as `.cursor/`) are local-only and not tracked.
+These root files describe how agents should work **inside this repository**. They are separate from the user-global files stowed into `$HOME`.
+
+### User-global configuration
+
+| Tracked source | Stow target | Synchronized baseline |
+|---|---|---|
+| [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
+| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | `~/.claude/settings.json` | Auto mode, permission allowlist, `xhigh`, fullscreen TUI, portable plugin declarations |
+| [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
+| [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | `~/.codex/config.toml` | `workspace-write`, `auto_review`, network access, `xhigh`, multi-agent, memories |
+
+The four files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
+
+- Claude Code `auto` mode, fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
+- Codex `auto_review`, multi-agent, memories, and network access can be constrained by the installed Codex version, selected model, account entitlement, sandbox implementation, or organization policy.
+- `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical.
+
+The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
+
+Third-party skills are also not stored in this repository. [`awesome-skills-update.sh`](awesome-skills-update.sh) installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
+
+After cloning on a new machine:
+
+```bash
+./stow-all.sh <host>
+sync-skills
+# Then authenticate Claude Code and Codex on this host.
+```
 
 ## Adding a New Package
 
@@ -333,6 +371,8 @@ stow --restow --no-folding -d common newtool
 
 - **Keep secrets out** of version control — use `*_local` files referenced by `[include]` chains.
 - **Stow order is sacred**: `common/` first, host second.
+- **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
+- **One Stow owner per target**: a host-specific AI config must replace, not duplicate, the corresponding file in `common/`.
 - **POSIX vs Bash vs Zsh**: shared logic lives in `common/sh/`; Bash/Zsh-specific syntax stays in matching shell files.
 - **CI mirrors local**: every commit is checked with the same `shellcheck`/`shfmt`/`stylua` you run via `pre-commit`.
 - **Verification**: after edits, run `pre-commit run --all-files` before committing.

@@ -47,6 +47,19 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep SSH targets split by concern in `.ssh/config.d/*.conf`.
 - Do not commit secrets or private key material.
 
+## AI assistant configuration
+
+- Keep shared user-global files in these Stow packages:
+  - `common/claude/.claude/CLAUDE.md`
+  - `common/claude/.claude/settings.json`
+  - `common/codex/.codex/AGENTS.md`
+  - `common/codex/.codex/config.toml`
+- Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
+- Shared settings may contain portable preferences, permission rules, plugin identifiers, and remote marketplace declarations.
+- Never track credentials, OAuth state, sessions, histories, project trust, caches, downloaded plugins, generated memories, runtime marketplace paths, or machine-specific absolute paths.
+- Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
+- Keep third-party skill payloads out of dotfiles; `awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
+
 ## Stow and update scripts
 
 - `stow-all.sh` is the canonical setup command.
