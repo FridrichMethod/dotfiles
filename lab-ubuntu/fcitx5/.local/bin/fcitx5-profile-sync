@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# fcitx5-profile-sync PORTABLE_PROFILE LIVE_PROFILE
+#
+# Materialize the tracked fcitx5 profile baseline into the live, mutable
+# ~/.config/fcitx5/profile that fcitx5 rewrites at runtime. Like the Claude and
+# Codex splits, the live file is a regular machine-local file rather than a Stow
+# symlink: fcitx5 normalizes and rewrites the profile (it appends whitespace and
+# can replace the file wholesale when input methods change), which would
+# otherwise dirty the repo or silently break the symlink.
+#
+# The profile carries no machine-specific or runtime-only state, so the tracked
+# baseline is authoritative and re-asserted on each stow; there is nothing to
+# merge back from the live copy. fcitx5's own conf/ runtime state stays
+# untracked and untouched.
+#
+# Fail closed: a missing portable baseline leaves the live file untouched.
+
+set -eu
+
+if [ "$#" -ne 2 ]; then
+    echo "usage: fcitx5-profile-sync PORTABLE_PROFILE LIVE_PROFILE" >&2
+    exit 2
+fi
+
+portable=$1
+live=$2
+
+if [ ! -f "$portable" ]; then
+    echo "fcitx5-profile-sync: missing portable profile: $portable" >&2
+    exit 1
+fi
+
+live_dir=$(dirname "$live")
+mkdir -p "$live_dir"
+
+# Break a legacy Stow symlink before writing the real regular file.
+if [ -L "$live" ]; then
+    rm -f "$live"
+fi
+
+# Write atomically; skip the replace when the baseline already matches. The
+# trap clears the staging file whether or not it gets moved into place.
+live_tmp=$(mktemp "$live_dir/.fcitx5-profile.XXXXXX")
+trap 'rm -f "$live_tmp"' EXIT HUP INT TERM
+cp "$portable" "$live_tmp"
+chmod 600 "$live_tmp"
+if ! { [ -f "$live" ] && cmp -s "$live_tmp" "$live"; }; then
+    mv -f "$live_tmp" "$live"
+fi
+
+echo "Synchronized fcitx5 profile into $live"

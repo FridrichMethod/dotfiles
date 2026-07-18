@@ -11,6 +11,10 @@
 # target. Claude Code owns the mutable regular file at ~/.claude/settings.json.
 --ignore='(^|/)\.claude/settings\.json$'
 
+# <host>/fcitx5/.config/fcitx5/profile is a portable baseline, not a symlink
+# target. fcitx5 owns the mutable regular file at ~/.config/fcitx5/profile.
+--ignore='(^|/)\.config/fcitx5/profile$'
+
 --ignore='(^|/)\.Trash-[0-9]+(/.*)?'
 --ignore='(^|/)\.Trash(/.*)?'
 

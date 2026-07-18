@@ -44,6 +44,17 @@ if [[ -x "$CLAUDE_SYNC" && -f "$CLAUDE_PORTABLE" ]]; then
     "$CLAUDE_SYNC" "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
 
+# fcitx5 rewrites ~/.config/fcitx5/profile at runtime, so it is materialized as
+# a machine-local regular file instead of a Stow symlink (see .stowrc).
+if [[ -n "$HOST" ]]; then
+    FCITX5_SYNC="$HOST_DIR/fcitx5/.local/bin/fcitx5-profile-sync"
+    FCITX5_PORTABLE="$HOST_DIR/fcitx5/.config/fcitx5/profile"
+    if [[ -x "$FCITX5_SYNC" && -f "$FCITX5_PORTABLE" ]]; then
+        echo "Synchronizing fcitx5 profile"
+        "$FCITX5_SYNC" "$FCITX5_PORTABLE" "$HOME/.config/fcitx5/profile"
+    fi
+fi
+
 # Remove the obsolete repository-local filter from the previous layout.
 if git config --local --get-regexp '^filter\.codex-portable\.' >/dev/null 2>&1; then
     git config --local --remove-section filter.codex-portable
