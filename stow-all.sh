@@ -34,6 +34,16 @@ if [[ -x "$CODEX_SYNC" && -f "$CODEX_PORTABLE" ]]; then
     "$CODEX_SYNC" "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
 fi
 
+CLAUDE_SYNC="$COMMON_DIR/claude/.local/bin/claude-settings-sync"
+CLAUDE_PORTABLE="$COMMON_DIR/claude/.claude/settings.json"
+if [[ -n "$HOST" && -f "$HOST_DIR/claude/.claude/settings.json" ]]; then
+    CLAUDE_PORTABLE="$HOST_DIR/claude/.claude/settings.json"
+fi
+if [[ -x "$CLAUDE_SYNC" && -f "$CLAUDE_PORTABLE" ]]; then
+    echo "Synchronizing portable Claude settings"
+    "$CLAUDE_SYNC" "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
+fi
+
 # Remove the obsolete repository-local filter from the previous layout.
 if git config --local --get-regexp '^filter\.codex-portable\.' >/dev/null 2>&1; then
     git config --local --remove-section filter.codex-portable

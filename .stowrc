@@ -7,6 +7,10 @@
 # target. Codex Desktop owns the mutable regular file at ~/.codex/config.toml.
 --ignore='(^|/)\.codex/config\.toml$'
 
+# common/claude/.claude/settings.json is a portable merge source, not a symlink
+# target. Claude Code owns the mutable regular file at ~/.claude/settings.json.
+--ignore='(^|/)\.claude/settings\.json$'
+
 --ignore='(^|/)\.Trash-[0-9]+(/.*)?'
 --ignore='(^|/)\.Trash(/.*)?'
 

@@ -142,7 +142,7 @@ dotfiles/
 ├── common/                       shared defaults (stowed first)
 │   ├── aria2/                    download client
 │   ├── bash/                     .bashrc, .bash_aliases, .bash_profile
-│   ├── claude/                   ~/.claude/CLAUDE.md + settings.json
+│   ├── claude/                   ~/.claude/CLAUDE.md + portable settings sync
 │   ├── codex/                    ~/.codex/AGENTS.md + portable config sync
 │   ├── conda/                    .condarc
 │   ├── git/                      .gitconfig (with [include] ~/.gitconfig_local)
@@ -329,15 +329,21 @@ These root files describe how agents should work **inside this repository**. The
 | Tracked source | Stow target | Synchronized baseline |
 |---|---|---|
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
-| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | `~/.claude/settings.json` | Auto mode, permission allowlist, `xhigh`, fullscreen TUI, portable plugin declarations |
+| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Permission allowlist, `xhigh`, fullscreen TUI, model, hooks, voice, portable plugin and marketplace declarations |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `workspace-write`, `auto_review`, network access, `xhigh`, multi-agent, memories |
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
-- Claude Code `auto` mode, fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
+- Claude Code fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
 - Codex `auto_review`, multi-agent, memories, and network access can be constrained by the installed Codex version, selected model, account entitlement, sandbox implementation, or organization policy.
 - `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical.
+
+#### Mutable Claude Code state
+
+Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permission edits, model selection, per-project `additionalDirectories`), and that file carries machine-specific absolute paths. The live file is intentionally a regular machine-local file rather than a Stow symlink.
+
+[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/claude/.local/bin/claude-settings-sync`](common/claude/.local/bin/claude-settings-sync), which deep-merges the portable baseline into the live file: portable keys win on conflict, while live-only keys such as `permissions.additionalDirectories` and any runtime state are preserved. The helper migrates the previous symlink layout without creating a backup and fails closed on a missing or malformed baseline, an unparseable live file, or a host with neither `jq` nor `python3`. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
 
 #### Mutable Codex Desktop state
 
@@ -378,6 +384,7 @@ stow --restow --no-folding -d common newtool
 - **Keep secrets out** of version control — use `*_local` files referenced by `[include]` chains.
 - **Stow order is sacred**: `common/` first, host second.
 - **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
+- **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync`, and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
 - **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist aligned whenever shared Codex settings change.
 - **One Stow owner per target**: a host-specific AI config must replace, not duplicate, the corresponding file in `common/`.
 - **POSIX vs Bash vs Zsh**: shared logic lives in `common/sh/`; Bash/Zsh-specific syntax stays in matching shell files.
