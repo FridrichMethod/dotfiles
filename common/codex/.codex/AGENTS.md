@@ -28,6 +28,7 @@
 - Before editing, inspect repository status and relevant diffs. Treat existing modifications as user-owned unless clearly produced by the current task.
 - Never discard, reset, stash, amend, rebase, or overwrite user work unless explicitly requested.
 - When commits are requested, keep them atomic and reviewable, stage files deliberately, and do not use `git add .` blindly.
+- When creating commits or pull requests, do not add `Co-Authored-By` trailers, "Generated with" lines, or any other AI or agent attribution.
 
 ## Engineering workflow
 

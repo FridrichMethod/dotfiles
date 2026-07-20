@@ -329,12 +329,14 @@ These root files describe how agents should work **inside this repository**. The
 | Tracked source | Stow target | Synchronized baseline |
 |---|---|---|
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
-| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Permission allowlist, `xhigh`, fullscreen TUI, model, hooks, voice, portable plugin and marketplace declarations |
+| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Permission allowlist, `xhigh`, fullscreen TUI, model, disabled commit/PR attribution, hooks, voice, portable plugin and marketplace declarations |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `workspace-write`, `auto_review`, network access, `xhigh`, multi-agent, memories |
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
+- Claude Code attribution is disabled with empty `attribution.commit` and `attribution.pr` strings; this supersedes the deprecated `includeCoAuthoredBy` setting.
+- Codex has no active attribution setting; the aligned global instruction files prohibit `Co-Authored-By`, generated-with lines, and other AI attribution.
 - Claude Code fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
 - Codex `auto_review`, multi-agent, memories, and network access can be constrained by the installed Codex version, selected model, account entitlement, sandbox implementation, or organization policy.
 - `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical.
