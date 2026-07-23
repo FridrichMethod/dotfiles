@@ -1,0 +1,7 @@
+[credential]
+	credentialStore = dpapi
+	helper = manager
+[credential "https://dev.azure.com"]
+	useHttpPath = true
+[credential "https://github.com"]
+	username = FridrichMethod

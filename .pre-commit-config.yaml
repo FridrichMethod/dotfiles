@@ -4,10 +4,15 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # Windows Terminal rewrites its settings.json on every UI save, with
+      # its own trailing spaces and no final newline. Reformatting it here
+      # only starts a fight the app always wins, so leave its bytes alone;
+      # check-json below still validates it.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: (^|/)\.p10k\.zsh$
+        exclude: (^|/)(\.p10k\.zsh|win/terminal/.*/settings\.json)$
       - id: end-of-file-fixer
+        exclude: (^|/)win/terminal/.*/settings\.json$
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
