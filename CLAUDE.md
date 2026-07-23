@@ -56,6 +56,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - `common/codex/.codex/config.toml`
 - Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
 - Shared settings may contain portable preferences, permission rules, plugin identifiers, and remote marketplace declarations.
+- Do not declare `model` in the portable Claude `settings.json`. The sync asserts every key it declares, so a shared `model` would silently undo each host's `/model` choice on the next stow. Model selection stays machine-local; `effortLevel` and the rest remain shared.
 - Never track credentials, OAuth state, sessions, histories, project trust, caches, downloaded plugins, generated memories, runtime marketplace paths, or machine-specific absolute paths.
 - Preserve the portable/live split for Codex: `.stowrc` excludes `common/codex/.codex/config.toml` from Stow, and `stow-all.sh` runs `common/codex/.local/bin/codex-config-sync` to merge it into the mutable regular file at `~/.codex/config.toml`.
 - Preserve the portable/live split for Claude: `.stowrc` excludes `common/claude/.claude/settings.json` from Stow, and `stow-all.sh` runs `common/claude/.local/bin/claude-settings-sync` to deep-merge it into the mutable regular file at `~/.claude/settings.json`. Portable keys win; live-only keys (for example the machine-specific `permissions.additionalDirectories`, plus any runtime state Claude Code writes) are preserved.
