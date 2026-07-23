@@ -32,6 +32,8 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - `common/sh/.aliases` sources `~/.config/sh/.aliases`
   - `common/sh/.profile` sources `~/.config/sh/.profile`
 - Keep startup flow quiet and idempotent; avoid duplicate side effects.
+- PATH belongs in `common/sh/.profile`, which prepends `$HOME/bin` and `$HOME/.local/bin` behind a duplicate guard. `common/zsh/.zshrc` sources `~/.profile` on its third line, so zsh inherits it too. Add new entries there, or in a host `*/sh/.profile`, never by appending to a shell rc.
+- Third-party installers (Codex, Claude Code, nvm, conda) append PATH blocks to `~/.zshrc`, which is a Stow symlink, so the edit lands in `common/zsh/.zshrc` and shows up as a dirty repo. Default to discarding them: they re-export a directory `.profile` already added, without its duplicate guard, so PATH grows on every nested shell, and they hardcode one machine's home (`/home/<user>/...`) into a baseline stowed to hosts with different usernames and home roots. Keep only the intent, expressed portably via `$HOME` in the profile.
 - Follow pre-commit shell style:
   - Bash: `shfmt -i 4 -ci -ln bash`
   - POSIX: `shfmt -i 4 -ci -ln posix`
