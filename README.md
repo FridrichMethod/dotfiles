@@ -28,14 +28,18 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 ```bash
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && git submodule update --init --recursive
-./stow-all.sh mac          # or: wsl-ubuntu, lab-ubuntu, sherlock, marlowe, fedora, ubuntu, win
+./stow-all.sh mac          # or: wsl-ubuntu, lab-ubuntu, sherlock, marlowe, fedora, ubuntu
+```
+
+```powershell
+.\stow-all.ps1 win         # native Windows (PowerShell 7+, Developer Mode)
 ```
 
 ---
 
 ## Highlights
 
-- **One command** to install everything on a fresh machine — `./stow-all.sh <host>`.
+- **One command** to install everything on a fresh machine — `./stow-all.sh <host>`, or `.\stow-all.ps1 win` on native Windows.
 - **Layered configs**: `common/` is the baseline; `<host>/` overrides where machines differ.
 - **Cross-host AI defaults**: global Claude Code and Codex instructions, permissions, reasoning effort, and portable plugin declarations live in `common/`.
 - **No templating, no conditionals** — Stow symlinks the right files into `$HOME`.
@@ -95,6 +99,23 @@ exec $SHELL -l
 ```
 
 > `.stowrc` sets `--target=~` so every package links into `$HOME`. Stow runs with `--restow --no-folding`, so re-running the installer is safe and idempotent.
+
+### On Windows
+
+GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead — same layering, same `.stowrc` ignores, same idempotency. Enable **Developer Mode** (Settings → System → For developers) first so symlinks need no elevation, and run it from PowerShell 7+:
+
+```powershell
+git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
+cd $HOME\dotfiles
+.\stow-all.ps1 win        # add -WhatIf for a dry run
+```
+
+Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point at a file inside ext4. A WSL distro keeps its own clone and uses `./stow-all.sh wsl-ubuntu` as usual.
+
+Like `stow-all.sh`, the Windows installer first merges the portable Claude/Codex baselines into the live `~/.claude/settings.json` and `~/.codex/config.toml` (via the same sync helpers, run through Git Bash), then stows. Windows-only differences from the POSIX installer:
+
+- **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
+- **Pre-existing files are adopted, not clobbered.** A file that already matches the repo (ignoring line endings) is replaced by its link silently; one that differs is moved to `<name>.stow-backup-<timestamp>` first.
 
 ## At a Glance
 
@@ -164,12 +185,14 @@ dotfiles/
 ├── marlowe/                      Marlowe HPC
 ├── fedora/                       Fedora overrides
 ├── ubuntu/                       Ubuntu desktop overrides
-├── win/                          Windows-side (.wezterm.lua, .wslconfig)
+├── win/                          Windows (PowerShell profiles, Terminal, WSL)
 │
 ├── .github/workflows/            ci.yml + daily submodule sync
+├── .gitattributes                LF everywhere (Windows clones set autocrlf)
 ├── .pre-commit-config.yaml       shellcheck · shfmt · stylua · hygiene
 ├── .stowrc                       Stow defaults (--target=~, ignores)
-├── stow-all.sh                   one-command installer
+├── stow-all.sh                   one-command installer (POSIX)
+├── stow-all.ps1                  one-command installer (Windows)
 ├── dotfiles-update.sh            session-once auto-pull on shell login
 ├── awesome-skills-update.sh      weekly Claude/Codex skill sync
 ├── CLAUDE.md                     guidance for Claude Code
@@ -202,7 +225,7 @@ dotfiles/
 | [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `git`, `sh`, `zsh` | 5 |
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
-| [`win/`](win/) | Windows | `wezterm`, `wsl` | 3 |
+| [`win/`](win/) | Windows | `git`, `powershell`, `ssh`, `terminal`, `wsl` | 8 |
 | [`common/`](common/) | _shared baseline_ | 16 packages | 48 |
 
 ## How Stow Layering Works

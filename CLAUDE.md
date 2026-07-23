@@ -74,6 +74,17 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`.
 - When setup behavior changes, update both script comments and `README.md`.
 
+## Windows
+
+- `stow-all.ps1` is the canonical setup command on native Windows; `stow-all.sh` rejects the `win` host and points at it. GNU Stow needs Perl and POSIX symlink semantics, so it is not used there.
+- Keep the two installers semantically aligned: `--target=~`, `--no-folding`, restow idempotency, the same ignore sources (`.stowrc` `--ignore=` lines plus per-package `.stow-local-ignore`), and the same portable/live sync steps. `stow-all.ps1` parses `.stowrc` rather than restating its patterns and invokes the same `claude-settings-sync`/`codex-config-sync` helpers through Git Bash (fail-closed when Git Bash or the helpers' own dependencies are missing); never fork the ignore list or reimplement the helpers.
+- `stow-all.ps1` stows an explicit allowlist of `common/` packages, not every package. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell packages must stay out of a Windows `$HOME`. Extend `$CommonPackages` only for tools that run natively on Windows.
+- `win/` packages mirror `$HOME` paths like every other package, including `Documents\PowerShell\` and `AppData\Local\Packages\`. No installer special-casing is needed because both live under `$HOME`.
+- Windows Terminal `settings.json` is a plain Stow symlink: Terminal resolves symlinks before its atomic save (`til::io::write_utf8_string_to_file_atomic`), so UI saves write through the link. This has been true since v1.10.2383.0. Never use a hard link, which the same atomic rename would sever. Hot reload does not fire through a symlink, so edits need a Terminal restart.
+- Keep machine-specific user-profile paths out of tracked Windows files: write `Join-Path $HOME ...`, not `C:\Users\<name>\...`. Re-running `conda init` re-hardcodes its block; treat that as drift to fix, not to commit.
+- Guard anything in a PowerShell profile that needs a real console behind `if (-not [Console]::IsOutputRedirected)`. Prediction setup, `Import-Module CompletionPredictor`, and `Install-Module` all fail or hang under the redirected stdout of every `pwsh -Command` call.
+- `.gitattributes` pins `eol=lf` because Git for Windows enables `core.autocrlf` in its system config. Files that must keep CRLF are marked `-text` individually.
+
 ## Workflows and checks
 
 - Keep workflow definitions in `.github/workflows/*.yml`.
