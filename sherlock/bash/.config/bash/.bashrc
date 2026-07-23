@@ -32,3 +32,11 @@ unset __mamba_setup
 # shfmt: on
 
 export PATH="$MAMBA_ROOT_PREFIX/envs/login/bin:$PATH"
+
+# Auto-load Lmod dev toolchain + Node.js LTS (gcc, cmake, make, cuda, openmpi, node/npm).
+# Python is intentionally left to conda/mamba, not a module.
+# NOTE: openmpi/5.0.5 is built against gcc/12.4.0 + cuda/12.6.1 and will pin those versions;
+# do not bump gcc/cuda here while openmpi is loaded. Use `ml spider <name>` for versions.
+if command -v ml >/dev/null 2>&1; then
+    ml gcc/12.4.0 cmake/3.31.4 make/4.4 cuda/12.6.1 openmpi/5.0.5 nodejs/24.13.0 2>/dev/null
+fi
