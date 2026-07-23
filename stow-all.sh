@@ -5,7 +5,17 @@ set -euo pipefail
 # Usage: ./stow-all.sh [host-dir]
 # Example: ./stow-all.sh wsl-ubuntu
 # If no host-dir is provided, only stow common.
+# The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
+
+if [[ "$HOST" == "win" ]]; then
+    echo "ERROR: the 'win' host is installed from Windows, not from POSIX." >&2
+    echo "       Its packages mirror Windows-only paths (Documents\\PowerShell," >&2
+    echo "       AppData\\Local\\Packages) that mean nothing in a POSIX \$HOME." >&2
+    echo "       Run this in PowerShell from the repo root instead:" >&2
+    echo "         .\\stow-all.ps1 win" >&2
+    exit 1
+fi
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 echo "Stowing from $REPO_ROOT"
