@@ -12,6 +12,12 @@ export BRIAN_HOME=/home/groups/btrippe
 export MICHAEL_HOME=/home/groups/mzlin
 export POSSU_HOME=/home/groups/possu
 
+# User tool environment
+case ":$PATH:" in
+    *":$HOME/micromamba/envs/login/bin:"*) ;;
+    *) export PATH="$HOME/micromamba/envs/login/bin:$PATH" ;;
+esac
+
 # Cache
 if [ -n "$SCRATCH" ]; then
     export APPTAINER_CACHEDIR="$SCRATCH/.cache/apptainercache"
