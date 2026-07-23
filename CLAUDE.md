@@ -84,6 +84,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep machine-specific user-profile paths out of tracked Windows files: write `Join-Path $HOME ...`, not `C:\Users\<name>\...`. Re-running `conda init` re-hardcodes its block; treat that as drift to fix, not to commit.
 - Guard anything in a PowerShell profile that needs a real console behind `if (-not [Console]::IsOutputRedirected)`. Prediction setup, `Import-Module CompletionPredictor`, and `Install-Module` all fail or hang under the redirected stdout of every `pwsh -Command` call.
 - `.gitattributes` pins `eol=lf` because Git for Windows enables `core.autocrlf` in its system config. Files that must keep CRLF are marked `-text` individually.
+- While this clone has a ref checked out that predates the `win/` packages, the stowed `~/.gitconfig_local` symlink dangles, and Git for Windows treats a global-config `[include]` of a dangling symlink as a fatal parse error — every git command on the machine fails, and a `git switch` can even tear mid-flight (worktree updated, `HEAD` not). To operate git inside such a window, point `GIT_CONFIG_GLOBAL` at an empty file; checking `main` back out restores the include target and heals git.
 
 ## Workflows and checks
 
