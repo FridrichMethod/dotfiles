@@ -25,6 +25,7 @@ if [ -n "$SCRATCH" ]; then
     export HF_DATASETS_CACHE="$SCRATCH/.cache/huggingface/datasets"
     export HF_HOME="$SCRATCH/.cache/huggingface"
     export HF_HUB_CACHE="$SCRATCH/.cache/huggingface/hub"
+    export NPM_CONFIG_CACHE="$SCRATCH/.cache/npm"
     export PIP_CACHE_DIR="$SCRATCH/.cache/pip"
     export TORCHINDUCTOR_CACHE_DIR="$SCRATCH/.cache/torchinductor"
     export TORCH_EXTENSIONS_DIR="$SCRATCH/.cache/torch_extensions"
@@ -53,6 +54,7 @@ if [ -n "$SCRATCH" ]; then
         "$HF_DATASETS_CACHE" \
         "$HF_HOME" \
         "$HF_HUB_CACHE" \
+        "$NPM_CONFIG_CACHE" \
         "$PIP_CACHE_DIR" \
         "$TORCHINDUCTOR_CACHE_DIR" \
         "$TORCH_EXTENSIONS_DIR" \
@@ -65,3 +67,8 @@ if [ -n "$SCRATCH" ]; then
         fi
     done
 fi
+
+# npm global installs. The nodejs module's default prefix is its read-only shared
+# software dir, so `npm install -g` fails there. Point it at ~/.local, which
+# common/sh/.profile already puts on PATH (binaries land in ~/.local/bin).
+export NPM_CONFIG_PREFIX="$HOME/.local"
