@@ -245,6 +245,8 @@ dotfiles/
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files) so `sshd` stays happy.
 
+`.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
+
 > **Git overrides** flow through `[include] path = ~/.gitconfig_local` — the shared `.gitconfig` includes the host file if it exists.
 > **SSH overrides** flow through `Include ~/.ssh/config.d/*.conf` — the shared root config delegates to per-concern fragments.
 >

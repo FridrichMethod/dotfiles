@@ -77,6 +77,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Preserve Stow flags unless intentionally migrating behavior:
   - `--restow --no-folding`
 - Keep `.stowrc` as global defaults (`--target=~` and ignore patterns).
+- Do not shell-quote `.stowrc` option values. GNU Stow parses the file directly, and Stow 2.3.1 treats quote characters around `--ignore=` regexes literally; keep the focused test that stows into a temporary target with materialized files already present.
 - `.stowrc` excludes each materialized AI baseline (`config.toml`, `settings.json`, and `portable.rules`); keep those exclusions aligned with `stow-all.sh` and `stow-all.ps1`.
 - Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`.
 - When setup behavior changes, update both script comments and `README.md`.

@@ -1,25 +1,25 @@
 --target=~
 
---ignore='\.DS_Store'
---ignore='\._.*'
+--ignore=\.DS_Store
+--ignore=\._.*
 
 # common/codex/.codex/config.toml is a portable merge source, not a symlink
 # target. Codex Desktop owns the mutable regular file at ~/.codex/config.toml.
---ignore='(^|/)\.codex/config\.toml$'
+--ignore=(^|/)\.codex/config\.toml$
 
 # Cross-host Codex rules are materialized next to the mutable default.rules.
---ignore='(^|/)\.codex/rules/portable\.rules$'
+--ignore=(^|/)\.codex/rules/portable\.rules$
 
 # common/claude/.claude/settings.json is a portable merge source, not a symlink
 # target. Claude Code owns the mutable regular file at ~/.claude/settings.json.
---ignore='(^|/)\.claude/settings\.json$'
+--ignore=(^|/)\.claude/settings\.json$
 
 # <host>/fcitx5/.config/fcitx5/profile is a portable baseline, not a symlink
 # target. fcitx5 owns the mutable regular file at ~/.config/fcitx5/profile.
---ignore='(^|/)\.config/fcitx5/profile$'
+--ignore=(^|/)\.config/fcitx5/profile$
 
---ignore='(^|/)\.Trash-[0-9]+(/.*)?'
---ignore='(^|/)\.Trash(/.*)?'
+--ignore=(^|/)\.Trash-[0-9]+(/.*)?
+--ignore=(^|/)\.Trash(/.*)?
 
---ignore='(^|/)__pycache__(/.*)?'
---ignore='\.py[cod]$'
+--ignore=(^|/)__pycache__(/.*)?
+--ignore=\.py[cod]$

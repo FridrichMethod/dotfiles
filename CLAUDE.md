@@ -77,6 +77,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Preserve Stow flags unless intentionally migrating behavior:
   - `--restow --no-folding`
 - Keep `.stowrc` as global defaults (`--target=~` and ignore patterns).
+- Do not shell-quote `.stowrc` option values. GNU Stow parses the file directly, and Stow 2.3.1 treats quote characters around `--ignore=` regexes literally; keep the focused test that stows into a temporary target with materialized files already present.
 - `.stowrc` also excludes app-rewritten or helper-materialized files that `stow-all.sh` writes as machine-local regular files instead of symlinks: Codex `config.toml` and Claude `settings.json` (merged, portable keys win), Codex `portable.rules` (materialized without touching `default.rules`), and the fcitx5 `profile` (materialized wholesale, since it holds nothing machine-specific). Add any new such file to both the `.stowrc` ignore list and matching POSIX/Windows sync steps, and keep its helper fail-closed.
 - Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`.
 - When setup behavior changes, update both script comments and `README.md`.
