@@ -41,7 +41,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 
 - **One command** to install everything on a fresh machine — `./stow-all.sh <host>`, or `.\stow-all.ps1 win` on native Windows.
 - **Layered configs**: `common/` is the baseline; `<host>/` overrides where machines differ.
-- **Cross-host AI defaults**: global Claude Code and Codex instructions, permissions, reasoning effort, and portable plugin declarations live in `common/`.
+- **Cross-host AI defaults**: global Claude Code and Codex instructions, curated permissions, guarded exec policies, reasoning effort, and portable plugin declarations live in `common/`.
 - **No templating, no conditionals** — Stow symlinks the right files into `$HOME`.
 - **Self-healing**: a shell hook checks for upstream changes once per login session and fast-forwards behind branches.
 - **Skill sync**: a weekly background hook keeps `~/.claude/skills/` and `~/.codex/skills/` aligned with [awesome-skills](https://github.com/FridrichMethod/awesome-skills) (~1,668 skills).
@@ -112,7 +112,7 @@ cd $HOME\dotfiles
 
 Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point at a file inside ext4. A WSL distro keeps its own clone and uses `./stow-all.sh wsl-ubuntu` as usual.
 
-Like `stow-all.sh`, the Windows installer first merges the portable Claude/Codex baselines into the live `~/.claude/settings.json` and `~/.codex/config.toml` (via the same sync helpers, run through Git Bash), then stows. Windows-only differences from the POSIX installer:
+Like `stow-all.sh`, the Windows installer first synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. Windows-only differences from the POSIX installer:
 
 - **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
 - **Pre-existing files are adopted, not clobbered.** A file that already matches the repo (ignoring line endings) is replaced by its link silently; one that differs is moved to `<name>.stow-backup-<timestamp>` first.
@@ -163,8 +163,8 @@ dotfiles/
 ├── common/                       shared defaults (stowed first)
 │   ├── aria2/                    download client
 │   ├── bash/                     .bashrc, .bash_aliases, .bash_profile
-│   ├── claude/                   ~/.claude/CLAUDE.md + portable settings sync
-│   ├── codex/                    ~/.codex/AGENTS.md + portable config sync
+│   ├── claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
+│   ├── codex/                    ~/.codex/AGENTS.md + portable config/exec rules
 │   ├── conda/                    .condarc
 │   ├── git/                      .gitconfig (with [include] ~/.gitconfig_local)
 │   ├── kitty/                    Kitty terminal
@@ -210,7 +210,7 @@ dotfiles/
 | **Editor** | Vim |
 | **Version Control** | Git, SSH |
 | **Science** | Conda (`.condarc`), PyMOL scripts (submodule) |
-| **AI Assistants** | Claude Code (`CLAUDE.md`, `settings.json`), OpenAI Codex (`AGENTS.md`, `config.toml`) |
+| **AI Assistants** | Claude Code (`CLAUDE.md`, `settings.json`), OpenAI Codex (`AGENTS.md`, `config.toml`, `portable.rules`) |
 | **Utilities** | Aria2 |
 | **Input (Linux)** | Fcitx5 (lab-ubuntu only) |
 
@@ -226,15 +226,16 @@ dotfiles/
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
 | [`win/`](win/) | Windows | `git`, `powershell`, `ssh`, `terminal`, `wsl` | 8 |
-| [`common/`](common/) | _shared baseline_ | 16 packages | 48 |
+| [`common/`](common/) | _shared baseline_ | 16 packages | 50 |
 
 ## How Stow Layering Works
 
 ```text
    common/zsh/.zshrc        ──stow──▶  ~/.zshrc            (baseline)
    common/git/.gitconfig    ──stow──▶  ~/.gitconfig        (baseline)
-   common/claude/.claude/*  ──stow──▶  ~/.claude/*         (AI baseline)
-   common/codex/.codex/*    ──stow──▶  ~/.codex/*          (AI baseline)
+   common/claude/.claude/CLAUDE.md ──stow──▶ ~/.claude/CLAUDE.md
+   common/codex/.codex/AGENTS.md   ──stow──▶ ~/.codex/AGENTS.md
+   settings/config/rules baselines ──sync──▶ mutable live files
    mac/git/.gitconfig_local ──stow──▶  ~/.gitconfig_local  (host override, [include]'d)
    mac/ssh/.ssh/config.d/*  ──stow──▶  ~/.ssh/config.d/*   (host-specific endpoints)
 ```
@@ -352,9 +353,10 @@ These root files describe how agents should work **inside this repository**. The
 | Tracked source | Stow target | Synchronized baseline |
 |---|---|---|
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
-| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Permission allowlist, `xhigh`, fullscreen TUI, model, disabled commit/PR attribution, hooks, voice, portable plugin and marketplace declarations |
+| [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Curated allow/ask policy, `xhigh`, fullscreen TUI, disabled commit/PR attribution, hooks, voice, portable plugin and marketplace declarations |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `workspace-write`, `auto_review`, network access, `xhigh`, multi-agent, memories |
+| [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Cross-host `prompt` guardrails that override less-restrictive host-local approvals |
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
@@ -368,15 +370,19 @@ The Git-stored versions of these files are safe to share across macOS, Linux, an
 
 Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permission edits, model selection, per-project `additionalDirectories`), and that file carries machine-specific absolute paths. The live file is intentionally a regular machine-local file rather than a Stow symlink.
 
-[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/claude/.local/bin/claude-settings-sync`](common/claude/.local/bin/claude-settings-sync), which deep-merges the portable baseline into the live file: portable keys win on conflict, while live-only keys such as `permissions.additionalDirectories` and any runtime state are preserved. The helper migrates the previous symlink layout without creating a backup and fails closed on a missing or malformed baseline, an unparseable live file, or a host with neither `jq` nor `python3`. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
+[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/claude/.local/bin/claude-settings-sync`](common/claude/.local/bin/claude-settings-sync), which deep-merges the portable baseline into the live file: portable keys win on conflict, while live-only keys such as `permissions.additionalDirectories` and any runtime state are preserved. The portable `permissions.allow` and `permissions.ask` arrays are authoritative, so a later stow removes ad-hoc live permission rules that are not part of the reviewed cross-host policy. The helper migrates the previous symlink layout without creating a backup and fails closed on a missing or malformed baseline, an unparseable live file, or a host with neither `jq` nor `python3`. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
+
+Claude Code already treats common file reads and read-only shell commands as non-interactive. The portable allowlist therefore contains only read-only search integrations; commands that mutate Git or remote state, transfer data, delete/move files, execute arbitrary packages, or install software stay in the portable ask list. Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source.
 
 #### Mutable Codex Desktop state
 
 Codex Desktop also writes host-local values such as plugin state, MCP commands, runtime marketplace paths, notification helpers, and UI preferences into the live `~/.codex/config.toml`. That live file is intentionally a regular machine-local file rather than a Stow symlink.
 
-[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/codex/.local/bin/codex-config-sync`](common/codex/.local/bin/codex-config-sync), which merges the portable allowlist into the live file while preserving runtime-only top-level keys, table entries, and tables. The helper also migrates the previous symlink layout without creating a backup and fails closed if a required portable key disappears. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
+[`.stowrc`](.stowrc) excludes the tracked config and rules baselines from Stow. [`stow-all.sh`](stow-all.sh) runs [`common/codex/.local/bin/codex-config-sync`](common/codex/.local/bin/codex-config-sync), which merges the portable config allowlist into the live file while preserving runtime-only top-level keys, table entries, and tables. It also runs [`common/codex/.local/bin/codex-rules-sync`](common/codex/.local/bin/codex-rules-sync), which atomically materializes the reviewed cross-host policy as `~/.codex/rules/portable.rules` without touching Codex-generated `default.rules` or other host-local rule files.
 
-The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
+Codex applies the most restrictive matching rule across active files. The portable file contains only `prompt` guardrails for destructive, networked, privileged, package-installing, and opaque code-execution prefixes; it grants no cross-host `allow`. One host's project-specific approvals therefore cannot silently weaken another host. Rerun `./stow-all.sh <host>` after pulling portable policy changes.
+
+The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, third-party copies under `~/.claude/rules/`, Codex-generated `~/.codex/rules/default.rules`, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
 
 Third-party skills are also not stored in this repository. [`awesome-skills-update.sh`](awesome-skills-update.sh) installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
 
@@ -411,6 +417,7 @@ stow --restow --no-folding -d common newtool
 - **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
 - **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync`, and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
 - **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist aligned whenever shared Codex settings change.
+- **Codex exec policy is layered**: keep reviewed cross-host guardrails in `portable.rules`; leave generated or project/host-specific approvals in the untracked `default.rules`.
 - **fcitx5 profile is materialized**: fcitx5 rewrites `~/.config/fcitx5/profile` at runtime, so `.stowrc` excludes it and `fcitx5-profile-sync` writes the tracked baseline as a machine-local regular file; the baseline is authoritative and re-asserted on stow.
 - **One Stow owner per target**: a host-specific AI config must replace, not duplicate, the corresponding file in `common/`.
 - **POSIX vs Bash vs Zsh**: shared logic lives in `common/sh/`; Bash/Zsh-specific syntax stays in matching shell files.

@@ -47,3 +47,12 @@ repos:
     hooks:
       - id: stylua
         files: \.(lua|luau)$
+
+  - repo: local
+    hooks:
+      - id: ai-config-sync
+        name: ai config and rules sync
+        entry: tests/ai-config-sync.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|tests/ai-config-sync\.sh)$

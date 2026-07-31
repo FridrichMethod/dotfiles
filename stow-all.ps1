@@ -102,12 +102,12 @@ function Invoke-PortableSync {
         Runs a portable/live sync helper, mirroring the same step in
         stow-all.sh.
     .DESCRIPTION
-        The claude/codex baselines are merge sources excluded from Stow by
-        .stowrc, so simply stowing those packages would silently drop them.
-        The helpers are POSIX sh; they run under Git Bash (claude needs jq or
-        python3 on PATH, codex only awk). system32\bash.exe is WSL and would
-        operate on the WSL home, so it is never used. Fail closed: any missing
-        prerequisite or nonzero exit leaves the live file untouched.
+        The Claude/Codex baselines are merge or materialization sources
+        excluded from Stow, so simply stowing those packages would silently
+        drop them. The helpers are POSIX sh and run under Git Bash.
+        system32\bash.exe is WSL and would operate on the WSL home, so it is
+        never used. Fail closed: any missing prerequisite or nonzero exit
+        leaves the live file untouched.
     #>
     param(
         [Parameter(Mandatory)][string]$Helper,
@@ -130,12 +130,12 @@ function Invoke-PortableSync {
     }
     if (-not $bash) {
         $script:Warnings.Add(
-            "$Label sync skipped: Git Bash not found; portable settings " +
-            "were not merged into $Live")
+            "$Label sync skipped: Git Bash not found; portable state " +
+            "was not synchronized into $Live")
         return
     }
 
-    if ($PSCmdlet.ShouldProcess($Live, "Merge portable $Label settings")) {
+    if ($PSCmdlet.ShouldProcess($Live, "Synchronize portable $Label")) {
         & $bash ($Helper -replace '\\', '/') ($Portable -replace '\\', '/') `
             ($Live -replace '\\', '/')
         if ($LASTEXITCODE -ne 0) {
@@ -278,18 +278,28 @@ $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 # Portable/live sync first, mirroring stow-all.sh: a host layer may override
 # the portable merge source wholesale.
 $codexPortable = Join-Path $commonRoot 'codex\.codex\config.toml'
+$codexRulesPortable = Join-Path $commonRoot 'codex\.codex\rules\portable.rules'
 $claudePortable = Join-Path $commonRoot 'claude\.claude\settings.json'
 if ($HostDir) {
     $codexHost = Join-Path $RepoRoot "$HostDir\codex\.codex\config.toml"
     if (Test-Path -LiteralPath $codexHost) { $codexPortable = $codexHost }
+    $codexRulesHost = Join-Path $RepoRoot `
+        "$HostDir\codex\.codex\rules\portable.rules"
+    if (Test-Path -LiteralPath $codexRulesHost) {
+        $codexRulesPortable = $codexRulesHost
+    }
     $claudeHost = Join-Path $RepoRoot "$HostDir\claude\.claude\settings.json"
     if (Test-Path -LiteralPath $claudeHost) { $claudePortable = $claudeHost }
 }
-Invoke-PortableSync -Label 'Codex' `
+Invoke-PortableSync -Label 'Codex settings' `
     -Helper (Join-Path $commonRoot 'codex\.local\bin\codex-config-sync') `
     -Portable $codexPortable `
     -Live (Join-Path $Target '.codex\config.toml')
-Invoke-PortableSync -Label 'Claude' `
+Invoke-PortableSync -Label 'Codex rules' `
+    -Helper (Join-Path $commonRoot 'codex\.local\bin\codex-rules-sync') `
+    -Portable $codexRulesPortable `
+    -Live (Join-Path $Target '.codex\rules\portable.rules')
+Invoke-PortableSync -Label 'Claude settings' `
     -Helper (Join-Path $commonRoot 'claude\.local\bin\claude-settings-sync') `
     -Portable $claudePortable `
     -Live (Join-Path $Target '.claude\settings.json')

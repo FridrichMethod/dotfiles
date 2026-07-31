@@ -44,6 +44,17 @@ if [[ -x "$CODEX_SYNC" && -f "$CODEX_PORTABLE" ]]; then
     "$CODEX_SYNC" "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
 fi
 
+CODEX_RULES_SYNC="$COMMON_DIR/codex/.local/bin/codex-rules-sync"
+CODEX_RULES_PORTABLE="$COMMON_DIR/codex/.codex/rules/portable.rules"
+if [[ -n "$HOST" && -f "$HOST_DIR/codex/.codex/rules/portable.rules" ]]; then
+    CODEX_RULES_PORTABLE="$HOST_DIR/codex/.codex/rules/portable.rules"
+fi
+if [[ -x "$CODEX_RULES_SYNC" && -f "$CODEX_RULES_PORTABLE" ]]; then
+    echo "Synchronizing portable Codex rules"
+    "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE" \
+        "$HOME/.codex/rules/portable.rules"
+fi
+
 CLAUDE_SYNC="$COMMON_DIR/claude/.local/bin/claude-settings-sync"
 CLAUDE_PORTABLE="$COMMON_DIR/claude/.claude/settings.json"
 if [[ -n "$HOST" && -f "$HOST_DIR/claude/.claude/settings.json" ]]; then

@@ -56,13 +56,17 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - `common/claude/.claude/settings.json`
   - `common/codex/.codex/AGENTS.md`
   - `common/codex/.codex/config.toml`
+  - `common/codex/.codex/rules/portable.rules`
 - Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
 - Shared settings may contain portable preferences, permission rules, plugin identifiers, and remote marketplace declarations.
 - Do not declare `model` in the portable Claude `settings.json`. The sync asserts every key it declares, so a shared `model` would silently undo each host's `/model` choice on the next stow. Model selection stays machine-local; `effortLevel` and the rest remain shared.
+- Keep Claude's portable `permissions.allow` limited to narrow, read-only integrations. Put mutating, network-transfer, package-execution, installation, privilege, and external-write prefixes in `permissions.ask`; the portable arrays are authoritative over ad-hoc live edits.
+- Do not vendor third-party Markdown payloads copied into `~/.claude/rules/`; plugin checkouts may be used as an audit source, but Claude does not load plugin-bundled rules automatically. Keep reviewed cross-host instructions in the global `CLAUDE.md`.
 - Never track credentials, OAuth state, sessions, histories, project trust, caches, downloaded plugins, generated memories, runtime marketplace paths, or machine-specific absolute paths.
 - Preserve the portable/live split for Codex: `.stowrc` excludes `common/codex/.codex/config.toml` from Stow, and `stow-all.sh` runs `common/codex/.local/bin/codex-config-sync` to merge it into the mutable regular file at `~/.codex/config.toml`.
 - Preserve the portable/live split for Claude: `.stowrc` excludes `common/claude/.claude/settings.json` from Stow, and `stow-all.sh` runs `common/claude/.local/bin/claude-settings-sync` to deep-merge it into the mutable regular file at `~/.claude/settings.json`. Portable keys win; live-only keys (for example the machine-specific `permissions.additionalDirectories`, plus any runtime state Claude Code writes) are preserved.
-- Keep both sync helpers fail-closed. Update `codex-config-sync`, its allowlist, README documentation, and portable `config.toml` together when shared Codex keys change; update `claude-settings-sync`, README documentation, and portable `settings.json` together when shared Claude keys change. Keep machine-specific absolute paths (for example `permissions.additionalDirectories`) out of the portable `settings.json`.
+- Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; `codex-rules-sync` materializes it without touching host-local `default.rules`. Portable rules may add `prompt`/`forbidden` safeguards but must not grant broad cross-host `allow` prefixes.
+- Keep all three AI sync helpers fail-closed. Update their sources, README documentation, and focused tests together when shared config or rule behavior changes. Keep machine-specific absolute paths (for example `permissions.additionalDirectories`) out of the portable `settings.json`.
 - Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
 - Keep third-party skill payloads out of dotfiles; `awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
 
@@ -73,14 +77,14 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Preserve Stow flags unless intentionally migrating behavior:
   - `--restow --no-folding`
 - Keep `.stowrc` as global defaults (`--target=~` and ignore patterns).
-- `.stowrc` also excludes app-rewritten mutable files that `stow-all.sh` materializes into machine-local regular files instead of symlinks: Codex `config.toml` and Claude `settings.json` (merged, portable keys win) and the fcitx5 `profile` (materialized wholesale, since it holds nothing machine-specific). Add any new such file to both the `.stowrc` ignore list and a matching `stow-all.sh` sync step, and keep its helper fail-closed.
+- `.stowrc` also excludes app-rewritten or helper-materialized files that `stow-all.sh` writes as machine-local regular files instead of symlinks: Codex `config.toml` and Claude `settings.json` (merged, portable keys win), Codex `portable.rules` (materialized without touching `default.rules`), and the fcitx5 `profile` (materialized wholesale, since it holds nothing machine-specific). Add any new such file to both the `.stowrc` ignore list and matching POSIX/Windows sync steps, and keep its helper fail-closed.
 - Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`.
 - When setup behavior changes, update both script comments and `README.md`.
 
 ## Windows
 
 - `stow-all.ps1` is the canonical setup command on native Windows; `stow-all.sh` rejects the `win` host and points at it. GNU Stow needs Perl and POSIX symlink semantics, so it is not used there.
-- Keep the two installers semantically aligned: `--target=~`, `--no-folding`, restow idempotency, the same ignore sources (`.stowrc` `--ignore=` lines plus per-package `.stow-local-ignore`), and the same portable/live sync steps. `stow-all.ps1` parses `.stowrc` rather than restating its patterns and invokes the same `claude-settings-sync`/`codex-config-sync` helpers through Git Bash (fail-closed when Git Bash or the helpers' own dependencies are missing); never fork the ignore list or reimplement the helpers.
+- Keep the two installers semantically aligned: `--target=~`, `--no-folding`, restow idempotency, the same ignore sources (`.stowrc` `--ignore=` lines plus per-package `.stow-local-ignore`), and the same portable/live sync steps. `stow-all.ps1` parses `.stowrc` rather than restating its patterns and invokes the same `claude-settings-sync`, `codex-config-sync`, and `codex-rules-sync` helpers through Git Bash (fail-closed when Git Bash or the helpers' own dependencies are missing); never fork the ignore list or reimplement the helpers.
 - `stow-all.ps1` stows an explicit allowlist of `common/` packages, not every package. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell packages must stay out of a Windows `$HOME`. Extend `$CommonPackages` only for tools that run natively on Windows.
 - `win/` packages mirror `$HOME` paths like every other package, including `Documents\PowerShell\` and `AppData\Local\Packages\`. No installer special-casing is needed because both live under `$HOME`.
 - Windows Terminal `settings.json` is a plain Stow symlink: Terminal resolves symlinks before its atomic save (`til::io::write_utf8_string_to_file_atomic`), so UI saves write through the link. This has been true since v1.10.2383.0. Never use a hard link, which the same atomic rename would sever. Hot reload does not fire through a symlink, so edits need a Terminal restart.
