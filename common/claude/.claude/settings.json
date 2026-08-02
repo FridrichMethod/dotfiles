@@ -3,30 +3,25 @@
     "allow": [
       "WebSearch",
       "mcp__plugin_everything-claude-code_github__search_code",
-      "mcp__plugin_everything-claude-code_github__get_file_contents"
-    ],
-    "ask": [
-      "Bash(git add *)",
+      "mcp__plugin_everything-claude-code_github__get_file_contents",
       "Bash(git commit *)",
+      "Bash(rmdir *)",
+      "Bash(mv *)",
+      "Bash(git add *)",
       "Bash(git push *)",
       "Bash(git pull *)",
       "Bash(git clone *)",
       "Bash(git reset *)",
       "Bash(git restore *)",
       "Bash(git checkout *)",
-      "Bash(git clean *)",
       "Bash(curl *)",
       "Bash(wget *)",
       "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(rsync *)",
-      "Bash(rm *)",
-      "Bash(rmdir *)",
-      "Bash(mv *)",
       "Bash(tee *)",
       "Bash(source *)",
       "Bash(. *)",
-      "Bash(npx *)",
       "Bash(pip install *)",
       "Bash(pip3 install *)",
       "Bash(uv pip install *)",
@@ -36,12 +31,17 @@
       "Bash(pnpm install *)",
       "Bash(yarn add *)",
       "Bash(brew install *)",
-      "Bash(sudo *)",
       "Bash(gh api *)",
       "Bash(gh pr create *)",
       "Bash(gh pr merge *)",
       "Bash(gh issue create *)",
       "Bash(gh release create *)"
+    ],
+    "ask": [
+      "Bash(git clean *)",
+      "Bash(rm *)",
+      "Bash(sudo *)",
+      "Bash(npx *)"
     ]
   },
   "attribution": {
