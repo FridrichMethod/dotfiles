@@ -79,7 +79,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep `.stowrc` as global defaults (`--target=~` and ignore patterns).
 - Do not shell-quote `.stowrc` option values. GNU Stow parses the file directly, and Stow 2.3.1 treats quote characters around `--ignore=` regexes literally; keep the focused test that stows into a temporary target with materialized files already present.
 - `.stowrc` excludes each materialized AI baseline (`config.toml`, `settings.json`, and `portable.rules`); keep those exclusions aligned with `stow-all.sh` and `stow-all.ps1`.
-- Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`.
+- Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`. `dotfiles-update.ps1` is its PowerShell counterpart, invoked from the tail of `win/powershell/Documents/PowerShell/profile.ps1`; keep the two in contract parity (`DOTFILES_DIR`, `DOTFILES_AUTO_UPDATE`, `_DOTFILES_CHECKED`, fast-forward only, never an automatic re-stow) and keep `tests/update-hooks.sh` passing. The PowerShell one skips on redirected stdout, since every `pwsh -Command ...` call loads the profile, and must not set `$ErrorActionPreference` to `Stop`, which would let a failed `git fetch` abort the whole profile on PowerShell 7.4+.
 - When setup behavior changes, update both script comments and `README.md`.
 
 ## Windows

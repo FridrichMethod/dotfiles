@@ -62,3 +62,9 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.sh)$
+      - id: update-hooks
+        name: login updater parity
+        entry: tests/update-hooks.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(dotfiles-update\.(sh|ps1)|win/powershell/Documents/PowerShell/profile\.ps1|tests/update-hooks\.sh)$

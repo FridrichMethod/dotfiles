@@ -197,6 +197,7 @@ dotfiles/
 ├── stow-all.sh                   one-command installer (POSIX)
 ├── stow-all.ps1                  one-command installer (Windows)
 ├── dotfiles-update.sh            session-once auto-pull on shell login
+├── dotfiles-update.ps1           the same hook, for PowerShell on Windows
 ├── awesome-skills-update.sh      weekly Claude/Codex skill sync
 ├── CLAUDE.md                     guidance for Claude Code
 └── AGENTS.md                     guidance for OpenAI Codex / other agents
@@ -257,7 +258,7 @@ dotfiles/
 
 ## Auto-update Hooks
 
-Two small shell hooks run on each interactive shell login. Both are session-throttled, so subshells and tmux panes never re-run them.
+Two small hooks run on each interactive shell login, and the pull hook has a PowerShell twin for Windows. All are session-throttled, so subshells and tmux panes never re-run them.
 
 <details open>
 <summary><strong><code>dotfiles-update.sh</code></strong> — pulls this repo when behind</summary>
@@ -276,6 +277,8 @@ Fetches the remote, fast-forwards if behind, then nudges you to re-stow and relo
 | `DOTFILES_DIR` | `~/dotfiles` | repo path |
 
 Session marker: `_DOTFILES_CHECKED` — exported so subshells skip instantly; a fresh SSH session (clean env) triggers a new check.
+
+**On Windows** — `dotfiles-update.ps1` is the PowerShell counterpart, invoked at the end of `win/powershell/Documents/PowerShell/profile.ps1`. Same variables, same `_DOTFILES_CHECKED` marker (a process environment variable, so a nested `pwsh` inherits it and skips). In place of the POSIX interactive-shell test it skips whenever stdout is redirected — which is every `pwsh -Command ...` call, so scripted invocations never trigger a fetch — and its re-stow hint says *elevated*, because only an elevated run creates trusted symlinks. It never re-stows on its own for the same reason.
 
 </details>
 
