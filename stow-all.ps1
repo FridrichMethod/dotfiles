@@ -14,8 +14,15 @@
     Ignore patterns are read from .stowrc and from per-package
     .stow-local-ignore files, so POSIX and Windows share one source of truth.
 
-    Requires Developer Mode (Settings > System > For developers) so that
-    symlinks can be created without an elevated prompt.
+    Run this from an elevated PowerShell. Developer Mode (Settings >
+    System > For developers) also lets it create symlinks without elevation,
+    but a symlink created by a non-elevated process is an untrusted reparse
+    point: Windows refuses to traverse one for a file open whose token is a
+    network logon - which is what OpenSSH public-key auth produces - so every
+    stowed dotfile fails inside an ssh session with "the path cannot be
+    traversed because it contains an untrusted mount point" while resolving
+    fine locally. An elevated run creates trusted links and repairs untrusted
+    ones it finds.
 
 .PARAMETER HostDir
     Host overlay to stow after common/. Defaults to 'win'. Pass '' to stow
@@ -46,9 +53,16 @@ $Target = [Environment]::GetFolderPath('UserProfile')
 $CommonPackages = @('claude', 'codex', 'conda', 'git', 'pymol', 'ssh', 'wezterm')
 
 $script:Linked = 0
+$script:Repaired = 0
 $script:Unchanged = 0
 $script:BackedUp = 0
 $script:Warnings = [System.Collections.Generic.List[string]]::new()
+
+# Only a token holding SeCreateSymbolicLinkPrivilege creates trusted symlinks,
+# so both the repair path and the closing warning need to know how we run.
+$script:Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$script:IsElevated = ([Security.Principal.WindowsPrincipal]$script:Identity).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
 
 function Get-StowIgnorePattern {
     <#
@@ -184,6 +198,48 @@ function Test-ContentEquivalent {
     return $textA -eq $textB
 }
 
+function Test-FileOpens {
+    <#
+    .SYNOPSIS
+        True when a file can actually be opened for reading.
+    .DESCRIPTION
+        ReadWrite sharing keeps a file another process holds open - a profile
+        being sourced, a config being watched - from reading as a failure.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    try {
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $stream.Dispose()
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-UntrustedLink {
+    <#
+    .SYNOPSIS
+        True when a symlink resolves on paper but cannot be traversed.
+    .DESCRIPTION
+        Get-Item, Test-Path and fsutil all report an untrusted reparse point as
+        a healthy link: tag, flags and substitute name are byte-identical to a
+        trusted one. Only an open that traverses the link fails, so opening it
+        is the sole reliable probe. A target that will not open either means a
+        lock or a missing file rather than link trust, and rewriting the link
+        would not help, so that case is not reported as untrusted.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Link,
+        [Parameter(Mandatory)][string]$Target
+    )
+
+    if (Test-FileOpens -Path $Link) { return $false }
+    return (Test-FileOpens -Path $Target)
+}
+
 function Invoke-StowPackage {
     param(
         [Parameter(Mandatory)][string]$PackageRoot,
@@ -233,8 +289,29 @@ function Invoke-StowPackage {
         if ($existing) {
             if ($existing.LinkType -eq 'SymbolicLink') {
                 if (@($existing.Target)[0] -eq $item.FullName) {
-                    Write-Verbose "ok        $relativeUnix"
-                    $script:Unchanged++
+                    if (-not (Test-UntrustedLink -Link $destination `
+                                -Target $item.FullName)) {
+                        Write-Verbose "ok        $relativeUnix"
+                        $script:Unchanged++
+                        continue
+                    }
+                    # Recreating it is the only repair, and only an elevated
+                    # token makes the replacement any more trusted than the
+                    # link already there.
+                    if (-not $script:IsElevated) {
+                        $script:Warnings.Add(
+                            "untrusted symlink left in place: $relativeUnix " +
+                            '(re-run from an elevated PowerShell to repair it)')
+                        $script:Unchanged++
+                        continue
+                    }
+                    if ($PSCmdlet.ShouldProcess(
+                            $destination, 'Repair untrusted symlink')) {
+                        New-Item -ItemType SymbolicLink -Path $destination `
+                            -Value $item.FullName -Force | Out-Null
+                        Write-Host "  repair  $relativeUnix"
+                        $script:Repaired++
+                    }
                     continue
                 }
                 if ($PSCmdlet.ShouldProcess($destination, 'Replace stale symlink')) {
@@ -340,5 +417,14 @@ if ((Test-Path -LiteralPath $profileRoot) -and
         "under $profileRoot (Documents may be redirected to OneDrive)")
 }
 
-Write-Host "`nlinked: $script:Linked   unchanged/ignored: $script:Unchanged   backed up: $script:BackedUp"
+# Every link inherits the trust of the token that created it, so a non-elevated
+# run quietly produces links that work locally and nowhere else.
+if (-not $script:IsElevated -and $script:Linked -gt 0) {
+    $script:Warnings.Add(
+        "$script:Linked symlink(s) created from a non-elevated session are " +
+        'untrusted reparse points: an ssh session cannot traverse them. ' +
+        'Re-run from an elevated PowerShell to replace them with trusted links')
+}
+
+Write-Host "`nlinked: $script:Linked   repaired: $script:Repaired   unchanged/ignored: $script:Unchanged   backed up: $script:BackedUp"
 foreach ($warning in $script:Warnings) { Write-Warning $warning }

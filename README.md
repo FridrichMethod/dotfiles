@@ -32,7 +32,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 ```
 
 ```powershell
-.\stow-all.ps1 win         # native Windows (PowerShell 7+, Developer Mode)
+.\stow-all.ps1 win         # native Windows (elevated PowerShell 7+)
 ```
 
 ---
@@ -102,7 +102,7 @@ exec $SHELL -l
 
 ### On Windows
 
-GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead — same layering, same `.stowrc` ignores, same idempotency. Enable **Developer Mode** (Settings → System → For developers) first so symlinks need no elevation, and run it from PowerShell 7+:
+GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead — same layering, same `.stowrc` ignores, same idempotency. Run it from an **elevated** PowerShell 7+:
 
 ```powershell
 git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
@@ -112,10 +112,13 @@ cd $HOME\dotfiles
 
 Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point at a file inside ext4. A WSL distro keeps its own clone and uses `./stow-all.sh wsl-ubuntu` as usual.
 
+**Why elevated?** Developer Mode (Settings → System → For developers) also lets the script create symlinks without elevation, but a symlink created by a non-elevated process is an *untrusted* reparse point. Windows refuses to traverse one for a file open whose token is a network logon — exactly what OpenSSH public-key auth produces — so inside an `ssh` session every stowed dotfile fails with `The path cannot be traversed because it contains an untrusted mount point` (error 448) while the same links resolve fine in a local session. That is not cosmetic: git dies with `fatal: unknown error occurred while reading the configuration files` because `~/.gitconfig` is unreadable. Neither `Get-Item` nor `fsutil reparsepoint query` can tell a trusted link from an untrusted one — tag, flags and substitute name are byte-identical — only the owner differs (`BUILTIN\Administrators` versus your user SID).
+
 Like `stow-all.sh`, the Windows installer first synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. Windows-only differences from the POSIX installer:
 
 - **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
 - **Pre-existing files are adopted, not clobbered.** A file that already matches the repo (ignoring line endings) is replaced by its link silently; one that differs is moved to `<name>.stow-backup-<timestamp>` first.
+- **Untrusted symlinks are repaired, not skipped.** A link already pointing at the right file is normally left alone, but a matching target says nothing about whether Windows will follow the link, so each one is opened to check. Untrusted links are rewritten when the run is elevated (counted as `repaired:`) and reported as warnings when it is not.
 
 ## At a Glance
 

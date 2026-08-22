@@ -56,3 +56,9 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|tests/ai-config-sync\.sh)$
+      - id: windows-installer
+        name: windows installer symlink trust
+        entry: tests/windows-installer.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(stow-all\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.sh)$
