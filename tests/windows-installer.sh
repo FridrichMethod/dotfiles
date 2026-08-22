@@ -54,13 +54,21 @@ for guide in CLAUDE.md AGENTS.md; do
     fi
 done
 
+# GitHub's Ubuntu runners ship pwsh, so this parse check does run in CI. The
+# path travels through the environment because -Command does not populate
+# $args, which silently parsed a null path until CI caught it.
 if command -v pwsh >/dev/null 2>&1; then
-    pwsh -NoProfile -NonInteractive -Command '
+    INSTALLER_PATH="$INSTALLER" pwsh -NoProfile -NonInteractive -Command '
+        $path = $env:INSTALLER_PATH
+        if (-not (Test-Path -LiteralPath $path)) {
+            Write-Output "installer not found at $path"
+            exit 1
+        }
         $errors = $null
         [void][System.Management.Automation.Language.Parser]::ParseFile(
-            $args[0], [ref]$null, [ref]$errors)
+            $path, [ref]$null, [ref]$errors)
         if ($errors) { $errors | ForEach-Object { $_.ToString() }; exit 1 }
-    ' -args "$INSTALLER"
+    '
 fi
 
 echo "windows-installer=PASS"
