@@ -335,6 +335,7 @@ Optional but recommended — same tools CI runs.
 ```bash
 pip install pre-commit          # or: brew install pre-commit
 pre-commit install
+./tests/run.sh                  # dynamic behavior tests for core automation
 pre-commit run --all-files
 ```
 

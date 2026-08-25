@@ -16,8 +16,9 @@ case $- in
     *) return 2>/dev/null || exit 0 ;;
 esac
 
-# Skip if already checked in this session
-[ -z "$_DOTFILES_CHECKED" ] || return 2>/dev/null || exit 0
+# Skip if already checked in this session. The default keeps this safe when the
+# calling interactive shell has nounset enabled.
+[ -z "${_DOTFILES_CHECKED:-}" ] || return 2>/dev/null || exit 0
 
 _dotfiles_update_check() {
     [ "${DOTFILES_AUTO_UPDATE:-1}" != "0" ] || return 0

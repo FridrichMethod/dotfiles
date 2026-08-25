@@ -23,8 +23,9 @@ if [ "${AWESOME_SKILLS_FORCE:-0}" != "1" ]; then
     esac
 fi
 
-# Skip if already checked in this session
-[ -z "$_AWESOME_SKILLS_CHECKED" ] || return 2>/dev/null || exit 0
+# Skip if already checked in this session. The default keeps this safe when the
+# calling interactive shell has nounset enabled.
+[ -z "${_AWESOME_SKILLS_CHECKED:-}" ] || return 2>/dev/null || exit 0
 
 _awesome_skills_check() {
     [ "${AWESOME_SKILLS_AUTO_UPDATE:-1}" != "0" ] || return 0
@@ -72,13 +73,18 @@ _awesome_skills_check() {
 
     # Inner runner — used for both fg and bg paths.
     _ask_run() {
-        echo "$$" >"$_ask_lock" 2>/dev/null
-        if curl -fsSL "$_ask_url" | bash >"$_ask_log" 2>&1; then
-            touch "$_ask_stamp"
+        echo "$$" >"$_ask_lock" 2>/dev/null || return 1
+        _ask_installer=$(mktemp "$_ask_cache/install.XXXXXX") || {
             rm -f "$_ask_lock"
+            return 1
+        }
+        if curl -fsSL "$_ask_url" >"$_ask_installer" 2>"$_ask_log" &&
+            bash "$_ask_installer" >>"$_ask_log" 2>&1 &&
+            touch "$_ask_stamp" 2>>"$_ask_log"; then
+            rm -f "$_ask_installer" "$_ask_lock"
             return 0
         fi
-        rm -f "$_ask_lock"
+        rm -f "$_ask_installer" "$_ask_lock"
         return 1
     }
 
@@ -99,4 +105,5 @@ _awesome_skills_check
 export _AWESOME_SKILLS_CHECKED=1
 unset -f _awesome_skills_check _ask_run 2>/dev/null
 unset _ask_url _ask_cache _ask_stamp _ask_lock _ask_log _ask_days \
-    _ask_now _ask_then _ask_age _ask_thresh _ask_first _ask_pid 2>/dev/null
+    _ask_now _ask_then _ask_age _ask_thresh _ask_first _ask_pid \
+    _ask_installer 2>/dev/null

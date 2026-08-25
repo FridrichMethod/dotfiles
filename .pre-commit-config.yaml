@@ -56,6 +56,30 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|tests/ai-config-sync\.sh)$
+      - id: codex-config-sync
+        name: codex config sync behavior
+        entry: tests/codex-config-sync.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/codex/(\.codex/config\.toml|\.local/bin/codex-config-sync)|tests/codex-config-sync\.sh)$
+      - id: stow-installer
+        name: POSIX stow installer behavior
+        entry: tests/stow-all.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(stow-all\.sh|\.stowrc|tests/stow-all\.sh)$
+      - id: fcitx5-profile-sync
+        name: fcitx5 profile sync behavior
+        entry: tests/fcitx5-profile-sync.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(stow-all\.sh|\.stowrc|lab-ubuntu/fcitx5/.*|tests/fcitx5-profile-sync\.sh)$
+      - id: awesome-skills-update
+        name: awesome skills updater behavior
+        entry: tests/awesome-skills-update.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(awesome-skills-update\.sh|common/(sh/\.(profile|aliases)|zsh/\.zshrc)|tests/awesome-skills-update\.sh)$
       - id: windows-installer
         name: windows installer symlink trust
         entry: tests/windows-installer.sh
