@@ -1,3 +1,4 @@
+model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 default_permissions = "workspace-net"

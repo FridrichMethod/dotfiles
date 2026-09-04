@@ -364,7 +364,7 @@ These root files describe how agents should work **inside this repository**. The
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Curated allow/ask policy, `xhigh`, fullscreen TUI, disabled commit/PR attribution, hooks, voice, portable plugin and marketplace declarations |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
-| [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, `xhigh`, multi-agent, memories |
+| [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
@@ -388,6 +388,8 @@ Claude Code already treats common file reads and read-only shell commands as non
 Codex Desktop also writes host-local values such as plugin state, MCP commands, runtime marketplace paths, notification helpers, and UI preferences into the live `~/.codex/config.toml`. That live file is intentionally a regular machine-local file rather than a Stow symlink.
 
 [`.stowrc`](.stowrc) excludes the tracked config and rules baselines from Stow. [`stow-all.sh`](stow-all.sh) runs [`common/codex/.local/bin/codex-config-sync`](common/codex/.local/bin/codex-config-sync), which merges the portable config allowlist into the live file while preserving runtime-only top-level keys, table entries, and tables. It also runs [`common/codex/.local/bin/codex-rules-sync`](common/codex/.local/bin/codex-rules-sync), which atomically materializes the reviewed cross-host policy as `~/.codex/rules/portable.rules` without touching Codex-generated `default.rules` or other host-local rule files.
+
+The portable baseline sets `model = "gpt-6-astra"` and `model_reasoning_effort = "xhigh"`. Each sync reapplies these top-level defaults; model settings in host-local profiles are preserved.
 
 The portable baseline selects `default_permissions = "workspace-net"` with `approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`. The named profile extends `:workspace`, so writes inside the active workspace and system temporary directories proceed without approval. Its network proxy allows any public destination without review while retaining the default block on local and private network targets. Writes outside the workspace and other escalations still route to the separate automatic reviewer. The sync helper deliberately removes legacy `sandbox_mode` and `[sandbox_workspace_write]` values so they cannot shadow the selected permission profile.
 
