@@ -19,7 +19,9 @@
 - Ask only when a missing choice would materially change the result or when additional authorization is required.
 - Preserve unrelated user changes and existing repository conventions. Do not broaden the task into unrelated cleanup or dependency upgrades.
 - Do not commit, push, open or merge a pull request, deploy, publish, or modify shared or remote state unless the request authorizes that action.
-- Before destructive or difficult-to-reverse actions, explain the exact target and obtain explicit approval.
+- Keep routine, scoped cleanup autonomous. Simple file deletion, empty-directory removal, and moves inside the active workspace may proceed when the exact targets are known; prefer `apply_patch` for tracked files and recoverable trash operations when practical.
+- Route recursive or forced deletion, destructive Git operations, disk/device mutation, and privilege escalation through their direct canonical commands so exec-policy can send them to automatic review. Never bypass a `prompt` decision through a shell, interpreter, script, alias, alternate executable path, or equivalent indirect operation.
+- Before an exceptionally destructive action, resolve and report every target, explain impact and recoverability, and obtain explicit user authorization. This includes recursive deletion aimed at a filesystem, home, workspace, or repository root; mount points, device paths, broad or ambiguous globs; disk overwrite, formatting, wiping, or partitioning; and operations likely to destroy irreplaceable or untracked data. Bounded cleanup of verified build, cache, test, or temporary outputs may rely on automatic review without a separate user prompt.
 
 ## Multiple agents and Git
 

@@ -1,16 +1,25 @@
 model_reasoning_effort = "max"
 personality = "pragmatic"
-sandbox_mode = "workspace-write"
+default_permissions = "workspace-net"
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 project_doc_fallback_filenames = ["CLAUDE.md"]
 
-[sandbox_workspace_write]
-network_access = true
-
 [features]
+network_proxy = true
 multi_agent = true
 memories = true
+
+[permissions.workspace-net]
+description = "Workspace editing with unrestricted public network access."
+extends = ":workspace"
+
+[permissions.workspace-net.network]
+enabled = true
+allow_local_binding = false
+
+[permissions.workspace-net.network.domains]
+"*" = "allow"
 
 [memories]
 generate_memories = true
