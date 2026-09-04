@@ -1,4 +1,4 @@
-model_reasoning_effort = "max"
+model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 default_permissions = "workspace-net"
 approval_policy = "on-request"
