@@ -130,10 +130,14 @@ function Test-Case {
 try {
     # -C cannot neutralize an inherited GIT_DIR/INDEX_FILE/CONFIG_COUNT or
     # object-store redirect. Keep all fixture Git activity inside this tree.
+    # SetEnvironmentVariable(name, $null) can leave an empty entry, which Git
+    # still interprets as an override. Remove the provider entry explicitly.
     foreach ($name in $environmentNames) {
-        if ($name.StartsWith('GIT_')) { [Environment]::SetEnvironmentVariable($name, $null) }
+        if ($name.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase) -or $name -in @('BASH_ENV', 'ENV')) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+            Assert-True (-not (Test-Path -LiteralPath "Env:$name")) "Environment override was not removed: $name"
+        }
     }
-    foreach ($name in @('BASH_ENV', 'ENV')) { [Environment]::SetEnvironmentVariable($name, $null) }
     $env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'empty.gitconfig'
     [IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '')
     $env:GIT_CONFIG_NOSYSTEM = '1'
@@ -352,7 +356,11 @@ try {
     Write-Output "windows-installer-native=PASS ($script:Passed cases)"
 } finally {
     foreach ($name in $environmentNames) {
-        [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name])
+        if ($null -eq $savedEnvironment[$name]) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+        } else {
+            [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name])
+        }
     }
     # Every fixture and backup belongs to this exact uniquely-created directory.
     if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
