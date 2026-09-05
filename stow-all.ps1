@@ -34,6 +34,12 @@
     Host overlay to stow after common/. Defaults to 'win'. Pass '' to stow
     only the shared baseline.
 
+.PARAMETER TargetRoot
+    Explicit target directory for a disposable installation or test. Defaults
+    to the real Windows user profile. A different target never records login
+    updater state. Run setup-sync.ps1 once before installing; every selected
+    AI configuration is checked before any helper or package is applied.
+
 .EXAMPLE
     .\stow-all.ps1 win
 
@@ -43,18 +49,50 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Position = 0)]
+    [AllowEmptyString()]
     [string]$HostDir = 'win',
     # Automatic workers treat skipped syncs or links as failures.
-    [switch]$Strict
+    [switch]$Strict,
+    [string]$TargetRoot = [Environment]::GetFolderPath('UserProfile')
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $false
 
 $RepoRoot = $PSScriptRoot
+if (-not $IsWindows) { throw 'Use stow-all.sh on Unix; stow-all.ps1 requires native Windows.' }
+if ($HostDir -cnotin @('', 'win')) { throw "Unsupported Windows host: '$HostDir'; use 'win' or ''." }
+if ([string]::IsNullOrWhiteSpace($TargetRoot) -or -not [IO.Path]::IsPathFullyQualified($TargetRoot)) {
+    throw 'TargetRoot must be an absolute Windows directory path.'
+}
+$Target = [IO.Path]::GetFullPath($TargetRoot)
+if ($Target.TrimEnd('\', '/') -eq [IO.Path]::GetPathRoot($Target).TrimEnd('\', '/')) {
+    throw 'TargetRoot must not be a drive or share root.'
+}
+$Target = $Target.TrimEnd('\', '/')
+$profileTarget = [IO.Path]::GetFullPath([Environment]::GetFolderPath('UserProfile')).TrimEnd('\', '/')
+$recordAppliedState = $Target.Equals($profileTarget, [StringComparison]::OrdinalIgnoreCase)
+if (Test-Path -LiteralPath $Target -PathType Leaf) { throw "TargetRoot is not a directory: $Target" }
+$commonRoot = Join-Path $RepoRoot 'common'
+if (-not (Test-Path -LiteralPath $commonRoot -PathType Container)) {
+    throw "missing common dir: $commonRoot"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot '.stowrc') -PathType Leaf)) {
+    throw 'Missing .stowrc; refusing to install without materialized-file exclusions.'
+}
+$hostRoot = $null
+$hostPackages = @()
+if ($HostDir) {
+    $hostRoot = Join-Path $RepoRoot $HostDir
+    if (-not (Test-Path -LiteralPath $hostRoot -PathType Container)) {
+        throw "host dir not found: $hostRoot"
+    }
+    $hostPackages = @(Get-ChildItem -LiteralPath $hostRoot -Directory |
+            Select-Object -ExpandProperty Name)
+}
 $stowStartHead = git -C $RepoRoot rev-parse --verify HEAD 2>$null
 if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve starting dotfiles HEAD.' }
-$Target = [Environment]::GetFolderPath('UserProfile')
 
 # common/ is stowed on every host, but on Windows we take an explicit
 # allowlist instead of every package: Git Bash sources ~/.bashrc and
@@ -130,43 +168,49 @@ function Invoke-PortableSync {
         excluded from Stow, so simply stowing those packages would silently
         drop them. The helpers are POSIX sh and run under Git Bash.
         system32\bash.exe is WSL and would operate on the WSL home, so it is
-        never used. Fail closed: any missing prerequisite or nonzero exit
-        leaves the live file untouched.
+        never used. CheckOnly runs the helper's read-only validation before
+        any selected file is applied. Apply failures stop installation and
+        never acknowledge the current revision.
     #>
     param(
         [Parameter(Mandatory)][string]$Helper,
         [Parameter(Mandatory)][string]$Portable,
         [Parameter(Mandatory)][string]$Live,
-        [Parameter(Mandatory)][string]$Label
+        [Parameter(Mandatory)][string]$Label,
+        [switch]$CheckOnly
     )
 
-    if (-not (Test-Path -LiteralPath $Helper) -or
-        -not (Test-Path -LiteralPath $Portable)) {
-        $script:Warnings.Add("$Label sync skipped: helper or portable source missing")
-        return
+    if (-not (Test-Path -LiteralPath $Helper -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $Portable -PathType Leaf)) {
+        throw "$Label sync prerequisite missing: helper or portable source."
     }
 
-    $git = Get-Command git -ErrorAction SilentlyContinue
+    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     $bash = $null
     if ($git) {
-        $gitRoot = Split-Path -Parent (Split-Path -Parent $git.Source)
-        $candidate = Join-Path $gitRoot 'bin\bash.exe'
-        if (Test-Path -LiteralPath $candidate) { $bash = $candidate }
+        # Git may be exposed from cmd/, bin/, or mingw64/bin/. Only inspect
+        # its own installation; never accidentally choose system32/WSL bash.
+        $gitDirectory = Split-Path -Parent $git.Source
+        for ($depth = 0; $depth -lt 3 -and $gitDirectory -and -not $bash; $depth++) {
+            foreach ($relative in @('bin\bash.exe', 'usr\bin\bash.exe')) {
+                $candidate = Join-Path $gitDirectory $relative
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) { $bash = $candidate; break }
+            }
+            $gitDirectory = Split-Path -Parent $gitDirectory
+        }
     }
     if (-not $bash) {
-        $script:Warnings.Add(
-            "$Label sync skipped: Git Bash not found; portable state " +
-            "was not synchronized into $Live")
-        return
+        throw "$Label sync prerequisite missing: Git Bash from the Git for Windows installation."
     }
 
-    if ($PSCmdlet.ShouldProcess($Live, "Synchronize portable $Label")) {
-        & $bash ($Helper -replace '\\', '/') ($Portable -replace '\\', '/') `
-            ($Live -replace '\\', '/')
+    if ($CheckOnly -or $PSCmdlet.ShouldProcess($Live, "Synchronize portable $Label")) {
+        $syncArguments = @(($Helper -replace '\\', '/'))
+        if ($CheckOnly) { $syncArguments += '--check' }
+        $syncArguments += @(($Portable -replace '\\', '/'), ($Live -replace '\\', '/'))
+        & $bash @syncArguments
         if ($LASTEXITCODE -ne 0) {
-            $script:Warnings.Add(
-                "$Label sync failed (exit $LASTEXITCODE); live file left " +
-                "untouched: $Live")
+            $phase = if ($CheckOnly) { 'preflight' } else { 'apply' }
+            throw "$Label sync $phase failed (exit $LASTEXITCODE); installation was not acknowledged."
         }
     }
 }
@@ -335,9 +379,10 @@ function Invoke-StowPackage {
                 }
             }
             else {
-                $backup = '{0}.stow-backup-{1}' -f $destination, (Get-Date -Format 'yyyyMMddHHmmss')
+                $backup = '{0}.stow-backup-{1}-{2}' -f $destination,
+                    (Get-Date -Format 'yyyyMMddHHmmss'), [Guid]::NewGuid().ToString('N')
                 if ($PSCmdlet.ShouldProcess($destination, "Back up to $backup")) {
-                    Move-Item -LiteralPath $destination -Destination $backup -Force
+                    Move-Item -LiteralPath $destination -Destination $backup
                     Write-Host "  backup  $relativeUnix -> $(Split-Path -Leaf $backup)"
                     $script:BackedUp++
                 }
@@ -355,11 +400,6 @@ function Invoke-StowPackage {
 
 Write-Host "Stowing from $RepoRoot"
 Write-Host "Target: $Target"
-
-$commonRoot = Join-Path $RepoRoot 'common'
-if (-not (Test-Path -LiteralPath $commonRoot)) {
-    throw "missing common dir: $commonRoot"
-}
 
 $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 
@@ -381,24 +421,41 @@ if ($HostDir) {
     $claudeHost = Join-Path $RepoRoot "$HostDir\claude\.claude\settings.json"
     if (Test-Path -LiteralPath $claudeHost) { $claudePortable = $claudeHost }
 }
-Invoke-PortableSync -Label 'Codex settings' `
-    -Helper (Join-Path $commonRoot 'codex\.local\bin\codex-config-sync') `
-    -Portable $codexPortable `
-    -Live (Join-Path $Target '.codex\config.toml')
-Invoke-PortableSync -Label 'Codex rules' `
-    -Helper (Join-Path $commonRoot 'codex\.local\bin\codex-rules-sync') `
-    -Portable $codexRulesPortable `
-    -Live (Join-Path $Target '.codex\rules\portable.rules')
-Invoke-PortableSync -Label 'Claude settings' `
-    -Helper (Join-Path $commonRoot 'claude\.local\bin\claude-settings-sync') `
-    -Portable $claudePortable `
-    -Live (Join-Path $Target '.claude\settings.json')
+$syncPlan = @(
+    @{ Label = 'Codex settings'; Helper = Join-Path $commonRoot 'codex\.local\bin\codex-config-sync'
+        Portable = $codexPortable; Live = Join-Path $Target '.codex\config.toml' },
+    @{ Label = 'Codex rules'; Helper = Join-Path $commonRoot 'codex\.local\bin\codex-rules-sync'
+        Portable = $codexRulesPortable; Live = Join-Path $Target '.codex\rules\portable.rules' },
+    @{ Label = 'Claude settings'; Helper = Join-Path $commonRoot 'claude\.local\bin\claude-settings-sync'
+        Portable = $claudePortable; Live = Join-Path $Target '.claude\settings.json' }
+)
+
+# Validate every selected merge and every ignore expression before mutation.
+# --check must also leave a missing target directory absent during -WhatIf.
+foreach ($sync in $syncPlan) { Invoke-PortableSync @sync -CheckOnly }
+foreach ($rootAndPackages in @(
+        @{ Root = $commonRoot; Packages = $CommonPackages },
+        @{ Root = $hostRoot; Packages = $hostPackages })) {
+    foreach ($package in $rootAndPackages.Packages) {
+        $packagePath = Join-Path $rootAndPackages.Root $package
+        if (-not (Test-Path -LiteralPath $packagePath -PathType Container)) {
+            $script:Warnings.Add("common package not found, skipped: $package")
+            continue
+        }
+        $patterns = @($globalIgnores) + @(Get-StowIgnorePattern `
+                -Path (Join-Path $packagePath '.stow-local-ignore') -Prefix '')
+        foreach ($pattern in $patterns) { [void][regex]::new($pattern) }
+    }
+}
+if ($Strict -and $script:Warnings.Count -gt 0) {
+    throw "Stow preflight failed: $($script:Warnings -join '; ')"
+}
+foreach ($sync in $syncPlan) { Invoke-PortableSync @sync }
 
 Write-Host "`nStowing common packages:"
 Write-Host ($CommonPackages -join ' ')
 foreach ($package in $CommonPackages) {
     if (-not (Test-Path -LiteralPath (Join-Path $commonRoot $package))) {
-        $script:Warnings.Add("common package not found, skipped: $package")
         continue
     }
     Invoke-StowPackage -PackageRoot $commonRoot -PackageName $package `
@@ -406,12 +463,6 @@ foreach ($package in $CommonPackages) {
 }
 
 if ($HostDir) {
-    $hostRoot = Join-Path $RepoRoot $HostDir
-    if (-not (Test-Path -LiteralPath $hostRoot)) {
-        throw "host dir not found: $hostRoot"
-    }
-    $hostPackages = @(Get-ChildItem -LiteralPath $hostRoot -Directory |
-            Select-Object -ExpandProperty Name)
     Write-Host "`nStowing host-specific packages ($HostDir):"
     Write-Host ($hostPackages -join ' ')
     foreach ($package in $hostPackages) {
@@ -423,7 +474,7 @@ if ($HostDir) {
 # A OneDrive-redirected Documents folder would strip the profile links of any
 # effect, so check the path PowerShell actually loads.
 $profileRoot = Join-Path $Target 'Documents\PowerShell'
-if ((Test-Path -LiteralPath $profileRoot) -and
+if ($recordAppliedState -and (Test-Path -LiteralPath $profileRoot) -and
     -not $PROFILE.CurrentUserAllHosts.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) {
     $script:Warnings.Add(
         "PowerShell loads $($PROFILE.CurrentUserAllHosts) but profiles were stowed " +
@@ -446,7 +497,7 @@ foreach ($warning in $script:Warnings) { Write-Warning $warning }
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw 'Stow completed with warnings; automatic state was not advanced.'
 }
-if (-not $WhatIfPreference -and $script:Warnings.Count -eq 0) {
+if ($recordAppliedState -and -not $WhatIfPreference -and $script:Warnings.Count -eq 0) {
     . (Join-Path $RepoRoot 'dotfiles-auto-stow.ps1')
     Save-DotfilesStowState -Repo $RepoRoot -HostDir $HostDir -ExpectedHead $stowStartHead
 }
