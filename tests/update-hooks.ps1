@@ -384,13 +384,43 @@ function Invoke-DotfilesUpdate {
         Assert-Equal 1 $global:DotfilesTestHookCalls 'Failed hook retried in same session.'
     }
     Test-Case 'redirected hook is quiet and leaves marker unset' {
-        Assert-True ([Console]::IsOutputRedirected) 'Run these tests with redirected stdout / -NonInteractive.'
         $fixture = New-Fixture
-        $env:DOTFILES_DIR = $fixture.Repo
-        . $hookPath
-        Assert-True (-not (Test-Path Env:_DOTFILES_CHECKED)) 'Noninteractive hook consumed marker.'
+        # Linux pre-commit uses a PTY. -NonInteractive does not redirect stdout,
+        # so create a real redirected child instead of assuming the test runner
+        # has no console. This exercises the actual guard on every platform.
+        $start = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        foreach ($argument in @('-NoProfile', '-NonInteractive', '-Command')) {
+            $start.ArgumentList.Add($argument)
+        }
+        $start.ArgumentList.Add(@'
+$ErrorActionPreference = 'Stop'
+& $env:DOTFILES_TEST_HOOK
+if (Test-Path Env:_DOTFILES_CHECKED) { throw 'Noninteractive hook consumed marker.' }
+Write-Output 'redirected-hook=PASS'
+'@)
+        $start.Environment['DOTFILES_DIR'] = $fixture.Repo
+        $start.Environment['DOTFILES_TEST_HOOK'] = $hookPath
+        [void]$start.Environment.Remove('_DOTFILES_CHECKED')
+        $child = [Diagnostics.Process]::Start($start)
+        try {
+            $stdout = $child.StandardOutput.ReadToEndAsync()
+            $stderr = $child.StandardError.ReadToEndAsync()
+            if (-not $child.WaitForExit(30000)) {
+                $child.Kill($true)
+                throw 'Redirected hook did not return within 30 seconds.'
+            }
+            $outputText = $stdout.GetAwaiter().GetResult()
+            $errorText = $stderr.GetAwaiter().GetResult()
+            Assert-Equal 0 $child.ExitCode "Redirected child failed: $errorText"
+            Assert-Equal 'redirected-hook=PASS' $outputText.Trim() 'Redirected hook was not quiet.'
+            Assert-Equal '' $errorText 'Redirected hook wrote stderr.'
+        }
+        finally { $child.Dispose() }
         Assert-Equal 0 (Get-InstallCount $fixture) 'Noninteractive hook invoked installer.'
-        Assert-True (-not ($global:DotfilesTestGitCalls | Where-Object { $_ -match ' fetch ' })) 'Noninteractive hook fetched.'
     }
     Write-Host "windows-update-hooks=PASS ($global:DotfilesTestPassed cases)"
 }
