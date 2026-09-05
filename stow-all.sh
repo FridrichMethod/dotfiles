@@ -9,6 +9,8 @@ set -euo pipefail
 # DOTFILES_AUTO_STOW=0 disables automatic stow in the login updater.
 # The common Claude package links local Node helpers and syncs its defaults;
 # Node.js 18+ must be on PATH when Claude runs the hooks and status line.
+# Run ./setup-sync.sh once per clone to provision the AI configuration parser.
+# All selected AI inputs are checked before any live configuration is changed.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
 
@@ -94,6 +96,18 @@ if [[ -n "$HOST" && -d "$HOST_DIR/fcitx5" ]]; then
     FCITX5_PORTABLE="$HOST_DIR/fcitx5/.config/fcitx5/profile"
     require_sync "$FCITX5_SYNC" "$FCITX5_PORTABLE"
     SYNC_FCITX5=1
+fi
+
+# Validate runtime dependencies and both documents for every selected AI
+# helper. A malformed later baseline must not partially apply earlier ones.
+# This is a read-only preflight, not a transaction across independent files.
+if [[ "$SYNC_CODEX" == 1 ]]; then
+    "$CODEX_SYNC" --check "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
+    "$CODEX_RULES_SYNC" --check "$CODEX_RULES_PORTABLE" \
+        "$HOME/.codex/rules/portable.rules"
+fi
+if [[ "$SYNC_CLAUDE" == 1 ]]; then
+    "$CLAUDE_SYNC" --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
 
 if [[ "$SYNC_CODEX" == 1 ]]; then

@@ -11,6 +11,8 @@ FIXTURE="$TEST_TMP/fixture"
 FAKE_BIN="$TEST_TMP/bin"
 TEST_HOME="$TEST_TMP/home"
 EVENT_LOG="$TEST_TMP/events.log"
+CHECK_LOG="$TEST_TMP/checks.log"
+export CHECK_LOG
 mkdir -p "$FIXTURE/.git" "$FAKE_BIN" "$TEST_HOME"
 cp "$INSTALLER" "$FIXTURE/stow-all.sh"
 chmod +x "$FIXTURE/stow-all.sh"
@@ -112,6 +114,11 @@ printf '%s\n' 'host-fcitx5' >"$FIXTURE/host-a/fcitx5/.config/fcitx5/profile"
 cat >"$TEST_TMP/sync-helper" <<'SH'
 #!/bin/sh
 name=$(basename "$0")
+if [ "${1:-}" = --check ]; then
+    printf 'check:%s:[%s][%s]\n' "$name" "$2" "$3" >>"$CHECK_LOG"
+    [ "${FAIL_CHECK:-}" != "$name" ] || exit 22
+    exit 0
+fi
 printf 'sync:%s:[%s][%s]\n' "$name" "$1" "$2" >>"$EVENT_LOG"
 [ "${FAIL_SYNC:-}" != "$name" ] || exit 23
 SH
@@ -132,6 +139,7 @@ run_fixture() {
     case_name=$1
     shift
     : >"$EVENT_LOG"
+    : >"$CHECK_LOG"
     env \
         HOME="$TEST_HOME" \
         PATH="$FAKE_BIN:/usr/bin:/bin" \
@@ -172,6 +180,12 @@ assert_events
 
 # Common-only setup synchronizes all portable AI baselines before one Stow call.
 run_fixture common-only
+printf '%s\n' \
+    "check:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
+    "check:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
+    "check:claude-settings-sync:[$FIXTURE/common/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
+    >"$TEST_TMP/expected-checks"
+cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
 assert_events \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "sync:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
@@ -187,6 +201,17 @@ grep -Fq 'Stowing common packages:' "$TEST_TMP/common-only.stdout"
 STATE="$FIXTURE/.git/dotfiles-sync-unix"
 printf '%s\n' "$TEST_HOME" "$(uname -s)" '' 'test-head' >"$TEST_TMP/expected-state"
 cmp "$STATE" "$TEST_TMP/expected-state"
+
+# Even the final helper's invalid input or missing parser is caught before the
+# first helper writes anything; the previous applied state is untouched.
+for helper in codex-config-sync codex-rules-sync claude-settings-sync; do
+    if run_fixture preflight-failure "FAIL_CHECK=$helper"; then
+        echo "ERROR: installer ignored configuration preflight failure: $helper" >&2
+        exit 1
+    fi
+    assert_events
+    cmp "$STATE" "$TEST_TMP/expected-state"
+done
 
 # Host baselines override common sources, fcitx5 is host-only, the obsolete Git
 # filter is removed when present, and common packages are stowed first.
