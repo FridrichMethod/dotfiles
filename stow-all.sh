@@ -5,6 +5,8 @@ set -euo pipefail
 # Usage: ./stow-all.sh [host-dir]
 # Example: ./stow-all.sh wsl-ubuntu
 # If no host-dir is provided, only stow common.
+# The common Claude package links local Node helpers and syncs its defaults;
+# Node.js 18+ must be on PATH when Claude runs the hooks and status line.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
 

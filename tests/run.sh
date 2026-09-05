@@ -4,6 +4,8 @@ set -euo pipefail
 
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+node --test "$TEST_DIR/claude-customizations.cjs"
+
 tests=(
     ai-config-sync.sh
     codex-config-sync.sh

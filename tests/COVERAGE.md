@@ -11,6 +11,7 @@ source-to-test behavior matrix instead.
 | Production target | Test | Covered behavior |
 | --- | --- | --- |
 | `common/claude/.local/bin/claude-settings-sync` | `ai-config-sync.sh` | portable-wins deep merge, live-only state, malformed/mistyped input, fresh and empty live files, permissions, idempotence, legacy symlink |
+| `common/claude/.claude/dotfiles/*.cjs` | `claude-customizations.cjs` | status-line fallbacks and Git branches, terminal notification routing and escaping, Git bypass blocks and allowed commands, portable launchers with spaced paths; desktop delivery needs an interactive terminal |
 | `common/codex/.local/bin/codex-config-sync` | `codex-config-sync.sh` | portable public-network profile ownership, runtime top-level/table/array-table preservation, legacy sandbox removal, removed compatibility flags, fresh live file, permissions, idempotence, missing-key failure, legacy symlink |
 | `common/codex/.local/bin/codex-rules-sync` | `ai-config-sync.sh` | create/no-op, empty source failure, sibling preservation, permissions, matching legacy symlink, prompt-only/no-forbidden invariants, low-friction command coverage |
 | `lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync` | `fcitx5-profile-sync.sh` | create, authoritative replace, no-op inode, permissions, missing source, legacy symlink |

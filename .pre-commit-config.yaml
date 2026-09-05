@@ -56,6 +56,12 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|tests/ai-config-sync\.sh)$
+      - id: claude-customizations
+        name: Claude status line, notifications and Git hook guard
+        entry: node --test tests/claude-customizations.cjs
+        language: system
+        pass_filenames: false
+        files: (^|/)(common/claude/.*|tests/claude-customizations\.cjs)$
       - id: codex-config-sync
         name: codex config sync behavior
         entry: tests/codex-config-sync.sh
