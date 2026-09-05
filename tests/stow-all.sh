@@ -5,6 +5,9 @@ set -euo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO_ROOT/stow-all.sh"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-stow-all.XXXXXX")"
+# macOS TMPDIR ends in '/', and /var may itself be a symlink. Compare the
+# installer's cd/pwd paths with one physical fixture root, not mktemp's spelling.
+TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
 FIXTURE="$TEST_TMP/fixture"
