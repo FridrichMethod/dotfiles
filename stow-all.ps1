@@ -24,6 +24,12 @@
     fine locally. An elevated run creates trusted links and repairs untrusted
     ones it finds.
 
+.PARAMETER Strict
+    Fail if any package, link or portable sync was skipped or warned.
+    Successful installations remember the host and applied revision for
+    the login updater. Register the Windows worker once with:
+      .\dotfiles-auto-stow.ps1 -Register
+
 .PARAMETER HostDir
     Host overlay to stow after common/. Defaults to 'win'. Pass '' to stow
     only the shared baseline.
@@ -37,13 +43,17 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Position = 0)]
-    [string]$HostDir = 'win'
+    [string]$HostDir = 'win',
+    # Automatic workers treat skipped syncs or links as failures.
+    [switch]$Strict
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = $PSScriptRoot
+$stowStartHead = git -C $RepoRoot rev-parse --verify HEAD 2>$null
+if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve starting dotfiles HEAD.' }
 $Target = [Environment]::GetFolderPath('UserProfile')
 
 # common/ is stowed on every host, but on Windows we take an explicit
@@ -132,6 +142,7 @@ function Invoke-PortableSync {
 
     if (-not (Test-Path -LiteralPath $Helper) -or
         -not (Test-Path -LiteralPath $Portable)) {
+        $script:Warnings.Add("$Label sync skipped: helper or portable source missing")
         return
     }
 
@@ -430,3 +441,12 @@ if (-not $script:IsElevated -and $script:Linked -gt 0) {
 
 Write-Host "`nlinked: $script:Linked   repaired: $script:Repaired   unchanged/ignored: $script:Unchanged   backed up: $script:BackedUp"
 foreach ($warning in $script:Warnings) { Write-Warning $warning }
+
+# Never acknowledge a partial or preview installation as an applied revision.
+if ($Strict -and $script:Warnings.Count -gt 0) {
+    throw 'Stow completed with warnings; automatic state was not advanced.'
+}
+if (-not $WhatIfPreference -and $script:Warnings.Count -eq 0) {
+    . (Join-Path $RepoRoot 'dotfiles-auto-stow.ps1')
+    Save-DotfilesStowState -Repo $RepoRoot -HostDir $HostDir -ExpectedHead $stowStartHead
+}

@@ -263,22 +263,52 @@ Two small hooks run on each interactive shell login, and the pull hook has a Pow
 <details open>
 <summary><strong><code>dotfiles-update.sh</code></strong> — pulls this repo when behind</summary>
 
-Fetches the remote, fast-forwards if behind, then nudges you to re-stow and reload the shell. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells).
+Fetches the remote, fast-forwards if behind, updates submodules, and automatically re-stows the selected host. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells). Automatic updates skip working trees with local file changes, including submodule changes; they never stash, reset, or discard work.
+
+First run the installer once on each Unix checkout to remember its host (Linux, macOS, WSL, and cluster overlays use the same flow):
 
 ```bash
-[dotfiles] 2 new commit(s) available — pulling...
-[dotfiles] Pulled successfully.
-[dotfiles] Run stow-all.sh to re-stow, then exec zsh to load updated config.
+./stow-all.sh mac           # or wsl-ubuntu, lab-ubuntu, sherlock, marlowe, fedora, ubuntu
+./stow-all.sh               # explicitly remember common-only setup instead
 ```
+
+The installer stores the selected host and last successfully applied commit in local Git metadata, bound to the home and platform. Existing installations need this one-time setup after pulling the new updater, or an explicit `DOTFILES_HOST` override. The hook does not guess which Linux/cluster overlay to use. Use a separate checkout for each home/platform.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `DOTFILES_AUTO_UPDATE` | `1` | set to `0` to disable |
-| `DOTFILES_DIR` | `~/dotfiles` | repo path |
+| `DOTFILES_AUTO_UPDATE` | `1` | `0` disables the entire login update hook |
+| `DOTFILES_AUTO_STOW` | `1` | `0` keeps pull enabled but skips automatic stow |
+| `DOTFILES_DIR` | `~/dotfiles` | repository path |
+| `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only |
 
-Session marker: `_DOTFILES_CHECKED` — exported so subshells skip instantly; a fresh SSH session (clean env) triggers a new check.
+Set these variables before the update hook runs. A failed stow does not advance the applied commit: later fresh sessions retry even if there are no new remote commits or fetch is offline. A lock serializes automatic update/stow operations across shells; callers' shell traps are preserved. State remains in Git metadata and is not committed. Interrupted submodule updates are retried only when a pending marker matches HEAD; user-selected submodule revisions are otherwise preserved.
 
-**On Windows** — `dotfiles-update.ps1` is the PowerShell counterpart, invoked at the end of `win/powershell/Documents/PowerShell/profile.ps1`. Same variables, same `_DOTFILES_CHECKED` marker (a process environment variable, so a nested `pwsh` inherits it and skips). In place of the POSIX interactive-shell test it skips whenever stdout is redirected — which is every `pwsh -Command ...` call, so scripted invocations never trigger a fetch — and its re-stow hint says *elevated*, because only an elevated run creates trusted symlinks. It never re-stows on its own for the same reason.
+Session marker: `_DOTFILES_CHECKED` is exported so nested shells skip; a fresh login with a clean environment checks again. Successful stow updates files on disk; start a new shell/application to load the settings. Windows Terminal needs a restart.
+
+**On Windows** — `dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1` and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
+
+```powershell
+cd "$HOME\dotfiles"
+.\stow-all.ps1 win
+.\dotfiles-auto-stow.ps1 -Register
+```
+
+The on-demand task runs as that user with `Interactive` logon and `Highest` privileges, using `pwsh -NoProfile -NonInteractive -WindowStyle Hidden`. Registration explicitly authorizes the checkout's updated installer scripts to run with administrator privileges. It stores no password, uses the user's home, allows battery operation, and ignores overlapping task starts. Task names include a checkout/user hash. No UAC prompt is launched from the login hook; ordinary shells enqueue work, while elevated shells can apply directly. The interactive task requires that user to be logged on to Windows.
+
+The worker verifies the requested revision, home, host and clean working tree again under the update lock before running `stow-all.ps1 -Strict`. Any installer warning or failed portable sync prevents marking the revision as applied. A queued task is not reported as a completed stow. Inspect its result and last-run log with:
+
+```powershell
+. .\dotfiles-auto-stow.ps1
+Get-ScheduledTaskInfo -TaskName (Get-DotfilesTaskName $PWD.Path)
+Get-Content (Join-Path (Get-DotfilesStateDirectory $PWD.Path) 'restow.log')
+```
+
+Set `DOTFILES_AUTO_STOW=0` before the login hook to stop automatic stow. To remove the registered worker entirely, from elevated PowerShell in the same checkout:
+
+```powershell
+. .\dotfiles-auto-stow.ps1
+Unregister-ScheduledTask -TaskName (Get-DotfilesTaskName $PWD.Path)
+```
 
 </details>
 

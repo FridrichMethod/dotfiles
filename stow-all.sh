@@ -5,6 +5,8 @@ set -euo pipefail
 # Usage: ./stow-all.sh [host-dir]
 # Example: ./stow-all.sh wsl-ubuntu
 # If no host-dir is provided, only stow common.
+# Successful setup remembers this home/platform/host for automatic login stow.
+# DOTFILES_AUTO_STOW=0 disables automatic stow in the login updater.
 # The common Claude package links local Node helpers and syncs its defaults;
 # Node.js 18+ must be on PATH when Claude runs the hooks and status line.
 # The win host is installed from Windows by stow-all.ps1, not from here.
@@ -18,6 +20,13 @@ if [[ "$HOST" == "win" ]]; then
     echo "         .\\stow-all.ps1 win" >&2
     exit 1
 fi
+
+case "$HOST" in
+    common | .* | */* | *\\*)
+        echo "ERROR: host must be a top-level host directory (or omitted for common-only)." >&2
+        exit 1
+        ;;
+esac
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 echo "Stowing from $REPO_ROOT"
@@ -35,49 +44,74 @@ if [[ -n "$HOST" && ! -d "$HOST_DIR" ]]; then
 fi
 
 cd "$REPO_ROOT" # ensures ./.stowrc is picked up
+START_HEAD=$(git rev-parse HEAD 2>/dev/null) || START_HEAD=
+
+# A present package requires its materialized settings and executable helper.
+# Stow ignores those settings files, so skipping a missing helper would leave
+# stale live settings while falsely recording the entire HEAD as applied.
+require_sync() {
+    if [[ ! -f "$1" || ! -x "$1" ]]; then
+        echo "ERROR: required sync helper is missing or not executable: $1" >&2
+        exit 1
+    fi
+    if [[ ! -f "$2" || ! -r "$2" ]]; then
+        echo "ERROR: required portable settings are missing or unreadable: $2" >&2
+        exit 1
+    fi
+}
 
 CODEX_SYNC="$COMMON_DIR/codex/.local/bin/codex-config-sync"
 CODEX_PORTABLE="$COMMON_DIR/codex/.codex/config.toml"
 if [[ -n "$HOST" && -f "$HOST_DIR/codex/.codex/config.toml" ]]; then
     CODEX_PORTABLE="$HOST_DIR/codex/.codex/config.toml"
 fi
-if [[ -x "$CODEX_SYNC" && -f "$CODEX_PORTABLE" ]]; then
-    echo "Synchronizing portable Codex settings"
-    "$CODEX_SYNC" "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
-fi
-
 CODEX_RULES_SYNC="$COMMON_DIR/codex/.local/bin/codex-rules-sync"
 CODEX_RULES_PORTABLE="$COMMON_DIR/codex/.codex/rules/portable.rules"
 if [[ -n "$HOST" && -f "$HOST_DIR/codex/.codex/rules/portable.rules" ]]; then
     CODEX_RULES_PORTABLE="$HOST_DIR/codex/.codex/rules/portable.rules"
 fi
-if [[ -x "$CODEX_RULES_SYNC" && -f "$CODEX_RULES_PORTABLE" ]]; then
-    echo "Synchronizing portable Codex rules"
-    "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE" \
-        "$HOME/.codex/rules/portable.rules"
-fi
-
 CLAUDE_SYNC="$COMMON_DIR/claude/.local/bin/claude-settings-sync"
 CLAUDE_PORTABLE="$COMMON_DIR/claude/.claude/settings.json"
 if [[ -n "$HOST" && -f "$HOST_DIR/claude/.claude/settings.json" ]]; then
     CLAUDE_PORTABLE="$HOST_DIR/claude/.claude/settings.json"
 fi
-if [[ -x "$CLAUDE_SYNC" && -f "$CLAUDE_PORTABLE" ]]; then
+
+# Validate every selected package before any helper changes the live home.
+SYNC_CODEX=0
+if [[ -d "$COMMON_DIR/codex" || (-n "$HOST" && -d "$HOST_DIR/codex") ]]; then
+    require_sync "$CODEX_SYNC" "$CODEX_PORTABLE"
+    require_sync "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE"
+    SYNC_CODEX=1
+fi
+SYNC_CLAUDE=0
+if [[ -d "$COMMON_DIR/claude" || (-n "$HOST" && -d "$HOST_DIR/claude") ]]; then
+    require_sync "$CLAUDE_SYNC" "$CLAUDE_PORTABLE"
+    SYNC_CLAUDE=1
+fi
+SYNC_FCITX5=0
+if [[ -n "$HOST" && -d "$HOST_DIR/fcitx5" ]]; then
+    FCITX5_SYNC="$HOST_DIR/fcitx5/.local/bin/fcitx5-profile-sync"
+    FCITX5_PORTABLE="$HOST_DIR/fcitx5/.config/fcitx5/profile"
+    require_sync "$FCITX5_SYNC" "$FCITX5_PORTABLE"
+    SYNC_FCITX5=1
+fi
+
+if [[ "$SYNC_CODEX" == 1 ]]; then
+    echo "Synchronizing portable Codex settings"
+    "$CODEX_SYNC" "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
+    echo "Synchronizing portable Codex rules"
+    "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE" \
+        "$HOME/.codex/rules/portable.rules"
+fi
+if [[ "$SYNC_CLAUDE" == 1 ]]; then
     echo "Synchronizing portable Claude settings"
     "$CLAUDE_SYNC" "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
-
-# fcitx5 rewrites ~/.config/fcitx5/profile at runtime, so it is materialized as
-# a machine-local regular file instead of a Stow symlink (see .stowrc).
-if [[ -n "$HOST" ]]; then
-    FCITX5_SYNC="$HOST_DIR/fcitx5/.local/bin/fcitx5-profile-sync"
-    FCITX5_PORTABLE="$HOST_DIR/fcitx5/.config/fcitx5/profile"
-    if [[ -x "$FCITX5_SYNC" && -f "$FCITX5_PORTABLE" ]]; then
-        echo "Synchronizing fcitx5 profile"
-        "$FCITX5_SYNC" "$FCITX5_PORTABLE" "$HOME/.config/fcitx5/profile"
-    fi
+# fcitx5 rewrites its profile at runtime, so this is a regular file, not a link.
+if [[ "$SYNC_FCITX5" == 1 ]]; then
+    echo "Synchronizing fcitx5 profile"
+    "$FCITX5_SYNC" "$FCITX5_PORTABLE" "$HOME/.config/fcitx5/profile"
 fi
-
 # Remove the obsolete repository-local filter from the previous layout.
 if git config --local --get-regexp '^filter\.codex-portable\.' >/dev/null 2>&1; then
     git config --local --remove-section filter.codex-portable
@@ -124,4 +158,22 @@ if [[ -d "$HOME/.ssh" ]]; then
             done
         )
     fi
+fi
+
+# Record only complete installs. A dirty manual setup still remembers the host,
+# but cannot claim that the committed HEAD was applied without local changes.
+# Git resolves this outside the tracked tree and supports linked worktrees.
+if SYNC_STATE=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null); then
+    APPLIED_HEAD=$(git rev-parse HEAD)
+    SYNC_STATUS=$(git status --porcelain --untracked-files=normal --ignore-submodules=none)
+    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" ]]; then
+        APPLIED_HEAD=
+    fi
+    (
+        umask 077
+        STATE_TMP=$(mktemp "${SYNC_STATE}.XXXXXX")
+        trap 'rm -f "$STATE_TMP"' EXIT
+        printf '%s\n' "$HOME" "$(uname -s)" "$HOST" "$APPLIED_HEAD" >"$STATE_TMP"
+        mv -f "$STATE_TMP" "$SYNC_STATE"
+    )
 fi

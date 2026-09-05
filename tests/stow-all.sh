@@ -11,7 +11,7 @@ FIXTURE="$TEST_TMP/fixture"
 FAKE_BIN="$TEST_TMP/bin"
 TEST_HOME="$TEST_TMP/home"
 EVENT_LOG="$TEST_TMP/events.log"
-mkdir -p "$FIXTURE" "$FAKE_BIN" "$TEST_HOME"
+mkdir -p "$FIXTURE/.git" "$FAKE_BIN" "$TEST_HOME"
 cp "$INSTALLER" "$FIXTURE/stow-all.sh"
 chmod +x "$FIXTURE/stow-all.sh"
 
@@ -54,6 +54,22 @@ SH
 
 cat >"$FAKE_BIN/git" <<'SH'
 #!/bin/sh
+# Metadata reads are tested through their resulting state, not event ordering.
+case ${1:-} in
+    rev-parse)
+        if [ "${2:-}" = --git-path ]; then
+            printf '%s/.git/%s\n' "$PWD" "$3"
+        else
+            printf 'test-head\n'
+        fi
+        exit 0
+        ;;
+    status)
+        [ "${STATUS_RC:-0}" = 0 ] || exit "$STATUS_RC"
+        printf '%s' "${INSTALL_DIRTY:-}"
+        exit 0
+        ;;
+esac
 {
     printf 'git:'
     for argument do
@@ -166,6 +182,12 @@ grep -Fq "Stowing from $FIXTURE" "$TEST_TMP/common-only.stdout"
 grep -Fq 'Stowing common packages:' "$TEST_TMP/common-only.stdout"
 ! grep -Fq 'Stowing host-specific packages:' "$TEST_TMP/common-only.stdout"
 
+# State binds common-only explicitly to this home and platform, outside Git's
+# tracked tree. The applied SHA is written only after every operation succeeds.
+STATE="$FIXTURE/.git/dotfiles-sync-unix"
+printf '%s\n' "$TEST_HOME" "$(uname -s)" '' 'test-head' >"$TEST_TMP/expected-state"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
 # Host baselines override common sources, fcitx5 is host-only, the obsolete Git
 # filter is removed when present, and common packages are stowed first.
 : >"$EVENT_LOG"
@@ -188,6 +210,57 @@ assert_events \
     "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5]"
 grep -Fq 'Stowing host-specific packages:' "$TEST_TMP/host.stdout"
 
+printf '%s\n' "$TEST_HOME" "$(uname -s)" 'host-a' 'test-head' >"$TEST_TMP/expected-state"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
+# Git can report a clean checkout with core.filemode=false even when a helper
+# loses its executable bit. Every required helper must fail before any sync or
+# Stow side effect, and the previous successful state must remain unchanged.
+for helper in \
+    "$FIXTURE/common/codex/.local/bin/codex-config-sync" \
+    "$FIXTURE/common/codex/.local/bin/codex-rules-sync" \
+    "$FIXTURE/common/claude/.local/bin/claude-settings-sync"; do
+    chmod -x "$helper"
+    if run_fixture nonexecutable-helper; then
+        echo "ERROR: installer skipped a required nonexecutable helper: $helper" >&2
+        exit 1
+    fi
+    grep -Fq 'required sync helper is missing or not executable' "$TEST_TMP/nonexecutable-helper.stderr"
+    assert_events
+    cmp "$STATE" "$TEST_TMP/expected-state"
+    chmod +x "$helper"
+done
+for source in \
+    "$FIXTURE/common/codex/.codex/config.toml" \
+    "$FIXTURE/common/codex/.codex/rules/portable.rules" \
+    "$FIXTURE/common/claude/.claude/settings.json"; do
+    mv "$source" "$source.saved"
+    if run_fixture missing-source; then
+        echo "ERROR: installer skipped a required portable source: $source" >&2
+        exit 1
+    fi
+    grep -Fq 'required portable settings are missing or unreadable' "$TEST_TMP/missing-source.stderr"
+    assert_events
+    cmp "$STATE" "$TEST_TMP/expected-state"
+    mv "$source.saved" "$source"
+done
+
+# A selected fcitx5 package also requires both files. Preflight must catch a
+# mismatch before any otherwise-valid Codex or Claude sync changes the home.
+for dependency in \
+    "$FIXTURE/host-a/fcitx5/.local/bin/fcitx5-profile-sync" \
+    "$FIXTURE/host-a/fcitx5/.config/fcitx5/profile"; do
+    mv "$dependency" "$dependency.saved"
+    : >"$EVENT_LOG"
+    if env HOME="$TEST_HOME" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
+        bash "$FIXTURE/stow-all.sh" host-a >"$TEST_TMP/missing-fcitx5.stdout" 2>"$TEST_TMP/missing-fcitx5.stderr"; then
+        echo "ERROR: installer skipped a required fcitx5 dependency: $dependency" >&2
+        exit 1
+    fi
+    assert_events
+    cmp "$STATE" "$TEST_TMP/expected-state"
+    mv "$dependency.saved" "$dependency"
+done
 # A sync failure is fail-closed: later syncs, git mutation, and Stow never run.
 : >"$EVENT_LOG"
 if env \
@@ -202,6 +275,31 @@ if env \
 fi
 assert_events \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
+
+cmp "$STATE" "$TEST_TMP/expected-state"
+if run_fixture stow-failure STOW_RC=24; then
+    echo "ERROR: installer ignored Stow failure" >&2
+    exit 1
+fi
+cmp "$STATE" "$TEST_TMP/expected-state"
+if run_fixture status-failure STATUS_RC=25; then
+    echo "ERROR: installer ignored Git status failure" >&2
+    exit 1
+fi
+cmp "$STATE" "$TEST_TMP/expected-state"
+run_fixture dirty INSTALL_DIRTY=' M common/config'
+printf '%s\n' "$TEST_HOME" "$(uname -s)" '' '' >"$TEST_TMP/expected-state"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
+# Entirely absent optional packages need no sync dependencies.
+mv "$FIXTURE/common/codex" "$TEST_TMP/saved-codex"
+mv "$FIXTURE/common/claude" "$TEST_TMP/saved-claude"
+run_fixture absent-packages
+assert_events \
+    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha]"
+mv "$TEST_TMP/saved-codex" "$FIXTURE/common/codex"
+mv "$TEST_TMP/saved-claude" "$FIXTURE/common/claude"
 
 # SSH permissions apply to the real targets of regular and chained symlinks;
 # dangling config snippets are ignored without aborting the restow.
