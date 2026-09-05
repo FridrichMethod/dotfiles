@@ -10,14 +10,13 @@ $hookPath = Join-Path $sourceRoot 'dotfiles-update.ps1'
 $global:DotfilesTestGitExecutable = (Get-Command git -CommandType Application | Select-Object -First 1).Source
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-update-ps-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testRoot)
-$environmentNames = @('DOTFILES_HOST', 'DOTFILES_AUTO_STOW', 'DOTFILES_AUTO_UPDATE', 'DOTFILES_DIR',
-    '_DOTFILES_CHECKED', 'GIT_TERMINAL_PROMPT', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM',
-    'DOTFILES_TEST_STOW_FAILURE', 'DOTFILES_TEST_STOW_NO_ACK')
+$environmentNames = @(@('DOTFILES_HOST', 'DOTFILES_AUTO_STOW', 'DOTFILES_AUTO_UPDATE', 'DOTFILES_DIR',
+        '_DOTFILES_CHECKED', 'GIT_TERMINAL_PROMPT', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM',
+        'GIT_TEMPLATE_DIR', 'DOTFILES_TEST_STOW_FAILURE', 'DOTFILES_TEST_STOW_NO_ACK') +
+    @(Get-ChildItem Env: | Where-Object Name -Like 'GIT_*' | Select-Object -ExpandProperty Name) |
+    Sort-Object -Unique)
 $savedEnvironment = @{}
 foreach ($name in $environmentNames) { $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name) }
-$env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'gitconfig'
-[IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '')
-$env:GIT_CONFIG_NOSYSTEM = '1'
 $global:DotfilesTestPassed = 0
 $global:DotfilesTestFixtureNumber = 0
 
@@ -108,6 +107,23 @@ function Test-Case {
 }
 
 try {
+    # -C cannot override inherited repository/index/object-store redirects or
+    # injected config. Fixtures must never reach the caller's checkout/hooks.
+    foreach ($name in $environmentNames) {
+        if ($name.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase)) {
+            # Setting a .NET environment variable to $null can leave an empty
+            # GIT_DIR on current runtimes; remove the provider entry instead.
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath "Env:$name") { throw "Cannot isolate inherited Git variable: $name" }
+        }
+    }
+    $env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'gitconfig'
+    [IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '')
+    $env:GIT_CONFIG_NOSYSTEM = '1'
+    $env:GIT_TERMINAL_PROMPT = '0'
+    $env:GIT_TEMPLATE_DIR = Join-Path $testRoot 'empty-git-template'
+    [void][IO.Directory]::CreateDirectory($env:GIT_TEMPLATE_DIR)
+
     . $helperPath
     function git {
         $global:DotfilesTestGitCalls.Add(($args -join ' '))
