@@ -16,6 +16,7 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 
 ## Working commands
 
+- Provision AI-sync parser once per clone: `./setup-sync.sh` (Windows: `./setup-sync.ps1`), with Python 3.11+.
 - Stow configs: `./stow-all.sh [host-dir]`
 - Initialize submodule: `git submodule update --init --recursive`
 - Run checks: `pre-commit run --all-files`
@@ -67,6 +68,8 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Preserve the portable/live split for Claude: `.stowrc` excludes `common/claude/.claude/settings.json` from Stow, and `stow-all.sh` runs `common/claude/.local/bin/claude-settings-sync` to deep-merge it into the mutable regular file at `~/.claude/settings.json`. Portable keys win; live-only keys such as machine-specific `permissions.additionalDirectories` are preserved.
 - Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; `codex-rules-sync` materializes it without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
 - Keep all three AI sync helpers fail-closed. Update their sources, README documentation, and focused tests together when shared config, permission, or rule behavior changes.
+- Keep structured merges in `lib/config_sync.py` with the pinned `tomlkit` runtime; do not reintroduce AWK/regex TOML parsing or a second JSON engine. Normal sync never rewrites the portable source; baseline cleanup is an explicit migration.
+- Installers must run every selected AI helper with read-only `--check` before any apply. Provision `.venv-sync` explicitly; profiles and automatic updates must never install dependencies.
 - Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
 - Keep third-party skill payloads out of dotfiles; `awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
 

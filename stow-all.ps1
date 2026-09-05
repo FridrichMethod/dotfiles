@@ -244,13 +244,16 @@ function Test-ContentEquivalent {
     }
 
     try {
-        $textA = [System.IO.File]::ReadAllText($PathA) -replace "`r`n", "`n"
-        $textB = [System.IO.File]::ReadAllText($PathB) -replace "`r`n", "`n"
+        # Only normalize CRLF in valid UTF-8. Replacement decoding can turn
+        # different binary bytes into the same text and destroy a conflict.
+        $utf8 = [Text.UTF8Encoding]::new($false, $true)
+        $textA = $utf8.GetString([System.IO.File]::ReadAllBytes($PathA)).Replace("`r`n", "`n")
+        $textB = $utf8.GetString([System.IO.File]::ReadAllBytes($PathB)).Replace("`r`n", "`n")
     }
     catch {
         return $false
     }
-    return $textA -eq $textB
+    return [string]::Equals($textA, $textB, [StringComparison]::Ordinal)
 }
 
 function Test-FileOpens {

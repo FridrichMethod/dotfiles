@@ -65,7 +65,8 @@ done
 # The paths travel through the environment because -Command does not populate
 # $args, which previously let a null path escape this check.
 if command -v pwsh >/dev/null 2>&1; then
-    for ps_file in "$INSTALLER" "$REPO_ROOT/tests/windows-installer.ps1"; do
+    for ps_file in "$INSTALLER" "$REPO_ROOT/tests/windows-installer.ps1" \
+        "$REPO_ROOT/setup-sync.ps1" "$REPO_ROOT/tests/run.ps1"; do
         INSTALLER_PATH="$ps_file" pwsh -NoProfile -NonInteractive -Command '
         $path = $env:INSTALLER_PATH
         if (-not (Test-Path -LiteralPath $path)) {

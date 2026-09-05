@@ -37,6 +37,8 @@ no-folding materialization, identical-file adoption, collision-resistant
 backups, stale and legacy links, no-op sync, dry-run, invalid final input,
 missing dependencies and strict failure. All fixture targets are separate from
 the real user profile and all fixture trees are removed after the test.
+Adoption is byte-identical or strictly decoded UTF-8 differing only by CRLF;
+case-only differences and invalid UTF-8 conflicts are backed up, not discarded.
 
 Unix checks in `tests/windows-installer.sh` preserve the source-level trust
 guardrails and parse both PowerShell files when `pwsh` is installed. They are

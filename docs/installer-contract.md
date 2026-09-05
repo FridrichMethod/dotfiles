@@ -1,7 +1,9 @@
 # Installer validation contract
 
 `stow-all.sh` preserves common-before-host Stow ordering and its existing
-`--restow --no-folding` flags. Before any selected AI helper writes to the
+`--restow --no-folding` flags. GNU Stow and the readable repository `.stowrc`
+are required before any write, so missing target/ignore defaults cannot send
+Stow to its default parent-of-package-directory target. Before any AI helper writes to the
 target, it invokes every selected helper with `--check`. The checks validate
 the parser runtime and portable/live documents without creating directories,
 materializing files, or modifying the tracked baseline.

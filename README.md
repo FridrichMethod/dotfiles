@@ -28,10 +28,12 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 ```bash
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && git submodule update --init --recursive
+./setup-sync.sh           # once per clone; Python 3.11+ and venv required
 ./stow-all.sh mac          # or: wsl-ubuntu, lab-ubuntu, sherlock, marlowe, fedora, ubuntu
 ```
 
 ```powershell
+.\setup-sync.ps1          # once per clone; Python 3.11+
 .\stow-all.ps1 win         # native Windows (elevated PowerShell 7+)
 ```
 
@@ -45,7 +47,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 - **No templating, no conditionals** — Stow symlinks the right files into `$HOME`.
 - **Self-healing**: a shell hook checks for upstream changes once per login session and fast-forwards behind branches.
 - **Skill sync**: a weekly background hook keeps `~/.claude/skills/` and `~/.codex/skills/` aligned with [awesome-skills](https://github.com/FridrichMethod/awesome-skills) (~1,668 skills).
-- **CI-checked**: every push runs `shellcheck`, `shfmt`, `stylua`, and hygiene hooks — same as the local pre-commit.
+- **CI-checked**: Ubuntu, macOS and native Windows run behavioral tests; Ubuntu also runs `shellcheck`, `shfmt`, `stylua`, and hygiene hooks — same as the local pre-commit.
 - **HPC-aware**: Stanford Sherlock and Marlowe overlays handle login-node quirks, module systems, and SLURM-friendly defaults.
 
 ## Table of Contents
@@ -86,11 +88,18 @@ git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/
 cd ~/dotfiles
 ```
 
-**2.** Stow your host (always stows `common/` first, then the overlay):
+**2.** Provision the small configuration parser, then stow your host (`common/` first, then the overlay):
 
 ```bash
+./setup-sync.sh                  # requires Python 3.11+ with venv/pip support
 ./stow-all.sh mac
 ```
+
+Setup installs the hash-pinned `tomlkit` dependency into this clone's ignored
+`.venv-sync`; JSON uses Python's standard library. No activation is needed.
+The shell/PowerShell installers remain the entrypoints. Login and automatic
+update never install dependencies or fetch Python packages. Run setup explicitly
+again when the pin changes; see [configuration sync](docs/config-sync.md).
 
 **3.** Reload your shell:
 
@@ -107,6 +116,7 @@ GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-al
 ```powershell
 git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
+.\setup-sync.ps1         # Python 3.11+; isolated environment inside this clone
 .\stow-all.ps1 win        # add -WhatIf for a dry run
 ```
 
@@ -114,10 +124,10 @@ Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point 
 
 **Why elevated?** Developer Mode (Settings → System → For developers) also lets the script create symlinks without elevation, but a symlink created by a non-elevated process is an *untrusted* reparse point. Windows refuses to traverse one for a file open whose token is a network logon — exactly what OpenSSH public-key auth produces — so inside an `ssh` session every stowed dotfile fails with `The path cannot be traversed because it contains an untrusted mount point` (error 448) while the same links resolve fine in a local session. That is not cosmetic: git dies with `fatal: unknown error occurred while reading the configuration files` because `~/.gitconfig` is unreadable. Neither `Get-Item` nor `fsutil reparsepoint query` can tell a trusted link from an untrusted one — tag, flags and substitute name are byte-identical — only the owner differs (`BUILTIN\Administrators` versus your user SID).
 
-Like `stow-all.sh`, the Windows installer first synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. Windows-only differences from the POSIX installer:
+Like `stow-all.sh`, the Windows installer validates all selected AI inputs and the parser runtime with the shared helpers' read-only `--check`, synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. A later filesystem failure can still produce a partial install, but must not acknowledge the revision; retry after fixing it. Windows-only differences from the POSIX installer:
 
 - **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
-- **Pre-existing files are adopted, not clobbered.** A file that already matches the repo (ignoring line endings) is replaced by its link silently; one that differs is moved to `<name>.stow-backup-<timestamp>` first.
+- **Pre-existing files are adopted, not clobbered.** A byte-identical file, or valid UTF-8 differing only by CRLF, is replaced by its link; case-only and binary differences are backed up to `<name>.stow-backup-<timestamp>-<unique-id>` first.
 - **Untrusted symlinks are repaired, not skipped.** A link already pointing at the right file is normally left alone, but a matching target says nothing about whether Windows will follow the link, so each one is opened to check. Untrusted links are rewritten when the run is elevated (counted as `repaired:`) and reported as warnings when it is not.
 
 ## At a Glance
@@ -365,16 +375,26 @@ Optional but recommended — same tools CI runs.
 ```bash
 pip install pre-commit          # or: brew install pre-commit
 pre-commit install
+./setup-sync.sh                 # explicit parser dependency setup
 ./tests/run.sh                  # dynamic behavior tests for core automation
 pre-commit run --all-files
 ```
 
 | Hook | Scope |
 |---|---|
-| **shellcheck** | `.sh`, `.bash*`, `.profile`, `.alias(es)` |
-| **shfmt** | `.sh`, `.bash*`, `.zsh*` (4-space indent, indented `case`, language-aware) |
+| **shellcheck** | `.sh`, `.bash*`, `.profile`, `.alias(es)`, extensionless `*-sync` helpers |
+| **shfmt** | shell files and extensionless sync helpers (4-space indent, indented `case`, POSIX/Bash/Zsh-aware) |
 | **stylua** | `*.lua`, `*.luau` |
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
+| **behavior** | structured config merges, safe writes, installers, updates, Claude hooks and dependency checks |
+
+CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
+`windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
+`pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI`. Each platform's
+assigned suites are mandatory, including native Windows installer fixtures;
+missing dependencies fail CI instead of silently skipping tests. See
+[testing commands and limitations](docs/testing.md) and the
+[behavior matrix](tests/COVERAGE.md).
 
 ## AI Assistant Configuration
 
@@ -411,7 +431,7 @@ The Git-stored versions of these files are safe to share across macOS, Linux, an
 
 Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permission edits, model selection, per-project `additionalDirectories`), and that file carries machine-specific absolute paths. The live file is intentionally a regular machine-local file rather than a Stow symlink.
 
-[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/claude/.local/bin/claude-settings-sync`](common/claude/.local/bin/claude-settings-sync), which deep-merges the portable baseline into the live file: portable keys win on conflict, while live-only keys such as `permissions.additionalDirectories` and any runtime state are preserved. The portable `permissions.allow` and `permissions.ask` arrays are authoritative, so a later stow removes ad-hoc live permission rules that are not part of the reviewed cross-host policy. The helper migrates the previous symlink layout without creating a backup and fails closed on a missing or malformed baseline, an unparseable live file, or a host with neither `jq` nor `python3`. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
+[`.stowrc`](.stowrc) excludes the tracked portable baseline from Stow. [`stow-all.sh`](stow-all.sh) instead runs [`common/claude/.local/bin/claude-settings-sync`](common/claude/.local/bin/claude-settings-sync), which deep-merges the portable baseline into the live file: portable keys win on conflict, while live-only keys such as `permissions.additionalDirectories` and any runtime state are preserved. The portable `permissions.allow` and `permissions.ask` arrays are authoritative, so a later stow removes ad-hoc live permission rules that are not part of the reviewed cross-host policy. One Python JSON implementation handles the merge; missing runtime, malformed documents or invalid types fail closed. The helper replaces a legacy symlink only after preparing the validated regular file, without writing through the link or changing its tracked source. Rerun `./stow-all.sh <host>` after pulling portable setting changes.
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
@@ -432,6 +452,14 @@ Codex Desktop also writes host-local values such as plugin state, MCP commands, 
 
 [`.stowrc`](.stowrc) excludes the tracked config and rules baselines from Stow. [`stow-all.sh`](stow-all.sh) runs [`common/codex/.local/bin/codex-config-sync`](common/codex/.local/bin/codex-config-sync), which merges the portable config allowlist into the live file while preserving runtime-only top-level keys, table entries, and tables. It also runs [`common/codex/.local/bin/codex-rules-sync`](common/codex/.local/bin/codex-rules-sync), which atomically materializes the reviewed cross-host policy as `~/.codex/rules/portable.rules` without touching Codex-generated `default.rules` or other host-local rule files.
 
+TOML is parsed and edited with `tomlkit`, including multiline values and quoted
+keys; it is not reconstructed with AWK or regular expressions. Normal sync never
+rewrites the portable baseline. Cleaning runtime state left in an old polluted
+baseline is an explicit `codex-config-sync --migrate-portable PORTABLE LIVE`
+operation; review the [migration safeguards](docs/config-sync.md) first.
+The updater verifies the applied HEAD/host after installation before reporting
+success; see the [update and locking contract](docs/update-contract.md).
+
 The portable baseline sets `model = "gpt-6-astra"`, `model_reasoning_effort = "xhigh"`, and `plan_mode_reasoning_effort = "xhigh"`. The [Plan-mode override](https://developers.openai.com/codex/config-reference) sets Plan mode to `xhigh` as well; without it, Plan mode uses its own built-in preset default. Each sync reapplies these top-level defaults; model and reasoning settings in host-local profiles are preserved.
 
 The portable baseline selects `default_permissions = "workspace-net"` with `approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`. The named profile extends `:workspace`, so writes inside the active workspace and system temporary directories proceed without approval. Its network proxy allows any public destination without review while retaining the default block on local and private network targets. Writes outside the workspace and other escalations still route to the separate automatic reviewer. The sync helper deliberately removes legacy `sandbox_mode` and `[sandbox_workspace_write]` values so they cannot shadow the selected permission profile.
@@ -445,6 +473,7 @@ Third-party skills are also not stored in this repository. [`awesome-skills-upda
 After cloning on a new machine:
 
 ```bash
+./setup-sync.sh
 ./stow-all.sh <host>
 sync-skills
 # Then authenticate Claude Code and Codex on this host.

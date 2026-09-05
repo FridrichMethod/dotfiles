@@ -44,6 +44,14 @@ if [[ -n "$HOST" && ! -d "$HOST_DIR" ]]; then
     echo "ERROR: host dir not found: $HOST_DIR" >&2
     exit 1
 fi
+if [[ ! -f "$REPO_ROOT/.stowrc" || ! -r "$REPO_ROOT/.stowrc" ]]; then
+    echo "ERROR: required .stowrc is missing or unreadable; refusing to install without target and ignore defaults." >&2
+    exit 1
+fi
+if ! command -v stow >/dev/null 2>&1; then
+    echo "ERROR: required GNU Stow is missing; install stow before applying dotfiles." >&2
+    exit 1
+fi
 
 cd "$REPO_ROOT" # ensures ./.stowrc is picked up
 START_HEAD=$(git rev-parse HEAD 2>/dev/null) || START_HEAD=

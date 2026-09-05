@@ -1,6 +1,7 @@
 # Dotfiles sync hardening execution plan
 
-Status: planned. Baseline: `c8567f1`.
+Status: implementation and independent review complete; final release checks
+are recorded against the published main SHA in GitHub Actions. Baseline: `c8567f1`.
 
 ## Objective and boundaries
 
@@ -93,5 +94,25 @@ but CI jobs must explicitly require the suites assigned to that platform.
 
 ## Execution record
 
-- P: inspected baseline and remote; only the original main worktree existed.
-- A/B/C/D/R/M: pending.
+- P: plan committed as `a4e50a0`; baseline full pre-commit passed.
+- A: `d7ba886` merged; three-platform jobs and prerequisite entrypoints tested.
+- C: `7ad5cbb` merged; acknowledgement and real-process/Git tests passed, as did
+  all 22 PowerShell updater cases using a task-local PowerShell 7.6.5 runtime.
+- B: `7d5aff7` merged; 52 backend tests, shell regressions and commit hooks
+  passed. Explicit runtime provisioning and source-preserving migration are
+  documented in `../config-sync.md`.
+- D: Windows `749c376` and Unix `71b3b5f` merged. Final wiring requires the
+  backend on every OS, real Git/Stow integration on Unix, and native Windows
+  installer integration. README, guides, lint and coverage matrix are aligned.
+- R: independent reviewers identified and verified fixes for JSON bool/number
+  no-op equality, source-only migration state, inherited Git test environments,
+  missing Unix Stow/control-file prerequisites, and unsafe Windows text
+  adoption. Windows adoption's actual function was tested on PowerShell with
+  CRLF, case-only and invalid-binary inputs. No confirmed blockers remain.
+- Integrated local validation: 52 Python tests, 7 Node tests, 22 PowerShell
+  updater cases, shell fixtures, real Git/Stow integration and PowerShell
+  parsing passed. Native NTFS/macOS results must come from their CI runners.
+- M: the coordinator publishes only this reviewed integration graph, checks
+  main for concurrent changes, removes only clean task worktrees and merged
+  task branches, pushes without force, and watches the exact resulting SHA.
+  CI repair commits, if needed, follow the same isolated-worktree procedure.

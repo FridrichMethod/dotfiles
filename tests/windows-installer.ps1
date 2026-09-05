@@ -235,6 +235,24 @@ try {
         Assert-Equal 'stale target remains' ([IO.File]::ReadAllText($stale)) 'Stale-link replacement modified its target.'
     }
 
+    Test-Case 'case-only and invalid-UTF8 differences are backed up rather than adopted' {
+        $fixture = New-Fixture
+        Write-FixtureFile (Join-Path $fixture.Target '.fixture-ssh') "SSH`n"
+        $binarySource = Join-Path $fixture.Repo 'common/conda/.fixture-conda'
+        $binaryTarget = Join-Path $fixture.Target '.fixture-conda'
+        [IO.File]::WriteAllBytes($binarySource, [byte[]]@(0xfe))
+        [IO.File]::WriteAllBytes($binaryTarget, [byte[]]@(0xff))
+        Assert-Success (Invoke-Install $fixture)
+        $textBackups = @(Get-ChildItem -LiteralPath $fixture.Target -Force -Filter '.fixture-ssh.stow-backup-*')
+        Assert-Equal 1 $textBackups.Count 'Case-only conflict was adopted without a backup.'
+        Assert-Equal "SSH`n" ([IO.File]::ReadAllText($textBackups[0].FullName)) 'Case-only backup changed.'
+        $binaryBackups = @(Get-ChildItem -LiteralPath $fixture.Target -Force -Filter '.fixture-conda.stow-backup-*')
+        Assert-Equal 1 $binaryBackups.Count 'Binary conflict was adopted without a backup.'
+        $bytes = [IO.File]::ReadAllBytes($binaryBackups[0].FullName)
+        Assert-True ($bytes.Length -eq 1 -and $bytes[0] -eq 0xff) 'Binary backup bytes changed.'
+        Assert-NoState $fixture
+    }
+
     Test-Case 'legacy AI links are materialized without editing their portable targets' {
         $fixture = New-Fixture
         $portable = Join-Path $fixture.Repo 'common/claude/.claude/settings.json'

@@ -29,6 +29,14 @@ for dependency in bash sh git python3 node; do
         missing=1
     fi
 done
+sync_python=${DOTFILES_SYNC_PYTHON:-$TEST_DIR/../.venv-sync/bin/python}
+if [[ ! -x "$sync_python" ]]; then
+    printf 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.\n' >&2
+    missing=1
+elif ! "$sync_python" -I -B "$TEST_DIR/../lib/config_sync.py" --runtime-check; then
+    missing=1
+fi
+export DOTFILES_SYNC_PYTHON="$sync_python"
 if ! command -v stow >/dev/null 2>&1; then
     if [[ "$require_ci" == 1 ]]; then
         printf 'ERROR: CI requires stow for real symlink integration tests.\n' >&2
@@ -53,6 +61,7 @@ node --test "$TEST_DIR/claude-customizations.cjs"
 
 tests=(
     test-entrypoints.sh
+    config-sync.sh
     ai-config-sync.sh
     codex-config-sync.sh
     fcitx5-profile-sync.sh
@@ -66,5 +75,10 @@ for test_name in "${tests[@]}"; do
     printf '==> %s\n' "$test_name"
     "$TEST_DIR/$test_name"
 done
+
+if command -v stow >/dev/null 2>&1; then
+    printf '==> unix-installer.sh\n'
+    "$TEST_DIR/unix-installer.sh"
+fi
 
 echo "test-suite=PASS"

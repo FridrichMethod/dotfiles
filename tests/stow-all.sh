@@ -15,6 +15,7 @@ CHECK_LOG="$TEST_TMP/checks.log"
 export CHECK_LOG
 mkdir -p "$FIXTURE/.git" "$FAKE_BIN" "$TEST_HOME"
 cp "$INSTALLER" "$FIXTURE/stow-all.sh"
+cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
 chmod +x "$FIXTURE/stow-all.sh"
 
 assert_mode() {
@@ -179,6 +180,27 @@ grep -Fq 'host dir not found' "$TEST_TMP/missing-host.stderr"
 assert_events
 
 # Common-only setup synchronizes all portable AI baselines before one Stow call.
+mv "$FIXTURE/.stowrc" "$FIXTURE/.stowrc.saved"
+if run_fixture missing-stowrc; then
+    echo 'ERROR: installer accepted missing target/ignore defaults' >&2
+    exit 1
+fi
+grep -Fq 'required .stowrc is missing or unreadable' "$TEST_TMP/missing-stowrc.stderr"
+assert_events
+[[ ! -s "$CHECK_LOG" ]]
+mv "$FIXTURE/.stowrc.saved" "$FIXTURE/.stowrc"
+
+mkdir "$TEST_TMP/no-stow-bin"
+ln -s "$(command -v dirname)" "$TEST_TMP/no-stow-bin/dirname"
+if env HOME="$TEST_HOME" PATH="$TEST_TMP/no-stow-bin" EVENT_LOG="$EVENT_LOG" \
+    /bin/bash "$FIXTURE/stow-all.sh" >"$TEST_TMP/no-stow.stdout" 2>"$TEST_TMP/no-stow.stderr"; then
+    echo 'ERROR: installer accepted missing GNU Stow' >&2
+    exit 1
+fi
+grep -Fq 'required GNU Stow is missing' "$TEST_TMP/no-stow.stderr"
+assert_events
+[[ ! -s "$CHECK_LOG" ]]
+
 run_fixture common-only
 printf '%s\n' \
     "check:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \

@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.11"
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
@@ -25,7 +25,9 @@ jobs:
       - name: Install Unix test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes stow jq
+          sudo apt-get install --yes stow
+      - name: Provision pinned configuration parser explicitly
+        run: ./setup-sync.sh
       - name: Run behavior tests with required CI prerequisites
         run: /bin/bash ./tests/run.sh --ci
       - uses: pre-commit/action@v3.0.1
@@ -47,7 +49,9 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       - name: Install Unix test dependencies
-        run: brew install stow jq
+        run: brew install stow
+      - name: Provision pinned configuration parser explicitly
+        run: ./setup-sync.sh
       - name: Run behavior tests with system Bash and BSD utilities
         run: /bin/bash ./tests/run.sh --ci
 
@@ -67,5 +71,7 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      - name: Provision pinned configuration parser explicitly
+        run: ./setup-sync.ps1
       - name: Run required native PowerShell and Node suites
         run: ./tests/run.ps1 -CI
