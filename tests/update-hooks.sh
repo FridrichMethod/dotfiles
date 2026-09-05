@@ -2,14 +2,24 @@
 
 set -euo pipefail
 
-# Exercise both login implementations with isolated homes and mocked mutations.
+# Exercise both login implementations with isolated homes, fake failures,
+# real local Git remotes, and independent-process lock contention.
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SH_UPDATER="$REPO_ROOT/dotfiles-update.sh"
 PS_UPDATER="$REPO_ROOT/dotfiles-update.ps1"
 PS_HELPER="$REPO_ROOT/dotfiles-auto-stow.ps1"
 PS_PROFILE="$REPO_ROOT/win/powershell/Documents/PowerShell/profile.ps1"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-update-hooks.XXXXXX")"
-trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
+REAL_CHILD_PID=
+REAL_GATE=
+cleanup() {
+    if [ -n "$REAL_CHILD_PID" ]; then
+        [ ! -d "$REAL_GATE" ] || : >"$REAL_GATE/release"
+        wait "$REAL_CHILD_PID" 2>/dev/null || true
+    fi
+    rm -rf "$TEST_TMP"
+}
+trap cleanup EXIT HUP INT TERM
 
 for token in _DOTFILES_CHECKED DOTFILES_AUTO_UPDATE DOTFILES_DIR DOTFILES_AUTO_STOW --ff-only 'submodule update'; do
     for f in "$SH_UPDATER" "$PS_UPDATER"; do
@@ -80,7 +90,14 @@ cat >"$FAKE_REPO/stow-all.sh" <<'SH'
 #!/bin/sh
 printf '[%s]\n' "$1" >>"$STOW_LOG"
 [ "${FAKE_STOW_RC:-0}" -eq 0 ] || { echo 'mock stow conflict' >&2; exit "$FAKE_STOW_RC"; }
-printf '%s\n' "$HOME" "$(uname -s)" "$1" "$(cat meta/head)" >meta/dotfiles-sync-unix
+case ${FAKE_STOW_ACK:-valid} in
+    absent) rm -f meta/dotfiles-sync-unix; exit 0 ;;
+    unchanged) exit 0 ;;
+    incomplete) printf '%s\n' "$HOME" "$(uname -s)" "$1" >meta/dotfiles-sync-unix; exit 0 ;;
+esac
+printf '%s\n' "${FAKE_ACK_HOME:-$HOME}" "${FAKE_ACK_PLATFORM:-$(uname -s)}" \
+    "${FAKE_ACK_HOST-$1}" "${FAKE_ACK_HEAD:-$(cat meta/head)}" >meta/dotfiles-sync-unix
+if [ "${FAKE_STOW_ACK:-valid}" = changed-head ]; then printf 'changed-during-stow\n' >meta/head; fi
 SH
 chmod +x "$FAKE_BIN/git"
 
@@ -118,8 +135,12 @@ run_interactive() {
             fi
             trap '\''printf "caller-trap\n"'\'' EXIT
             before_trap=$(trap -p EXIT)
+            before_flags=$-
+            before_umask=$(umask)
             . "$SH_UPDATER"
             [ "$(trap -p EXIT)" = "$before_trap" ] || printf "trap-leaked\n"
+            [ "$-" = "$before_flags" ] || printf "flags-leaked\n"
+            [ "$(umask)" = "$before_umask" ] || printf "umask-leaked\n"
             printf "marker=%s\n" "${_DOTFILES_CHECKED:-missing}"
             bash -uc '\''printf "child-marker=%s\\n" "$_DOTFILES_CHECKED"'\''
             if declare -F _dotfiles_update_check >/dev/null || declare -p _df_dir >/dev/null 2>&1; then
@@ -219,6 +240,20 @@ grep -Fq 'mock stow conflict' "$LAST_STDERR"
 grep -Fq 'Stow failed' "$LAST_STDOUT"
 [ "$(tail -n 1 "$FAKE_REPO/meta/dotfiles-sync-unix")" = older ]
 
+# Exit zero is not success without complete, correctly bound acknowledgement.
+for acknowledgement in absent unchanged incomplete changed-head; do
+    run_interactive "ack-$acknowledgement" FAKE_APPLIED=older FAKE_STOW_ACK="$acknowledgement"
+    applied_host host-a
+    grep -Fq 'Installer did not acknowledge this revision' "$LAST_STDOUT"
+    ! grep -Fq 'Stow completed' "$LAST_STDOUT"
+done
+for binding in FAKE_ACK_HOME FAKE_ACK_PLATFORM FAKE_ACK_HOST FAKE_ACK_HEAD; do
+    run_interactive "ack-$binding" FAKE_APPLIED=older "$binding=incorrect"
+    applied_host host-a
+    grep -Fq 'Installer did not acknowledge this revision' "$LAST_STDOUT"
+    ! grep -Fq 'Stow completed' "$LAST_STDOUT"
+done
+
 # Common-only is configured; an unknown home/platform/host must not be guessed.
 run_interactive common-only FAKE_HOST= FAKE_APPLIED=older
 applied_host ''
@@ -250,6 +285,153 @@ no_fetch
 no_stow
 grep -Fq 'Incomplete update lock' "$LAST_STDOUT"
 
+# These cases use actual Git and file://-free local remotes, not mocked Git.
+# Nothing can use the operator's Git config, home, hooks, or remote credentials.
+REAL_GIT=$(command -v git)
+REAL_PATH=$PATH
+REAL_CASE_NUMBER=0
+: >"$TEST_TMP/gitconfig"
+real_git() {
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_CONFIG_COUNT \
+        HOME="$TEST_TMP/home" GIT_CONFIG_GLOBAL="$TEST_TMP/gitconfig" \
+        GIT_CONFIG_NOSYSTEM=1 "$REAL_GIT" "$@"
+}
+new_real_fixture() {
+    REAL_CASE_NUMBER=$((REAL_CASE_NUMBER + 1))
+    REAL_ROOT="$TEST_TMP/real fixture $REAL_CASE_NUMBER"
+    REAL_REMOTE="$REAL_ROOT/remote.git"
+    REAL_SEED="$REAL_ROOT/seed"
+    REAL_REPO="$REAL_ROOT/checkout with spaces"
+    real_git init --bare --quiet --initial-branch=main "$REAL_REMOTE"
+    real_git init --quiet --initial-branch=main "$REAL_SEED"
+    real_git -C "$REAL_SEED" config user.name 'Dotfiles tests'
+    real_git -C "$REAL_SEED" config user.email 'dotfiles-tests@example.invalid'
+    mkdir "$REAL_SEED/host-a"
+    printf 'host fixture\n' >"$REAL_SEED/host-a/config"
+    printf 'initial configuration\n' >"$REAL_SEED/settings.txt"
+    cat >"$REAL_SEED/stow-all.sh" <<'SH'
+#!/bin/sh
+state=$(git rev-parse --git-path dotfiles-sync-unix) || exit 70
+printf '[%s]\n' "$1" >>"$state.installs"
+if [ -n "${REAL_STOW_GATE:-}" ]; then
+    : >"$REAL_STOW_GATE/entered"
+    count=0
+    while [ ! -f "$REAL_STOW_GATE/release" ]; do
+        count=$((count + 1))
+        [ "$count" -lt 200 ] || { echo 'Timed out waiting for test gate.' >&2; exit 71; }
+        sleep 0.05
+    done
+fi
+[ "${REAL_STOW_FAILURE:-0}" = 0 ] || { echo 'Injected fixture installer failure.' >&2; exit 72; }
+[ "${REAL_STOW_NO_ACK:-0}" = 0 ] || exit 0
+printf '%s\n' "$HOME" "$(uname -s)" "$1" "$(git rev-parse HEAD)" >"$state"
+SH
+    real_git -C "$REAL_SEED" add stow-all.sh settings.txt host-a/config
+    real_git -C "$REAL_SEED" commit --quiet -m 'Initial test fixture'
+    real_git -C "$REAL_SEED" remote add origin "$REAL_REMOTE"
+    real_git -C "$REAL_SEED" push --quiet --set-upstream origin main
+    real_git clone --quiet "$REAL_REMOTE" "$REAL_REPO"
+    real_git -C "$REAL_REPO" config user.name 'Dotfiles tests'
+    real_git -C "$REAL_REPO" config user.email 'dotfiles-tests@example.invalid'
+    REAL_STATE="$REAL_REPO/.git/dotfiles-sync-unix"
+    printf '%s\n' "$TEST_TMP/home" "$(uname -s)" host-a pending >"$REAL_STATE"
+}
+advance_real_remote() {
+    printf 'remote update\n' >>"$REAL_SEED/settings.txt"
+    real_git -C "$REAL_SEED" add settings.txt
+    real_git -C "$REAL_SEED" commit --quiet -m 'Remote test update'
+    real_git -C "$REAL_SEED" push --quiet
+}
+real_hook() {
+    local output_name=$1
+    shift
+    env -u _DOTFILES_CHECKED -u DOTFILES_HOST -u GIT_DIR -u GIT_WORK_TREE \
+        -u GIT_INDEX_FILE -u GIT_CONFIG_COUNT \
+        HOME="$TEST_TMP/home" PATH="$REAL_PATH" \
+        GIT_CONFIG_GLOBAL="$TEST_TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1 \
+        DOTFILES_DIR="$REAL_REPO" DOTFILES_AUTO_UPDATE=1 DOTFILES_AUTO_STOW=1 \
+        SH_UPDATER="$SH_UPDATER" "$@" bash --noprofile --norc -uic '
+            . "$SH_UPDATER"
+            printf "marker=%s\n" "${_DOTFILES_CHECKED:-missing}"
+        ' >"$REAL_ROOT/$output_name.stdout" 2>"$REAL_ROOT/$output_name.stderr"
+    grep -Fxq 'marker=1' "$REAL_ROOT/$output_name.stdout"
+}
+assert_real_acknowledged() {
+    [ "$(tail -n 1 "$REAL_STATE")" = "$(real_git -C "$REAL_REPO" rev-parse HEAD)" ]
+    [ ! -d "$REAL_STATE.lock" ]
+    [ -z "$(real_git -C "$REAL_REPO" status --porcelain)" ]
+}
+
+new_real_fixture
+advance_real_remote
+real_hook fast-forward
+[ "$(real_git -C "$REAL_REPO" rev-parse HEAD)" = "$(real_git -C "$REAL_SEED" rev-parse HEAD)" ]
+grep -Fq 'Stow completed' "$REAL_ROOT/fast-forward.stdout"
+assert_real_acknowledged
+
+new_real_fixture
+initial_head=$(real_git -C "$REAL_REPO" rev-parse HEAD)
+advance_real_remote
+printf 'local change\n' >>"$REAL_REPO/settings.txt"
+real_hook dirty
+[ "$(real_git -C "$REAL_REPO" rev-parse HEAD)" = "$initial_head" ]
+[ ! -e "$REAL_STATE.installs" ]
+grep -Fq 'Local changes' "$REAL_ROOT/dirty.stdout"
+
+new_real_fixture
+advance_real_remote
+printf 'local commit\n' >>"$REAL_REPO/settings.txt"
+real_git -C "$REAL_REPO" add settings.txt
+real_git -C "$REAL_REPO" commit --quiet -m 'Local divergent commit'
+local_head=$(real_git -C "$REAL_REPO" rev-parse HEAD)
+real_hook diverged
+[ "$(real_git -C "$REAL_REPO" rev-parse HEAD)" = "$local_head" ]
+[ ! -e "$REAL_STATE.installs" ]
+grep -Fq 'Fast-forward pull failed' "$REAL_ROOT/diverged.stdout"
+
+# Three sessions at the same real HEAD: failure, missing acknowledgement, retry.
+new_real_fixture
+real_hook failed REAL_STOW_FAILURE=1
+[ "$(tail -n 1 "$REAL_STATE")" = pending ]
+grep -Fq 'Stow failed' "$REAL_ROOT/failed.stdout"
+real_hook unacknowledged REAL_STOW_NO_ACK=1
+[ "$(tail -n 1 "$REAL_STATE")" = pending ]
+grep -Fq 'Installer did not acknowledge this revision' "$REAL_ROOT/unacknowledged.stdout"
+! grep -Fq 'Stow completed' "$REAL_ROOT/unacknowledged.stdout"
+real_hook retry
+[ "$(wc -l <"$REAL_STATE.installs" | tr -d ' ')" = 3 ]
+assert_real_acknowledged
+
+# Hold the first actual interactive-shell process inside its installer while
+# a second independent shell tries to update the same checkout and home.
+new_real_fixture
+REAL_GATE="$REAL_REPO/.git/test-gate"
+mkdir "$REAL_GATE"
+real_hook owner REAL_STOW_GATE="$REAL_GATE" &
+REAL_CHILD_PID=$!
+gate_attempt=0
+while [ ! -f "$REAL_GATE/entered" ]; do
+    gate_attempt=$((gate_attempt + 1))
+    if [ "$gate_attempt" -ge 200 ]; then
+        echo 'ERROR: lock owner did not reach the test gate.' >&2
+        exit 1
+    fi
+    sleep 0.05
+done
+real_hook contender
+[ "$(wc -l <"$REAL_STATE.installs" | tr -d ' ')" = 1 ]
+[ "$(tail -n 1 "$REAL_STATE")" = pending ]
+[ -d "$REAL_STATE.lock" ]
+! grep -Fq '[dotfiles]' "$REAL_ROOT/contender.stdout"
+: >"$REAL_GATE/release"
+wait "$REAL_CHILD_PID"
+REAL_CHILD_PID=
+assert_real_acknowledged
+real_hook released
+[ "$(wc -l <"$REAL_STATE.installs" | tr -d ' ')" = 1 ]
+! grep -Fq '[dotfiles]' "$REAL_ROOT/released.stdout"
+echo 'unix-update-hooks-real=PASS (fast-forward, dirty, divergence, retry, process lock)'
+
 if command -v pwsh >/dev/null 2>&1; then
     for f in "$PS_UPDATER" "$PS_PROFILE" "$PS_HELPER"; do
         PS_FILE="$f" pwsh -NoProfile -NonInteractive -Command '
@@ -262,6 +444,8 @@ if command -v pwsh >/dev/null 2>&1; then
     if [ -f "$REPO_ROOT/tests/update-hooks.ps1" ]; then
         PS_FILE="$REPO_ROOT/tests/update-hooks.ps1" pwsh -NoProfile -NonInteractive -Command '$ErrorActionPreference = "Stop"; & $env:PS_FILE; exit 0'
     fi
+else
+    echo 'windows-update-hooks=SKIP (pwsh not installed; native PowerShell suite required in Windows CI)'
 fi
 
 echo "update-hooks=PASS"

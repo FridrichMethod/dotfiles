@@ -9,11 +9,63 @@ permissions:
   contents: read
 
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
+  linux:
+    name: Linux behavior and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install Unix test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes stow jq
+      - name: Run behavior tests with required CI prerequisites
+        run: /bin/bash ./tests/run.sh --ci
       - uses: pre-commit/action@v3.0.1
+
+  macos:
+    name: macOS system Bash behavior
+    runs-on: macos-15
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install Unix test dependencies
+        run: brew install stow jq
+      - name: Run behavior tests with system Bash and BSD utilities
+        run: /bin/bash ./tests/run.sh --ci
+
+  windows:
+    name: Windows native PowerShell behavior
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Run required native PowerShell and Node suites
+        run: ./tests/run.ps1 -CI

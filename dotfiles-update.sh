@@ -4,6 +4,8 @@
 # entire hook; DOTFILES_AUTO_STOW=0 keeps pulls but disables automatic setup.
 # DOTFILES_HOST overrides the host remembered by a successful stow-all.sh run
 # (an explicitly empty value means common-only). No host is guessed.
+# Success requires the installer to acknowledge this home, platform, host,
+# and unchanged HEAD in local Git metadata; exit zero alone is insufficient.
 
 case $- in
     *i*) ;;
@@ -145,7 +147,28 @@ _dotfiles_update_check() (
     fi
     printf '[dotfiles] Applying dotfiles (%s)...\n' "${_df_host:-common-only}"
     if bash ./stow-all.sh "$_df_host" >"$_df_lock/stow.log" 2>&1; then
-        printf '[dotfiles] Stow completed; open a new shell to load updated config.\n'
+        _df_acknowledged=0
+        if [ -f "$_df_state" ]; then
+            if {
+                IFS= read -r _df_ack_home &&
+                    IFS= read -r _df_ack_platform &&
+                    IFS= read -r _df_ack_host &&
+                    IFS= read -r _df_ack_head
+            } <"$_df_state" &&
+                [ "$_df_ack_home" = "$HOME" ] &&
+                [ "$_df_ack_platform" = "$_df_platform" ] &&
+                [ "$_df_ack_host" = "$_df_host" ] &&
+                [ "$_df_ack_head" = "$_df_head" ] &&
+                [ "$(git rev-parse HEAD 2>/dev/null)" = "$_df_head" ]; then
+                _df_acknowledged=1
+            fi
+        fi
+        if [ "$_df_acknowledged" = 1 ]; then
+            printf '[dotfiles] Stow completed; open a new shell to load updated config.\n'
+        else
+            cat "$_df_lock/stow.log" >&2
+            printf '[dotfiles] Installer did not acknowledge this revision; automatic stow remains pending. Rerun stow-all.sh if configuration state is missing or invalid.\n'
+        fi
     else
         cat "$_df_lock/stow.log" >&2
         printf '[dotfiles] Stow failed; fix the error and retry stow-all.sh, or retry next login.\n'

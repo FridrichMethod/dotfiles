@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-# The Windows installer cannot be executed in CI - there is no pwsh, and the
-# behaviour under test is an NTFS reparse-point property - so these are static
-# assertions on the source plus an optional parse check when pwsh exists.
+# Unix contract checks supplement tests/windows-installer.ps1, which exercises
+# actual links and helper processes in the native Windows CI job. A normal
+# hosted job cannot establish SSH network-logon reparse-point trust.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO_ROOT/stow-all.ps1"
@@ -35,6 +35,13 @@ if ! grep -Fq 'created from a non-elevated session are' "$INSTALLER"; then
 fi
 grep -Fq 'repaired: $script:Repaired' "$INSTALLER"
 
+# Isolated targets and validation-only helper calls are part of the installer
+# contract. Native behavior tests exercise them; these guard Unix-only runs.
+grep -Fq '[string]$TargetRoot' "$INSTALLER"
+grep -Fq 'foreach ($sync in $syncPlan) { Invoke-PortableSync @sync -CheckOnly }' "$INSTALLER"
+grep -Fq 'if ($recordAppliedState -and -not $WhatIfPreference' "$INSTALLER"
+grep -Fq "Unsupported Windows host:" "$INSTALLER"
+
 # The help text and README must not send anyone back to the unelevated path.
 if grep -Fq 'symlinks can be created without an elevated prompt' "$INSTALLER"; then
     echo "ERROR: installer help still recommends the unelevated path" >&2
@@ -54,11 +61,12 @@ for guide in CLAUDE.md AGENTS.md; do
     fi
 done
 
-# GitHub's Ubuntu runners ship pwsh, so this parse check does run in CI. The
-# path travels through the environment because -Command does not populate
-# $args, which silently parsed a null path until CI caught it.
+# Parse both the installer and native fixture when PowerShell is installed.
+# The paths travel through the environment because -Command does not populate
+# $args, which previously let a null path escape this check.
 if command -v pwsh >/dev/null 2>&1; then
-    INSTALLER_PATH="$INSTALLER" pwsh -NoProfile -NonInteractive -Command '
+    for ps_file in "$INSTALLER" "$REPO_ROOT/tests/windows-installer.ps1"; do
+        INSTALLER_PATH="$ps_file" pwsh -NoProfile -NonInteractive -Command '
         $path = $env:INSTALLER_PATH
         if (-not (Test-Path -LiteralPath $path)) {
             Write-Output "installer not found at $path"
@@ -69,6 +77,9 @@ if command -v pwsh >/dev/null 2>&1; then
             $path, [ref]$null, [ref]$errors)
         if ($errors) { $errors | ForEach-Object { $_.ToString() }; exit 1 }
     '
+    done
+else
+    printf 'SKIP: Windows installer/native fixture parse checks (pwsh unavailable).\n'
 fi
 
 echo "windows-installer=PASS"
