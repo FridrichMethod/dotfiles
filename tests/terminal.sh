@@ -14,6 +14,7 @@ import selectors
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 SCRIPT = r'''
@@ -137,6 +138,70 @@ for mode in ('', 'invalid'):
     assert ESC not in stdout + stderr
     stdout, stderr = run(stdout_tty=True, overrides={'DOTFILES_COLOR': mode})
     assert ESC in stdout and ESC not in stderr
+
+# Powerlevel10k's instant prompt hides the terminal behind a capture file that
+# it replays verbatim, so auto keeps color there - but only for the descriptors
+# p10k actually saved, and without dash's "illegal number" noise on stderr.
+# Descriptors 3 and 4 stand in for p10k's saved terminal (a real session saved
+# the same tty twice); 6 keeps the child's own stderr free for noise checks.
+P9K_SCRIPT = r"""
+. "$TERMINAL_LIB"
+: >"$P9K_CAPTURE"
+: >"$P9K_PLAIN"
+exec 3>&1 4>&1 6>&2
+exec 1>"$P9K_CAPTURE" 2>&1
+__p9k_instant_prompt_active=1
+__p9k_fd_1=3
+__p9k_fd_2=4
+dotfiles_log step 'Captured stdout reaches the saved terminal'
+dotfiles_log warn 'Captured stderr reaches the saved terminal'
+__p9k_fd_1=oops
+dotfiles_log ok 'Non-numeric saved descriptor'
+__p9k_fd_1=
+dotfiles_log ok 'Empty saved descriptor'
+exec 5>>"$P9K_PLAIN"
+__p9k_fd_1=5
+dotfiles_log ok 'Saved descriptor is not a terminal'
+__p9k_fd_1=3
+unset __p9k_instant_prompt_active
+dotfiles_log ok 'Instant prompt inactive'
+__p9k_instant_prompt_active=1
+dotfiles_captured_tty 1 || :
+[ "${_dt_tty_fd:-unset}" = unset ]
+exec 1>&3 2>&6 3>&- 4>&- 5>&- 6>&-
+cat "$P9K_CAPTURE"
+[ ! -s "$P9K_PLAIN" ]
+"""
+
+P9K_REPLAY = [
+    b'\x1b[1;36m[dotfiles] [step]\x1b[0m Captured stdout reaches the saved terminal',
+    b'\x1b[33m[dotfiles] [warn]\x1b[0m Captured stderr reaches the saved terminal',
+    b'[dotfiles] [ok] Non-numeric saved descriptor',
+    b'[dotfiles] [ok] Empty saved descriptor',
+    b'[dotfiles] [ok] Saved descriptor is not a terminal',
+    b'[dotfiles] [ok] Instant prompt inactive',
+]
+
+p9k_dir = tempfile.mkdtemp(prefix='dotfiles-instant-prompt-')
+try:
+    paths = {'P9K_CAPTURE': os.path.join(p9k_dir, 'capture'),
+             'P9K_PLAIN': os.path.join(p9k_dir, 'plain')}
+    shells = ['sh'] + [name for name in ('dash', 'bash', 'zsh') if shutil.which(name)]
+    for shell in shells:
+        command = [shell, '-eu', '-c', P9K_SCRIPT]
+        stdout, stderr = run(stdout_tty=True, command=command, overrides=paths)
+        assert stderr == b'', (shell, stderr)
+        replayed = [line for line in stdout.replace(b'\r\n', b'\n').split(b'\n') if line]
+        assert replayed == P9K_REPLAY, (shell, replayed)
+        for settings in ({'DOTFILES_COLOR': 'never'}, {'NO_COLOR': '1'}, {'TERM': 'dumb'}):
+            stdout, stderr = run(stdout_tty=True, command=command,
+                                 overrides={**paths, **settings})
+            assert ESC not in stdout, (shell, settings, stdout)
+            assert stderr == b'', (shell, settings, stderr)
+    print('instant-prompt-replay=PASS (%s: saved terminal colored, '
+          'stale and inactive descriptors plain)' % ', '.join(shells))
+finally:
+    shutil.rmtree(p9k_dir, ignore_errors=True)
 
 result = subprocess.run(['sh', '-eu', '-c', '. "$TERMINAL_LIB"'],
                         capture_output=True, check=True)

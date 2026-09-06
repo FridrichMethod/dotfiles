@@ -308,7 +308,12 @@ The installer stores the selected host and last successfully applied commit in l
 
 Installers and update hooks use compact `[dotfiles] [step/ok/warn/error/info]`
 badges: cyan stages, green success, yellow warnings and red errors. Automatic
-color requires a capable terminal; redirected output is plain by default.
+color requires a capable terminal; redirected output is plain by default. The
+exception is Powerlevel10k's instant prompt, which swaps stdout and stderr for
+a capture file and later replays it verbatim to the terminal it saved: `auto`
+keeps color there, so login-hook messages are not plain just because the prompt
+buffered them. Automatic stow still writes the installer's own output to a log
+file, so those lines stay plain and only surface when stow fails.
 `TERM=dumb` and nonempty `NO_COLOR` disable color even with `DOTFILES_COLOR=always`.
 Shared helpers are quiet during installation, but validation and write errors
 remain visible. This does not change your prompt, terminal theme, fonts or PATH.

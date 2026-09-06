@@ -82,7 +82,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 
 ## Stow and update scripts
 
-- Keep status formatting in `lib/terminal.sh` / `lib/terminal.ps1`, with TTY-aware `DOTFILES_COLOR=auto|always|never`; nonempty `NO_COLOR` and `TERM=dumb` disable color. Preserve plain redirected logs by default, PowerShell stream capture, and caller shell/preferences. Do not add terminal formatting dependencies.
+- Keep status formatting in `lib/terminal.sh` / `lib/terminal.ps1`, with TTY-aware `DOTFILES_COLOR=auto|always|never`; nonempty `NO_COLOR` and `TERM=dumb` disable color. Preserve plain redirected logs by default, PowerShell stream capture, and caller shell/preferences. Under `auto`, treat a descriptor that Powerlevel10k's instant prompt captured as a terminal: it replays the capture file verbatim, and the check is `__p9k_instant_prompt_active` plus a numeric, still-a-terminal `__p9k_fd_1`/`__p9k_fd_2` (a non-numeric operand makes dash's `-t` print to stderr, which sourcing must never do). Every other hidden terminal stays plain. Do not add terminal formatting dependencies.
 
 - `stow-all.sh` is the canonical setup command.
 - Keep order stable: stow `common/` packages first, then optional host packages.
