@@ -21,7 +21,7 @@ if (-not $elevated) { throw 'Native installer integration needs an elevated proc
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-native-stow-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testRoot)
 $environmentNames = @(@('DOTFILES_SYNC_PYTHON', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM',
-        'GIT_TERMINAL_PROMPT', 'GIT_TEMPLATE_DIR', 'BASH_ENV', 'ENV') +
+        'GIT_TERMINAL_PROMPT', 'GIT_TEMPLATE_DIR', 'BASH_ENV', 'ENV', 'DOTFILES_COLOR', 'NO_COLOR') +
     @(Get-ChildItem Env: | Where-Object Name -Like 'GIT_*' | Select-Object -ExpandProperty Name) |
     Sort-Object -Unique)
 $savedEnvironment = @{}
@@ -62,7 +62,7 @@ function New-Fixture {
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
     foreach ($relative in @('stow-all.ps1', 'dotfiles-auto-stow.ps1', '.stowrc',
-            'lib/config_sync.py', 'lib/sync-runtime.sh',
+            'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
             'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
@@ -133,7 +133,7 @@ try {
     # SetEnvironmentVariable(name, $null) can leave an empty entry, which Git
     # still interprets as an override. Remove the provider entry explicitly.
     foreach ($name in $environmentNames) {
-        if ($name.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase) -or $name -in @('BASH_ENV', 'ENV')) {
+        if ($name.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase) -or $name -in @('BASH_ENV', 'ENV', 'DOTFILES_COLOR', 'NO_COLOR')) {
             Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
             Assert-True (-not (Test-Path -LiteralPath "Env:$name")) "Environment override was not removed: $name"
         }
@@ -183,6 +183,18 @@ try {
         Assert-Equal $sourceHash (Get-FileHash -LiteralPath $portable).Hash 'Portable TOML source changed.'
         $changes = & $gitExecutable -C $fixture.Repo status --porcelain
         Assert-True (-not $changes) 'Installation modified the fixture checkout.'
+        Assert-NoState $fixture
+    }
+
+    Test-Case 'uppercase WIN is normalized before selecting the overlay' {
+        $fixture = New-Fixture
+        $result = Invoke-Install $fixture -HostDir 'WIN'
+        Assert-Success $result
+        Assert-Link (Join-Path $fixture.Target '.gitconfig') (Join-Path $fixture.Repo 'win/git/.gitconfig')
+        Assert-True ($result.Output.Contains('[dotfiles] [step] Stowing host packages (win):')) 'Host logging did not use canonical win.'
+        Assert-True ($result.Output.Contains('[dotfiles] [ok] Stow complete;')) 'Installer success summary missing.'
+        Assert-True (-not $result.Output.Contains([string][char]27)) 'Redirected installer emitted ANSI by default.'
+        Assert-True ($result.Output -notmatch '(?m)^\s*(Validated|Synchronized)\b') 'Sync helper chatter escaped --quiet.'
         Assert-NoState $fixture
     }
 

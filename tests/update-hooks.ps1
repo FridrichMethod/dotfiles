@@ -271,11 +271,62 @@ try {
         Invoke-DotfilesUpdate $fixture.Repo
         Assert-Equal 2 (Get-InstallCount $fixture) 'Switching back to win did not apply.'
     }
+    Test-Case 'WIN override and legacy host state dispatch canonical win' {
+        $fixture = New-Fixture
+        $directory = Get-DotfilesStateDirectory $fixture.Repo
+        Save-DotfilesStowState $fixture.Repo 'WIN'
+        $saved = Get-Content -LiteralPath (Join-Path $directory 'configuration.json') -Raw | ConvertFrom-Json
+        Assert-Equal 'win' $saved.host 'Manual save did not canonicalize WIN.'
+        # Existing metadata may contain mixed-case hosts accepted by older hooks.
+        Write-DotfilesState $directory 'configuration.json' @{ home = [Environment]::GetFolderPath('UserProfile'); host = 'WiN'; appliedHead = '' }
+        Assert-Equal 'win' (Read-DotfilesState $directory).host 'Legacy configuration host not canonicalized on read.'
+        $env:DOTFILES_HOST = 'WIN'
+        $global:DotfilesTestElevated = $false
+        Invoke-DotfilesUpdate $fixture.Repo
+        $request = Get-Content -LiteralPath (Join-Path $directory 'request.json') -Raw | ConvertFrom-Json
+        Assert-Equal 'win' $request.host 'Override dispatched uppercase host.'
+        $request.host = 'WIN'
+        Write-DotfilesState $directory 'request.json' $request
+        $global:DotfilesTestElevated = $true
+        Invoke-DotfilesApply $fixture.Repo
+        $saved = Get-Content -LiteralPath (Join-Path $directory 'configuration.json') -Raw | ConvertFrom-Json
+        Assert-Equal 'win' $saved.host 'Worker did not canonicalize legacy request.'
+        Assert-Equal 'win' ([IO.File]::ReadAllText((Join-Path $directory 'installs.log')).Trim()) 'Installer received noncanonical host.'
+        Remove-Item Env:DOTFILES_HOST
+        Invoke-DotfilesUpdate $fixture.Repo
+        Assert-Equal 1 (Get-InstallCount $fixture) 'Canonical host caused redundant restow.'
+    }
     Test-Case 'invalid Windows host fails before dispatch' {
         $fixture = New-Fixture
         $env:DOTFILES_HOST = 'wsl-ubuntu'
         Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'Windows DOTFILES_HOST'
         Assert-Equal 0 (Get-InstallCount $fixture) 'Unsupported host installed.'
+        Assert-Throws { Save-DotfilesStowState $fixture.Repo 'arbitraryhost' } 'Windows DOTFILES_HOST'
+        $directory = Get-DotfilesStateDirectory $fixture.Repo
+        Write-DotfilesState $directory 'request.json' @{ home = [Environment]::GetFolderPath('UserProfile'); host = 'arbitraryhost'; head = (Get-DotfilesHead $fixture.Repo) }
+        Assert-Throws { Invoke-DotfilesApply $fixture.Repo } 'Windows DOTFILES_HOST'
+        Assert-Equal 0 (Get-InstallCount $fixture) 'Invalid legacy request installed.'
+    }
+    Test-Case 'missing null and non-string persisted hosts fail closed before dispatch or apply' {
+        $fixture = New-Fixture
+        $directory = Get-DotfilesStateDirectory $fixture.Repo
+        foreach ($name in @('configuration.json', 'request.json')) {
+            foreach ($hostCase in @(@{ Label = 'missing' }, @{ Label = 'null'; Value = $null },
+                    @{ Label = 'empty array'; Value = @() }, @{ Label = 'array'; Value = @('win') },
+                    @{ Label = 'number'; Value = 0 }, @{ Label = 'boolean'; Value = $false },
+                    @{ Label = 'object'; Value = @{} })) {
+                Save-DotfilesStowState $fixture.Repo 'win'
+                $value = @{ home = [Environment]::GetFolderPath('UserProfile'); head = (Get-DotfilesHead $fixture.Repo); appliedHead = '' }
+                if ($hostCase.ContainsKey('Value')) { $value.host = $hostCase.Value }
+                Write-DotfilesState $directory $name $value
+                if ($name -eq 'configuration.json') {
+                    Assert-Throws { Request-DotfilesRestow $fixture.Repo $directory } 'host must be a string'
+                }
+                else { Assert-Throws { Invoke-DotfilesApply $fixture.Repo } 'host must be a string' }
+                Assert-Equal 0 (Get-InstallCount $fixture) "$name accepted $($hostCase.Label) host."
+            }
+        }
+        Assert-Equal 0 $global:DotfilesTestTaskCalls.Count 'Malformed host dispatched a scheduled task.'
     }
     Test-Case 'dirty manual install remembers host without acknowledging commit' {
         $fixture = New-Fixture
@@ -368,6 +419,33 @@ try {
         Assert-True ($registration[0].Extent.Text -match '-LogonType Interactive -RunLevel Highest') 'Registration principal lost interactive highest-privilege contract.'
         Assert-True ($registration[0].Extent.Text -match '-MultipleInstances IgnoreNew') 'Task overlap guard missing.'
     }
+    Test-Case 'worker branch retains all-stream log capture without changing caller preferences' {
+        $fixture = New-Fixture
+        $parseErrors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseFile($helperPath, [ref]$null, [ref]$parseErrors)
+        Assert-True (-not $parseErrors) 'Helper failed PowerShell parse.'
+        $dispatch = @($ast.EndBlock.Statements | Where-Object { $_.Extent.Text.StartsWith('if ($Register)') })
+        Assert-Equal 1 $dispatch.Count 'Could not isolate worker dispatch.'
+        function Invoke-DotfilesApply {
+            param([string]$Repo)
+            Write-DotfilesLog step 'Worker stage'
+            Write-DotfilesLog ok 'Worker success'
+            Write-Output 'Installer output'
+        }
+        # A real file preserves $PSScriptRoot inside the worker's child scope;
+        # ScriptBlock.Create resets that automatic variable to an empty value.
+        $worker = Join-Path $fixture.Repo 'worker-test.ps1'
+        [IO.File]::WriteAllText($worker, '[CmdletBinding(SupportsShouldProcess)]param([switch]$Register, [switch]$Apply) ' + $dispatch[0].Extent.Text)
+        $PSNativeCommandUseErrorActionPreference = $true
+        $savedErrorAction = $ErrorActionPreference
+        . $worker -Apply
+        Assert-Equal $savedErrorAction $ErrorActionPreference 'Worker changed caller error preference.'
+        Assert-True $PSNativeCommandUseErrorActionPreference 'Worker changed caller native preference.'
+        $content = [IO.File]::ReadAllText((Join-Path (Get-DotfilesStateDirectory $fixture.Repo) 'restow.log'))
+        Assert-True ($content.Contains('[dotfiles] [step] Worker stage')) 'Worker log lost stage output.'
+        Assert-True ($content.Contains('[dotfiles] [ok] Worker success')) 'Worker log lost success output.'
+        Assert-True ($content.Contains('Installer output')) 'Worker log lost ordinary output.'
+    }
     Test-Case 'interactive hook guards export marker and contain update failures' {
         $fixture = New-Fixture
         $stub = @'
@@ -386,16 +464,23 @@ function Invoke-DotfilesUpdate {
         $global:DotfilesTestHookCalls = 0
         $env:DOTFILES_DIR = $fixture.Repo
         $env:DOTFILES_AUTO_UPDATE = '0'
-        & $interactiveHook
+        $PSNativeCommandUseErrorActionPreference = $true
+        $savedErrorAction = $ErrorActionPreference
+        $savedNativePreference = $PSNativeCommandUseErrorActionPreference
+        . $interactiveHook
+        Assert-Equal $savedErrorAction $ErrorActionPreference 'Disabled hook changed caller error preference.'
+        Assert-Equal $savedNativePreference $PSNativeCommandUseErrorActionPreference 'Disabled hook changed native preference.'
         Assert-Equal '1' $env:_DOTFILES_CHECKED 'Disabled hook did not export marker.'
         Assert-Equal 0 $global:DotfilesTestHookCalls 'Disabled hook ran update.'
         $env:DOTFILES_AUTO_UPDATE = '1'
-        & $interactiveHook
+        . $interactiveHook
         Assert-Equal 0 $global:DotfilesTestHookCalls 'Existing marker did not suppress update.'
         Remove-Item Env:_DOTFILES_CHECKED
-        & $interactiveHook
+        . $interactiveHook
         Assert-Equal 1 $global:DotfilesTestHookCalls 'Interactive hook missed update.'
         Assert-Equal '1' $env:_DOTFILES_CHECKED 'Failed hook did not export marker.'
+        Assert-Equal $savedErrorAction $ErrorActionPreference 'Failed hook changed caller error preference.'
+        Assert-Equal $savedNativePreference $PSNativeCommandUseErrorActionPreference 'Failed hook changed native preference.'
         & $interactiveHook
         Assert-Equal 1 $global:DotfilesTestHookCalls 'Failed hook retried in same session.'
     }

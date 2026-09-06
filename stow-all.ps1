@@ -61,6 +61,21 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
 $RepoRoot = $PSScriptRoot
+function Write-DotfilesLog {
+    param([string]$Level, [string]$Message)
+    Write-Host "[dotfiles] [$Level] $Message"
+}
+try {
+    $terminalLibrary = Join-Path $RepoRoot 'lib/terminal.ps1'
+    if (Test-Path -LiteralPath $terminalLibrary -PathType Leaf) { . $terminalLibrary }
+} catch { } # Plain diagnostics remain usable in a partial checkout.
+
+trap {
+    Write-DotfilesLog error $_.Exception.Message
+    throw
+}
+
+$HostDir = $HostDir.ToLowerInvariant()
 if (-not $IsWindows) { throw 'Use stow-all.sh on Unix; stow-all.ps1 requires native Windows.' }
 if ($HostDir -cnotin @('', 'win')) { throw "Unsupported Windows host: '$HostDir'; use 'win' or ''." }
 if ([string]::IsNullOrWhiteSpace($TargetRoot) -or -not [IO.Path]::IsPathFullyQualified($TargetRoot)) {
@@ -204,7 +219,7 @@ function Invoke-PortableSync {
     }
 
     if ($CheckOnly -or $PSCmdlet.ShouldProcess($Live, "Synchronize portable $Label")) {
-        $syncArguments = @(($Helper -replace '\\', '/'))
+        $syncArguments = @(($Helper -replace '\\', '/'), '--quiet')
         if ($CheckOnly) { $syncArguments += '--check' }
         $syncArguments += @(($Portable -replace '\\', '/'), ($Live -replace '\\', '/'))
         & $bash @syncArguments
@@ -367,7 +382,7 @@ function Invoke-StowPackage {
                             $destination, 'Repair untrusted symlink')) {
                         New-Item -ItemType SymbolicLink -Path $destination `
                             -Value $item.FullName -Force | Out-Null
-                        Write-Host "  repair  $relativeUnix"
+                        Write-Verbose "repair    $relativeUnix"
                         $script:Repaired++
                     }
                     continue
@@ -386,7 +401,7 @@ function Invoke-StowPackage {
                     (Get-Date -Format 'yyyyMMddHHmmss'), [Guid]::NewGuid().ToString('N')
                 if ($PSCmdlet.ShouldProcess($destination, "Back up to $backup")) {
                     Move-Item -LiteralPath $destination -Destination $backup
-                    Write-Host "  backup  $relativeUnix -> $(Split-Path -Leaf $backup)"
+                    Write-DotfilesLog info "Backed up $relativeUnix -> $(Split-Path -Leaf $backup)"
                     $script:BackedUp++
                 }
             }
@@ -395,14 +410,14 @@ function Invoke-StowPackage {
         if ($PSCmdlet.ShouldProcess($destination, "Link to $($item.FullName)")) {
             New-Item -ItemType SymbolicLink -Path $destination `
                 -Value $item.FullName -Force | Out-Null
-            Write-Host "  link    $relativeUnix"
+            Write-Verbose "link      $relativeUnix"
             $script:Linked++
         }
     }
 }
 
-Write-Host "Stowing from $RepoRoot"
-Write-Host "Target: $Target"
+Write-DotfilesLog step "Checking portable settings and packages for $Target"
+Write-Verbose "Stowing from $RepoRoot"
 
 $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 
@@ -453,10 +468,10 @@ foreach ($rootAndPackages in @(
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow preflight failed: $($script:Warnings -join '; ')"
 }
+if (-not $WhatIfPreference) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync }
 
-Write-Host "`nStowing common packages:"
-Write-Host ($CommonPackages -join ' ')
+Write-DotfilesLog step "Stowing common packages: $($CommonPackages -join ' ')"
 foreach ($package in $CommonPackages) {
     if (-not (Test-Path -LiteralPath (Join-Path $commonRoot $package))) {
         continue
@@ -466,8 +481,7 @@ foreach ($package in $CommonPackages) {
 }
 
 if ($HostDir) {
-    Write-Host "`nStowing host-specific packages ($HostDir):"
-    Write-Host ($hostPackages -join ' ')
+    Write-DotfilesLog step "Stowing host packages ($HostDir): $($hostPackages -join ' ')"
     foreach ($package in $hostPackages) {
         Invoke-StowPackage -PackageRoot $hostRoot -PackageName $package `
             -GlobalIgnores $globalIgnores
@@ -493,8 +507,9 @@ if (-not $script:IsElevated -and $script:Linked -gt 0) {
         'Re-run from an elevated PowerShell to replace them with trusted links')
 }
 
-Write-Host "`nlinked: $script:Linked   repaired: $script:Repaired   unchanged/ignored: $script:Unchanged   backed up: $script:BackedUp"
-foreach ($warning in $script:Warnings) { Write-Warning $warning }
+# Preserve PowerShell's warning stream and -WarningAction behavior. The native
+# warning renderer owns its appearance; status logging uses terminal.ps1.
+foreach ($warning in $script:Warnings) { Write-Warning "[dotfiles] [warn] $warning" }
 
 # Never acknowledge a partial or preview installation as an applied revision.
 if ($Strict -and $script:Warnings.Count -gt 0) {
@@ -504,3 +519,6 @@ if ($recordAppliedState -and -not $WhatIfPreference -and $script:Warnings.Count 
     . (Join-Path $RepoRoot 'dotfiles-auto-stow.ps1')
     Save-DotfilesStowState -Repo $RepoRoot -HostDir $HostDir -ExpectedHead $stowStartHead
 }
+$resultLevel = if ($WhatIfPreference -or $script:Warnings.Count) { 'info' } else { 'ok' }
+$resultLabel = if ($WhatIfPreference) { 'Preview complete (no changes)' } else { 'Stow complete' }
+Write-DotfilesLog $resultLevel "$resultLabel; linked: $script:Linked   repaired: $script:Repaired   unchanged/ignored: $script:Unchanged   backed up: $script:BackedUp"
