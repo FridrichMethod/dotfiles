@@ -5,9 +5,9 @@ set -euo pipefail
 # Exercise both login implementations with isolated homes, fake failures,
 # real local Git remotes, and independent-process lock contention.
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-SH_UPDATER="$REPO_ROOT/dotfiles-update.sh"
-PS_UPDATER="$REPO_ROOT/dotfiles-update.ps1"
-PS_HELPER="$REPO_ROOT/dotfiles-auto-stow.ps1"
+SH_UPDATER="$REPO_ROOT/scripts/dotfiles-update.sh"
+PS_UPDATER="$REPO_ROOT/scripts/dotfiles-update.ps1"
+PS_HELPER="$REPO_ROOT/scripts/dotfiles-auto-stow.ps1"
 PS_PROFILE="$REPO_ROOT/win/powershell/Documents/PowerShell/profile.ps1"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-update-hooks.XXXXXX")"
 REAL_CHILD_PID=
@@ -32,7 +32,7 @@ for token in _DOTFILES_CHECKED DOTFILES_AUTO_UPDATE DOTFILES_DIR DOTFILES_AUTO_S
     done
 done
 grep -Fq '[Console]::IsOutputRedirected' "$PS_UPDATER"
-grep -Fq 'dotfiles-update.ps1' "$PS_PROFILE"
+grep -Fq 'scripts/dotfiles-update.ps1' "$PS_PROFILE"
 grep -Fq 'PSNativeCommandUseErrorActionPreference = $false' "$PS_UPDATER"
 
 FAKE_BIN="$TEST_TMP/bin"

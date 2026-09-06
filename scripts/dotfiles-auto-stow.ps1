@@ -3,15 +3,23 @@
 .SYNOPSIS
     Windows automatic restow support; register once from elevated PowerShell.
 .DESCRIPTION
-    .\dotfiles-auto-stow.ps1 -Register installs an on-demand task for the
-    current user with highest privileges. Login hooks request work; -Apply
-    runs it under the same checkout lock used by fetch/pull. Dot-sourcing
-    without switches only defines functions (also used by the installer).
+    .\scripts\dotfiles-auto-stow.ps1 -Register installs an on-demand task
+    for the current user with highest privileges. Login hooks request work;
+    -Apply runs it under the same checkout lock used by fetch/pull.
+    Dot-sourcing without switches only defines functions (also used by the
+    installer).
     The task executes this checkout's scripts with administrator privileges.
     Registration is explicit; the login hook never prompts for elevation.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param([switch]$Register, [switch]$Apply)
+
+# This script lives in scripts/, so the checkout is its parent. Everything
+# below means the repository, never this directory: the terminal library, the
+# Git metadata holding sync state, the stow target, and the SHA256 task-name
+# key. Deriving it once keeps the registered task's name stable if this file
+# ever moves again.
+$DotfilesRepoRoot = Split-Path -Parent $PSScriptRoot
 
 # Old/partial checkouts and isolated fixtures must still report failures.
 function Write-DotfilesLog {
@@ -19,7 +27,7 @@ function Write-DotfilesLog {
     Write-Host "[dotfiles] [$Level] $Message"
 }
 try {
-    $terminalLibrary = Join-Path $PSScriptRoot 'lib/terminal.ps1'
+    $terminalLibrary = Join-Path $DotfilesRepoRoot 'lib/terminal.ps1'
     if (Test-Path -LiteralPath $terminalLibrary -PathType Leaf) { . $terminalLibrary }
 } catch { } # Logging is cosmetic; keep the plain fallback available.
 
@@ -266,7 +274,7 @@ function Invoke-DotfilesUpdate {
                 Write-DotfilesLog info "Restow queued. Log: $(Join-Path $directory 'restow.log')"
             }
             catch {
-                throw "Cannot start $taskName. Run .\dotfiles-auto-stow.ps1 -Register once from elevated PowerShell in $Repo. $($_.Exception.Message)"
+                throw "Cannot start $taskName. Run .\scripts\dotfiles-auto-stow.ps1 -Register once from elevated PowerShell in $Repo. $($_.Exception.Message)"
             }
         }
     }
@@ -275,7 +283,7 @@ function Invoke-DotfilesUpdate {
 if ($Register -and $Apply) { throw 'Choose either -Register or -Apply.' }
 if ($Register) {
     if (-not (Test-DotfilesElevated)) { throw 'Register from elevated PowerShell 7+.' }
-    $repo = $PSScriptRoot
+    $repo = $DotfilesRepoRoot
     $taskName = Get-DotfilesTaskName $repo
     if ($PSCmdlet.ShouldProcess($taskName, 'Register current-user task that runs checkout scripts with highest privileges')) {
         $action = New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'pwsh.exe') `
@@ -295,11 +303,11 @@ elseif ($Apply) {
     & {
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $false
-        $directory = Get-DotfilesStateDirectory $PSScriptRoot
+        $directory = Get-DotfilesStateDirectory $DotfilesRepoRoot
         $log = Join-Path $directory 'restow.log'
         try {
             # One bounded last-run log; requests remain pending on any error.
-            & { Invoke-DotfilesApply $PSScriptRoot } *> $log
+            & { Invoke-DotfilesApply $DotfilesRepoRoot } *> $log
         }
         catch { Add-Content -LiteralPath $log -Value "[dotfiles] [error] $($_.ToString())"; exit 1 }
     }

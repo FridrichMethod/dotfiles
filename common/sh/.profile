@@ -31,7 +31,7 @@ fi
 
 # Dotfiles auto-update check (bash/sh only; zsh runs it at end of .zshrc)
 if [ -z "${ZSH_VERSION:-}" ]; then
-    _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/dotfiles-update.sh"
+    _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/dotfiles-update.sh"
     if [ -r "$_df_update" ]; then
         # shellcheck source=/dev/null
         . "$_df_update"
@@ -39,7 +39,7 @@ if [ -z "${ZSH_VERSION:-}" ]; then
     unset _df_update
 
     # Awesome-skills weekly sync (bash/sh only; zsh sources from .zshrc tail)
-    _as_update="${DOTFILES_DIR:-$HOME/dotfiles}/awesome-skills-update.sh"
+    _as_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/awesome-skills-update.sh"
     if [ -r "$_as_update" ]; then
         # shellcheck source=/dev/null
         . "$_as_update"

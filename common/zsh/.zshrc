@@ -172,11 +172,11 @@ zstyle ':completion:*' special-dirs false
 ! _is_agent_session && [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 
 # Dotfiles auto-update check (runs at end so ssh-agent/env is ready; run stow-all.sh and restart shell to apply)
-_df_update="${DOTFILES_DIR:-$HOME/dotfiles}/dotfiles-update.sh"
+_df_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/dotfiles-update.sh"
 [[ -r "$_df_update" ]] && source "$_df_update"
 unset _df_update
 
-# Awesome-skills weekly sync (Claude Code / Codex skill library); see awesome-skills-update.sh
-_as_update="${DOTFILES_DIR:-$HOME/dotfiles}/awesome-skills-update.sh"
+# Awesome-skills weekly sync (Claude Code / Codex skill library); see scripts/awesome-skills-update.sh
+_as_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/awesome-skills-update.sh"
 [[ -r "$_as_update" ]] && source "$_as_update"
 unset _as_update

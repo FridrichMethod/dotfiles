@@ -34,10 +34,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
-        exclude: ^(dotfiles-update\.sh|awesome-skills-update\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$
+        exclude: ^(scripts/(dotfiles-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(dotfiles-update\.sh|awesome-skills-update\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(dotfiles-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -56,7 +56,7 @@ repos:
         entry: tests/terminal.sh
         language: script
         pass_filenames: false
-        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|dotfiles-update\.sh|stow-all\.sh)$
+        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|scripts/dotfiles-update\.sh|stow-all\.sh)$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh
@@ -92,7 +92,7 @@ repos:
         entry: tests/unix-installer.sh
         language: script
         pass_filenames: false
-        files: ^(stow-all\.sh|dotfiles-update\.sh|\.stowrc|lib/.*|common/(claude|codex)/.*|tests/unix-installer\.sh)$
+        files: ^(stow-all\.sh|scripts/dotfiles-update\.sh|\.stowrc|lib/.*|common/(claude|codex)/.*|tests/unix-installer\.sh)$
       - id: fcitx5-profile-sync
         name: fcitx5 profile sync behavior
         entry: tests/fcitx5-profile-sync.sh

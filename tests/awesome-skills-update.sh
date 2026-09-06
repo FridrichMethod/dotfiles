@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-UPDATER="$REPO_ROOT/awesome-skills-update.sh"
+UPDATER="$REPO_ROOT/scripts/awesome-skills-update.sh"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-awesome-skills.XXXXXX")"
 trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 

@@ -26,14 +26,16 @@ for dependency in git stow python3; do
     fi
 done
 
-mkdir -p "$FIXTURE/common" "$FIXTURE/lib" "$TARGET" "$FIXTURE/test-host/sample" "$GIT_TEMPLATE_DIR"
-cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/dotfiles-update.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
+mkdir -p "$FIXTURE/common" "$FIXTURE/lib" "$FIXTURE/scripts" "$TARGET" \
+    "$FIXTURE/test-host/sample" "$GIT_TEMPLATE_DIR"
+cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
+cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
     "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
 cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
 printf '%s\n' 'host overlay fixture' >"$FIXTURE/test-host/sample/.fixture-host"
 git init -q -b main "$FIXTURE"
-git -C "$FIXTURE" add common lib test-host stow-all.sh dotfiles-update.sh .stowrc
+git -C "$FIXTURE" add common lib scripts test-host stow-all.sh .stowrc
 git -C "$FIXTURE" commit -qm 'Fixture baseline'
 
 run_install() {
@@ -79,7 +81,7 @@ git -C "$TEST_TMP/upstream" commit -qm 'Fixture update'
 git -C "$TEST_TMP/upstream" push -q origin main
 if ! env -u _DOTFILES_CHECKED HOME="$TARGET" DOTFILES_DIR="$FIXTURE" \
     DOTFILES_AUTO_UPDATE=1 DOTFILES_AUTO_STOW=1 DOTFILES_HOST=test-host \
-    bash --noprofile --norc -ic '. "$DOTFILES_DIR/dotfiles-update.sh"' \
+    bash --noprofile --norc -ic '. "$DOTFILES_DIR/scripts/dotfiles-update.sh"' \
     >"$TEST_TMP/update.log" 2>&1; then
     cat "$TEST_TMP/update.log" >&2
     exit 1

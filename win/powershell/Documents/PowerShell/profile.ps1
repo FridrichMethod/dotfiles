@@ -50,8 +50,8 @@ if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
 # --- Dotfiles auto-update check ---------------------------------------
 # Last, mirroring the tail of common/zsh/.zshrc, so the prompt and modules
 # above are ready first. The session-once and no-console guards live in
-# dotfiles-update.ps1 so both updaters keep one contract.
+# scripts/dotfiles-update.ps1 so both updaters keep one contract.
 $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
-$DotfilesUpdate = Join-Path $DotfilesDir 'dotfiles-update.ps1'
+$DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
 if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
 Remove-Variable DotfilesDir, DotfilesUpdate

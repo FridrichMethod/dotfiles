@@ -5,8 +5,8 @@ param()
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $sourceRoot = if ($env:DOTFILES_TEST_ROOT) { $env:DOTFILES_TEST_ROOT } else { Split-Path $PSScriptRoot -Parent }
-$helperPath = Join-Path $sourceRoot 'dotfiles-auto-stow.ps1'
-$hookPath = Join-Path $sourceRoot 'dotfiles-update.ps1'
+$helperPath = Join-Path $sourceRoot 'scripts/dotfiles-auto-stow.ps1'
+$hookPath = Join-Path $sourceRoot 'scripts/dotfiles-update.ps1'
 $global:DotfilesTestGitExecutable = (Get-Command git -CommandType Application | Select-Object -First 1).Source
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-update-ps-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testRoot)
@@ -363,7 +363,7 @@ try {
         $fixture = New-Fixture
         $global:DotfilesTestElevated = $false
         $global:DotfilesTestFailTaskStart = $true
-        Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'dotfiles-auto-stow.ps1 -Register.*elevated PowerShell'
+        Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'scripts.dotfiles-auto-stow.ps1 -Register.*elevated PowerShell'
         Assert-Equal '' (Get-AppliedHead $fixture) 'Failed dispatch acknowledged HEAD.'
         $global:DotfilesTestFailTaskStart = $false
         Invoke-DotfilesUpdate $fixture.Repo
@@ -455,7 +455,9 @@ function Invoke-DotfilesUpdate {
     throw 'Injected hook failure.'
 }
 '@
-        [IO.File]::WriteAllText((Join-Path $fixture.Repo 'dotfiles-auto-stow.ps1'), $stub)
+        $stubDirectory = Join-Path $fixture.Repo 'scripts'
+        [void][IO.Directory]::CreateDirectory($stubDirectory)
+        [IO.File]::WriteAllText((Join-Path $stubDirectory 'dotfiles-auto-stow.ps1'), $stub)
         $hookSource = [IO.File]::ReadAllText($hookPath)
         $consoleGuard = 'if ([Console]::IsOutputRedirected) { return }'
         Assert-True ($hookSource.Contains($consoleGuard)) 'Console guard not found.'

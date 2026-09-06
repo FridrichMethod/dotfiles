@@ -154,11 +154,12 @@ catch { Write-DotfilesLog error $_.Exception.Message; exit 17 }
     }
     Test-Case 'missing or broken optional logging library leaves plain worker fallback' {
         $fixture = Join-Path $temporaryRoot 'partial checkout'
-        [void][IO.Directory]::CreateDirectory($fixture)
-        Copy-Item -LiteralPath (Join-Path $sourceRoot 'dotfiles-auto-stow.ps1') -Destination $fixture
+        $fixtureScripts = Join-Path $fixture 'scripts'
+        [void][IO.Directory]::CreateDirectory($fixtureScripts)
+        Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/dotfiles-auto-stow.ps1') -Destination $fixtureScripts
         $command = @'
 $ErrorActionPreference = 'Stop'
-. (Join-Path $env:DOTFILES_TEST_TEMP 'partial checkout/dotfiles-auto-stow.ps1')
+. (Join-Path $env:DOTFILES_TEST_TEMP 'partial checkout/scripts/dotfiles-auto-stow.ps1')
 Write-DotfilesLog error 'partial checkout diagnostic'
 '@
         foreach ($broken in @($false, $true)) {
@@ -196,13 +197,14 @@ Write-DotfilesLog error 'partial checkout diagnostic'
     Test-Case 'profile contains helper-load failure without altering caller preferences' {
         $fixture = Join-Path $temporaryRoot 'broken worker checkout'
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture '.git'))
-        [IO.File]::WriteAllText((Join-Path $fixture 'dotfiles-auto-stow.ps1'), "throw 'worker load failed'")
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture 'scripts'))
+        [IO.File]::WriteAllText((Join-Path $fixture 'scripts/dotfiles-auto-stow.ps1'), "throw 'worker load failed'")
         $outputText = Invoke-LogChild @'
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $env:DOTFILES_DIR = Join-Path $env:DOTFILES_TEST_TEMP 'broken worker checkout'
 $env:DOTFILES_AUTO_UPDATE = '1'
-$source = [IO.File]::ReadAllText((Join-Path $env:DOTFILES_TEST_ROOT 'dotfiles-update.ps1'))
+$source = [IO.File]::ReadAllText((Join-Path $env:DOTFILES_TEST_ROOT 'scripts/dotfiles-update.ps1'))
 $source = $source.Replace('if ([Console]::IsOutputRedirected) { return }', '')
 . ([scriptblock]::Create($source))
 if ($env:_DOTFILES_CHECKED -ne '1') { throw 'Load failure lost session marker.' }

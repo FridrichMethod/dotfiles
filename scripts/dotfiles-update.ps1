@@ -6,7 +6,7 @@
     Shares the Unix hook's session marker, opt-outs, clean-tree requirement,
     fast-forward-only updates and retry of unapplied revisions. Windows stow
     runs elevated, directly or through the explicitly registered current-user
-    task (.\dotfiles-auto-stow.ps1 -Register). No login-time UAC prompt.
+    task (.\scripts\dotfiles-auto-stow.ps1 -Register). No login-time UAC prompt.
 .NOTES
     DOTFILES_DIR          repository path (default ~/dotfiles)
     DOTFILES_AUTO_UPDATE  0 disables the entire hook
@@ -30,7 +30,7 @@ if ($env:_DOTFILES_CHECKED) { return }
         if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return }
         $repo = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
         if (-not (Test-Path -LiteralPath (Join-Path $repo '.git'))) { return }
-        . (Join-Path $repo 'dotfiles-auto-stow.ps1')
+        . (Join-Path $repo 'scripts/dotfiles-auto-stow.ps1')
         Invoke-DotfilesUpdate $repo
     }
     catch {

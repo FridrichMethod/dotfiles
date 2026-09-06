@@ -61,7 +61,7 @@ function New-Fixture {
     $repo = Join-Path $root 'checkout with spaces'
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
-    foreach ($relative in @('stow-all.ps1', 'dotfiles-auto-stow.ps1', '.stowrc',
+    foreach ($relative in @('stow-all.ps1', 'scripts/dotfiles-auto-stow.ps1', '.stowrc',
             'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
@@ -84,7 +84,7 @@ function New-Fixture {
     Invoke-FixtureGit -C $repo config user.name 'Dotfiles tests'
     Invoke-FixtureGit -C $repo config user.email 'dotfiles-tests@example.invalid'
     Invoke-FixtureGit -C $repo config core.autocrlf false
-    Invoke-FixtureGit -C $repo add stow-all.ps1 dotfiles-auto-stow.ps1 .stowrc lib common win
+    Invoke-FixtureGit -C $repo add stow-all.ps1 scripts .stowrc lib common win
     Invoke-FixtureGit -C $repo commit --quiet -m fixture
     return [pscustomobject]@{ Root = $root; Repo = $repo; Target = $target }
 }

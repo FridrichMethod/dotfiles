@@ -28,7 +28,7 @@
     Fail if any package, link or portable sync was skipped or warned.
     Successful installations remember the host and applied revision for
     the login updater. Register the Windows worker once with:
-      .\dotfiles-auto-stow.ps1 -Register
+      .\scripts\dotfiles-auto-stow.ps1 -Register
 
 .PARAMETER HostDir
     Host overlay to stow after common/. Defaults to 'win'. Pass '' to stow
@@ -516,7 +516,7 @@ if ($Strict -and $script:Warnings.Count -gt 0) {
     throw 'Stow completed with warnings; automatic state was not advanced.'
 }
 if ($recordAppliedState -and -not $WhatIfPreference -and $script:Warnings.Count -eq 0) {
-    . (Join-Path $RepoRoot 'dotfiles-auto-stow.ps1')
+    . (Join-Path $RepoRoot 'scripts/dotfiles-auto-stow.ps1')
     Save-DotfilesStowState -Repo $RepoRoot -HostDir $HostDir -ExpectedHead $stowStartHead
 }
 $resultLevel = if ($WhatIfPreference -or $script:Warnings.Count) { 'info' } else { 'ok' }
