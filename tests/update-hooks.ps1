@@ -414,7 +414,7 @@ try {
         function New-ScheduledTaskPrincipal { throw 'WhatIf attempted to create a principal.' }
         function New-ScheduledTaskSettingsSet { throw 'WhatIf attempted to create settings.' }
         function Register-ScheduledTask { throw 'WhatIf attempted to register a task.' }
-        $preview = [scriptblock]::Create('[CmdletBinding(SupportsShouldProcess)]param([string]$RegistrationRoot) $PSScriptRoot = $RegistrationRoot; $Register = $true; $Apply = $false; ' + $registration[0].Extent.Text)
+        $preview = [scriptblock]::Create('[CmdletBinding(SupportsShouldProcess)]param([string]$RegistrationRoot) $DotfilesRepoRoot = $RegistrationRoot; $Register = $true; $Apply = $false; ' + $registration[0].Extent.Text)
         & $preview -RegistrationRoot $sourceRoot -WhatIf
         Assert-True ($registration[0].Extent.Text -match '-LogonType Interactive -RunLevel Highest') 'Registration principal lost interactive highest-privilege contract.'
         Assert-True ($registration[0].Extent.Text -match '-MultipleInstances IgnoreNew') 'Task overlap guard missing.'
@@ -434,8 +434,11 @@ try {
         }
         # A real file preserves $PSScriptRoot inside the worker's child scope;
         # ScriptBlock.Create resets that automatic variable to an empty value.
+        # The helper derives the checkout from its own location, which only the
+        # whole file does; the extracted branch gets it injected instead, with
+        # the fixture repo standing in for the checkout root.
         $worker = Join-Path $fixture.Repo 'worker-test.ps1'
-        [IO.File]::WriteAllText($worker, '[CmdletBinding(SupportsShouldProcess)]param([switch]$Register, [switch]$Apply) ' + $dispatch[0].Extent.Text)
+        [IO.File]::WriteAllText($worker, '[CmdletBinding(SupportsShouldProcess)]param([switch]$Register, [switch]$Apply) $DotfilesRepoRoot = $PSScriptRoot; ' + $dispatch[0].Extent.Text)
         $PSNativeCommandUseErrorActionPreference = $true
         $savedErrorAction = $ErrorActionPreference
         . $worker -Apply
