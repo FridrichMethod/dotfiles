@@ -56,7 +56,7 @@ repos:
         entry: tests/terminal.sh
         language: script
         pass_filenames: false
-        files: ^(lib/terminal\.sh|tests/terminal\.sh|dotfiles-update\.sh|stow-all\.sh)$
+        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|dotfiles-update\.sh|stow-all\.sh)$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh

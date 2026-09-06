@@ -10,6 +10,7 @@ export TERMINAL_LIB="$REPO_ROOT/lib/terminal.sh"
 python3 - <<'PY'
 import errno
 import os
+import shutil
 import subprocess
 
 SCRIPT = r'''
@@ -27,7 +28,7 @@ dotfiles_log error 'Configuration invalid'
 ESC = b'\x1b['
 
 
-def run(*, stdout_tty=False, stderr_tty=False, overrides=None):
+def run(*, stdout_tty=False, stderr_tty=False, overrides=None, command=None, timeout=10):
     env = dict(os.environ)
     for key in ('DOTFILES_COLOR', 'NO_COLOR', 'TERM'):
         env.pop(key, None)
@@ -38,7 +39,7 @@ def run(*, stdout_tty=False, stderr_tty=False, overrides=None):
         master, slave = os.openpty()
     try:
         process = subprocess.Popen(
-            ['sh', '-eu', '-c', SCRIPT], env=env,
+            command or ['sh', '-eu', '-c', SCRIPT], env=env,
             stdout=slave if stdout_tty else subprocess.PIPE,
             stderr=slave if stderr_tty else subprocess.PIPE,
         )
@@ -46,7 +47,7 @@ def run(*, stdout_tty=False, stderr_tty=False, overrides=None):
             os.close(slave)
             slave = None
         try:
-            stdout, stderr = process.communicate(timeout=10)
+            stdout, stderr = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()
@@ -116,4 +117,19 @@ result = subprocess.run(['sh', '-eu', '-c', '. "$TERMINAL_LIB"'],
                         capture_output=True, check=True)
 assert result.stdout == result.stderr == b''
 print('terminal-output=PASS (TTY streams, overrides, plain logs, silent sourcing)')
+
+# PowerShell's *> redirects streams without redirecting the process console.
+# Exercise that distinction on an actual PTY, including OutputRendering=Ansi;
+# the ordinary pipe-based PowerShell run cannot cover this branch by itself.
+power_shell = shutil.which('pwsh')
+if power_shell:
+    suite = os.path.join(os.path.dirname(os.environ['TERMINAL_LIB']), '..', 'tests', 'terminal.ps1')
+    stdout, stderr = run(stdout_tty=True, timeout=60, command=[
+        power_shell, '-NoProfile', '-NonInteractive', '-File', suite,
+    ])
+    assert b'same-session-console-redirected=False' in stdout, (stdout, stderr)
+    assert b'powershell-terminal=PASS' in stdout, (stdout, stderr)
+    print('powershell-terminal-pty=PASS (real console with PowerShell stream redirection)')
+else:
+    print('SKIP: PowerShell real-PTY output tests (pwsh unavailable)')
 PY

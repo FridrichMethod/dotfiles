@@ -28,7 +28,9 @@ does not depend on Bash discovering an optional PowerShell executable.
 `tests/terminal.sh` exercises actual Unix pseudo-terminals as well as redirected
 stdout/stderr, including forced color, `NO_COLOR`, `TERM=dumb`, literal percent
 signs and silent sourcing. `tests/terminal.ps1` covers the matching PowerShell
-policy, pipeline/stream behavior and preference isolation. Installers are tested
+policy, pipeline/stream behavior and preference isolation. When pwsh is present,
+the Unix terminal suite also runs it on a real PTY to cover same-console `*>`
+redirection, even with PowerShell's ANSI rendering preference. Installers are tested
 with quiet helpers; errors and failed-install retries must remain observable.
 
 Run either entrypoint from any working directory. To check prerequisites only:
