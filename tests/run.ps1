@@ -45,6 +45,10 @@ Write-Output '==> claude-customizations.cjs'
 & node --test (Join-Path $PSScriptRoot 'claude-customizations.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed.' }
 
+Write-Output '==> terminal.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'terminal.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'PowerShell terminal-output tests failed.' }
+
 Write-Output '==> update-hooks.ps1'
 # Use a child process so fixtures cannot leak mock functions or global state.
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'update-hooks.ps1')

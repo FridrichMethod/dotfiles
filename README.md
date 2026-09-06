@@ -41,7 +41,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 
 ## Highlights
 
-- **One command** to install everything on a fresh machine — `./stow-all.sh <host>`, or `.\stow-all.ps1 win` on native Windows.
+- **One installer command after setup** — `./stow-all.sh <host>`, or `.\stow-all.ps1 win` on native Windows.
 - **Layered configs**: `common/` is the baseline; `<host>/` overrides where machines differ.
 - **Cross-host AI defaults**: global Claude Code and Codex instructions, curated permissions, guarded exec policies, reasoning effort, and portable plugin declarations live in `common/`.
 - **No templating, no conditionals** — Stow symlinks the right files into `$HOME`.
@@ -98,8 +98,11 @@ cd ~/dotfiles
 Setup installs the hash-pinned `tomlkit` dependency into this clone's ignored
 `.venv-sync`; JSON uses Python's standard library. No activation is needed.
 The shell/PowerShell installers remain the entrypoints. Login and automatic
-update never install dependencies or fetch Python packages. Run setup explicitly
+update never install AI-sync dependencies or fetch Python packages. Run setup explicitly
 again when the pin changes; see [configuration sync](docs/config-sync.md).
+The venv is the default isolation mechanism, not a requirement of Python itself:
+an explicitly selected interpreter can replace it. See [dependencies and lighter
+packaging options](docs/dependencies.md) for the runtime/test split and tradeoffs.
 
 **3.** Reload your shell:
 
@@ -130,6 +133,9 @@ Like `stow-all.sh`, the Windows installer validates all selected AI inputs and t
 - **Pre-existing files are adopted, not clobbered.** A byte-identical file, or valid UTF-8 differing only by CRLF, is replaced by its link; case-only and binary differences are backed up to `<name>.stow-backup-<timestamp>-<unique-id>` first.
 - **Untrusted symlinks are repaired, not skipped.** A link already pointing at the right file is normally left alone, but a matching target says nothing about whether Windows will follow the link, so each one is opened to check. Untrusted links are rewritten when the run is elevated (counted as `repaired:`) and reported as warnings when it is not.
 
+Use `-Verbose` for per-link details. Normal output shows stages, backups, warnings
+and summary counts; `-WhatIf` reports a preview, not a successful install.
+
 ## At a Glance
 
 | | |
@@ -140,7 +146,7 @@ Like `stow-all.sh`, the Windows installer validates all selected AI inputs and t
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
 | **Submodule** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) — auto-updated daily by GitHub Actions |
-| **Install** | One command: `./stow-all.sh <host>` |
+| **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
 | **CI** | `shellcheck` · `shfmt` · `stylua` · YAML/JSON/TOML hygiene |
 
@@ -290,6 +296,17 @@ The installer stores the selected host and last successfully applied commit in l
 | `DOTFILES_AUTO_STOW` | `1` | `0` keeps pull enabled but skips automatic stow |
 | `DOTFILES_DIR` | `~/dotfiles` | repository path |
 | `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only |
+| `DOTFILES_COLOR` | `auto` | `always` forces ANSI color; `never` disables it |
+| `NO_COLOR` | unset | any nonempty value disables color, including `0` |
+
+Installers and update hooks use compact `[dotfiles] [step/ok/warn/error/info]`
+badges: cyan stages, green success, yellow warnings and red errors. Automatic
+color requires a capable terminal; redirected output is plain by default.
+`TERM=dumb` and nonempty `NO_COLOR` disable color even with `DOTFILES_COLOR=always`.
+Shared helpers are quiet during installation, but validation and write errors
+remain visible. This does not change your prompt, terminal theme, fonts or PATH.
+PowerShell's native warning/error/`WhatIf` rendering remains PowerShell-controlled;
+these color switches govern the shared dotfiles status logger.
 
 Set these variables before the update hook runs. A failed stow does not advance the applied commit: later fresh sessions retry even if there are no new remote commits or fetch is offline. A lock serializes automatic update/stow operations across shells; callers' shell traps are preserved. State remains in Git metadata and is not committed. Interrupted submodule updates are retried only when a pending marker matches HEAD; user-selected submodule revisions are otherwise preserved.
 

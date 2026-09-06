@@ -22,6 +22,10 @@ the requested host and revision. It never obtains elevation through a login
 UAC prompt; use the explicit elevated worker or its registered current-user
 task.
 
+Native Windows accepts case variants of `win` at installer/worker boundaries
+and canonicalizes them to `win` when saving or dispatching state, including
+legacy records. Other host names remain invalid.
+
 Neither updater writes a successful acknowledgement on behalf of the
 installer. A failed install, or a zero-exit install which leaves the prior
 unapplied state unchanged, remains eligible for retry in a new login session,
@@ -56,6 +60,16 @@ Introducing a lock shared by manual and automatic entrypoints needs a separate
 reentrant/handoff design, so the worker cannot deadlock its child installer.
 
 ## Executable coverage
+
+Status output shares `[dotfiles] [step/ok/warn/error/info]` badges across shells.
+`DOTFILES_COLOR=auto` uses terminal detection; `always` forces color and `never`
+disables it. Nonempty `NO_COLOR` and `TERM=dumb` always disable color. Redirected
+logs remain plain by default. Unix warnings/errors use stderr; PowerShell keeps
+host/information-stream capture so the scheduled worker's `*>` log retains them.
+Installer warnings retain PowerShell's warning stream and `-WarningAction`
+semantics; native warning/error/`WhatIf` rendering follows PowerShell preferences,
+not the dotfiles logger's color policy.
+Formatting must not alter exit status, updater retry rules or caller preferences.
 
 `tests/update-hooks.sh` checks shell session isolation and injected failure
 paths, including malformed or mismatched acknowledgements. It also uses real

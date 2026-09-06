@@ -34,10 +34,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
-        exclude: ^(dotfiles-update\.sh|awesome-skills-update\.sh|setup-sync\.sh|lib/sync-runtime\.sh)$
+        exclude: ^(dotfiles-update\.sh|awesome-skills-update\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(dotfiles-update\.sh|awesome-skills-update\.sh|setup-sync\.sh|lib/sync-runtime\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(dotfiles-update\.sh|awesome-skills-update\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -51,6 +51,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: terminal-output
+        name: portable terminal output and color controls
+        entry: tests/terminal.sh
+        language: script
+        pass_filenames: false
+        files: ^(lib/terminal\.sh|tests/terminal\.sh|dotfiles-update\.sh|stow-all\.sh)$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh
@@ -80,7 +86,7 @@ repos:
         entry: tests/stow-all.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.sh|\.stowrc|tests/stow-all\.sh)$
+        files: (^|/)(stow-all\.sh|lib/terminal\.sh|\.stowrc|tests/stow-all\.sh)$
       - id: unix-installer-integration
         name: real Git and Stow integration
         entry: tests/unix-installer.sh
@@ -104,10 +110,10 @@ repos:
         entry: tests/windows-installer.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
+        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/terminal\.ps1|tests/terminal\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
       - id: update-hooks
         name: automatic update and stow behavior
         entry: tests/update-hooks.sh
         language: script
         pass_filenames: false
-        files: (^|/)(dotfiles-update\.(sh|ps1)|dotfiles-auto-stow\.ps1|stow-all\.(sh|ps1)|win/powershell/Documents/PowerShell/profile\.ps1|tests/update-hooks\.(sh|ps1))$
+        files: (^|/)(dotfiles-update\.(sh|ps1)|dotfiles-auto-stow\.ps1|stow-all\.(sh|ps1)|lib/terminal\.(sh|ps1)|win/powershell/Documents/PowerShell/profile\.ps1|tests/update-hooks\.(sh|ps1))$
