@@ -146,6 +146,9 @@ run_interactive() {
             if declare -F _dotfiles_update_check >/dev/null || declare -p _df_dir >/dev/null 2>&1; then
                 printf "state-leaked\n"
             fi
+            if declare -F dotfiles_log >/dev/null || declare -F dotfiles_color_enabled >/dev/null; then
+                printf "logging-functions-leaked\n"
+            fi
             if [ -n "${FAKE_LOCK:-}" ]; then
                 rm -f "$FAKE_REPO/meta/dotfiles-sync-unix.lock/pid"
                 rmdir "$FAKE_REPO/meta/dotfiles-sync-unix.lock" 2>/dev/null || true
@@ -188,7 +191,7 @@ no_stow
 no_pull
 run_interactive pull-failure FAKE_BEHIND=2 FAKE_PULL_RC=19
 no_stow
-grep -Fq 'Fast-forward pull failed' "$LAST_STDOUT"
+grep -Fq '[dotfiles] [error] Fast-forward pull failed' "$LAST_STDERR"
 run_interactive success FAKE_BEHIND=3
 applied_host host-a
 grep -Fq '[pull][--ff-only][--quiet]' "$GIT_LOG"
@@ -198,7 +201,7 @@ grep -Fq 'Stow completed' "$LAST_STDOUT"
 
 run_interactive submodule-failure FAKE_BEHIND=1 FAKE_SUBMODULE_RC=20
 no_stow
-grep -Fq 'Submodule update failed' "$LAST_STDOUT"
+grep -Fq '[dotfiles] [error] Submodule update failed' "$LAST_STDERR"
 [ "$(cat "$FAKE_REPO/meta/dotfiles-sync-unix.submodules-pending")" = new ]
 run_interactive user-gitlink FAKE_GITLINK_DIRTY=' M submodule' FAKE_APPLIED=older
 no_fetch
@@ -237,20 +240,20 @@ no_pull
 run_interactive stow-failure FAKE_APPLIED=older FAKE_STOW_RC=23
 applied_host host-a
 grep -Fq 'mock stow conflict' "$LAST_STDERR"
-grep -Fq 'Stow failed' "$LAST_STDOUT"
+grep -Fq '[dotfiles] [error] Stow failed' "$LAST_STDERR"
 [ "$(tail -n 1 "$FAKE_REPO/meta/dotfiles-sync-unix")" = older ]
 
 # Exit zero is not success without complete, correctly bound acknowledgement.
 for acknowledgement in absent unchanged incomplete changed-head; do
     run_interactive "ack-$acknowledgement" FAKE_APPLIED=older FAKE_STOW_ACK="$acknowledgement"
     applied_host host-a
-    grep -Fq 'Installer did not acknowledge this revision' "$LAST_STDOUT"
+    grep -Fq '[dotfiles] [error] Installer did not acknowledge this revision' "$LAST_STDERR"
     ! grep -Fq 'Stow completed' "$LAST_STDOUT"
 done
 for binding in FAKE_ACK_HOME FAKE_ACK_PLATFORM FAKE_ACK_HOST FAKE_ACK_HEAD; do
     run_interactive "ack-$binding" FAKE_APPLIED=older "$binding=incorrect"
     applied_host host-a
-    grep -Fq 'Installer did not acknowledge this revision' "$LAST_STDOUT"
+    grep -Fq '[dotfiles] [error] Installer did not acknowledge this revision' "$LAST_STDERR"
     ! grep -Fq 'Stow completed' "$LAST_STDOUT"
 done
 
@@ -283,7 +286,21 @@ applied_host host-a
 run_interactive incomplete-lock FAKE_LOCK=incomplete FAKE_APPLIED=older
 no_fetch
 no_stow
-grep -Fq 'Incomplete update lock' "$LAST_STDOUT"
+grep -Fq '[dotfiles] [warn] Incomplete update lock' "$LAST_STDERR"
+
+# A real logger has the same messages as the legacy fallback, no leaked
+# functions, and no ANSI when redirected unless color is explicitly forced.
+mkdir "$FAKE_REPO/lib"
+cp "$REPO_ROOT/lib/terminal.sh" "$FAKE_REPO/lib/terminal.sh"
+run_interactive logger-success FAKE_BEHIND=1 DOTFILES_COLOR=auto TERM=xterm
+grep -Fq '[dotfiles] [step] Applying dotfiles' "$LAST_STDOUT"
+grep -Fq '[dotfiles] [ok] Stow completed' "$LAST_STDOUT"
+! grep -q "$(printf '\033')" "$LAST_STDOUT" "$LAST_STDERR"
+run_interactive logger-failure FAKE_APPLIED=older FAKE_STOW_RC=23 DOTFILES_COLOR=auto TERM=xterm
+grep -Fq '[dotfiles] [error] Stow failed' "$LAST_STDERR"
+! grep -q "$(printf '\033')" "$LAST_STDOUT" "$LAST_STDERR"
+run_interactive logger-no-update DOTFILES_COLOR=always TERM=xterm
+! grep -Fq '[dotfiles]' "$LAST_STDOUT" "$LAST_STDERR"
 
 # These cases use actual Git and file://-free local remotes, not mocked Git.
 # Nothing can use the operator's Git config, home, hooks, or remote credentials.
@@ -383,7 +400,7 @@ printf 'local change\n' >>"$REAL_REPO/settings.txt"
 real_hook dirty
 [ "$(real_git -C "$REAL_REPO" rev-parse HEAD)" = "$initial_head" ]
 [ ! -e "$REAL_STATE.installs" ]
-grep -Fq 'Local changes' "$REAL_ROOT/dirty.stdout"
+grep -Fq 'Local changes' "$REAL_ROOT/dirty.stderr"
 
 new_real_fixture
 advance_real_remote
@@ -394,16 +411,16 @@ local_head=$(real_git -C "$REAL_REPO" rev-parse HEAD)
 real_hook diverged
 [ "$(real_git -C "$REAL_REPO" rev-parse HEAD)" = "$local_head" ]
 [ ! -e "$REAL_STATE.installs" ]
-grep -Fq 'Fast-forward pull failed' "$REAL_ROOT/diverged.stdout"
+grep -Fq 'Fast-forward pull failed' "$REAL_ROOT/diverged.stderr"
 
 # Three sessions at the same real HEAD: failure, missing acknowledgement, retry.
 new_real_fixture
 real_hook failed REAL_STOW_FAILURE=1
 [ "$(tail -n 1 "$REAL_STATE")" = pending ]
-grep -Fq 'Stow failed' "$REAL_ROOT/failed.stdout"
+grep -Fq 'Stow failed' "$REAL_ROOT/failed.stderr"
 real_hook unacknowledged REAL_STOW_NO_ACK=1
 [ "$(tail -n 1 "$REAL_STATE")" = pending ]
-grep -Fq 'Installer did not acknowledge this revision' "$REAL_ROOT/unacknowledged.stdout"
+grep -Fq 'Installer did not acknowledge this revision' "$REAL_ROOT/unacknowledged.stderr"
 ! grep -Fq 'Stow completed' "$REAL_ROOT/unacknowledged.stdout"
 real_hook retry
 [ "$(wc -l <"$REAL_STATE.installs" | tr -d ' ')" = 3 ]

@@ -20,6 +20,18 @@ _dotfiles_update_check() (
     _df_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
     [ -d "$_df_dir" ] || return 0
     cd "$_df_dir" || return 0
+    if [ -r ./lib/terminal.sh ]; then
+        # shellcheck source=lib/terminal.sh
+        . ./lib/terminal.sh
+    else
+        # Older checkouts and isolated fixtures may not yet have the logger.
+        dotfiles_log() {
+            case $1 in
+                warn | error) printf '[dotfiles] [%s] %s\n' "$1" "$2" >&2 ;;
+                *) printf '[dotfiles] [%s] %s\n' "$1" "$2" ;;
+            esac
+        }
+    fi
     _df_state=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null) || return 0
     _df_lock=$(git rev-parse --git-path dotfiles-sync-unix.lock 2>/dev/null) || return 0
     umask 077
@@ -29,7 +41,7 @@ _dotfiles_update_check() (
         _df_pid=$(cat "$_df_lock/pid" 2>/dev/null) || _df_pid=
         case $_df_pid in
             '' | *[!0-9]*)
-                printf '[dotfiles] Incomplete update lock at %s; remove it after checking no update is running.\n' "$_df_lock"
+                dotfiles_log warn "Incomplete update lock at $_df_lock; remove it after checking no update is running."
                 return 0
                 ;;
         esac
@@ -58,7 +70,7 @@ _dotfiles_update_check() (
     _df_dirty=$(git status --porcelain --untracked-files=normal --ignore-submodules="$_df_ignore" 2>/dev/null) || return 0
     if [ -n "$_df_dirty" ] || ! git submodule foreach --quiet --recursive \
         'status=$(git status --porcelain --untracked-files=normal --ignore-submodules=all) && test -z "$status"' >/dev/null 2>&1; then
-        printf '[dotfiles] Local changes in %s; automatic pull and stow skipped.\n' "$_df_dir"
+        dotfiles_log warn "Local changes in $_df_dir; automatic pull and stow skipped."
         return 0
     fi
 
@@ -70,16 +82,16 @@ _dotfiles_update_check() (
         # shellcheck disable=SC1083
         _df_behind=$(git rev-list --count "HEAD..@{upstream}" 2>/dev/null) || _df_behind=0
         if [ "$_df_behind" -gt 0 ] 2>/dev/null; then
-            printf '[dotfiles] %s new commit(s) available — pulling...\n' "$_df_behind"
+            dotfiles_log step "$_df_behind new commit(s) available - pulling..."
             if ! git pull --ff-only --quiet 2>/dev/null; then
-                printf '[dotfiles] Fast-forward pull failed. Resolve manually in %s.\n' "$_df_dir"
+                dotfiles_log error "Fast-forward pull failed. Resolve manually in $_df_dir."
                 return 0
             fi
-            printf '[dotfiles] Pulled successfully.\n'
+            dotfiles_log ok 'Pulled successfully.'
             _df_head=$(git rev-parse HEAD 2>/dev/null) || return 0
             printf '%s\n' "$_df_head" >"$_df_state.submodules-pending" || return 0
             if ! git submodule update --init --recursive --quiet 2>/dev/null; then
-                printf '[dotfiles] Submodule update failed; automatic stow will retry next login.\n'
+                dotfiles_log error 'Submodule update failed; automatic stow will retry next login.'
                 return 0
             fi
             rm -f "$_df_state.submodules-pending"
@@ -89,7 +101,7 @@ _dotfiles_update_check() (
 
     if [ "$_df_pulled" != 1 ] && [ "$_df_pending" = "$_df_head" ]; then
         if ! git submodule update --init --recursive --quiet 2>/dev/null; then
-            printf '[dotfiles] Submodule update failed; automatic stow will retry next login.\n'
+            dotfiles_log error 'Submodule update failed; automatic stow will retry next login.'
             return 0
         fi
         rm -f "$_df_state.submodules-pending"
@@ -121,31 +133,31 @@ _dotfiles_update_check() (
         _df_configured=1
     fi
     if [ "$_df_configured" != 1 ]; then
-        printf '[dotfiles] Run bash "%s/stow-all.sh" [host-dir] once to enable automatic stow for this home.\n' "$_df_dir"
+        dotfiles_log info "Run bash \"$_df_dir/stow-all.sh\" [host-dir] once to enable automatic stow for this home."
         return 0
     fi
     case $_df_host in
         win | common | .* | */* | *\\*)
-            printf '[dotfiles] Invalid Unix host "%s"; rerun stow-all.sh with a host directory.\n' "$_df_host"
+            dotfiles_log error "Invalid Unix host \"$_df_host\"; rerun stow-all.sh with a host directory."
             return 0
             ;;
     esac
     if [ -n "$_df_host" ] && [ ! -d "$_df_host" ]; then
-        printf '[dotfiles] Remembered host directory "%s" is missing; rerun stow-all.sh.\n' "$_df_host"
+        dotfiles_log warn "Remembered host directory \"$_df_host\" is missing; rerun stow-all.sh."
         return 0
     fi
     _df_head=$(git rev-parse HEAD 2>/dev/null) || return 0
     [ "$_df_head" != "$_df_applied" ] || return 0
     if [ "$_df_pulled" != 1 ] && ! git submodule update --init --recursive --quiet 2>/dev/null; then
-        printf '[dotfiles] Submodule update failed; automatic stow will retry next login.\n'
+        dotfiles_log error 'Submodule update failed; automatic stow will retry next login.'
         return 0
     fi
     _df_dirty=$(git status --porcelain --untracked-files=normal --ignore-submodules=none 2>/dev/null) || return 0
     if [ -n "$_df_dirty" ]; then
-        printf '[dotfiles] Checkout changed during update; automatic stow skipped.\n'
+        dotfiles_log warn 'Checkout changed during update; automatic stow skipped.'
         return 0
     fi
-    printf '[dotfiles] Applying dotfiles (%s)...\n' "${_df_host:-common-only}"
+    dotfiles_log step "Applying dotfiles (${_df_host:-common-only})..."
     if bash ./stow-all.sh "$_df_host" >"$_df_lock/stow.log" 2>&1; then
         _df_acknowledged=0
         if [ -f "$_df_state" ]; then
@@ -164,14 +176,14 @@ _dotfiles_update_check() (
             fi
         fi
         if [ "$_df_acknowledged" = 1 ]; then
-            printf '[dotfiles] Stow completed; open a new shell to load updated config.\n'
+            dotfiles_log ok 'Stow completed; open a new shell to load updated config.'
         else
             cat "$_df_lock/stow.log" >&2
-            printf '[dotfiles] Installer did not acknowledge this revision; automatic stow remains pending. Rerun stow-all.sh if configuration state is missing or invalid.\n'
+            dotfiles_log error 'Installer did not acknowledge this revision; automatic stow remains pending. Rerun stow-all.sh if configuration state is missing or invalid.'
         fi
     else
         cat "$_df_lock/stow.log" >&2
-        printf '[dotfiles] Stow failed; fix the error and retry stow-all.sh, or retry next login.\n'
+        dotfiles_log error 'Stow failed; fix the error and retry stow-all.sh, or retry next login.'
     fi
     rm -f "$_df_lock/stow.log"
 )

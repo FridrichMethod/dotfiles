@@ -28,7 +28,8 @@ done
 
 mkdir -p "$FIXTURE/common" "$FIXTURE/lib" "$TARGET" "$FIXTURE/test-host/sample" "$GIT_TEMPLATE_DIR"
 cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/dotfiles-update.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
-cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$FIXTURE/lib/"
+cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
+    "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
 cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
 printf '%s\n' 'host overlay fixture' >"$FIXTURE/test-host/sample/.fixture-host"
 git init -q -b main "$FIXTURE"
@@ -36,13 +37,17 @@ git -C "$FIXTURE" add common lib test-host stow-all.sh dotfiles-update.sh .stowr
 git -C "$FIXTURE" commit -qm 'Fixture baseline'
 
 run_install() {
-    if ! env HOME="$TARGET" bash "$FIXTURE/stow-all.sh" test-host >"$TEST_TMP/install.log" 2>&1; then
+    if ! env HOME="$TARGET" DOTFILES_COLOR=auto bash "$FIXTURE/stow-all.sh" test-host >"$TEST_TMP/install.log" 2>&1; then
         cat "$TEST_TMP/install.log" >&2
         return 1
     fi
 }
 
 run_install
+grep -Fq '[dotfiles] [step] Checking selected AI configuration and runtime' "$TEST_TMP/install.log"
+grep -Fq '[dotfiles] [ok] Stow completed (test-host)' "$TEST_TMP/install.log"
+! grep -Eq '^(Validated|Synchronized) ' "$TEST_TMP/install.log"
+! grep -q "$(printf '\033')" "$TEST_TMP/install.log"
 [[ -L "$TARGET/.fixture-host" ]]
 [[ -L "$TARGET/.local/bin/codex-config-sync" ]]
 [[ -f "$TARGET/.codex/config.toml" && ! -L "$TARGET/.codex/config.toml" ]]

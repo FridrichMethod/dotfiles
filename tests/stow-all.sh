@@ -16,7 +16,10 @@ TEST_HOME="$TEST_TMP/home"
 EVENT_LOG="$TEST_TMP/events.log"
 CHECK_LOG="$TEST_TMP/checks.log"
 export CHECK_LOG
+export DOTFILES_COLOR=auto
 mkdir -p "$FIXTURE/.git" "$FAKE_BIN" "$TEST_HOME"
+mkdir "$FIXTURE/lib"
+cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/terminal.sh"
 cp "$INSTALLER" "$FIXTURE/stow-all.sh"
 cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
 chmod +x "$FIXTURE/stow-all.sh"
@@ -118,6 +121,10 @@ printf '%s\n' 'host-fcitx5' >"$FIXTURE/host-a/fcitx5/.config/fcitx5/profile"
 cat >"$TEST_TMP/sync-helper" <<'SH'
 #!/bin/sh
 name=$(basename "$0")
+if [ "$name" != fcitx5-profile-sync ]; then
+    [ "${1:-}" = --quiet ] || { echo 'Installer must request quiet backend output.' >&2; exit 21; }
+    shift
+fi
 if [ "${1:-}" = --check ]; then
     printf 'check:%s:[%s][%s]\n' "$name" "$2" "$3" >>"$CHECK_LOG"
     [ "${FAIL_CHECK:-}" != "$name" ] || exit 22
@@ -219,6 +226,8 @@ assert_events \
     "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
 grep -Fq "Stowing from $FIXTURE" "$TEST_TMP/common-only.stdout"
 grep -Fq 'Stowing common packages:' "$TEST_TMP/common-only.stdout"
+grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/common-only.stdout"
+! grep -q "$(printf '\033')" "$TEST_TMP/common-only.stdout" "$TEST_TMP/common-only.stderr"
 ! grep -Fq 'Stowing host-specific packages:' "$TEST_TMP/common-only.stdout"
 
 # State binds common-only explicitly to this home and platform, outside Git's
@@ -236,6 +245,7 @@ for helper in codex-config-sync codex-rules-sync claude-settings-sync; do
     fi
     assert_events
     cmp "$STATE" "$TEST_TMP/expected-state"
+    ! grep -Fq '[dotfiles] [ok] Stow completed' "$TEST_TMP/preflight-failure.stdout"
 done
 
 # Host baselines override common sources, fcitx5 is host-only, the obsolete Git
@@ -331,11 +341,13 @@ if run_fixture stow-failure STOW_RC=24; then
     echo "ERROR: installer ignored Stow failure" >&2
     exit 1
 fi
+! grep -Fq '[dotfiles] [ok] Stow completed' "$TEST_TMP/stow-failure.stdout"
 cmp "$STATE" "$TEST_TMP/expected-state"
 if run_fixture status-failure STATUS_RC=25; then
     echo "ERROR: installer ignored Git status failure" >&2
     exit 1
 fi
+! grep -Fq '[dotfiles] [ok] Stow completed' "$TEST_TMP/status-failure.stdout"
 cmp "$STATE" "$TEST_TMP/expected-state"
 run_fixture dirty INSTALL_DIRTY=' M common/config'
 printf '%s\n' "$TEST_HOME" "$(uname -s)" '' '' >"$TEST_TMP/expected-state"
