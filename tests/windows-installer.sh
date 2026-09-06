@@ -66,7 +66,8 @@ done
 # $args, which previously let a null path escape this check.
 if command -v pwsh >/dev/null 2>&1; then
     for ps_file in "$INSTALLER" "$REPO_ROOT/tests/windows-installer.ps1" \
-        "$REPO_ROOT/setup-sync.ps1" "$REPO_ROOT/tests/run.ps1"; do
+        "$REPO_ROOT/setup-sync.ps1" "$REPO_ROOT/tests/run.ps1" \
+        "$REPO_ROOT/lib/terminal.ps1" "$REPO_ROOT/tests/terminal.ps1"; do
         INSTALLER_PATH="$ps_file" pwsh -NoProfile -NonInteractive -Command '
         $path = $env:INSTALLER_PATH
         if (-not (Test-Path -LiteralPath $path)) {
@@ -79,6 +80,7 @@ if command -v pwsh >/dev/null 2>&1; then
         if ($errors) { $errors | ForEach-Object { $_.ToString() }; exit 1 }
     '
     done
+    pwsh -NoProfile -NonInteractive -File "$REPO_ROOT/tests/terminal.ps1"
 else
     printf 'SKIP: Windows installer/native fixture parse checks (pwsh unavailable).\n'
 fi

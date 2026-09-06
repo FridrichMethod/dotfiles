@@ -13,6 +13,25 @@
 [CmdletBinding(SupportsShouldProcess)]
 param([switch]$Register, [switch]$Apply)
 
+# Old/partial checkouts and isolated fixtures must still report failures.
+function Write-DotfilesLog {
+    param([string]$Level, [string]$Message)
+    Write-Host "[dotfiles] [$Level] $Message"
+}
+try {
+    $terminalLibrary = Join-Path $PSScriptRoot 'lib/terminal.ps1'
+    if (Test-Path -LiteralPath $terminalLibrary -PathType Leaf) { . $terminalLibrary }
+} catch { } # Logging is cosmetic; keep the plain fallback available.
+
+function ConvertTo-DotfilesWindowsHost {
+    param([AllowEmptyString()][string]$HostDir)
+    $canonical = $HostDir.ToLowerInvariant()
+    if ($canonical -cnotin @('', 'win')) {
+        throw 'Windows DOTFILES_HOST must be win or empty (common only).'
+    }
+    return $canonical
+}
+
 function Get-DotfilesStateDirectory {
     param([Parameter(Mandatory)][string]$Repo)
     $gitDir = git -C $Repo rev-parse --absolute-git-dir 2>$null
@@ -45,6 +64,13 @@ function Read-DotfilesState {
     $state = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
     if ($state.home -ne [Environment]::GetFolderPath('UserProfile')) {
         throw 'Automatic stow state belongs to another home; use a separate checkout.'
+    }
+    if ($Name -in @('configuration.json', 'request.json')) {
+        $hostProperty = $state.PSObject.Properties['host']
+        if ($null -eq $hostProperty -or $hostProperty.Value -isnot [string]) {
+            throw 'Invalid Windows host in automatic stow state; host must be a string (win or empty).'
+        }
+        $state.host = ConvertTo-DotfilesWindowsHost $hostProperty.Value
     }
     return $state
 }
@@ -129,6 +155,7 @@ function Invoke-DotfilesSubmoduleSync {
 
 function Save-DotfilesStowState {
     param([string]$Repo, [AllowEmptyString()][string]$HostDir, [string]$ExpectedHead)
+    $HostDir = ConvertTo-DotfilesWindowsHost $HostDir
     $directory = Get-DotfilesStateDirectory $Repo
     # Remember the host for dirty manual installs without acknowledging HEAD.
     $head = Get-DotfilesHead $Repo
@@ -146,7 +173,7 @@ function Request-DotfilesRestow {
     $state = Read-DotfilesState $Directory
     $hostDir = if (Test-Path Env:DOTFILES_HOST) { $env:DOTFILES_HOST }
         elseif ($null -ne $state) { $state.host } else { 'win' }
-    if ($hostDir -notin @('', 'win')) { throw 'Windows DOTFILES_HOST must be win or empty (common only).' }
+    $hostDir = ConvertTo-DotfilesWindowsHost $hostDir
     $head = Get-DotfilesHead $Repo
     if ($null -ne $state -and $state.appliedHead -eq $head -and $state.host -eq $hostDir) {
         return $false
@@ -170,7 +197,7 @@ function Invoke-DotfilesApply {
     try {
         $request = Read-DotfilesState $directory 'request.json'
         if ($null -eq $request) { return }
-        if ($request.host -notin @('', 'win')) { throw 'Invalid Windows host in restow request.' }
+        $request.host = ConvertTo-DotfilesWindowsHost $request.host
         if ($request.head -ne (Get-DotfilesHead $Repo)) { throw 'HEAD changed; a new login will request the current revision.' }
         if (-not (Test-DotfilesUpdateClean $Repo $directory)) { throw 'Working tree has local changes; restow remains pending.' }
         $state = Read-DotfilesState $directory
@@ -182,7 +209,7 @@ function Invoke-DotfilesApply {
         if ($null -eq $state -or $state.appliedHead -ne $request.head -or $state.host -ne $request.host) {
             throw 'Installer did not acknowledge this revision; restow remains pending.'
         }
-        Write-Host '[dotfiles] Automatically stowed. Restart the shell/apps to load updated settings.'
+        Write-DotfilesLog ok 'Automatically stowed. Restart the shell/apps to load updated settings.'
     }
     finally {
         $lock.Dispose()
@@ -202,19 +229,19 @@ function Invoke-DotfilesUpdate {
     $env:GIT_TERMINAL_PROMPT = '0'
     try {
         if (-not (Test-DotfilesUpdateClean $Repo $directory)) {
-            Write-Host '[dotfiles] Local changes present; automatic pull/stow skipped.'
+            Write-DotfilesLog warn 'Local changes present; automatic pull/stow skipped.'
             return
         }
         git -C $Repo fetch --quiet 2>$null
         if ($LASTEXITCODE -eq 0) {
             $behind = git -C $Repo rev-list --count 'HEAD..@{upstream}' 2>$null
             if ($LASTEXITCODE -eq 0 -and ($behind -as [int]) -gt 0) {
-                Write-Host "[dotfiles] $behind new commit(s) available - pulling..."
+                Write-DotfilesLog step "$behind new commit(s) available - pulling..."
                 git -C $Repo pull --ff-only --quiet 2>$null
                 if ($LASTEXITCODE -ne 0) { throw "Fast-forward pull failed. Resolve manually in $Repo." }
                 Set-DotfilesSubmodulePending $Repo $directory
                 $pulled = $true
-                Write-Host '[dotfiles] Pulled successfully.'
+                Write-DotfilesLog ok 'Pulled successfully.'
             }
         }
         # Also retries failed stows after a previous pull or while offline.
@@ -236,7 +263,7 @@ function Invoke-DotfilesUpdate {
             $taskName = Get-DotfilesTaskName $Repo
             try {
                 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
-                Write-Host "[dotfiles] Restow queued. Log: $(Join-Path $directory 'restow.log')"
+                Write-DotfilesLog info "Restow queued. Log: $(Join-Path $directory 'restow.log')"
             }
             catch {
                 throw "Cannot start $taskName. Run .\dotfiles-auto-stow.ps1 -Register once from elevated PowerShell in $Repo. $($_.Exception.Message)"
@@ -261,20 +288,19 @@ if ($Register) {
             -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
         Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal `
             -Settings $settings -Description "Apply this user's dotfiles after update: $repo" -Force -ErrorAction Stop | Out-Null
-        Write-Host "Registered $taskName. New interactive shells can now request automatic stow."
+        Write-DotfilesLog ok "Registered $taskName. New interactive shells can now request automatic stow."
     }
 }
 elseif ($Apply) {
-    $ErrorActionPreference = 'Stop'
-    $PSNativeCommandUseErrorActionPreference = $false
-    $directory = Get-DotfilesStateDirectory $PSScriptRoot
-    $log = Join-Path $directory 'restow.log'
-    try {
-        # One bounded last-run log; requests remain pending on any error.
-        & { Invoke-DotfilesApply $PSScriptRoot } *> $log
-    }
-    catch {
-        Add-Content -LiteralPath $log -Value $_.ToString()
-        exit 1
+    & {
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $false
+        $directory = Get-DotfilesStateDirectory $PSScriptRoot
+        $log = Join-Path $directory 'restow.log'
+        try {
+            # One bounded last-run log; requests remain pending on any error.
+            & { Invoke-DotfilesApply $PSScriptRoot } *> $log
+        }
+        catch { Add-Content -LiteralPath $log -Value "[dotfiles] [error] $($_.ToString())"; exit 1 }
     }
 }
