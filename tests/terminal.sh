@@ -10,8 +10,11 @@ export TERMINAL_LIB="$REPO_ROOT/lib/terminal.sh"
 python3 - <<'PY'
 import errno
 import os
+import selectors
 import shutil
 import subprocess
+import sys
+import time
 
 SCRIPT = r'''
 before_flags=$-
@@ -35,6 +38,7 @@ def run(*, stdout_tty=False, stderr_tty=False, overrides=None, command=None, tim
     env['TERM'] = 'xterm-256color'
     env.update(overrides or {})
     master = slave = None
+    process = None
     if stdout_tty or stderr_tty:
         master, slave = os.openpty()
     try:
@@ -43,31 +47,52 @@ def run(*, stdout_tty=False, stderr_tty=False, overrides=None, command=None, tim
             stdout=slave if stdout_tty else subprocess.PIPE,
             stderr=slave if stderr_tty else subprocess.PIPE,
         )
-        if slave is not None:
-            os.close(slave)
-            slave = None
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()
-            raise
-        assert process.returncode == 0, (stdout, stderr)
-        terminal = b''
-        if master is not None:
+        # Keep the parent's slave open until output is drained: macOS may
+        # discard unread PTY bytes when the last slave closes. Multiplex all
+        # three streams while the child runs so no pipe/PTY buffer can fill.
+        chunks = {'terminal': [], 'stdout': [], 'stderr': []}
+        deadline = time.monotonic() + timeout
+        with selectors.DefaultSelector() as selector:
+            for descriptor, name in ((master, 'terminal'),
+                                     (process.stdout, 'stdout'),
+                                     (process.stderr, 'stderr')):
+                if descriptor is not None:
+                    fd = descriptor if isinstance(descriptor, int) else descriptor.fileno()
+                    os.set_blocking(fd, False)
+                    selector.register(descriptor, selectors.EVENT_READ, name)
             while True:
-                try:
-                    chunk = os.read(master, 4096)
-                except OSError as error:
-                    if error.errno == errno.EIO:
-                        break
-                    raise
-                if not chunk:
+                if time.monotonic() >= deadline:
+                    raise subprocess.TimeoutExpired(process.args, timeout)
+                child_exited = process.poll() is not None
+                events = selector.select(timeout=0.1)
+                for key, _ in events:
+                    try:
+                        chunk = os.read(key.fd, 4096)
+                    except BlockingIOError:
+                        continue
+                    except OSError as error:
+                        if key.data != 'terminal' or error.errno != errno.EIO:
+                            raise
+                        chunk = b''
+                    if chunk:
+                        chunks[key.data].append(chunk)
+                    else:
+                        selector.unregister(key.fileobj)
+                if child_exited and not events:
                     break
-                terminal += chunk
+        terminal, stdout, stderr = (b''.join(chunks[name])
+                                    for name in ('terminal', 'stdout', 'stderr'))
+        assert process.returncode == 0, (terminal, stdout, stderr)
         return (terminal if stdout_tty else stdout,
                 terminal if stderr_tty else stderr)
     finally:
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
         for descriptor in (master, slave):
             if descriptor is not None:
                 os.close(descriptor)
@@ -83,14 +108,14 @@ assert b'[dotfiles] [error] Configuration invalid' in stderr
 assert b'[warn]' not in stdout and b'[error]' not in stdout
 
 stdout, stderr = run(stdout_tty=True)
-assert b'\x1b[1;36m[dotfiles] [step]' in stdout
-assert b'\x1b[32m[dotfiles] [ok]' in stdout
-assert ESC not in stderr
+assert b'\x1b[1;36m[dotfiles] [step]' in stdout, (stdout, stderr)
+assert b'\x1b[32m[dotfiles] [ok]' in stdout, (stdout, stderr)
+assert ESC not in stderr, (stdout, stderr)
 
 stdout, stderr = run(stderr_tty=True)
-assert ESC not in stdout
-assert b'\x1b[33m[dotfiles] [warn]' in stderr
-assert b'\x1b[31m[dotfiles] [error]' in stderr
+assert ESC not in stdout, (stdout, stderr)
+assert b'\x1b[33m[dotfiles] [warn]' in stderr, (stdout, stderr)
+assert b'\x1b[31m[dotfiles] [error]' in stderr, (stdout, stderr)
 
 stdout, stderr = run(overrides={'DOTFILES_COLOR': 'always'})
 assert ESC in stdout and ESC in stderr
@@ -116,6 +141,14 @@ for mode in ('', 'invalid'):
 result = subprocess.run(['sh', '-eu', '-c', '. "$TERMINAL_LIB"'],
                         capture_output=True, check=True)
 assert result.stdout == result.stderr == b''
+
+# Prove the harness drains PTY and pipe output concurrently, beyond their
+# kernel buffer sizes, without dropping a short-lived child's trailing bytes.
+stdout, stderr = run(stdout_tty=True, command=[
+    sys.executable, '-c',
+    "import sys; sys.stdout.buffer.write(b'x' * 131072); sys.stderr.buffer.write(b'y' * 131072)",
+])
+assert stdout == b'x' * 131072 and stderr == b'y' * 131072, (len(stdout), len(stderr))
 print('terminal-output=PASS (TTY streams, overrides, plain logs, silent sourcing)')
 
 # PowerShell's *> redirects streams without redirecting the process console.
