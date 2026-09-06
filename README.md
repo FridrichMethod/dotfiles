@@ -212,9 +212,11 @@ dotfiles/
 ├── .stowrc                       Stow defaults (--target=~, ignores)
 ├── stow-all.sh                   one-command installer (POSIX)
 ├── stow-all.ps1                  one-command installer (Windows)
-├── dotfiles-update.sh            session-once auto-pull on shell login
-├── dotfiles-update.ps1           the same hook, for PowerShell on Windows
-├── awesome-skills-update.sh      weekly Claude/Codex skill sync
+├── scripts/                      hooks the shell or a task runs, not you
+│   ├── dotfiles-update.sh        session-once auto-pull on shell login
+│   ├── dotfiles-update.ps1       the same hook, for PowerShell on Windows
+│   ├── dotfiles-auto-stow.ps1    elevated restow worker (Windows task)
+│   └── awesome-skills-update.sh  weekly Claude/Codex skill sync
 ├── CLAUDE.md                     guidance for Claude Code
 └── AGENTS.md                     guidance for OpenAI Codex / other agents
 ```
@@ -277,7 +279,7 @@ dotfiles/
 Two small hooks run on each interactive shell login, and the pull hook has a PowerShell twin for Windows. All are session-throttled, so subshells and tmux panes never re-run them.
 
 <details open>
-<summary><strong><code>dotfiles-update.sh</code></strong> — pulls this repo when behind</summary>
+<summary><strong><code>scripts/dotfiles-update.sh</code></strong> — pulls this repo when behind</summary>
 
 Fetches the remote, fast-forwards if behind, updates submodules, and automatically re-stows the selected host. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells). Automatic updates skip working trees with local file changes, including submodule changes; they never stash, reset, or discard work.
 
@@ -312,12 +314,12 @@ Set these variables before the update hook runs. A failed stow does not advance 
 
 Session marker: `_DOTFILES_CHECKED` is exported so nested shells skip; a fresh login with a clean environment checks again. Successful stow updates files on disk; start a new shell/application to load the settings. Windows Terminal needs a restart.
 
-**On Windows** — `dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1` and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
+**On Windows** — `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1` and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
 
 ```powershell
 cd "$HOME\dotfiles"
 .\stow-all.ps1 win
-.\dotfiles-auto-stow.ps1 -Register
+.\scripts\dotfiles-auto-stow.ps1 -Register
 ```
 
 The on-demand task runs as that user with `Interactive` logon and `Highest` privileges, using `pwsh -NoProfile -NonInteractive -WindowStyle Hidden`. Registration explicitly authorizes the checkout's updated installer scripts to run with administrator privileges. It stores no password, uses the user's home, allows battery operation, and ignores overlapping task starts. Task names include a checkout/user hash. No UAC prompt is launched from the login hook; ordinary shells enqueue work, while elevated shells can apply directly. The interactive task requires that user to be logged on to Windows.
@@ -325,7 +327,7 @@ The on-demand task runs as that user with `Interactive` logon and `Highest` priv
 The worker verifies the requested revision, home, host and clean working tree again under the update lock before running `stow-all.ps1 -Strict`. Any installer warning or failed portable sync prevents marking the revision as applied. A queued task is not reported as a completed stow. Inspect its result and last-run log with:
 
 ```powershell
-. .\dotfiles-auto-stow.ps1
+. .\scripts\dotfiles-auto-stow.ps1
 Get-ScheduledTaskInfo -TaskName (Get-DotfilesTaskName $PWD.Path)
 Get-Content (Join-Path (Get-DotfilesStateDirectory $PWD.Path) 'restow.log')
 ```
@@ -333,14 +335,14 @@ Get-Content (Join-Path (Get-DotfilesStateDirectory $PWD.Path) 'restow.log')
 Set `DOTFILES_AUTO_STOW=0` before the login hook to stop automatic stow. To remove the registered worker entirely, from elevated PowerShell in the same checkout:
 
 ```powershell
-. .\dotfiles-auto-stow.ps1
+. .\scripts\dotfiles-auto-stow.ps1
 Unregister-ScheduledTask -TaskName (Get-DotfilesTaskName $PWD.Path)
 ```
 
 </details>
 
 <details>
-<summary><strong><code>awesome-skills-update.sh</code></strong> — weekly Claude/Codex skill sync</summary>
+<summary><strong><code>scripts/awesome-skills-update.sh</code></strong> — weekly Claude/Codex skill sync</summary>
 
 Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/awesome-skills`](https://github.com/FridrichMethod/awesome-skills) — a curated collection of ~1,668 Claude Code / Codex skills for AI4Protein, bioinformatics, AI development, and academic writing.
 
@@ -485,7 +487,7 @@ Codex applies the most restrictive matching rule across active files. The portab
 
 The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, third-party copies under `~/.claude/rules/`, Codex-generated `~/.codex/rules/default.rules`, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
 
-Third-party skills are also not stored in this repository. [`awesome-skills-update.sh`](awesome-skills-update.sh) installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
+Third-party skills are also not stored in this repository. [`scripts/awesome-skills-update.sh`](scripts/awesome-skills-update.sh) installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
 
 After cloning on a new machine:
 

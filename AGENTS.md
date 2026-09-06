@@ -7,6 +7,13 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 - Shared defaults live in `common/`.
 - Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, `fedora/`, `ubuntu/`, and `win/`.
 - Packages mirror `$HOME` paths (for example `.config/...`, `.ssh/...`).
+- Non-package code is split by who calls it. The repo root holds only the entry
+  points a person types on a fresh clone (`stow-all.sh`, `stow-all.ps1`,
+  `setup-sync.sh`, `setup-sync.ps1`); `scripts/` holds hooks the environment
+  invokes on its own (login profiles, the Windows scheduled task); `lib/` holds
+  code that is only sourced or imported, never executed directly. Put a new
+  file where its caller says it belongs, and keep `.stowrc` at the root because
+  GNU Stow reads it from the working directory.
 
 ## Required conventions
 
@@ -71,7 +78,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep structured merges in `lib/config_sync.py`; only TOML sync and the full runtime check require pinned `tomlkit`, while JSON/rules use the Python standard library. Do not reintroduce AWK/regex TOML parsing or a second JSON engine. Normal sync never rewrites the portable source; baseline cleanup is an explicit migration. Never broaden existing regular-file Unix permissions.
 - Installers must run every selected AI helper with read-only `--check` before any apply; `--quiet` suppresses successful helper chatter, never errors. Provision `.venv-sync` or an explicitly selected interpreter in advance; profiles and automatic updates must never install dependencies.
 - Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
-- Keep third-party skill payloads out of dotfiles; `awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
+- Keep third-party skill payloads out of dotfiles; `scripts/awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
 
 ## Stow and update scripts
 
@@ -84,8 +91,8 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep `.stowrc` as global defaults (`--target=~` and ignore patterns).
 - Do not shell-quote `.stowrc` option values. GNU Stow parses the file directly, and Stow 2.3.1 treats quote characters around `--ignore=` regexes literally; keep the focused test that stows into a temporary target with materialized files already present.
 - `.stowrc` excludes each materialized AI baseline (`config.toml`, `settings.json`, and `portable.rules`); keep those exclusions aligned with `stow-all.sh` and `stow-all.ps1`.
-- Keep `dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`. `dotfiles-update.ps1` is its PowerShell counterpart, invoked from the tail of `win/powershell/Documents/PowerShell/profile.ps1`; keep the two in contract parity (`DOTFILES_DIR`, `DOTFILES_AUTO_UPDATE`, `_DOTFILES_CHECKED`, fast-forward only, automatic stow after successful updates with remembered host, clean-tree protection, locking and failed-stow retries) and keep `tests/update-hooks.sh` passing. The PowerShell one skips on redirected stdout, since every `pwsh -Command ...` call loads the profile, and must not set `$ErrorActionPreference` to `Stop`, which would let a failed `git fetch` abort the whole profile on PowerShell 7.4+.
-- Automatic stow is enabled by default; `DOTFILES_AUTO_STOW=0` keeps pull-only behavior and `DOTFILES_AUTO_UPDATE=0` disables the entire hook. Unix must remember the explicitly installed host or use `DOTFILES_HOST`, never guess a Linux/cluster overlay. Store host/applied-revision state only in local Git metadata, bound to the home/platform. Windows automatic stow must run elevated through `dotfiles-auto-stow.ps1` or its explicitly registered current-user task; do not launch login-time UAC prompts. Failed or partial installs must not advance applied state. Keep executable update-hook tests for both shells.
+- Keep `scripts/dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`. `scripts/dotfiles-update.ps1` is its PowerShell counterpart, invoked from the tail of `win/powershell/Documents/PowerShell/profile.ps1`; keep the two in contract parity (`DOTFILES_DIR`, `DOTFILES_AUTO_UPDATE`, `_DOTFILES_CHECKED`, fast-forward only, automatic stow after successful updates with remembered host, clean-tree protection, locking and failed-stow retries) and keep `tests/update-hooks.sh` passing. The PowerShell one skips on redirected stdout, since every `pwsh -Command ...` call loads the profile, and must not set `$ErrorActionPreference` to `Stop`, which would let a failed `git fetch` abort the whole profile on PowerShell 7.4+.
+- Automatic stow is enabled by default; `DOTFILES_AUTO_STOW=0` keeps pull-only behavior and `DOTFILES_AUTO_UPDATE=0` disables the entire hook. Unix must remember the explicitly installed host or use `DOTFILES_HOST`, never guess a Linux/cluster overlay. Store host/applied-revision state only in local Git metadata, bound to the home/platform. Windows automatic stow must run elevated through `scripts/dotfiles-auto-stow.ps1` or its explicitly registered current-user task; do not launch login-time UAC prompts. Failed or partial installs must not advance applied state. Keep executable update-hook tests for both shells.
 - When setup behavior changes, update both script comments and `README.md`.
 
 ## Windows
