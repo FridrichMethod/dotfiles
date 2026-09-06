@@ -13,43 +13,52 @@ set -euo pipefail
 # All selected AI inputs are checked before any live configuration is changed.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -r "$REPO_ROOT/lib/terminal.sh" ]]; then
+    # shellcheck source=lib/terminal.sh
+    . "$REPO_ROOT/lib/terminal.sh"
+else
+    dotfiles_log() {
+        case $1 in
+            warn | error) printf '[dotfiles] [%s] %s\n' "$1" "$2" >&2 ;;
+            *) printf '[dotfiles] [%s] %s\n' "$1" "$2" ;;
+        esac
+    }
+fi
 
 if [[ "$HOST" == "win" ]]; then
-    echo "ERROR: the 'win' host is installed from Windows, not from POSIX." >&2
-    echo "       Its packages mirror Windows-only paths (Documents\\PowerShell," >&2
-    echo "       AppData\\Local\\Packages) that mean nothing in a POSIX \$HOME." >&2
-    echo "       Run this in PowerShell from the repo root instead:" >&2
-    echo "         .\\stow-all.ps1 win" >&2
+    dotfiles_log error "the 'win' host is installed from Windows, not from POSIX."
+    dotfiles_log error 'Its packages mirror Windows-only paths (Documents\PowerShell, AppData\Local\Packages) that mean nothing in a POSIX $HOME.'
+    dotfiles_log error 'Run this in PowerShell from the repo root instead: .\stow-all.ps1 win'
     exit 1
 fi
 
 case "$HOST" in
     common | .* | */* | *\\*)
-        echo "ERROR: host must be a top-level host directory (or omitted for common-only)." >&2
+        dotfiles_log error 'host must be a top-level host directory (or omitted for common-only).'
         exit 1
         ;;
 esac
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-echo "Stowing from $REPO_ROOT"
+dotfiles_log step "Stowing from $REPO_ROOT"
 
 COMMON_DIR="${REPO_ROOT}/common"
 HOST_DIR="${REPO_ROOT}/${HOST}"
 
 if [[ ! -d "$COMMON_DIR" ]]; then
-    echo "ERROR: missing common dir: $COMMON_DIR" >&2
+    dotfiles_log error "missing common dir: $COMMON_DIR"
     exit 1
 fi
 if [[ -n "$HOST" && ! -d "$HOST_DIR" ]]; then
-    echo "ERROR: host dir not found: $HOST_DIR" >&2
+    dotfiles_log error "host dir not found: $HOST_DIR"
     exit 1
 fi
 if [[ ! -f "$REPO_ROOT/.stowrc" || ! -r "$REPO_ROOT/.stowrc" ]]; then
-    echo "ERROR: required .stowrc is missing or unreadable; refusing to install without target and ignore defaults." >&2
+    dotfiles_log error 'required .stowrc is missing or unreadable; refusing to install without target and ignore defaults.'
     exit 1
 fi
 if ! command -v stow >/dev/null 2>&1; then
-    echo "ERROR: required GNU Stow is missing; install stow before applying dotfiles." >&2
+    dotfiles_log error 'required GNU Stow is missing; install stow before applying dotfiles.'
     exit 1
 fi
 
@@ -61,11 +70,11 @@ START_HEAD=$(git rev-parse HEAD 2>/dev/null) || START_HEAD=
 # stale live settings while falsely recording the entire HEAD as applied.
 require_sync() {
     if [[ ! -f "$1" || ! -x "$1" ]]; then
-        echo "ERROR: required sync helper is missing or not executable: $1" >&2
+        dotfiles_log error "required sync helper is missing or not executable: $1"
         exit 1
     fi
     if [[ ! -f "$2" || ! -r "$2" ]]; then
-        echo "ERROR: required portable settings are missing or unreadable: $2" >&2
+        dotfiles_log error "required portable settings are missing or unreadable: $2"
         exit 1
     fi
 }
@@ -109,29 +118,32 @@ fi
 # Validate runtime dependencies and both documents for every selected AI
 # helper. A malformed later baseline must not partially apply earlier ones.
 # This is a read-only preflight, not a transaction across independent files.
+if [[ "$SYNC_CODEX" == 1 || "$SYNC_CLAUDE" == 1 ]]; then
+    dotfiles_log step 'Checking selected AI configuration and runtime'
+fi
 if [[ "$SYNC_CODEX" == 1 ]]; then
-    "$CODEX_SYNC" --check "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
-    "$CODEX_RULES_SYNC" --check "$CODEX_RULES_PORTABLE" \
+    "$CODEX_SYNC" --quiet --check "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
+    "$CODEX_RULES_SYNC" --quiet --check "$CODEX_RULES_PORTABLE" \
         "$HOME/.codex/rules/portable.rules"
 fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
-    "$CLAUDE_SYNC" --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
+    "$CLAUDE_SYNC" --quiet --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
 
 if [[ "$SYNC_CODEX" == 1 ]]; then
-    echo "Synchronizing portable Codex settings"
-    "$CODEX_SYNC" "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
-    echo "Synchronizing portable Codex rules"
-    "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE" \
+    dotfiles_log step 'Synchronizing portable Codex settings'
+    "$CODEX_SYNC" --quiet "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
+    dotfiles_log step 'Synchronizing portable Codex rules'
+    "$CODEX_RULES_SYNC" --quiet "$CODEX_RULES_PORTABLE" \
         "$HOME/.codex/rules/portable.rules"
 fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
-    echo "Synchronizing portable Claude settings"
-    "$CLAUDE_SYNC" "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
+    dotfiles_log step 'Synchronizing portable Claude settings'
+    "$CLAUDE_SYNC" --quiet "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
 # fcitx5 rewrites its profile at runtime, so this is a regular file, not a link.
 if [[ "$SYNC_FCITX5" == 1 ]]; then
-    echo "Synchronizing fcitx5 profile"
+    dotfiles_log step 'Synchronizing fcitx5 profile'
     "$FCITX5_SYNC" "$FCITX5_PORTABLE" "$HOME/.config/fcitx5/profile"
 fi
 # Remove the obsolete repository-local filter from the previous layout.
@@ -139,21 +151,19 @@ if git config --local --get-regexp '^filter\.codex-portable\.' >/dev/null 2>&1; 
     git config --local --remove-section filter.codex-portable
 fi
 
-echo "Stowing common packages:"
+dotfiles_log step 'Stowing common packages:'
 if compgen -G "${COMMON_DIR}"'/*/' >/dev/null; then
     common_pkgs=$(basename -a "${COMMON_DIR}"/*/)
-    # shellcheck disable=SC2086
-    echo $common_pkgs
+    dotfiles_log info "Packages: ${common_pkgs//$'\n'/ }"
     # shellcheck disable=SC2086
     stow --restow --no-folding -d "$COMMON_DIR" $common_pkgs
 fi
 
 if [[ -n "$HOST" ]]; then
-    echo "Stowing host-specific packages:"
+    dotfiles_log step 'Stowing host-specific packages:'
     if compgen -G "${HOST_DIR}"'/*/' >/dev/null; then
         host_pkgs=$(basename -a "${HOST_DIR}"/*/)
-        # shellcheck disable=SC2086
-        echo $host_pkgs
+        dotfiles_log info "Packages: ${host_pkgs//$'\n'/ }"
         # shellcheck disable=SC2086
         stow --restow --no-folding -d "$HOST_DIR" $host_pkgs
     fi
@@ -199,3 +209,5 @@ if SYNC_STATE=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null); then
         mv -f "$STATE_TMP" "$SYNC_STATE"
     )
 fi
+
+dotfiles_log ok "Stow completed (${HOST:-common-only}); open a new shell to load updated config."
