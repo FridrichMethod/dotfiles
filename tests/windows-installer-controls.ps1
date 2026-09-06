@@ -77,6 +77,16 @@ $script:FixtureNumber = 0
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
+function Remove-ControlFixture([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    # Remove-Item -Force changes attributes through symlinks before unlinking.
+    # Unlink first so targets such as macOS's read-only system Bash stay untouched.
+    foreach ($link in Get-ChildItem -LiteralPath $Path -Recurse -Force | Where-Object LinkType -EQ SymbolicLink) {
+        if ($link.PSIsContainer) { [IO.Directory]::Delete($link.FullName) }
+        else { [IO.File]::Delete($link.FullName) }
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
 function New-ControlFixture {
     $script:FixtureNumber++
     $root = Join-Path $testRoot $script:FixtureNumber
@@ -152,6 +162,25 @@ function Test-Case([string]$Name, [scriptblock]$Action) {
     Write-Output "PASS: $Name"
 }
 try {
+    Test-Case 'fixture cleanup preserves external read-only targets and removes dangling links' {
+        $fixture = New-ControlFixture
+        $cleanupRoot = Join-Path $fixture.Root 'cleanup'
+        [void][IO.Directory]::CreateDirectory($cleanupRoot)
+        $attributes = [IO.File]::GetAttributes($fixture.Source)
+        try {
+            [IO.File]::SetAttributes($fixture.Source, $attributes -bor [IO.FileAttributes]::ReadOnly)
+            $readOnlyAttributes = [IO.File]::GetAttributes($fixture.Source)
+            New-Item -ItemType SymbolicLink -Path (Join-Path $cleanupRoot 'read-only') -Value $fixture.Source | Out-Null
+            New-Item -ItemType SymbolicLink -Path (Join-Path $cleanupRoot 'directory') -Value $fixture.Package | Out-Null
+            New-Item -ItemType SymbolicLink -Path (Join-Path $cleanupRoot 'dangling') -Value (Join-Path $fixture.Root 'missing') | Out-Null
+            Remove-ControlFixture $cleanupRoot
+            Assert-True (-not (Test-Path -LiteralPath $cleanupRoot)) 'Fixture cleanup left files behind.'
+            Assert-True ([IO.File]::ReadAllText($fixture.Source) -ceq 'source content') 'Cleanup changed external target bytes.'
+            Assert-True ([IO.File]::GetAttributes($fixture.Source) -eq $readOnlyAttributes) 'Cleanup changed external target attributes.'
+        } finally {
+            [IO.File]::SetAttributes($fixture.Source, $attributes)
+        }
+    }
     Test-Case 'declining a conflict preserves original bytes and suppresses replacement and state' {
         $fixture = New-ControlFixture
         [IO.File]::WriteAllText($fixture.Destination, 'irreplaceable original')
@@ -304,7 +333,7 @@ Invoke-PortableSync @sync
             Assert-True $failed 'Unavailable trust policy was silently treated as healthy.'
         }
     }
-    Write-Output "windows-installer-controls=PASS ($script:Passed cases)"
 } finally {
-    if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
+    Remove-ControlFixture $testRoot
 }
+Write-Output "windows-installer-controls=PASS ($script:Passed cases)"
