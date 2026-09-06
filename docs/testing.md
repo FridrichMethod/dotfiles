@@ -49,4 +49,4 @@ permission/inode assertions stay on Unix; NTFS/link behavior stays on Windows.
 Ordinary hosted-runner tests do not establish OpenSSH network-logon symlink
 trust or real Task Scheduler behavior; those remain explicitly scoped
 environment checks, documented in `windows-installer.md` and
-`update-contract.md`. See the [execution plan](plans/sync-hardening.md).
+`update-contract.md`.
