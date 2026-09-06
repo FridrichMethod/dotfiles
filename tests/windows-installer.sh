@@ -9,13 +9,15 @@ set -euo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO_ROOT/stow-all.ps1"
 
-# A symlink whose target already matches is indistinguishable from a healthy one
-# until something opens it: an untrusted reparse point carries the same tag,
-# flags and substitute name. Losing this probe silently reintroduces dotfiles
-# that resolve locally and fail in every ssh session.
-grep -Fq 'function Test-FileOpens' "$INSTALLER"
-grep -Fq 'function Test-UntrustedLink' "$INSTALLER"
-grep -Fq 'if (-not (Test-UntrustedLink -Link $destination' "$INSTALLER"
+# A local open cannot detect RedirectionGuard rejection in an SSH process.
+# The shared helper must enable enforcement only in a disposable child, and
+# the installer must consume its native errors for sources and destinations.
+grep -Fq 'Get-DotfilesLinkReadErrors -Paths $probePaths.ToArray()' "$INSTALLER"
+grep -Fq '$linkError -ne 448' "$INSTALLER"
+grep -Fq '$sourceError -eq 448' "$INSTALLER"
+grep -Fq -- '-Value @($item.Target)[0] -Force -Confirm:$false' "$INSTALLER"
+grep -Fq 'SetProcessMitigationPolicy(16, ref flags' "$REPO_ROOT/lib/windows-link-trust.ps1"
+grep -Fq '$start.RedirectStandardInput = $true' "$REPO_ROOT/lib/windows-link-trust.ps1"
 
 if ! grep -Fq 'Repair untrusted symlink' "$INSTALLER"; then
     echo "ERROR: installer must repair untrusted symlinks, not skip them" >&2
@@ -67,7 +69,8 @@ done
 if command -v pwsh >/dev/null 2>&1; then
     for ps_file in "$INSTALLER" "$REPO_ROOT/tests/windows-installer.ps1" \
         "$REPO_ROOT/setup-sync.ps1" "$REPO_ROOT/tests/run.ps1" \
-        "$REPO_ROOT/lib/terminal.ps1" "$REPO_ROOT/tests/terminal.ps1"; do
+        "$REPO_ROOT/lib/terminal.ps1" "$REPO_ROOT/tests/terminal.ps1" \
+        "$REPO_ROOT/lib/windows-link-trust.ps1" "$REPO_ROOT/tests/windows-installer-controls.ps1"; do
         INSTALLER_PATH="$ps_file" pwsh -NoProfile -NonInteractive -Command '
         $path = $env:INSTALLER_PATH
         if (-not (Test-Path -LiteralPath $path)) {
@@ -81,6 +84,7 @@ if command -v pwsh >/dev/null 2>&1; then
     '
     done
     pwsh -NoProfile -NonInteractive -File "$REPO_ROOT/tests/terminal.ps1"
+    pwsh -NoProfile -NonInteractive -File "$REPO_ROOT/tests/windows-installer-controls.ps1"
 else
     printf 'SKIP: Windows installer/native fixture parse checks (pwsh unavailable).\n'
 fi

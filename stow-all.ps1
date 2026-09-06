@@ -17,12 +17,15 @@
     Run this from an elevated PowerShell. Developer Mode (Settings >
     System > For developers) also lets it create symlinks without elevation,
     but a symlink created by a non-elevated process is an untrusted reparse
-    point: Windows refuses to traverse one for a file open whose token is a
-    network logon - which is what OpenSSH public-key auth produces - so every
-    stowed dotfile fails inside an ssh session with "the path cannot be
-    traversed because it contains an untrusted mount point" while resolving
-    fine locally. An elevated run creates trusted links and repairs untrusted
-    ones it finds.
+    point. Processes enforcing RedirectionGuard, including protected OpenSSH
+    sessions, refuse to traverse it with "the path cannot be traversed because
+    it contains an untrusted mount point" even when a local console can read
+    the same link. A separate read-only process enables RedirectionGuard to
+    check links even from a local console. An elevated run repairs rejected
+    source and destination links, preserving source links' relative targets.
+    Unsupported or failed trust checks stop the installation before syncing.
+    Declining any change leaves the installation partial; Strict reports a
+    failure and the login updater never records that revision as applied.
 
 .PARAMETER Strict
     Fail if any package, link or portable sync was skipped or warned.
@@ -120,12 +123,26 @@ $script:Repaired = 0
 $script:Unchanged = 0
 $script:BackedUp = 0
 $script:Warnings = [System.Collections.Generic.List[string]]::new()
+$script:LinkReadErrors = @{}
+$script:InstalledPaths = [Collections.Generic.List[string]]::new()
+. (Join-Path $RepoRoot 'lib/windows-link-trust.ps1')
 
 # Only a token holding SeCreateSymbolicLinkPrivilege creates trusted symlinks,
 # so both the repair path and the closing warning need to know how we run.
 $script:Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $script:IsElevated = ([Security.Principal.WindowsPrincipal]$script:Identity).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
+
+function Test-StowShouldProcess {
+    # A declined operation makes this installation partial. WhatIf is a
+    # successful preview, so it does not contribute warnings or fail Strict.
+    param([string]$Path, [string]$Action)
+    if ($PSCmdlet.ShouldProcess($Path, $Action)) { return $true }
+    if (-not $WhatIfPreference) {
+        $script:Warnings.Add("operation declined: $Action ($Path)")
+    }
+    return $false
+}
 
 function Get-StowIgnorePattern {
     <#
@@ -218,7 +235,7 @@ function Invoke-PortableSync {
         throw "$Label sync prerequisite missing: Git Bash from the Git for Windows installation."
     }
 
-    if ($CheckOnly -or $PSCmdlet.ShouldProcess($Live, "Synchronize portable $Label")) {
+    if ($CheckOnly -or (Test-StowShouldProcess $Live "Synchronize portable $Label")) {
         $syncArguments = @(($Helper -replace '\\', '/'), '--quiet')
         if ($CheckOnly) { $syncArguments += '--check' }
         $syncArguments += @(($Portable -replace '\\', '/'), ($Live -replace '\\', '/'))
@@ -271,48 +288,6 @@ function Test-ContentEquivalent {
     return [string]::Equals($textA, $textB, [StringComparison]::Ordinal)
 }
 
-function Test-FileOpens {
-    <#
-    .SYNOPSIS
-        True when a file can actually be opened for reading.
-    .DESCRIPTION
-        ReadWrite sharing keeps a file another process holds open - a profile
-        being sourced, a config being watched - from reading as a failure.
-    #>
-    param([Parameter(Mandatory)][string]$Path)
-
-    try {
-        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open,
-            [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-        $stream.Dispose()
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-function Test-UntrustedLink {
-    <#
-    .SYNOPSIS
-        True when a symlink resolves on paper but cannot be traversed.
-    .DESCRIPTION
-        Get-Item, Test-Path and fsutil all report an untrusted reparse point as
-        a healthy link: tag, flags and substitute name are byte-identical to a
-        trusted one. Only an open that traverses the link fails, so opening it
-        is the sole reliable probe. A target that will not open either means a
-        lock or a missing file rather than link trust, and rewriting the link
-        would not help, so that case is not reported as untrusted.
-    #>
-    param(
-        [Parameter(Mandatory)][string]$Link,
-        [Parameter(Mandatory)][string]$Target
-    )
-
-    if (Test-FileOpens -Path $Link) { return $false }
-    return (Test-FileOpens -Path $Target)
-}
-
 function Invoke-StowPackage {
     param(
         [Parameter(Mandatory)][string]$PackageRoot,
@@ -326,7 +301,7 @@ function Invoke-StowPackage {
     $patterns = @($GlobalIgnores) + @($localIgnores)
 
     foreach ($item in Get-ChildItem -LiteralPath $packagePath -Recurse -Force -File) {
-        $relative = $item.FullName.Substring($packagePath.Length).TrimStart('\')
+        $relative = $item.FullName.Substring($packagePath.Length).TrimStart('\', '/')
         $relativeUnix = $relative -replace '\\', '/'
 
         # Stow never installs its own control file.
@@ -338,34 +313,59 @@ function Invoke-StowPackage {
             continue
         }
 
-        # A tracked file may itself be a symlink into a submodule
-        # (common/pymol/.pymolrc). Linking an uninitialised one would only
-        # propagate a dead target.
-        if ($item.LinkType -eq 'SymbolicLink' -and
-            -not (Test-Path -LiteralPath $item.FullName)) {
-            $script:Warnings.Add(
-                "dangling source skipped: $PackageName/$relativeUnix " +
-                '(run: git submodule update --init --recursive)')
-            continue
+        # A source can itself be a symlink (for example .pymolrc into a
+        # submodule). Check it before its destination so repairing the outer
+        # link cannot hide an untrusted source in the chain.
+        $sourceRepaired = $false
+        if ($item.LinkType -eq 'SymbolicLink') {
+            $sourceError = $script:LinkReadErrors[$item.FullName]
+            if ($sourceError -in @(2, 3)) {
+                $script:Warnings.Add(
+                    "dangling source skipped: $PackageName/$relativeUnix " +
+                    '(run: git submodule update --init --recursive)')
+                continue
+            }
+            if ($sourceError -eq 448) {
+                if (-not $script:IsElevated) {
+                    $script:Warnings.Add("untrusted source symlink left in place: $PackageName/$relativeUnix (re-run elevated)")
+                    continue
+                }
+                if (-not (Test-StowShouldProcess $item.FullName 'Repair untrusted source symlink')) { continue }
+                # Use the raw target, never a resolved absolute path: Git
+                # tracks relative symlink text, including submodule links.
+                New-Item -ItemType SymbolicLink -Path $item.FullName `
+                    -Value @($item.Target)[0] -Force -Confirm:$false | Out-Null
+                $sourceError = (Get-DotfilesLinkReadErrors -Paths @($item.FullName))[$item.FullName]
+                $script:LinkReadErrors[$item.FullName] = $sourceError
+                $script:Repaired++
+                $sourceRepaired = $true
+            }
+            if ($sourceError -ne 0) {
+                $script:Warnings.Add("source unreadable under RedirectionGuard, skipped: $PackageName/$relativeUnix (Win32 $sourceError)")
+                continue
+            }
         }
 
         $destination = Join-Path $Target $relative
         $destinationDir = Split-Path -Parent $destination
 
-        if (-not (Test-Path -LiteralPath $destinationDir)) {
-            if ($PSCmdlet.ShouldProcess($destinationDir, 'Create directory')) {
-                New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
-            }
-        }
-
+        $backup = $null
+        $removeExisting = $false
+        $action = "Link to $($item.FullName)"
         $existing = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
         if ($existing) {
             if ($existing.LinkType -eq 'SymbolicLink') {
                 if (@($existing.Target)[0] -eq $item.FullName) {
-                    if (-not (Test-UntrustedLink -Link $destination `
-                                -Target $item.FullName)) {
+                    $linkError = if ($sourceRepaired) {
+                        (Get-DotfilesLinkReadErrors -Paths @($destination))[$destination]
+                    } else { $script:LinkReadErrors[$destination] }
+                    if ($linkError -eq 0) {
                         Write-Verbose "ok        $relativeUnix"
                         $script:Unchanged++
+                        continue
+                    }
+                    if ($linkError -ne 448) {
+                        $script:Warnings.Add("symlink unreadable under RedirectionGuard, skipped: $relativeUnix (Win32 $linkError)")
                         continue
                     }
                     # Recreating it is the only repair, and only an elevated
@@ -378,41 +378,52 @@ function Invoke-StowPackage {
                         $script:Unchanged++
                         continue
                     }
-                    if ($PSCmdlet.ShouldProcess(
-                            $destination, 'Repair untrusted symlink')) {
+                    if (Test-StowShouldProcess $destination 'Repair untrusted symlink') {
                         New-Item -ItemType SymbolicLink -Path $destination `
-                            -Value $item.FullName -Force | Out-Null
+                            -Value $item.FullName -Force -Confirm:$false | Out-Null
+                        $repairedError = (Get-DotfilesLinkReadErrors -Paths @($destination))[$destination]
+                        if ($repairedError -ne 0) {
+                            throw "Repaired symlink is still unreadable under RedirectionGuard: $destination (Win32 $repairedError)"
+                        }
                         Write-Verbose "repair    $relativeUnix"
                         $script:Repaired++
                     }
                     continue
                 }
-                if ($PSCmdlet.ShouldProcess($destination, 'Replace stale symlink')) {
-                    Remove-Item -LiteralPath $destination -Force -Confirm:$false
-                }
+                $action = "Replace stale symlink with link to $($item.FullName)"
+                $removeExisting = $true
             }
             elseif (Test-ContentEquivalent -PathA $destination -PathB $item.FullName) {
-                if ($PSCmdlet.ShouldProcess($destination, 'Adopt identical file')) {
-                    Remove-Item -LiteralPath $destination -Force -Confirm:$false
-                }
+                $action = "Adopt identical file as link to $($item.FullName)"
+                $removeExisting = $true
             }
             else {
                 $backup = '{0}.stow-backup-{1}-{2}' -f $destination,
                     (Get-Date -Format 'yyyyMMddHHmmss'), [Guid]::NewGuid().ToString('N')
-                if ($PSCmdlet.ShouldProcess($destination, "Back up to $backup")) {
-                    Move-Item -LiteralPath $destination -Destination $backup
-                    Write-DotfilesLog info "Backed up $relativeUnix -> $(Split-Path -Leaf $backup)"
-                    $script:BackedUp++
-                }
+                $action = "Back up to $backup and link to $($item.FullName)"
             }
         }
 
-        if ($PSCmdlet.ShouldProcess($destination, "Link to $($item.FullName)")) {
-            New-Item -ItemType SymbolicLink -Path $destination `
-                -Value $item.FullName -Force | Out-Null
-            Write-Verbose "link      $relativeUnix"
-            $script:Linked++
+        # Backup/removal and replacement are one consent decision. In
+        # particular, declining a backup must never fall through to a forced
+        # link creation that can overwrite the original without a backup.
+        if (-not (Test-StowShouldProcess $destination $action)) { continue }
+        if (-not (Test-Path -LiteralPath $destinationDir)) {
+            New-Item -ItemType Directory -Path $destinationDir -Force -Confirm:$false | Out-Null
         }
+        if ($backup) {
+            Move-Item -LiteralPath $destination -Destination $backup -Confirm:$false
+            Write-DotfilesLog info "Backed up $relativeUnix -> $(Split-Path -Leaf $backup)"
+            $script:BackedUp++
+        } elseif ($removeExisting) {
+            Remove-Item -LiteralPath $destination -Force -Confirm:$false
+        }
+        # Do not overwrite a file that appeared after the initial check.
+        New-Item -ItemType SymbolicLink -Path $destination `
+            -Value $item.FullName -Confirm:$false | Out-Null
+        Write-Verbose "link      $relativeUnix"
+        $script:Linked++
+        $script:InstalledPaths.Add($destination)
     }
 }
 
@@ -451,6 +462,7 @@ $syncPlan = @(
 # Validate every selected merge and every ignore expression before mutation.
 # --check must also leave a missing target directory absent during -WhatIf.
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync -CheckOnly }
+$probePaths = [Collections.Generic.List[string]]::new()
 foreach ($rootAndPackages in @(
         @{ Root = $commonRoot; Packages = $CommonPackages },
         @{ Root = $hostRoot; Packages = $hostPackages })) {
@@ -463,7 +475,25 @@ foreach ($rootAndPackages in @(
         $patterns = @($globalIgnores) + @(Get-StowIgnorePattern `
                 -Path (Join-Path $packagePath '.stow-local-ignore') -Prefix '')
         foreach ($pattern in $patterns) { [void][regex]::new($pattern) }
+        foreach ($item in Get-ChildItem -LiteralPath $packagePath -Recurse -Force -File) {
+            $relative = $item.FullName.Substring($packagePath.Length).TrimStart('\', '/')
+            if ($relative -eq '.stow-local-ignore' -or
+                (Test-StowIgnored -RelativePath ($relative -replace '\\', '/') -Patterns $patterns)) { continue }
+            if ($item.LinkType -eq 'SymbolicLink') { $probePaths.Add($item.FullName) }
+            $destination = Join-Path $Target $relative
+            $existing = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
+            if ($existing -and $existing.LinkType -eq 'SymbolicLink' -and
+                @($existing.Target)[0] -eq $item.FullName) { $probePaths.Add($destination) }
+        }
     }
+}
+# Even an initial install checks policy availability before any apply. The
+# source script is an ordinary readable file and also validates the checkout's
+# parent path. A failed/unsupported probe must never count as trusted.
+$probePaths.Add($PSCommandPath)
+$script:LinkReadErrors = Get-DotfilesLinkReadErrors -Paths $probePaths.ToArray()
+if ($script:LinkReadErrors[$PSCommandPath] -ne 0) {
+    throw 'The installer checkout is not readable under RedirectionGuard; repair its parent path first.'
 }
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow preflight failed: $($script:Warnings -join '; ')"
@@ -485,6 +515,18 @@ if ($HostDir) {
     foreach ($package in $hostPackages) {
         Invoke-StowPackage -PackageRoot $hostRoot -PackageName $package `
             -GlobalIgnores $globalIgnores
+    }
+}
+
+# Validate final destinations in one guarded process, including newly created
+# links and host overrides. A trusted file link inside an untrusted directory
+# still fails traversal; such an install must not advance applied state.
+if (-not $WhatIfPreference -and $script:InstalledPaths.Count -gt 0) {
+    $installedErrors = Get-DotfilesLinkReadErrors -Paths $script:InstalledPaths.ToArray()
+    foreach ($path in $installedErrors.Keys) {
+        if ($installedErrors[$path] -ne 0) {
+            $script:Warnings.Add("installed symlink unreadable under RedirectionGuard: $path (Win32 $($installedErrors[$path]))")
+        }
     }
 }
 

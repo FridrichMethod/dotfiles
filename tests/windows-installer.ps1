@@ -62,7 +62,7 @@ function New-Fixture {
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
     foreach ($relative in @('stow-all.ps1', 'scripts/dotfiles-auto-stow.ps1', '.stowrc',
-            'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1',
+            'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
             'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
@@ -184,6 +184,56 @@ try {
         $changes = & $gitExecutable -C $fixture.Repo status --porcelain
         Assert-True (-not $changes) 'Installation modified the fixture checkout.'
         Assert-NoState $fixture
+    }
+
+    Test-Case 'guarded child probes trusted and missing paths without changing caller mitigation' {
+        . (Join-Path $sourceRoot 'lib/windows-link-trust.ps1')
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class DotfilesCallerMitigation {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetProcessMitigationPolicy(IntPtr process, int policy, out uint flags, UIntPtr size);
+    public static uint Read() {
+        uint flags;
+        if (!GetProcessMitigationPolicy(new IntPtr(-1), 16, out flags, (UIntPtr)4))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        return flags;
+    }
+}
+'@
+        $fixture = New-Fixture
+        $source = Join-Path $fixture.Repo 'common/git/.fixture-git'
+        $link = Join-Path $fixture.Root 'trusted link-测试'
+        $missing = Join-Path $fixture.Root 'missing-file'
+        New-Item -ItemType SymbolicLink -Path $link -Value $source | Out-Null
+        $before = [DotfilesCallerMitigation]::Read()
+        $errors = Get-DotfilesLinkReadErrors -Paths @($source, $link, $missing)
+        Assert-Equal 0 $errors[$source] 'Guarded process could not read ordinary source.'
+        Assert-Equal 0 $errors[$link] 'Guarded process rejected an elevated trusted link.'
+        Assert-Equal 2 $errors[$missing] 'Guarded process did not return native missing-file error.'
+        Assert-Equal $before ([DotfilesCallerMitigation]::Read()) 'Probe changed the caller mitigation policy.'
+    }
+
+    Test-Case 'source symlinks keep their exact relative Git payload across install and rerun' {
+        $fixture = New-Fixture
+        $source = Join-Path $fixture.Repo 'common/pymol/.pymolrc'
+        Write-FixtureFile (Join-Path $fixture.Repo 'common/pymol/scripts/init.pml') 'pymol fixture'
+        New-Item -ItemType SymbolicLink -Path $source -Value './scripts/init.pml' | Out-Null
+        $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
+        Assert-True (-not [IO.Path]::IsPathRooted($originalTarget)) 'Fixture source target is not relative.'
+        Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
+        Invoke-FixtureGit -C $fixture.Repo add common/pymol
+        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'relative symlink fixture'
+        $before = & $gitExecutable -C $fixture.Repo show HEAD:common/pymol/.pymolrc
+        Assert-Success (Invoke-Install $fixture)
+        Assert-Success (Invoke-Install $fixture)
+        Assert-Equal $originalTarget @((Get-Item -LiteralPath $source -Force).Target)[0] 'Relative source symlink text changed.'
+        Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/pymol/.pymolrc) 'Git source symlink payload changed.'
+        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Source symlink install dirtied the checkout.'
+        Assert-Link (Join-Path $fixture.Target '.pymolrc') $source
     }
 
     Test-Case 'uppercase WIN is normalized before selecting the overlay' {

@@ -125,13 +125,14 @@ cd $HOME\dotfiles
 
 Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point at a file inside ext4. A WSL distro keeps its own clone and uses `./stow-all.sh wsl-ubuntu` as usual.
 
-**Why elevated?** Developer Mode (Settings → System → For developers) also lets the script create symlinks without elevation, but a symlink created by a non-elevated process is an *untrusted* reparse point. Windows refuses to traverse one for a file open whose token is a network logon — exactly what OpenSSH public-key auth produces — so inside an `ssh` session every stowed dotfile fails with `The path cannot be traversed because it contains an untrusted mount point` (error 448) while the same links resolve fine in a local session. That is not cosmetic: git dies with `fatal: unknown error occurred while reading the configuration files` because `~/.gitconfig` is unreadable. Neither `Get-Item` nor `fsutil reparsepoint query` can tell a trusted link from an untrusted one — tag, flags and substitute name are byte-identical — only the owner differs (`BUILTIN\Administrators` versus your user SID).
+**Why elevated?** Links created without elevation can be rejected by processes enforcing [RedirectionGuard](https://www.microsoft.com/en-us/msrc/blog/2025/06/redirectionguard-mitigating-unsafe-junction-traversal-in-windows/), which [current Windows OpenSSH installers enable](https://github.com/PowerShell/openssh-portable/pull/808). The resulting error is `The path cannot be traversed because it contains an untrusted mount point` (448); Git can fail when it cannot read `~/.gitconfig`. The same link can remain readable in an ordinary local PowerShell, so local readability is not a trust check.
 
 Like `stow-all.sh`, the Windows installer validates all selected AI inputs and the parser runtime with the shared helpers' read-only `--check`, synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. A later filesystem failure can still produce a partial install, but must not acknowledge the revision; retry after fixing it. Windows-only differences from the POSIX installer:
 
 - **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
 - **Pre-existing files are adopted, not clobbered.** A byte-identical file, or valid UTF-8 differing only by CRLF, is replaced by its link; case-only and binary differences are backed up to `<name>.stow-backup-<timestamp>-<unique-id>` first.
-- **Untrusted symlinks are repaired, not skipped.** A link already pointing at the right file is normally left alone, but a matching target says nothing about whether Windows will follow the link, so each one is opened to check. Untrusted links are rewritten when the run is elevated (counted as `repaired:`) and reported as warnings when it is not.
+- **Link trust is checked in a separate process.** The probe enables RedirectionGuard before opening source and destination links, without changing the calling shell. Elevated runs rebuild rejected links, retaining relative targets for repository-side links. An unavailable or failed trust probe stops installation; other unreadable links and unelevated repairs are reported as incomplete.
+- **Confirmation covers a complete file operation.** `-Confirm` accepts or declines backup/removal and link creation together. Declined changes prevent recording the revision as applied and cause `-Strict` to fail.
 
 Use `-Verbose` for per-link details. Normal output shows stages, backups, warnings
 and summary counts; `-WhatIf` reports a preview, not a successful install.
@@ -265,9 +266,13 @@ dotfiles/
 1. **`common/`** is stowed first — every package, every host. Shared baseline.
 2. **`<host>/`** is stowed second — overrides where the machine differs.
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
-4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files) so `sshd` stays happy.
+4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
+
+The shared shell profile prepends `/usr/local/man` while retaining the default
+manual search directories when `MANPATH` was unset or empty. Repeated sourcing
+preserves existing search paths without duplicating the entry.
 
 > **Git overrides** flow through `[include] path = ~/.gitconfig_local` — the shared `.gitconfig` includes the host file if it exists.
 > **SSH overrides** flow through `Include ~/.ssh/config.d/*.conf` — the shared root config delegates to per-concern fragments.
@@ -353,7 +358,7 @@ Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/a
 | First-time install | Foreground (you see the curl progress) |
 | Refresh interval | Every **7 days** |
 | Subsequent refreshes | **Background** — never blocks shell startup |
-| Lockfile | `$XDG_CACHE_HOME/awesome-skills/in-progress.pid` |
+| Lock directory | `${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/in-progress.lock` |
 | Log | `$XDG_CACHE_HOME/awesome-skills/last.log` |
 | Failure handling | Stamp not advanced → retries next shell session |
 | Manual trigger | `sync-skills` alias |
@@ -375,11 +380,21 @@ Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/a
 |---|---|---|
 | `AWESOME_SKILLS_AUTO_UPDATE` | `1` | set to `0` to disable entirely |
 | `AWESOME_SKILLS_REFRESH_DAYS` | `7` | change the throttle window |
-| `AWESOME_SKILLS_FORCE` | `0` | set to `1` to bypass throttle once |
+| `AWESOME_SKILLS_FORCE` | `0` | set to `1` to bypass interactive/session/time throttles once; active locks and `AUTO_UPDATE=0` still apply |
 | `AWESOME_SKILLS_BG` | `1` | set to `0` to run synchronously |
 | `AWESOME_SKILLS_INSTALLER_URL` | upstream `install.sh` | point at a fork or branch |
 
-Force a sync:
+The lock belongs to the independent worker, so closing the shell that launched
+it does not allow a second installer to run concurrently. The directory remains
+after completion: `pid` is `0` when idle, and a dead worker can be replaced under
+a short recovery lock. An active legacy `in-progress.pid` is also respected.
+An interrupted PID publication or abandoned `recover` directory is left in
+place and reported, rather than risking simultaneous writes. If this occurs,
+first check that no sync is running, then remove the exact residual lock named
+in the diagnostic and run `sync-skills` again. Background diagnostics go to
+`last.log`.
+
+Force a sync, including after this shell's automatic startup check:
 
 ```bash
 sync-skills
@@ -522,7 +537,7 @@ stow --restow --no-folding -d common newtool
 - **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync`, and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
 - **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist aligned whenever shared Codex settings change.
 - **Codex exec policy is layered**: keep reviewed cross-host guardrails in `portable.rules`; leave generated or project/host-specific approvals in the untracked `default.rules`.
-- **fcitx5 profile is materialized**: fcitx5 rewrites `~/.config/fcitx5/profile` at runtime, so `.stowrc` excludes it and `fcitx5-profile-sync` writes the tracked baseline as a machine-local regular file; the baseline is authoritative and re-asserted on stow.
+- **fcitx5 profile is materialized**: fcitx5 rewrites `~/.config/fcitx5/profile` at runtime, so `.stowrc` excludes it and `fcitx5-profile-sync` writes the tracked baseline as a machine-local regular file; the baseline is authoritative and re-asserted on stow. Invalid directory or special-file targets fail visibly; an existing link remains intact until its replacement is fully staged, so staging failures preserve the old profile.
 - **One Stow owner per target**: a host-specific AI config must replace, not duplicate, the corresponding file in `common/`.
 - **POSIX vs Bash vs Zsh**: shared logic lives in `common/sh/`; Bash/Zsh-specific syntax stays in matching shell files.
 - **CI mirrors local**: every commit is checked with the same `shellcheck`/`shfmt`/`stylua` you run via `pre-commit`.

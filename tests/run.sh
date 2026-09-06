@@ -62,6 +62,7 @@ node --test "$TEST_DIR/claude-customizations.cjs"
 tests=(
     test-entrypoints.sh
     terminal.sh
+    shell-profile.sh
     config-sync.sh
     ai-config-sync.sh
     codex-config-sync.sh

@@ -372,7 +372,7 @@ ln -s "$TEST_TMP/ssh-sources/config" "$TEST_HOME/.ssh/config"
 ln -s "$TEST_TMP/ssh-sources/nested/example.conf" \
     "$TEST_HOME/.ssh/config.d/example.conf"
 ln -s "$TEST_TMP/ssh-sources/missing.conf" \
-    "$TEST_HOME/.ssh/config.d/dangling.conf"
+    "$TEST_HOME/.ssh/config.d/z-dangling.conf"
 chmod 777 "$TEST_HOME/.ssh" "$TEST_HOME/.ssh/config.d"
 chmod 666 \
     "$TEST_TMP/ssh-sources/config" \
@@ -384,6 +384,10 @@ assert_mode "$TEST_TMP/ssh-sources/config" 600
 assert_mode "$TEST_TMP/ssh-sources/nested/example.conf" 600
 [[ -L "$TEST_HOME/.ssh/config" ]]
 [[ -L "$TEST_HOME/.ssh/config.d/example.conf" ]]
-[[ -L "$TEST_HOME/.ssh/config.d/dangling.conf" ]]
+[[ -L "$TEST_HOME/.ssh/config.d/z-dangling.conf" ]]
+
+grep -Fq '[dotfiles] [ok] Stow completed' "$TEST_TMP/ssh-permissions.stdout"
+printf '%s\n' "$TEST_HOME" "$(uname -s)" '' 'test-head' >"$TEST_TMP/expected-state"
+cmp "$STATE" "$TEST_TMP/expected-state"
 
 echo "stow-all=PASS"

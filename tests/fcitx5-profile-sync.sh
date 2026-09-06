@@ -75,6 +75,40 @@ cmp -s \
     "$TEST_TMP/symlink/source-profile" \
     "$TEST_TMP/symlink/live-profile"
 
+# Staging and replacement failures must preserve the original legacy link.
+mkdir -p "$TEST_TMP/failure-bin" "$TEST_TMP/atomic"
+printf '%s\n' 'original profile' >"$TEST_TMP/atomic/original"
+ln -s original "$TEST_TMP/atomic/live"
+for failing_command in mktemp cp chmod mv; do
+    printf '#!/bin/sh\nexit 17\n' >"$TEST_TMP/failure-bin/$failing_command"
+    chmod +x "$TEST_TMP/failure-bin/$failing_command"
+    assert_status 17 env PATH="$TEST_TMP/failure-bin:$PATH" \
+        "$SYNC" "$TEST_TMP/portable-profile" "$TEST_TMP/atomic/live"
+    [[ -L "$TEST_TMP/atomic/live" ]]
+    [[ "$(readlink "$TEST_TMP/atomic/live")" == original ]]
+    grep -Fxq 'original profile' "$TEST_TMP/atomic/live"
+    if compgen -G "$TEST_TMP/atomic/.fcitx5-profile.*" >/dev/null; then
+        echo "ERROR: staging failure leaked a temporary file" >&2
+        exit 1
+    fi
+    rm "$TEST_TMP/failure-bin/$failing_command"
+done
+
+# A directory must never receive the temporary file and masquerade as success.
+mkdir "$TEST_TMP/directory-live"
+printf '%s\n' 'keep directory contents' >"$TEST_TMP/directory-live/sentinel"
+ln -s directory-live "$TEST_TMP/directory-link"
+mkfifo "$TEST_TMP/fifo-live"
+for invalid_live in directory-live directory-link fifo-live; do
+    assert_status 1 "$SYNC" "$TEST_TMP/portable-profile" "$TEST_TMP/$invalid_live"
+    grep -Fq 'live profile is not a regular file' "$TEST_TMP/status.stderr"
+done
+[[ -d "$TEST_TMP/directory-live" ]]
+[[ -L "$TEST_TMP/directory-link" ]]
+[[ -p "$TEST_TMP/fifo-live" ]]
+grep -Fxq 'keep directory contents' "$TEST_TMP/directory-live/sentinel"
+[[ "$(ls -A "$TEST_TMP/directory-live")" == sentinel ]]
+
 # Missing input and bad arity leave an existing live file untouched.
 printf '%s\n' 'keep-me' >"$TEST_TMP/failure-live"
 failure_inode="$(python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_ino)' "$TEST_TMP/failure-live")"

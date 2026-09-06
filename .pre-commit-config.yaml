@@ -57,6 +57,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|scripts/dotfiles-update\.sh|stow-all\.sh)$
+      - id: shell-profile
+        name: portable shell profile and default manual search
+        entry: tests/shell-profile.sh
+        language: script
+        pass_filenames: false
+        files: ^(common/sh/\.profile|tests/shell-profile\.sh)$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh
@@ -110,7 +116,7 @@ repos:
         entry: tests/windows-installer.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/terminal\.ps1|tests/terminal\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
+        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/(terminal|windows-link-trust)\.ps1|tests/(terminal|windows-installer-controls)\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
       - id: update-hooks
         name: automatic update and stow behavior
         entry: tests/update-hooks.sh

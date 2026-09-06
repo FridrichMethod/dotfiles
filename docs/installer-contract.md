@@ -17,3 +17,9 @@ Preflight is not a multi-file transaction. A later filesystem failure can
 leave earlier files applied, but the installer must fail without acknowledging
 that revision. Each sync helper is responsible for safe individual file
 replacement and retries must be idempotent.
+
+SSH permission cleanup skips dangling optional snippets regardless of their
+filename order. An actual chmod failure still fails the installation. The
+fcitx5 profile helper rejects directory and special-file targets, and retains
+legacy symlinks until the replacement is fully staged. Failed staging or
+replacement leaves the old profile accessible and cannot advance applied state.

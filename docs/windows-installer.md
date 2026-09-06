@@ -26,7 +26,20 @@ configuration/applied revision and does not compare its profile location with
 the operator's actual PowerShell profile. `-WhatIf` still validates dependencies
 and inputs but creates no target directories, live files, links, backups or
 applied-state metadata. `-Strict` also rejects missing package warnings before
-application; warnings during linking prevent acknowledgement as before.
+application. A declined `-Confirm` operation is also an incomplete installation:
+it produces a warning, prevents acknowledgement and fails `-Strict`. Each file's
+backup/removal and replacement share a single confirmation, so declining backup
+cannot fall through to an unbacked replacement. `-WhatIf` remains a preview.
+
+A separate, read-only PowerShell process enables RedirectionGuard and checks
+source and destination symlinks. This catches links that are readable in an
+ordinary local PowerShell but rejected by protected processes. The caller's
+process mitigation settings are not changed. Missing or unsupported enforcement,
+failed probes and malformed probe output stop installation before live sync.
+Elevated runs rebuild links rejected with Win32 error 448 and verify the result;
+repository-side links retain their original relative targets. Missing targets
+and other read errors are reported as incomplete, rather than treated as trust
+failures that rewriting a link would fix.
 
 `tests/windows-installer.ps1` requires native Windows, Git for Windows, the
 provisioned parser runtime and an elevated PowerShell process. It copies a
@@ -40,9 +53,13 @@ the real user profile and all fixture trees are removed after the test.
 Adoption is byte-identical or strictly decoded UTF-8 differing only by CRLF;
 case-only differences and invalid UTF-8 conflicts are backed up, not discarded.
 
-Unix checks in `tests/windows-installer.sh` preserve the source-level trust
-guardrails and parse both PowerShell files when `pwsh` is installed. They are
-supplemental, not native execution coverage.
+`tests/windows-installer-controls.ps1` runs on Unix and Windows. A scripted
+PowerShell host answers actual `ShouldProcess` prompts to test accepted/declined
+file operations, unchanged originals, missing backups, preview and applied-state
+handling. Trust results are injected for portable repair-control tests. Unix
+checks in `tests/windows-installer.sh` run this suite and parse the installer,
+probe library and tests when `pwsh` is installed. Native Windows integration
+separately exercises the actual protected probe and NTFS links.
 
 Hosted Windows integration does **not** establish the OpenSSH network-logon
 token's symlink-trust behavior or real Task Scheduler registration/execution.

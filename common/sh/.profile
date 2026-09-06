@@ -7,7 +7,8 @@ export LANG="en_US.UTF-8"
 
 case ":${MANPATH-}:" in
     *:/usr/local/man:*) ;;
-    *) export MANPATH="/usr/local/man${MANPATH:+:${MANPATH}}" ;;
+    # An empty entry retains man's default search path when MANPATH was unset.
+    *) export MANPATH="/usr/local/man:${MANPATH-}" ;;
 esac
 
 # User binaries first in PATH

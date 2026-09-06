@@ -10,7 +10,7 @@ alias vi='nvim'
 # ssh for terminal
 alias ssh='TERM=xterm-256color ssh'
 
-# Force a manual awesome-skills sync (bypasses the 7-day throttle)
+# Force a manual awesome-skills sync (bypasses session and 7-day throttles)
 alias sync-skills='AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/awesome-skills-update.sh"'
 
 # Load host-specific alias additions (if any)
