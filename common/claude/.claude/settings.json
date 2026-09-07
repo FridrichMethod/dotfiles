@@ -38,11 +38,17 @@
       "Bash(gh issue create *)",
       "Bash(gh release create *)"
     ],
+    "deny": [
+      "Bash(sudo pip:*)",
+      "Bash(sudo pip3:*)",
+      "Bash(sudo rm *)",
+      "Bash(rm -rf /)",
+      "Bash(rm -fr /)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -fr ~)"
+    ],
     "ask": [
-      "Bash(git clean *)",
-      "Bash(rm *)",
-      "Bash(sudo *)",
-      "Bash(npx *)"
+      "Bash(sudo *)"
     ]
   },
   "attribution": {
@@ -130,7 +136,17 @@
   "voiceEnabled": true,
   "tui": "fullscreen",
   "autoMode": {
-    "classifyAllShell": true
+    "classifyAllShell": true,
+    "allow": [
+      "$defaults",
+      "Removing reproducible artifacts is allowed: paths under /tmp, the session scratchpad, node_modules, .venv, __pycache__, build and dist output, and tool caches such as .pytest_cache and .mypy_cache. A build or install step regenerates them and they hold no user data."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Never remove a GNU Stow link target in the dotfiles repository, or the ~/.claude, ~/.codex, ~/.ssh and ~/.config trees those links point into: deleting a link target silently breaks every host that stows it.",
+      "Never remove a conda or mamba environment directory, .venv-sync, or any other Python environment directory: they are expensive to rebuild and are not tracked in git.",
+      "Never remove untracked or unstaged work in a git repository. When the git status shown with the command reports staged, modified or untracked files, move them aside or stash them instead of deleting them."
+    ]
   },
   "statusLine": {
     "type": "command",
