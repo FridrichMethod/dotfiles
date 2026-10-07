@@ -51,6 +51,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: sherlock-kit-integration
+        name: offline Sherlock pin and instruction projection
+        entry: tests/sherlock-kit.sh
+        language: script
+        pass_filenames: false
+        files: ^(lib/sherlock_kit_integration\.py|sherlock-kit\.pin\.json|setup-sherlock-kit\.(sh|ps1)|common/(claude/\.claude/CLAUDE\.md|codex/\.codex/AGENTS\.md|codex/\.local/bin/shk)|tests/(test_sherlock_kit_integration\.py|sherlock-kit\.sh))$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh

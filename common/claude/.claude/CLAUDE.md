@@ -52,3 +52,47 @@
 - Inspect the final diff or artifact before reporting completion.
 - State the outcome, key changes, validation performed, and remaining risks or limitations.
 - When blocked, identify the concrete blocker and the smallest user action needed to continue.
+
+<!-- SHERLOCK-KIT:BEGIN -->
+<!-- source: SHERLOCK.md; schema_version: 1; policy_sha256: cb6fe161d747c7a7254d62b46cf5a04fd63cb938afdf06235da69d2a9aa8f582 -->
+When working on or connecting to Sherlock: read `/etc/agents/AGENTS.md` and the
+relevant topic guides before acting; check `hostname` and `SLURM_JOB_ID` first.
+
+- Never extend `$SCRATCH` or `$GROUP_SCRATCH` lifetime artificially: no touching,
+  rewriting, copying over, or refresh/keepalive helpers for purge evasion, even
+  once. This can cause account suspension. Normal useful computation, checkpoint
+  writes, and legitimate transfers are allowed; keep durable copies elsewhere.
+- Sustained computation, heavy builds/installations, and intensive internal copies
+  require a Slurm allocation. External bulk transfers use DTNs or Globus. DTNs
+  have no interactive shell; never run control commands there or SSH to them from
+  Sherlock. Use explicit paths because DTN default paths differ from login nodes.
+- Slurm requests need explicit walltime and correct CPU/GPU resources and partition.
+  Sherlock does not support `--account` or node exclusion (`--exclude`, `-x`);
+  use supported constraints and discover hardware with `sh_part`/`sh_node_feat`.
+- Leave at least 60 seconds between status checks; prefer dependencies and shared
+  cached queries. No `watch` or shell polling loops, duplicate pending submissions,
+  or blind failure retries. Batch short work into at least ten minutes of real useful
+  work, preferably thirty; never pad jobs with sleeps.
+- Resolve storage via environment roots on the intended host, then validate paths
+  and authorization. Avoid intensive `$HOME` job I/O; persistent `$GROUP_HOME`
+  environments and small reads are allowed. Stage file-heavy work in
+  `$L_SCRATCH_JOB`; export needed outputs before job end. `$L_SCRATCH` cleanup
+  follows the user's last job on a node. Scratch has no backup and a 90-day purge.
+- Use only authorized directories/jobs and Low/Moderate Risk data. No borrowed
+  access inferred from scheduler visibility or old scripts, credential/session
+  sharing, authentication bypass, system configuration probing, or other-user scans.
+  Cancel jobs through Slurm. Never publish secrets or private grant/configuration.
+- Check `ml spider`; prefer modules, suitable existing group environments, then an
+  authorized `$GROUP_HOME` environment/container. Initialize batch environments
+  explicitly; keep shell startup cheap. No unattended login-node agent servers,
+  indefinite restart supervisors, or recurring future agent sessions; preserve
+  managed client/sandbox restrictions. The site module is `pi-coding-agent`.
+- Use bounded noninteractive OpenSSH, normally `sherlock-plain`, and human
+  authentication bootstrap. No authentication storms or stored MFA/passwords.
+  A lost mutation reply is unknown; preserve its reservation and reconcile identity
+  before retrying. `ssh -O check` only checks a local master. Doctor is read-only.
+
+Full policy and provenance: `shk policy`; installed identity: `shk policy --identity`.
+The toolkit's transport/projection does not enforce arbitrary scripts or certify
+scientific results. Consumer resources, grants, budgets, and validators are explicit.
+<!-- SHERLOCK-KIT:END -->

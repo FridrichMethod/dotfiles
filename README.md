@@ -518,6 +518,32 @@ sync-skills
 # Then authenticate Claude Code and Codex on this host.
 ```
 
+## Pinned Sherlock toolkit
+
+The common global instruction files carry matching marked policy projections
+from [`sherlock-kit.pin.json`](sherlock-kit.pin.json). The block applies when
+working on or connecting to Sherlock from any host. The executable is installed
+separately and is not downloaded by Stow, profiles or automatic updates:
+
+```sh
+./setup-sherlock-kit.sh
+./stow-all.sh <host>
+shk policy
+shk doctor
+python3 -I -B lib/sherlock_kit_integration.py --check  # offline, no shk needed
+```
+
+On Windows use `./setup-sherlock-kit.ps1 -Python python`, followed by the normal
+`./stow-all.ps1 win`; the native command is `~/.local/bin/shk.cmd`. Frozen releases
+live in the private persistent `~/.local/share/sherlock-kit/revisions/REV` directory,
+independent of development worktrees. A sole stable launcher is owned by
+`common/codex`; installations retain older releases for reconciliation. Pulling
+dotfiles updates the advertised instructions before the installed executable:
+the launcher reports an identity mismatch and doctor diagnoses it. Run explicit
+setup to activate the new pin. Hooks remain opt-in and require separate client
+registration, trust and blocking tests; installation alone does not activate them.
+See the [installation and update contract](docs/sherlock-kit.md).
+
 ## Adding a New Package
 
 ```bash

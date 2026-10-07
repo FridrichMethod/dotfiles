@@ -64,6 +64,7 @@ tests=(
     terminal.sh
     shell-profile.sh
     config-sync.sh
+    sherlock-kit.sh
     ai-config-sync.sh
     codex-config-sync.sh
     fcitx5-profile-sync.sh
