@@ -10,6 +10,7 @@ set -euo pipefail
 # The common Claude package links local Node helpers and syncs its defaults;
 # Node.js 18+ must be on PATH when Claude runs the hooks and status line.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
+# Sherlock toolkit installation is a separate explicit ./setup-sherlock-kit.sh step.
 # All selected AI inputs are checked before any live configuration is changed.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"

@@ -12,6 +12,7 @@ source-to-test behavior matrix instead.
 
 | Production target | Test | Covered behavior |
 | --- | --- | --- |
+| `lib/sherlock_kit_integration.py`, explicit setup and stable `shk` launcher | `test_sherlock_kit_integration.py`, `sherlock-kit.sh` | offline pin/projection checks, strict markers, source-only block updates, frozen identity mismatch, private activation, failed/concurrent setup protection, symlink refusal, shared POSIX/Windows backend; actual client delivery remains separate |
 | `lib/config_sync.py` and sync runtime/wrappers | `test_config_sync.py`, `config-sync.sh` | parsed TOML multiline/quoted/dotted/inline/AoT forms, required/retired ownership, JSON authoritative arrays and type-sensitive no-op, source immutability, explicit migration, read-only preflight, invalid/unreadable inputs, adjacent replacement and failure cleanup, stricter permissions retained on no-op/write, quiet success but visible errors, JSON/rules with stdlib-only runtime |
 | `common/sh/.profile` | `shell-profile.sh` | unset/empty/explicit MANPATH, repeated sourcing in sh/Bash/Zsh, actual default man-page lookup when installed |
 | `lib/terminal.sh`, `lib/terminal.ps1` | `terminal.sh`, `terminal.ps1` | TTY versus redirected output, color overrides, NO_COLOR and dumb terminals, literal messages, silent sourcing, Powerlevel10k instant-prompt capture replay across every available POSIX shell, PowerShell stream capture and preference isolation |

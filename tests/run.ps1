@@ -41,6 +41,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_config_sync.py')
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_config_sync.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Configuration backend tests failed.' }
 
+Write-Output '==> test_sherlock_kit_integration.py'
+& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_sherlock_kit_integration.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Sherlock integration tests failed.' }
+& $syncPython -I -B (Join-Path $repoRoot 'lib/sherlock_kit_integration.py') --check
+if ($LASTEXITCODE -ne 0) { throw 'Sherlock pin/projection check failed.' }
+
 Write-Output '==> claude-customizations.cjs'
 & node --test (Join-Path $PSScriptRoot 'claude-customizations.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed.' }

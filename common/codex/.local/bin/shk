@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Stable launcher owned by the common Codex Stow package."""
+from pathlib import Path
+import sys
+
+sys.dont_write_bytecode = True
+root = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(root / "lib"))
+from sherlock_kit_integration import launch
+
+try:
+    launch(root, sys.argv[1:])
+except (OSError, ValueError) as exc:
+    print(f"shk: {exc}; run setup-sherlock-kit explicitly", file=sys.stderr)
+    sys.exit(1)
