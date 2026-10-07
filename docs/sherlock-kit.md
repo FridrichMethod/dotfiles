@@ -76,3 +76,17 @@ Apply `--check` first. A later ordinary sync still follows ordinary baseline
 ownership; persistent opt-in installer wiring, removal/upgrades, actual guard
 registration/trust and negative smoke tests are Phase 5 work. Codex `--hooks`
 is rejected until its installed schema and trust have been verified.
+
+## Foundation activation evidence (2026-10-07)
+
+Toolkit pin f91b68b was fetched from the public owner repository and installed into
+a temporary target, then explicitly activated by the integrator from canonical
+dotfiles. The stable launcher resolves to canonical dotfiles, never a temporary
+worktree. Local doctor confirms frozen revision/policy and both instruction blocks.
+Opt-in remote doctor confirms the control endpoint and local DTN master; DTN shell
+capability is deliberately unverified. Full pre-commit checks passed after merge.
+Actual Codex 0.161.0 prompt inspection confirms the policy in clean, AGENTS,
+AGENTS.override and CLAUDE fallback contexts. Claude 2.1.293 real loading remains
+pending automatic-review authorization for external transmission of test context.
+Native PowerShell execution was unavailable locally; cross-platform fixtures do not
+claim to replace native Windows acceptance. Optional guards remain inactive.
