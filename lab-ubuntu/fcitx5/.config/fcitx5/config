@@ -1,10 +1,10 @@
 [Hotkey]
 # Enumerate when press trigger key repeatedly
 EnumerateWithTriggerKeys=True
-# Enumerate Input Method Forward
-EnumerateForwardKeys=
-# Enumerate Input Method Backward
-EnumerateBackwardKeys=
+# Enumerate Input Method Group Forward
+EnumerateGroupForwardKeys=
+# Enumerate Input Method Group Backward
+EnumerateGroupBackwardKeys=
 # Skip first input method while enumerating
 EnumerateSkipFirst=False
 
@@ -14,10 +14,10 @@ EnumerateSkipFirst=False
 [Hotkey/AltTriggerKeys]
 0=Shift+Shift_R
 
-[Hotkey/EnumerateGroupForwardKeys]
+[Hotkey/EnumerateForwardKeys]
 0=Super+space
 
-[Hotkey/EnumerateGroupBackwardKeys]
+[Hotkey/EnumerateBackwardKeys]
 0=Shift+Super+space
 
 [Hotkey/ActivateKeys]
