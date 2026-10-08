@@ -21,7 +21,7 @@ Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
 
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
-runs the PowerShell parser, terminal-output, installer confirmation and update behavior tests. The Windows job invokes
+runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
 PowerShell behavior tests directly and fails if any assigned suite fails; it
 does not depend on Bash discovering an optional PowerShell executable.
 

@@ -24,9 +24,10 @@ There is no global Node/npm dependency for the AI merge backend. `jq`, `uv`,
 
 ## Optional Windows interactive tools
 
-The PowerShell 7 profile uses these tools only when they are already installed,
-and checks each one on `PATH` at startup. Install them by hand; profiles, stow
-and automatic updates never install them.
+The PowerShell 7 profile uses these tools only when they are already installed:
+executables are probed on `PATH`, PSFzf with `Get-Module -ListAvailable`, and
+CompletionPredictor is imported on the first idle tick with errors ignored.
+Install them by hand; profiles, stow and automatic updates never install them.
 
 | Tool | Install | Used for | When absent |
 | --- | --- | --- | --- |
@@ -37,7 +38,7 @@ and automatic updates never install them.
 | zoxide | `winget install --id ajeetdsouza.zoxide -e` | `z` / `zi` directory jumping | not defined |
 | eza | `winget install --id eza-community.eza -e` | `ll` / `la` | `Get-ChildItem` |
 | bat | `winget install --id sharkdp.bat -e` | `BAT_THEME` (Catppuccin Mocha) | not set |
-| fd | `winget install --id sharkdp.fd -e` | fast file search | none |
+| fd | `winget install --id sharkdp.fd -e` | standalone `fd`; the profile does not use it | none |
 
 oh-my-posh 31 is an MSIX package. Upgrading from a 29.x installer requires
 `winget uninstall` first, and the theme's `$schema` pin moves with the release.

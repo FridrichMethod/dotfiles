@@ -139,10 +139,11 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 
 #### PowerShell profile and prompt
 
-`win/powershell/Documents/PowerShell/profile.ps1` is the PowerShell 7 profile for all hosts. It installs nothing. The optional tools in [docs/dependencies.md](docs/dependencies.md) are used only when they are on `PATH`.
+`win/powershell/Documents/PowerShell/profile.ps1` is the PowerShell 7 profile for all hosts. It installs nothing. The optional tools in [docs/dependencies.md](docs/dependencies.md) are used only when they are installed.
 
 - **Interactive consoles only.** PSReadLine options, key bindings, predictors, oh-my-posh and zoxide load only when stdout is a console and the shell is not a Cursor or Gemini agent session (the same test as `_is_agent_session` in zsh). `pwsh -Command ...` therefore loads the profile in about 0.3 s instead of stalling for about 30 s on `Microsoft.WinGet.CommandNotFound`.
 - **Keys.** Tab cycles completions (`MenuComplete`). RightArrow at the end of the line, or selecting an entry in the list view, accepts a prediction, and F2 switches between inline and list view. Up/Down search history by prefix. With fzf and PSFzf installed, Ctrl+R searches history, Ctrl+T inserts paths and Alt+C changes directory.
+- **Encoding.** Interactive consoles decode native output as UTF-8 and set `PYTHONIOENCODING=utf-8` unless `PYTHONIOENCODING` or `PYTHONUTF8` is already set, so captured `git`, `rg` and Python output keeps non-ASCII text. The console code page change also applies to a parent `cmd` or Windows PowerShell sharing the console, and localized output of built-in Windows tools (code page 936) can decode wrongly when captured.
 - **History.** Lines that start with a space, and lines that look like tokens, keys, `Bearer` headers or URL credentials, stay in the session history and are not written to `ConsoleHost_history.txt`.
 - **conda loads lazily.** A `conda` stub runs `conda.exe shell.powershell hook` on first use, which saves about 0.8 s per start, and Tab-completes subcommands and environment names. `CONDA_CHANGEPS1=false` leaves the prompt to oh-my-posh, which shows the active environment. Do not run `conda init powershell`, because it writes an eager, absolute-path block back into the profile.
 - **Prompt.** oh-my-posh loads the tracked theme `~/.config/oh-my-posh/prompt.omp.json` (from `win/oh-my-posh`), falling back to the builtin `catppuccin` until stow links it. The theme emits OSC 133 prompt marks and OSC 9;9 working-directory reports for Windows Terminal, and collapses earlier prompts with a transient prompt. Preview edits with `oh-my-posh print primary --config <file> --shell pwsh` and open a new shell to apply them. oh-my-posh never upgrades itself; use `winget upgrade --id JanDeDobbeleer.OhMyPosh -e`.
@@ -446,7 +447,7 @@ pre-commit run --all-files
 | **shfmt** | shell files and extensionless sync helpers (4-space indent, indented `case`, POSIX/Bash/Zsh-aware) |
 | **stylua** | `*.lua`, `*.luau` |
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
-| **behavior** | structured config merges, safe writes, installers, updates, Claude hooks and dependency checks |
+| **behavior** | structured config merges, safe writes, installers, updates, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
 CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
 `windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
