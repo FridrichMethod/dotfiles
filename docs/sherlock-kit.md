@@ -22,10 +22,12 @@ The explicit installers share `lib/sherlock_kit_integration.py`:
 ./setup-sherlock-kit.sh --source /path/to/sherlock-kit
 # Disposable test home:
 ./setup-sherlock-kit.sh --source /path/to/sherlock-kit --target-home /tmp/shk-home
+# Persist a local state location independently of package revisions:
+./setup-sherlock-kit.sh --state-root /absolute/path/to/private-state
 ```
 
 ```powershell
-./setup-sherlock-kit.ps1 -Python python -Source /path/to/sherlock-kit -TargetHome /path/to/test-home
+./setup-sherlock-kit.ps1 -Python python -Source /path/to/sherlock-kit -TargetHome C:/path/to/test-home -StateRoot C:/path/to/private-state
 ```
 
 Setup archives the exact pin, builds a frozen package with embedded revision,
@@ -37,6 +39,17 @@ the named exact path before manually cleaning it. Setup never changes an active
 pointer on failed verification. Existing restrictive regular-file modes are
 preserved. Windows uses inherited directory ACLs; Unix mode bits are not Windows
 ACL enforcement. Keep the private installation root in a user-owned directory.
+
+`--state-root` (PowerShell `-StateRoot`) records an absolute state directory in
+the private `active.json`. Setup validates the locator and never creates that
+directory. Relative paths, parent traversal, control characters, invalid Windows
+components, files and symlinked paths are rejected before changing the pointer.
+Reinstalling or upgrading without this option preserves the saved locator;
+passing it again explicitly replaces the locator. The launcher exports it as
+`SHERLOCK_KIT_STATE_ROOT` only when that variable is unset, so an explicit
+environment override takes precedence. With no saved locator or override,
+the toolkit retains its default state location. Choose user-owned persistent
+storage appropriate to the host; keep personal absolute paths out of dotfiles.
 
 The Stow-owned `common/codex/.local/bin/shk` resolves the dotfiles checkout and
 executes the active frozen interpreter. It supplies advertised pin and real
@@ -58,10 +71,10 @@ python3 -I -B lib/sherlock_kit_integration.py --update-projection --source /path
 Generation imports policy APIs from a temporary Git archive of source HEAD,
 not uncommitted files. Review the resulting pin and both blocks together. Publish
 the toolkit revision first, then publish the dotfiles pin; a locally generated
-pin alone is not evidence that the revision is fetchable. Never run an isolated
-worktree's installer against the real home. Real Claude/Codex instruction loading
-and precedence tests are a separate acceptance gate; unit tests do not prove
-actual client delivery.
+pin alone is not evidence that the revision is fetchable. Activate real client
+configuration from the reviewed canonical checkout after isolated validation.
+Client acceptance evidence belongs in the toolkit's
+[validation record](https://github.com/FridrichMethod/sherlock-kit/blob/main/docs/validation/acceptance.md).
 
 ## Explicit first-party adapter delivery
 
@@ -114,10 +127,8 @@ common/claude/.local/bin/claude-settings-sync --check --hooks config/sherlock-ki
 common/claude/.local/bin/claude-settings-sync --hooks config/sherlock-kit/claude-hooks.json common/claude/.claude/settings.json /tmp/shk-home/.claude/settings.json
 ```
 
-Codex inline registrations use the documented raw `timeout` field. On installed
-Codex 0.161.0, actual `hooks/list` parsed this as `timeoutSec: 5`; the spellings
-`timeoutSec` and `timeout_sec` instead silently fell back to 600 seconds, so the
-sync validator rejects them. Raw handler fields and review behavior follow the
+Codex inline registrations use the raw `timeout` field; the sync validator rejects
+the normalized API spellings `timeoutSec` and `timeout_sec`. Handler fields follow the
 [official Codex hooks documentation](https://learn.chatgpt.com/docs/hooks);
 Claude handlers follow the [Claude hooks reference](https://code.claude.com/docs/en/hooks).
 
@@ -134,64 +145,15 @@ and are skipped until reviewed again. A disabled or absent hook is inactive.
 Dotfiles does not write Codex's internal trust database or bypass review.
 Keep a single inline owner rather than also registering the same handler in
 `hooks.json`. Removing the opt-in input does not remove the live registration;
-review and remove the exact handler when retiring it. Real blocking tests and
-user-approved activation from canonical dotfiles remain separate acceptance gates.
+review and remove the exact handler when retiring it. Test a harmless blocking
+canary and a benign command on each installed client before relying on a hook;
+malformed output, missing handlers or timeouts can leave protection inactive.
+Doctor does not infer trust or successful blocking from file presence. Definition
+trust also does not attest executable contents; verify the frozen package identity.
+See the toolkit [acceptance record](https://github.com/FridrichMethod/sherlock-kit/blob/main/docs/validation/acceptance.md)
+for client-specific validation and limitations.
 
-## Foundation activation evidence (2026-10-07)
-
-Toolkit pin f91b68b was fetched from the public owner repository and installed into
-a temporary target, then explicitly activated by the integrator from canonical
-dotfiles. The stable launcher resolves to canonical dotfiles, never a temporary
-worktree. Local doctor confirms frozen revision/policy and both instruction blocks.
-Opt-in remote doctor confirms the control endpoint and local DTN master; DTN shell
-capability is deliberately unverified. Full pre-commit checks passed after merge.
-Actual Codex 0.161.0 prompt inspection confirms the policy in clean, AGENTS,
-AGENTS.override and CLAUDE fallback contexts. After explicit user authorization,
-Claude 2.1.293 authenticated tool-free probes also confirmed the global rules in
-clean, project CLAUDE, project AGENTS and override-directory contexts. Claude
-selected AGENTS in the override fixture; provenance Markdown comments are stripped
-from its model context, so the digest is checked on disk. Disabling every setting
-source also disabled instruction discovery; this is not a successful delivery mode.
-Native PowerShell execution was unavailable locally; cross-platform fixtures do not
-claim to replace native Windows acceptance. Optional guards remain inactive.
-
-## Actual opt-in adapter checks
-
-Published toolkit 3f02864 was independently installed in a temporary target and
-then by the integrator from canonical dotfiles. Its three adapter files passed
-preflight and actual copying. Codex's actual `skills/list` discovered
-`sherlock-kit-operate` as an enabled user skill. A GPT-6.1 Sol high read-only
-client run loaded that skill and invoked the same canonical `shk`, reporting the
-exact frozen revision and matching local doctor. The pre-existing large skill
-catalog triggered traversal/context-budget warnings; those unrelated skills were
-preserved. Claude's `sherlock-kit:sherlock-kit-operate` was loaded with explicit
-`--plugin-dir` and invoked the frozen installation in a read-only smoke test.
-
-Claude's single scoped PreToolUse hook blocked a harmless synthetic canary named
-as a prohibited helper. A continuing session executed a benign canary, then
-denied the prohibited-name canary. Codex's normal review UI initially showed
-Active=0 and review required, then Trusted/Active=1 after explicit `/hooks` review.
-The real tool call was denied; an independent benign canary executed successfully
-through normal approval review. No trust-store editing or bypass flag was used.
-The local sandbox's bwrap failure is distinct from a hook denial.
-
-Claude missing-command, malformed-output and timed-out handlers were separately
-tested in synthetic contexts: all continued execution, so these states are not
-active protection. The pure toolkit guard itself reports no approval for malformed
-or unknown events. These are scoped client checks; production global hooks remain
-opt-in and are not automatically activated by package/adapter installation. Local
-doctor reports registration/trust/blocking as unverified rather than inferring
-them from disk presence. Preserve one dotfiles registration owner per client.
-
-Codex's actual untrusted and changed-hash definitions were skipped; malformed
-output and a five-second timeout allowed the synthetic tool. A trusted Python
-handler with a missing file returned exit 2 and blocked execution. These are
-installed-client observations, not a portable error-mode guarantee. The safe
-structured toolkit receipts record current trust hashes and actual canary results.
-The definition hash does not attest executable contents; verify the frozen helper
-separately. Existing sandbox failures used normal approval review.
-
-The shared admission/controller/artifact-promotion path currently requires POSIX
-ownership, no-follow opens and fcntl. Windows instructions, guard and installer
-adapters do not imply native Windows controller support. Native PowerShell checks
-remain untested on the implementation workstation; existing Windows CI owns them.
+Native Windows setup, instructions, skills and guard support do not imply native
+Windows controller support: admission and artifact promotion require POSIX
+ownership, no-follow opens and `fcntl`. Native PowerShell behavior is validated
+by dotfiles' Windows CI; local POSIX fixtures do not replace that gate.

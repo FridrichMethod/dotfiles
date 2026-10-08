@@ -168,6 +168,85 @@ class IntegrationTests(unittest.TestCase):
             integration.install(self.root, home)
         self.assertTrue(lock.is_dir())
 
+    def test_state_locator_is_persisted_preserved_on_upgrade_and_explicitly_replaced(self):
+        home = self.temporary_root / "locator home"
+        install_root = home / ".local/share/sherlock-kit"
+        locator = self.temporary_root / "private state 文档"
+        (install_root / "revisions" / self.pin["code_revision"]).mkdir(parents=True)
+        with mock.patch.object(integration, "installed_identity", return_value=dict(self.pin, install_mode="frozen")), \
+             mock.patch.object(integration, "run", side_effect=AssertionError("must not fetch/build")):
+            integration.install(self.root, home, state_root=locator)
+        active = install_root / "active.json"
+        self.assertEqual(json.loads(active.read_text()), {"revision": self.pin["code_revision"], "state_root": str(locator)})
+        self.assertFalse(locator.exists())
+        self.pin["code_revision"] = "c" * 40
+        self.write_pin()
+        (install_root / "revisions" / self.pin["code_revision"]).mkdir()
+        with mock.patch.object(integration, "installed_identity", return_value=dict(self.pin, install_mode="frozen")), \
+             mock.patch.object(integration, "run", side_effect=AssertionError("must not fetch/build")):
+            integration.install(self.root, home)
+            self.assertEqual(json.loads(active.read_text()), {"revision": "c" * 40, "state_root": str(locator)})
+            replacement = self.temporary_root / "replacement state"
+            integration.install(self.root, home, state_root=replacement)
+        self.assertEqual(json.loads(active.read_text())["state_root"], str(replacement))
+        self.assertFalse(locator.exists())
+        self.assertFalse(replacement.exists())
+
+    def test_invalid_state_locator_never_changes_pointer_or_creates_target(self):
+        home = self.temporary_root / "bad locator home"
+        install_root = home / ".local/share/sherlock-kit"
+        install_root.mkdir(parents=True)
+        active = install_root / "active.json"
+        original = '{"revision":"previous"}'
+        active.write_text(original)
+        target_file = self.temporary_root / "state file"
+        target_file.write_text("user content")
+        bad = ["", "relative/path", "~/state", "/state\x00root", "/state\nroot", "/state\x7froot",
+               str(self.temporary_root / "parent" / ".." / "state"), str(target_file), str(target_file / "child"), 42, None]
+        if os.name == "nt":
+            bad += [str(self.temporary_root / name) for name in ("bad?name", "NUL", "COM1.txt", "trailing.")]
+        with mock.patch.object(integration, "installed_identity", side_effect=AssertionError("must validate first")), \
+             mock.patch.object(integration, "run", side_effect=AssertionError("must not fetch/build")):
+            for locator in bad:
+                # None means omitted for install; a serialized null is still invalid.
+                if locator is not None:
+                    with self.subTest(locator=locator), self.assertRaisesRegex(ValueError, "state_root"):
+                        integration.install(self.root, home, state_root=locator)
+                    self.assertEqual(active.read_text(), original)
+                broken = json.dumps({"revision": "previous", "state_root": locator})
+                active.write_text(broken)
+                with self.subTest(serialized=locator), self.assertRaisesRegex(ValueError, "state_root"):
+                    integration.install(self.root, home)
+                self.assertEqual(active.read_text(), broken)
+                active.write_text(original)
+        self.assertFalse((install_root / "revisions").exists())
+        self.assertFalse((self.temporary_root / "parent").exists())
+        self.assertEqual(target_file.read_text(), "user content")
+
+    def test_installer_cli_rejects_bad_locator_before_target_home_creation(self):
+        home = self.temporary_root / "unused CLI home"
+        command = [sys.executable, "-I", "-B", str(ROOT / "lib/sherlock_kit_integration.py"),
+                   "--root", str(self.root), "--target-home", str(home), "--state-root", "relative"]
+        for action in ("--install", "--check"):
+            with self.subTest(action=action):
+                result = subprocess.run([*command, action], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn("state", result.stderr)
+                self.assertFalse(home.exists())
+
+    def test_explicit_installer_wrapper_forwards_state_root_and_fails_without_writes(self):
+        home = self.temporary_root / "unused wrapper home"
+        if os.name == "nt":
+            command = ["pwsh", "-NoProfile", "-NonInteractive", "-File", str(ROOT / "setup-sherlock-kit.ps1"),
+                       "-Python", sys.executable, "-TargetHome", str(home), "-StateRoot", "relative"]
+        else:
+            command = ["sh", str(ROOT / "setup-sherlock-kit.sh"), "--target-home", str(home), "--state-root", "relative"]
+        result = subprocess.run(command, env=dict(os.environ, SHERLOCK_KIT_SETUP_PYTHON=sys.executable),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("state_root", result.stderr)
+        self.assertFalse(home.exists())
+
     @unittest.skipIf(os.name == "nt", "native link trust covered separately")
     def test_symlinked_installation_and_write_targets_are_rejected(self):
         home = self.temporary_root / "home"
@@ -186,6 +265,11 @@ class IntegrationTests(unittest.TestCase):
                 with self.subTest(check_only=check_only), self.assertRaisesRegex(ValueError, "symlinked adapter"):
                     integration.install_adapters(self.root, home, Path("synthetic-python"), check_only=check_only)
         self.assertEqual(before, self.snapshot())
+        state_link = self.temporary_root / "state link"
+        state_link.symlink_to(self.root, target_is_directory=True)
+        for locator in (state_link, state_link / "missing"):
+            with self.subTest(locator=locator), self.assertRaisesRegex(ValueError, "symlinked state_root"):
+                integration.validate_state_root(locator)
 
     def test_launch_sets_advertised_identity_and_executes_frozen_python(self):
         home = self.temporary_root / "home"
@@ -200,12 +284,43 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(integration.os.environ["SHERLOCK_KIT_PIN"], str(self.root / "sherlock-kit.pin.json"))
             command = execute.call_args.args[1]
             self.assertEqual(command[1:], ["-I", "-m", "sherlock_kit", "doctor"])
+            self.assertNotIn("SHERLOCK_KIT_STATE_ROOT", integration.os.environ)
+
+    def test_launch_exports_saved_state_locator_and_respects_environment_override(self):
+        home = self.temporary_root / "launcher home"
+        install_root = home / ".local/share/sherlock-kit"
+        install_root.mkdir(parents=True)
+        locator = self.temporary_root / "saved state"
+        override = self.temporary_root / "explicit state"
+        active = install_root / "active.json"
+        active.write_text(json.dumps({"revision": self.pin["code_revision"], "state_root": str(locator)}))
+        for environment, expected in (({}, str(locator)), ({"SHERLOCK_KIT_STATE_ROOT": str(override)}, str(override)),
+                                      ({"SHERLOCK_KIT_STATE_ROOT": ""}, "")):
+            with self.subTest(environment=environment), \
+                 mock.patch.object(integration.Path, "home", return_value=home), \
+                 mock.patch.object(integration, "installed_identity", return_value=dict(self.pin, install_mode="frozen")), \
+                 mock.patch.object(integration.os, "environ", dict(environment)), \
+                 mock.patch.object(integration.os, "execv") as execute:
+                integration.launch(self.root, ["doctor"])
+                self.assertEqual(integration.os.environ["SHERLOCK_KIT_STATE_ROOT"], expected)
+                execute.assert_called_once()
+        self.assertFalse(locator.exists())
+        self.assertFalse(override.exists())
+        broken = json.dumps({"revision": self.pin["code_revision"], "state_root": "relative"})
+        active.write_text(broken)
+        with mock.patch.object(integration.Path, "home", return_value=home), \
+             mock.patch.object(integration.os, "execv") as execute:
+            with self.assertRaisesRegex(ValueError, "state_root"):
+                integration.launch(self.root, ["doctor"])
+            execute.assert_not_called()
+        self.assertEqual(active.read_text(), broken)
 
     def test_installers_are_explicit_and_share_backend(self):
         for name in ("setup-sherlock-kit.sh", "setup-sherlock-kit.ps1"):
             text = (ROOT / name).read_text()
             self.assertIn("lib/sherlock_kit_integration.py", text)
             self.assertIn("--install", text)
+            self.assertIn("--state-root", text)
         for name in ("setup-sherlock-adapters.sh", "setup-sherlock-adapters.ps1"):
             text = (ROOT / name).read_text()
             self.assertIn("lib/sherlock_kit_integration.py", text)

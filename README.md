@@ -546,6 +546,11 @@ dotfiles updates the advertised instructions before the installed executable:
 the launcher reports an identity mismatch and doctor diagnoses it. Run explicit
 setup to activate the new pin. Hooks remain opt-in and require separate client
 registration, trust and blocking tests; installation alone does not activate them.
+Add `--state-root /absolute/path/to/private-state` (PowerShell
+`-StateRoot C:/path/to/private-state`) during explicit setup to persist a local state
+locator. Setup records the location without creating it; upgrades preserve it and
+an explicit `SHERLOCK_KIT_STATE_ROOT` environment value takes precedence. With no
+locator, the toolkit's existing default remains in use.
 See the [installation and update contract](docs/sherlock-kit.md).
 
 First-party Claude plugin and Codex skill payloads are delivered separately by
