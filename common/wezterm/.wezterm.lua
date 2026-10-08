@@ -32,7 +32,7 @@ config.line_height = 1.0
 
 config.color_scheme = "Catppuccin Mocha"
 config.set_environment_variables = {
-	BAT_THEME = "Catppuccin-mocha",
+	BAT_THEME = "Catppuccin Mocha",
 }
 
 config.inactive_pane_hsb = { saturation = 0.95, brightness = 0.95 }
