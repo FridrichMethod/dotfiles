@@ -1,0 +1,16 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "^Bash$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "shk guard --client codex",
+          "commandWindows": "shk.cmd guard --client codex",
+          "timeout": 5,
+          "async": false
+        }
+      ]
+    }
+  ]
+}
