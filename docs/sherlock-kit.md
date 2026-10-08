@@ -182,3 +182,16 @@ or unknown events. These are scoped client checks; production global hooks remai
 opt-in and are not automatically activated by package/adapter installation. Local
 doctor reports registration/trust/blocking as unverified rather than inferring
 them from disk presence. Preserve one dotfiles registration owner per client.
+
+Codex's actual untrusted and changed-hash definitions were skipped; malformed
+output and a five-second timeout allowed the synthetic tool. A trusted Python
+handler with a missing file returned exit 2 and blocked execution. These are
+installed-client observations, not a portable error-mode guarantee. The safe
+structured toolkit receipts record current trust hashes and actual canary results.
+The definition hash does not attest executable contents; verify the frozen helper
+separately. Existing sandbox failures used normal approval review.
+
+The shared admission/controller/artifact-promotion path currently requires POSIX
+ownership, no-follow opens and fcntl. Windows instructions, guard and installer
+adapters do not imply native Windows controller support. Native PowerShell checks
+remain untested on the implementation workstation; existing Windows CI owns them.
