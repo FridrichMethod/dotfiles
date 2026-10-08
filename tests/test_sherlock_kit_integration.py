@@ -17,6 +17,47 @@ SPEC.loader.exec_module(integration)
 
 
 class IntegrationTests(unittest.TestCase):
+    def bundle(self):
+        return {"identity": dict(self.pin, install_mode="frozen"), "files": {
+            "claude/.claude-plugin/plugin.json": '{"name":"sherlock-kit","version":"0.1.0"}\n',
+            "claude/skills/sherlock-kit-operate/SKILL.md": "---\nname: sherlock-kit-operate\n---\nUse the frozen shk.\n",
+            "codex/skills/sherlock-kit-operate/SKILL.md": "---\nname: sherlock-kit-operate\n---\nUse the frozen shk.\n"}}
+
+    def test_first_party_adapter_preflight_is_read_only_and_copy_is_idempotent(self):
+        home = Path(self.temporary.name) / "adapter home 文档"
+        with mock.patch.object(integration, "adapter_bundle", return_value=self.bundle()):
+            integration.install_adapters(self.root, home, Path("synthetic-python"), check_only=True)
+            self.assertFalse(home.exists())
+            integration.install_adapters(self.root, home, Path("synthetic-python"))
+            before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in home.rglob("*") if path.is_file()}
+            integration.install_adapters(self.root, home, Path("synthetic-python"))
+            self.assertEqual(before, {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in home.rglob("*") if path.is_file()})
+        self.assertEqual(len(before), 3)
+        self.assertFalse((home / ".claude/settings.json").exists())
+        self.assertFalse((home / ".codex/config.toml").exists())
+
+    def test_adapter_bundle_identity_extra_hooks_and_local_conflicts_fail_closed(self):
+        home = Path(self.temporary.name) / "adapter home"
+        for kind in ("identity", "extra", "plugin-hooks", "invalid-plugin", "invalid-payload"):
+            payload = self.bundle()
+            if kind == "identity": payload["identity"]["code_revision"] = "0" * 40
+            elif kind == "extra": payload["files"]["claude/hooks/hooks.json"] = "{}"
+            elif kind == "plugin-hooks": payload["files"]["claude/.claude-plugin/plugin.json"] = '{"name":"sherlock-kit","hooks":{}}'
+            elif kind == "invalid-plugin": payload["files"]["claude/.claude-plugin/plugin.json"] = '[]'
+            else: payload["files"]["claude/.claude-plugin/plugin.json"] = 1
+            with self.subTest(kind=kind), mock.patch.object(integration, "adapter_bundle", return_value=payload):
+                with self.assertRaises(ValueError):
+                    integration.install_adapters(self.root, home, Path("synthetic-python"))
+            self.assertFalse(home.exists())
+        conflict = home / ".codex/skills/sherlock-kit-operate/SKILL.md"
+        conflict.parent.mkdir(parents=True)
+        conflict.write_text("user-owned content")
+        with mock.patch.object(integration, "adapter_bundle", return_value=self.bundle()):
+            with self.assertRaisesRegex(ValueError, "differs"):
+                integration.install_adapters(self.root, home, Path("synthetic-python"))
+        self.assertEqual(conflict.read_text(), "user-owned content")
+        self.assertFalse((home / ".claude").exists())
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="shk-dotfiles-tests-")
         self.addCleanup(self.temporary.cleanup)
@@ -155,10 +196,15 @@ class IntegrationTests(unittest.TestCase):
             text = (ROOT / name).read_text()
             self.assertIn("lib/sherlock_kit_integration.py", text)
             self.assertIn("--install", text)
+        for name in ("setup-sherlock-adapters.sh", "setup-sherlock-adapters.ps1"):
+            text = (ROOT / name).read_text()
+            self.assertIn("lib/sherlock_kit_integration.py", text)
+            self.assertIn("--install-adapters", text)
         for name in ("stow-all.sh", "stow-all.ps1", "scripts/dotfiles-update.sh", "scripts/dotfiles-update.ps1"):
             statements = "\n".join(line for line in (ROOT / name).read_text().splitlines()
                                    if not line.lstrip().startswith("#"))
             self.assertNotIn("setup-sherlock-kit", statements)
+            self.assertNotIn("setup-sherlock-adapters", statements)
         self.assertFalse((ROOT / "sherlock/claude/.claude/CLAUDE.md").exists())
         self.assertFalse((ROOT / "sherlock/codex/.codex/AGENTS.md").exists())
 

@@ -1,0 +1,14 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "shk guard --client claude",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}

@@ -16,6 +16,11 @@ import tempfile
 BEGIN = "<!-- SHERLOCK-KIT:BEGIN -->"
 END = "<!-- SHERLOCK-KIT:END -->"
 INSTRUCTIONS = ("common/claude/.claude/CLAUDE.md", "common/codex/.codex/AGENTS.md")
+ADAPTER_TARGETS = {
+    "claude/.claude-plugin/plugin.json": ".claude/plugins/sherlock-kit/.claude-plugin/plugin.json",
+    "claude/skills/sherlock-kit-operate/SKILL.md": ".claude/plugins/sherlock-kit/skills/sherlock-kit-operate/SKILL.md",
+    "codex/skills/sherlock-kit-operate/SKILL.md": ".codex/skills/sherlock-kit-operate/SKILL.md",
+}
 
 
 def run(argv, **kwargs):
@@ -146,6 +151,54 @@ def installed_identity(venv):
                           "import json; from sherlock_kit import policy_identity; print(json.dumps(policy_identity()))"]))
 
 
+def adapter_bundle(runtime):
+    code = """import json
+from importlib import resources
+from sherlock_kit import policy_identity
+root = resources.files('sherlock_kit_data').joinpath('adapters')
+files = {}
+def walk(path, prefix=''):
+    for child in path.iterdir():
+        name = prefix + child.name
+        if child.is_dir(): walk(child, name + '/')
+        elif child.is_file(): files[name] = child.read_text(encoding='utf-8')
+walk(root)
+print(json.dumps({'identity':policy_identity(),'files':files}))
+"""
+    return json.loads(run([str(runtime), "-I", "-B", "-c", code]))
+
+
+def install_adapters(root, home, runtime, *, check_only=False):
+    """Copy first-party payloads from the frozen package; never register/trust hooks."""
+    pin = check(root)
+    payload = adapter_bundle(runtime)
+    verify_identity(payload["identity"], pin)
+    files = payload.get("files")
+    if not isinstance(files, dict) or set(files) != set(ADAPTER_TARGETS):
+        raise ValueError("unsupported or missing frozen adapter bundle; expected the three first-party payloads")
+    if any(not isinstance(data, str) or not data for data in files.values()):
+        raise ValueError("empty or invalid first-party adapter payload")
+    plugin = json.loads(files["claude/.claude-plugin/plugin.json"])
+    if not isinstance(plugin, dict) or plugin.get("name") != "sherlock-kit" or "hooks" in plugin:
+        raise ValueError("Claude adapter must be namespaced and contain no hook registrations")
+    candidates = []
+    for relative, target in ADAPTER_TARGETS.items():
+        data = files[relative]
+        path = home / target
+        if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+            raise ValueError(f"refusing symlinked adapter target: {path}")
+        if path.exists() and (not path.is_file() or path.read_text(encoding="utf-8") != data):
+            raise ValueError(f"adapter target differs; review local content before explicit replacement: {path}")
+        candidates.append((path, data))
+    # A changed/untrusted hook remains inactive: this installer owns only payloads.
+    if not check_only:
+        for path, data in candidates:
+            if not path.exists():
+                write(path, data)
+    print("First-party adapters validated; hook registration/trust remains inactive" if check_only else
+          "First-party adapters copied; hook registration/trust remains inactive")
+
+
 def verify_identity(identity, pin):
     if identity.get("install_mode") != "frozen" or any(identity.get(key) != pin[key]
             for key in ("schema_version", "code_revision", "policy_sha256")):
@@ -234,21 +287,30 @@ def main(argv=None):
     choices.add_argument("--check", action="store_true")
     choices.add_argument("--update-projection", action="store_true")
     choices.add_argument("--install", action="store_true")
+    choices.add_argument("--install-adapters", action="store_true")
     parser.add_argument("--source", type=Path)
     parser.add_argument("--insert", action="store_true")
     parser.add_argument("--target-home", type=Path, default=Path.home())
+    parser.add_argument("--runtime", type=Path, help="explicit frozen interpreter for adapter delivery")
+    parser.add_argument("--check-adapters", action="store_true", help="read-only adapter preflight with --install-adapters")
     args = parser.parse_args(argv)
     try:
         if sys.version_info < (3, 11):
             raise ValueError("Python 3.11 or newer is required")
         if args.insert and not args.update_projection:
             raise ValueError("--insert requires --update-projection")
+        if args.check_adapters and not args.install_adapters:
+            raise ValueError("--check-adapters requires --install-adapters")
         if args.update_projection:
             if args.source is None:
                 raise ValueError("--update-projection requires --source")
             update(args.root, args.source, insert=args.insert)
         elif args.install:
             install(args.root, args.target_home.absolute(), args.source)
+        elif args.install_adapters:
+            if args.runtime is None:
+                raise ValueError("--install-adapters requires --runtime pointing to the frozen package interpreter")
+            install_adapters(args.root, args.target_home.absolute(), args.runtime, check_only=args.check_adapters)
         else:
             check(args.root)
         print("sherlock-kit pin/projection: valid")

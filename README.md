@@ -544,6 +544,15 @@ setup to activate the new pin. Hooks remain opt-in and require separate client
 registration, trust and blocking tests; installation alone does not activate them.
 See the [installation and update contract](docs/sherlock-kit.md).
 
+First-party Claude plugin and Codex skill payloads are delivered separately by
+`./setup-sherlock-adapters.sh --runtime /path/to/frozen/python --target-home /tmp/shk-home`
+(PowerShell: `./setup-sherlock-adapters.ps1 -Runtime /path/to/python -TargetHome /path/to/test-home`).
+The package identity must match the advertised pin and existing conflicting
+payloads are preserved. Add `--check-adapters` (PowerShell `-Check`) for read-only
+preflight. Stow and automatic updates do not call this installer. Optional
+`config/sherlock-kit/*-hooks.json` inputs use the existing sync helpers' explicit
+`--hooks` option; client review and trust are required before activation.
+
 ## Adding a New Package
 
 ```bash
