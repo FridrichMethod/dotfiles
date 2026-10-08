@@ -38,6 +38,7 @@
 - Validate in proportion to risk: run focused checks first, then broader tests when justified. Report what was run and any checks that could not be completed.
 - For reviews, prioritize correctness, security, scientific validity, regressions, numerical issues, concurrency, and missing tests over cosmetic style comments.
 - For long-running or parallelizable work, delegate bounded independent subtasks, keep write ownership disjoint, and consolidate evidence in the main task.
+- In the user's own repositories, `AGENTS.md` is the single source of project instructions and `CLAUDE.md` is a stub that imports it; add or change project rules in `AGENTS.md`, never in the stub.
 
 ## Scientific and mathematical work
 
