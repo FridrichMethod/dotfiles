@@ -33,6 +33,13 @@ the Unix terminal suite also runs it on a real PTY to cover same-console `*>`
 redirection, even with PowerShell's ANSI rendering preference. Installers are tested
 with quiet helpers; errors and failed-install retries must remain observable.
 
+`tests/powershell-profile.ps1` checks the tracked PowerShell profiles and the
+oh-my-posh theme without loading the live profile. It walks the AST to keep
+interactive setup inside the console and agent-session guard, the conda hook
+lazy, installs out of the profile and Windows PowerShell 5.1 syntax ASCII-only.
+It also dot-sources the PowerShell 7 profile in a redirected child with a fake
+home and a 60 s timeout, and renders the theme when oh-my-posh is installed.
+
 Run either entrypoint from any working directory. To check prerequisites only:
 
 ```sh
