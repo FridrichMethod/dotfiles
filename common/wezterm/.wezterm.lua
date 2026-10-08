@@ -32,7 +32,7 @@ config.line_height = 1.0
 
 config.color_scheme = "Catppuccin Mocha"
 config.set_environment_variables = {
-	BAT_THEME = "Catppuccin-mocha",
+	BAT_THEME = "Catppuccin Mocha",
 }
 
 config.inactive_pane_hsb = { saturation = 0.95, brightness = 0.95 }
@@ -126,15 +126,16 @@ if is_windows then
 			domain = { DomainName = "local" },
 			args = { "pwsh", "-NoLogo" },
 		},
-		{
-			label = "Ubuntu",
-			domain = { DomainName = "WSL:Ubuntu" },
-		},
-		{
-			label = "Debian",
-			domain = { DomainName = "WSL:Debian" },
-		},
 	}
+	-- One entry per installed distro; Docker Desktop's distros are not shells.
+	for _, domain in ipairs(config.wsl_domains) do
+		if not domain.distribution:find("^docker") then
+			table.insert(config.launch_menu, {
+				label = domain.distribution,
+				domain = { DomainName = domain.name },
+			})
+		end
+	end
 end
 
 -- ── Key bindings ──────────────────────────────────────────────────────────────
@@ -167,11 +168,6 @@ if is_windows then
 		key = "u",
 		mods = "CTRL|ALT",
 		action = act.SpawnTab({ DomainName = "WSL:Ubuntu" }),
-	})
-	table.insert(config.keys, {
-		key = "d",
-		mods = "CTRL|ALT",
-		action = act.SpawnTab({ DomainName = "WSL:Debian" }),
 	})
 end
 

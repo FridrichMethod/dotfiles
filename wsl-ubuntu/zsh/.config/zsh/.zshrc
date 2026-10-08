@@ -46,3 +46,28 @@ plugins+=(
     ssh-agent
     ubuntu
 )
+
+# Windows Terminal: report the cwd with OSC 9;9 so duplicated tabs and panes
+# open in the same directory. Report from precmd whenever $PWD changed since
+# the last report: precmd always runs in the main shell with the terminal as
+# stdout, whereas a chpwd hook misses `cd dir >/dev/null` and `cd -q`. The
+# first precmd still runs while the Powerlevel10k instant prompt has stdout
+# redirected to its capture file, so write to the terminal p10k saved.
+# _is_agent_session comes from ~/.zshrc, which sources this file.
+if [[ -o interactive && -n ${WT_SESSION:-} && -z ${TERM_PROGRAM:-} ]] &&
+    [[ -n ${commands[wslpath]-} ]] && ! _is_agent_session; then
+    typeset -g _wt_reported_pwd=
+    _wt_report_cwd() {
+        [[ $PWD == "$_wt_reported_pwd" ]] && return 0
+        local fd=1 win_pwd
+        if [[ -n ${__p9k_instant_prompt_active:-} && ${__p9k_fd_1:-x} != *[!0-9]* ]]; then
+            fd=$__p9k_fd_1
+        fi
+        [[ -t $fd ]] || return 0
+        win_pwd=$(wslpath -w "$PWD" 2>/dev/null) || return 0
+        builtin printf '\e]9;9;%s\e\\' "$win_pwd" >&$fd
+        _wt_reported_pwd=$PWD
+    }
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd _wt_report_cwd
+fi

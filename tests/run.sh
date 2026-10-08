@@ -70,6 +70,7 @@ tests=(
     fcitx5-profile-sync.sh
     stow-all.sh
     update-hooks.sh
+    powershell-profile.sh
     awesome-skills-update.sh
     windows-installer.sh
 )

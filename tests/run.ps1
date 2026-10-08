@@ -60,6 +60,10 @@ Write-Output '==> update-hooks.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'update-hooks.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell update-hook tests failed.' }
 
+Write-Output '==> powershell-profile.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'powershell-profile.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'PowerShell profile tests failed.' }
+
 Write-Output '==> windows-installer-controls.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'windows-installer-controls.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Windows installer confirmation and failure-control tests failed.' }

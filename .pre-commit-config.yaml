@@ -123,6 +123,12 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/(terminal|windows-link-trust)\.ps1|tests/(terminal|windows-installer-controls)\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
+      - id: powershell-profile
+        name: PowerShell profile contract and prompt theme
+        entry: tests/powershell-profile.sh
+        language: script
+        pass_filenames: false
+        files: ^(win/powershell/.*|win/oh-my-posh/.*|tests/powershell-profile\.(sh|ps1))$
       - id: update-hooks
         name: automatic update and stow behavior
         entry: tests/update-hooks.sh
