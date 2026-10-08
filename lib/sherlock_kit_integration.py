@@ -205,13 +205,49 @@ def verify_identity(identity, pin):
         raise ValueError("installed toolkit identity does not match advertised pin; rerun explicit setup")
 
 
-def install(root, home, source=None):
+def validate_state_root(value):
+    """Validate a locator without creating or resolving its destination."""
+    if not isinstance(value, (str, Path)):
+        raise ValueError("state_root must be an absolute directory path")
+    text = str(value)
+    if not text or any(ord(char) < 32 or ord(char) == 127 for char in text):
+        raise ValueError("state_root contains invalid path characters")
+    path = Path(text)
+    if not path.is_absolute() or ".." in path.parts:
+        raise ValueError("state_root must be absolute without parent traversal")
+    if os.name == "nt" and any(re.search(r'[<>:"|?*]', part) or part.endswith((".", " "))
+                              or re.fullmatch(r"(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?", part)
+                              for part in path.parts[1:]):
+        raise ValueError("state_root contains invalid Windows path components")
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+        raise ValueError("refusing symlinked state_root")
+    if any(component.exists() and not component.is_dir() for component in (path, *path.parents)):
+        raise ValueError("state_root must identify a directory")
+    return text
+
+
+def active_read(install_root):
+    path = install_root / "active.json"
+    if path.is_symlink():
+        raise ValueError("refusing symlinked active toolkit pointer")
+    active = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    if not isinstance(active, dict):
+        raise ValueError("invalid active toolkit pointer")
+    if "state_root" in active:
+        validate_state_root(active["state_root"])
+    return active
+
+
+def install(root, home, source=None, *, state_root=None):
     pin = check(root)
     install_root = home / ".local/share/sherlock-kit"
     versions = install_root / "revisions"
     for path in (home / ".local", home / ".local/share", install_root, versions):
         if path.is_symlink():
             raise ValueError(f"refusing symlinked installation path: {path}")
+    if state_root is not None:
+        state_root = validate_state_root(state_root)
+    active_read(install_root)
     versions.mkdir(parents=True, exist_ok=True)
     if os.name != "nt":
         install_root.chmod(install_root.stat().st_mode & 0o700)
@@ -222,12 +258,16 @@ def install(root, home, source=None):
     except FileExistsError:
         raise ValueError(f"setup already running or interrupted; inspect exact lock: {lock}") from None
     try:
-        install_locked(root, home, source, pin, install_root, versions)
+        install_locked(root, home, source, pin, install_root, versions, state_root)
     finally:
         lock.rmdir()
 
 
-def install_locked(root, home, source, pin, install_root, versions):
+def install_locked(root, home, source, pin, install_root, versions, state_root=None):
+    # Read under the setup lock so an upgrade preserves the current locator.
+    active = active_read(install_root)
+    if state_root is None:
+        state_root = active.get("state_root")
     revision_path = versions / pin["code_revision"]
     if revision_path.is_symlink():
         raise ValueError("refusing symlinked revision environment")
@@ -256,14 +296,17 @@ def install_locked(root, home, source, pin, install_root, versions):
         # No Stow target competes with this native command wrapper.
         launcher = home / ".local/bin/shk.cmd"
         write(launcher, f'@"{sys.executable}" "{root / "common/codex/.local/bin/shk"}" %*\n')
-    write(install_root / "active.json", json.dumps({"revision": pin["code_revision"]}) + "\n")
+    active = {"revision": pin["code_revision"]}
+    if state_root is not None:
+        active["state_root"] = state_root
+    write(install_root / "active.json", json.dumps(active) + "\n")
     print(f"Installed frozen sherlock-kit {pin['code_revision']} at {revision_path}")
 
 
 def launch(root, arguments):
     pin = check(root)
     install_root = Path.home() / ".local/share/sherlock-kit"
-    active = json.loads((install_root / "active.json").read_text(encoding="utf-8"))
+    active = active_read(install_root)
     revision = active.get("revision", "")
     if not isinstance(revision, str) or not re.fullmatch("[0-9a-f]{40}", revision):
         raise ValueError("invalid active toolkit revision")
@@ -277,6 +320,8 @@ def launch(root, arguments):
     os.environ["SHERLOCK_KIT_PIN"] = str(root / "sherlock-kit.pin.json")
     os.environ["SHERLOCK_KIT_CLAUDE_INSTRUCTIONS"] = str(Path.home() / ".claude/CLAUDE.md")
     os.environ["SHERLOCK_KIT_CODEX_INSTRUCTIONS"] = str(Path.home() / ".codex/AGENTS.md")
+    if "state_root" in active:
+        os.environ.setdefault("SHERLOCK_KIT_STATE_ROOT", active["state_root"])
     os.execv(str(python_at(venv)), [str(python_at(venv)), "-I", "-m", "sherlock_kit", *arguments])
 
 
@@ -289,6 +334,7 @@ def main(argv=None):
     choices.add_argument("--install", action="store_true")
     choices.add_argument("--install-adapters", action="store_true")
     parser.add_argument("--source", type=Path)
+    parser.add_argument("--state-root", help="absolute local state directory locator; setup does not create it")
     parser.add_argument("--insert", action="store_true")
     parser.add_argument("--target-home", type=Path, default=Path.home())
     parser.add_argument("--runtime", type=Path, help="explicit frozen interpreter for adapter delivery")
@@ -301,12 +347,14 @@ def main(argv=None):
             raise ValueError("--insert requires --update-projection")
         if args.check_adapters and not args.install_adapters:
             raise ValueError("--check-adapters requires --install-adapters")
+        if args.state_root is not None and not args.install:
+            raise ValueError("--state-root requires --install")
         if args.update_projection:
             if args.source is None:
                 raise ValueError("--update-projection requires --source")
             update(args.root, args.source, insert=args.insert)
         elif args.install:
-            install(args.root, args.target_home.absolute(), args.source)
+            install(args.root, args.target_home.absolute(), args.source, state_root=args.state_root)
         elif args.install_adapters:
             if args.runtime is None:
                 raise ValueError("--install-adapters requires --runtime pointing to the frozen package interpreter")
