@@ -146,7 +146,52 @@ worktree. Local doctor confirms frozen revision/policy and both instruction bloc
 Opt-in remote doctor confirms the control endpoint and local DTN master; DTN shell
 capability is deliberately unverified. Full pre-commit checks passed after merge.
 Actual Codex 0.161.0 prompt inspection confirms the policy in clean, AGENTS,
-AGENTS.override and CLAUDE fallback contexts. Claude 2.1.293 real loading remains
-pending automatic-review authorization for external transmission of test context.
+AGENTS.override and CLAUDE fallback contexts. After explicit user authorization,
+Claude 2.1.293 authenticated tool-free probes also confirmed the global rules in
+clean, project CLAUDE, project AGENTS and override-directory contexts. Claude
+selected AGENTS in the override fixture; provenance Markdown comments are stripped
+from its model context, so the digest is checked on disk. Disabling every setting
+source also disabled instruction discovery; this is not a successful delivery mode.
 Native PowerShell execution was unavailable locally; cross-platform fixtures do not
 claim to replace native Windows acceptance. Optional guards remain inactive.
+
+## Actual opt-in adapter checks
+
+Published toolkit 3f02864 was independently installed in a temporary target and
+then by the integrator from canonical dotfiles. Its three adapter files passed
+preflight and actual copying. Codex's actual `skills/list` discovered
+`sherlock-kit-operate` as an enabled user skill. A GPT-6.1 Sol high read-only
+client run loaded that skill and invoked the same canonical `shk`, reporting the
+exact frozen revision and matching local doctor. The pre-existing large skill
+catalog triggered traversal/context-budget warnings; those unrelated skills were
+preserved. Claude's `sherlock-kit:sherlock-kit-operate` was loaded with explicit
+`--plugin-dir` and invoked the frozen installation in a read-only smoke test.
+
+Claude's single scoped PreToolUse hook blocked a harmless synthetic canary named
+as a prohibited helper. A continuing session executed a benign canary, then
+denied the prohibited-name canary. Codex's normal review UI initially showed
+Active=0 and review required, then Trusted/Active=1 after explicit `/hooks` review.
+The real tool call was denied; an independent benign canary executed successfully
+through normal approval review. No trust-store editing or bypass flag was used.
+The local sandbox's bwrap failure is distinct from a hook denial.
+
+Claude missing-command, malformed-output and timed-out handlers were separately
+tested in synthetic contexts: all continued execution, so these states are not
+active protection. The pure toolkit guard itself reports no approval for malformed
+or unknown events. These are scoped client checks; production global hooks remain
+opt-in and are not automatically activated by package/adapter installation. Local
+doctor reports registration/trust/blocking as unverified rather than inferring
+them from disk presence. Preserve one dotfiles registration owner per client.
+
+Codex's actual untrusted and changed-hash definitions were skipped; malformed
+output and a five-second timeout allowed the synthetic tool. A trusted Python
+handler with a missing file returned exit 2 and blocked execution. These are
+installed-client observations, not a portable error-mode guarantee. The safe
+structured toolkit receipts record current trust hashes and actual canary results.
+The definition hash does not attest executable contents; verify the frozen helper
+separately. Existing sandbox failures used normal approval review.
+
+The shared admission/controller/artifact-promotion path currently requires POSIX
+ownership, no-follow opens and fcntl. Windows instructions, guard and installer
+adapters do not imply native Windows controller support. Native PowerShell checks
+remain untested on the implementation workstation; existing Windows CI owns them.
