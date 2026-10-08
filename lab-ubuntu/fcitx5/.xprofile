@@ -1,3 +1,13 @@
-setxkbmap -option caps:hyper
+# GNOME (mutter) rebuilds the X keymap from its own settings after this file
+# runs, discarding setxkbmap options, so declare keyboard intent through GNOME:
+# CapsLock becomes Hyper_L (the fcitx5 trigger), and GNOME's input-source
+# switcher gives up Super+Space so fcitx5 can cycle input methods with it.
+# Call the system gsettings by path: Linuxbrew's lacks the dconf backend and
+# would silently write a keyfile GNOME never reads.
+if [ -x /usr/bin/gsettings ]; then
+    /usr/bin/gsettings set org.gnome.desktop.input-sources xkb-options "['caps:hyper']"
+    /usr/bin/gsettings set org.gnome.desktop.wm.keybindings switch-input-source "[]"
+    /usr/bin/gsettings set org.gnome.desktop.wm.keybindings switch-input-source-backward "[]"
+fi
 # kitty (GLFW) only reaches an IME over the IBus protocol; fcitx5 serves it.
 export GLFW_IM_MODULE=ibus
