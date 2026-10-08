@@ -5,7 +5,8 @@
 # Do not run `conda init powershell`: it rewrites this block eagerly (~0.8 s
 # per start) with an absolute path. The stub runs the same hook on first use;
 # Conda.psm1's `conda` alias then outranks it. 5.1 has no oh-my-posh, so
-# conda keeps its own (env) prompt prefix here.
+# conda's own (env) prefix is the only env indicator here, except when this
+# shell inherits CONDA_CHANGEPS1=false from a PowerShell 7 parent.
 if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
     function global:conda {
         $hook = & (Join-Path $HOME 'miniconda3\Scripts\conda.exe') shell.powershell hook | Out-String

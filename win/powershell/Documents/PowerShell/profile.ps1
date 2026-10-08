@@ -57,8 +57,15 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
     # The ANSI code page here is 936 (GBK), so pwsh mis-decoded captured UTF-8
     # output of native tools (git, rg, node, uv). The setter changes the code
     # page of the whole console (shared with any parent shell) and throws when
-    # there is none, hence the guard and the try.
-    try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new() } catch { }
+    # there is none, hence the guard and the try. Python (python, pip,
+    # conda.exe) writes pipes in the ANSI code page, which this decoder would
+    # turn into U+FFFD, so make its stdio UTF-8 too; a user or parent setting
+    # wins.
+    try {
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+        if (-not ($env:PYTHONIOENCODING -or $env:PYTHONUTF8)) { $env:PYTHONIOENCODING = 'utf-8' }
+    }
+    catch { }
 
     # Get-Command takes ~0.45 s per missing name on this machine; probe PATH.
     $HasExe = {
@@ -138,8 +145,19 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
     # Same theme as common/zsh/.zshrc.
     if ((& $HasExe bat) -and -not $env:BAT_THEME) { $env:BAT_THEME = 'Catppuccin Mocha' }
     if (& $HasExe eza) {
-        function global:ll { eza -l --group-directories-first --icons=auto @args }
-        function global:la { eza -la --group-directories-first --icons=auto @args }
+        # eza does not glob on Windows and PowerShell passes wildcards to
+        # native commands verbatim, so expand them here (ll *.pdb).
+        function global:Expand-EzaArgs {
+            foreach ($a in $args) {
+                if ($a -is [string] -and $a -notlike '-*' -and [WildcardPattern]::ContainsWildcardCharacters($a)) {
+                    $hits = @(Resolve-Path -Path $a -Relative -ErrorAction Ignore)
+                    if ($hits.Count) { $hits -replace '^\.[\\/]', ''; continue }
+                }
+                $a
+            }
+        }
+        function global:ll { eza -l --group-directories-first --icons=auto @(Expand-EzaArgs @args) }
+        function global:la { eza -la --group-directories-first --icons=auto @(Expand-EzaArgs @args) }
     }
     else {
         function global:ll { Get-ChildItem @args }
