@@ -131,8 +131,10 @@ SH
         # Run in foreground so user sees first-time progress.
         _ask_run || true
     else
-        # Background refresh; do not block shell startup.
-        (_ask_run) </dev/null >/dev/null 2>>"$_ask_cache/last.log" &
+        # Background refresh; do not block shell startup. The outer subshell
+        # keeps the job out of the interactive shell's job table, so zsh/bash
+        # don't print "[N] PID" / "done" notifications.
+        ( (_ask_run) </dev/null >/dev/null 2>>"$_ask_cache/last.log" &)
     fi
 }
 
