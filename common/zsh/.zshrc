@@ -170,6 +170,13 @@ zstyle ':completion:*' special-dirs false
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 ! _is_agent_session && [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 
+# Windows Terminal: emit OSC 133 prompt and command marks (scrollbar marks,
+# scrollToMark). Set here, not in ~/.p10k.zsh, which unsets every
+# POWERLEVEL9K_* and is rewritten by `p10k configure`; p10k reads it when it
+# initializes at the first prompt. A nonempty TERM_PROGRAM means another
+# terminal (VS Code, WezTerm, tmux) was started from a Windows Terminal tab.
+! _is_agent_session && [[ -n ${WT_SESSION:-} && -z ${TERM_PROGRAM:-} ]] && typeset -g POWERLEVEL9K_TERM_SHELL_INTEGRATION=true
+
 # Dotfiles auto-update check (runs at end so ssh-agent/env is ready; run stow-all.sh and restart shell to apply)
 _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/dotfiles-update.sh"
 [[ -r "$_df_update" ]] && source "$_df_update"
