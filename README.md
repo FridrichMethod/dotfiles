@@ -137,13 +137,34 @@ Like `stow-all.sh`, the Windows installer validates all selected AI inputs and t
 Use `-Verbose` for per-link details. Normal output shows stages, backups, warnings
 and summary counts; `-WhatIf` reports a preview, not a successful install.
 
+#### PowerShell profile and prompt
+
+`win/powershell/Documents/PowerShell/profile.ps1` is the PowerShell 7 profile for all hosts. It installs nothing. The optional tools in [docs/dependencies.md](docs/dependencies.md) are used only when they are on `PATH`.
+
+- **Interactive consoles only.** PSReadLine options, key bindings, predictors, oh-my-posh and zoxide load only when stdout is a console and the shell is not a Cursor or Gemini agent session (the same test as `_is_agent_session` in zsh). `pwsh -Command ...` therefore loads the profile in about 0.3 s instead of stalling for about 30 s on `Microsoft.WinGet.CommandNotFound`.
+- **Keys.** Tab cycles completions (`MenuComplete`). RightArrow at the end of the line, or selecting an entry in the list view, accepts a prediction, and F2 switches between inline and list view. Up/Down search history by prefix. With fzf and PSFzf installed, Ctrl+R searches history, Ctrl+T inserts paths and Alt+C changes directory.
+- **History.** Lines that start with a space, and lines that look like tokens, keys, `Bearer` headers or URL credentials, stay in the session history and are not written to `ConsoleHost_history.txt`.
+- **conda loads lazily.** A `conda` stub runs `conda.exe shell.powershell hook` on first use, which saves about 0.8 s per start, and Tab-completes subcommands and environment names. `CONDA_CHANGEPS1=false` leaves the prompt to oh-my-posh, which shows the active environment. Do not run `conda init powershell`, because it writes an eager, absolute-path block back into the profile.
+- **Prompt.** oh-my-posh loads the tracked theme `~/.config/oh-my-posh/prompt.omp.json` (from `win/oh-my-posh`), falling back to the builtin `catppuccin` until stow links it. The theme emits OSC 133 prompt marks and OSC 9;9 working-directory reports for Windows Terminal, and collapses earlier prompts with a transient prompt. Preview edits with `oh-my-posh print primary --config <file> --shell pwsh` and open a new shell to apply them. oh-my-posh never upgrades itself; use `winget upgrade --id JanDeDobbeleer.OhMyPosh -e`.
+- **Windows PowerShell 5.1** gets only the lazy conda stub. Keep that file ASCII and 5.1 syntax.
+- **Leave `Documents\PowerShell\Microsoft.PowerShell_profile.ps1` empty.** It runs after the tracked profile, and installers that follow the `notepad $PROFILE` advice append to it, outside the guard and the tests.
+
+#### Windows Terminal
+
+`settings.json` is a symlink, so restart Terminal after stow or after editing the file; hot reload does not fire through the link. Do not save from the Settings UI between pulling a change and that restart, because the save would write the old in-memory settings back through the link. If Terminal later rewrites the file, commit the rewrite only when the diff is formatting-only.
+
+- Prompt marks appear on the scrollbar. Ctrl+Up/Down jump between them, Alt+Shift+D duplicates the pane in the current directory and Alt+Shift+Z zooms it. Ctrl+Alt+P and Ctrl+Alt+U open PowerShell and Ubuntu tabs.
+- One Ubuntu profile: the WSL fragment and generator sources are disabled so they cannot add duplicates. In WSL zsh, Powerlevel10k emits the prompt marks and `wsl-ubuntu`'s `.zshrc` reports the working directory.
+- The Sherlock and Marlowe tabs run `ssh` inside WSL, so later tabs reuse the WSL OpenSSH `ControlMaster` connection and Duo prompts only once. Windows OpenSSH cannot multiplex. Do not put them in `startupActions`.
+- Appearance: Catppuccin Mocha, CaskaydiaMono Nerd Font and 80% opacity, matching WezTerm, Kitty and the prompt palette.
+
 ## At a Glance
 
 | | |
 |---|---|
 | **Layout** | `common/` + 8 host overlays |
-| **Shells** | Zsh, Bash, POSIX sh, tcsh, xonsh |
-| **Terminals** | WezTerm, Kitty |
+| **Shells** | Zsh, Bash, POSIX sh, tcsh, xonsh, PowerShell 7 |
+| **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
 | **Submodule** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) — auto-updated daily by GitHub Actions |
@@ -205,7 +226,7 @@ dotfiles/
 ├── marlowe/                      Marlowe HPC
 ├── fedora/                       Fedora overrides
 ├── ubuntu/                       Ubuntu desktop overrides
-├── win/                          Windows (PowerShell profiles, Terminal, WSL)
+├── win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 │
 ├── .github/workflows/            ci.yml + daily submodule sync
 ├── .gitattributes                LF everywhere (Windows clones set autocrlf)
@@ -228,8 +249,8 @@ dotfiles/
 
 | Category | Tools |
 |---|---|
-| **Shell** | Zsh (with Powerlevel10k), Bash, POSIX `sh`, tcsh, xonsh |
-| **Terminal** | Kitty, WezTerm |
+| **Shell** | Zsh (with Powerlevel10k), Bash, POSIX `sh`, tcsh, xonsh, PowerShell 7 (PSReadLine + oh-my-posh) |
+| **Terminal** | Kitty, WezTerm, Windows Terminal |
 | **Editor** | Vim |
 | **Version Control** | Git, SSH |
 | **Science** | Conda (`.condarc`), PyMOL scripts (submodule) |
@@ -248,7 +269,7 @@ dotfiles/
 | [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `git`, `sh`, `zsh` | 5 |
 | [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
 | [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
-| [`win/`](win/) | Windows | `git`, `powershell`, `ssh`, `terminal`, `wsl` | 8 |
+| [`win/`](win/) | Windows | `git`, `oh-my-posh`, `powershell`, `ssh`, `terminal`, `wsl` | 9 |
 | [`common/`](common/) | _shared baseline_ | 16 packages | 50 |
 
 ## How Stow Layering Works

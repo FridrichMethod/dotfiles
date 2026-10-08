@@ -22,6 +22,26 @@ to use their respective settings, not all to copy or symlink the repository.
 There is no global Node/npm dependency for the AI merge backend. `jq`, `uv`,
 `yq`, `jaq`, and `dasel` are not required by that backend either.
 
+## Optional Windows interactive tools
+
+The PowerShell 7 profile uses these tools only when they are already installed,
+and checks each one on `PATH` at startup. Install them by hand; profiles, stow
+and automatic updates never install them.
+
+| Tool | Install | Used for | When absent |
+| --- | --- | --- | --- |
+| oh-my-posh | `winget install --id JanDeDobbeleer.OhMyPosh -e` | prompt (`win/oh-my-posh` theme) | default `PS>` prompt |
+| CaskaydiaMono Nerd Font | `oh-my-posh font install CascadiaMono` | Windows Terminal, WezTerm and Kitty glyphs | missing icons |
+| CompletionPredictor | `Install-PSResource CompletionPredictor -Scope CurrentUser` | list-view predictions from completions | history-only predictions |
+| fzf + PSFzf | `winget install --id junegunn.fzf -e`; `Install-PSResource PSFzf -Scope CurrentUser` | Ctrl+R, Ctrl+T, Alt+C | PSReadLine defaults |
+| zoxide | `winget install --id ajeetdsouza.zoxide -e` | `z` / `zi` directory jumping | not defined |
+| eza | `winget install --id eza-community.eza -e` | `ll` / `la` | `Get-ChildItem` |
+| bat | `winget install --id sharkdp.bat -e` | `BAT_THEME` (Catppuccin Mocha) | not set |
+| fd | `winget install --id sharkdp.fd -e` | fast file search | none |
+
+oh-my-posh 31 is an MSIX package. Upgrading from a 29.x installer requires
+`winget uninstall` first, and the theme's `$schema` pin moves with the release.
+
 ## Is a venv necessary?
 
 No: [venv](https://docs.python.org/3/library/venv.html) provides package isolation;
