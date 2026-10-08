@@ -55,13 +55,15 @@ if grep -Fq 'so symlinks need no elevation' "$REPO_ROOT/README.md"; then
 fi
 grep -Fq 'untrusted mount point' "$REPO_ROOT/README.md"
 
-# Both repository guides carry the rule; agents read one or the other.
-for guide in CLAUDE.md AGENTS.md; do
-    if ! grep -Fq 'untrusted mount point' "$REPO_ROOT/$guide"; then
-        echo "ERROR: $guide is missing the untrusted-symlink rule" >&2
-        exit 1
-    fi
-done
+# AGENTS.md is the single repository guide; CLAUDE.md only imports it.
+if ! grep -Fq 'untrusted mount point' "$REPO_ROOT/AGENTS.md"; then
+    echo "ERROR: AGENTS.md is missing the untrusted-symlink rule" >&2
+    exit 1
+fi
+if [[ "$(head -n1 "$REPO_ROOT/CLAUDE.md")" != '@AGENTS.md' ]]; then
+    echo "ERROR: CLAUDE.md must start with @AGENTS.md so Claude Code imports the shared guide" >&2
+    exit 1
+fi
 
 # Parse both the installer and native fixture when PowerShell is installed.
 # The paths travel through the environment because -Command does not populate

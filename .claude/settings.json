@@ -1,4 +1,7 @@
 {
+  "claudeMdExcludes": [
+    "**/dotfiles/common/claude/.claude/CLAUDE.md"
+  ],
   "permissions": {
     "allow": [
       "Bash(gh run watch *)"

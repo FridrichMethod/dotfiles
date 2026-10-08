@@ -218,8 +218,8 @@ dotfiles/
 │   ├── dotfiles-update.ps1       the same hook, for PowerShell on Windows
 │   ├── dotfiles-auto-stow.ps1    elevated restow worker (Windows task)
 │   └── awesome-skills-update.sh  weekly Claude/Codex skill sync
-├── CLAUDE.md                     guidance for Claude Code
-└── AGENTS.md                     guidance for OpenAI Codex / other agents
+├── AGENTS.md                     repository guide for every agent
+└── CLAUDE.md                     @AGENTS.md import stub for Claude Code
 ```
 
 </details>
@@ -445,10 +445,10 @@ remains active in adapter preflight and apply checks.
 
 | File | Audience |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | [Claude Code](https://claude.com/claude-code) |
-| [`AGENTS.md`](AGENTS.md) | OpenAI Codex and any agent following the [`AGENTS.md`](https://agents.md) convention |
+| [`AGENTS.md`](AGENTS.md) | Every agent: OpenAI Codex, Cursor, Copilot and any tool following the [`AGENTS.md`](https://agents.md) convention read it directly; [Claude Code](https://claude.com/claude-code) loads it through the import in `CLAUDE.md` |
+| [`CLAUDE.md`](CLAUDE.md) | Claude Code only: a stub whose first line is `@AGENTS.md`, kept so that clients without native `AGENTS.md` support and the first session after an upgrade still load the guide |
 
-These root files describe how agents should work **inside this repository**. They are separate from the user-global files stowed into `$HOME`.
+`AGENTS.md` is the single source of repository policy; the stub carries no rules of its own. All FridrichMethod repositories use this layout: a regular-file import stub rather than a symlink, so Windows clones and Claude's Edit tool keep working, and an `AGENTS.md` kept under 28 KB because Codex truncates project instructions at a combined 32 KiB budget. These root files describe how agents should work **inside this repository**. They are separate from the user-global files stowed into `$HOME`.
 
 ### User-global configuration
 
@@ -466,9 +466,10 @@ The Git-stored versions of these files are safe to share across macOS, Linux, an
 - Claude Code attribution is disabled with empty `attribution.commit` and `attribution.pr` strings; this supersedes the deprecated `includeCoAuthoredBy` setting.
 - Claude Code starts new sessions with `permissions.defaultMode = "auto"`. [Auto mode](https://code.claude.com/docs/en/permission-modes) requires a supported client, model, and account configuration; organization policy can disable it. Explicit CLI or higher-precedence settings can override the default. `skipAutoPermissionPrompt` only skips the opt-in prompt; it does not select the mode.
 - Codex has no active attribution setting; the aligned global instruction files prohibit `Co-Authored-By`, generated-with lines, and other AI attribution.
+- The two global instruction files are identical except for the destructive-action bullets under "Autonomy and scope", which encode Codex exec-policy review versus Claude auto-mode classification; `tests/ai-config-sync.sh` fails on any other difference.
 - Claude Code fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
 - Codex permission profiles, the network proxy, `auto_review`, multi-agent, and memories can be constrained by the installed Codex version, selected model, account entitlement, sandbox implementation, or organization policy.
-- `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical.
+- `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical. Every FridrichMethod repository ships an `AGENTS.md`, so this fallback only matters in third-party checkouts.
 
 #### Mutable Claude Code state
 
@@ -487,7 +488,7 @@ Claude's local helpers require Node.js 18 or newer on `PATH` (Git is optional fo
 
 Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to link the helpers and sync these defaults, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
 
-Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source.
+Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. No `~/.claude/AGENTS.md` should exist on a host either: Claude Code treats it as the `.claude/AGENTS.md` of the home directory and injects it as project instructions wherever no `CLAUDE.md` is on the path.
 
 #### Mutable Codex Desktop state
 
