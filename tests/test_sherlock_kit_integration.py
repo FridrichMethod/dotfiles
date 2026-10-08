@@ -24,7 +24,7 @@ class IntegrationTests(unittest.TestCase):
             "codex/skills/sherlock-kit-operate/SKILL.md": "---\nname: sherlock-kit-operate\n---\nUse the frozen shk.\n"}}
 
     def test_first_party_adapter_preflight_is_read_only_and_copy_is_idempotent(self):
-        home = Path(self.temporary.name) / "adapter home 文档"
+        home = self.temporary_root / "adapter home 文档"
         with mock.patch.object(integration, "adapter_bundle", return_value=self.bundle()):
             integration.install_adapters(self.root, home, Path("synthetic-python"), check_only=True)
             self.assertFalse(home.exists())
@@ -37,7 +37,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertFalse((home / ".codex/config.toml").exists())
 
     def test_adapter_bundle_identity_extra_hooks_and_local_conflicts_fail_closed(self):
-        home = Path(self.temporary.name) / "adapter home"
+        home = self.temporary_root / "adapter home"
         for kind in ("identity", "extra", "plugin-hooks", "invalid-plugin", "invalid-payload"):
             payload = self.bundle()
             if kind == "identity": payload["identity"]["code_revision"] = "0" * 40
@@ -61,7 +61,10 @@ class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="shk-dotfiles-tests-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name) / "dotfiles 文档"
+        # macOS exposes tempfile's /var root through a system symlink. Resolve
+        # only the fixture root before creating targets; target links stay unsafe.
+        self.temporary_root = Path(self.temporary.name).resolve()
+        self.root = self.temporary_root / "dotfiles 文档"
         self.root.mkdir()
         self.projection = (integration.BEGIN + "\n<!-- source: SHERLOCK.md; schema_version: 1; policy_sha256: "
                            + "a" * 64 + " -->\nScoped synthetic policy\n" + integration.END + "\n")
@@ -135,7 +138,7 @@ class IntegrationTests(unittest.TestCase):
                 integration.verify_identity(dict(frozen, **{key: "different"}), self.pin)
 
     def test_install_reuses_verified_revision_and_keeps_private_pointer(self):
-        home = Path(self.temporary.name) / "home with spaces"
+        home = self.temporary_root / "home with spaces"
         revision = home / ".local/share/sherlock-kit/revisions" / self.pin["code_revision"]
         revision.mkdir(parents=True)
         identity = dict(self.pin, install_mode="frozen")
@@ -150,7 +153,7 @@ class IntegrationTests(unittest.TestCase):
             self.assertIn(str(sys.executable), (home / ".local/bin/shk.cmd").read_text())
 
     def test_failed_install_and_concurrent_setup_leave_active_unchanged(self):
-        home = Path(self.temporary.name) / "home"
+        home = self.temporary_root / "home"
         revision = home / ".local/share/sherlock-kit/revisions" / self.pin["code_revision"]
         revision.mkdir(parents=True)
         active = revision.parent.parent / "active.json"
@@ -167,7 +170,7 @@ class IntegrationTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "native link trust covered separately")
     def test_symlinked_installation_and_write_targets_are_rejected(self):
-        home = Path(self.temporary.name) / "home"
+        home = self.temporary_root / "home"
         home.mkdir()
         (home / ".local").symlink_to(self.root, target_is_directory=True)
         with self.assertRaisesRegex(ValueError, "symlinked"):
@@ -176,9 +179,16 @@ class IntegrationTests(unittest.TestCase):
         linked.symlink_to(self.root / "sherlock-kit.pin.json")
         with self.assertRaisesRegex(ValueError, "symlink"):
             integration.write(linked, "bad")
+        (home / ".claude").symlink_to(self.root, target_is_directory=True)
+        before = self.snapshot()
+        with mock.patch.object(integration, "adapter_bundle", return_value=self.bundle()):
+            for check_only in (True, False):
+                with self.subTest(check_only=check_only), self.assertRaisesRegex(ValueError, "symlinked adapter"):
+                    integration.install_adapters(self.root, home, Path("synthetic-python"), check_only=check_only)
+        self.assertEqual(before, self.snapshot())
 
     def test_launch_sets_advertised_identity_and_executes_frozen_python(self):
-        home = Path(self.temporary.name) / "home"
+        home = self.temporary_root / "home"
         state = home / ".local/share/sherlock-kit"
         state.mkdir(parents=True)
         (state / "active.json").write_text(json.dumps({"revision": self.pin["code_revision"]}))

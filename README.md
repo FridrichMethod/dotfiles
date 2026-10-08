@@ -435,6 +435,10 @@ missing dependencies fail CI instead of silently skipping tests. See
 [testing commands and limitations](docs/testing.md) and the
 [behavior matrix](tests/COVERAGE.md).
 
+Sherlock integration fixtures use physical temporary-root paths, including on
+macOS where `/var` is a system symlink. Target and ancestor symlink rejection
+remains active in adapter preflight and apply checks.
+
 ## AI Assistant Configuration
 
 ### Repository guides
