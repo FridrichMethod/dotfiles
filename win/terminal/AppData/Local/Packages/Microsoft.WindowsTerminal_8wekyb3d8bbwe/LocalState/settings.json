@@ -6,31 +6,6 @@
         {
             "command": 
             {
-                "action": "copy",
-                "singleLine": false
-            },
-            "id": "User.copy.644BA8F2"
-        },
-        {
-            "command": "paste",
-            "id": "User.paste"
-        },
-        {
-            "command": 
-            {
-                "action": "splitPane",
-                "split": "auto",
-                "splitMode": "duplicate"
-            },
-            "id": "User.splitPane.A6751878"
-        },
-        {
-            "command": "find",
-            "id": "User.find"
-        },
-        {
-            "command": 
-            {
                 "action": "sendInput",
                 "input": "\u0017"
             },
@@ -43,16 +18,54 @@
                 "input": "\u001bd"
             },
             "id": "User.sendInput.53EE635F"
+        },
+        {
+            "command": 
+            {
+                "action": "scrollToMark",
+                "direction": "previous"
+            },
+            "id": "User.scrollToMark.previous"
+        },
+        {
+            "command": 
+            {
+                "action": "scrollToMark",
+                "direction": "next"
+            },
+            "id": "User.scrollToMark.next"
+        },
+        {
+            "command": 
+            {
+                "action": "newTab",
+                "profile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}"
+            },
+            "id": "User.newTab.PowerShell"
+        },
+        {
+            "command": 
+            {
+                "action": "newTab",
+                "profile": "{9e0358ba-a72d-4a9a-ae5c-d8f7af5438a5}"
+            },
+            "id": "User.newTab.Ubuntu"
         }
     ],
     "copyFormatting": "none",
     "copyOnSelect": true,
     "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+    "disabledProfileSources": 
+    [
+        "Microsoft.WSL",
+        "Windows.Terminal.Wsl",
+        "Windows.Terminal.Azure"
+    ],
     "focusFollowMouse": true,
     "keybindings": 
     [
         {
-            "id": "User.copy.644BA8F2",
+            "id": "Terminal.CopyToClipboard",
             "keys": "ctrl+c"
         },
         {
@@ -64,16 +77,32 @@
             "keys": "ctrl+backspace"
         },
         {
-            "id": "User.paste",
+            "id": "Terminal.PasteFromClipboard",
             "keys": "ctrl+v"
         },
         {
-            "id": "User.find",
-            "keys": "ctrl+shift+f"
+            "id": "Terminal.DuplicatePaneAuto",
+            "keys": "alt+shift+d"
         },
         {
-            "id": "User.splitPane.A6751878",
-            "keys": "alt+shift+d"
+            "id": "Terminal.TogglePaneZoom",
+            "keys": "alt+shift+z"
+        },
+        {
+            "id": "User.scrollToMark.previous",
+            "keys": "ctrl+up"
+        },
+        {
+            "id": "User.scrollToMark.next",
+            "keys": "ctrl+down"
+        },
+        {
+            "id": "User.newTab.PowerShell",
+            "keys": "ctrl+alt+p"
+        },
+        {
+            "id": "User.newTab.Ubuntu",
+            "keys": "ctrl+alt+u"
         }
     ],
     "newTabMenu": 
@@ -87,12 +116,9 @@
         "defaults": 
         {
             "adjustIndistinguishableColors": "never",
-            "autoMarkPrompts": false,
-            "backgroundImageOpacity": 0.2,
             "colorScheme": "One Half Dark",
             "cursorShape": "bar",
             "experimental.repositionCursorWithMouse": true,
-            "experimental.retroTerminalEffect": false,
             "font": 
             {
                 "face": "CaskaydiaCove Nerd Font",
@@ -127,12 +153,29 @@
                 "startingDirectory": "%USERPROFILE%"
             },
             {
-                "commandline": "C:\\WINDOWS\\system32\\wsl.exe -d Ubuntu",
+                "commandline": "%SystemRoot%\\System32\\wsl.exe -d Ubuntu",
                 "guid": "{9e0358ba-a72d-4a9a-ae5c-d8f7af5438a5}",
                 "hidden": false,
                 "icon": "ms-appx:///ProfileIcons/{9acb9455-ca41-5af7-950f-6bca1bc9722f}.png",
                 "name": "Ubuntu",
+                "pathTranslationStyle": "wsl",
                 "startingDirectory": "~"
+            },
+            {
+                "commandline": "%SystemRoot%\\System32\\wsl.exe -d Ubuntu -- ssh sherlock",
+                "guid": "{7c235087-8e3a-4410-8af0-d5ac10f37177}",
+                "hidden": false,
+                "icon": "\ue968",
+                "name": "Sherlock",
+                "tabColor": "#8C1515"
+            },
+            {
+                "commandline": "%SystemRoot%\\System32\\wsl.exe -d Ubuntu -- ssh marlowe",
+                "guid": "{1f2df154-b151-4eb1-a722-5753ff2025f4}",
+                "hidden": false,
+                "icon": "\ue968",
+                "name": "Marlowe",
+                "tabColor": "#175E54"
             }
         ]
     },
