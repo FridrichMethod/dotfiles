@@ -103,7 +103,6 @@ plugins=(
     gh
     git
     git-lfs
-    github
     gitignore
     golang
     history
