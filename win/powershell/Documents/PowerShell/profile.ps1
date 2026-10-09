@@ -32,14 +32,17 @@ if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
     }
     # Conda.psm1 completes only via the legacy TabExpansion function, which
     # PowerShell 7.4 stopped calling; this serves both the stub and the alias.
+    # Commands are conda 26.5's `conda commands`; only the words before the
+    # cursor count, so completing mid-line works.
     Register-ArgumentCompleter -Native -CommandName conda -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
-        $words = @($commandAst.CommandElements | ForEach-Object { $_.Extent.Text })
-        if ($wordToComplete) { $words = @($words | Select-Object -SkipLast 1) }
+        $words = @($commandAst.CommandElements | Where-Object { $_.Extent.EndOffset -lt $cursorPosition } |
+                ForEach-Object { $_.Extent.Text })
         $candidates = if ($words.Count -eq 1) {
-            'activate', 'clean', 'compare', 'config', 'create', 'deactivate', 'doctor', 'env',
-            'export', 'info', 'init', 'install', 'list', 'notices', 'package', 'remove',
-            'rename', 'run', 'search', 'uninstall', 'update', 'upgrade'
+            'activate', 'check', 'clean', 'commands', 'compare', 'config', 'content-trust', 'create',
+            'deactivate', 'doctor', 'env', 'export', 'index', 'info', 'init', 'install', 'list',
+            'menuinst', 'notices', 'package', 'pypi', 'remove', 'rename', 'repoquery', 'run',
+            'search', 'self', 'token', 'tos', 'uninstall', 'update', 'upgrade'
         }
         elseif (($words.Count -eq 2 -and $words[1] -eq 'activate') -or $words[-1] -in '-n', '--name') {
             @('base') + @(Get-ChildItem -LiteralPath (Join-Path $HOME 'miniconda3\envs') -Directory -ErrorAction Ignore |

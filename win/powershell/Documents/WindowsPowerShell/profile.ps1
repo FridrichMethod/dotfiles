@@ -20,5 +20,27 @@ if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
         }
         Invoke-Conda @args
     }
+    # Same completer as the PowerShell 7 profile, so the stub completes before
+    # Conda.psm1 (whose TabExpansion spawns conda.exe per Tab) is loaded.
+    # Commands are conda 26.5's `conda commands`; only the words before the
+    # cursor count, so completing mid-line works.
+    Register-ArgumentCompleter -Native -CommandName conda -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+        $words = @($commandAst.CommandElements | Where-Object { $_.Extent.EndOffset -lt $cursorPosition } |
+                ForEach-Object { $_.Extent.Text })
+        $candidates = if ($words.Count -eq 1) {
+            'activate', 'check', 'clean', 'commands', 'compare', 'config', 'content-trust', 'create',
+            'deactivate', 'doctor', 'env', 'export', 'index', 'info', 'init', 'install', 'list',
+            'menuinst', 'notices', 'package', 'pypi', 'remove', 'rename', 'repoquery', 'run',
+            'search', 'self', 'token', 'tos', 'uninstall', 'update', 'upgrade'
+        }
+        elseif (($words.Count -eq 2 -and $words[1] -eq 'activate') -or $words[-1] -in '-n', '--name') {
+            @('base') + @(Get-ChildItem -LiteralPath (Join-Path $HOME 'miniconda3\envs') -Directory -ErrorAction Ignore |
+                    ForEach-Object Name)
+        }
+        $candidates | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
 }
 #endregion

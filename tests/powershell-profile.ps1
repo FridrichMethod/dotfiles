@@ -24,6 +24,45 @@ function Assert-True([bool]$Condition, [string]$Message) {
     }
 }
 
+# Runs a child without a window or stdin, with environment edits ($null
+# removes a variable), drains both streams concurrently so neither pipe can
+# fill up, and kills it after the timeout.
+function Invoke-Child {
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [hashtable]$Environment = @{},
+        [int]$TimeoutSeconds = 60
+    )
+    $psi = [Diagnostics.ProcessStartInfo]::new($FilePath)
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    foreach ($name in $Environment.Keys) {
+        if ($null -eq $Environment[$name]) { $null = $psi.Environment.Remove($name) }
+        else { $psi.Environment[$name] = $Environment[$name] }
+    }
+    foreach ($a in $ArgumentList) { $psi.ArgumentList.Add($a) }
+    $process = [Diagnostics.Process]::Start($psi)
+    try {
+        $process.StandardInput.Close()
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+        if ($timedOut) { $process.Kill($true) }
+        $process.WaitForExit()
+        [pscustomobject]@{
+            TimedOut = $timedOut
+            ExitCode = $process.ExitCode
+            Out = $stdout.GetAwaiter().GetResult().Trim()
+            Err = $stderr.GetAwaiter().GetResult().Trim()
+        }
+    }
+    finally { $process.Dispose() }
+}
+
 function Get-ProfileAst([string]$Path) {
     $tokens = $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$errors)
@@ -140,6 +179,14 @@ foreach ($parsed in $parsed7, $parsed51) {
     $evaluation = if ($stub) { @(Get-Commands $stub.Body | Where-Object { $_.GetCommandName() -eq 'Invoke-Expression' }) }
     Assert-True ($removal.Count -eq 1 -and $evaluation.Count -eq 1 -and $removal[0].Extent.StartOffset -lt $evaluation[0].Extent.StartOffset) "$file drops the conda stub before running the hook"
 }
+$condaSetup = {
+    param($parsed)
+    $completer = @(Get-Commands $parsed.Ast | Where-Object {
+            $_.GetCommandName() -eq 'Register-ArgumentCompleter' -and $_.Extent.Text -match '-CommandName\s+conda\b'
+        })
+    ((Get-FunctionAst $parsed.Ast 'conda').Extent.Text, ($completer | ForEach-Object { $_.Extent.Text })) -join "`n"
+}
+Assert-True ((& $condaSetup $parsed7) -ceq (& $condaSetup $parsed51) -and (& $condaSetup $parsed7) -match 'Register-ArgumentCompleter') 'both profiles define the same conda stub and completer'
 
 Write-Output '--- Windows PowerShell 5.1 compatibility'
 $modern = @($parsed51.Ast.FindAll({
@@ -152,19 +199,32 @@ $modern = @($parsed51.Ast.FindAll({
 Assert-True ($modern.Count -eq 0) 'the 5.1 profile avoids PowerShell 7-only syntax'
 $windowsPowerShell = if ($IsWindows) { Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe' }
 if ($windowsPowerShell -and (Test-Path -LiteralPath $windowsPowerShell)) {
-    # Windows PowerShell cannot load modules from the pwsh 7 module path it
-    # would inherit, so start it with that variable removed.
-    $psi = [Diagnostics.ProcessStartInfo]::new($windowsPowerShell)
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $null = $psi.Environment.Remove('PSModulePath')
-    $script = "`$t = `$e = `$null; [void][System.Management.Automation.Language.Parser]::ParseFile('$profile51', [ref]`$t, [ref]`$e); `$e.Count"
-    foreach ($a in '-NoProfile', '-NonInteractive', '-Command', $script) { $psi.ArgumentList.Add($a) }
-    $process = [Diagnostics.Process]::Start($psi)
-    $out = $process.StandardOutput.ReadToEnd().Trim()
-    $process.WaitForExit()
-    Assert-True ($process.ExitCode -eq 0 -and $out -eq '0') "the 5.1 profile parses under Windows PowerShell (errors: $out)"
+    $fakeHome51 = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-profile51-test-" + [guid]::NewGuid().ToString('N'))
+    try {
+        $null = New-Item -ItemType Directory -Force -Path (Join-Path $fakeHome51 'miniconda3/Scripts'), (Join-Path $fakeHome51 'miniconda3/envs/demo')
+        $null = New-Item -ItemType File -Force -Path (Join-Path $fakeHome51 'miniconda3/Scripts/conda.exe')
+        # Paths travel in the environment, so no quoting can break the command.
+        # Windows PowerShell cannot load modules from the pwsh 7 module path it
+        # would inherit, so that variable is removed.
+        $child51 = @'
+$t = $e = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile($env:DOTFILES_TEST_PROFILE, [ref]$t, [ref]$e)
+"parse-errors=$($e.Count)"
+Set-Variable -Name HOME -Value $env:DOTFILES_TEST_HOME -Force -Scope Global
+. $env:DOTFILES_TEST_PROFILE
+"conda=$((Get-Command conda).CommandType)"
+"subcommand=$(@((TabExpansion2 'conda inf --json' 9).CompletionMatches | ForEach-Object CompletionText) -join ',')"
+"env=$(@((TabExpansion2 'conda activate de' 17).CompletionMatches | ForEach-Object CompletionText) -join ',')"
+'@
+        $result = Invoke-Child $windowsPowerShell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $child51) -Environment @{
+            PSModulePath = $null; DOTFILES_TEST_PROFILE = $profile51; DOTFILES_TEST_HOME = $fakeHome51
+        }
+        $expected = "parse-errors=0`nconda=Function`nsubcommand=info`nenv=demo"
+        Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and ($result.Out -replace "`r", '') -eq $expected -and -not $result.Err) "the 5.1 profile parses and completes conda under Windows PowerShell (exit=$($result.ExitCode) out=$($result.Out -replace '\s+', ' ') err=$($result.Err))"
+    }
+    finally {
+        Remove-Item -LiteralPath $fakeHome51 -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 else {
     Write-Output 'SKIP: Windows PowerShell 5.1 parse (not on Windows)'
@@ -201,11 +261,11 @@ try {
     $null = New-Item -ItemType File -Force -Path (Join-Path $fakeHome 'miniconda3/Scripts/conda.exe')
     $child = @'
 $ErrorActionPreference = 'Stop'
-Set-Variable -Name HOME -Value '__HOME__' -Force -Scope Global
+Set-Variable -Name HOME -Value $env:DOTFILES_TEST_HOME -Force -Scope Global
 $promptBefore = (Get-Command prompt).ScriptBlock.ToString()
 $before = @((Get-Variable).Name)
 $sw = [Diagnostics.Stopwatch]::StartNew()
-. '__PROFILE__'
+. $env:DOTFILES_TEST_PROFILE
 $sw.Stop()
 $leaked = @((Get-Variable).Name | Where-Object { $_ -notin $before -and $_ -notin 'before', 'sw', 'promptBefore' })
 if ($sw.Elapsed.TotalSeconds -ge 5) { throw "profile load took $($sw.Elapsed.TotalSeconds) s" }
@@ -216,33 +276,19 @@ if ($IsWindows) {
     if ((Get-Command conda).CommandType -ne 'Function') { throw 'conda is not the lazy stub' }
     $completion = (TabExpansion2 'conda activate de' 17).CompletionMatches.CompletionText
     if ('demo' -notin $completion) { throw "conda completion offered: $($completion -join ', ')" }
+    $completion = (TabExpansion2 'conda inf --json' 9).CompletionMatches.CompletionText
+    if ('info' -notin $completion) { throw "mid-line conda completion offered: $($completion -join ', ')" }
 }
 'PASS'
 '@
-    $child = $child.Replace('__HOME__', $fakeHome.Replace("'", "''")).Replace('__PROFILE__', $profile7.Replace("'", "''"))
-    $psi = [Diagnostics.ProcessStartInfo]::new($powerShell)
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $psi.RedirectStandardInput = $true
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $psi.Environment['DOTFILES_AUTO_UPDATE'] = '0'
-    $psi.Environment['DOTFILES_DIR'] = Join-Path $fakeHome 'no-dotfiles'
-    $null = $psi.Environment.Remove('CONDA_CHANGEPS1')
-    foreach ($a in '-NoProfile', '-NonInteractive', '-Command', $child) { $psi.ArgumentList.Add($a) }
-    $process = [Diagnostics.Process]::Start($psi)
-    $process.StandardInput.Close()
-    $stdout = $process.StandardOutput.ReadToEndAsync()
-    $stderr = $process.StandardError.ReadToEndAsync()
-    if (-not $process.WaitForExit(60000)) {
-        $process.Kill($true)
-        Assert-True $false 'redirected profile load finished within 60 s'
+    $result = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $child) -Environment @{
+        DOTFILES_AUTO_UPDATE = '0'
+        DOTFILES_DIR = Join-Path $fakeHome 'no-dotfiles'
+        DOTFILES_TEST_HOME = $fakeHome
+        DOTFILES_TEST_PROFILE = $profile7
+        CONDA_CHANGEPS1 = $null
     }
-    else {
-        $out = $stdout.GetAwaiter().GetResult().Trim()
-        $err = $stderr.GetAwaiter().GetResult().Trim()
-        Assert-True ($process.ExitCode -eq 0 -and $out -eq 'PASS' -and -not $err) "redirected load is fast, silent and leaves the prompt alone (exit=$($process.ExitCode) out=$out err=$err)"
-    }
+    Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and $result.Out -eq 'PASS' -and -not $result.Err) "redirected load is fast, silent and leaves the prompt alone (timedout=$($result.TimedOut) exit=$($result.ExitCode) out=$($result.Out) err=$($result.Err))"
 }
 finally {
     Remove-Item -LiteralPath $fakeHome -Recurse -Force -ErrorAction SilentlyContinue
