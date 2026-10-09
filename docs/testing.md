@@ -34,11 +34,22 @@ redirection, even with PowerShell's ANSI rendering preference. Installers are te
 with quiet helpers; errors and failed-install retries must remain observable.
 
 `tests/powershell-profile.ps1` checks the tracked PowerShell profiles and the
-oh-my-posh theme without loading the live profile. It walks the AST to keep
-interactive setup inside the console and agent-session guard, the conda hook
-lazy, installs out of the profile and Windows PowerShell 5.1 syntax ASCII-only.
-It also dot-sources the PowerShell 7 profile in a redirected child with a fake
-home and a 60 s timeout, and renders the theme when oh-my-posh is installed.
+oh-my-posh theme without loading the live profile. It walks the AST to pin the
+exact interactive guard and keep setup in its then-branch, checks agent-session
+parity against `common/zsh/.zshrc`, keeps the conda stub lazy (removed before
+the hook runs) and identical in both profiles, installs out of the profile and
+Windows PowerShell 5.1 syntax ASCII-only. It unit-tests the history filter in
+both directions, the eza glob expansion and the `$LASTEXITCODE` prompt wrapper,
+parses and completes conda under Windows PowerShell 5.1, dot-sources the
+PowerShell 7 profile in a redirected child with a fake home and a 60 s timeout,
+and renders the primary, transient and secondary prompts with any inherited
+oh-my-posh session removed and a temporary cache, failing on rendered template
+errors (unknown segment types are not detectable in oh-my-posh 31.6).
+
+`tests/shell-profile.sh` also resolves nvm's `default` alias forms against a
+fake `NVM_DIR` under sh, dash, Bash and Zsh, and checks that
+`custom/nvm.zsh` loads nvm with `--no-use` and keeps its node ahead of other
+bins.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 

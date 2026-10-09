@@ -71,7 +71,7 @@ repos:
         entry: tests/shell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(common/sh/\.profile|tests/shell-profile\.sh)$
+        files: ^(common/sh/\.profile|common/zsh/\.oh-my-zsh/custom/nvm\.zsh|tests/shell-profile\.sh)$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh

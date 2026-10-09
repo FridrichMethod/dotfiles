@@ -25,8 +25,10 @@ There is no global Node/npm dependency for the AI merge backend. `jq`, `uv`,
 ## Optional Windows interactive tools
 
 The PowerShell 7 profile uses these tools only when they are already installed:
-executables are probed on `PATH`, PSFzf with `Get-Module -ListAvailable`, and
-CompletionPredictor is imported on the first idle tick with errors ignored.
+executables are probed on `PATH`, PSFzf by looking for a `PSFzf` directory in
+each `PSModulePath` entry, and CompletionPredictor and
+Microsoft.WinGet.CommandNotFound are imported on the first idle tick (a missing
+module is silent; one that is installed but fails to import warns once).
 Install them by hand; profiles, stow and automatic updates never install them.
 
 | Tool | Install | Used for | When absent |
@@ -41,7 +43,8 @@ Install them by hand; profiles, stow and automatic updates never install them.
 | fd | `winget install --id sharkdp.fd -e` | standalone `fd`; the profile does not use it | none |
 
 oh-my-posh 31 is an MSIX package. Upgrading from a 29.x installer requires
-`winget uninstall` first, and the theme's `$schema` pin moves with the release.
+`winget uninstall` first. The MSIX package can also update itself through App
+Installer; the theme's `$schema` pin moves with the installed release.
 
 ## Is a venv necessary?
 
