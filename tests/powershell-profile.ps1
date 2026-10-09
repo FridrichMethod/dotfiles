@@ -13,6 +13,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $profile7 = Join-Path $repoRoot 'win/powershell/Documents/PowerShell/profile.ps1'
 $profile51 = Join-Path $repoRoot 'win/powershell/Documents/WindowsPowerShell/profile.ps1'
 $theme = Join-Path $repoRoot 'win/oh-my-posh/.config/oh-my-posh/prompt.omp.json'
+$zshrc = Join-Path $repoRoot 'common/zsh/.zshrc'
 $powerShell = (Get-Process -Id $PID).Path
 $failures = [System.Collections.Generic.List[string]]::new()
 
@@ -76,18 +77,6 @@ function Get-Commands($Ast) {
     $Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
 }
 
-# True when $Node sits inside the interactive guard: an `if` whose condition
-# tests both redirected stdout and the agent-session flag.
-function Test-InsideConsoleGuard($Node) {
-    for ($p = $Node.Parent; $p; $p = $p.Parent) {
-        if ($p -is [System.Management.Automation.Language.IfStatementAst]) {
-            $condition = $p.Clauses[0].Item1.Extent.Text
-            if ($condition -match 'IsOutputRedirected' -and $condition -match 'IsAgentSession') { return $true }
-        }
-    }
-    $false
-}
-
 function Test-InsideNode($Node, $Ancestor) {
     for ($p = $Node.Parent; $p; $p = $p.Parent) {
         if ([object]::ReferenceEquals($p, $Ancestor)) { return $true }
@@ -134,20 +123,55 @@ $tail = $text7.Substring([Math]::Max($tailAt, 0))
 Assert-True ($tail.Contains('scripts/dotfiles-update.ps1')) 'the update hook runs scripts/dotfiles-update.ps1'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
+# Interactive setup runs only in the then-branch of exactly this if: stdout is
+# a console, no agent terminal, and the host loaded PSReadLine, which it skips
+# for -Command/-File scripts and -NonInteractive. Comparing the whole condition
+# catches an inverted or dropped term, and the branch check catches setup moved
+# into an else or elseif.
+$guardText = '-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Module PSReadLine)'
+$guards = @($parsed7.Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] }, $true) |
+        Where-Object { ($_.Clauses[0].Item1.Extent.Text -replace '\s+', ' ').Trim() -eq $guardText })
+Assert-True ($guards.Count -eq 1) "exactly one interactive guard: if ($guardText)"
+$guardBody = if ($guards.Count -eq 1) { $guards[0].Clauses[0].Item2 }
 $guarded = @(Get-Commands $parsed7.Ast | Where-Object {
         $name = $_.GetCommandName()
         $name -in 'Set-PSReadLineOption', 'Set-PSReadLineKeyHandler', 'Register-EngineEvent', 'oh-my-posh', 'zoxide' -or
         ($name -eq 'Import-Module' -and $_.Extent.Text -match 'CompletionPredictor|Microsoft\.WinGet\.CommandNotFound|PSFzf')
     })
 Assert-True ($guarded.Count -ge 8) "found the interactive commands ($($guarded.Count))"
-$outside = @($guarded | Where-Object { -not (Test-InsideConsoleGuard $_) })
-Assert-True ($outside.Count -eq 0) "interactive setup stays inside the console and agent guard$(if ($outside) { ': ' + (($outside | ForEach-Object { $_.Extent.Text.Split("`n")[0] }) -join ' | ') })"
-$agentFlag = $parsed7.Ast.FindAll({
+$outside = @($guarded | Where-Object { -not ($guardBody -and (Test-InsideNode $_ $guardBody)) })
+Assert-True ($outside.Count -eq 0) "interactive setup runs only in the guard's then-branch$(if ($outside) { ': ' + (($outside | ForEach-Object { $_.Extent.Text.Split("`n")[0] }) -join ' | ') })"
+
+# $IsAgentSession tests exactly the variables zsh's _is_agent_session tests,
+# joined with -or, so an agent terminal skips the same setup in both shells.
+$zshAgents = @()
+if (Test-Path -LiteralPath $zshrc) {
+    $zshMatch = [regex]::Match((Get-Content -LiteralPath $zshrc -Raw), '(?m)^_is_agent_session\(\)\s*\{\s*\[\[(?<body>[^\]]*)\]\]\s*\}')
+    if ($zshMatch.Success) {
+        $terms = @($zshMatch.Groups['body'].Value -split '\|\|')
+        $names = @($terms | ForEach-Object { if ($_ -match '^\s*-n\s+"\$\{?(\w+)\}?"\s*$') { $Matches[1].ToUpperInvariant() } })
+        if ($names.Count -eq $terms.Count) { $zshAgents = $names }
+    }
+}
+Assert-True ($zshAgents.Count -gt 0) "common/zsh/.zshrc defines _is_agent_session as [[ -n `"`$A`" || ... ]] ($($zshAgents -join ', '))"
+$psAgents = @()
+$agentFlag = $parsed7.Ast.Find({
         param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
         $n.Left.Extent.Text -eq '$IsAgentSession'
-    }, $true) | Select-Object -First 1
-Assert-True ($null -ne $agentFlag -and $agentFlag.Right.Extent.Text -match 'CURSOR_AGENT' -and
-    $agentFlag.Right.Extent.Text -match 'GEMINI_CLI') 'agent sessions mirror _is_agent_session (CURSOR_AGENT, GEMINI_CLI)'
+    }, $true)
+if ($agentFlag) {
+    $find = { param($Type) @($agentFlag.Right.FindAll({ param($n) $n -is $Type }.GetNewClosure(), $true)) }
+    $variables = & $find ([System.Management.Automation.Language.VariableExpressionAst])
+    $operators = @(& $find ([System.Management.Automation.Language.BinaryExpressionAst]) | ForEach-Object Operator)
+    $negations = & $find ([System.Management.Automation.Language.UnaryExpressionAst])
+    if (-not ($variables | Where-Object { $_.VariablePath.DriveName -ne 'env' }) -and
+        -not ($operators | Where-Object { $_ -ne 'Or' }) -and -not $negations) {
+        $psAgents = @($variables | ForEach-Object { ($_.VariablePath.UserPath -replace '^env:', '').ToUpperInvariant() })
+    }
+}
+$sameAgents = (@($zshAgents | Sort-Object -Unique) -join ',') -eq (@($psAgents | Sort-Object -Unique) -join ',')
+Assert-True ($zshAgents.Count -gt 0 -and $sameAgents) "`$IsAgentSession is `$env:$($zshAgents -join ' -or $env:'), like _is_agent_session (profile: $($psAgents -join ', '))"
+
 $importsPSReadLine = @(Get-Commands $parsed7.Ast | Where-Object {
         $_.GetCommandName() -eq 'Import-Module' -and $_.Extent.Text -match '\bPSReadLine\b'
     })

@@ -132,7 +132,7 @@ repos:
         entry: tests/powershell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(win/powershell/.*|win/oh-my-posh/.*|tests/powershell-profile\.(sh|ps1))$
+        files: ^(win/powershell/.*|win/oh-my-posh/.*|common/zsh/\.zshrc|tests/powershell-profile\.(sh|ps1))$
       - id: update-hooks
         name: automatic update and stow behavior
         entry: tests/update-hooks.sh
