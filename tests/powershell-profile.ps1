@@ -178,6 +178,8 @@ $importsPSReadLine = @(Get-Commands $parsed7.Ast | Where-Object {
 Assert-True ($importsPSReadLine.Count -eq 0) 'PSReadLine is not imported again'
 $getCommand = @(Get-Commands $parsed7.Ast | Where-Object { $_.GetCommandName() -in 'Get-Command', 'gcm' })
 Assert-True ($getCommand.Count -eq 0) 'optional tools are probed on PATH, not with Get-Command'
+$listAvailable = @(Get-Commands $parsed7.Ast | Where-Object { $_.GetCommandName() -eq 'Get-Module' -and $_.Extent.Text -match '-ListAvailable' })
+Assert-True ($listAvailable.Count -eq 0) 'optional modules are probed on PSModulePath, not with Get-Module -ListAvailable'
 
 $tabBinding = @(Get-Commands $parsed7.Ast | Where-Object {
         $_.GetCommandName() -eq 'Set-PSReadLineKeyHandler' -and $_.Extent.Text -match '-Key\s+Tab\b'

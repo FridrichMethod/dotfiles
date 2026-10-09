@@ -146,7 +146,9 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
     # --- Optional CLI tools (docs/dependencies.md); each skipped when absent ---
     if (& $HasExe fzf) {
         if (-not $env:FZF_DEFAULT_OPTS) { $env:FZF_DEFAULT_OPTS = '--height=60% --layout=reverse --border --info=inline' }
-        if (Get-Module PSFzf -ListAvailable) {
+        # Get-Module -ListAvailable takes ~30 ms; look in the module path instead.
+        if ($env:PSModulePath.Split([IO.Path]::PathSeparator) |
+                Where-Object { $_ -and [IO.Directory]::Exists([IO.Path]::Combine($_, 'PSFzf')) }) {
             # Calling an exported function autoloads PSFzf on the first keypress
             # instead of at startup. PSFzf never overrides a chord that is
             # already bound, so these bindings survive its import.
