@@ -185,9 +185,23 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
         # Code, Anaconda Prompt) in this process. A user or parent value wins.
         if ((Get-Module oh-my-posh-core) -and $null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
     }
-    # zoxide wraps the prompt function, so it must run after oh-my-posh.
+    # zoxide wraps the prompt function, so it must run after oh-my-posh. Its
+    # hook runs `zoxide add` after oh-my-posh restored $LASTEXITCODE, which
+    # reset it to 0 after every cd, so the outer wrapper restores it again.
+    # The value is a parameter default because any statement ahead of the
+    # inner call would reset the $? that oh-my-posh reads, and the inner
+    # prompt lives in a closure, not a global, so re-sourcing this profile
+    # cannot make the wrapper call itself.
     if (& $HasExe zoxide) {
         Invoke-Expression (& { (zoxide init powershell | Out-String) })
+        $function:global:prompt = & {
+            $inner = $function:prompt
+            {
+                param($ExitCode = $global:LASTEXITCODE)
+                & $inner
+                $global:LASTEXITCODE = $ExitCode
+            }.GetNewClosure()
+        }
     }
     Remove-Variable HasExe
 }

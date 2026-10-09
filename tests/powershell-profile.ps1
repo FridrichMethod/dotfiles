@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 # PowerShell profile and oh-my-posh theme contract. Runs with -NoProfile and
-# never loads the live profile: static checks walk the AST, and the load checks
-# dot-source the tracked files in child processes with a fake HOME and the
-# update hook disabled.
+# never loads the live profile: static checks walk the AST, unit checks run
+# single pieces lifted from it, and the load checks dot-source the tracked
+# files in child processes with a fake HOME and the update hook disabled.
 [CmdletBinding()]
 param()
 
@@ -190,6 +190,32 @@ Assert-True ($ompInit.Count -eq 1 -and -not ($keyHandlers | Where-Object { $_.Ex
 $zoxide = @(Get-Commands $parsed7.Ast | Where-Object { $_.GetCommandName() -eq 'zoxide' })
 Assert-True ($zoxide.Count -eq 1 -and $ompInit.Count -eq 1 -and $zoxide[0].Extent.StartOffset -gt $ompInit[0].Extent.StartOffset) 'zoxide wraps the oh-my-posh prompt, so it initializes after it'
 Assert-True ($text7.Contains(".config/oh-my-posh/prompt.omp.json")) 'the profile loads the tracked theme path'
+
+Write-Output '--- prompt wrapper'
+# zoxide's hook runs a native command after oh-my-posh restored
+# $LASTEXITCODE. Replay that with stand-ins: the oh-my-posh one reads $? first
+# and restores $LASTEXITCODE, the zoxide one wraps it and then clobbers it.
+$wrapper = $parsed7.Ast.Find({
+        param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $n.Left.Extent.Text -eq '$function:global:prompt'
+    }, $true)
+Assert-True ($null -ne $wrapper -and $zoxide.Count -eq 1 -and $wrapper.Extent.StartOffset -gt $zoxide[0].Extent.StartOffset -and
+    $guardBody -and (Test-InsideNode $wrapper $guardBody)) 'a guarded prompt wrapper follows zoxide init'
+if ($wrapper) {
+    function global:prompt { $global:OmpSawStatus = $?; $code = $global:LASTEXITCODE; 'PS> '; $global:LASTEXITCODE = $code }
+    $global:__zoxide_prompt_old = $function:prompt
+    function global:prompt {
+        if ($null -ne $__zoxide_prompt_old) { & $__zoxide_prompt_old }
+        $global:LASTEXITCODE = 0
+    }
+    Invoke-Expression $wrapper.Extent.Text
+    $global:LASTEXITCODE = 3
+    Write-Error 'a failed command' -ErrorAction SilentlyContinue
+    $rendered = prompt
+    Assert-True ($global:LASTEXITCODE -eq 3 -and $global:OmpSawStatus -eq $false -and $rendered -eq 'PS> ') "the prompt keeps `$LASTEXITCODE and the `$? oh-my-posh reads (LASTEXITCODE=$global:LASTEXITCODE, `$?=$global:OmpSawStatus)"
+    Remove-Item -LiteralPath Function:\prompt
+    Remove-Variable -Name __zoxide_prompt_old, OmpSawStatus -Scope Global
+}
 
 Write-Output '--- conda stays lazy'
 foreach ($parsed in $parsed7, $parsed51) {
