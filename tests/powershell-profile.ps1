@@ -271,7 +271,10 @@ $leaked = @((Get-Variable).Name | Where-Object { $_ -notin $before -and $_ -noti
 if ($sw.Elapsed.TotalSeconds -ge 5) { throw "profile load took $($sw.Elapsed.TotalSeconds) s" }
 if ($leaked) { throw "profile leaked globals: $($leaked -join ', ')" }
 if ((Get-Command prompt).ScriptBlock.ToString() -ne $promptBefore) { throw 'redirected load changed the prompt' }
-if ($env:CONDA_CHANGEPS1 -ne 'false') { throw "CONDA_CHANGEPS1 is '$env:CONDA_CHANGEPS1'" }
+foreach ($name in 'CONDA_CHANGEPS1', 'PYTHONUTF8', 'PYTHONIOENCODING') {
+    $value = [Environment]::GetEnvironmentVariable($name)
+    if ($null -ne $value) { throw "redirected load set $name=$value" }
+}
 if ($IsWindows) {
     if ((Get-Command conda).CommandType -ne 'Function') { throw 'conda is not the lazy stub' }
     $completion = (TabExpansion2 'conda activate de' 17).CompletionMatches.CompletionText
@@ -287,8 +290,10 @@ if ($IsWindows) {
         DOTFILES_TEST_HOME = $fakeHome
         DOTFILES_TEST_PROFILE = $profile7
         CONDA_CHANGEPS1 = $null
+        PYTHONUTF8 = $null
+        PYTHONIOENCODING = $null
     }
-    Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and $result.Out -eq 'PASS' -and -not $result.Err) "redirected load is fast, silent and leaves the prompt alone (timedout=$($result.TimedOut) exit=$($result.ExitCode) out=$($result.Out) err=$($result.Err))"
+    Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and $result.Out -eq 'PASS' -and -not $result.Err) "redirected load is fast, silent and leaves the prompt and environment alone (timedout=$($result.TimedOut) exit=$($result.ExitCode) out=$($result.Out) err=$($result.Err))"
 }
 finally {
     Remove-Item -LiteralPath $fakeHome -Recurse -Force -ErrorAction SilentlyContinue

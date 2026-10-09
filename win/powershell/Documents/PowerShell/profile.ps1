@@ -14,12 +14,7 @@ $IsAgentSession = [bool]($env:CURSOR_AGENT -or $env:GEMINI_CLI)
 # stub runs the same hook on first use, after which Conda.psm1's `conda` alias
 # outranks it. The stub removes itself before running the hook: with
 # auto_activate on, the hook ends in `conda activate base`, which would call
-# the stub again, forever, if Conda.psm1 failed to load. CONDA_CHANGEPS1=false
-# is process-wide, not scoped to the stub, so activation through
-# conda-hook.ps1 (VS Code, Anaconda Prompt) also leaves the oh-my-posh prompt
-# unwrapped instead of printing a 'False' or '(env)' prefix; the theme shows
-# the env itself. A value set by the user or a parent process wins.
-if ($null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
+# the stub again, forever, if Conda.psm1 failed to load.
 if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
     function global:conda {
         Remove-Item -LiteralPath Function:\conda
@@ -185,6 +180,10 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
         if (-not (Test-Path -LiteralPath $OmpConfig -PathType Leaf)) { $OmpConfig = 'catppuccin' }
         oh-my-posh init pwsh --config $OmpConfig | Invoke-Expression
         Remove-Variable OmpConfig
+        # The theme shows the conda env itself, so keep conda's '(env)' prefix
+        # off this prompt, also for activations through conda-hook.ps1 (VS
+        # Code, Anaconda Prompt) in this process. A user or parent value wins.
+        if ((Get-Module oh-my-posh-core) -and $null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
     }
     # zoxide wraps the prompt function, so it must run after oh-my-posh.
     if (& $HasExe zoxide) {
