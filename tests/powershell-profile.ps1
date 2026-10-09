@@ -26,16 +26,18 @@ function Assert-True([bool]$Condition, [string]$Message) {
 }
 
 # Runs a child without a window or stdin, with environment edits ($null
-# removes a variable), decodes its output as UTF-8 (oh-my-posh writes UTF-8;
-# the console code page would merge its glyphs with the next ASCII letter),
-# drains both streams concurrently so neither pipe can fill up, and kills it
-# after the timeout.
+# removes a variable), drains both streams concurrently so neither pipe can
+# fill up, and kills it after the timeout. Output is decoded in the console
+# code page that PowerShell children write in, or in -Encoding (oh-my-posh
+# writes UTF-8, and the console code page would merge its glyphs with the next
+# ASCII letter).
 function Invoke-Child {
     param(
         [Parameter(Mandatory)][string]$FilePath,
         [string[]]$ArgumentList = @(),
         [hashtable]$Environment = @{},
-        [int]$TimeoutSeconds = 60
+        [int]$TimeoutSeconds = 60,
+        [System.Text.Encoding]$Encoding
     )
     $psi = [Diagnostics.ProcessStartInfo]::new($FilePath)
     $psi.UseShellExecute = $false
@@ -43,7 +45,7 @@ function Invoke-Child {
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
-    $psi.StandardOutputEncoding = $psi.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
+    if ($Encoding) { $psi.StandardOutputEncoding = $psi.StandardErrorEncoding = $Encoding }
     foreach ($name in $Environment.Keys) {
         if ($null -eq $Environment[$name]) { $null = $psi.Environment.Remove($name) }
         else { $psi.Environment[$name] = $Environment[$name] }
@@ -171,6 +173,9 @@ Assert-True ($outside.Count -eq 0) "interactive setup runs only in the guard's t
 
 # $IsAgentSession tests exactly the variables zsh's _is_agent_session tests,
 # joined with -or, so an agent terminal skips the same setup in both shells.
+# It is assigned once, before the guard reads it, as [bool] of nothing but
+# $env: variables, -or and parentheses (a constant or another cast would make
+# every session an agent one).
 $zshAgents = @()
 if (Test-Path -LiteralPath $zshrc) {
     $zshMatch = [regex]::Match((Get-Content -LiteralPath $zshrc -Raw), '(?m)^_is_agent_session\(\)\s*\{\s*\[\[(?<body>[^\]]*)\]\]\s*\}')
@@ -182,22 +187,31 @@ if (Test-Path -LiteralPath $zshrc) {
 }
 Assert-True ($zshAgents.Count -gt 0) "common/zsh/.zshrc defines _is_agent_session as [[ -n `"`$A`" || ... ]] ($($zshAgents -join ', '))"
 $psAgents = @()
-$agentFlag = $parsed7.Ast.Find({
-        param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
-        $n.Left.Extent.Text -eq '$IsAgentSession'
-    }, $true)
-if ($agentFlag) {
-    $find = { param($Type) @($agentFlag.Right.FindAll({ param($n) $n -is $Type }.GetNewClosure(), $true)) }
-    $variables = & $find ([System.Management.Automation.Language.VariableExpressionAst])
-    $operators = @(& $find ([System.Management.Automation.Language.BinaryExpressionAst]) | ForEach-Object Operator)
-    $negations = & $find ([System.Management.Automation.Language.UnaryExpressionAst])
-    if (-not ($variables | Where-Object { $_.VariablePath.DriveName -ne 'env' }) -and
-        -not ($operators | Where-Object { $_ -ne 'Or' }) -and -not $negations) {
-        $psAgents = @($variables | ForEach-Object { ($_.VariablePath.UserPath -replace '^env:', '').ToUpperInvariant() })
+$agentFlags = Get-Assignments $parsed7.Ast '$IsAgentSession'
+Assert-True ($agentFlags.Count -eq 1 -and $guards.Count -eq 1 -and $agentFlags[0].Extent.EndOffset -lt $guards[0].Extent.StartOffset) "`$IsAgentSession is assigned exactly once, before the guard ($($agentFlags.Count) assignments)"
+if ($agentFlags.Count -eq 1) {
+    $agentValue = $agentFlags[0].Right
+    if ($agentValue -is [System.Management.Automation.Language.PipelineAst] -and $agentValue.PipelineElements.Count -eq 1) { $agentValue = $agentValue.PipelineElements[0] }
+    if ($agentValue -is [System.Management.Automation.Language.CommandExpressionAst]) { $agentValue = $agentValue.Expression }
+    if ($agentValue -is [System.Management.Automation.Language.ConvertExpressionAst] -and
+        $agentValue.Type.TypeName.GetReflectionType() -eq [bool]) {
+        $nodes = @($agentValue.Child.FindAll({ $true }, $true))
+        $foreign = @($nodes | Where-Object {
+                -not ($_ -is [System.Management.Automation.Language.ParenExpressionAst] -or
+                    $_ -is [System.Management.Automation.Language.PipelineAst] -or
+                    $_ -is [System.Management.Automation.Language.CommandExpressionAst] -or
+                    ($_ -is [System.Management.Automation.Language.BinaryExpressionAst] -and $_.Operator -eq 'Or') -or
+                    ($_ -is [System.Management.Automation.Language.VariableExpressionAst] -and $_.VariablePath.DriveName -eq 'env'))
+            })
+        if (-not $foreign) {
+            $psAgents = @($nodes | Where-Object { $_ -is [System.Management.Automation.Language.VariableExpressionAst] } |
+                    ForEach-Object { ($_.VariablePath.UserPath -replace '^env:', '').ToUpperInvariant() })
+        }
     }
 }
-$sameAgents = (@($zshAgents | Sort-Object -Unique) -join ',') -eq (@($psAgents | Sort-Object -Unique) -join ',')
-Assert-True ($zshAgents.Count -gt 0 -and $sameAgents) "`$IsAgentSession is `$env:$($zshAgents -join ' -or $env:'), like _is_agent_session (profile: $($psAgents -join ', '))"
+$sameAgents = $psAgents.Count -eq $zshAgents.Count -and
+    (@($zshAgents | Sort-Object -Unique) -join ',') -eq (@($psAgents | Sort-Object -Unique) -join ',')
+Assert-True ($zshAgents.Count -gt 0 -and $sameAgents) "`$IsAgentSession is [bool](`$env:$($zshAgents -join ' -or $env:')), like _is_agent_session (profile: $($psAgents -join ', '))"
 
 # Python writes pipes in the ANSI code page unless it runs in UTF-8 mode;
 # PYTHONIOENCODING would fix only its own stdout and break Python->Python
@@ -244,6 +258,34 @@ $zoxide = @(Get-Commands $parsed7.Ast | Where-Object { $_.GetCommandName() -eq '
 Assert-True ($zoxide.Count -eq 1 -and $ompInit.Count -eq 1 -and $zoxide[0].Extent.StartOffset -gt $ompInit[0].Extent.StartOffset) 'zoxide wraps the oh-my-posh prompt, so it initializes after it'
 Assert-True ($text7.Contains(".config/oh-my-posh/prompt.omp.json")) 'the profile loads the tracked theme path'
 
+# The theme shows the conda env, so conda's own prefix is turned off, but only
+# where oh-my-posh drew the prompt and only when nobody chose a value: one
+# assignment, after `oh-my-posh init` in the oh-my-posh branch, inside an if
+# whose condition requires $null -eq $env:CONDA_CHANGEPS1.
+$changePs1 = Get-Assignments $parsed7.Ast '$env:CONDA_CHANGEPS1'
+$ompBranch = Get-IfStatements $parsed7.Ast '& $HasExe oh-my-posh'
+$changePs1Rule = if ($changePs1.Count -eq 1) { $changePs1[0].Parent.Parent }
+$unsetTest = @()
+if ($changePs1Rule -is [System.Management.Automation.Language.IfStatementAst]) {
+    # The terms joined by -and at the top of the condition.
+    $pending = [System.Collections.Generic.Queue[object]]::new()
+    $pending.Enqueue($changePs1Rule.Clauses[0].Item1)
+    $andTerms = while ($pending.Count) {
+        $node = $pending.Dequeue()
+        if ($node -is [System.Management.Automation.Language.PipelineAst] -and $node.PipelineElements.Count -eq 1) { $pending.Enqueue($node.PipelineElements[0]) }
+        elseif ($node -is [System.Management.Automation.Language.CommandExpressionAst]) { $pending.Enqueue($node.Expression) }
+        elseif ($node -is [System.Management.Automation.Language.BinaryExpressionAst] -and $node.Operator -eq 'And') { $pending.Enqueue($node.Left); $pending.Enqueue($node.Right) }
+        else { $node }
+    }
+    $unsetTest = @($andTerms | Where-Object {
+            $_ -is [System.Management.Automation.Language.BinaryExpressionAst] -and $_.Operator -eq 'Ieq' -and
+            $_.Left.Extent.Text -eq '$null' -and $_.Right.Extent.Text -eq '$env:CONDA_CHANGEPS1'
+        })
+}
+Assert-True ($changePs1.Count -eq 1 -and $changePs1[0].Right.Extent.Text -eq "'false'" -and $ompBranch.Count -eq 1 -and $ompInit.Count -eq 1 -and
+    (Test-InsideNode $changePs1[0] $ompBranch[0].Clauses[0].Item2) -and $changePs1[0].Extent.StartOffset -gt $ompInit[0].Extent.EndOffset -and
+    $unsetTest.Count -eq 1 -and [object]::ReferenceEquals($changePs1[0].Parent, $changePs1Rule.Clauses[0].Item2)) "CONDA_CHANGEPS1=false is set once, after oh-my-posh init and only when unset ($($changePs1.Count) assignments)"
+
 Write-Output '--- prompt wrapper'
 # zoxide's hook runs a native command after oh-my-posh restored
 # $LASTEXITCODE. Replay that with stand-ins: the oh-my-posh one reads $? first
@@ -266,6 +308,12 @@ if ($wrapper) {
     Write-Error 'a failed command' -ErrorAction SilentlyContinue
     $rendered = prompt
     Assert-True ($global:LASTEXITCODE -eq 3 -and $global:OmpSawStatus -eq $false -and $rendered -eq 'PS> ') "the prompt keeps `$LASTEXITCODE and the `$? oh-my-posh reads (LASTEXITCODE=$global:LASTEXITCODE, `$?=$global:OmpSawStatus)"
+    # Re-sourcing the profile wraps the wrapper; the inner prompt must come
+    # from a closure, or the second wrapper calls itself until the stack ends.
+    Invoke-Expression $wrapper.Extent.Text
+    $global:LASTEXITCODE = 5
+    $rendered = try { prompt } catch { "threw: $($_.Exception.Message)" }
+    Assert-True ($global:LASTEXITCODE -eq 5 -and $rendered -eq 'PS> ') "a second wrap neither recurses nor loses `$LASTEXITCODE (LASTEXITCODE=$global:LASTEXITCODE, prompt=$rendered)"
     Remove-Item -LiteralPath Function:\prompt
     Remove-Variable -Name __zoxide_prompt_old, OmpSawStatus -Scope Global
 }
@@ -488,13 +536,14 @@ if ($omp) {
     # POSH_* session and a cache directory that exists and is deleted after.
     $ompDir = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-omp-test-" + [guid]::NewGuid().ToString('N'))
     $ompEnv = @{ OMP_CACHE_DIR = Join-Path $ompDir 'cache' }
+    $utf8 = [System.Text.UTF8Encoding]::new($false)
     Get-ChildItem Env: | Where-Object Name -like 'POSH_*' | ForEach-Object { $ompEnv[$_.Name] = $null }
     # A broken theme still exits 0 and prints a prompt; the error text that
     # replaces the failed part is what gives it away.
     $renderError = 'CONFIG PARSE ERROR|CONFIG ERROR|invalid template text|unable to create text based on template'
     $render = {
         param([string]$Config, [string]$Kind)
-        Invoke-Child $omp.Source @('print', $Kind, '--config', $Config, '--shell', 'pwsh', '--plain') -Environment $ompEnv
+        Invoke-Child $omp.Source @('print', $Kind, '--config', $Config, '--shell', 'pwsh', '--plain') -Environment $ompEnv -Encoding $utf8
     }
     try {
         $null = New-Item -ItemType Directory -Path $ompEnv.OMP_CACHE_DIR
@@ -508,7 +557,7 @@ if ($omp) {
         $brokenTheme = Join-Path $ompDir 'broken.omp.json'
         [IO.File]::WriteAllText($brokenTheme, ($broken | ConvertTo-Json -Depth 64))
         Assert-True ((& $render $brokenTheme 'primary').Out -match $renderError) 'the render check catches a broken template'
-        $init = Invoke-Child $omp.Source @('init', 'pwsh', '--config', $theme, '--print') -Environment $ompEnv
+        $init = Invoke-Child $omp.Source @('init', 'pwsh', '--config', $theme, '--print') -Environment $ompEnv -Encoding $utf8
         Assert-True ($init.Out -match '_ompFTCSMarks = \$true' -and $init.Out -match '_ompTransientPrompt = \$true') 'oh-my-posh enables prompt marks and the transient prompt'
     }
     finally {
