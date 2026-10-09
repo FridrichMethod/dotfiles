@@ -139,13 +139,14 @@ function Get-IfStatements($Ast, [string]$Condition) {
             Where-Object { ($_.Clauses[0].Item1.Extent.Text -replace '\s+', ' ').Trim() -eq $Condition })
 }
 
-# The interactive test is computed once: stdout is a console and the host
-# loaded PSReadLine, which it skips for -Command/-File scripts and
-# -NonInteractive. Setup runs only in the then-branch of exactly one if on that
-# flag and no agent terminal, and the update check only under the flag.
-# Comparing whole conditions catches an inverted or dropped term, and the
-# branch checks catch code moved into an else or elseif.
-$interactiveText = '-not [Console]::IsOutputRedirected -and (Get-Module PSReadLine)'
+# The interactive test is computed once: stdout and stdin are a console and
+# the host loaded PSReadLine, which it skips for -Command/-File scripts and
+# -NonInteractive but not for commands piped to stdin. Setup runs only in the
+# then-branch of exactly one if on that flag and no agent terminal, and the
+# update check only under the flag. Comparing whole conditions catches an
+# inverted or dropped term, and the branch checks catch code moved into an
+# else or elseif.
+$interactiveText = '-not [Console]::IsOutputRedirected -and -not [Console]::IsInputRedirected -and (Get-Module PSReadLine)'
 $interactiveFlag = Get-Assignments $parsed7.Ast '$IsInteractive'
 Assert-True ($interactiveFlag.Count -eq 1 -and ($interactiveFlag[0].Right.Extent.Text -replace '\s+', ' ').Trim() -eq $interactiveText) "`$IsInteractive is assigned once: $interactiveText"
 $guardText = '$IsInteractive -and -not $IsAgentSession'
