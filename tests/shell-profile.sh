@@ -186,5 +186,82 @@ if command -v zsh >/dev/null 2>&1; then
     fi
 fi
 
+# common/zsh/.zshrc in three nested interactive shells. The host rc runs a
+# fake `brew shellenv` that, like Homebrew's, prints nothing only while PATH
+# starts with its bin:sbin, then prepends a condabin once per process tree,
+# as conda's hook does; Homebrew's bin holds another node. A stub
+# oh-my-zsh hashes a marker command and sources custom/nvm.zsh. Every level
+# must end with the same PATH, FPATH and INFOPATH, no duplicate in PATH,
+# nvm's default node first, and no PATH assignment after oh-my-zsh. An env
+# activated ahead of node in the first shell stays ahead in nested shells.
+# Without nvm nothing restores the order that `brew shellenv` changes in the
+# second shell, but PATH must still not grow.
+if command -v zsh >/dev/null 2>&1; then
+    zhome=$TEST_TMP/zsh-home brew=$TEST_TMP/brew
+    mkdir -p "$zhome/.config/zsh" "$zhome/.oh-my-zsh/custom" "$brew/bin" "$brew/sbin" \
+        "$TEST_TMP/condabin" "$TEST_TMP/env/bin"
+    ln -s "$REPO_ROOT/common/sh/.profile" "$zhome/.profile"
+    ln -s "$REPO_ROOT/common/zsh/.zshrc" "$zhome/.zshrc"
+    ln -s "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/nvm.zsh" "$zhome/.oh-my-zsh/custom/"
+    for node in "$brew/bin/node" "$TEST_TMP/env/bin/node"; do
+        printf '#!/bin/sh\n' >"$node"
+        chmod +x "$node"
+    done
+    # shellcheck disable=SC2016
+    {
+        printf '#!/bin/sh\n'
+        printf 'case "$PATH:" in "%s/bin:%s/sbin:"*) exit 0 ;; esac\n' "$brew" "$brew"
+        printf 'echo '\''export PATH="%s/bin:%s/sbin${PATH+:$PATH}"'\''\n' "$brew" "$brew"
+        printf 'echo '\''fpath[1,0]="%s/share/zsh/site-functions"; export FPATH'\''\n' "$brew"
+        printf 'echo '\''export INFOPATH="%s/share/info:${INFOPATH:-}"'\''\n' "$brew"
+    } >"$brew/bin/brew"
+    chmod +x "$brew/bin/brew"
+    # shellcheck disable=SC2016
+    printf '%s\n' "eval \"\$('$brew/bin/brew' shellenv)\"" \
+        'if [[ -z ${CONDA_SHLVL+x} ]]; then' \
+        "    export CONDA_SHLVL=0 PATH='$TEST_TMP/condabin':\$PATH" \
+        'fi' >"$zhome/.config/zsh/.zshrc"
+    # shellcheck disable=SC2016
+    printf '%s\n' 'hash _omz_marker=/bin/sh' 'for f in $ZSH/custom/*.zsh; do source $f; done' \
+        >"$zhome/.oh-my-zsh/oh-my-zsh.sh"
+    # shellcheck disable=SC2016
+    printf '%s\n' \
+        '(($+commands[_omz_marker])) || print -r -- "L$LVL: PATH assigned after oh-my-zsh"' \
+        '[[ -z $ACTIVATE || $LVL != 1 ]] || path[1,0]=$ACTIVATE' \
+        'print -rl -- "$PATH" "$FPATH" "$INFOPATH" "$NVM_BIN" "${commands[node]}" >$OUT$LVL' \
+        '((LVL < 3)) || return 0' \
+        'LVL=$((LVL + 1)) zsh -d -i -c '\''source $NEST'\''' >"$TEST_TMP/nest.zsh"
+    printf '24\n' >"$nvm_dir/alias/default"
+    nvm_bin=$(node_bin v24.11.1)
+    for variant in default env no-nvm; do
+        out=$TEST_TMP/nested-$variant activate='' nvm_home=$nvm_dir same=1
+        head=$nvm_bin: want_nvm_bin=$nvm_bin node=$nvm_bin/node
+        case $variant in
+            env) activate=$TEST_TMP/env/bin head=$activate:$nvm_bin: node=$activate/node ;;
+            no-nvm) nvm_home=$TEST_TMP/no-nvm head='' want_nvm_bin='' node=$brew/bin/node same=2 ;;
+        esac
+        noise=$(env -i HOME="$zhome" PATH=/usr/bin:/bin TERM=dumb NVM_DIR="$nvm_home" \
+            DOTFILES_DIR="$TEST_TMP/no-checkout" NEST="$TEST_TMP/nest.zsh" OUT="$out" \
+            ACTIVATE="$activate" LVL=1 zsh -d -i -c 'source $NEST' </dev/null 2>&1 |
+            grep -v '^stty: ' || true)
+        ok=1
+        [ -z "$noise" ] && cmp -s "$out$same" "${out}2" && cmp -s "$out$same" "${out}3" || ok=0
+        for level in 1 2 3; do
+            [ -f "$out$level" ] && [ -z "$(sed -n 1p "$out$level" | tr : '\n' | sort | uniq -d)" ] ||
+                ok=0
+        done
+        if [ "$ok" = 1 ]; then
+            case $(sed -n 1p "${out}1") in "$head"*) ;; *) ok=0 ;; esac
+            [ "$(sed -n 4p "${out}1")" = "$want_nvm_bin" ] && [ "$(sed -n 5p "${out}1")" = "$node" ] ||
+                ok=0
+        fi
+        if [ "$ok" = 0 ]; then
+            printf 'FAIL nested .zshrc (%s): %s\n' "$variant" "$noise" >&2
+            for level in 1 2 3; do sed "s/^/  L$level: /" "$out$level" >&2 || true; done
+            nvm_failures=$((nvm_failures + 1))
+        fi
+    done
+fi
+
 [ "$nvm_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

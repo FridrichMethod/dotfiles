@@ -1,5 +1,12 @@
 #!/bin/zsh
 
+# Drop duplicates from PATH, fpath and INFOPATH. In a nested shell the host
+# rc prepends again what the parent already has (`brew shellenv` is a no-op
+# only while PATH starts with Homebrew's bin:sbin), so each level would grow
+# them. -U on path alone would miss `export PATH=...`.
+typeset -gU path PATH fpath
+typeset -gUT INFOPATH infopath
+
 source "$HOME/.profile"
 
 # --------------- Interactive Shell Settings ---------------
@@ -127,6 +134,13 @@ plugins=(
     zoxide
 )
 
+# A parent shell that loaded nvm, whose NVM_BIN is still on PATH, has already
+# ordered PATH (for example, a conda env activated ahead of node). Keep its
+# order for the nvm block before oh-my-zsh.
+if [[ -n ${NVM_BIN:-} ]] && ((${path[(Ie)$NVM_BIN]})); then
+    _zshrc_parent_path=("${path[@]}")
+fi
+
 # Host-specific interactive config (plugins, fpath filters, etc.)
 if [[ -r "$HOME/.config/zsh/.zshrc" ]]; then
     source "$HOME/.config/zsh/.zshrc"
@@ -165,10 +179,14 @@ fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 # nvm: the host rc has prepended Homebrew's and conda's bins, which can hold
 # another node or tree-sitter, ahead of the default node's bin that
 # ~/.profile added. Move that bin back to the front, where `nvm use` puts it,
-# and export what `nvm use` would. Do it here: every PATH assignment empties
-# the command hash table that oh-my-zsh fills next, and refilling it rescans
-# all of PATH (~0.13 s under WSL, mostly on /mnt/c).
-if [[ -n ${NVM_DIR:-} ]]; then
+# and export what `nvm use` would. A nested shell instead restores its
+# parent's order, which `brew shellenv` has just changed. Do it here: every
+# PATH assignment empties the command hash table that oh-my-zsh fills next,
+# and refilling it rescans all of PATH (~0.13 s under WSL, mostly on /mnt/c).
+if (($+_zshrc_parent_path)); then
+    path=("${(@)path:|_zshrc_parent_path}" "${(@)_zshrc_parent_path:*path}")
+    unset _zshrc_parent_path
+elif [[ -n ${NVM_DIR:-} ]]; then
     () {
         local bin=${path[(r)${(b)NVM_DIR}/versions/node/*/bin]}
         [[ -n $bin ]] || return 0
