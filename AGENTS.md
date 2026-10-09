@@ -45,7 +45,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Follow pre-commit shell style:
   - Bash: `shfmt -i 4 -ci -ln bash`
   - POSIX: `shfmt -i 4 -ci -ln posix`
-  - Zsh: `shfmt -i 4 -ci -ln zsh`
+  - Zsh: `shfmt -i 4 -ci -ln zsh` (needs shfmt 3.13+, the first release with a zsh dialect)
 
 ## Git and SSH conventions
 
