@@ -3,7 +3,7 @@
   "version": 4,
   "final_space": true,
   "shell_integration": true,
-  "pwd": "{{ if and .Env.WT_SESSION (not .Env.TERM_PROGRAM) }}osc99{{ end }}",
+  "pwd": "{{ if eq .Env.TERM_PROGRAM \"WezTerm\" }}osc7{{ else if and .Env.WT_SESSION (not .Env.TERM_PROGRAM) }}osc99{{ end }}",
   "console_title_template": "{{ if .Root }}admin: {{ end }}{{ .Folder }}",
   "upgrade": {
     "source": "cdn",
