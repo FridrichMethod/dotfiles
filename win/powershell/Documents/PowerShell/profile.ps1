@@ -68,11 +68,12 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
     # page of the whole console (shared with any parent shell) and throws when
     # there is none, hence the guard and the try. Python (python, pip,
     # conda.exe) writes pipes in the ANSI code page, which this decoder would
-    # turn into U+FFFD, so make its stdio UTF-8 too; a user or parent setting
-    # wins.
+    # turn into U+FFFD, so put it in UTF-8 mode. Unlike PYTHONIOENCODING, that
+    # also makes a Python parent decode its Python children as UTF-8. A user
+    # or parent setting wins.
     try {
         [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-        if (-not ($env:PYTHONIOENCODING -or $env:PYTHONUTF8)) { $env:PYTHONIOENCODING = 'utf-8' }
+        if (-not ($env:PYTHONIOENCODING -or $env:PYTHONUTF8)) { $env:PYTHONUTF8 = '1' }
     }
     catch { }
 
