@@ -189,17 +189,21 @@ fi
 # common/zsh/.zshrc in three nested interactive shells. The host rc runs a
 # fake `brew shellenv` that, like Homebrew's, prints nothing only while PATH
 # starts with its bin:sbin, then prepends a condabin once per process tree,
-# as conda's hook does; Homebrew's bin holds another node. A stub
-# oh-my-zsh hashes a marker command and sources custom/nvm.zsh. Every level
-# must end with the same PATH, FPATH and INFOPATH, no duplicate in PATH,
-# nvm's default node first, and no PATH assignment after oh-my-zsh. An env
-# activated ahead of node in the first shell stays ahead in nested shells.
-# Without nvm nothing restores the order that `brew shellenv` changes in the
-# second shell, but PATH must still not grow.
+# as conda's hook does, and a login env's bin every time, as Sherlock's does;
+# Homebrew's bin holds another node. A stub oh-my-zsh hashes a marker
+# command and sources custom/nvm.zsh. Every level must end with the same
+# PATH, FPATH and INFOPATH, no duplicate in PATH, nvm's default node first,
+# and no PATH assignment after oh-my-zsh. After startup PATH keeps
+# duplicates: a simulated `conda activate` (prepend) and `conda deactivate`
+# (drop the first copy) of the login env, through PATH and again through
+# path, leaves PATH as it was. An env activated ahead of node in the first
+# shell stays ahead in nested shells. Without nvm nothing restores the order
+# that `brew shellenv` changes in the second shell, but PATH must still not
+# grow.
 if command -v zsh >/dev/null 2>&1; then
     zhome=$TEST_TMP/zsh-home brew=$TEST_TMP/brew
     mkdir -p "$zhome/.config/zsh" "$zhome/.oh-my-zsh/custom" "$brew/bin" "$brew/sbin" \
-        "$TEST_TMP/condabin" "$TEST_TMP/env/bin"
+        "$TEST_TMP/condabin" "$TEST_TMP/env/bin" "$TEST_TMP/login/bin"
     ln -s "$REPO_ROOT/common/sh/.profile" "$zhome/.profile"
     ln -s "$REPO_ROOT/common/zsh/.zshrc" "$zhome/.zshrc"
     ln -s "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/nvm.zsh" "$zhome/.oh-my-zsh/custom/"
@@ -220,13 +224,19 @@ if command -v zsh >/dev/null 2>&1; then
     printf '%s\n' "eval \"\$('$brew/bin/brew' shellenv)\"" \
         'if [[ -z ${CONDA_SHLVL+x} ]]; then' \
         "    export CONDA_SHLVL=0 PATH='$TEST_TMP/condabin':\$PATH" \
-        'fi' >"$zhome/.config/zsh/.zshrc"
+        'fi' \
+        "export PATH='$TEST_TMP/login/bin':\$PATH" >"$zhome/.config/zsh/.zshrc"
     # shellcheck disable=SC2016
     printf '%s\n' 'hash _omz_marker=/bin/sh' 'for f in $ZSH/custom/*.zsh; do source $f; done' \
         >"$zhome/.oh-my-zsh/oh-my-zsh.sh"
     # shellcheck disable=SC2016
     printf '%s\n' \
         '(($+commands[_omz_marker])) || print -r -- "L$LVL: PATH assigned after oh-my-zsh"' \
+        "p0=\$PATH login='$TEST_TMP/login/bin'" \
+        'export PATH=$login:$PATH' \
+        'p=("${(@s.:.)PATH}") && p[${p[(ie)$login]}]=() && export PATH=${(j.:.)p}' \
+        'path[1,0]=$login && path[${path[(ie)$login]}]=()' \
+        '[[ $PATH == "$p0" ]] || print -r -- "L$LVL: conda deactivate dropped $login"' \
         '[[ -z $ACTIVATE || $LVL != 1 ]] || path[1,0]=$ACTIVATE' \
         'print -rl -- "$PATH" "$FPATH" "$INFOPATH" "$NVM_BIN" "${commands[node]}" >$OUT$LVL' \
         '((LVL < 3)) || return 0' \
@@ -261,6 +271,15 @@ if command -v zsh >/dev/null 2>&1; then
             nvm_failures=$((nvm_failures + 1))
         fi
     done
+    # Sourced by a non-interactive shell, .zshrc stops after ~/.profile, and
+    # PATH must not stay unique there either.
+    # shellcheck disable=SC2016
+    if ! env -i HOME="$zhome" PATH=/usr/bin:/bin NVM_DIR="$nvm_dir" \
+        DOTFILES_DIR="$TEST_TMP/no-checkout" \
+        zsh -d -c 'source ~/.zshrc && [[ ${(t)path}${(t)PATH} != *unique* ]]' 2>&1; then
+        echo "FAIL non-interactive .zshrc left PATH unique" >&2
+        nvm_failures=$((nvm_failures + 1))
+    fi
 fi
 
 [ "$nvm_failures" = 0 ] || exit 1

@@ -3,7 +3,8 @@
 # Drop duplicates from PATH, fpath and INFOPATH. In a nested shell the host
 # rc prepends again what the parent already has (`brew shellenv` is a no-op
 # only while PATH starts with Homebrew's bin:sbin), so each level would grow
-# them. -U on path alone would miss `export PATH=...`.
+# them. -U on path alone would miss `export PATH=...`. PATH keeps -U only
+# while this file sets it up (see before oh-my-zsh).
 typeset -gU path PATH fpath
 typeset -gUT INFOPATH infopath
 
@@ -14,7 +15,10 @@ source "$HOME/.profile"
 # Enable the subsequent settings only in interactive sessions
 case $- in
     *i*) ;;
-    *) return ;;
+    *)
+        typeset -g +U path PATH
+        return
+        ;;
 esac
 
 # Disable software flow control
@@ -194,6 +198,11 @@ elif [[ -n ${NVM_DIR:-} ]]; then
         export NVM_BIN=$bin NVM_INC=${bin%/bin}/include/node
     }
 fi
+
+# PATH is set up. Without -U from here on, `conda activate` of a prefix
+# already on PATH adds a second copy instead of moving the only one, so
+# `conda deactivate` (which removes the first copy) leaves the original.
+typeset -g +U path PATH
 
 # Source Oh My Zsh
 source $ZSH/oh-my-zsh.sh
