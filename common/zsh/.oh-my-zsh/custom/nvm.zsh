@@ -4,9 +4,11 @@
 # PATH yet, which puts Homebrew's bin back ahead of the default node's bin
 # that ~/.zshrc moved to the front. Move it ahead again only in that case:
 # the plugins have filled the command hash table by now, and any PATH
-# assignment empties it.
+# assignment empties it. ~/.zshrc sets _zshrc_brew_ahead when Homebrew's bin
+# was ahead before oh-my-zsh already, in a nested shell that keeps the order
+# of a parent which put it there.
 () {
-    [[ -n ${NVM_BIN:-} && -n ${HOMEBREW_PREFIX:-} ]] || return 0
+    [[ -n ${NVM_BIN:-} && -n ${HOMEBREW_PREFIX:-} ]] && ((! $+_zshrc_brew_ahead)) || return 0
     local nvm=${path[(ie)$NVM_BIN]} brew=${path[(ie)$HOMEBREW_PREFIX/bin]}
     ((brew < nvm && nvm <= $#path)) || return 0
     path=("${(@)path[1,brew-1]}" "$NVM_BIN" "${(@)${(@)path[brew,-1]}:#$NVM_BIN}")

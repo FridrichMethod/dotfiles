@@ -190,16 +190,19 @@ fi
 # fake `brew shellenv` that, like Homebrew's, prints nothing only while PATH
 # starts with its bin:sbin, then prepends a condabin once per process tree,
 # as conda's hook does, and a login env's bin every time, as Sherlock's does;
-# Homebrew's bin holds another node. A stub oh-my-zsh hashes a marker
+# Homebrew's bin holds another node. A stub oh-my-zsh runs `brew shellenv`
+# when brew is not on PATH, as its brew plugin does, then hashes a marker
 # command and sources custom/nvm.zsh. Every level must end with the same
 # PATH, FPATH and INFOPATH, no duplicate in PATH, nvm's default node first,
 # and no PATH assignment after oh-my-zsh. After startup PATH keeps
 # duplicates: a simulated `conda activate` (prepend) and `conda deactivate`
 # (drop the first copy) of the login env, through PATH and again through
-# path, leaves PATH as it was. An env activated ahead of node in the first
-# shell stays ahead in nested shells. Without nvm nothing restores the order
-# that `brew shellenv` changes in the second shell, but PATH must still not
-# grow.
+# path, leaves PATH as it was. An env, or Homebrew's bin, that the first
+# shell put ahead of node stays ahead in nested shells. On macOS (mac: no
+# `brew shellenv` in the host rc) the brew plugin puts Homebrew's bin ahead
+# in the first shell, and nvm.zsh moves nvm's back ahead of it. Without nvm
+# nothing restores the order that `brew shellenv` changes in the second
+# shell, but PATH must still not grow.
 if command -v zsh >/dev/null 2>&1; then
     zhome=$TEST_TMP/zsh-home brew=$TEST_TMP/brew
     mkdir -p "$zhome/.config/zsh" "$zhome/.oh-my-zsh/custom" "$brew/bin" "$brew/sbin" \
@@ -215,47 +218,53 @@ if command -v zsh >/dev/null 2>&1; then
     {
         printf '#!/bin/sh\n'
         printf 'case "$PATH:" in "%s/bin:%s/sbin:"*) exit 0 ;; esac\n' "$brew" "$brew"
+        printf 'echo '\''export HOMEBREW_PREFIX="%s"'\''\n' "$brew"
         printf 'echo '\''export PATH="%s/bin:%s/sbin${PATH+:$PATH}"'\''\n' "$brew" "$brew"
         printf 'echo '\''fpath[1,0]="%s/share/zsh/site-functions"; export FPATH'\''\n' "$brew"
         printf 'echo '\''export INFOPATH="%s/share/info:${INFOPATH:-}"'\''\n' "$brew"
     } >"$brew/bin/brew"
     chmod +x "$brew/bin/brew"
     # shellcheck disable=SC2016
-    printf '%s\n' "eval \"\$('$brew/bin/brew' shellenv)\"" \
+    printf '%s\n' "[[ -n \${MAC-} ]] || eval \"\$('$brew/bin/brew' shellenv)\"" \
         'if [[ -z ${CONDA_SHLVL+x} ]]; then' \
         "    export CONDA_SHLVL=0 PATH='$TEST_TMP/condabin':\$PATH" \
         'fi' \
         "export PATH='$TEST_TMP/login/bin':\$PATH" >"$zhome/.config/zsh/.zshrc"
     # shellcheck disable=SC2016
-    printf '%s\n' 'hash _omz_marker=/bin/sh' 'for f in $ZSH/custom/*.zsh; do source $f; done' \
+    printf '%s\n' "((\$+commands[brew])) || eval \"\$('$brew/bin/brew' shellenv)\"" \
+        'hash _omz_marker=/bin/sh' 'for f in $ZSH/custom/*.zsh; do source $f; done' \
         >"$zhome/.oh-my-zsh/oh-my-zsh.sh"
     # shellcheck disable=SC2016
     printf '%s\n' \
         '(($+commands[_omz_marker])) || print -r -- "L$LVL: PATH assigned after oh-my-zsh"' \
+        '((!$+_zshrc_brew_ahead && !$+_zshrc_parent_path)) || print -r -- "L$LVL: leaked"' \
         "p0=\$PATH login='$TEST_TMP/login/bin'" \
         'export PATH=$login:$PATH' \
         'p=("${(@s.:.)PATH}") && p[${p[(ie)$login]}]=() && export PATH=${(j.:.)p}' \
         'path[1,0]=$login && path[${path[(ie)$login]}]=()' \
         '[[ $PATH == "$p0" ]] || print -r -- "L$LVL: conda deactivate dropped $login"' \
-        '[[ -z $ACTIVATE || $LVL != 1 ]] || path[1,0]=$ACTIVATE' \
+        '[[ -z $ACTIVATE || $LVL != 1 ]] || path=("$ACTIVATE" "${(@)path:#$ACTIVATE}")' \
         'print -rl -- "$PATH" "$FPATH" "$INFOPATH" "$NVM_BIN" "${commands[node]}" >$OUT$LVL' \
         '((LVL < 3)) || return 0' \
         'LVL=$((LVL + 1)) zsh -d -i -c '\''source $NEST'\''' >"$TEST_TMP/nest.zsh"
     printf '24\n' >"$nvm_dir/alias/default"
     nvm_bin=$(node_bin v24.11.1)
-    for variant in default env no-nvm; do
-        out=$TEST_TMP/nested-$variant activate='' nvm_home=$nvm_dir same=1
+    for variant in default env brew-first mac no-nvm; do
+        out=$TEST_TMP/nested-$variant activate='' nvm_home=$nvm_dir same=1 mac='' want_noise=''
         head=$nvm_bin: want_nvm_bin=$nvm_bin node=$nvm_bin/node
         case $variant in
             env) activate=$TEST_TMP/env/bin head=$activate:$nvm_bin: node=$activate/node ;;
+            brew-first) activate=$brew/bin head=$activate:$nvm_bin: node=$activate/node ;;
+            mac) mac=1 head=$nvm_bin:$brew/bin: want_noise='L1: PATH assigned after oh-my-zsh' ;;
             no-nvm) nvm_home=$TEST_TMP/no-nvm head='' want_nvm_bin='' node=$brew/bin/node same=2 ;;
         esac
         noise=$(env -i HOME="$zhome" PATH=/usr/bin:/bin TERM=dumb NVM_DIR="$nvm_home" \
             DOTFILES_DIR="$TEST_TMP/no-checkout" NEST="$TEST_TMP/nest.zsh" OUT="$out" \
-            ACTIVATE="$activate" LVL=1 zsh -d -i -c 'source $NEST' </dev/null 2>&1 |
+            ACTIVATE="$activate" MAC="$mac" LVL=1 zsh -d -i -c 'source $NEST' </dev/null 2>&1 |
             grep -v '^stty: ' || true)
         ok=1
-        [ -z "$noise" ] && cmp -s "$out$same" "${out}2" && cmp -s "$out$same" "${out}3" || ok=0
+        [ "$noise" = "$want_noise" ] && cmp -s "$out$same" "${out}2" && cmp -s "$out$same" "${out}3" ||
+            ok=0
         for level in 1 2 3; do
             [ -f "$out$level" ] && [ -z "$(sed -n 1p "$out$level" | tr : '\n' | sort | uniq -d)" ] ||
                 ok=0

@@ -204,8 +204,17 @@ fi
 # `conda deactivate` (which removes the first copy) leaves the original.
 typeset -g +U path PATH
 
+# custom/nvm.zsh moves nvm's bin ahead of Homebrew's again only if oh-my-zsh
+# (its brew plugin on macOS) puts Homebrew's ahead, not if it already is:
+# a nested shell has kept its parent's order above.
+if [[ -n ${NVM_BIN:-} && -n ${HOMEBREW_PREFIX:-} ]] &&
+    ((${path[(ie)$HOMEBREW_PREFIX/bin]} < ${path[(ie)$NVM_BIN]})); then
+    _zshrc_brew_ahead=1
+fi
+
 # Source Oh My Zsh
 source $ZSH/oh-my-zsh.sh
+unset _zshrc_brew_ahead
 
 # source alias file if it exists
 if [[ -r "$HOME/.zsh_aliases" ]]; then
