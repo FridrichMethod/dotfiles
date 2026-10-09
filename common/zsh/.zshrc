@@ -150,6 +150,16 @@ export BAT_THEME="Catppuccin Mocha"
 # nvm
 # ssh-agent
 # zsh-autosuggestions
+#
+# oh-my-zsh sources $ZSH_CUSTOM/*.zsh only after loading every plugin, but
+# the nvm and ssh-agent plugins read their zstyle options (lazy, quiet, ...)
+# while loading, so source those two files first. Re-sourcing them later is
+# harmless.
+for _omz_plugin_options in nvm ssh-agent; do
+    _omz_plugin_options=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/$_omz_plugin_options.zsh
+    [[ -r $_omz_plugin_options ]] && source "$_omz_plugin_options"
+done
+unset _omz_plugin_options
 
 # Load the zsh-completions plugin
 # See https://github.com/zsh-users/zsh-completions/blob/master/README.md
