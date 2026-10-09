@@ -65,13 +65,15 @@ nvm_failures=0
 # Sources the profile three times: with a parent's NVM_BIN still on PATH
 # (adds nothing), without it or with a $STALE_NVM_BIN that is not on PATH
 # (adds EXPECTED_BIN, or nothing when empty), and again (no change). Also
-# requires silence and no leaked helper names.
+# requires silence and no leaked helper names. FAILGLOB=1 (bash only) turns
+# failglob on first and requires it to stay on.
 nvm_case() {
     local label=$1 test_shell=$2 home=$3 expected_bin=$4 expected_dir=$5
     shift 5
     if env -u NVM_DIR -u NVM_BIN -u NVM_INC -u XDG_CONFIG_HOME "$@" \
         HOME="$home" DOTFILES_DIR="$TEST_TMP/no-checkout" PATH=/usr/bin:/bin \
         "$test_shell" -c '
+            if [ -n "${FAILGLOB-}" ]; then shopt -s failglob; fi
             NVM_BIN=/bin
             . "$1"
             base=$PATH
@@ -83,6 +85,7 @@ nvm_case() {
             [ "${NVM_DIR-unset}" = "$3" ] || { printf "NVM_DIR=%s\n" "${NVM_DIR-unset}"; exit 1; }
             if leaked=$(set | grep "^_nvm"); then printf "leaked: %s\n" "$leaked"; exit 1; fi
             if command -v _nvm_default_bin >/dev/null 2>&1; then echo "leaked function"; exit 1; fi
+            if [ -n "${FAILGLOB-}" ]; then shopt -q failglob || { echo "failglob off"; exit 1; }; fi
         ' profile "$REPO_ROOT/common/sh/.profile" "$expected_bin" "$expected_dir" \
         >"$TEST_TMP/nvm-out" 2>&1 && [ ! -s "$TEST_TMP/nvm-out" ]; then
         return 0
@@ -119,6 +122,7 @@ v23 -
 v24.11.2 -
 lts/iron -
 lts/argon -
+lts/-1 -
 system -
 cycle-a -
 EOF
@@ -130,6 +134,14 @@ EOF
     printf '24\n' >"$nvm_dir/alias/default"
     nvm_case "stale NVM_BIN not on PATH" "$test_shell" "$TEST_TMP/home" \
         "$(node_bin v24.11.1)" "$nvm_dir" NVM_DIR="$nvm_dir" STALE_NVM_BIN=/nonexistent/bin
+    if [ "${test_shell##*/}" = bash ]; then
+        printf 'v23\n' >"$nvm_dir/alias/default"
+        nvm_case "failglob, nothing installed matches" "$test_shell" "$TEST_TMP/home" "" \
+            "$nvm_dir" NVM_DIR="$nvm_dir" FAILGLOB=1
+        printf '24\n' >"$nvm_dir/alias/default"
+        nvm_case "failglob" "$test_shell" "$TEST_TMP/home" "$(node_bin v24.11.1)" "$nvm_dir" \
+            NVM_DIR="$nvm_dir" FAILGLOB=1
+    fi
     # Without NVM_DIR the profile finds ~/.nvm, then $XDG_CONFIG_HOME/nvm
     # (~/.config/nvm), and exports it; with neither it sets nothing.
     nvm_case "HOME/.nvm" "$test_shell" "$TEST_TMP/nvm-home" "$(node_bin v24.11.1)" "$nvm_dir"

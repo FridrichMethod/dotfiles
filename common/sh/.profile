@@ -33,7 +33,8 @@ fi
 # an exact version, or the newest install for `node`/`stable` or for a
 # partial version (24, v24, 24.11). Sets _nvm_bin; fails when no installed
 # version matches, or while a parent shell's `nvm use` bin (NVM_BIN) is
-# still on PATH.
+# still on PATH. Relative LTS aliases (lts/-1) are left unresolved, so such
+# a default adds nothing.
 _nvm_default_bin() {
     # zsh sources this file too: keep a glob that matches nothing literal,
     # as sh does, instead of failing with "no matches found".
@@ -63,6 +64,14 @@ _nvm_default_bin() {
     esac
     _nvm_bin=
     _nvm_best=-1
+    # bash's failglob would print "no match" for a version not installed.
+    # shopt is a bash builtin, so this costs no fork.
+    _nvm_failglob=
+    # shellcheck disable=SC3044
+    if [ -n "${BASH_VERSION-}" ] && shopt -q failglob; then
+        _nvm_failglob=1
+        shopt -u failglob
+    fi
     for _nvm_dir in "$NVM_DIR/versions/node/v$_nvm_version"*; do
         _nvm_name=${_nvm_dir##*/v}
         # Only complete vX.Y.Z installs; leading zeros would read as octal.
@@ -78,6 +87,8 @@ _nvm_default_bin() {
             _nvm_bin=$_nvm_dir/bin
         fi
     done
+    # shellcheck disable=SC3044
+    [ -z "$_nvm_failglob" ] || shopt -s failglob
     [ -n "$_nvm_bin" ]
 }
 if [ -n "${NVM_DIR-}" ] && _nvm_default_bin; then
@@ -87,7 +98,7 @@ if [ -n "${NVM_DIR-}" ] && _nvm_default_bin; then
     esac
 fi
 unset -f _nvm_default_bin
-unset _nvm_version _nvm_hops _nvm_bin _nvm_best _nvm_dir _nvm_name _nvm_rest _nvm_key
+unset _nvm_version _nvm_hops _nvm_bin _nvm_best _nvm_dir _nvm_name _nvm_rest _nvm_key _nvm_failglob
 
 # CUDA setup
 if [ -d /usr/local/cuda/bin ]; then
