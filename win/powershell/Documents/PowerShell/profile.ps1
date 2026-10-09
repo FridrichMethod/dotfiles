@@ -57,8 +57,12 @@ if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
 # --- Interactive console only -------------------------------------------------
 # Redirected stdout breaks prediction, hangs CompletionPredictor, stalls
 # Microsoft.WinGet.CommandNotFound for ~31 s and never draws a prompt, so all
-# of that stays in here.
-if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
+# of that stays in here. A script run in a console (`pwsh -File x.ps1`, a .cmd
+# wrapper's `pwsh -Command ...`) has real stdout but never reads a line. The
+# console host imports PSReadLine before the profile only for a session that
+# will (no -Command or -File without -NoExit, no -NonInteractive); VS Code's
+# PowerShell extension does the same.
+if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Module PSReadLine)) {
     # The ANSI code page here is 936 (GBK), so pwsh mis-decoded captured UTF-8
     # output of native tools (git, rg, node, uv). The setter changes the code
     # page of the whole console (shared with any parent shell) and throws when
