@@ -119,6 +119,10 @@ config.status_update_interval = 1000
 if is_windows then
 	config.wsl_domains = wezterm.default_wsl_domains()
 	config.default_domain = "WSL:Ubuntu"
+	-- Program for spawns in the local domain that name none, such as a split of
+	-- a PowerShell pane; without it WezTerm runs %ComSpec% (cmd.exe). WSL
+	-- domains use their own default and are unaffected.
+	config.default_prog = { "pwsh", "-NoLogo" }
 
 	config.launch_menu = {
 		{
@@ -168,8 +172,10 @@ config.keys = {
 	-- oh-my-posh theme emit them), as Ctrl+Up/Down does in Windows Terminal.
 	{ key = "UpArrow", mods = "CTRL", action = act.ScrollToPrompt(-1) },
 	{ key = "DownArrow", mods = "CTRL", action = act.ScrollToPrompt(1) },
-	-- Split to the right in the current directory (reported with OSC 7), like
-	-- Windows Terminal's duplicate pane. Ctrl+Shift+Z already zooms a pane.
+	-- Split to the right in the current pane's domain and directory (reported
+	-- with OSC 7). The new pane runs that domain's default program, not a copy
+	-- of the pane's command: an ssh tab splits into a local WSL shell.
+	-- Ctrl+Shift+Z already zooms a pane.
 	{ key = "D", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
 }
 
