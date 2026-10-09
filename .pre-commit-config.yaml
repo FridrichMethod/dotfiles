@@ -29,7 +29,7 @@ repos:
         types: [file]
 
   - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.12.0-2
+    rev: v3.14.1-1
     hooks:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
@@ -42,6 +42,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
         files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$)
+        # The upstream hook excludes the zsh type; without this override no
+        # zsh file ever reached it.
+        types: [file]
+        exclude_types: []
 
   - repo: https://github.com/JohnnyMorganz/StyLua
     rev: v2.0.2
