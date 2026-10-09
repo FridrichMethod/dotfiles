@@ -326,16 +326,35 @@ if (Get-Module PSReadLine) {
             param($n) $n -is [System.Management.Automation.Language.ScriptBlockExpressionAst]
         }, $true) | Select-Object -First 1
     $handler = $handlerAst.ScriptBlock.GetScriptBlock()
-    $memoryOnly = [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly
+    # Token-shaped strings are assembled at run time so no scanner flags them.
     foreach ($line in @(
-            'curl -H "Authorization: Bearer abcdefghijkl" https://example.org',
+            'curl -H "Authorization: Bearer abc123def456ghi" https://example.org',
             ('echo ghp_' + ('a' * 24)),
-            '$env:ANTHROPIC_API_KEY = "sk-ant-xxxxxxxxxxxxxxxxxx"',
+            ('gh auth login --with-token github_pat_' + ('A1b' * 8)),
+            ('$env:ANTHROPIC_API_KEY = "sk-ant-' + 'api03-' + ('x' * 20) + '"'),
+            ('echo sk-proj-' + ('Ab1' * 8)),
+            ('echo sk-' + ('aB3' * 12)),
+            ('huggingface-cli login --token hf_' + ('aB' * 12)),
+            ('aws configure set aws_access_key_id AKIA' + ('ABCD2345' * 2)),
+            ('curl -d token=xoxb-' + ('12345-' * 3) + 'abc https://slack.com/api'),
+            ('echo "-----BEGIN ' + 'OPENSSH PRIVATE KEY-----"'),
             'git clone https://user:pass@example.org/repo.git',
+            '$env:GITHUB_TOKEN = "abc"',
+            '$env:GH_PAT = "abc"',
             ' echo kept in memory only')) {
-        Assert-True ((& $handler $line) -eq $memoryOnly) "history keeps out of the file: $line"
+        Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly) "history keeps out of the file: $line"
     }
-    Assert-True ((& $handler 'git push') -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile) 'ordinary commands still reach the history file'
+    foreach ($line in @(
+            'git push',
+            '$env:CUDA_PATH = "C:\cuda\v12.4"',
+            '$env:LD_LIBRARY_PATH = "/opt/lib"',
+            '$env:CMAKE_PREFIX_PATH = "C:\deps"',
+            '$env:PKG_CONFIG_PATH = "C:\deps\lib\pkgconfig"',
+            '$env:PATH = "C:\tools;" + $env:PATH',
+            'git commit -m "Add bearer authentication"',
+            'git checkout sk-refactor-dataloader-v2')) {
+        Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile) "history file keeps: $line"
+    }
 }
 else {
     Write-Output 'SKIP: PSReadLine unavailable'

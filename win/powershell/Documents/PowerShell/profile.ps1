@@ -98,16 +98,19 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
         -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView `
         -Colors @{ InlinePrediction = '#8d8d8d' }
     # Keep credentials out of ConsoleHost_history.txt (still recallable in this
-    # session); a leading space mirrors zsh HIST_IGNORE_SPACE.
+    # session); a leading space mirrors zsh HIST_IGNORE_SPACE. A bearer token
+    # needs a digit, a classic sk- key is one unbroken run, and PAT must be a
+    # whole name part, so prose ("bearer authentication"), branch names
+    # (sk-refactor-dataloader-v2) and *_PATH variables still reach the file.
     Set-PSReadLineOption -AddToHistoryHandler {
         param([string]$line)
         if ($line -match '^\s') { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
-        $secret = '(?i)\bbearer\s+[\w.~+/=-]{8,}' +
+        $secret = '(?i)\bbearer\s+(?=[\w.~+/=-]*\d)[\w.~+/=-]{8,}' +
             '|\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,})' +
-            '|\bsk-(ant-|proj-)?[\w-]{16,}|\bhf_[A-Za-z0-9]{20,}' +
+            '|\bsk-(ant-|proj-)[\w-]{16,}|\bsk-[A-Za-z0-9]{32,}|\bhf_[A-Za-z0-9]{20,}' +
             '|\bAKIA[0-9A-Z]{16}\b|\bxox[abprs]-[\w-]{10,}' +
             '|-----BEGIN [A-Z ]*PRIVATE KEY-----' +
-            '|\$env:\w*(token|secret|passw(or)?d|api_?key|_pat)\w*\s*=' +
+            '|\$env:\w*(token|secret|passw(or)?d|api_?key|(?<![a-z0-9])pat(?![a-z0-9]))\w*\s*=' +
             '|://[^/\s:@]+:[^/\s@]+@'
         if ($line -match $secret) { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
         [Microsoft.PowerShell.PSConsoleReadLine]::GetDefaultAddToHistoryOption($line)
