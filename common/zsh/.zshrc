@@ -167,6 +167,16 @@ fi
 # This should be set after sourcing oh-my-zsh to override its default setting
 zstyle ':completion:*' special-dirs false
 
+# GROMACS completion (~/.profile exports GMXBIN instead of sourcing GMXRC).
+# bashcompinit needs the compinit that oh-my-zsh has just run.
+if [[ -n ${GMXBIN:-} && -r $GMXBIN/gmx-completion.bash ]]; then
+    autoload -Uz bashcompinit && bashcompinit
+    for _gmx_completion in "$GMXBIN"/gmx-completion*.bash(N); do
+        source "$_gmx_completion"
+    done
+    unset _gmx_completion
+fi
+
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 ! _is_agent_session && [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
 
