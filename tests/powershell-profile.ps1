@@ -254,18 +254,23 @@ if ($expandAst) {
     $globDir = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-eza-test-" + [guid]::NewGuid().ToString('N'))
     try {
         $null = New-Item -ItemType Directory -Path (Join-Path $globDir 'sub')
-        foreach ($name in 'a.pyc', 'b.pyc', 'd.md', '[draft].md', '-rf.txt', 'secret.txt', 'sub/x.md') {
+        foreach ($name in 'a.pyc', 'b.pyc', 'd.md', '[draft].md', '-rf.txt', 'secret.txt', 'sub/x.md', '~$lock.docx') {
             [IO.File]::WriteAllText((Join-Path $globDir $name), '')
         }
         if ($IsWindows) { [IO.File]::SetAttributes((Join-Path $globDir 'secret.txt'), 'Hidden') }
         Push-Location -LiteralPath $globDir
+        $null = New-PSDrive -Name DotfilesEzaTest -PSProvider FileSystem -Root $globDir -Scope Global
         $cases = [ordered]@{
             'option values pass through'             = @('-I', '*.pyc', '--sort', 'size'), @('-I', '*.pyc', '--sort', 'size')
             'a short cluster takes the next word'    = @('-lI', '*.pyc'), @('-lI', '*.pyc')
+            'an optional value is never an option'   = @('-F', '-I', '*.pyc', '--color', '--ignore-glob', '*.pyc'), @('-F', '-I', '*.pyc', '--color', '--ignore-glob', '*.pyc')
+            'an optional value takes a plain word'   = @('-F', 'never', '*.md'), @('-F', 'never', 'd.md', '[draft].md')
             'an existing literal name stays'         = @(, '[draft].md'), @(, '[draft].md')
             'matches include hidden, -names guarded' = @(, '*.txt'), @((Join-Path . '-rf.txt'), 'secret.txt')
             'a relative directory stays relative'    = @(, 'sub/*.md'), @(, (Join-Path sub x.md))
             'a rooted pattern yields full paths'     = @(, (Join-Path $globDir '*.pyc')), @((Join-Path $globDir a.pyc), (Join-Path $globDir b.pyc))
+            'a drive-qualified pattern is rooted'    = @(, "DotfilesEzaTest:$([IO.Path]::DirectorySeparatorChar)*.pyc"), @((Join-Path $globDir a.pyc), (Join-Path $globDir b.pyc))
+            'a leading ~ is home only before a slash' = @(, '~$*'), @(, '~$lock.docx')
             'no match stays as typed'                = @(, '*.zzz'), @(, '*.zzz')
             'a quoted -- ends expansion'             = @('--', '*.md'), @('--', '*.md')
         }
@@ -278,6 +283,7 @@ if ($expandAst) {
     }
     finally {
         Pop-Location
+        Remove-PSDrive -Name DotfilesEzaTest -Scope Global -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $globDir -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath Function:\Expand-EzaArgs -ErrorAction SilentlyContinue
     }

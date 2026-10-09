@@ -184,18 +184,20 @@ if ($IsInteractive -and -not $IsAgentSession) {
         # native commands verbatim, so expand them here (ll *.pdb) as a POSIX
         # shell would: hidden items match, a pattern that matches nothing or
         # names an existing file ([draft].md) stays as typed, a rooted pattern
-        # (~\Docu*) yields full paths, and a match starting with '-' gets a .\
-        # prefix. Option values (-I '*.pyc') and everything after a quoted
-        # '--' pass through; PowerShell drops a bare -- before this sees it.
+        # (~\Docu*, Temp:\*.log) yields full paths, and a match starting with
+        # '-' gets a .\ prefix. Option values (-I '*.pyc') and everything after
+        # a quoted '--' pass through; PowerShell drops a bare -- before this
+        # sees it.
         function global:Expand-EzaArgs {
             # eza 0.23 options that consume the next word, including -F and
-            # the --color/--icons kind whose value is optional.
+            # the --color/--icons kind whose value is optional. As in eza's
+            # parser, that word is never another option (-F -I '*.pyc').
             $takesValue = '--ignore-glob', '--level', '--sort', '--time', '--width', '--time-style',
             '--color-scale-mode', '--classify', '--color', '--colour', '--icons', '--hyperlink',
             '--absolute', '--color-scale', '--colour-scale'
             $value = $literal = $false
             foreach ($a in $args) {
-                if ($value -or $literal -or $a -isnot [string]) { $value = $false; $a; continue }
+                if ($literal -or $a -isnot [string] -or ($value -and $a -notlike '-*')) { $value = $false; $a; continue }
                 if ($a -like '-*') {
                     $literal = $a -eq '--'
                     $value = $a -cmatch '^-[^-ILstwF]*[ILstwF]$' -or $a -cin $takesValue
@@ -205,7 +207,7 @@ if ($IsInteractive -and -not $IsAgentSession) {
                 try { $hits = @(Get-Item -Path $a -Force -ErrorAction Ignore | Where-Object { $_ -is [IO.FileSystemInfo] }) }
                 catch { $hits = @() }
                 if (-not $hits) { $a; continue }
-                $rooted = $a -like '~*' -or [IO.Path]::IsPathRooted($a)
+                $rooted = $a -match '^~([\\/]|$)|^[^\\/:]+:' -or [IO.Path]::IsPathRooted($a)
                 $here = (Get-Location -PSProvider FileSystem).ProviderPath
                 foreach ($hit in $hits) {
                     $path = if ($rooted) { $hit.FullName } else { [IO.Path]::GetRelativePath($here, $hit.FullName) }
