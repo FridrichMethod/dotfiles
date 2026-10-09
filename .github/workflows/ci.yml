@@ -30,7 +30,16 @@ jobs:
         run: ./setup-sync.sh
       - name: Run behavior tests with required CI prerequisites
         run: /bin/bash ./tests/run.sh --ci
-      - uses: pre-commit/action@v3.0.1
+      # The same steps pre-commit/action@v3.0.1 runs, without its unmaintained
+      # actions/cache@v4 pin (Node 20). Same cache path and key.
+      - name: Install pre-commit
+        run: python -m pip install pre-commit==4.6.2
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Run pre-commit
+        run: pre-commit run --show-diff-on-failure --color=always --all-files
 
   macos:
     name: macOS system Bash behavior
