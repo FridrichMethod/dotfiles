@@ -150,6 +150,13 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 - **Windows PowerShell 5.1** gets only the lazy conda stub. Keep that file ASCII and 5.1 syntax.
 - **Leave `Documents\PowerShell\Microsoft.PowerShell_profile.ps1` empty.** It runs after the tracked profile, and installers that follow the `notepad $PROFILE` advice append to it, outside the guard and the tests.
 
+#### WezTerm
+
+`common/wezterm` is the main terminal on Windows and macOS. New tabs open WSL Ubuntu on Windows; Ctrl+Alt+P opens PowerShell and Alt+L lists every launcher, including Sherlock and Marlowe (on Windows they run `ssh` inside WSL so later tabs reuse the WSL `ControlMaster` connection and Duo prompts only once).
+
+- Powerlevel10k (zsh) and the oh-my-posh theme (PowerShell) emit OSC 133 prompt marks in WezTerm, so Ctrl+Up/Down jump between prompts (macOS may reserve those keys for Mission Control). oh-my-zsh and the oh-my-posh theme report the working directory with OSC 7, so Alt+Shift+D and the default split keys open the new pane in the current directory. Ctrl+Shift+Z zooms a pane.
+- Configuration edits reload automatically; the shell-side changes need a new tab.
+
 #### Windows Terminal
 
 `settings.json` is a symlink, so restart Terminal after stow or after editing the file; hot reload does not fire through the link. Do not save from the Settings UI between pulling a change and that restart, because the save would write the old in-memory settings back through the link. If Terminal later rewrites the file, commit the rewrite only when the diff is formatting-only.

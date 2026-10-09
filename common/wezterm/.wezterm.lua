@@ -138,6 +138,17 @@ if is_windows then
 	end
 end
 
+-- Clusters: ssh inside WSL on Windows, because Windows OpenSSH cannot
+-- multiplex and WSL's ControlMaster lets later tabs skip the Duo prompt.
+config.launch_menu = config.launch_menu or {}
+for _, host in ipairs({ "sherlock", "marlowe" }) do
+	local entry = { label = host:sub(1, 1):upper() .. host:sub(2), args = { "ssh", host } }
+	if is_windows then
+		entry.domain = { DomainName = "WSL:Ubuntu" }
+	end
+	table.insert(config.launch_menu, entry)
+end
+
 -- ── Key bindings ──────────────────────────────────────────────────────────────
 
 config.treat_left_ctrlalt_as_altgr = false
@@ -153,6 +164,13 @@ config.keys = {
 		mods = "ALT",
 		action = act.ShowLauncherArgs({ flags = "LAUNCH_MENU_ITEMS" }),
 	},
+	-- Jump between prompts marked by OSC 133 (Powerlevel10k and the
+	-- oh-my-posh theme emit them), as Ctrl+Up/Down does in Windows Terminal.
+	{ key = "UpArrow", mods = "CTRL", action = act.ScrollToPrompt(-1) },
+	{ key = "DownArrow", mods = "CTRL", action = act.ScrollToPrompt(1) },
+	-- Split to the right in the current directory (reported with OSC 7), like
+	-- Windows Terminal's duplicate pane. Ctrl+Shift+Z already zooms a pane.
+	{ key = "D", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
 }
 
 if is_windows then
