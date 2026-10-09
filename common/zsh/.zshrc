@@ -78,6 +78,7 @@ zstyle ':omz:update' mode auto
 plugins=(
     # fzf-tab-source  # config manually
     # gitfast  # deprecated?
+    # nvm  # $ZSH_CUSTOM/nvm.zsh loads nvm itself, without lazy wrappers
     # thefuck  # for fun
     # timer  # p10k has builtin timer
     # z  # conflicts with zoxide
@@ -110,7 +111,6 @@ plugins=(
     man
     node
     npm
-    nvm
     pip
     python
     rsync
@@ -147,18 +147,15 @@ export BAT_THEME="Catppuccin Mocha"
 # conda-zsh-completion
 # fzf
 # fzf-tab
-# nvm
+# nvm (loads nvm itself; the oh-my-zsh nvm plugin is not used)
 # ssh-agent
 # zsh-autosuggestions
 #
 # oh-my-zsh sources $ZSH_CUSTOM/*.zsh only after loading every plugin, but
-# the nvm and ssh-agent plugins read their zstyle options (lazy, quiet, ...)
-# while loading, so source those two files first. Re-sourcing them later is
-# harmless.
-for _omz_plugin_options in nvm ssh-agent; do
-    _omz_plugin_options=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/$_omz_plugin_options.zsh
-    [[ -r $_omz_plugin_options ]] && source "$_omz_plugin_options"
-done
+# the ssh-agent plugin reads its zstyle options (lazy, quiet) while loading,
+# so source that file first. Re-sourcing it later is harmless.
+_omz_plugin_options=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/ssh-agent.zsh
+[[ -r $_omz_plugin_options ]] && source "$_omz_plugin_options"
 unset _omz_plugin_options
 
 # Load the zsh-completions plugin

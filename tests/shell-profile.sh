@@ -139,5 +139,34 @@ EOF
     nvm_case "no nvm" "$test_shell" "$TEST_TMP/home" "" unset
 done
 
+# common/zsh/.oh-my-zsh/custom/nvm.zsh loads nvm without `nvm use` and moves
+# the default node's bin back in front of the Homebrew and conda bins that
+# the host rc prepended after ~/.profile ran.
+if command -v zsh >/dev/null 2>&1; then
+    # shellcheck disable=SC2016
+    printf '%s\n' 'print -r -- "$*" >>"$NVM_DIR/nvm.sh.args"' 'nvm() { :; }' >"$nvm_dir/nvm.sh"
+    if ! env -u NVM_BIN -u NVM_INC NVM_DIR="$nvm_dir" HOME="$TEST_TMP/home" \
+        zsh -f -c '
+            nvm_zsh=$1 node_bin=$2
+            PATH=/opt/brew/bin:$node_bin:/usr/bin:/bin:$node_bin
+            source $nvm_zsh
+            [[ $PATH == $node_bin:/opt/brew/bin:/usr/bin:/bin ]] || { print -r -- "PATH=$PATH"; exit 1 }
+            [[ $NVM_BIN == $node_bin && $NVM_INC == ${node_bin%/bin}/include/node ]] || exit 1
+            [[ $(<$NVM_DIR/nvm.sh.args) == --no-use ]] || exit 1
+            (( ! ${#chpwd_functions} )) || exit 1
+            source $nvm_zsh
+            [[ $PATH == $node_bin:/opt/brew/bin:/usr/bin:/bin ]] || exit 1
+            [[ $(<$NVM_DIR/nvm.sh.args) == --no-use ]] || exit 1
+            unset NVM_BIN NVM_INC
+            PATH=/opt/brew/bin:/usr/bin:/bin
+            source $nvm_zsh
+            [[ $PATH == /opt/brew/bin:/usr/bin:/bin && -z ${NVM_BIN-} ]]
+        ' nvm-zsh "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/nvm.zsh" "$(node_bin v24.11.1)" \
+        2>&1; then
+        echo "FAIL nvm.zsh" >&2
+        nvm_failures=$((nvm_failures + 1))
+    fi
+fi
+
 [ "$nvm_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"
