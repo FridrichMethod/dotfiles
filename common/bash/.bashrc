@@ -95,6 +95,16 @@ if ! shopt -oq posix; then
     fi
 fi
 
+# GROMACS completion (~/.profile exports GMXBIN instead of sourcing GMXRC).
+if [ -n "${GMXBIN:-}" ] && [ -r "$GMXBIN/gmx-completion.bash" ]; then
+    shopt -s extglob
+    for _gmx_completion in "$GMXBIN"/gmx-completion*.bash; do
+        # shellcheck source=/dev/null
+        [ -r "$_gmx_completion" ] && . "$_gmx_completion"
+    done
+    unset _gmx_completion
+fi
+
 # Load host-specific interactive config (if any)
 if [ -r "$HOME/.config/bash/.bashrc" ]; then
     . "$HOME/.config/bash/.bashrc"
