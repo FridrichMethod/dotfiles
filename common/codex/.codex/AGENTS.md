@@ -57,7 +57,7 @@
 - When blocked, identify the concrete blocker and the smallest user action needed to continue.
 
 <!-- SHERLOCK-KIT:BEGIN -->
-<!-- source: SHERLOCK.md; schema_version: 1; policy_sha256: cb6fe161d747c7a7254d62b46cf5a04fd63cb938afdf06235da69d2a9aa8f582 -->
+<!-- source: SHERLOCK.md; schema_version: 1; policy_sha256: 561c3eb32de8c498143f5d4f5f5044075c686ca27ae24ae422d6144b634f2e1b -->
 When working on or connecting to Sherlock: read `/etc/agents/AGENTS.md` and the
 relevant topic guides before acting; check `hostname` and `SLURM_JOB_ID` first.
 
@@ -94,6 +94,13 @@ relevant topic guides before acting; check `hostname` and `SLURM_JOB_ID` first.
   authentication bootstrap. No authentication storms or stored MFA/passwords.
   A lost mutation reply is unknown; preserve its reservation and reconcile identity
   before retrying. `ssh -O check` only checks a local master. Doctor is read-only.
+- Consumer partitions are packaged toolkit profiles (`shk policy --identity` reports
+  `partitions_sha256`); unknown partitions are refused, borrowed partitions need an
+  identity-bound grant and `shk occupancy` first, and `--requeue` is emitted only
+  where the profile allows it:
+  - `btrippe`: preemptible=no, requeue=no, borrowed=yes, gpus=yes. Borrowed from another group. Run `shk occupancy` first. Courtesy budget about 2 jobs x 2 h while others are active; more (e.g. 4 jobs x 6 h) only when the partition is idle, typically 00:00-07:00.
+  - `normal`: preemptible=no, requeue=no, borrowed=no, gpus=no.
+  - `owners`: preemptible=yes, requeue=yes, borrowed=no, gpus=yes. Preemptible: Slurm requeues preempted jobs; scripts must checkpoint and resume. No cap.
 
 Full policy and provenance: `shk policy`; installed identity: `shk policy --identity`.
 The toolkit's transport/projection does not enforce arbitrary scripts or certify
