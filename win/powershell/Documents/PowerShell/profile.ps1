@@ -76,10 +76,13 @@ if ($IsInteractive -and -not $IsAgentSession) {
     # conda.exe) writes pipes in the ANSI code page, which this decoder would
     # turn into U+FFFD, so put it in UTF-8 mode. Unlike PYTHONIOENCODING, that
     # also makes a Python parent decode its Python children as UTF-8. A user
-    # or parent setting wins.
+    # or parent setting wins, except PYTHONIOENCODING=utf-8, which this
+    # profile used to export and which UTF-8 mode agrees with.
     try {
         [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-        if (-not ($env:PYTHONIOENCODING -or $env:PYTHONUTF8)) { $env:PYTHONUTF8 = '1' }
+        if (-not $env:PYTHONUTF8 -and (-not $env:PYTHONIOENCODING -or $env:PYTHONIOENCODING -eq 'utf-8')) {
+            $env:PYTHONUTF8 = '1'
+        }
     }
     catch { }
 

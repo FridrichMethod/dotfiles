@@ -199,6 +199,30 @@ if ($agentFlag) {
 $sameAgents = (@($zshAgents | Sort-Object -Unique) -join ',') -eq (@($psAgents | Sort-Object -Unique) -join ',')
 Assert-True ($zshAgents.Count -gt 0 -and $sameAgents) "`$IsAgentSession is `$env:$($zshAgents -join ' -or $env:'), like _is_agent_session (profile: $($psAgents -join ', '))"
 
+# Python writes pipes in the ANSI code page unless it runs in UTF-8 mode;
+# PYTHONIOENCODING would fix only its own stdout and break Python->Python
+# pipes, so the profile never sets it.
+$pythonUtf8 = @(Get-Assignments $parsed7.Ast '$env:PYTHONUTF8')
+$pythonIo = @(Get-Assignments $parsed7.Ast '$env:PYTHONIOENCODING') + @(Get-Assignments $parsed51.Ast '$env:PYTHONIOENCODING')
+Assert-True ($pythonUtf8.Count -eq 1 -and $pythonUtf8[0].Right.Extent.Text -eq "'1'" -and $guardBody -and (Test-InsideNode $pythonUtf8[0] $guardBody) -and
+    $pythonIo.Count -eq 0) "interactive setup sets PYTHONUTF8=1 and nothing sets PYTHONIOENCODING ($($pythonUtf8.Count) and $($pythonIo.Count) assignments)"
+if ($pythonUtf8.Count -eq 1) {
+    # Only an if made of expressions is replayed here, never the guard.
+    $utf8Rule = $pythonUtf8[0].Parent.Parent
+    if ($utf8Rule -isnot [System.Management.Automation.Language.IfStatementAst] -or (Get-Commands $utf8Rule)) { $utf8Rule = $null }
+    $savedPython = @{ PYTHONUTF8 = $env:PYTHONUTF8; PYTHONIOENCODING = $env:PYTHONIOENCODING }
+    try {
+        # Inherited value -> expected PYTHONUTF8. utf-8 is what this profile
+        # used to export, so terminals started before the change are fixed too.
+        foreach ($case in @(@($null, $null, '1'), @('utf-8', $null, '1'), @('cp936', $null, $null), @($null, '0', '0'))) {
+            $env:PYTHONIOENCODING, $env:PYTHONUTF8 = $case[0], $case[1]
+            if ($utf8Rule) { Invoke-Expression $utf8Rule.Extent.Text }
+            Assert-True ($utf8Rule -and $env:PYTHONUTF8 -eq $case[2] -and $env:PYTHONIOENCODING -eq $case[0]) "PYTHONIOENCODING=[$($case[0])] PYTHONUTF8=[$($case[1])] -> PYTHONUTF8=[$($case[2])] (got [$env:PYTHONUTF8])"
+        }
+    }
+    finally { $env:PYTHONIOENCODING, $env:PYTHONUTF8 = $savedPython.PYTHONIOENCODING, $savedPython.PYTHONUTF8 }
+}
+
 $importsPSReadLine = @(Get-Commands $parsed7.Ast | Where-Object {
         $_.GetCommandName() -eq 'Import-Module' -and $_.Extent.Text -match '\bPSReadLine\b'
     })
