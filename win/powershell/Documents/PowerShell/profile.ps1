@@ -12,20 +12,22 @@ $IsAgentSession = [bool]($env:CURSOR_AGENT -or $env:GEMINI_CLI)
 # Do not run `conda init powershell`: it rewrites this file with an eager hook
 # that spawns conda.exe on every start (~0.8-0.95 s) and an absolute path. The
 # stub runs the same hook on first use, after which Conda.psm1's `conda` alias
-# outranks it. CONDA_CHANGEPS1=false is process-wide, not scoped to the stub,
-# so activation through conda-hook.ps1 (VS Code, Anaconda Prompt) also leaves
-# the oh-my-posh prompt unwrapped instead of printing a 'False' or '(env)'
-# prefix; the theme shows the env itself. A value set by the user or a parent
-# process wins.
+# outranks it. The stub removes itself before running the hook: with
+# auto_activate on, the hook ends in `conda activate base`, which would call
+# the stub again, forever, if Conda.psm1 failed to load. CONDA_CHANGEPS1=false
+# is process-wide, not scoped to the stub, so activation through
+# conda-hook.ps1 (VS Code, Anaconda Prompt) also leaves the oh-my-posh prompt
+# unwrapped instead of printing a 'False' or '(env)' prefix; the theme shows
+# the env itself. A value set by the user or a parent process wins.
 if ($null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
 if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
     function global:conda {
+        Remove-Item -LiteralPath Function:\conda
         $hook = & (Join-Path $HOME 'miniconda3\Scripts\conda.exe') shell.powershell hook | Out-String
         Invoke-Expression $hook
         if (-not (Test-Path Function:\Invoke-Conda)) {
             throw 'conda: shell.powershell hook did not load Conda.psm1'
         }
-        Remove-Item -LiteralPath Function:\conda
         Invoke-Conda @args
     }
     # Conda.psm1 completes only via the legacy TabExpansion function, which

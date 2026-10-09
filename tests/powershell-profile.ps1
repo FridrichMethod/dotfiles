@@ -49,12 +49,18 @@ function Test-InsideConsoleGuard($Node) {
     $false
 }
 
-function Test-InsideFunction($Node, [string]$Name) {
+function Test-InsideNode($Node, $Ancestor) {
     for ($p = $Node.Parent; $p; $p = $p.Parent) {
-        if ($p -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            ($p.Name -replace '^global:', '') -eq $Name) { return $true }
+        if ([object]::ReferenceEquals($p, $Ancestor)) { return $true }
     }
     $false
+}
+
+function Get-FunctionAst($Ast, [string]$Name) {
+    $Ast.Find({
+            param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            ($n.Name -replace '^global:', '') -eq $Name
+        }, $true)
 }
 
 $parsed7 = Get-ProfileAst $profile7
@@ -124,8 +130,15 @@ Assert-True ($text7.Contains(".config/oh-my-posh/prompt.omp.json")) 'the profile
 
 Write-Output '--- conda stays lazy'
 foreach ($parsed in $parsed7, $parsed51) {
+    $file = $parsed.Ast.Extent.File
     $hooks = @(Get-Commands $parsed.Ast | Where-Object { $_.Extent.Text -match 'shell\.powershell' })
-    Assert-True ($hooks.Count -ge 1 -and -not ($hooks | Where-Object { -not (Test-InsideFunction $_ 'conda') })) "$($parsed.Ast.Extent.File) runs the conda hook only from the conda stub"
+    $stub = Get-FunctionAst $parsed.Ast 'conda'
+    Assert-True ($hooks.Count -ge 1 -and -not ($hooks | Where-Object { -not ($stub -and (Test-InsideNode $_ $stub)) })) "$file runs the conda hook only from the conda stub"
+    # With auto_activate the hook itself calls conda; the stub must be gone by
+    # then, or a failed Conda.psm1 import recurses until the call stack overflows.
+    $removal = if ($stub) { @(Get-Commands $stub.Body | Where-Object { $_.GetCommandName() -eq 'Remove-Item' -and $_.Extent.Text -match 'Function:\\conda' }) }
+    $evaluation = if ($stub) { @(Get-Commands $stub.Body | Where-Object { $_.GetCommandName() -eq 'Invoke-Expression' }) }
+    Assert-True ($removal.Count -eq 1 -and $evaluation.Count -eq 1 -and $removal[0].Extent.StartOffset -lt $evaluation[0].Extent.StartOffset) "$file drops the conda stub before running the hook"
 }
 
 Write-Output '--- Windows PowerShell 5.1 compatibility'
