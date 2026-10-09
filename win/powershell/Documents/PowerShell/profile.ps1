@@ -125,9 +125,20 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
 
     # Both plugins register process-wide subsystems, so importing them on the
     # first idle tick works and keeps them off the startup path. Never installs.
+    # A missing module stays quiet; one that is installed but fails to load
+    # warns once per session, below the first prompt, which is then redrawn.
     $null = Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -MaxTriggerCount 1 -Action {
-        Import-Module CompletionPredictor -Global -ErrorAction Ignore
-        Import-Module Microsoft.WinGet.CommandNotFound -Global -ErrorAction Ignore
+        $failed = foreach ($module in 'CompletionPredictor', 'Microsoft.WinGet.CommandNotFound') {
+            try { Import-Module $module -Global -ErrorAction Stop }
+            catch {
+                if ($_.FullyQualifiedErrorId -notlike 'Modules_ModuleNotFound,*') { "${module}: $($_.Exception.Message)" }
+            }
+        }
+        if ($failed) {
+            $Host.UI.WriteLine()
+            $failed | ForEach-Object { $Host.UI.WriteWarningLine($_) }
+            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt($null, $Host.UI.RawUI.CursorPosition.Y)
+        }
     }
 
     $PSStyle.FileInfo.Directory = $PSStyle.Bold + $PSStyle.Foreground.Blue
