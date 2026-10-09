@@ -26,8 +26,10 @@ function Assert-True([bool]$Condition, [string]$Message) {
 }
 
 # Runs a child without a window or stdin, with environment edits ($null
-# removes a variable), drains both streams concurrently so neither pipe can
-# fill up, and kills it after the timeout.
+# removes a variable), decodes its output as UTF-8 (oh-my-posh writes UTF-8;
+# the console code page would merge its glyphs with the next ASCII letter),
+# drains both streams concurrently so neither pipe can fill up, and kills it
+# after the timeout.
 function Invoke-Child {
     param(
         [Parameter(Mandatory)][string]$FilePath,
@@ -41,6 +43,7 @@ function Invoke-Child {
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = $psi.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
     foreach ($name in $Environment.Keys) {
         if ($null -eq $Environment[$name]) { $null = $psi.Environment.Remove($name) }
         else { $psi.Environment[$name] = $Environment[$name] }
@@ -415,18 +418,37 @@ Assert-True ($null -ne $config.transient_prompt) 'the theme defines a transient 
 Assert-True ($config.upgrade.auto -eq $false -and $config.upgrade.notice -eq $false) 'the theme never upgrades or nags'
 $omp = Get-Command oh-my-posh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($omp) {
-    $cache = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-omp-cache-" + [guid]::NewGuid().ToString('N'))
-    $savedCache = $env:OMP_CACHE_DIR
+    # An inherited POSH_SESSION_ID makes oh-my-posh render that session's
+    # cached config instead of --config, and an OMP_CACHE_DIR that does not
+    # exist falls back to the user's own cache. Each call therefore gets no
+    # POSH_* session and a cache directory that exists and is deleted after.
+    $ompDir = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-omp-test-" + [guid]::NewGuid().ToString('N'))
+    $ompEnv = @{ OMP_CACHE_DIR = Join-Path $ompDir 'cache' }
+    Get-ChildItem Env: | Where-Object Name -like 'POSH_*' | ForEach-Object { $ompEnv[$_.Name] = $null }
+    # A broken theme still exits 0 and prints a prompt; the error text that
+    # replaces the failed part is what gives it away.
+    $renderError = 'CONFIG PARSE ERROR|CONFIG ERROR|invalid template text|unable to create text based on template'
+    $render = {
+        param([string]$Config, [string]$Kind)
+        Invoke-Child $omp.Source @('print', $Kind, '--config', $Config, '--shell', 'pwsh', '--plain') -Environment $ompEnv
+    }
     try {
-        $env:OMP_CACHE_DIR = $cache
-        $rendered = & $omp.Source print primary --config $theme --shell pwsh 2>&1 | Out-String
-        Assert-True ($LASTEXITCODE -eq 0 -and $rendered.Trim()) 'oh-my-posh renders the theme'
-        $init = & $omp.Source init pwsh --config $theme --print 2>&1 | Out-String
-        Assert-True ($init -match '_ompFTCSMarks = \$true' -and $init -match '_ompTransientPrompt = \$true') 'oh-my-posh enables prompt marks and the transient prompt'
+        $null = New-Item -ItemType Directory -Path $ompEnv.OMP_CACHE_DIR
+        foreach ($kind in 'primary', 'transient', 'secondary') {
+            $result = & $render $theme $kind
+            Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and $result.Out -and $result.Out -notmatch $renderError -and -not $result.Err) "oh-my-posh renders the $kind prompt without errors"
+        }
+        # The render check itself must notice a broken segment template.
+        $broken = Get-Content -LiteralPath $theme -Raw | ConvertFrom-Json -AsHashtable
+        $broken.blocks[0].segments[0].template = '{{ .NoSuchField }}'
+        $brokenTheme = Join-Path $ompDir 'broken.omp.json'
+        [IO.File]::WriteAllText($brokenTheme, ($broken | ConvertTo-Json -Depth 64))
+        Assert-True ((& $render $brokenTheme 'primary').Out -match $renderError) 'the render check catches a broken template'
+        $init = Invoke-Child $omp.Source @('init', 'pwsh', '--config', $theme, '--print') -Environment $ompEnv
+        Assert-True ($init.Out -match '_ompFTCSMarks = \$true' -and $init.Out -match '_ompTransientPrompt = \$true') 'oh-my-posh enables prompt marks and the transient prompt'
     }
     finally {
-        $env:OMP_CACHE_DIR = $savedCache
-        Remove-Item -LiteralPath $cache -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $ompDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 else {
