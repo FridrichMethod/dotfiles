@@ -194,8 +194,9 @@ config.keys = {
 	-- already zooms a pane.
 	{ key = "D", mods = "ALT|SHIFT", action = split_right },
 	-- WezTerm's own split keys, Ctrl+Shift+Alt+% (right) and Ctrl+Shift+Alt+"
-	-- (down), rebound in every form its defaults register (the unshifted US
-	-- key is matched first), so none of them falls back to cmd.exe on Windows.
+	-- (down), rebound in every form its defaults register (which form a press
+	-- resolves to depends on platform and layout; on Windows with a US layout
+	-- it is the shifted % and "), so none of them falls back to cmd.exe.
 	{ key = "5", mods = "CTRL|SHIFT|ALT", action = split_right },
 	{ key = "%", mods = "CTRL|SHIFT|ALT", action = split_right },
 	{ key = "%", mods = "CTRL|ALT", action = split_right },
