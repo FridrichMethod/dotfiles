@@ -307,12 +307,14 @@ Set-Variable -Name HOME -Value $env:DOTFILES_TEST_HOME -Force -Scope Global
 "conda=$((Get-Command conda).CommandType)"
 "subcommand=$(@((TabExpansion2 'conda inf --json' 9).CompletionMatches | ForEach-Object CompletionText) -join ',')"
 "env=$(@((TabExpansion2 'conda activate de' 17).CompletionMatches | ForEach-Object CompletionText) -join ',')"
+try { conda --version } catch { }
+"after-failed-hook=$((Get-Command conda).CommandType)"
 '@
         $result = Invoke-Child $windowsPowerShell @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $child51) -Environment @{
             PSModulePath = $null; DOTFILES_TEST_PROFILE = $profile51; DOTFILES_TEST_HOME = $fakeHome51
         }
-        $expected = "parse-errors=0`nconda=Function`nsubcommand=info`nenv=demo"
-        Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and ($result.Out -replace "`r", '') -eq $expected -and -not $result.Err) "the 5.1 profile parses and completes conda under Windows PowerShell (exit=$($result.ExitCode) out=$($result.Out -replace '\s+', ' ') err=$($result.Err))"
+        $expected = "parse-errors=0`nconda=Function`nsubcommand=info`nenv=demo`nafter-failed-hook=Function"
+        Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and ($result.Out -replace "`r", '') -eq $expected -and -not $result.Err) "the 5.1 profile parses, completes conda and keeps the stub after a failed hook under Windows PowerShell (exit=$($result.ExitCode) out=$($result.Out -replace '\s+', ' ') err=$($result.Err))"
     }
     finally {
         Remove-Item -LiteralPath $fakeHome51 -Recurse -Force -ErrorAction SilentlyContinue
@@ -397,6 +399,9 @@ if ($IsWindows) {
     if ('demo' -notin $completion) { throw "conda completion offered: $($completion -join ', ')" }
     $completion = (TabExpansion2 'conda inf --json' 9).CompletionMatches.CompletionText
     if ('info' -notin $completion) { throw "mid-line conda completion offered: $($completion -join ', ')" }
+    # The fake conda.exe cannot run, so the hook fails; the stub must come back.
+    try { conda --version } catch { }
+    if ((Get-Command conda).CommandType -ne 'Function') { throw 'a failed conda hook left no stub behind' }
 }
 'PASS'
 '@

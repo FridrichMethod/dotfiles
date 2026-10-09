@@ -14,12 +14,21 @@ $IsAgentSession = [bool]($env:CURSOR_AGENT -or $env:GEMINI_CLI)
 # stub runs the same hook on first use, after which Conda.psm1's `conda` alias
 # outranks it. The stub removes itself before running the hook: with
 # auto_activate on, the hook ends in `conda activate base`, which would call
-# the stub again, forever, if Conda.psm1 failed to load.
+# the stub again, forever, if Conda.psm1 failed to load. Once the hook has
+# returned without loading it (a failed hook, Ctrl+C) the stub comes back, so
+# the next call retries instead of reaching a `conda` on PATH (conda.bat runs
+# in a child cmd and cannot activate).
 if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
     function global:conda {
+        $stub = $MyInvocation.MyCommand.ScriptBlock
         Remove-Item -LiteralPath Function:\conda
-        $hook = & (Join-Path $HOME 'miniconda3\Scripts\conda.exe') shell.powershell hook | Out-String
-        Invoke-Expression $hook
+        try {
+            $hook = & (Join-Path $HOME 'miniconda3\Scripts\conda.exe') shell.powershell hook | Out-String
+            Invoke-Expression $hook
+        }
+        finally {
+            if (-not (Test-Path Function:\Invoke-Conda)) { ${function:global:conda} = $stub }
+        }
         if (-not (Test-Path Function:\Invoke-Conda)) {
             throw 'conda: shell.powershell hook did not load Conda.psm1'
         }
