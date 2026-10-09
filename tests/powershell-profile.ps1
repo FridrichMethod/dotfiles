@@ -126,16 +126,40 @@ $tail = $text7.Substring([Math]::Max($tailAt, 0))
 Assert-True ($tail.Contains('scripts/dotfiles-update.ps1')) 'the update hook runs scripts/dotfiles-update.ps1'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
-# Interactive setup runs only in the then-branch of exactly this if: stdout is
-# a console, no agent terminal, and the host loaded PSReadLine, which it skips
-# for -Command/-File scripts and -NonInteractive. Comparing the whole condition
-# catches an inverted or dropped term, and the branch check catches setup moved
-# into an else or elseif.
-$guardText = '-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Module PSReadLine)'
-$guards = @($parsed7.Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] }, $true) |
-        Where-Object { ($_.Clauses[0].Item1.Extent.Text -replace '\s+', ' ').Trim() -eq $guardText })
-Assert-True ($guards.Count -eq 1) "exactly one interactive guard: if ($guardText)"
+function Get-Assignments($Ast, [string]$Left) {
+    @($Ast.FindAll({
+                param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                $n.Left.Extent.Text -eq $Left
+            }.GetNewClosure(), $true))
+}
+function Get-IfStatements($Ast, [string]$Condition) {
+    @($Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] }, $true) |
+            Where-Object { ($_.Clauses[0].Item1.Extent.Text -replace '\s+', ' ').Trim() -eq $Condition })
+}
+
+# The interactive test is computed once: stdout is a console and the host
+# loaded PSReadLine, which it skips for -Command/-File scripts and
+# -NonInteractive. Setup runs only in the then-branch of exactly one if on that
+# flag and no agent terminal, and the update check only under the flag.
+# Comparing whole conditions catches an inverted or dropped term, and the
+# branch checks catch code moved into an else or elseif.
+$interactiveText = '-not [Console]::IsOutputRedirected -and (Get-Module PSReadLine)'
+$interactiveFlag = Get-Assignments $parsed7.Ast '$IsInteractive'
+Assert-True ($interactiveFlag.Count -eq 1 -and ($interactiveFlag[0].Right.Extent.Text -replace '\s+', ' ').Trim() -eq $interactiveText) "`$IsInteractive is assigned once: $interactiveText"
+$guardText = '$IsInteractive -and -not $IsAgentSession'
+$guards = Get-IfStatements $parsed7.Ast $guardText
+Assert-True ($guards.Count -eq 1 -and $interactiveFlag.Count -eq 1 -and $guards[0].Extent.StartOffset -gt $interactiveFlag[0].Extent.EndOffset) "exactly one interactive guard, after the flag: if ($guardText)"
 $guardBody = if ($guards.Count -eq 1) { $guards[0].Clauses[0].Item2 }
+$updateCall = @(Get-Commands $parsed7.Ast | Where-Object {
+        $_.InvocationOperator -eq 'Ampersand' -and $_.CommandElements[0].Extent.Text -eq '$DotfilesUpdate'
+    })
+$updateGate = Get-IfStatements $parsed7.Ast '$IsInteractive'
+$afterGate = if ($updateGate.Count -eq 1) {
+    @($parsed7.Ast.EndBlock.Statements | Where-Object { $_.Extent.StartOffset -gt $updateGate[0].Extent.StartOffset })
+}
+Assert-True ($updateCall.Count -eq 1 -and $updateGate.Count -eq 1 -and [object]::ReferenceEquals($updateGate[0].Parent, $parsed7.Ast.EndBlock) -and
+    (Test-InsideNode $updateCall[0] $updateGate[0].Clauses[0].Item2) -and
+    -not ($afterGate | Where-Object { $_ -isnot [System.Management.Automation.Language.PipelineAst] -or $_.Extent.Text -notmatch '^Remove-Variable\b' })) 'the update check runs last, only in the then-branch of if ($IsInteractive)'
 $guarded = @(Get-Commands $parsed7.Ast | Where-Object {
         $name = $_.GetCommandName()
         $name -in 'Set-PSReadLineOption', 'Set-PSReadLineKeyHandler', 'Register-EngineEvent', 'oh-my-posh', 'zoxide' -or

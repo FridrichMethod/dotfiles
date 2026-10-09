@@ -65,8 +65,10 @@ if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
 # wrapper's `pwsh -Command ...`) has real stdout but never reads a line. The
 # console host imports PSReadLine before the profile only for a session that
 # will (no -Command or -File without -NoExit, no -NonInteractive); VS Code's
-# PowerShell extension does the same.
-if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Module PSReadLine)) {
+# PowerShell extension does the same. The update check at the end uses the
+# same test; as in zsh, agent terminals skip only the setup here.
+$IsInteractive = -not [Console]::IsOutputRedirected -and (Get-Module PSReadLine)
+if ($IsInteractive -and -not $IsAgentSession) {
     # The ANSI code page here is 936 (GBK), so pwsh mis-decoded captured UTF-8
     # output of native tools (git, rg, node, uv). The setter changes the code
     # page of the whole console (shared with any parent shell) and throws when
@@ -259,9 +261,14 @@ Remove-Variable IsAgentSession
 
 # --- Dotfiles auto-update check ---------------------------------------
 # Last, mirroring the tail of common/zsh/.zshrc, so the prompt and modules
-# above are ready first. The session-once and no-console guards live in
-# scripts/dotfiles-update.ps1 so both updaters keep one contract.
-$DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
-$DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
-if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
-Remove-Variable DotfilesDir, DotfilesUpdate
+# above are ready first. Like zsh, which returns before it for non-interactive
+# shells, a script run in a console never fetches or stows. The session-once
+# and no-console guards live in scripts/dotfiles-update.ps1 so both updaters
+# keep one contract.
+if ($IsInteractive) {
+    $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
+    $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
+    if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
+    Remove-Variable DotfilesDir, DotfilesUpdate
+}
+Remove-Variable IsInteractive
