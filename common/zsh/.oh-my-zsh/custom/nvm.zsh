@@ -1,5 +1,17 @@
 #!/bin/zsh
 
+# On macOS, oh-my-zsh's brew plugin runs `brew shellenv` when brew is not on
+# PATH yet, which puts Homebrew's bin back ahead of the default node's bin
+# that ~/.zshrc moved to the front. Move it ahead again only in that case:
+# the plugins have filled the command hash table by now, and any PATH
+# assignment empties it.
+() {
+    [[ -n ${NVM_BIN:-} && -n ${HOMEBREW_PREFIX:-} ]] || return 0
+    local nvm=${path[(ie)$NVM_BIN]} brew=${path[(ie)$HOMEBREW_PREFIX/bin]}
+    ((brew < nvm && nvm <= $#path)) || return 0
+    path=("${(@)path[1,brew-1]}" "$NVM_BIN" "${(@)${(@)path[brew,-1]}:#$NVM_BIN}")
+}
+
 # nvm for interactive zsh, instead of the oh-my-zsh nvm plugin. ~/.profile
 # has already put the default node's bin on PATH and exported NVM_DIR, so
 # this only defines the nvm function and its completion: `--no-use` skips
@@ -15,14 +27,3 @@ if [[ -r $NVM_DIR/bash_completion ]]; then
     # An empty ZSH_VERSION skips the compinit call in nvm's script.
     ZSH_VERSION= source "$NVM_DIR/bash_completion"
 fi
-
-# oh-my-zsh sources this file after its plugins, so Homebrew's shellenv and
-# conda's hook have prepended bins that can hold another node or
-# tree-sitter. Move nvm's bin back to the front, where `nvm use` puts it,
-# and export what `nvm use` would.
-() {
-    local bin=${path[(r)${(b)NVM_DIR}/versions/node/*/bin]}
-    [[ -n $bin ]] || return 0
-    path=("$bin" "${(@)path:#$bin}")
-    export NVM_BIN=$bin NVM_INC=${bin%/bin}/include/node
-}

@@ -151,28 +151,34 @@ EOF
     nvm_case "no nvm" "$test_shell" "$TEST_TMP/home" "" unset
 done
 
-# common/zsh/.oh-my-zsh/custom/nvm.zsh loads nvm without `nvm use` and moves
-# the default node's bin back in front of the Homebrew and conda bins that
-# the host rc prepended after ~/.profile ran.
+# common/zsh/.oh-my-zsh/custom/nvm.zsh loads nvm without `nvm use`. Only
+# when a later `brew shellenv` (oh-my-zsh's brew plugin on macOS) has put
+# Homebrew's bin ahead of nvm's does it move nvm's bin back, just ahead of
+# Homebrew's. Otherwise it must not assign PATH, which would empty the
+# command hash table: a hashed marker command has to survive.
 if command -v zsh >/dev/null 2>&1; then
     # shellcheck disable=SC2016
     printf '%s\n' 'print -r -- "$*" >>"$NVM_DIR/nvm.sh.args"' 'nvm() { :; }' >"$nvm_dir/nvm.sh"
-    if ! env -u NVM_BIN -u NVM_INC NVM_DIR="$nvm_dir" HOME="$TEST_TMP/home" \
+    if ! env -u NVM_BIN -u NVM_INC -u HOMEBREW_PREFIX NVM_DIR="$nvm_dir" HOME="$TEST_TMP/home" \
         zsh -f -c '
             nvm_zsh=$1 node_bin=$2
-            PATH=/opt/brew/bin:$node_bin:/usr/bin:/bin:$node_bin
+            NVM_BIN=$node_bin HOMEBREW_PREFIX=/opt/brew
+            PATH=/opt/x:/opt/brew/bin:/opt/brew/sbin:$node_bin:/usr/bin:/bin
             source $nvm_zsh
-            [[ $PATH == $node_bin:/opt/brew/bin:/usr/bin:/bin ]] || { print -r -- "PATH=$PATH"; exit 1 }
-            [[ $NVM_BIN == $node_bin && $NVM_INC == ${node_bin%/bin}/include/node ]] || exit 1
+            [[ $PATH == /opt/x:$node_bin:/opt/brew/bin:/opt/brew/sbin:/usr/bin:/bin ]] ||
+                { print -r -- "PATH=$PATH"; exit 1 }
             [[ $(<$NVM_DIR/nvm.sh.args) == --no-use ]] || exit 1
             (( ! ${#chpwd_functions} )) || exit 1
+            hash _marker=/bin/sh
             source $nvm_zsh
-            [[ $PATH == $node_bin:/opt/brew/bin:/usr/bin:/bin ]] || exit 1
+            [[ $PATH == /opt/x:$node_bin:/opt/brew/bin:/opt/brew/sbin:/usr/bin:/bin ]] || exit 1
             [[ $(<$NVM_DIR/nvm.sh.args) == --no-use ]] || exit 1
-            unset NVM_BIN NVM_INC
-            PATH=/opt/brew/bin:/usr/bin:/bin
+            (( $+commands[_marker] )) || { print "PATH assigned"; exit 1 }
+            unset NVM_BIN
+            PATH=/opt/brew/bin:/usr/bin:/bin:$node_bin
+            hash _marker=/bin/sh
             source $nvm_zsh
-            [[ $PATH == /opt/brew/bin:/usr/bin:/bin && -z ${NVM_BIN-} ]]
+            [[ $PATH == /opt/brew/bin:/usr/bin:/bin:$node_bin ]] && (( $+commands[_marker] ))
         ' nvm-zsh "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/nvm.zsh" "$(node_bin v24.11.1)" \
         2>&1; then
         echo "FAIL nvm.zsh" >&2

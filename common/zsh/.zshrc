@@ -162,6 +162,21 @@ unset _omz_plugin_options
 # See https://github.com/zsh-users/zsh-completions/blob/master/README.md
 fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 
+# nvm: the host rc has prepended Homebrew's and conda's bins, which can hold
+# another node or tree-sitter, ahead of the default node's bin that
+# ~/.profile added. Move that bin back to the front, where `nvm use` puts it,
+# and export what `nvm use` would. Do it here: every PATH assignment empties
+# the command hash table that oh-my-zsh fills next, and refilling it rescans
+# all of PATH (~0.13 s under WSL, mostly on /mnt/c).
+if [[ -n ${NVM_DIR:-} ]]; then
+    () {
+        local bin=${path[(r)${(b)NVM_DIR}/versions/node/*/bin]}
+        [[ -n $bin ]] || return 0
+        path=("$bin" "${(@)path:#$bin}")
+        export NVM_BIN=$bin NVM_INC=${bin%/bin}/include/node
+    }
+fi
+
 # Source Oh My Zsh
 source $ZSH/oh-my-zsh.sh
 
