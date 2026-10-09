@@ -54,10 +54,12 @@ plugins+=(
 # `cd dir >/dev/null` and `cd -q`. Cache the wslpath conversion per $PWD, so
 # only a directory change forks. The first precmd still runs while the
 # Powerlevel10k instant prompt has stdout redirected to its capture file, so
-# write to the terminal p10k saved.
+# write to the terminal p10k saved. Test wslpath by its path: a $commands
+# lookup here would fill the command hash table by scanning all of PATH, and
+# ~/.zshrc's nvm block empties it again before oh-my-zsh refills it.
 # _is_agent_session comes from ~/.zshrc, which sources this file.
 if [[ -o interactive && -n ${WT_SESSION:-} && -z ${TERM_PROGRAM:-} ]] &&
-    [[ -n ${commands[wslpath]-} ]] && ! _is_agent_session; then
+    [[ -x /usr/bin/wslpath ]] && ! _is_agent_session; then
     typeset -g _wt_cwd_pwd= _wt_cwd_win=
     _wt_report_cwd() {
         local fd=1
