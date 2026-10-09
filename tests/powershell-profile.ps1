@@ -441,12 +441,12 @@ if (Get-Module PSReadLine) {
             'curl -H "Authorization: Bearer abc123def456ghi" https://example.org',
             ('echo ghp_' + ('a' * 24)),
             ('gh auth login --with-token github_pat_' + ('A1b' * 8)),
-            ('$env:ANTHROPIC_API_KEY = "sk-ant-' + 'api03-' + ('x' * 20) + '"'),
-            ('echo sk-proj-' + ('Ab1' * 8)),
+            ('$env:ANTHROPIC_API_KEY = "sk-ant-' + 'api03-' + ('x' * 48) + '"'),
+            ('echo sk-proj-' + ('Ab1' * 16)),
             ('echo sk-' + ('aB3' * 12)),
-            ('setx OPENAI_API_KEY sk-svcacct-' + ('aB3_' * 6)),
-            ("[Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-admin-" + ('aB3-' * 6) + "', 'User')"),
-            ('setx OPENAI_API_KEY sk-None-' + ('aB3' * 8)),
+            ('setx OPENAI_API_KEY sk-svcacct-' + ('aB3_' * 12)),
+            ("[Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-admin-" + ('aB3-' * 12) + "', 'User')"),
+            ('setx OPENAI_API_KEY sk-None-' + ('aB3' * 16)),
             ('python run.py --api-key sk-or-v1-' + ('0123456789abcdef' * 4)),
             ('codex login --api-key sk-' + ('aB3' * 4) + 'T3Blbk' + 'FJ' + ('aB3' * 4)),
             ('echo sk-next-' + ('aB3' * 25) + 'T3Blbk' + 'FJ' + ('aB3' * 25)),
@@ -456,6 +456,8 @@ if (Get-Module PSReadLine) {
             ('echo "-----BEGIN ' + 'OPENSSH PRIVATE KEY-----"'),
             'git clone https://user:pass@example.org/repo.git',
             '$env:GITHUB_TOKEN = "abc"',
+            '$env:HF_TOKEN = "abc"',
+            '$env:AWS_SECRET_ACCESS_KEY = "abc"',
             '$env:GH_PAT = "abc"',
             ' echo kept in memory only')) {
         Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly) "history keeps out of the file: $line"
@@ -471,6 +473,7 @@ if (Get-Module PSReadLine) {
             'git checkout sk-refactor-dataloader-v2',
             # Too short for an admin key; a key's None prefix is capitalized.
             'git checkout -b sk-admin-tools',
+            'git checkout -b sk-admin-dashboard-cleanup-v2',
             'git switch sk-none-fix-for-flaky-tests')) {
         Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile) "history file keeps: $line"
     }
