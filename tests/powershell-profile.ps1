@@ -449,6 +449,7 @@ if (Get-Module PSReadLine) {
             ('setx OPENAI_API_KEY sk-None-' + ('aB3' * 8)),
             ('python run.py --api-key sk-or-v1-' + ('0123456789abcdef' * 4)),
             ('codex login --api-key sk-' + ('aB3' * 4) + 'T3Blbk' + 'FJ' + ('aB3' * 4)),
+            ('echo sk-next-' + ('aB3' * 25) + 'T3Blbk' + 'FJ' + ('aB3' * 25)),
             ('huggingface-cli login --token hf_' + ('aB' * 12)),
             ('aws configure set aws_access_key_id AKIA' + ('ABCD2345' * 2)),
             ('curl -d token=xoxb-' + ('12345-' * 3) + 'abc https://slack.com/api'),
@@ -467,9 +468,20 @@ if (Get-Module PSReadLine) {
             '$env:PKG_CONFIG_PATH = "C:\deps\lib\pkgconfig"',
             '$env:PATH = "C:\tools;" + $env:PATH',
             'git commit -m "Add bearer authentication"',
-            'git checkout sk-refactor-dataloader-v2')) {
+            'git checkout sk-refactor-dataloader-v2',
+            # Too short for an admin key; a key's None prefix is capitalized.
+            'git checkout -b sk-admin-tools',
+            'git switch sk-none-fix-for-flaky-tests')) {
         Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile) "history file keeps: $line"
     }
+    # The handler runs on Enter. With an unbounded gap before the T3BlbkFJ
+    # marker, one run of many sk- starts backtracked quadratically: this line
+    # took about 4 s, the bounded gap tens of milliseconds.
+    $runLine = 'echo ' + ('sk-' * 20000)
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $runResult = & $handler $runLine
+    $sw.Stop()
+    Assert-True ($runResult -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile -and $sw.ElapsedMilliseconds -lt 500) "history filter takes $($sw.ElapsedMilliseconds) ms (< 500) for a $($runLine.Length)-character run of sk-"
 }
 else {
     Write-Output 'SKIP: PSReadLine unavailable'

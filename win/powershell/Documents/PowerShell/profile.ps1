@@ -115,17 +115,20 @@ if ($IsInteractive -and -not $IsAgentSession) {
         -Colors @{ InlinePrediction = '#8d8d8d' }
     # Keep credentials out of ConsoleHost_history.txt (still recallable in this
     # session); a leading space mirrors zsh HIST_IGNORE_SPACE. A bearer token
-    # needs a digit, an sk- key a vendor prefix (Anthropic, OpenAI project,
-    # service-account, admin and legacy keys, OpenRouter), OpenAI's T3BlbkFJ
-    # marker or one unbroken run, and PAT must be a whole name part, so prose
-    # ("bearer authentication"), branch names (sk-refactor-dataloader-v2) and
-    # *_PATH variables still reach the file.
+    # needs a digit, an sk- key a vendor prefix in the vendor's case
+    # (Anthropic, OpenAI project, service-account, admin and legacy None keys,
+    # OpenRouter), OpenAI's T3BlbkFJ marker within 160 characters or one
+    # unbroken run, and PAT must be a whole name part, so prose ("bearer
+    # authentication"), branch names (sk-refactor-dataloader-v2,
+    # sk-none-fix-for-flaky-tests) and *_PATH variables still reach the file.
+    # The bound keeps a pasted run of sk- from backtracking for seconds on
+    # Enter.
     Set-PSReadLineOption -AddToHistoryHandler {
         param([string]$line)
         if ($line -match '^\s') { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
         $secret = '(?i)\bbearer\s+(?=[\w.~+/=-]*\d)[\w.~+/=-]{8,}' +
             '|\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,})' +
-            '|\bsk-(ant|proj|svcacct|admin|None|or-v1)-[\w-]{16,}|\bsk-[\w-]*T3BlbkFJ|\bsk-[A-Za-z0-9]{32,}' +
+            '|\bsk-(?-i:ant|proj|svcacct|admin|None|or-v1)-[\w-]{16,}|\bsk-[\w-]{0,160}T3BlbkFJ|\bsk-[A-Za-z0-9]{32,}' +
             '|\bhf_[A-Za-z0-9]{20,}' +
             '|\bAKIA[0-9A-Z]{16}\b|\bxox[abprs]-[\w-]{10,}' +
             '|-----BEGIN [A-Z ]*PRIVATE KEY-----' +
