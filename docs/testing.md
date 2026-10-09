@@ -47,9 +47,12 @@ oh-my-posh session removed and a temporary cache, failing on rendered template
 errors (unknown segment types are not detectable in oh-my-posh 31.6).
 
 `tests/shell-profile.sh` also resolves nvm's `default` alias forms against a
-fake `NVM_DIR` under sh, dash, Bash and Zsh, and checks that
-`custom/nvm.zsh` loads nvm with `--no-use` and keeps its node ahead of other
-bins.
+fake `NVM_DIR` under sh, dash, Bash and Zsh (including bash `failglob`), checks
+that `custom/nvm.zsh` loads nvm with `--no-use`, and runs `common/zsh/.zshrc`
+three levels deep with a fake `brew shellenv` and conda prepends: PATH, FPATH
+and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
+(activated env or brew first) is kept, a conda-style activate and deactivate
+keeps an entry already on PATH, and nothing assigns PATH after oh-my-zsh.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
