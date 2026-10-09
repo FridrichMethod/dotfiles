@@ -153,6 +153,28 @@ end
 
 config.treat_left_ctrlalt_as_altgr = false
 
+-- Split the active pane in its own domain and directory (reported with OSC 7).
+-- The new pane runs that domain's default program, not a copy of the pane's
+-- command: an ssh launcher tab splits into that domain's shell (WSL on
+-- Windows, the local shell elsewhere), not a second ssh. On Windows the local
+-- domain's default is %ComSpec% (cmd.exe), so a local pane's split names pwsh
+-- here. config.default_prog cannot do this: `wezterm start --cwd <dir>`
+-- without a program (Explorer's "Open WezTerm here") builds its command from
+-- it before picking the default WSL domain, and pwsh does not exist there.
+local function split_pane(direction)
+	return wezterm.action_callback(function(window, pane)
+		local args = nil
+		if is_windows and pane:get_domain_name() == "local" then
+			args = { "pwsh", "-NoLogo" }
+		end
+		window:perform_action(
+			act.SplitPane({ direction = direction, command = { domain = "CurrentPaneDomain", args = args } }),
+			pane
+		)
+	end)
+end
+local split_right, split_down = split_pane("Right"), split_pane("Down")
+
 config.keys = {
 	{
 		key = "w",
@@ -168,9 +190,19 @@ config.keys = {
 	-- oh-my-posh theme emit them), as Ctrl+Up/Down does in Windows Terminal.
 	{ key = "UpArrow", mods = "CTRL", action = act.ScrollToPrompt(-1) },
 	{ key = "DownArrow", mods = "CTRL", action = act.ScrollToPrompt(1) },
-	-- Split to the right in the current directory (reported with OSC 7), like
-	-- Windows Terminal's duplicate pane. Ctrl+Shift+Z already zooms a pane.
-	{ key = "D", mods = "ALT|SHIFT", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+	-- Windows Terminal's split key, splitting to the right. Ctrl+Shift+Z
+	-- already zooms a pane.
+	{ key = "D", mods = "ALT|SHIFT", action = split_right },
+	-- WezTerm's own split keys, Ctrl+Shift+Alt+% (right) and Ctrl+Shift+Alt+"
+	-- (down), rebound in every form its defaults register (which form a press
+	-- resolves to depends on platform and layout; on Windows with a US layout
+	-- it is the shifted % and "), so none of them falls back to cmd.exe.
+	{ key = "5", mods = "CTRL|SHIFT|ALT", action = split_right },
+	{ key = "%", mods = "CTRL|SHIFT|ALT", action = split_right },
+	{ key = "%", mods = "CTRL|ALT", action = split_right },
+	{ key = "'", mods = "CTRL|SHIFT|ALT", action = split_down },
+	{ key = '"', mods = "CTRL|SHIFT|ALT", action = split_down },
+	{ key = '"', mods = "CTRL|ALT", action = split_down },
 }
 
 if is_windows then

@@ -12,32 +12,41 @@ $IsAgentSession = [bool]($env:CURSOR_AGENT -or $env:GEMINI_CLI)
 # Do not run `conda init powershell`: it rewrites this file with an eager hook
 # that spawns conda.exe on every start (~0.8-0.95 s) and an absolute path. The
 # stub runs the same hook on first use, after which Conda.psm1's `conda` alias
-# outranks it. CONDA_CHANGEPS1=false is process-wide, not scoped to the stub,
-# so activation through conda-hook.ps1 (VS Code, Anaconda Prompt) also leaves
-# the oh-my-posh prompt unwrapped instead of printing a 'False' or '(env)'
-# prefix; the theme shows the env itself. A value set by the user or a parent
-# process wins.
-if ($null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
+# outranks it. The stub removes itself before running the hook: with
+# auto_activate on, the hook ends in `conda activate base`, which would call
+# the stub again, forever, if Conda.psm1 failed to load. Once the hook has
+# returned without loading it (a failed hook, Ctrl+C) the stub comes back, so
+# the next call retries instead of reaching a `conda` on PATH (conda.bat runs
+# in a child cmd and cannot activate).
 if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
     function global:conda {
-        $hook = & (Join-Path $HOME 'miniconda3\Scripts\conda.exe') shell.powershell hook | Out-String
-        Invoke-Expression $hook
+        $stub = $MyInvocation.MyCommand.ScriptBlock
+        Remove-Item -LiteralPath Function:\conda
+        try {
+            $hook = & (Join-Path $HOME 'miniconda3\Scripts\conda.exe') shell.powershell hook | Out-String
+            Invoke-Expression $hook
+        }
+        finally {
+            if (-not (Test-Path Function:\Invoke-Conda)) { ${function:global:conda} = $stub }
+        }
         if (-not (Test-Path Function:\Invoke-Conda)) {
             throw 'conda: shell.powershell hook did not load Conda.psm1'
         }
-        Remove-Item -LiteralPath Function:\conda
         Invoke-Conda @args
     }
     # Conda.psm1 completes only via the legacy TabExpansion function, which
     # PowerShell 7.4 stopped calling; this serves both the stub and the alias.
+    # Commands are conda 26.5's `conda commands`; only the words before the
+    # cursor count, so completing mid-line works.
     Register-ArgumentCompleter -Native -CommandName conda -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
-        $words = @($commandAst.CommandElements | ForEach-Object { $_.Extent.Text })
-        if ($wordToComplete) { $words = @($words | Select-Object -SkipLast 1) }
+        $words = @($commandAst.CommandElements | Where-Object { $_.Extent.EndOffset -lt $cursorPosition } |
+                ForEach-Object { $_.Extent.Text })
         $candidates = if ($words.Count -eq 1) {
-            'activate', 'clean', 'compare', 'config', 'create', 'deactivate', 'doctor', 'env',
-            'export', 'info', 'init', 'install', 'list', 'notices', 'package', 'remove',
-            'rename', 'run', 'search', 'uninstall', 'update', 'upgrade'
+            'activate', 'check', 'clean', 'commands', 'compare', 'config', 'content-trust', 'create',
+            'deactivate', 'doctor', 'env', 'export', 'index', 'info', 'init', 'install', 'list',
+            'menuinst', 'notices', 'package', 'pypi', 'remove', 'rename', 'repoquery', 'run',
+            'search', 'self', 'token', 'tos', 'uninstall', 'update', 'upgrade'
         }
         elseif (($words.Count -eq 2 -and $words[1] -eq 'activate') -or $words[-1] -in '-n', '--name') {
             @('base') + @(Get-ChildItem -LiteralPath (Join-Path $HOME 'miniconda3\envs') -Directory -ErrorAction Ignore |
@@ -52,18 +61,30 @@ if (Test-Path -LiteralPath (Join-Path $HOME 'miniconda3\Scripts\conda.exe')) {
 # --- Interactive console only -------------------------------------------------
 # Redirected stdout breaks prediction, hangs CompletionPredictor, stalls
 # Microsoft.WinGet.CommandNotFound for ~31 s and never draws a prompt, so all
-# of that stays in here.
-if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
+# of that stays in here. A script run in a console (`pwsh -File x.ps1`, a .cmd
+# wrapper's `pwsh -Command ...`) has real stdout but never reads a line. The
+# console host imports PSReadLine before the profile only for a session that
+# will (no -Command or -File without -NoExit, no -NonInteractive); VS Code's
+# PowerShell extension does the same. It also imports it when the commands
+# come from a pipe (`... | pwsh`, `-Command -`, `-File -`), which, as in zsh,
+# is not an interactive shell, hence the stdin test. The update check at the
+# end uses the same test; as in zsh, agent terminals skip only the setup here.
+$IsInteractive = -not [Console]::IsOutputRedirected -and -not [Console]::IsInputRedirected -and (Get-Module PSReadLine)
+if ($IsInteractive -and -not $IsAgentSession) {
     # The ANSI code page here is 936 (GBK), so pwsh mis-decoded captured UTF-8
     # output of native tools (git, rg, node, uv). The setter changes the code
     # page of the whole console (shared with any parent shell) and throws when
     # there is none, hence the guard and the try. Python (python, pip,
     # conda.exe) writes pipes in the ANSI code page, which this decoder would
-    # turn into U+FFFD, so make its stdio UTF-8 too; a user or parent setting
-    # wins.
+    # turn into U+FFFD, so put it in UTF-8 mode. Unlike PYTHONIOENCODING, that
+    # also makes a Python parent decode its Python children as UTF-8. A user
+    # or parent setting wins, except PYTHONIOENCODING=utf-8, which this
+    # profile used to export and which UTF-8 mode agrees with.
     try {
         [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-        if (-not ($env:PYTHONIOENCODING -or $env:PYTHONUTF8)) { $env:PYTHONIOENCODING = 'utf-8' }
+        if (-not $env:PYTHONUTF8 -and (-not $env:PYTHONIOENCODING -or $env:PYTHONIOENCODING -eq 'utf-8')) {
+            $env:PYTHONUTF8 = '1'
+        }
     }
     catch { }
 
@@ -93,16 +114,28 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
         -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView `
         -Colors @{ InlinePrediction = '#8d8d8d' }
     # Keep credentials out of ConsoleHost_history.txt (still recallable in this
-    # session); a leading space mirrors zsh HIST_IGNORE_SPACE.
+    # session); a leading space mirrors zsh HIST_IGNORE_SPACE. A bearer token
+    # needs a digit, an sk- key a vendor prefix in the vendor's case
+    # (Anthropic, OpenAI project, service-account, admin and legacy None keys,
+    # OpenRouter) with a key-length body of 40+ characters, OpenAI's T3BlbkFJ
+    # marker within 160 characters or one unbroken run, and a secret $env:
+    # name word (TOKEN, SECRET, PASSWORD, API_KEY, PAT) must be a whole name
+    # part, so prose ("bearer authentication"), branch names
+    # (sk-refactor-dataloader-v2, sk-admin-dashboard-cleanup-v2) and *_PATH
+    # variables still reach the file. Everything else falls through to
+    # PSReadLine's own filter, which also keeps any line containing "token"
+    # (TOKENIZERS_PARALLELISM too) out of the file. The bounds and the
+    # lookahead keep a long pasted line from backtracking for seconds on Enter.
     Set-PSReadLineOption -AddToHistoryHandler {
         param([string]$line)
         if ($line -match '^\s') { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
-        $secret = '(?i)\bbearer\s+[\w.~+/=-]{8,}' +
+        $secret = '(?i)\bbearer\s+(?=[\w.~+/=-]*\d)[\w.~+/=-]{8,}' +
             '|\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,})' +
-            '|\bsk-(ant-|proj-)?[\w-]{16,}|\bhf_[A-Za-z0-9]{20,}' +
+            '|\bsk-(?-i:ant|proj|svcacct|admin|None|or-v1)-[\w-]{40,}|\bsk-[\w-]{0,160}T3BlbkFJ|\bsk-[A-Za-z0-9]{32,}' +
+            '|\bhf_[A-Za-z0-9]{20,}' +
             '|\bAKIA[0-9A-Z]{16}\b|\bxox[abprs]-[\w-]{10,}' +
             '|-----BEGIN [A-Z ]*PRIVATE KEY-----' +
-            '|\$env:\w*(token|secret|passw(or)?d|api_?key|_pat)\w*\s*=' +
+            '|\$env:(?=\w*?(?<![a-z0-9])(token|secret|passw(or)?d|api_?key|pat)(?![a-z0-9]))\w*\s*=' +
             '|://[^/\s:@]+:[^/\s@]+@'
         if ($line -match $secret) { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
         [Microsoft.PowerShell.PSConsoleReadLine]::GetDefaultAddToHistoryOption($line)
@@ -117,9 +150,20 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
 
     # Both plugins register process-wide subsystems, so importing them on the
     # first idle tick works and keeps them off the startup path. Never installs.
+    # A missing module stays quiet; one that is installed but fails to load
+    # warns once per session, below the first prompt, which is then redrawn.
     $null = Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -MaxTriggerCount 1 -Action {
-        Import-Module CompletionPredictor -Global -ErrorAction Ignore
-        Import-Module Microsoft.WinGet.CommandNotFound -Global -ErrorAction Ignore
+        $failed = foreach ($module in 'CompletionPredictor', 'Microsoft.WinGet.CommandNotFound') {
+            try { Import-Module $module -Global -ErrorAction Stop }
+            catch {
+                if ($_.FullyQualifiedErrorId -notlike 'Modules_ModuleNotFound,*') { "${module}: $($_.Exception.Message)" }
+            }
+        }
+        if ($failed) {
+            $Host.UI.WriteLine()
+            $failed | ForEach-Object { $Host.UI.WriteWarningLine($_) }
+            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt($null, $Host.UI.RawUI.CursorPosition.Y)
+        }
     }
 
     $PSStyle.FileInfo.Directory = $PSStyle.Bold + $PSStyle.Foreground.Blue
@@ -127,7 +171,9 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
     # --- Optional CLI tools (docs/dependencies.md); each skipped when absent ---
     if (& $HasExe fzf) {
         if (-not $env:FZF_DEFAULT_OPTS) { $env:FZF_DEFAULT_OPTS = '--height=60% --layout=reverse --border --info=inline' }
-        if (Get-Module PSFzf -ListAvailable) {
+        # Get-Module -ListAvailable takes ~30 ms; look in the module path instead.
+        if ($env:PSModulePath.Split([IO.Path]::PathSeparator) |
+                Where-Object { $_ -and [IO.Directory]::Exists([IO.Path]::Combine($_, 'PSFzf')) }) {
             # Calling an exported function autoloads PSFzf on the first keypress
             # instead of at startup. PSFzf never overrides a chord that is
             # already bound, so these bindings survive its import.
@@ -146,14 +192,38 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
     if ((& $HasExe bat) -and -not $env:BAT_THEME) { $env:BAT_THEME = 'Catppuccin Mocha' }
     if (& $HasExe eza) {
         # eza does not glob on Windows and PowerShell passes wildcards to
-        # native commands verbatim, so expand them here (ll *.pdb).
+        # native commands verbatim, so expand them here (ll *.pdb) as a POSIX
+        # shell would: hidden items match, a pattern that matches nothing or
+        # names an existing file ([draft].md) stays as typed, a rooted pattern
+        # (~\Docu*, Temp:\*.log) yields full paths, and a match starting with
+        # '-' gets a .\ prefix. Option values (-I '*.pyc') and everything after
+        # a quoted '--' pass through; PowerShell drops a bare -- before this
+        # sees it.
         function global:Expand-EzaArgs {
+            # eza 0.23 options that consume the next word, including -F and
+            # the --color/--icons kind whose value is optional. As in eza's
+            # parser, that word is never another option (-F -I '*.pyc').
+            $takesValue = '--ignore-glob', '--level', '--sort', '--time', '--width', '--time-style',
+            '--color-scale-mode', '--classify', '--color', '--colour', '--icons', '--hyperlink',
+            '--absolute', '--color-scale', '--colour-scale'
+            $value = $literal = $false
             foreach ($a in $args) {
-                if ($a -is [string] -and $a -notlike '-*' -and [WildcardPattern]::ContainsWildcardCharacters($a)) {
-                    $hits = @(Resolve-Path -Path $a -Relative -ErrorAction Ignore)
-                    if ($hits.Count) { $hits -replace '^\.[\\/]', ''; continue }
+                if ($literal -or $a -isnot [string] -or ($value -and $a -notlike '-*')) { $value = $false; $a; continue }
+                if ($a -like '-*') {
+                    $literal = $a -eq '--'
+                    $value = $a -cmatch '^-[^-ILstwF]*[ILstwF]$' -or $a -cin $takesValue
+                    $a; continue
                 }
-                $a
+                if (-not [WildcardPattern]::ContainsWildcardCharacters($a) -or (Test-Path -LiteralPath $a)) { $a; continue }
+                try { $hits = @(Get-Item -Path $a -Force -ErrorAction Ignore | Where-Object { $_ -is [IO.FileSystemInfo] }) }
+                catch { $hits = @() }
+                if (-not $hits) { $a; continue }
+                $rooted = $a -match '^~([\\/]|$)|^[^\\/:]+:' -or [IO.Path]::IsPathRooted($a)
+                $here = (Get-Location -PSProvider FileSystem).ProviderPath
+                foreach ($hit in $hits) {
+                    $path = if ($rooted) { $hit.FullName } else { [IO.Path]::GetRelativePath($here, $hit.FullName) }
+                    if ($path -like '-*') { Join-Path . $path } else { $path }
+                }
             }
         }
         function global:ll { eza -l --group-directories-first --icons=auto @(Expand-EzaArgs @args) }
@@ -175,10 +245,28 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession) {
         if (-not (Test-Path -LiteralPath $OmpConfig -PathType Leaf)) { $OmpConfig = 'catppuccin' }
         oh-my-posh init pwsh --config $OmpConfig | Invoke-Expression
         Remove-Variable OmpConfig
+        # The theme shows the conda env itself, so keep conda's '(env)' prefix
+        # off this prompt, also for activations through conda-hook.ps1 (VS
+        # Code, Anaconda Prompt) in this process. A user or parent value wins.
+        if ((Get-Module oh-my-posh-core) -and $null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
     }
-    # zoxide wraps the prompt function, so it must run after oh-my-posh.
+    # zoxide wraps the prompt function, so it must run after oh-my-posh. Its
+    # hook runs `zoxide add` after oh-my-posh restored $LASTEXITCODE, which
+    # reset it to 0 after every cd, so the outer wrapper restores it again.
+    # The value is a parameter default because any statement ahead of the
+    # inner call would reset the $? that oh-my-posh reads, and the inner
+    # prompt lives in a closure, not a global, so re-sourcing this profile
+    # cannot make the wrapper call itself.
     if (& $HasExe zoxide) {
         Invoke-Expression (& { (zoxide init powershell | Out-String) })
+        $function:global:prompt = & {
+            $inner = $function:prompt
+            {
+                param($ExitCode = $global:LASTEXITCODE)
+                & $inner
+                $global:LASTEXITCODE = $ExitCode
+            }.GetNewClosure()
+        }
     }
     Remove-Variable HasExe
 }
@@ -186,9 +274,14 @@ Remove-Variable IsAgentSession
 
 # --- Dotfiles auto-update check ---------------------------------------
 # Last, mirroring the tail of common/zsh/.zshrc, so the prompt and modules
-# above are ready first. The session-once and no-console guards live in
-# scripts/dotfiles-update.ps1 so both updaters keep one contract.
-$DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
-$DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
-if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
-Remove-Variable DotfilesDir, DotfilesUpdate
+# above are ready first. Like zsh, which returns before it for non-interactive
+# shells, a script run in a console or piped in never fetches or stows. The
+# session-once and no-console guards live in scripts/dotfiles-update.ps1 so
+# both updaters keep one contract.
+if ($IsInteractive) {
+    $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
+    $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
+    if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
+    Remove-Variable DotfilesDir, DotfilesUpdate
+}
+Remove-Variable IsInteractive

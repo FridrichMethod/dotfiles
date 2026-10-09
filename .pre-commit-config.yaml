@@ -42,10 +42,9 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
         files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$)
-        # The upstream hook excludes the zsh type; without this override no
-        # zsh file ever reached it.
+        # The upstream hook selects the shell type, which identify does not
+        # give .zsh_aliases; every file the pattern names is checked instead.
         types: [file]
-        exclude_types: []
 
   - repo: https://github.com/JohnnyMorganz/StyLua
     rev: v2.0.2
@@ -72,7 +71,7 @@ repos:
         entry: tests/shell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(common/sh/\.profile|tests/shell-profile\.sh)$
+        files: ^(common/sh/\.profile|common/zsh/\.zshrc|common/zsh/\.oh-my-zsh/custom/nvm\.zsh|tests/shell-profile\.sh)$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh
@@ -132,7 +131,7 @@ repos:
         entry: tests/powershell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(win/powershell/.*|win/oh-my-posh/.*|tests/powershell-profile\.(sh|ps1))$
+        files: ^(win/powershell/.*|win/oh-my-posh/.*|common/zsh/\.zshrc|tests/powershell-profile\.(sh|ps1))$
       - id: update-hooks
         name: automatic update and stow behavior
         entry: tests/update-hooks.sh

@@ -48,25 +48,31 @@ plugins+=(
 )
 
 # Windows Terminal: report the cwd with OSC 9;9 so duplicated tabs and panes
-# open in the same directory. Report from precmd whenever $PWD changed since
-# the last report: precmd always runs in the main shell with the terminal as
-# stdout, whereas a chpwd hook misses `cd dir >/dev/null` and `cd -q`. The
-# first precmd still runs while the Powerlevel10k instant prompt has stdout
-# redirected to its capture file, so write to the terminal p10k saved.
+# open in the same directory. Report from precmd at every prompt, as Microsoft
+# documents: the terminal keeps only the last report, which a nested shell, an
+# ssh session or a Windows program may have sent, and a chpwd hook would miss
+# `cd dir >/dev/null` and `cd -q`. Cache the wslpath conversion per $PWD, so
+# only a directory change forks. The first precmd still runs while the
+# Powerlevel10k instant prompt has stdout redirected to its capture file, so
+# write to the terminal p10k saved. Test wslpath by its path: a $commands
+# lookup here would fill the command hash table by scanning all of PATH, and
+# ~/.zshrc's nvm block empties it again before oh-my-zsh refills it.
 # _is_agent_session comes from ~/.zshrc, which sources this file.
 if [[ -o interactive && -n ${WT_SESSION:-} && -z ${TERM_PROGRAM:-} ]] &&
-    [[ -n ${commands[wslpath]-} ]] && ! _is_agent_session; then
-    typeset -g _wt_reported_pwd=
+    [[ -x /usr/bin/wslpath ]] && ! _is_agent_session; then
+    typeset -g _wt_cwd_pwd= _wt_cwd_win=
     _wt_report_cwd() {
-        [[ $PWD == "$_wt_reported_pwd" ]] && return 0
-        local fd=1 win_pwd
+        local fd=1
         if [[ -n ${__p9k_instant_prompt_active:-} && ${__p9k_fd_1:-x} != *[!0-9]* ]]; then
             fd=$__p9k_fd_1
         fi
         [[ -t $fd ]] || return 0
-        win_pwd=$(wslpath -w "$PWD" 2>/dev/null) || return 0
-        builtin printf '\e]9;9;%s\e\\' "$win_pwd" >&$fd
-        _wt_reported_pwd=$PWD
+        if [[ $PWD != "$_wt_cwd_pwd" ]]; then
+            _wt_cwd_pwd=$PWD
+            _wt_cwd_win=$(wslpath -w "$PWD" 2>/dev/null) || _wt_cwd_win=
+        fi
+        [[ -n $_wt_cwd_win ]] || return 0
+        builtin printf '\e]9;9;%s\e\\' "$_wt_cwd_win" >&$fd
     }
     autoload -Uz add-zsh-hook
     add-zsh-hook precmd _wt_report_cwd

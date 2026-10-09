@@ -1,5 +1,13 @@
 #!/bin/zsh
 
+# Drop duplicates from PATH, fpath and INFOPATH. In a nested shell the host
+# rc prepends again what the parent already has (`brew shellenv` is a no-op
+# only while PATH starts with Homebrew's bin:sbin), so each level would grow
+# them. -U on path alone would miss `export PATH=...`. PATH keeps -U only
+# while this file sets it up (see before oh-my-zsh).
+typeset -gU path PATH fpath
+typeset -gUT INFOPATH infopath
+
 source "$HOME/.profile"
 
 # --------------- Interactive Shell Settings ---------------
@@ -7,7 +15,10 @@ source "$HOME/.profile"
 # Enable the subsequent settings only in interactive sessions
 case $- in
     *i*) ;;
-    *) return ;;
+    *)
+        typeset -g +U path PATH
+        return
+        ;;
 esac
 
 # Disable software flow control
@@ -78,6 +89,7 @@ zstyle ':omz:update' mode auto
 plugins=(
     # fzf-tab-source  # config manually
     # gitfast  # deprecated?
+    # nvm  # $ZSH_CUSTOM/nvm.zsh loads nvm itself, without lazy wrappers
     # thefuck  # for fun
     # timer  # p10k has builtin timer
     # z  # conflicts with zoxide
@@ -110,7 +122,6 @@ plugins=(
     man
     node
     npm
-    nvm
     pip
     python
     rsync
@@ -126,6 +137,13 @@ plugins=(
     you-should-use
     zoxide
 )
+
+# A parent shell that loaded nvm, whose NVM_BIN is still on PATH, has already
+# ordered PATH (for example, a conda env activated ahead of node). Keep its
+# order for the nvm block before oh-my-zsh.
+if [[ -n ${NVM_BIN:-} ]] && ((${path[(Ie)$NVM_BIN]})); then
+    _zshrc_parent_path=("${path[@]}")
+fi
 
 # Host-specific interactive config (plugins, fpath filters, etc.)
 if [[ -r "$HOME/.config/zsh/.zshrc" ]]; then
@@ -147,26 +165,56 @@ export BAT_THEME="Catppuccin Mocha"
 # conda-zsh-completion
 # fzf
 # fzf-tab
-# nvm
+# nvm (loads nvm itself; the oh-my-zsh nvm plugin is not used)
 # ssh-agent
 # zsh-autosuggestions
 #
 # oh-my-zsh sources $ZSH_CUSTOM/*.zsh only after loading every plugin, but
-# the nvm and ssh-agent plugins read their zstyle options (lazy, quiet, ...)
-# while loading, so source those two files first. Re-sourcing them later is
-# harmless.
-for _omz_plugin_options in nvm ssh-agent; do
-    _omz_plugin_options=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/$_omz_plugin_options.zsh
-    [[ -r $_omz_plugin_options ]] && source "$_omz_plugin_options"
-done
+# the ssh-agent plugin reads its zstyle options (lazy, quiet) while loading,
+# so source that file first. Re-sourcing it later is harmless.
+_omz_plugin_options=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/ssh-agent.zsh
+[[ -r $_omz_plugin_options ]] && source "$_omz_plugin_options"
 unset _omz_plugin_options
 
 # Load the zsh-completions plugin
 # See https://github.com/zsh-users/zsh-completions/blob/master/README.md
 fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 
+# nvm: the host rc has prepended Homebrew's and conda's bins, which can hold
+# another node or tree-sitter, ahead of the default node's bin that
+# ~/.profile added. Move that bin back to the front, where `nvm use` puts it,
+# and export what `nvm use` would. A nested shell instead restores its
+# parent's order, which `brew shellenv` has just changed. Do it here: every
+# PATH assignment empties the command hash table that oh-my-zsh fills next,
+# and refilling it rescans all of PATH (~0.13 s under WSL, mostly on /mnt/c).
+if (($+_zshrc_parent_path)); then
+    path=("${(@)path:|_zshrc_parent_path}" "${(@)_zshrc_parent_path:*path}")
+    unset _zshrc_parent_path
+elif [[ -n ${NVM_DIR:-} ]]; then
+    () {
+        local bin=${path[(r)${(b)NVM_DIR}/versions/node/*/bin]}
+        [[ -n $bin ]] || return 0
+        path=("$bin" "${(@)path:#$bin}")
+        export NVM_BIN=$bin NVM_INC=${bin%/bin}/include/node
+    }
+fi
+
+# PATH is set up. Without -U from here on, `conda activate` of a prefix
+# already on PATH adds a second copy instead of moving the only one, so
+# `conda deactivate` (which removes the first copy) leaves the original.
+typeset -g +U path PATH
+
+# custom/nvm.zsh moves nvm's bin ahead of Homebrew's again only if oh-my-zsh
+# (its brew plugin on macOS) puts Homebrew's ahead, not if it already is:
+# a nested shell has kept its parent's order above.
+if [[ -n ${NVM_BIN:-} && -n ${HOMEBREW_PREFIX:-} ]] &&
+    ((${path[(ie)$HOMEBREW_PREFIX/bin]} < ${path[(ie)$NVM_BIN]})); then
+    _zshrc_brew_ahead=1
+fi
+
 # Source Oh My Zsh
 source $ZSH/oh-my-zsh.sh
+unset _zshrc_brew_ahead
 
 # source alias file if it exists
 if [[ -r "$HOME/.zsh_aliases" ]]; then
