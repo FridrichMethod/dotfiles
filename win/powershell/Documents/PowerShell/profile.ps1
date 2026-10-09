@@ -151,14 +151,36 @@ if (-not [Console]::IsOutputRedirected -and -not $IsAgentSession -and (Get-Modul
     if ((& $HasExe bat) -and -not $env:BAT_THEME) { $env:BAT_THEME = 'Catppuccin Mocha' }
     if (& $HasExe eza) {
         # eza does not glob on Windows and PowerShell passes wildcards to
-        # native commands verbatim, so expand them here (ll *.pdb).
+        # native commands verbatim, so expand them here (ll *.pdb) as a POSIX
+        # shell would: hidden items match, a pattern that matches nothing or
+        # names an existing file ([draft].md) stays as typed, a rooted pattern
+        # (~\Docu*) yields full paths, and a match starting with '-' gets a .\
+        # prefix. Option values (-I '*.pyc') and everything after a quoted
+        # '--' pass through; PowerShell drops a bare -- before this sees it.
         function global:Expand-EzaArgs {
+            # eza 0.23 options that consume the next word, including -F and
+            # the --color/--icons kind whose value is optional.
+            $takesValue = '--ignore-glob', '--level', '--sort', '--time', '--width', '--time-style',
+            '--color-scale-mode', '--classify', '--color', '--colour', '--icons', '--hyperlink',
+            '--absolute', '--color-scale', '--colour-scale'
+            $value = $literal = $false
             foreach ($a in $args) {
-                if ($a -is [string] -and $a -notlike '-*' -and [WildcardPattern]::ContainsWildcardCharacters($a)) {
-                    $hits = @(Resolve-Path -Path $a -Relative -ErrorAction Ignore)
-                    if ($hits.Count) { $hits -replace '^\.[\\/]', ''; continue }
+                if ($value -or $literal -or $a -isnot [string]) { $value = $false; $a; continue }
+                if ($a -like '-*') {
+                    $literal = $a -eq '--'
+                    $value = $a -cmatch '^-[^-ILstwF]*[ILstwF]$' -or $a -cin $takesValue
+                    $a; continue
                 }
-                $a
+                if (-not [WildcardPattern]::ContainsWildcardCharacters($a) -or (Test-Path -LiteralPath $a)) { $a; continue }
+                try { $hits = @(Get-Item -Path $a -Force -ErrorAction Ignore | Where-Object { $_ -is [IO.FileSystemInfo] }) }
+                catch { $hits = @() }
+                if (-not $hits) { $a; continue }
+                $rooted = $a -like '~*' -or [IO.Path]::IsPathRooted($a)
+                $here = (Get-Location -PSProvider FileSystem).ProviderPath
+                foreach ($hit in $hits) {
+                    $path = if ($rooted) { $hit.FullName } else { [IO.Path]::GetRelativePath($here, $hit.FullName) }
+                    if ($path -like '-*') { Join-Path . $path } else { $path }
+                }
             }
         }
         function global:ll { eza -l --group-directories-first --icons=auto @(Expand-EzaArgs @args) }

@@ -217,6 +217,43 @@ if ($wrapper) {
     Remove-Variable -Name __zoxide_prompt_old, OmpSawStatus -Scope Global
 }
 
+Write-Output '--- eza argument expansion'
+$expandAst = Get-FunctionAst $parsed7.Ast 'Expand-EzaArgs'
+Assert-True ($null -ne $expandAst) 'Expand-EzaArgs is defined'
+if ($expandAst) {
+    Invoke-Expression $expandAst.Extent.Text
+    $globDir = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-eza-test-" + [guid]::NewGuid().ToString('N'))
+    try {
+        $null = New-Item -ItemType Directory -Path (Join-Path $globDir 'sub')
+        foreach ($name in 'a.pyc', 'b.pyc', 'd.md', '[draft].md', '-rf.txt', 'secret.txt', 'sub/x.md') {
+            [IO.File]::WriteAllText((Join-Path $globDir $name), '')
+        }
+        if ($IsWindows) { [IO.File]::SetAttributes((Join-Path $globDir 'secret.txt'), 'Hidden') }
+        Push-Location -LiteralPath $globDir
+        $cases = [ordered]@{
+            'option values pass through'             = @('-I', '*.pyc', '--sort', 'size'), @('-I', '*.pyc', '--sort', 'size')
+            'a short cluster takes the next word'    = @('-lI', '*.pyc'), @('-lI', '*.pyc')
+            'an existing literal name stays'         = @(, '[draft].md'), @(, '[draft].md')
+            'matches include hidden, -names guarded' = @(, '*.txt'), @((Join-Path . '-rf.txt'), 'secret.txt')
+            'a relative directory stays relative'    = @(, 'sub/*.md'), @(, (Join-Path sub x.md))
+            'a rooted pattern yields full paths'     = @(, (Join-Path $globDir '*.pyc')), @((Join-Path $globDir a.pyc), (Join-Path $globDir b.pyc))
+            'no match stays as typed'                = @(, '*.zzz'), @(, '*.zzz')
+            'a quoted -- ends expansion'             = @('--', '*.md'), @('--', '*.md')
+        }
+        foreach ($case in $cases.GetEnumerator()) {
+            $words = $case.Value[0]
+            $got = @(Expand-EzaArgs @words)
+            $same = (@($got | Sort-Object) -join '|') -ceq (@($case.Value[1] | Sort-Object) -join '|')
+            Assert-True $same "Expand-EzaArgs: $($case.Key) ($($case.Value[0] -join ' ') -> $($got -join ' '))"
+        }
+    }
+    finally {
+        Pop-Location
+        Remove-Item -LiteralPath $globDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath Function:\Expand-EzaArgs -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Output '--- conda stays lazy'
 foreach ($parsed in $parsed7, $parsed51) {
     $file = $parsed.Ast.Extent.File
