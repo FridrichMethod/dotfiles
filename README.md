@@ -474,7 +474,7 @@ remains active in adapter preflight and apply checks.
 
 | File | Audience |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | Every agent: OpenAI Codex, Cursor, Copilot and any tool following the [`AGENTS.md`](https://agents.md) convention read it directly; [Claude Code](https://claude.com/claude-code) loads it through the import in `CLAUDE.md` |
+| [`AGENTS.md`](AGENTS.md) | Every agent: OpenAI Codex, Cursor, Copilot and any tool following the [`AGENTS.md`](https://agents.md) convention read it directly; [Claude Code](https://claude.com/claude-code) reads it natively with the portable Project instructions setting, or through the import in `CLAUDE.md` |
 | [`CLAUDE.md`](CLAUDE.md) | Claude Code only: a stub whose first line is `@AGENTS.md`, kept so that clients without native `AGENTS.md` support and the first session after an upgrade still load the guide |
 
 `AGENTS.md` is the single source of repository policy; the stub carries no rules of its own. All FridrichMethod repositories use this layout: a regular-file import stub rather than a symlink, so Windows clones and Claude's Edit tool keep working, and an `AGENTS.md` kept under 28 KB because Codex truncates project instructions at a combined 32 KiB budget. These root files describe how agents should work **inside this repository**. They are separate from the user-global files stowed into `$HOME`.
@@ -499,6 +499,7 @@ The Git-stored versions of these files are safe to share across macOS, Linux, an
 - Claude Code fullscreen TUI, `xhigh`, and plugins require a sufficiently recent client; `xhigh` falls back when the selected model does not support it. Plugin declarations are portable, but each host still downloads its own plugin cache.
 - Codex permission profiles, the network proxy, `auto_review`, multi-agent, and memories can be constrained by the installed Codex version, selected model, account entitlement, sandbox implementation, or organization policy.
 - `project_doc_fallback_filenames = ["CLAUDE.md"]` lets Codex use a project `CLAUDE.md` only when that directory has no `AGENTS.md` or `AGENTS.override.md`; it does not make the two instruction systems identical. Every FridrichMethod repository ships an `AGENTS.md`, so this fallback only matters in third-party checkouts.
+- The portable baseline sets Claude Code's Project instructions to `claude-md-and-agents-md` under both `pluginConfigs` IDs, `agents-md@builtin` and `cc-plugin-agents-md@builtin`. Clients before 2.1.285 recognize only the legacy ID; newer clients recognize both. Native ancestor loading makes `AGENTS.md` available when launching from repository subdirectories, where the stub's import would otherwise be skipped as an unapproved external import. At the repository root, an `AGENTS.md` already loaded through the stub is deduplicated. Keep the stub for older clients without native `AGENTS.md` support.
 
 #### Mutable Claude Code state
 
@@ -517,7 +518,7 @@ Claude's local helpers require Node.js 18 or newer on `PATH` (Git is optional fo
 
 Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to link the helpers and sync these defaults, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
 
-Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. No `~/.claude/AGENTS.md` should exist on a host either: Claude Code treats it as the `.claude/AGENTS.md` of the home directory and injects it as project instructions wherever no `CLAUDE.md` is on the path.
+Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. With native ancestor loading enabled, no extra `AGENTS.md` should exist in any ancestor directory on a host, including `~/.claude/AGENTS.md`: Claude Code treats that file as the home directory's `.claude/AGENTS.md` and can inject it into descendant projects.
 
 #### Mutable Codex Desktop state
 
