@@ -206,7 +206,7 @@ and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-
 into your shell first:
 
 ```sh
-# with your package manager: git zsh curl rsync tar file tmux man, python3 >= 3.11, GNU Stow >= 2.3.1,
+# with your package manager: git zsh curl rsync tar file tmux man ssh, python3 >= 3.11, GNU Stow >= 2.3.1,
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
@@ -254,7 +254,7 @@ and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
 | `--quiet` | Only rows that are neither `ok` nor `skip`, then the summary |
 | `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in. The probes may write the tools' own state in your home (claude rewrites `~/.claude.json` and keeps backups of it; some codex releases create `~/.codex/tmp`); the doctor itself still writes nothing |
-| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails on `plugin .* not found`, `command not found` or `no such file` in its stderr. It may write zsh's own caches |
+| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails when its stdout or stderr has a line starting `[oh-my-zsh]` (oh-my-zsh echoes `plugin 'x' not found`, `theme 'x' not found` and `zoxide not found` on stdout), or matching `plugin .* not found`, `plugin: .* not found`, `plugin: Cannot find`, `command not found`, `no such file` or `Permission denied` (all case-insensitive); `stty:` noise passes. It may write zsh's own caches |
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
@@ -724,7 +724,10 @@ Applies to `wsl-ubuntu` and `lab-ubuntu`: the packages in
 `wslview`, libnotify-bin for `notify-send`) or
 [`apt/lab-ubuntu.txt`](../config/bootstrap/apt/lab-ubuntu.txt) (xclip,
 wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
-git-lfs, tmux, man, locales, build tools) and Python: `python3` and
+git-lfs, tmux, man, locales, build tools, and `openssh-client` for the
+`ssh`, `ssh-agent` and `ssh-keygen` that the stowed `~/.ssh` config, the
+overlays' ssh-agent plugin and [H7-auth](#h7-auth-authentication) need; a
+minimal Ubuntu has none of them) and Python: `python3` and
 `python3-venv` meet the 3.11 floor of setup-sync (Ubuntu 24.04 ships 3.12), so
 no Linuxbrew python is bundled ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
 The interactive tools come from
