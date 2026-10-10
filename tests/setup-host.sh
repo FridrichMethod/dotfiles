@@ -789,8 +789,8 @@ expect_line apply 'HUMAN-BEGIN S5-claude inspect'
 expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes"
 expect_line apply "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_line apply 'HUMAN-BEGIN H7-stow judgment'
-expect_line apply "cd $FIXTURE"
-expect_line apply './stow-all.sh lab-ubuntu'
+# One self-contained line: stow is on PATH only after the first stow.
+expect_line apply "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
 expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 
 [ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
@@ -1018,6 +1018,7 @@ expect_rc hpc-alloc 3
 expect_event "micromamba:create -y -r $CASE_HOME/micromamba -n login -f $FIXTURE/config/bootstrap/hpc-login-env.yml"
 expect_event "setup-sync:--python $CASE_HOME/micromamba/envs/login/bin/python3"
 expect_line hpc-alloc 'HUMAN-BEGIN H7-stow judgment'
+expect_line hpc-alloc "PATH=\"\$HOME/micromamba/envs/login/bin:\$PATH\" $FIXTURE/stow-all.sh sherlock"
 expect_no_text hpc-alloc out 'HUMAN-BEGIN H2-alloc'
 expect_no_event TRIPWIRE
 
@@ -1118,6 +1119,7 @@ expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
 expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
+expect_line manual "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
 [ "$(grep -c '^HUMAN-BEGIN ' "$TEST_TMP/manual.out")" = "$(grep -c '^HUMAN-END$' "$TEST_TMP/manual.out")" ] ||
     fail 'unbalanced HUMAN blocks'
@@ -1146,6 +1148,26 @@ PATH_DEBIAN=$(path_case debian)
 PATH_HPC=$(path_case hpc)
 [ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
     fail "hpc PATH before stow: $PATH_HPC"
+
+# The H7-stow prefix without a Homebrew yet: each profile's default prefix,
+# and a found brew outside the plain path characters stays quoted.
+stow_line() {
+    awk -v tail=" $FIXTURE/stow-all.sh $2" 'substr($0, length($0) - length(tail) + 1) == tail' "$TEST_TMP/$1.out"
+}
+run_case stow-arm "${MAC_ENV[@]}" -- --host mac --print-manual
+[ "$(stow_line stow-arm mac)" = "PATH=\"/opt/homebrew/bin:\$PATH\" $FIXTURE/stow-all.sh mac" ] ||
+    fail "Apple Silicon stow line: $(stow_line stow-arm mac)"
+run_case stow-intel "${MAC_ENV[@]}" BOOTSTRAP_UNAME_M=x86_64 -- --host mac --print-manual
+[ "$(stow_line stow-intel mac)" = "PATH=\"/usr/local/bin:\$PATH\" $FIXTURE/stow-all.sh mac" ] ||
+    fail "Intel macOS stow line: $(stow_line stow-intel mac)"
+run_case stow-linux BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host wsl-ubuntu --print-manual
+[ "$(stow_line stow-linux wsl-ubuntu)" = "PATH=\"/home/linuxbrew/.linuxbrew/bin:\$PATH\" $FIXTURE/stow-all.sh wsl-ubuntu" ] ||
+    fail "Linuxbrew stow line: $(stow_line stow-linux wsl-ubuntu)"
+mkdir -p "$TEST_TMP/odd brew/bin"
+cp "$TEST_TMP/brew-stub" "$TEST_TMP/odd brew/bin/brew"
+run_case stow-odd BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/odd brew/bin/brew" -- --host lab-ubuntu --print-manual
+[ "$(stow_line stow-odd lab-ubuntu)" = "PATH=$(printf '%q' "$TEST_TMP/odd brew/bin"):\"\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu" ] ||
+    fail "quoted stow prefix: $(stow_line stow-odd lab-ubuntu)"
 
 # --- bootstrap_fetch ---------------------------------------------------------
 

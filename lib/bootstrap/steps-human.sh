@@ -320,11 +320,38 @@ step_H7_stow_check() {
     return 1
 }
 
+# steps_stow_path_prefix: the one-shot PATH prefix for the first
+# ./stow-all.sh. GNU Stow comes from the login env on hpc, else from
+# Homebrew (the one this run found, or the profile's default prefix on
+# Apple Silicon, Intel macOS or Linux), and only the stowed rc files put
+# those on PATH.
+steps_stow_path_prefix() {
+    local brew dir
+    if [ "$STEPS_PROFILE" = hpc ]; then
+        # shellcheck disable=SC2016 # expanded by the shell the block is pasted into
+        printf '%s\n' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'
+        return 0
+    fi
+    if brew=$(bootstrap_brew_bin); then
+        dir=${brew%/brew}
+    elif [ "$STEPS_PROFILE" != macos ]; then
+        dir=/home/linuxbrew/.linuxbrew/bin
+    elif [ "$STEPS_ARCH" = x86_64 ]; then
+        dir=/usr/local/bin
+    else
+        dir=/opt/homebrew/bin
+    fi
+    case $dir in
+        *[!A-Za-z0-9_./-]*) printf 'PATH=%s:"$PATH"\n' "$(steps_quote "$dir")" ;;
+        *) printf 'PATH="%s:$PATH"\n' "$dir" ;;
+    esac
+}
+
 step_H7_stow_plan() {
     steps_block_begin H7-stow judgment
-    printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command'
-    printf 'cd %s\n' "$(steps_quote "$STEPS_ROOT")"
-    printf './stow-all.sh %s\n' "$STEPS_HOST"
+    printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command' \
+        "# stow reaches PATH only through this stow, so the prefix names where this host's stow lives"
+    printf '%s %s %s\n' "$(steps_stow_path_prefix)" "$(steps_quote "$STEPS_ROOT/stow-all.sh")" "$STEPS_HOST"
     steps_block_end
 }
 
