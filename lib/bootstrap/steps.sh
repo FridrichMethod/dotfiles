@@ -65,6 +65,11 @@ STEPS_PROBE_FOUND='' STEPS_OMZ_RECOVERY='' STEPS_STOW_CONFLICTS='' STEPS_BREW_CO
 STEPS_NVM_REFUSAL='' STEPS_NVM_PIN='' STEPS_NVM_HEAD=''
 STEPS_RC=0 STEPS_ERROR='' STEPS_EXIT=0
 STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_TODO='' STEPS_STOPPED=''
+# The registry parsed for one host and profile (steps_load), and that host's
+# tools.tsv rows (steps_load_tools in steps-common.sh). Every step looks its
+# rows up, and Bash 3.2 (macOS /bin/bash) matches patterns slowly in a UTF-8
+# locale, so each is filtered and split once, not once per lookup.
+STEPS_ROWS='' STEPS_IDS='' STEPS_LOADED='' STEPS_TOOL_ROWS='' STEPS_TOOLS_LOADED=''
 
 # steps_rows: "id kind tier blocking" for every registry step of STEPS_HOST.
 steps_rows() {
@@ -83,24 +88,33 @@ steps_rows() {
     done
 }
 
-# steps_ids: the step ids of STEPS_HOST, space-separated, in phase order.
-steps_ids() {
-    local lines line id rest ids=''
-    lines=$(steps_rows)$BOOTSTRAP_NL || true
+# steps_load: set STEPS_ROWS (the steps_rows lines) and STEPS_IDS (the ids,
+# space-separated, in phase order) for STEPS_HOST, unless they already hold
+# this host and profile. Call it in the shell that uses them, not in $(...).
+steps_load() {
+    local lines line
+    [ "$STEPS_LOADED" != "$STEPS_HOST $STEPS_PROFILE" ] || return 0
+    STEPS_ROWS=$(steps_rows) || true
+    STEPS_IDS=''
+    lines=$STEPS_ROWS$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         line=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
-        bootstrap_split ' ' "$line" id rest
-        if [ -n "$id" ]; then
-            ids="$ids${ids:+ }$id"
-        fi
+        [ -z "$line" ] || STEPS_IDS="$STEPS_IDS${STEPS_IDS:+ }${line%% *}"
     done
-    printf '%s\n' "$ids"
+    STEPS_LOADED="$STEPS_HOST $STEPS_PROFILE"
+}
+
+# steps_ids: the step ids of STEPS_HOST, space-separated, in phase order.
+steps_ids() {
+    steps_load
+    printf '%s\n' "$STEPS_IDS"
 }
 
 # steps_has ID: 0 when ID is a step of STEPS_HOST.
 steps_has() {
-    case " $(steps_ids) " in
+    steps_load
+    case " $STEPS_IDS " in
         *" $1 "*) return 0 ;;
     esac
     return 1
@@ -108,20 +122,16 @@ steps_has() {
 
 # steps_meta ID: set STEP_KIND, STEP_TIER and STEP_BLOCKING from the registry.
 steps_meta() {
-    local lines line id kind tier blocking
-    lines=$(steps_rows)$BOOTSTRAP_NL || true
-    while [ -n "$lines" ]; do
-        line=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        bootstrap_split ' ' "$line" id kind tier blocking
-        if [ "$id" = "$1" ]; then
-            STEP_KIND=$kind
-            STEP_TIER=$tier
-            STEP_BLOCKING=$blocking
-            return 0
-        fi
-    done
-    return 1
+    local row
+    steps_load
+    row=$BOOTSTRAP_NL$STEPS_ROWS$BOOTSTRAP_NL
+    case $row in
+        *"$BOOTSTRAP_NL$1 "*) ;;
+        *) return 1 ;;
+    esac
+    row=${row#*"$BOOTSTRAP_NL$1 "}
+    row=${row%%"$BOOTSTRAP_NL"*}
+    bootstrap_split ' ' "$row" STEP_KIND STEP_TIER STEP_BLOCKING
 }
 
 # steps_set FIELD ID VALUE / steps_get FIELD ID: per-step run state, kept in
@@ -386,7 +396,9 @@ steps_rerun() {
 steps_run() {
     local IFS=' ' id kind tier blocking fn after=''
     STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_TODO='' STEPS_STOPPED=''
-    for id in $(steps_ids); do
+    steps_load
+    steps_load_tools
+    for id in $STEPS_IDS; do
         if [ -n "$STEPS_STOPPED" ]; then
             break
         fi
@@ -425,10 +437,12 @@ steps_run() {
 steps_list() {
     local lines line id kind tier blocking
     printf 'id\tkind\ttier\tblocking\n'
-    lines=$(steps_rows)$BOOTSTRAP_NL || true
+    steps_load
+    lines=$STEPS_ROWS$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         line=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
+        [ -n "$line" ] || continue
         bootstrap_split ' ' "$line" id kind tier blocking
         printf '%s\t%s\t%s\t%s\n' "$id" "$kind" "$tier" "$blocking"
     done
@@ -439,7 +453,8 @@ steps_list() {
 steps_print_manual() {
     local IFS=' ' id fn
     STEPS_MODE=manual
-    for id in $(steps_ids); do
+    steps_load
+    for id in $STEPS_IDS; do
         fn=${id//-/_}
         steps_meta "$id"
         if [ "$STEP_KIND" != auto ]; then

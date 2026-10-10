@@ -11,8 +11,9 @@
 # temporary file, which the read-only modes must not create. Nor process
 # substitution: Bash 3.2 keeps its descriptors open until the outermost
 # function returns. Lines and fields are split with parameter expansion
-# (BOOTSTRAP_NL, bootstrap_split), and text reaches a command through a pipe
-# (bootstrap_text_has). tests/bootstrap-manifest.sh enforces the rule.
+# (BOOTSTRAP_NL, bootstrap_split), and text reaches a command, or a loop that
+# only prints, through a pipe (bootstrap_text_has, bootstrap_rows_for_host).
+# tests/bootstrap-manifest.sh enforces the rule.
 
 BOOTSTRAP_TAB=$(printf '\t')
 BOOTSTRAP_NL='
@@ -182,15 +183,14 @@ bootstrap_tier_selected() {
 }
 
 # bootstrap_rows_for_host FILE COLUMN HOST: data rows whose hosts column
-# matches HOST.
+# matches HOST. The loop only prints, so it reads its lines from a pipe in a
+# subshell: splitting off one line at a time copies the rest of a whole
+# manifest per line, which Bash 3.2 does slowly in a UTF-8 locale.
 bootstrap_rows_for_host() {
-    local file=$1 column=$2 host=${3:-} rows lines line hosts
+    local file=$1 column=$2 host=${3:-} rows line hosts
     rows=$(bootstrap_rows "$file") || return 1
     [ -n "$rows" ] || return 0
-    lines=$rows$BOOTSTRAP_NL
-    while [ -n "$lines" ]; do
-        line=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
+    printf '%s\n' "$rows" | while IFS= read -r line; do
         hosts=$(bootstrap_field "$line" "$column") || continue
         if bootstrap_host_matches "$hosts" "$host"; then
             printf '%s\n' "$line"

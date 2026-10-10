@@ -21,21 +21,27 @@ steps_block_end() {
     printf '%s\n' HUMAN-END
 }
 
+# steps_load_tools: set STEPS_TOOL_ROWS to the tools.tsv rows of STEPS_HOST,
+# unless it already holds them. steps_run loads them once in the main shell,
+# so the lookups below, often in $(...), never filter tools.tsv again.
+steps_load_tools() {
+    [ "$STEPS_TOOLS_LOADED" != "$STEPS_HOST ${BOOTSTRAP_CONFIG-}" ] || return 0
+    STEPS_TOOL_ROWS=$(bootstrap_tool_rows "$STEPS_HOST") || STEPS_TOOL_ROWS=
+    STEPS_TOOLS_LOADED="$STEPS_HOST ${BOOTSTRAP_CONFIG-}"
+}
+
 # steps_tool_cell ID COLUMN: one tools.tsv cell of the row ID for this host.
 steps_tool_cell() {
-    local lines row
-    lines=$(bootstrap_tool_rows "$STEPS_HOST")$BOOTSTRAP_NL || true
-    while [ -n "$lines" ]; do
-        row=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        case $row in
-            "$1$BOOTSTRAP_TAB"*)
-                bootstrap_field "$row" "$2"
-                return
-                ;;
-        esac
-    done
-    return 1
+    local row
+    steps_load_tools
+    row=$BOOTSTRAP_NL$STEPS_TOOL_ROWS$BOOTSTRAP_NL
+    case $row in
+        *"$BOOTSTRAP_NL$1$BOOTSTRAP_TAB"*) ;;
+        *) return 1 ;;
+    esac
+    row=${row#*"$BOOTSTRAP_NL$1$BOOTSTRAP_TAB"}
+    row=${row%%"$BOOTSTRAP_NL"*}
+    bootstrap_field "$1$BOOTSTRAP_TAB$row" "$2"
 }
 
 # steps_probe ID: evaluate the tools.tsv probe of ID (command list, file:,
@@ -44,6 +50,7 @@ steps_tool_cell() {
 steps_probe() {
     local probe rest name path
     STEPS_PROBE_FOUND=
+    steps_load_tools
     probe=$(steps_tool_cell "$1" 4) || return 2
     case $probe in
         file:*)
