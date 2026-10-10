@@ -1,0 +1,6 @@
+# wsl-ubuntu additions to apt/common.txt (H1-apt-core).
+# pinned 2026-10-09
+# wslu provides wslview (BROWSER in the wsl profile); libnotify-bin provides
+# notify-send for the alert alias.
+wslu
+libnotify-bin

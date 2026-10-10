@@ -1,0 +1,44 @@
+# micromamba `login` environment for sherlock and marlowe (S2-login-env).
+# pinned 2026-10-09: names and platforms verified on anaconda.org/conda-forge.
+# Create it inside an allocation, never under $SCRATCH:
+#   micromamba create -y -r "$HOME/micromamba" -n login -f config/bootstrap/hpc-login-env.yml
+# The workstation ssh RemoteCommand execs $HOME/micromamba/envs/login/bin/zsh.
+# conda-forge name traps:
+#   nvim is the editor; `neovim` there is the 0.3 Python client.
+#   fd-find provides fd; go-shfmt provides shfmt; git-delta provides delta.
+#   tealdeer provides tldr (brew and winget use tlrc).
+#   stow has no linux-aarch64 build; both hosts are x86_64.
+#   nodejs provides node (>= 22 for the Claude hooks); on sherlock the
+#   overlay's later `ml nodejs/24.13.0` puts the Lmod node first on PATH.
+# Floors mirror tools.tsv.
+name: login
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11
+  - zsh
+  - git
+  - git-lfs
+  - gh>=2.50.0
+  - stow>=2.3.1
+  - tmux
+  - rsync
+  - curl
+  - file
+  - fzf>=0.58.0
+  - zoxide
+  - eza>=0.18.20
+  - bat
+  - fd-find>=8.3.0
+  - ripgrep
+  - git-delta
+  - nvim
+  - jq
+  - tealdeer
+  - chafa
+  - aria2
+  - uv
+  - go-shfmt>=3.13.0
+  - shellcheck
+  - pre-commit
+  - nodejs>=22.0
