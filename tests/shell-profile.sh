@@ -301,18 +301,27 @@ fi
 # common/zsh/.oh-my-zsh/custom/fzf-tab.zsh: both tldr previews color the page
 # with every tldr client. tlrc and tealdeer take `--color always`; the C
 # client (Homebrew's tldr formula) takes a bare -C and, given
-# `--color always ls`, looks up a page named "always", prints "This page
+# `--color always ls`, looks up a page named "always-ls", prints "This page
 # doesn't exist yet!" and exits 1. Each fake prints the colored page only for
-# the arguments its client accepts, and that error for any other. The
-# previews are evaluated as fzf-tab does, in zsh with $word and $desc set.
+# the arguments its client accepts, and that error for any other. The C
+# client goes online (a page its cache lacks, a cache two weeks old) unless
+# TLDR_AUTO_UPDATE_DISABLED is set, so its fake logs every call made without
+# it, and no preview may make one. The previews are evaluated as fzf-tab
+# does, in zsh with $word and $desc set.
 preview_failures=0
+TLDR_ONLINE_LOG=$TEST_TMP/tldr-online.log
 if command -v zsh >/dev/null 2>&1; then
-    # write_tldr DIR ACCEPTED: a fake tldr in DIR that accepts only ACCEPTED.
+    # write_tldr DIR ACCEPTED [ONLINE_LOG]: a fake tldr in DIR that accepts
+    # only ACCEPTED and, given ONLINE_LOG, appends to it the arguments of each
+    # call made without TLDR_AUTO_UPDATE_DISABLED.
     write_tldr() {
         mkdir -p "$1"
         {
-            printf '#!/bin/sh\naccepted=%s\n' "'$2'"
+            printf '#!/bin/sh\naccepted=%s\nonline_log=%s\n' "'$2'" "'${3:-}'"
             cat <<'SH'
+if [ -n "$online_log" ] && [ -z "${TLDR_AUTO_UPDATE_DISABLED+set}" ]; then
+    printf '%s\n' "$*" >>"$online_log"
+fi
 if [ "$*" = "$accepted" ]; then
     printf '\033[1mls\033[0m\nList directory contents.\n'
     exit 0
@@ -337,7 +346,9 @@ SH
     want=$(printf '\033[1mls\033[0m\nList directory contents.')
     for client in 'c:-C ls' 'tlrc:--color always ls'; do
         dir=$TEST_TMP/tldr-${client%%:*}
-        write_tldr "$dir" "${client#*:}"
+        online_log=
+        [ "${client%%:*}" != c ] || online_log=$TLDR_ONLINE_LOG
+        write_tldr "$dir" "${client#*:}" "$online_log"
         for context in ':fzf-tab:complete:tldr:argument-1' ':fzf-tab:complete:-command-:'; do
             got=$(preview "$dir" "$context" ls || true)
             if [ "$got" != "$want" ]; then
@@ -357,6 +368,11 @@ SH
     got=$(preview "$TEST_TMP/tldr-c" ':fzf-tab:complete:tldr:argument-1' no-such-page || true)
     if [ -n "$got" ]; then
         printf 'FAIL fzf-tab tldr preview of a missing page printed: %s\n' "$got" >&2
+        preview_failures=$((preview_failures + 1))
+    fi
+    if [ -s "$TLDR_ONLINE_LOG" ]; then
+        printf 'FAIL fzf-tab previews ran the C client without TLDR_AUTO_UPDATE_DISABLED: %s\n' \
+            "$(tr '\n' ';' <"$TLDR_ONLINE_LOG")" >&2
         preview_failures=$((preview_failures + 1))
     fi
 fi

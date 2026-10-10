@@ -838,13 +838,15 @@ The `tldr` command comes back from the `tldr` formula on the next run (a cask
 such as `wezterm@nightly` likewise gives way to `wezterm`). That formula is
 the C client (tldr-c-client), whose `-C`/`--color` takes no argument; the
 fzf-tab previews try `tldr --color always` (tlrc, tealdeer) and then
-`tldr -C`, so they color with every client. The conflict holds back the whole
-step, every selected Brewfile, so keeping the other package instead means
-leaving its tier out (for tldr, `--tier core,ai`). `--print-manual`
-prints the block for every declared pair that applies on this platform. A
-conflict Homebrew adds later is not judged until a Brewfile line names it
-([Known limitations](#known-limitations)). See also
-[X-recovery](#x-recovery-recovery-recipes).
+`tldr -C`, so they color with every client, and run both with
+`TLDR_AUTO_UPDATE_DISABLED=1`, so the C client answers from its local cache
+and never fetches a missing page or a stale archive while you tab-complete.
+The conflict holds back the whole step, every selected Brewfile, so keeping
+the other package instead means leaving its tier out (for tldr,
+`--tier core,ai`). `--print-manual` prints the block for every declared pair
+that applies on this platform. A conflict Homebrew adds later is not judged
+until a Brewfile line names it ([Known limitations](#known-limitations)). See
+also [X-recovery](#x-recovery-recovery-recipes).
 
 ### S2-micromamba: micromamba
 

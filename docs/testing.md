@@ -69,8 +69,10 @@ and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
 keeps an entry already on PATH, and nothing assigns PATH after oh-my-zsh.
 It also evaluates the fzf-tab tldr previews of `custom/fzf-tab.zsh`, as
 fzf-tab does, with a fake C client (Homebrew's `tldr`, which takes only `-C`)
-and a fake tlrc (only `--color always`): both must show the colored page, and
-a client's missing-page error must never reach the preview.
+and a fake tlrc (only `--color always`): both must show the colored page, a
+client's missing-page error must never reach the preview, and the C client
+must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
+fetches a missing page from GitHub.
 
 The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
 unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs
