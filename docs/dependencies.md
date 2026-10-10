@@ -157,10 +157,11 @@ prints) appear at the start of the When absent cell.
 Opt-in, outside every tier: the pinned Sherlock toolkit (`shk`), which the
 global agent instructions name for work on or connections to Sherlock. Neither
 `./setup-host.sh` nor the doctor touches it; on a host where agents work with
-Sherlock, run `./setup-sherlock-kit.sh` (Windows:
-`./setup-sherlock-kit.ps1 -Python python`) explicitly, then `./stow-all.sh`,
-which links the `shk` launcher. See the README's Pinned Sherlock toolkit
-section and [sherlock-kit.md](sherlock-kit.md).
+Sherlock, run `./setup-sherlock-kit.sh` explicitly, then
+`./stow-all.sh <host>`, which links the `shk` launcher. On Windows run
+`./setup-sherlock-kit.ps1 -Python python`, which also writes the native
+`~/.local/bin/shk.cmd`, then the normal `./stow-all.ps1 win`. See the README's
+Pinned Sherlock toolkit section and [sherlock-kit.md](sherlock-kit.md).
 
 ### Desktop tier
 

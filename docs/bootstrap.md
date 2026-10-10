@@ -962,9 +962,10 @@ nodes.
 global agent instructions name, is neither a site module nor part of a tier:
 setup-host does not install it and the doctor does not check it. On a host
 where agents work on or connect to Sherlock, install it explicitly with
-`./setup-sherlock-kit.sh` (Windows: `./setup-sherlock-kit.ps1 -Python python`),
-then stow, which links the `shk` launcher; [sherlock-kit.md](sherlock-kit.md)
-is its contract.
+`./setup-sherlock-kit.sh`, then `./stow-all.sh <host>`, which links the `shk`
+launcher (Windows: `./setup-sherlock-kit.ps1 -Python python`, which writes the
+native `~/.local/bin/shk.cmd`, then `./stow-all.ps1 win`);
+[sherlock-kit.md](sherlock-kit.md) is its contract.
 
 **OS and glibc.** Record `cat /etc/os-release` and `ldd --version` on each
 cluster; vendor binaries and conda-forge builds each need a minimum glibc.
