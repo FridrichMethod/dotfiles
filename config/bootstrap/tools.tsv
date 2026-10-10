@@ -70,7 +70,6 @@ nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PAT
 node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
 claude	ai	all	claude	--version	-	Claude Code is unavailable	S5-claude
 codex	ai	all	codex	--version	-	Codex is unavailable	S5-codex
-bubblewrap	ai	wsl-ubuntu,lab-ubuntu	bwrap	--version	-	the Codex Linux sandbox cannot start	H1-apt-core
 kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the stowed kitty.conf has no terminal to configure	S6-kitty
 wezterm	desktop	mac,win	wezterm	-	-	the stowed .wezterm.lua has no terminal to configure	S2-brew-bundle
 nerd-font	desktop	mac,lab-ubuntu,win	font:CaskaydiaMono Nerd Font	-	-	prompt, eza and terminal icons render as boxes	S6-nerd-font

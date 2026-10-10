@@ -4,7 +4,3 @@
 # notify-send for the alert alias.
 wslu
 libnotify-bin
-# bubblewrap is the bwrap that the Codex Linux sandbox looks up on PATH (the
-# pinned codex binary bundles none). On Ubuntu 24.04, S5-codex also loads the
-# bwrap-userns-restrict AppArmor profile.
-bubblewrap

@@ -87,9 +87,15 @@ TODO(T5)
 
 ### S5-codex: Codex CLI
 
-TODO(T5). Keep: the pinned binary bundles no bwrap; its Linux sandbox uses the
-apt `bubblewrap` on PATH, and Ubuntu 24.04 also needs the `bwrap-userns-restrict`
-AppArmor profile loaded (a sudo HUMAN block).
+TODO(T5). Keep: the pinned `codex-package` tarball is laid out as OpenAI's
+installer does it: extracted to
+`~/.codex/packages/standalone/releases/<version>-<target>/`, with
+`~/.codex/packages/standalone/current` linked to that release and
+`~/.local/bin/codex` linked to `current/bin/codex`. The package bundles its own
+`bwrap` (`codex-resources/bwrap`), `rg` and `codex-code-mode-host`, so no apt
+`bubblewrap` is needed. On Ubuntu 24.04, AppArmor may restrict the unprivileged
+user namespaces that bwrap needs; that is a judgment HUMAN block pointing at
+OpenAI's Linux sandbox docs.
 
 ### S6-nerd-font: Nerd Font
 

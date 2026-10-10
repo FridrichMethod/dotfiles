@@ -10,7 +10,3 @@ fcitx5-mozc
 fcitx5-frontend-all
 fcitx5-config-qt
 im-config
-# bubblewrap is the bwrap that the Codex Linux sandbox looks up on PATH (the
-# pinned codex binary bundles none). On Ubuntu 24.04, S5-codex also loads the
-# bwrap-userns-restrict AppArmor profile.
-bubblewrap

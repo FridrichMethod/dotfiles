@@ -142,7 +142,6 @@ required by default; `desktop`, `contributor` and `host` are reported only.
 | `node` | ai | all | Claude hooks and the status line fail |
 | `claude` | ai | all | Claude Code is unavailable |
 | `codex` | ai | all | Codex is unavailable |
-| `bubblewrap` | ai | wsl-ubuntu, lab-ubuntu | the Codex Linux sandbox cannot start |
 | `kitty` | desktop | mac, lab-ubuntu | the stowed kitty.conf has no terminal to configure |
 | `wezterm` | desktop | mac, win | the stowed .wezterm.lua has no terminal to configure |
 | `nerd-font` | desktop | mac, lab-ubuntu, win | prompt, eza and terminal icons render as boxes |

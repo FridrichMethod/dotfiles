@@ -58,16 +58,15 @@ REQUIRED_INSTALLERS = {
 for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64", "arm64")):
     REQUIRED_INSTALLERS[("micromamba", _arch)] = ("binary", "sherlock,marlowe", "core", "-", "$HOME/.local/bin/micromamba",
                                                   f"{GH}mamba-org/micromamba-releases/releases/download/*/micromamba-linux-{_mamba}")
-    REQUIRED_INSTALLERS[("codex", _arch)] = ("archive", DEBIAN_HOSTS, "ai", "-", "$HOME/.local/bin/codex",
-                                             f"{GH}openai/codex/releases/download/rust-v*/codex-{_arch}-unknown-linux-musl.tar.gz")
+    REQUIRED_INSTALLERS[("codex", _arch)] = ("archive", DEBIAN_HOSTS, "ai", "-", "$HOME/.codex/packages/standalone",
+                                             f"{GH}openai/codex/releases/download/rust-v*/codex-package-{_arch}-unknown-linux-musl.tar.gz")
     REQUIRED_INSTALLERS[("kitty", _arch)] = ("archive", "lab-ubuntu", "desktop", "-", "$HOME/.local/kitty.app",
                                              f"{GH}kovidgoyal/kitty/releases/download/v*/kitty-*-{_kitty}.txz")
 BREW_TIERS = ("core", "cli", "ai", "desktop", "contributor")
 APT_COMMON = ("zsh", "git", "git-lfs", "curl", "rsync", "tar", "file", "procps", "build-essential",
               "gnupg", "python3", "python3-venv", "python3-pip", "tmux", "bsdextrautils", "man-db",
               "locales", "ca-certificates", "unzip", "xz-utils", "fontconfig")
-APT_HOST_REQUIRED = {"wsl-ubuntu": ("wslu", "libnotify-bin", "bubblewrap"),
-                     "lab-ubuntu": ("xclip", "wl-clipboard", "fcitx5", "bubblewrap")}
+APT_HOST_REQUIRED = {"wsl-ubuntu": ("wslu", "libnotify-bin"), "lab-ubuntu": ("xclip", "wl-clipboard", "fcitx5")}
 LOGIN_REQUIRED = ("python", "zsh", "git", "git-lfs", "gh", "stow", "tmux", "rsync", "curl", "fzf",
                   "zoxide", "eza", "bat", "fd-find", "ripgrep", "nvim", "jq", "tealdeer", "aria2",
                   "uv", "go-shfmt", "shellcheck", "pre-commit", "file", "nodejs")
@@ -716,7 +715,9 @@ class RejectionTests(unittest.TestCase):
             ("installer-set", "homebrew without sudo", self.installers("homebrew", "human", "-")),
             ("installer-set", "micromamba hosts", self.installers("micromamba", "hosts", "unix")),
             ("installer-set", "micromamba tier", self.installers("micromamba", "tier", "host")),
-            ("installer-set", "codex dest", self.installers("codex", "dest", "$HOME/bin/codex")),
+            ("installer-set", "codex bare binary dest", self.installers("codex", "dest", "$HOME/.local/bin/codex")),
+            ("installer-set", "codex bare binary asset",
+             self.installers("codex", "url", lambda url: url.replace("codex-package-", "codex-"))),
             ("installer-set", "codex glibc asset", self.installers("codex", "url", lambda url: url.replace("musl", "gnu"))),
             ("installer-set", "kitty arch asset", self.installers("kitty", "url", lambda url: url.replace("x86_64", "arm64"))),
             ("installer-set", "nerd-font dest", self.installers("nerd-font", "dest", "$XDG_DATA_HOME/fonts")),
@@ -751,7 +752,7 @@ class RejectionTests(unittest.TestCase):
             ("apt", "overlap", lambda: self.append("apt/lab-ubuntu.txt", "tmux\n")),
             ("apt-set", "common extra", lambda: self.append("apt/common.txt", "jq\n")),
             ("apt-set", "host missing", lambda: self.replace("apt/lab-ubuntu.txt", "xclip\n", "")),
-            ("apt-set", "bwrap missing", lambda: self.replace("apt/wsl-ubuntu.txt", "bubblewrap\n", "")),
+            ("apt-set", "wsl host missing", lambda: self.replace("apt/wsl-ubuntu.txt", "wslu\n", "")),
         ])
 
     def test_winget_and_login_env(self):

@@ -512,19 +512,13 @@ esac
 assert_eq "$(bootstrap_clone_rows sherlock | wc -l | tr -d ' ')" 8 'eight clones on sherlock'
 assert_eq "$(bootstrap_clone_rows win | wc -l | tr -d ' ')" 0 'no clones on win'
 assert_eq "$(bootstrap_installer_row micromamba sherlock aarch64 | cut -f3 | sed 's#.*/##')" micromamba-linux-aarch64 'micromamba aarch64'
-assert_eq "$(bootstrap_installer_row codex lab-ubuntu x86_64 | cut -f3 | sed 's#.*/##')" codex-x86_64-unknown-linux-musl.tar.gz 'codex x86_64'
+assert_eq "$(bootstrap_installer_row codex lab-ubuntu x86_64 | cut -f3 | sed 's#.*/##')" codex-package-x86_64-unknown-linux-musl.tar.gz 'codex x86_64'
 assert_eq "$(bootstrap_installer_row claude wsl-ubuntu aarch64 | cut -f9)" inspect 'claude is inspect'
 assert_status 1 'no micromamba on lab-ubuntu' bootstrap_installer_row micromamba lab-ubuntu x86_64
 case " $(bootstrap_apt_packages lab-ubuntu | tr '\n' ' ')" in
     *' zsh '*' fontconfig xclip '*) ;;
     *) fail 'lab-ubuntu apt list is not common.txt then lab-ubuntu.txt' ;;
 esac
-for host in wsl-ubuntu lab-ubuntu; do
-    case " $(bootstrap_apt_packages "$host" | tr '\n' ' ')" in
-        *' bubblewrap '*) ;;
-        *) fail "$host apt list has no bubblewrap for the codex sandbox" ;;
-    esac
-done
 assert_eq "$(bootstrap_brewfiles core,cli,ai | sed 's#.*/##' | tr '\n' ' ')" \
     'core.Brewfile cli.Brewfile ai.Brewfile ' 'default-tier Brewfiles'
 assert_eq "$(bootstrap_expand_path "$(bootstrap_field "$(bootstrap_installer_row bat-theme mac any)" 5)")" \
