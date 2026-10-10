@@ -166,11 +166,44 @@ bootstrap_host_env_empty() {
     [ "${DOTFILES_HOST+set}" = set ] && [ -z "$DOTFILES_HOST" ]
 }
 
+# bootstrap_state_file ROOT: the readable file in which ./stow-all.sh records
+# its install for the checkout ROOT, $(git rev-parse --git-path
+# dotfiles-sync-unix), with lines HOME, uname -s, HOST (empty for common
+# only) and APPLIED_HEAD. Returns 1 when there is none.
+bootstrap_state_file() {
+    local root=$1 state
+    state=$(git -C "$root" rev-parse --git-path dotfiles-sync-unix 2>/dev/null) || return 1
+    [ -n "$state" ] || return 1
+    case $state in
+        /*) ;;
+        *) state=$root/$state ;;
+    esac
+    [ -f "$state" ] && [ -r "$state" ] || return 1
+    printf '%s\n' "$state"
+}
+
+# bootstrap_recorded_common_only ROOT: 0 when ./stow-all.sh recorded a
+# common-only install (an empty HOST line) for this home and kernel, which
+# the login updater reads as common only, as it does a set but empty
+# DOTFILES_HOST. Like the updater, it needs all four lines.
+bootstrap_recorded_common_only() {
+    local state home_line os_line host_line
+    state=$(bootstrap_state_file "$1") || return 1
+    {
+        IFS= read -r home_line && IFS= read -r os_line &&
+            IFS= read -r host_line && IFS= read -r _
+    } <"$state" || return 1
+    [ -n "${HOME:-}" ] && [ "$home_line" = "$HOME" ] || return 1
+    [ "$os_line" = "$(bootstrap_os)" ] || return 1
+    [ -z "$host_line" ]
+}
+
 # bootstrap_resolve_host ROOT: DOTFILES_HOST when set (it must be a known
-# host), else the host that ./stow-all.sh recorded for this home and kernel in
-# $(git rev-parse --git-path dotfiles-sync-unix): lines HOME, uname -s, HOST,
-# APPLIED_HEAD. Returns 1 when unknown, and when DOTFILES_HOST is set but empty
-# (common only, so the recorded host does not apply); never guesses an overlay.
+# host), else the host that ./stow-all.sh recorded for this home and kernel
+# (bootstrap_state_file). Returns 1 when unknown, and for common only: a set
+# but empty DOTFILES_HOST (the recorded host does not apply) or a recorded
+# common-only install (bootstrap_recorded_common_only tells that case apart).
+# Never guesses an overlay.
 bootstrap_resolve_host() {
     local root=$1 state home_line os_line host_line
     if bootstrap_host_env_empty; then
@@ -181,13 +214,7 @@ bootstrap_resolve_host() {
         printf '%s\n' "$DOTFILES_HOST"
         return 0
     fi
-    state=$(git -C "$root" rev-parse --git-path dotfiles-sync-unix 2>/dev/null) || return 1
-    [ -n "$state" ] || return 1
-    case $state in
-        /*) ;;
-        *) state=$root/$state ;;
-    esac
-    [ -f "$state" ] && [ -r "$state" ] || return 1
+    state=$(bootstrap_state_file "$root") || return 1
     home_line='' os_line='' host_line=''
     {
         IFS= read -r home_line && IFS= read -r os_line &&

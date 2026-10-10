@@ -415,6 +415,42 @@ run_doctor env-empty-platform DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -
 assert_rc 0
 assert_not_in "$OUT/$CASE.err" 'set but empty'
 assert_row zsh ok
+
+# So does a common-only install that ./stow-all.sh recorded (an empty host
+# line), as the login updater reads it: the detected platform, with a
+# warning, never "none recorded". DOTFILES_HOST, --host and --platform still
+# win, and a state that is not all four lines (which the updater ignores)
+# records nothing.
+printf '%s\n' "$TEST_HOME" Linux '' test-head >"$STATE_FILE"
+run_doctor state-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_tsv_shape
+assert_err './stow-all.sh recorded a common-only install for this home (no host overlay): checking as --platform debian'
+assert_not_in "$OUT/$CASE.err" 'none recorded'
+assert_row fzf ok '' -
+assert_no_row login-tool
+assert_no_row host-tool
+run_doctor state-common-only-list BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --list
+assert_rc 0
+assert_err 'recorded a common-only install'
+run_doctor state-common-only-env DOTFILES_HOST=lab-ubuntu -- --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'common-only'
+run_doctor state-common-only-host -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'common-only'
+run_doctor state-common-only-empty DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_err 'DOTFILES_HOST is set but empty'
+assert_not_in "$OUT/$CASE.err" 'recorded a common-only'
+printf '%s\n' "$TEST_TMP/elsewhere" Linux '' test-head >"$STATE_FILE"
+expect_usage_error state-common-only-other-home 'none recorded for this home' --
+printf '%s\n' "$TEST_HOME" Darwin '' test-head >"$STATE_FILE"
+expect_usage_error state-common-only-other-kernel 'none recorded for this home' --
+printf '%s\n' "$TEST_HOME" Linux '' >"$STATE_FILE"
+expect_usage_error state-common-only-truncated 'none recorded for this home' --
 rm -f "$STATE_FILE"
 
 # --- baseline: every required row ok ---------------------------------------

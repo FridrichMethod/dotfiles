@@ -11,9 +11,10 @@ set -euo pipefail
 # offline: it installs nothing, writes nothing and uses no network unless
 # --online (auth status probes) or --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
-# for this home; it is never guessed. A set but empty DOTFILES_HOST means
-# common only: the detected platform, as --platform. The win host is checked
-# by doctor.ps1.
+# for this home; it is never guessed. Common only, as the login updater reads
+# it (a set but empty DOTFILES_HOST, or a common-only install ./stow-all.sh
+# recorded), means the detected platform, as --platform. The win host is
+# checked by doctor.ps1.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
 # row or a structural check); 2 usage error, invalid manifest, unknown host
 # or win.
@@ -73,7 +74,8 @@ usage() {
         '                      (win: pwsh -File doctor.ps1 -Host win)' \
         '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
         '                      without a host overlay' \
-        'A set but empty DOTFILES_HOST means common only: the detected platform.' \
+        'Common only (a set but empty DOTFILES_HOST, or a common-only install' \
+        './stow-all.sh recorded) means the detected platform without an overlay.' \
         '' \
         'Options:' \
         '  --tier LIST|all     required tiers, comma list of core, cli, ai, desktop,' \
@@ -184,12 +186,19 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 
 # Host and profile. --platform runs without an overlay: only all/unix rows.
-# A DOTFILES_HOST that is set but empty means common only, as the login
-# updater reads it, so without --host or --platform the doctor checks the
-# platform it detects, without an overlay, and says so.
-if [[ -z "$PLATFORM" && $HOST_SET == 0 ]] && bootstrap_host_env_empty; then
-    PLATFORM=$(bootstrap_detect_platform)
-    dotfiles_log warn "DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+# A DOTFILES_HOST that is set but empty, and without DOTFILES_HOST a
+# common-only install that ./stow-all.sh recorded for this home, mean common
+# only, as the login updater reads them, so without --host or --platform the
+# doctor checks the platform it detects, without an overlay, and says so.
+if [[ -z "$PLATFORM" && $HOST_SET == 0 ]]; then
+    if bootstrap_host_env_empty; then
+        PLATFORM=$(bootstrap_detect_platform)
+        dotfiles_log warn "DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+    elif [[ -z "${DOTFILES_HOST:-}" ]] && bootstrap_find_command git >/dev/null &&
+        bootstrap_recorded_common_only "$REPO_ROOT"; then
+        PLATFORM=$(bootstrap_detect_platform)
+        dotfiles_log warn "./stow-all.sh recorded a common-only install for this home (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+    fi
 fi
 if [[ -n "$PLATFORM" ]]; then
     case $PLATFORM in

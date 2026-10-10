@@ -236,14 +236,16 @@ exec zsh -l
 `--list` resolves the host like every other mode: without `--host` or
 `--platform` it needs `DOTFILES_HOST` or a host `./stow-all.sh` recorded for
 this home, and exits 2 otherwise (for example in a fresh clone or a linked
-worktree). A `DOTFILES_HOST` that is set but empty means common only, as the
-login updater reads it: the doctor then checks the platform it detects
-(`macos`, `debian`, `hpc` or `other`) without an overlay, exactly as
-`--platform` would, and warns that it did; the recorded host does not apply.
+worktree). Common only, as the login updater reads it, is either a
+`DOTFILES_HOST` that is set but empty or, without `DOTFILES_HOST`, a
+common-only install that `./stow-all.sh` (no host argument) recorded for this
+home and kernel: the doctor then checks the platform it detects (`macos`,
+`debian`, `hpc` or `other`) without an overlay, exactly as `--platform` would,
+and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; a set but empty `DOTFILES_HOST` means the detected platform without an overlay. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) means the detected platform without an overlay. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
@@ -285,7 +287,7 @@ at HW-clone).
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor; `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and a set but empty `DOTFILES_HOST` (common only) exits 2 asking for `--host` |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor; `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |

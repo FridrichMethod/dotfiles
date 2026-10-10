@@ -528,6 +528,25 @@ printf '%s\n' "$TEST_HOME" Plan9 mac '' >"$STATE"
 assert_eq "$(resolve "$REPO" BOOTSTRAP_UNAME_S=Plan9)" mac 'kernel override matches'
 printf '%s\n' "$TEST_HOME" "$(uname -s)" '' '' >"$STATE"
 assert_status 1 'common-only stow' resolve "$REPO"
+# A recorded common-only install, which resolve cannot tell from no record:
+# all four lines, as the login updater reads them, for this home and kernel.
+common_only() {
+    # common_only ROOT [VAR=VALUE...]
+    local root=$1
+    shift
+    env "$@" bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only "$2"' _ \
+        "$FIXTURE/lib/bootstrap/platform.sh" "$root"
+}
+assert_status 0 'recorded common only' common_only "$REPO"
+assert_status 0 'the record alone (DOTFILES_HOST is for the caller)' common_only "$REPO" DOTFILES_HOST=sherlock
+assert_status 1 'common only, other HOME' common_only "$REPO" HOME="$TEST_TMP/elsewhere"
+assert_status 1 'common only, other kernel' common_only "$REPO" BOOTSTRAP_UNAME_S=Plan9
+printf '%s\n' "$TEST_HOME" "$(uname -s)" '' >"$STATE"
+assert_status 1 'common only, three lines' common_only "$REPO"
+printf '%s\n' "$TEST_HOME" "$(uname -s)" sherlock '' >"$STATE"
+assert_status 1 'a recorded host is not common only' common_only "$REPO"
+rm -f "$STATE"
+assert_status 1 'no state is not common only' common_only "$REPO"
 printf '%s\n' "$TEST_HOME" "$(uname -s)" ubuntu '' >"$STATE"
 assert_status 1 'unknown recorded host' resolve "$REPO"
 printf '%s\n%s\n%s' "$TEST_HOME" "$(uname -s)" lab-ubuntu >"$STATE"

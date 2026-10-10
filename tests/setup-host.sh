@@ -716,6 +716,26 @@ expect_no_events env-host-empty
 run_case env-host-empty-explicit DOTFILES_HOST= -- --host lab-ubuntu --check --only S3-dirs
 expect_rc env-host-empty-explicit 3
 expect_text env-host-empty-explicit out 'P0-preflight done host lab-ubuntu'
+# So is a common-only install that ./stow-all.sh recorded (an empty host
+# line): exit 2 asking for --host, not the generic "no host"; DOTFILES_HOST
+# and --host still win.
+printf '%s\n' "$CASE_HOME" Linux '' recorded-head >"$FIXTURE/.git/dotfiles-sync-unix"
+run_case state-common-only -- --check --only S3-dirs
+expect_rc state-common-only 2
+expect_text state-common-only err './stow-all.sh recorded a common-only install for this home (no host overlay)'
+expect_text state-common-only err 'pass --host HOST'
+expect_no_text state-common-only err 'no host: pass --host'
+expect_no_text state-common-only out 'P0-preflight'
+expect_no_events state-common-only
+run_case state-common-only-list -- --list
+expect_rc state-common-only-list 2
+expect_text state-common-only-list err 'recorded a common-only install'
+run_case state-common-only-env DOTFILES_HOST=lab-ubuntu -- --check --only S3-dirs
+expect_rc state-common-only-env 3
+expect_text state-common-only-env out 'P0-preflight done host lab-ubuntu'
+run_case state-common-only-host -- --host lab-ubuntu --check --only S3-dirs
+expect_rc state-common-only-host 3
+expect_text state-common-only-host out 'P0-preflight done host lab-ubuntu'
 rm -f "$FIXTURE/.git/dotfiles-sync-unix"
 
 # Never as root: it would install into /root or leave root-owned files.
