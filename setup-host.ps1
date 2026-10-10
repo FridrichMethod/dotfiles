@@ -290,7 +290,8 @@ function ConvertTo-SetupQuoted {
 }
 
 function Get-SetupHumanBlock {
-    # Kind and lines for one HUMAN step; comment lines start with #.
+    # Kind and lines for one HUMAN step. Each line is a '# ' note or a
+    # self-contained command: no Set-Location or variable carries over.
     param([Parameter(Mandatory)][string]$Id)
     $repo = ConvertTo-SetupQuoted $RepoRoot
     switch -CaseSensitive ($Id) {
@@ -305,15 +306,13 @@ function Get-SetupHumanBlock {
         'HW-stow' {
             return @{ Kind = 'judgment'; Lines = @(
                     '# From an elevated PowerShell 7 (Run as administrator); it writes ~\.claude, ~\.codex and ~\.ssh.'
-                    "Set-Location -LiteralPath $repo"
-                    '.\stow-all.ps1 win'
+                    "& $(ConvertTo-SetupQuoted (Join-Path $RepoRoot 'stow-all.ps1')) win"
                 ) }
         }
         'HW-auto-stow-task' {
             return @{ Kind = 'judgment'; Lines = @(
                     '# Optional, elevated PowerShell 7: lets the login updater restow without a UAC prompt.'
-                    "Set-Location -LiteralPath $repo"
-                    '.\scripts\dotfiles-auto-stow.ps1 -Register'
+                    "& $(ConvertTo-SetupQuoted (Join-Path (Join-Path $RepoRoot 'scripts') 'dotfiles-auto-stow.ps1')) -Register"
                 ) }
         }
         'HW-execution-policy' {

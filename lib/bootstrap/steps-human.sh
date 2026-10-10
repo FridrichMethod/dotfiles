@@ -158,15 +158,22 @@ step_H1_gh_apt_repo_check() {
     return 1
 }
 
+# The keyring and source list are staged as you under a fixed scratch path,
+# so every line of the block stands alone (no shell variable carries over).
 step_H1_gh_apt_repo_plan() {
-    local keyring=/etc/apt/keyrings/githubcli-archive-keyring.gpg
+    local keyring=/etc/apt/keyrings/githubcli-archive-keyring.gpg dir key list
+    dir=$(steps_scratch_base)/gh-apt
+    key=$(steps_quote "$dir/githubcli-archive-keyring.gpg")
+    list=$(steps_quote "$dir/github-cli.list")
     steps_block_begin H1-gh-apt-repo sudo
     printf '%s\n' \
         '# the cli.github.com apt repository; .gitconfig_local runs /usr/bin/gh auth git-credential' \
-        'keyring_download=$(mktemp)' \
-        "curl -fsSL --proto '=https' --tlsv1.2 -o \"\$keyring_download\" https://cli.github.com/packages/githubcli-archive-keyring.gpg" \
-        "sudo install -D -m 0644 \"\$keyring_download\" $keyring" \
-        "echo \"deb [arch=\$(dpkg --print-architecture) signed-by=$keyring] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null" \
+        "curl -fsSL --proto '=https' --tlsv1.2 --create-dirs -o $key https://cli.github.com/packages/githubcli-archive-keyring.gpg" \
+        "# compare the fingerprint with the one in GitHub's Linux install guide (docs/install_linux.md) before you go on" \
+        "gpg --show-keys $key" \
+        "printf 'deb [arch=%s signed-by=$keyring] https://cli.github.com/packages stable main\\n' \"\$(dpkg --print-architecture)\" >$list" \
+        "sudo install -D -m 0644 $key $keyring" \
+        "sudo install -D -m 0644 $list /etc/apt/sources.list.d/github-cli.list" \
         'sudo apt-get update' \
         'sudo apt-get install -y gh'
     steps_block_end
@@ -216,9 +223,8 @@ step_H2_alloc_plan() {
                 'srun --time=1:00:00 --pty bash -l'
             ;;
     esac
-    printf '%s\n' '# then, inside the allocation:'
-    printf 'cd %s\n' "$(steps_quote "$STEPS_ROOT")"
-    printf './setup-host.sh --host %s\n' "$STEPS_HOST"
+    printf '%s\n' '# then, inside the allocation (export CONDA_PKGS_DIRS first, as docs/bootstrap.md S2-login-env says):'
+    printf '%s --host %s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST"
     steps_block_end
 }
 
@@ -448,9 +454,10 @@ step_H7_doctor_check() {
 }
 
 step_H7_doctor_plan() {
+    local doctor
+    doctor=$(steps_quote "$STEPS_ROOT/doctor.sh")
     steps_block_begin H7-doctor judgment
-    printf 'cd %s\n' "$(steps_quote "$STEPS_ROOT")"
-    printf './doctor.sh --host %s\n' "$STEPS_HOST"
-    printf './doctor.sh --host %s --smoke\n' "$STEPS_HOST"
+    printf '%s --host %s\n' "$doctor" "$STEPS_HOST"
+    printf '%s --host %s --smoke\n' "$doctor" "$STEPS_HOST"
     steps_block_end
 }

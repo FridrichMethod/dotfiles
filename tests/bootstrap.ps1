@@ -922,7 +922,7 @@ try {
         Assert-Equal (($blocks | ForEach-Object Kind) -join ',') 'gui,judgment,judgment,judgment,sudo,judgment,auth' 'HUMAN kinds'
         Assert-Equal @($run.Lines | Where-Object { $_ -notmatch '^HUMAN-' }).Count (@($blocks | ForEach-Object { $_.Lines.Count }) | Measure-Object -Sum).Sum 'text outside blocks'
         $text = $run.Stdout
-        foreach ($expected in @('.\stow-all.ps1 win', '.\scripts\dotfiles-auto-stow.ps1 -Register',
+        foreach ($expected in @("stow-all.ps1' win", "dotfiles-auto-stow.ps1' -Register",
                 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser', 'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser',
                 'wsl --install -d Ubuntu', 'named exactly Ubuntu', 'Developer Mode', 'core.symlinks true',
                 'Set-Service -Name ssh-agent -StartupType Automatic', 'gh auth login --git-protocol ssh', 'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519')) {
@@ -933,7 +933,7 @@ try {
         Assert-True (-not $wsl.Contains('not stowed')) 'HW-wsl claims win\wsl is not stowed'
         $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
         Assert-True (-not @($commands | Where-Object { $_ -match 'setup-git' }).Count) 'a HUMAN block runs gh auth setup-git'
-        foreach ($line in @($commands | Where-Object { $_ -match '^(git -C|Set-Location) ' })) {
+        foreach ($line in @($commands | Where-Object { $_ -match '^git -C ' })) {
             $errors = $null
             $parsed = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$errors)
             Assert-True (-not $errors) "HUMAN line does not parse: $line"
@@ -941,6 +941,35 @@ try {
             $argument = $command.CommandElements[2]
             Assert-True ($argument -is [Management.Automation.Language.StringConstantExpressionAst] -and
                 $argument.StringConstantType -eq 'SingleQuoted' -and $argument.Value -ceq $fixture.Repo) "path not single-quoted in: $line"
+        }
+        # The stow and task lines call the checkout's scripts by full path, so
+        # they run from any directory, the elevated shell's included.
+        $scripts = @((Join-Path $fixture.Repo 'stow-all.ps1'), (Join-Path (Join-Path $fixture.Repo 'scripts') 'dotfiles-auto-stow.ps1'))
+        $invocations = @($commands | Where-Object { $_.StartsWith('& ') })
+        Assert-Equal $invocations.Count 2 'full-path script lines'
+        foreach ($line in $invocations) {
+            $errors = $null
+            $parsed = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$errors)
+            Assert-True (-not $errors) "HUMAN line does not parse: $line"
+            $script = $parsed.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true).CommandElements[0]
+            Assert-True ($script -is [Management.Automation.Language.StringConstantExpressionAst] -and
+                $script.StringConstantType -eq 'SingleQuoted' -and $script.Value -cin $scripts) "script path not single-quoted in: $line"
+        }
+        # Every line is a '# ' note or a command that needs nothing another
+        # line set up: no directory change, no variable assigned elsewhere.
+        foreach ($block in $blocks) {
+            $assigned = @{}
+            for ($i = 0; $i -lt $block.Lines.Count; $i++) {
+                $line = $block.Lines[$i]
+                if ($line.StartsWith('#')) { Assert-True ($line.StartsWith('# ')) "$($block.Id) note without a space: $line"; continue }
+                Assert-True ($line -notmatch '^(Set-Location|Push-Location|Pop-Location|cd|chdir|sl)(\s|$)') "$($block.Id) changes directory: $line"
+                if ($line -match '^\$(\w+)\s*=') { $assigned[$Matches[1]] = $i }
+            }
+            foreach ($name in $assigned.Keys) {
+                for ($i = 0; $i -lt $block.Lines.Count; $i++) {
+                    Assert-True ($i -eq $assigned[$name] -or $block.Lines[$i] -notmatch ('\$' + [regex]::Escape($name) + '\b')) "$($block.Id) line $i uses `$$name from another line"
+                }
+            }
         }
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
     }

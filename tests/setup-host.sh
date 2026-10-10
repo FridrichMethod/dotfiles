@@ -1169,6 +1169,84 @@ run_case stow-odd BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/odd brew/bin/brew" -- --h
 [ "$(stow_line stow-odd lab-ubuntu)" = "PATH=$(printf '%q' "$TEST_TMP/odd brew/bin"):\"\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu" ] ||
     fail "quoted stow prefix: $(stow_line stow-odd lab-ubuntu)"
 
+# --- HUMAN block lines stand alone -------------------------------------------
+
+# block_violations FILE: print every HUMAN block line of FILE that is neither
+# a '# ' note nor a self-contained command. A command may not change shell
+# state (cd, export, ...), may not use a $NAME that another line of the
+# block assigns, and never runs gh auth setup-git. An agent runs each line
+# as its own command, with no shell state kept in between.
+block_violations() {
+    awk '
+        function finish(i, j, k, count, names, pattern) {
+            for (j = 1; j <= n; j++) {
+                if (!(j in assigned)) continue
+                count = split(assigned[j], names, " ")
+                for (k = 1; k <= count; k++) {
+                    pattern = "[$][{]?" names[k] "([^A-Za-z0-9_]|$)"
+                    for (i = 1; i <= n; i++)
+                        if (i != j && lines[i] !~ /^#/ && lines[i] ~ pattern)
+                            print id ": uses $" names[k] " from another line: " lines[i]
+                }
+            }
+        }
+        /^HUMAN-BEGIN / { inside = 1; id = $2; n = 0; split("", lines); split("", assigned); next }
+        /^HUMAN-END$/ { finish(); inside = 0; next }
+        !inside { next }
+        {
+            lines[++n] = $0
+            if ($0 ~ /^#/) {
+                if ($0 !~ /^# /) print id ": a note needs \"# \": " $0
+                next
+            }
+            if ($0 ~ /^[[:space:]]*$/) print id ": empty line"
+            if ($0 ~ /^(cd|pushd|popd|export|unset|set|source|alias|read|declare|typeset|local)([[:space:]]|$)/ || $0 ~ /^[.][[:space:]]/)
+                print id ": changes shell state: " $0
+            if ($0 ~ /setup-git/) print id ": runs gh auth setup-git: " $0
+            rest = $0
+            while (match(rest, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
+                assigned[n] = assigned[n] " " substr(rest, 1, RLENGTH - 1)
+                rest = substr(rest, RLENGTH + 1)
+                sub(/^[^[:space:]]*[[:space:]]*/, "", rest)
+            }
+        }
+        END { if (inside) print id ": no HUMAN-END" }
+    ' "$1"
+}
+
+# The scan finds the carried state it is meant to catch.
+cat >"$TEST_TMP/carried.out" <<'EOF'
+HUMAN-BEGIN H1-example sudo
+#no space
+download=$(mktemp)
+curl -o "$download" https://example.invalid/key
+cd /tmp
+gh auth setup-git
+NONINTERACTIVE=1 /bin/bash /tmp/install.sh
+HUMAN-END
+EOF
+VIOLATIONS=$(block_violations "$TEST_TMP/carried.out")
+for text in 'a note needs' 'uses $download from another line' 'changes shell state: cd /tmp' 'runs gh auth setup-git'; do
+    case $VIOLATIONS in
+        *"$text"*) ;;
+        *) fail "the block scan misses [$text]: $VIOLATIONS" ;;
+    esac
+done
+[ "$(printf '%s\n' "$VIOLATIONS" | grep -c .)" = 4 ] || fail "the block scan flags a self-contained line: $VIOLATIONS"
+
+# Every block of every host, as --print-manual lists them and as the
+# apply and check runs above printed them.
+run_case manual-mac "${MAC_ENV[@]}" -- --host mac --print-manual
+for host in wsl-ubuntu sherlock marlowe; do
+    run_case "manual-$host" -- --host "$host" --print-manual
+done
+for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
+    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew; do
+    grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
+    VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
+    [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
+done
+
 # --- bootstrap_fetch ---------------------------------------------------------
 
 # fetch_case NAME BIN_DIR ARGS...: run bootstrap_fetch with PATH=BIN_DIR.
