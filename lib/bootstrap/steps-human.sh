@@ -471,12 +471,18 @@ step_H7_sync_skills_check() {
     return 1
 }
 
+# The hook is on by default once stowed, and the provisioning shells export
+# AWESOME_SKILLS_AUTO_UPDATE=0, which even AWESOME_SKILLS_FORCE=1 obeys: the
+# run line sets it back to 1 for itself.
 step_H7_sync_skills_plan() {
     steps_block_begin H7-sync-skills judgment
     printf '%s\n' \
-        '# opt-in: an unpinned curl of awesome-skills main (raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh)' \
-        '# that installs into ~/.claude/skills and ~/.codex/skills; after stow the sync-skills alias runs the same'
-    printf 'AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh %s\n' "$(steps_quote "$STEPS_ROOT/scripts/awesome-skills-update.sh")"
+        "# on by default once stowed: every new interactive shell runs it unless AWESOME_SKILLS_AUTO_UPDATE=0 is in that shell's environment" \
+        '# it is an unpinned curl of awesome-skills main (raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh)' \
+        '# that installs into ~/.claude/skills and ~/.codex/skills; to keep it off, export AWESOME_SKILLS_AUTO_UPDATE=0' \
+        '# in the environment your terminals and ssh sessions start with. To run it once now, in the foreground:'
+    printf 'AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh %s\n' \
+        "$(steps_quote "$STEPS_ROOT/scripts/awesome-skills-update.sh")"
     steps_block_end
 }
 

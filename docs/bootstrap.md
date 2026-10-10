@@ -1193,9 +1193,11 @@ environment that the terminal or the ssh session starts with.
 
 - **Check:** `ls ~/.claude/skills ~/.codex/skills 2>/dev/null | head; ls -l "${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last-sync"`
 - **Install:** opt-out, as above; nothing to do to keep it on. To run it once
-  now, in the foreground: `sync-skills` in a stowed shell, or the line the
-  setup-host block prints, which works before the stow too:
-  `AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh ~/dotfiles/scripts/awesome-skills-update.sh`.
+  now, in the foreground: the line the setup-host block prints, which works
+  before the stow too and also in a shell that exports
+  `AWESOME_SKILLS_AUTO_UPDATE=0`, which even `AWESOME_SKILLS_FORCE=1` obeys:
+  `AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh ~/dotfiles/scripts/awesome-skills-update.sh`.
+  In a stowed shell without that export, `sync-skills` does the same.
 - **Verify:** `ls ~/.claude/skills | wc -l` is non-zero; the log is
   `${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last.log`.
 - **Human:** yes (judgment: it is on by default once stowed and runs an unpinned

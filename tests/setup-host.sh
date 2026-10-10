@@ -612,6 +612,8 @@ write_clones
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
+mkdir -p "$FIXTURE/scripts"
+cp "$REPO_ROOT/scripts/awesome-skills-update.sh" "$FIXTURE/scripts/awesome-skills-update.sh"
 printf '%s\n' '/.venv-sync/' >"$FIXTURE/.gitignore"
 cat >"$FIXTURE/stow-all.sh" <<'SH'
 #!/bin/sh
@@ -774,6 +776,9 @@ expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-sync-skills judgment'
 expect_text check-fresh out 'unpinned curl of awesome-skills main'
+expect_text check-fresh out '# on by default once stowed: every new interactive shell runs it unless AWESOME_SKILLS_AUTO_UPDATE=0'
+SKILLS_LINE="AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh $FIXTURE/scripts/awesome-skills-update.sh"
+expect_line check-fresh "$SKILLS_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
 expect_no_events check-fresh
 snapshot >"$TEST_TMP/after"
@@ -782,6 +787,14 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
     fail '--check created or removed files'
 }
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
+
+# The skill-sync line runs the sync even in a provisioning shell, which
+# exports AWESOME_SKILLS_AUTO_UPDATE=0 (curl is the stub; it logs the URL).
+: >"$EVENT_LOG"
+env -i HOME="$TEST_TMP/skills-home" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
+    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$URL_MAP" AWESOME_SKILLS_AUTO_UPDATE=0 \
+    sh -c "$SKILLS_LINE" >/dev/null 2>&1 || true
+expect_event 'curl:https://raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh'
 
 # --- debian apply: every step, in phase order --------------------------------
 
