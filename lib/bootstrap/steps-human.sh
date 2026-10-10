@@ -38,9 +38,10 @@ steps_brew_check() {
 
 # steps_homebrew_block STEP: the pinned Homebrew installer, run by a person.
 # Apply mode downloaded and verified it first; --check and --print-manual
-# only name the URL and digest.
+# only name the URL and digest. The block re-checks the digest itself right
+# before the sudo-backed run, since the file may have changed since then.
 steps_homebrew_block() {
-    local path
+    local path quoted verify=sha256sum
     steps_block_begin "$1" sudo
     if ! steps_installer_fields homebrew; then
         printf '# no installers.tsv homebrew row for %s\n' "$STEPS_HOST"
@@ -48,14 +49,18 @@ steps_homebrew_block() {
         return 0
     fi
     path=$(steps_scratch_file homebrew "$STEPS_URL")
+    quoted=$(steps_quote "$path")
+    [ "$STEPS_PROFILE" != macos ] || verify='shasum -a 256'
     if [ "$STEPS_MODE" = apply ] && steps_has_digest "$path" "$STEPS_SHA"; then
         printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
     else
         printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
         printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
     fi
-    printf '%s\n' "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v'
-    printf 'NONINTERACTIVE=1 /bin/bash %s\n' "$(steps_quote "$path")"
+    printf '%s\n' '# re-check the pinned sha256 right before the sudo-backed run; stop unless it prints OK' \
+        "printf '%s  %s\\n' $STEPS_SHA $quoted | $verify -c -" \
+        "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v'
+    printf 'NONINTERACTIVE=1 /bin/bash %s\n' "$quoted"
     steps_block_end
 }
 

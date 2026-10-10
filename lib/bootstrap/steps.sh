@@ -2,8 +2,9 @@
 # shellcheck disable=SC2034 # the run state (STEP_*, STEPS_*) is shared with the step files
 # Step registry and runner for setup-host.sh. Sourced only; defines functions
 # and changes no shell options (the runner restores errexit after each step).
-# Helpers live in steps-common.sh; the steps in steps-human.sh,
-# steps-packages.sh, steps-files.sh, steps-runtimes.sh and steps-archives.sh.
+# Helpers live in steps-common.sh, the rc-pollution guard in steps-guard.sh;
+# the steps in steps-human.sh, steps-packages.sh, steps-files.sh,
+# steps-runtimes.sh and steps-archives.sh.
 # Bash 3.2 compatible and `set -u` safe: no associative arrays, no mapfile.
 #
 # A step id names four functions, its dashes turned into underscores:
@@ -16,7 +17,7 @@
 #                     then runs. Optional for HUMAN steps.
 #   step_<id>_verify  optional; by default the check must pass after apply.
 # apply and verify run in a subshell with errexit; the rc-pollution guard
-# then requires `git status --porcelain` of the checkout to be unchanged.
+# (steps_guarded) then requires the checkout to be unchanged, content included.
 #
 # The caller sets STEPS_ROOT (physical checkout path), STEPS_HOST,
 # STEPS_PROFILE, STEPS_ARCH, STEPS_MODE (check, apply or manual), STEPS_TIERS,
@@ -59,7 +60,7 @@ STEP_DETAIL=''
 STEP_KIND='' STEP_TIER='' STEP_BLOCKING=''
 STEPS_KIND='' STEPS_URL='' STEPS_SHA='' STEPS_DEST='' STEPS_HUMAN='' STEPS_ARCHIVE=''
 STEPS_PROBE_FOUND='' STEPS_OMZ_RECOVERY='' STEPS_RC=0 STEPS_ERROR='' STEPS_EXIT=0
-STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_STOPPED=''
+STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_TODO='' STEPS_STOPPED=''
 
 # steps_rows: "id kind tier blocking" for every registry step of STEPS_HOST.
 steps_rows() {
@@ -132,6 +133,7 @@ steps_needs() {
         macos:S4-setup-sync) echo S2-brew-bundle ;;
         macos:H7-stow | debian:H7-stow) echo S3-clones S2-brew-bundle S4-setup-sync ;;
         debian:S2-brew-bundle) echo H1-linuxbrew ;;
+        debian:H7-chsh) echo H1-apt-core ;;
         debian:H1-linuxbrew | debian:S3-clones | debian:S3-bat-theme | debian:S4-* | \
             debian:S5-* | debian:S6-*)
             echo H1-apt-core
@@ -144,8 +146,9 @@ steps_needs() {
 
 # steps_blocker ID KIND: print the first prerequisite that stops ID. A failed
 # or blocked prerequisite, or a pending blocking HUMAN one, stops every step;
-# a HUMAN step also waits for auto prerequisites that are still to do, so a
-# --check never hands out ./stow-all.sh before its prerequisites ran.
+# a HUMAN step also waits for auto prerequisites that are still to do, or
+# that --skip or a declined prompt left undone, so the run never hands out
+# ./stow-all.sh before its prerequisites ran.
 steps_blocker() {
     local IFS=' ' need state
     for need in $(steps_needs "$1"); do
@@ -167,17 +170,24 @@ steps_blocker() {
                     return 0
                 fi
                 ;;
+            skipped | declined)
+                if [ "$2" != auto ]; then
+                    printf '%s (%s)\n' "$need" "$state"
+                    return 0
+                fi
+                ;;
         esac
     done
     return 1
 }
 
-# steps_selection ID TIER: 0 when the options select ID, else print why not.
+# steps_selection ID TIER: 0 when the options select ID, else print why not
+# and return 3 for --skip, 1 for --only and --tier.
 steps_selection() {
     case $STEPS_SKIP in
         *",$1,"*)
             printf '%s\n' 'skipped by --skip'
-            return 1
+            return 3
             ;;
     esac
     [ "$1" != P0-preflight ] || return 0
@@ -192,56 +202,6 @@ steps_selection() {
     bootstrap_tier_selected "$2" "$STEPS_TIERS" && return 0
     printf 'tier %s not selected\n' "$2"
     return 1
-}
-
-# steps_status_snapshot: the checkout's `git status --porcelain`, used by
-# the rc-pollution guard (an installer appending to a stowed rc file dirties
-# a tracked file; --no-optional-locks keeps the snapshot itself read-only).
-steps_status_snapshot() {
-    git --no-optional-locks -C "$STEPS_ROOT" status --porcelain 2>/dev/null </dev/null ||
-        printf '%s\n' '(git status failed)'
-}
-
-# steps_status_changes BEFORE AFTER: the paths whose status line is new.
-steps_status_changes() {
-    local nl='
-' line changed=''
-    while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        case "$nl$1$nl" in
-            *"$nl$line$nl"*) ;;
-            *) changed="$changed${changed:+ }${line#???}" ;;
-        esac
-    done <<EOF
-$2
-EOF
-    printf '%s\n' "${changed:-git status changed}"
-}
-
-# steps_guarded FUNCTION [ARG...]: run FUNCTION in a subshell with errexit,
-# then require an unchanged checkout. Sets STEPS_RC (0 ok) and STEPS_ERROR.
-# Call it as a plain command: inside `if`, `||` or `&&`, Bash ignores errexit
-# in the whole call chain, including this subshell.
-steps_guarded() {
-    local before after errexit=0
-    case $- in
-        *e*) errexit=1 ;;
-    esac
-    STEPS_ERROR=
-    before=$(steps_status_snapshot)
-    set +e
-    (
-        set -e
-        "$@"
-    )
-    STEPS_RC=$?
-    [ "$errexit" = 0 ] || set -e
-    after=$(steps_status_snapshot)
-    if [ "$before" != "$after" ]; then
-        STEPS_ERROR="changed files in $STEPS_ROOT: $(steps_status_changes "$before" "$after")"
-        STEPS_RC=1
-    fi
-    return 0
 }
 
 # steps_verify FN: the step's verify function, else its check must pass.
@@ -277,17 +237,30 @@ steps_confirm() {
     return 1
 }
 
-# steps_finish_step ID STATE DETAIL [KIND]: record STATE and print the plan
-# line "<id> <done|todo|human|skip|failed> <detail>".
+# steps_finish_step ID STATE DETAIL [KIND [BLOCKING]]: record STATE and print
+# the plan line "<id> <done|todo|human|skip|failed> <detail>". blocked shows
+# as todo for an auto KIND, else as human; skipped (--skip) and declined (the
+# prompt) show as skip. Work left undone is collected in STEPS_TODO (auto
+# steps) and STEPS_HELD (blocking HUMAN steps); either makes the run exit 3.
 steps_finish_step() {
     local id=$1 state=$2 detail shown
     detail=$(printf '%s' "$3" | tr '\n\t' '  ')
     steps_set STATE "$id" "$state"
     case $state in
         blocked)
-            if [ "${4:-auto}" = auto ]; then shown=todo; else shown=human; fi
-            STEPS_HELD="$STEPS_HELD${STEPS_HELD:+ }$id"
+            if [ "${4:-auto}" = auto ]; then
+                shown=todo
+                STEPS_TODO="$STEPS_TODO${STEPS_TODO:+ }$id"
+            else
+                shown=human
+                [ "${5:-yes}" != yes ] || STEPS_HELD="$STEPS_HELD${STEPS_HELD:+ }$id"
+            fi
             ;;
+        todo | declined)
+            if [ "$state" = todo ]; then shown=todo; else shown=skip; fi
+            STEPS_TODO="$STEPS_TODO${STEPS_TODO:+ }$id"
+            ;;
+        skipped) shown=skip ;;
         failed)
             shown=failed
             STEPS_FAILED="$STEPS_FAILED${STEPS_FAILED:+ }$id"
@@ -322,7 +295,7 @@ steps_run_auto() {
     local id=$1 fn=$2 plan
     plan=$(steps_plan_text "$fn")
     if [ "$STEPS_YES" != 1 ] && ! steps_confirm "$id" "$plan"; then
-        steps_finish_step "$id" skip "declined: $plan"
+        steps_finish_step "$id" declined "declined: $plan"
         return 0
     fi
     dotfiles_log step "$id: $plan"
@@ -343,10 +316,18 @@ steps_run_one() {
     local id=$1 kind=$2 tier=$3 blocking=$4 fn reason rc=0 blocker prepare=yes
     fn=${id//-/_}
     STEP_DETAIL=
-    if ! reason=$(steps_selection "$id" "$tier"); then
-        steps_finish_step "$id" skip "$reason"
-        return 0
-    fi
+    reason=$(steps_selection "$id" "$tier") || rc=$?
+    case $rc in
+        0) ;;
+        3)
+            steps_finish_step "$id" skipped "$reason"
+            return 0
+            ;;
+        *)
+            steps_finish_step "$id" skip "$reason"
+            return 0
+            ;;
+    esac
     "step_${fn}_check" || rc=$?
     case $rc in
         0)
@@ -363,12 +344,12 @@ steps_run_one() {
             prepare=no
             ;;
         4)
-            steps_finish_step "$id" blocked "waiting: $STEP_DETAIL" "$kind"
+            steps_finish_step "$id" blocked "waiting: $STEP_DETAIL" "$kind" "$blocking"
             return 0
             ;;
     esac
     if blocker=$(steps_blocker "$id" "$kind"); then
-        steps_finish_step "$id" blocked "blocked by $blocker: $STEP_DETAIL" "$kind"
+        steps_finish_step "$id" blocked "blocked by $blocker: $STEP_DETAIL" "$kind" "$blocking"
         return 0
     fi
     if [ "$kind" != auto ]; then
@@ -380,12 +361,21 @@ steps_run_one() {
     fi
 }
 
+# steps_rerun: the command that continues this run.
+steps_rerun() {
+    printf './setup-host.sh --host %s' "$STEPS_HOST"
+    [ "$STEPS_TIERS" = core,cli,ai ] || printf ' --tier %s' "$STEPS_TIERS"
+    printf '\n'
+}
+
 # steps_run: run every step of the host in phase order, print the pending
-# HUMAN blocks, and set STEPS_EXIT (0 done, 1 failed, 3 HUMAN steps pending).
+# HUMAN blocks, and set STEPS_EXIT: 0 when every selected step is done or not
+# applicable, 1 when one failed, 3 when work remains (HUMAN steps pending, or
+# auto steps left to apply by --check, a declined prompt or a HUMAN step).
 # Call it as a plain command (see steps_guarded).
 steps_run() {
-    local IFS=' ' id kind tier blocking fn
-    STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_STOPPED=''
+    local IFS=' ' id kind tier blocking fn after=''
+    STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_TODO='' STEPS_STOPPED=''
     for id in $(steps_ids); do
         if [ -n "$STEPS_STOPPED" ]; then
             break
@@ -402,13 +392,23 @@ steps_run() {
         STEPS_EXIT=1
         [ -z "$STEPS_STOPPED" ] || dotfiles_log error "stopped after $STEPS_STOPPED failed; rerun with --keep-going to continue past failures"
         dotfiles_log error "failed steps: $STEPS_FAILED"
-    elif [ -n "$STEPS_HELD" ]; then
-        STEPS_EXIT=3
-        dotfiles_log warn "HUMAN steps pending: $STEPS_HELD; run the HUMAN blocks above, then rerun ./setup-host.sh --host $STEPS_HOST"
-    else
-        STEPS_EXIT=0
-        dotfiles_log ok "setup-host: nothing blocking remains for $STEPS_HOST"
+        return 0
     fi
+    STEPS_EXIT=0
+    if [ -n "$STEPS_HELD" ]; then
+        STEPS_EXIT=3
+        after='after the HUMAN blocks, '
+        dotfiles_log warn "HUMAN steps pending: $STEPS_HELD; run the HUMAN blocks above, then rerun $(steps_rerun)"
+    fi
+    if [ -n "$STEPS_TODO" ]; then
+        STEPS_EXIT=3
+        if [ "$STEPS_MODE" = check ]; then
+            dotfiles_log warn "steps to apply: $STEPS_TODO; ${after}rerun $(steps_rerun) without --check"
+        else
+            dotfiles_log warn "steps not applied: $STEPS_TODO; ${after}rerun $(steps_rerun)"
+        fi
+    fi
+    [ "$STEPS_EXIT" != 0 ] || dotfiles_log ok "setup-host: nothing blocking remains for $STEPS_HOST"
 }
 
 # steps_list: the registry of STEPS_HOST (id, kind, tier, blocking).

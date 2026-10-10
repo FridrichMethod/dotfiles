@@ -292,16 +292,25 @@ $(bootstrap_rows "$BOOTSTRAP_CONFIG/git-clones.tsv")
 EOF
 }
 
-# steps_platform_mismatch: print why this machine cannot be STEPS_PROFILE.
+# steps_platform_mismatch: print why this machine cannot be STEPS_HOST, so
+# the wrong overlay's installs never run: the kernel, the distribution, Lmod
+# for a cluster, and WSL for wsl-ubuntu (and not for lab-ubuntu).
 steps_platform_mismatch() {
-    local os id like
+    local os id like platform
     os=$(bootstrap_os)
     case $STEPS_PROFILE in
         macos)
             [ "$os" = Darwin ] || printf 'host %s is macOS, but this kernel is %s\n' "$STEPS_HOST" "$os"
             ;;
         hpc)
-            [ "$os" = Linux ] || printf 'host %s is a Linux cluster, but this kernel is %s\n' "$STEPS_HOST" "$os"
+            if [ "$os" != Linux ]; then
+                printf 'host %s is a Linux cluster, but this kernel is %s\n' "$STEPS_HOST" "$os"
+                return 0
+            fi
+            platform=$(bootstrap_detect_platform)
+            [ "$platform" = hpc ] ||
+                printf 'host %s is a cluster with Lmod, but LMOD_DIR is unset here (detected %s); run it on the cluster from a login shell\n' \
+                    "$STEPS_HOST" "$platform"
             ;;
         debian)
             if [ "$os" != Linux ]; then
@@ -312,14 +321,22 @@ steps_platform_mismatch() {
             like=$(bootstrap_os_release_value ID_LIKE)
             case " $id $like " in
                 *' debian '* | *' ubuntu '*) ;;
-                *) printf 'host %s needs Debian or Ubuntu, but os-release says ID=%s\n' "$STEPS_HOST" "${id:-unknown}" ;;
+                *)
+                    printf 'host %s needs Debian or Ubuntu, but os-release says ID=%s\n' "$STEPS_HOST" "${id:-unknown}"
+                    return 0
+                    ;;
             esac
+            if [ "$STEPS_HOST" = wsl-ubuntu ] && ! bootstrap_is_wsl; then
+                printf '%s\n' 'host wsl-ubuntu runs under WSL, but this is not WSL (no WSL_DISTRO_NAME, no Microsoft kernel); a native Ubuntu workstation is --host lab-ubuntu'
+            elif [ "$STEPS_HOST" != wsl-ubuntu ] && bootstrap_is_wsl; then
+                printf 'host %s is a native workstation, but this is WSL; use --host wsl-ubuntu\n' "$STEPS_HOST"
+            fi
             ;;
     esac
 }
 
 step_P0_preflight_check() {
-    local glibc platform detail paths path missing=''
+    local glibc platform detail paths path dirty missing=''
     glibc=$(bootstrap_glibc_version)
     platform=$(bootstrap_detect_platform)
     detail="host $STEPS_HOST, profile $STEPS_PROFILE, $(bootstrap_os) $STEPS_ARCH${glibc:+, glibc $glibc}, detected $platform, checkout $STEPS_ROOT"
@@ -338,6 +355,15 @@ EOF
     fi
     if [ -n "${DOTFILES_DIR:-}" ] && [ "$DOTFILES_DIR" != "$STEPS_ROOT" ]; then
         dotfiles_log warn "DOTFILES_DIR is $DOTFILES_DIR, but this checkout is $STEPS_ROOT"
+    fi
+    # X-rc-protection expects a clean checkout; the guard still fails a step
+    # that changes a file that was already dirty.
+    if ! dirty=$(steps_dirty_summary); then
+        dotfiles_log warn "git status fails in $STEPS_ROOT, so the rc-pollution guard cannot see installer edits"
+        detail="$detail; git status failed"
+    elif [ -n "$dirty" ]; then
+        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since an installer that appends to a stowed rc file edits this checkout (docs/bootstrap.md X-rc-protection)"
+        detail="$detail; checkout has uncommitted changes"
     fi
     STEP_DETAIL=$detail
     return 0

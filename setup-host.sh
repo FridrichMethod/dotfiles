@@ -12,7 +12,9 @@ set -euo pipefail
 # printed as HUMAN blocks for a person (or one visible top-level agent
 # command). The only write inside the checkout is .venv-sync, made by
 # ./setup-sync.sh. --check writes nothing and makes no network calls.
-# Exit: 0 done, 1 a step failed, 2 usage or refusal, 3 HUMAN steps pending.
+# Exit: 0 every selected step done, 1 a step failed, 2 usage or refusal
+# (also as root, or on a machine that is not HOST), 3 work remains: HUMAN
+# steps pending, or auto steps left to apply (--check, a declined prompt).
 # The win host uses setup-host.ps1 from PowerShell instead.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -52,7 +54,13 @@ blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.
 
 Plan lines: <step-id> <done|todo|human|skip|failed> <detail>
 HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run)
-Exit: 0 done, 1 a step failed, 2 usage or refusal, 3 HUMAN steps pending.
+Exit: 0 every selected step is done or not applicable
+      1 a step failed
+      2 usage or refusal (unknown host, win, root, not this platform,
+        no terminal without --yes, invalid manifest)
+      3 work remains: HUMAN steps pending, or auto steps still to apply
+        (--check, a declined prompt, or waiting on a HUMAN step)
+Run it as your user, never with sudo.
 EOF
 }
 
@@ -62,8 +70,8 @@ usage_error() {
     exit 2
 }
 
-for lib in manifest platform version fetch steps steps-common steps-human steps-packages \
-    steps-files steps-runtimes steps-archives; do
+for lib in manifest platform version fetch steps steps-guard steps-common steps-human \
+    steps-packages steps-files steps-runtimes steps-archives; do
     if [[ ! -r "$REPO_ROOT/lib/bootstrap/$lib.sh" ]]; then
         dotfiles_log error "missing library: $REPO_ROOT/lib/bootstrap/$lib.sh"
         exit 2
@@ -79,6 +87,8 @@ done
 . "$REPO_ROOT/lib/bootstrap/fetch.sh"
 # shellcheck source=lib/bootstrap/steps.sh
 . "$REPO_ROOT/lib/bootstrap/steps.sh"
+# shellcheck source=lib/bootstrap/steps-guard.sh
+. "$REPO_ROOT/lib/bootstrap/steps-guard.sh"
 # shellcheck source=lib/bootstrap/steps-common.sh
 . "$REPO_ROOT/lib/bootstrap/steps-common.sh"
 # shellcheck source=lib/bootstrap/steps-human.sh
@@ -178,6 +188,14 @@ while [[ $# -gt 0 ]]; do
         *) usage_error "unknown argument: $1" ;;
     esac
 done
+
+# Everything installs into the invoking user's home; as root it would land
+# in /root, or leave root-owned files in a home that sudo kept. The sudo
+# steps are HUMAN blocks a person runs.
+if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
+    dotfiles_log error 'run ./setup-host.sh as your user, not root (no sudo); the sudo steps are printed as HUMAN blocks'
+    exit 2
+fi
 
 if [[ -z "$HOST" ]]; then
     HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
