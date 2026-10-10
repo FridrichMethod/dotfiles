@@ -12,8 +12,9 @@ set -euo pipefail
 # --online (auth status probes) or --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
 # for this home; it is never guessed. The win host is checked by doctor.ps1.
-# Exit: 0 every required tier ok, 1 a required row missing or outdated or a
-# structural error, 2 usage error, invalid manifest, unknown host or win.
+# Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
+# row or a structural check); 2 usage error, invalid manifest, unknown host
+# or win.
 # docs/bootstrap.md explains each step id the report cites.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,8 +80,9 @@ Options:
   -h, --help          show this help
 
 Statuses: ok outdated missing warn skip human. Fixes cite docs/bootstrap.md.
-Exit: 0 every required tier ok; 1 a required row missing or outdated, or a
-structural error; 2 usage error, invalid manifest, unknown host or win.
+Exit: 0 no required-tier row is missing, outdated or human (warn and skip
+never fail); 1 a required-tier row or structural check is missing, outdated
+or human; 2 usage error, invalid manifest, unknown host or win.
 EOF
 }
 

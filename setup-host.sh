@@ -12,9 +12,10 @@ set -euo pipefail
 # printed as HUMAN blocks for a person (or one visible top-level agent
 # command). The only write inside the checkout is .venv-sync, made by
 # ./setup-sync.sh. --check writes nothing and makes no network calls.
-# Exit: 0 every selected step done, 1 a step failed, 2 usage or refusal
-# (also as root, or on a machine that is not HOST), 3 work remains: HUMAN
-# steps pending, or auto steps left to apply (--check, a declined prompt).
+# Exit: 0 every selected step done (non-blocking HUMAN reminders may still
+# print), 1 a step failed, 2 usage or refusal (also as root, or on a machine
+# that is not HOST), 3 work remains: a blocking HUMAN step pending, or auto
+# steps left to apply (--check, a declined prompt).
 # The win host uses setup-host.ps1 from PowerShell instead.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -53,13 +54,15 @@ blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.
   -h, --help        show this help
 
 Plan lines: <step-id> <done|todo|human|skip|failed> <detail>
-HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run)
-Exit: 0 every selected step is done or not applicable
+HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run);
+              '# ' lines are notes, every other line one self-contained command
+Exit: 0 every selected step is done or not applicable (non-blocking
+        HUMAN blocks may still be printed)
       1 a step failed
       2 usage or refusal (unknown host, win, root, not this platform,
         no terminal without --yes, invalid manifest)
-      3 work remains: HUMAN steps pending, or auto steps still to apply
-        (--check, a declined prompt, or waiting on a HUMAN step)
+      3 work remains: a blocking HUMAN step pending, or auto steps still to
+        apply (--check, a declined prompt, or waiting on a HUMAN step)
 Run it as your user, never with sudo.
 EOF
 }
@@ -230,16 +233,21 @@ $(comma_items "$TIERS")
 EOF
 fi
 
-STEPS_ROOT=$REPO_ROOT
-STEPS_HOST=$HOST
-STEPS_PROFILE=$PROFILE
-STEPS_ARCH=$(bootstrap_arch) || true
-STEPS_MODE=$MODE
-STEPS_TIERS=$TIERS
-STEPS_ONLY=${ONLY:+$ONLY,}
-STEPS_SKIP=${SKIP:+$SKIP,}
-STEPS_YES=$YES
-STEPS_KEEP_GOING=$KEEP_GOING
+# The run state that the step libraries read; a lint run without those files
+# on its command line cannot see the reads.
+# shellcheck disable=SC2034
+{
+    STEPS_ROOT=$REPO_ROOT
+    STEPS_HOST=$HOST
+    STEPS_PROFILE=$PROFILE
+    STEPS_ARCH=$(bootstrap_arch) || true
+    STEPS_MODE=$MODE
+    STEPS_TIERS=$TIERS
+    STEPS_ONLY=${ONLY:+$ONLY,}
+    STEPS_SKIP=${SKIP:+$SKIP,}
+    STEPS_YES=$YES
+    STEPS_KEEP_GOING=$KEEP_GOING
+}
 bootstrap_init "$REPO_ROOT"
 
 while IFS= read -r id; do
