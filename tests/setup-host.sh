@@ -612,6 +612,10 @@ write_clones
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
+mkdir -p "$FIXTURE/common/bash" "$FIXTURE/common/claude/.claude"
+printf '%s\n' '# fixture bashrc' >"$FIXTURE/common/bash/.bashrc"
+printf '%s\n' '{}' >"$FIXTURE/common/claude/.claude/settings.json"
+cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
 mkdir -p "$FIXTURE/scripts"
 cp "$REPO_ROOT/scripts/awesome-skills-update.sh" "$FIXTURE/scripts/awesome-skills-update.sh"
 printf '%s\n' '/.venv-sync/' >"$FIXTURE/.gitignore"
@@ -958,6 +962,31 @@ expect_text check-cloned out 'S3-clones done 3 clones at their pins'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
+
+# --- H7-stow: home files Stow would refuse are moved aside first -------------
+
+new_home stow-conflicts
+mkdir -p "$CASE_HOME/.oh-my-zsh" "$CASE_HOME/.claude"
+: >"$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh"
+printf '# from /etc/skel\n' >"$CASE_HOME/.bashrc"
+ln -s "$TEST_TMP/elsewhere/.zshrc" "$CASE_HOME/.zshrc"
+# A regular file by design: .stowrc ignores the tracked settings.json.
+printf '{}\n' >"$CASE_HOME/.claude/settings.json"
+run_case stow-conflicts -- --host lab-ubuntu --check --only H7-stow
+expect_rc stow-conflicts 3
+expect_text stow-conflicts out 'H7-stow human '
+expect_text stow-conflicts out '2 home file(s) to move aside first: .bashrc .zshrc'
+expect_text stow-conflicts out 'stow --adopt would overwrite the tracked copies'
+expect_line stow-conflicts "mv -n $CASE_HOME/.bashrc $CASE_HOME/.bashrc.pre-dotfiles"
+expect_line stow-conflicts "mv -n $CASE_HOME/.zshrc $CASE_HOME/.zshrc.pre-dotfiles"
+expect_no_text stow-conflicts out 'settings.json.pre-dotfiles'
+expect_no_events stow-conflicts
+# A link into this checkout is Stow's own: nothing to move.
+rm "$CASE_HOME/.bashrc"
+ln -s "$FIXTURE/common/bash/.bashrc" "$CASE_HOME/.bashrc"
+run_case stow-own-link -- --host lab-ubuntu --check --only H7-stow
+expect_text stow-own-link out '1 home file(s) to move aside first: .zshrc'
+expect_no_text stow-own-link out "mv -n $CASE_HOME/.bashrc"
 
 # --- H1-gh-apt-repo: Ubuntu's own /usr/bin/gh is below the floor ------------
 
@@ -1357,7 +1386,7 @@ for host in wsl-ubuntu sherlock marlowe; do
     run_case "manual-$host" -- --host "$host" --print-manual
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
-    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew; do
+    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"

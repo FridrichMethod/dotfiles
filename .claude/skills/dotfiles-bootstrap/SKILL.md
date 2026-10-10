@@ -40,8 +40,10 @@ from this checkout, stop and say so.
    still to apply. Re-run step 5 after each block until H7-stow is the only one
    left.
 8. Ask the person about H7-sync-skills (on by default once stowed). Then run
-   the H7-stow block's one line exactly as printed (the `PATH=` prefix for this
-   host, then the clone's `stow-all.sh H`), only as its own visible top-level
+   the H7-stow block's lines exactly as printed: any `mv -n` lines first (they
+   move aside home files Stow would refuse, such as a fresh `~/.bashrc`; never
+   `stow --adopt`), then the stow line (the `PATH=` prefix for this host and
+   the clone's `stow-all.sh H`), each only as its own visible top-level
    command that the person approves; it writes under `~/.claude` and
    `~/.codex`. Re-run step 5; it should exit 0.
 9. Finish with `./doctor.sh --host H --smoke`; exit 0 is the completion gate.

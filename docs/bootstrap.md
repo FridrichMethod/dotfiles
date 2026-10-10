@@ -51,7 +51,12 @@ macOS, Linuxbrew on Ubuntu and the login env on hpc, and each of those reaches
 PATH only through the stowed rc files. `./setup-host.sh` adds them to its own
 PATH, never to yours. So the first `./stow-all.sh` runs with a one-shot `PATH=`
 prefix: the H7-stow block prints it as one line, ready to run, and
-[H7-stow](#h7-stow-stow-the-dotfiles) lists it per host.
+[H7-stow](#h7-stow-stow-the-dotfiles) lists it per host. Stow also never
+replaces a regular file, and a fresh Linux home already has `~/.bashrc` and
+`~/.profile` from `/etc/skel` (RHEL-family clusters also `~/.bash_profile`):
+the block lists each such file with an `mv -n` line that moves it aside, to
+run before the stow line. Never use `stow --adopt`, which would overwrite the
+tracked copies with them.
 
 Keep the login hooks quiet while provisioning, in every shell you use for it:
 `export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0`. Otherwise the
@@ -110,6 +115,7 @@ export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
 ./setup-host.sh --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
 ./setup-host.sh --host wsl-ubuntu             # again after each block (later the S5-claude inspect block),
                                               # until only H7-stow still blocks
+# H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.profile), then:
 PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu   # H7-stow
 ./setup-host.sh --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
@@ -143,6 +149,7 @@ cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
 ./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-stow
 exit                                               # back to the login node
+# H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.bash_profile), then:
 PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock   # H7-stow
 ./setup-host.sh --host sherlock                    # exits 0 now
 # H7-sync-skills: decide before the next login or `ssh sherlock`
@@ -503,9 +510,11 @@ short and send the agent here. The rules they follow:
   auto mode cannot pre-approve, so the agent runs it only as its own visible
   top-level command that the person approves, or leaves it to the person. Never
   launder it through a wrapper script. Before the first stow, `stow` is not on
-  PATH, so the agent runs the H7-stow block's one line exactly as printed: the
-  one-shot `PATH=` prefix that [H7-stow](#h7-stow-stow-the-dotfiles) gives for
-  the host, then the clone's `stow-all.sh H`.
+  PATH, so the agent runs the H7-stow block's lines exactly as printed: its
+  `mv -n` lines first, if it has any (they move aside home files Stow would
+  refuse; never `stow --adopt`), then the stow line, the one-shot `PATH=`
+  prefix that [H7-stow](#h7-stow-stow-the-dotfiles) gives for the host and the
+  clone's `stow-all.sh H`.
 - **Exit 3** means work remains: a blocking HUMAN step is pending, or automatic
   steps are still to apply, and H7-stow blocks. The agent re-runs setup-host
   after each block until H7-stow is the only one left, then stows, then runs
@@ -547,9 +556,10 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    judgment: explain the choice and let me decide.
 7. Exit 3 means work remains (a blocking HUMAN step, or steps still to apply).
    Re-run setup-host after each block until H7-stow is the only one left. Ask
-   me about H7-sync-skills, then run the H7-stow block's line exactly as printed
-   (PATH prefix, then stow-all.sh H), only as its own visible command after I
-   approve it. Re-run setup-host; it should exit 0.
+   me about H7-sync-skills, then run the H7-stow block's lines exactly as printed
+   (any mv -n lines, then PATH prefix and stow-all.sh H; never stow --adopt),
+   each only as its own visible command after I approve it. Re-run setup-host;
+   it should exit 0.
 8. Finish with ./doctor.sh --host H --smoke, then report what changed, what is
    still pending, and every failure with its docs/bootstrap.md step id.
 Never run git lfs install, gh auth setup-git, conda init or micromamba shell init,
@@ -1126,9 +1136,16 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
 - **Check:** a dry run that lists every conflict, for example on `wsl-ubuntu`:
   `cd ~/dotfiles && PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" stow -n --restow --no-folding -d common $(ls common)`
   (repeat with `-d wsl-ubuntu $(ls wsl-ubuntu)` for the overlay)
-- **Install:** move conflicting regular files aside (for example
-  `mv ~/.bashrc ~/.bashrc.pre-dotfiles`), then the prefix and `./stow-all.sh H`,
-  for example `PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu`.
+- **Install:** the H7-stow block. It first lists every home file Stow would
+  refuse, a regular file or a link that leads outside this checkout where a
+  package tracks a file (files `.stowrc` ignores are left alone), each with its
+  own line, for example `mv -n ~/.bashrc ~/.bashrc.pre-dotfiles`; run those,
+  never `stow --adopt` (it would overwrite the tracked copies with the home's
+  files), and merge what you still need into the overlay later. Then the
+  prefix and `./stow-all.sh H`, for example
+  `PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu`.
+  `./stow-all.sh` runs the dry run above itself and stops, before it writes
+  anything, when one is left.
 - **Verify:** `ls -l ~/.zshrc ~/.profile ~/.gitconfig` shows links into
   `~/dotfiles/common/`; the doctor's `stow-links` and `path-order` checks are `ok`.
 - **Human:** yes (judgment: it rewrites your home's dotfiles and AI settings;

@@ -351,11 +351,57 @@ steps_stowed() {
     return 1
 }
 
+# steps_stow_conflicts: the home paths (relative to $HOME, one per line) that
+# the first ./stow-all.sh would have to replace: a regular file, or a link
+# that does not lead into this checkout, where a common/ or host package
+# tracks a file that .stowrc does not ignore. Stow refuses them, and
+# stow --adopt would overwrite the tracked copies instead, so the H7-stow
+# block moves each aside first. Read-only: git ls-files and the home.
+steps_stow_conflicts() {
+    local files ignores pattern path rel target resolved
+    files=$(git -c core.quotePath=false --no-optional-locks -C "$STEPS_ROOT" ls-files -- common "$STEPS_HOST" \
+        2>/dev/null </dev/null) || return 0
+    ignores=$(sed -n 's/^--ignore=//p' "$STEPS_ROOT/.stowrc" 2>/dev/null) || ignores=
+    pattern=$(printf '%s\n' "$ignores" | awk 'NF { printf "%s(%s)$", sep, $0; sep = "|" }')
+    while IFS= read -r path; do
+        case $path in
+            \"* | */*/.stow-local-ignore) continue ;;
+            */*/*) ;;
+            *) continue ;;
+        esac
+        rel=${path#*/}
+        rel=${rel#*/}
+        if [ -n "$pattern" ] && steps_text_has -E "$pattern" "$rel"; then
+            continue
+        fi
+        target=$HOME/$rel
+        if [ -L "$target" ]; then
+            resolved=$(steps_resolve "$target") || resolved=
+            case $resolved in
+                "$STEPS_ROOT"/*) continue ;;
+            esac
+        elif [ ! -e "$target" ] || [ -d "$target" ]; then
+            continue
+        fi
+        printf '%s\n' "$rel"
+    done <<EOF
+$files
+EOF
+}
+
 step_H7_stow_check() {
+    local count
+    STEPS_STOW_CONFLICTS=
     steps_stowed && return 0
     if ! steps_probe oh-my-zsh; then
         STEP_DETAIL='oh-my-zsh must be cloned before ./stow-all.sh (S3-clones), or stow creates ~/.oh-my-zsh/custom first'
         return 4
+    fi
+    STEPS_STOW_CONFLICTS=$(steps_stow_conflicts)
+    if [ -n "$STEPS_STOW_CONFLICTS" ]; then
+        count=$(printf '%s\n' "$STEPS_STOW_CONFLICTS" | grep -c .)
+        STEP_DETAIL="$STEP_DETAIL; $count home file(s) to move aside first: $(printf '%s\n' "$STEPS_STOW_CONFLICTS" | tr '\n' ' ')"
+        STEP_DETAIL=${STEP_DETAIL% }
     fi
     return 1
 }
@@ -388,7 +434,21 @@ steps_stow_path_prefix() {
 }
 
 step_H7_stow_plan() {
+    local rel
     steps_block_begin H7-stow judgment
+    if [ -n "${STEPS_STOW_CONFLICTS:-}" ]; then
+        printf '%s\n' '# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;' \
+            '# merge what you still need into the overlay later'
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            printf 'mv -n %s %s\n' "$(steps_quote "$HOME/$rel")" "$(steps_quote "$HOME/$rel.pre-dotfiles")"
+        done <<EOF
+$STEPS_STOW_CONFLICTS
+EOF
+    elif [ "$STEPS_MODE" = manual ]; then
+        printf '%s\n' '# Stow never replaces a regular file (a fresh ~/.bashrc or ~/.profile from /etc/skel);' \
+            '# ./setup-host.sh lists each one in this block with a mv line that moves it aside first'
+    fi
     printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command' \
         "# stow reaches PATH only through this stow, so the prefix names where this host's stow lives"
     printf '%s %s %s\n' "$(steps_stow_path_prefix)" "$(steps_quote "$STEPS_ROOT/stow-all.sh")" "$STEPS_HOST"

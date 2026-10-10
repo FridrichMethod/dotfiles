@@ -103,7 +103,9 @@ after which oh-my-zsh can no longer be cloned there, so `./stow-all.sh` refuses
 until `~/.oh-my-zsh/oh-my-zsh.sh` exists (`DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1`
 overrides that). It also stops, before writing anything, when Stow would have
 to replace a regular file such as the `~/.bashrc` a fresh Ubuntu home gets
-from `/etc/skel`.
+from `/etc/skel`; the H7-stow block lists each such file with an `mv -n` line
+that moves it aside (never `stow --adopt`, which would overwrite the tracked
+copy).
 `setup-host.sh` clones oh-my-zsh and never runs sudo, `chsh` or stow itself. On native
 Windows the twins are `.\doctor.ps1` and `.\setup-host.ps1`. Other Linux
 distributions have no overlay: install the tools yourself and stow `common/`
