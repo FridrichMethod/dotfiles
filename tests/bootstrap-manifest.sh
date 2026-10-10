@@ -529,6 +529,24 @@ bad=$(bootstrap_rows "$BOOTSTRAP_CONFIG/tools.tsv" | awk -F '\t' '$4 ~ /(^|,)bre
 [ -z "$bad" ] || fail "tools.tsv runs brew for its version: $bad"
 assert_events
 
+# -------------------------------------------------- gh auth setup-git
+echo '==> no bootstrap script or doc tells anyone to run gh auth setup-git'
+# It runs git config --global, which writes through the stowed ~/.gitconfig
+# into common/git/.gitconfig. It may only be named as a warning.
+setup_git_offenders() {
+    local file
+    for file in "$@"; do
+        grep -Hn -e 'setup-git' -- "$file" | grep -Eiv "never|do not run|don't run|skip" || true
+    done
+}
+SETUP_GIT_FILES=(README.md AGENTS.md docs/bootstrap.md docs/dependencies.md doctor.sh setup-host.sh
+    doctor.ps1 setup-host.ps1 lib/bootstrap.ps1 lib/bootstrap/*.sh
+    .claude/skills/dotfiles-bootstrap/SKILL.md .agents/skills/dotfiles-bootstrap/SKILL.md)
+offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}")
+[ -z "$offenders" ] || fail "gh auth setup-git outside a warning: $offenders"
+printf '%s\n' '# never run gh auth setup-git' 'gh auth login && gh auth setup-git' >"$TEST_TMP/setup-git.md"
+assert_eq "$(setup_git_offenders "$TEST_TMP/setup-git.md" | cut -d: -f2)" 2 'the setup-git check finds a command'
+
 # ----------------------------------------------------------- validator
 echo '==> manifest validator'
 "$TEST_PYTHON" -I -B -m unittest discover -s "$TEST_DIR" -p test_bootstrap_manifest.py
