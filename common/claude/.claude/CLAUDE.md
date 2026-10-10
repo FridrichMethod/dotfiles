@@ -55,7 +55,7 @@
 - When blocked, identify the concrete blocker and the smallest user action needed to continue.
 
 <!-- SHERLOCK-KIT:BEGIN -->
-<!-- source: SHERLOCK.md; schema_version: 1; policy_sha256: 561c3eb32de8c498143f5d4f5f5044075c686ca27ae24ae422d6144b634f2e1b -->
+<!-- source: SHERLOCK.md; schema_version: 1; policy_sha256: 1147d1ec29e2cb1d42c4bc639389d6f05d3352dda9e0c8ea9d2126f59942efc0 -->
 When working on or connecting to Sherlock: read `/etc/agents/AGENTS.md` and the
 relevant topic guides before acting; check `hostname` and `SLURM_JOB_ID` first.
 
@@ -90,17 +90,25 @@ relevant topic guides before acting; check `hostname` and `SLURM_JOB_ID` first.
   managed client/sandbox restrictions. The site module is `pi-coding-agent`.
 - Use bounded noninteractive OpenSSH, normally `sherlock-plain`, and human
   authentication bootstrap. No authentication storms or stored MFA/passwords.
-  A lost mutation reply is unknown; preserve its reservation and reconcile identity
-  before retrying. `ssh -O check` only checks a local master. Doctor is read-only.
+  A lost mutation reply is unknown; the attempt record on Sherlock and Slurm
+  accounting are the truth: run `shk status --attempt ID` before any retry.
+  `ssh -O check` only checks a local master. Doctor is read-only.
 - Consumer partitions are packaged toolkit profiles (`shk policy --identity` reports
   `partitions_sha256`); unknown partitions are refused, borrowed partitions need an
   identity-bound grant and `shk occupancy` first, and `--requeue` is emitted only
   where the profile allows it:
+  - `bigmem`: preemptible=no, requeue=no, borrowed=no, gpus=no. Public high-memory partition: only for jobs that need more memory than normal provides. Follow Sherlock's own limits for it.
+  - `bioe`: preemptible=no, requeue=no, borrowed=no, gpus=yes. Department GPU partition, not borrowed: respect fairshare and leave room for other department users.
   - `btrippe`: preemptible=no, requeue=no, borrowed=yes, gpus=yes. Borrowed from another group. Run `shk occupancy` first. Courtesy budget about 2 jobs x 2 h while others are active; more (e.g. 4 jobs x 6 h) only when the partition is idle, typically 00:00-07:00.
+  - `dev`: preemptible=no, requeue=no, borrowed=no, gpus=yes. Public development partition: debugging and short tests only, never production runs. Follow Sherlock's own limits for it.
+  - `gpu`: preemptible=no, requeue=no, borrowed=no, gpus=yes. Public GPU partition: few GPUs, long queue, never preempted. Follow Sherlock's own per-user GPU limits.
   - `normal`: preemptible=no, requeue=no, borrowed=no, gpus=no.
   - `owners`: preemptible=yes, requeue=yes, borrowed=no, gpus=yes. Preemptible: Slurm requeues preempted jobs; scripts must checkpoint and resume. No cap.
+  - `possu`: preemptible=no, requeue=no, borrowed=yes, gpus=yes. Borrowed from another group and stricter than btrippe. Run `shk occupancy` first. Submit only between 00:00 and 07:00 Pacific, a few short jobs; never submit outside that window, not even short jobs.
+  - `service`: preemptible=no, requeue=no, borrowed=no, gpus=no. Public service partition: lightweight recurring administrative tasks such as transfers or backups, never computation. Follow Sherlock's own limits for it.
+  - `stat`: preemptible=no, requeue=no, borrowed=no, gpus=yes. Department GPU partition, not borrowed: respect fairshare and leave room for other department users.
 
 Full policy and provenance: `shk policy`; installed identity: `shk policy --identity`.
 The toolkit's transport/projection does not enforce arbitrary scripts or certify
-scientific results. Consumer resources, grants, budgets, and validators are explicit.
+scientific results. Consumer resources, grants and validators are explicit.
 <!-- SHERLOCK-KIT:END -->
