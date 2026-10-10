@@ -160,6 +160,23 @@ assert_events 'ldd:--version' 'ldd:--version' 'ldd:--version'
 assert_eq "$(BOOTSTRAP_UNAME_S=Darwin bootstrap_glibc_version)" '' 'macOS glibc'
 assert_events
 
+# A fresh Homebrew is off PATH until `brew shellenv` runs (stow brings that).
+BREW_OFF="$TEST_TMP/prefix-a/bin/brew"
+BREW_ON="$TEST_TMP/prefix-b/bin/brew"
+mkdir -p "${BREW_OFF%/brew}" "${BREW_ON%/brew}"
+: >"$BREW_OFF"
+printf '#!/bin/sh\nexit 0\n' >"$BREW_ON"
+chmod +x "$BREW_ON"
+assert_eq "$(BOOTSTRAP_BREW_CANDIDATES="$BREW_OFF:$BREW_ON" bootstrap_brew_bin)" "$BREW_ON" 'first executable brew prefix'
+assert_eq "$(brew() { :; } && BOOTSTRAP_BREW_CANDIDATES="$BREW_ON" bootstrap_brew_bin)" "$BREW_ON" 'a brew function is not a path'
+assert_status 1 'no executable brew' env BOOTSTRAP_BREW_CANDIDATES="$BREW_OFF" bash -c \
+    '. "$1"; bootstrap_brew_bin' _ "$FIXTURE/lib/bootstrap/platform.sh"
+assert_status 1 'empty brew candidates' env BOOTSTRAP_BREW_CANDIDATES= bash -c \
+    '. "$1"; bootstrap_brew_bin' _ "$FIXTURE/lib/bootstrap/platform.sh"
+cp "$BREW_ON" "$FAKE_BIN/brew"
+assert_eq "$(BOOTSTRAP_BREW_CANDIDATES="$BREW_OFF" bootstrap_brew_bin)" "$FAKE_BIN/brew" 'brew on PATH wins'
+rm -f "$FAKE_BIN/brew"
+
 # ----------------------------------------------------------------- versions
 echo '==> version extraction and comparison'
 version_case() {

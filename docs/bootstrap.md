@@ -16,7 +16,10 @@ TODO(T5)
 
 ### H1-homebrew: Homebrew on macOS
 
-TODO(T5)
+TODO(T5). Keep: a fresh Homebrew stays off PATH until the stowed rc files run
+`brew shellenv`, so `doctor.sh` and `setup-host.sh` prepend the directory of
+`bootstrap_brew_bin` (`/opt/homebrew`, `/usr/local`, `/home/linuxbrew/.linuxbrew`)
+to their own PATH before any brew or Brewfile tool probe.
 
 ### H1-apt-core: apt prerequisites
 

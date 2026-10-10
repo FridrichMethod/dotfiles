@@ -3,7 +3,7 @@
 # Sourced only; defines functions and changes no shell options. Bash 3.2
 # compatible and `set -u` safe; nothing here splits words by the caller's IFS.
 # Test overrides: BOOTSTRAP_UNAME_S, BOOTSTRAP_UNAME_M, BOOTSTRAP_OS_RELEASE,
-# BOOTSTRAP_PROC_VERSION.
+# BOOTSTRAP_PROC_VERSION, BOOTSTRAP_BREW_CANDIDATES.
 
 # bootstrap_known_hosts: the host overlays, one per line.
 bootstrap_known_hosts() {
@@ -127,6 +127,36 @@ bootstrap_glibc_version() {
     awk 'match($0, /[0-9]+\.[0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<EOF
 $first
 EOF
+}
+
+# bootstrap_brew_bin: the brew executable this process should use: brew on
+# PATH, else the first executable among Homebrew's default prefixes. A fresh
+# install stays off PATH until `brew shellenv` runs, which only the stowed rc
+# files do, so callers prepend the printed file's directory to their own PATH
+# before probing or bundling. BOOTSTRAP_BREW_CANDIDATES (colon-separated paths)
+# replaces the prefix list for tests. Returns 1 when there is none.
+bootstrap_brew_bin() {
+    local found rest candidate
+    found=$(command -v brew 2>/dev/null) || found=
+    case $found in
+        /*)
+            printf '%s\n' "$found"
+            return 0
+            ;;
+    esac
+    rest=${BOOTSTRAP_BREW_CANDIDATES-/opt/homebrew/bin/brew:/usr/local/bin/brew:/home/linuxbrew/.linuxbrew/bin/brew:${HOME:-}/.linuxbrew/bin/brew}
+    while [ -n "$rest" ]; do
+        candidate=${rest%%:*}
+        case $rest in
+            *:*) rest=${rest#*:} ;;
+            *) rest= ;;
+        esac
+        if [ -n "$candidate" ] && [ -f "$candidate" ] && [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # bootstrap_resolve_host ROOT: DOTFILES_HOST when set (it must be a known

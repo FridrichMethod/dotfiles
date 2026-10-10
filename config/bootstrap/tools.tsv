@@ -29,6 +29,10 @@ file	core	unix	file	--version	-	fzf previews cannot detect file types	H1-apt-cor
 col	core	unix	col	-	-	fzf-tab man page previews fail	H1-apt-core
 man	core	unix	man	-	-	man, colored-man-pages and fzf-tab man previews fail	H1-apt-core
 tmux	core	unix	tmux	-V	-	fzf --tmux popups and tmux sessions are unavailable	H1-apt-core
+# A fresh Homebrew is off PATH until the stowed rc files run brew shellenv, so
+# doctor and setup-host first prepend the directory of bootstrap_brew_bin
+# (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to
+# their own PATH; the brew probe and every Brewfile tool probe rely on that.
 homebrew	core	mac	brew	--version	-	Brewfile bundles cannot run	H1-homebrew
 linuxbrew	core	wsl-ubuntu,lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/brew	-	-	Brewfile bundles cannot run and the overlay brew shellenv line fails	H1-linuxbrew
 python3	core	all	python3,python	--version	3.11	setup-sync and the AI config sync helpers cannot run	S2-brew-bundle
