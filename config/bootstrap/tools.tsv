@@ -68,8 +68,6 @@ nvim	cli	all	nvim	-	-	the vi alias fails	S2-brew-bundle
 aria2	cli	all	aria2c	--version	-	aria2c downloads with the stowed aria2.conf fail	S2-brew-bundle
 uv	cli	all	uv	--version	-	uv and the oh-my-zsh uv plugin are unavailable	S2-brew-bundle
 gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows fail	S2-brew-bundle
-# /usr/bin/gh is versioned: Ubuntu's own gh package (2.45) installs the same path below the floor.
-gh-apt	cli	lab-ubuntu	file:/usr/bin/gh	--version	2.50.0	the github.com credential helper in .gitconfig_local fails	H1-gh-apt-repo
 xclip	cli	lab-ubuntu	xclip	-	-	fzf Ctrl-Y cannot copy to the X clipboard	H1-apt-core
 wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	H1-apt-core
 nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
@@ -156,7 +154,6 @@ lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so over
 # alias: aria2 aria2.aria2
 # alias: uv astral-sh.uv
 # alias: gh GitHub.cli
-# manual: gh-apt lab-ubuntu
 # alias: node nvm
 # alias: node OpenJS.NodeJS.LTS
 # alias: node nodejs

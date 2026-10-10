@@ -577,14 +577,14 @@ for file in tools.tsv:8 git-clones.tsv:5 installers.tsv:9; do
     [ -z "$bad" ] || fail "${file%%:*} rows without ${file#*:} fields: $bad"
 done
 case " $(real_ids bootstrap_tool_rows lab-ubuntu)" in
-    *' fzf '*' gh-apt '*) ;;
-    *) fail 'lab-ubuntu tools miss fzf or gh-apt' ;;
+    *' fzf '*' xclip '*) ;;
+    *) fail 'lab-ubuntu tools miss fzf or xclip' ;;
 esac
 case " $(real_ids bootstrap_tool_rows lab-ubuntu)" in
     *' pwsh '* | *' login-env '*) fail 'lab-ubuntu tools include another host' ;;
 esac
 case " $(real_ids bootstrap_tool_rows '')" in
-    *' gh-apt '* | *' pwsh '* | *' micromamba '*) fail 'platform mode includes host-list rows' ;;
+    *' xclip '* | *' pwsh '* | *' micromamba '*) fail 'platform mode includes host-list rows' ;;
 esac
 assert_eq "$(bootstrap_clone_rows sherlock | wc -l | tr -d ' ')" 8 'eight clones on sherlock'
 assert_eq "$(bootstrap_clone_rows win | wc -l | tr -d ' ')" 0 'no clones on win'

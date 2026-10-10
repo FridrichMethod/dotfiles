@@ -124,10 +124,9 @@ exec zsh -l
 ./doctor.sh --host wsl-ubuntu --smoke
 ```
 
-`lab-ubuntu` adds one sudo block (H1-gh-apt-repo) and one gui step (H1-fcitx5:
-`im-config -n fcitx5` as you, then a relogin); add `--tier all` to get kitty and
-the Nerd Font. An agent CLI first, if wanted: the Claude Code installer as on
-macOS.
+`lab-ubuntu` adds one gui step (H1-fcitx5: `im-config -n fcitx5` as you, then
+a relogin); add `--tier all` to get kitty and the Nerd Font. An agent CLI
+first, if wanted: the Claude Code installer as on macOS.
 
 ### Sherlock and Marlowe
 
@@ -302,7 +301,9 @@ AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
 `Brewfile.lock.json` into the checkout), and in every mode
-`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1`, so a check that runs gh writes nothing.
+`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1`: no step runs gh, and the export keeps
+a gh that any tool it starts may run from writing its device id
+([Guarantees](#guarantees)).
 Before probing anything, both scripts prepend to their own PATH, when they
 exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
@@ -338,10 +339,10 @@ as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
 conflicting Homebrew formula or cask in S2-brew-bundle, an `nvm.sh` S4-nvm will not
 source). A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
 dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
-`--tier` or `--only` leaves out does not. Non-blocking blocks (locale, the gh
-apt repository, fcitx5, site modules, `chsh`, sign-in, skill sync, the final
-doctor run) are printed but leave the exit code alone. Since H7-stow blocks,
-every run before the first stow exits 3.
+`--tier` or `--only` leaves out does not. Non-blocking blocks (locale, fcitx5,
+site modules, `chsh`, sign-in, skill sync, the final doctor run) are printed
+but leave the exit code alone. Since H7-stow blocks, every run before the
+first stow exits 3.
 
 The Windows twins take the same ideas as PowerShell parameters:
 `.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
@@ -699,7 +700,13 @@ Applies to `wsl-ubuntu` and `lab-ubuntu`: the packages in
 wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
 git-lfs, tmux, man, locales, build tools). The interactive tools come from
 Linuxbrew because Ubuntu 24.04's apt is below the floors (fzf 0.44.1,
-gh 2.45) and renames bat and fd to `batcat` and `fdfind`.
+gh 2.45) and renames bat and fd to `batcat` and `fdfind`. Ubuntu's apt gh is
+too old and is not used, even where it is installed: the Linuxbrew gh of the
+`cli` Brewfile comes first on PATH in the stowed shells, and it is what git's
+github.com credential helper calls on lab-ubuntu, by its full path
+`/home/linuxbrew/.linuxbrew/bin/gh` in `lab-ubuntu/git/.gitconfig_local`
+(git started from a GUI or another non-login context may not have Linuxbrew
+on PATH). gh needs no sudo on any host.
 
 - **Check:** `grep -hv '^#' config/bootstrap/apt/common.txt config/bootstrap/apt/wsl-ubuntu.txt | xargs dpkg -s >/dev/null && echo ok`
   (use `lab-ubuntu.txt` on lab-ubuntu)
@@ -743,43 +750,6 @@ files guard their `brew shellenv` line, so shells stay quiet before it exists.
 
 Never append the installer's "Next steps" lines to `~/.bashrc` or `~/.zshrc`;
 the overlay already has them.
-
-### H1-gh-apt-repo: GitHub CLI apt repository
-
-Applies to `lab-ubuntu` (row `gh-apt`): its `.gitconfig_local` uses
-`!/usr/bin/gh auth git-credential` for github.com, so `/usr/bin/gh` must be the
-current GitHub CLI from cli.github.com, not Ubuntu's older package, which
-installs the same path. The doctor's `gh-apt` row and this step's check both
-run `/usr/bin/gh --version` against the `gh-apt` floor in `tools.tsv`, so
-Ubuntu's gh shows as `outdated` and the block stays pending. The Linuxbrew `gh`
-stays first on PATH; both share `~/.config/gh`.
-
-- **Check:** `/usr/bin/gh --version | head -n 1; apt-cache policy gh | grep -c cli.github.com`
-- **Install:** the printed sudo block. setup-host first downloads the apt
-  keyring through the `gh-apt` row of
-  [`installers.tsv`](../config/bootstrap/installers.tsv), checks it against the
-  sha256 GitHub publishes for it, and stages it under
-  `~/.cache/dotfiles-bootstrap/gh-apt` (or
-  `$XDG_CACHE_HOME/dotfiles-bootstrap/gh-apt`). The keyring holds GitHub's two
-  signing keys, `2C6106201985B60E6C7AC87323F3D4EA75716059` and
-  `7F38BBB59D064DBCB3D84D725612B36462313325` (`gpg --show-keys <file>` lists
-  them). The block writes the source list as you, then installs the keyring
-  with sudo only behind a digest gate on the pinned sha256; stop if that line
-  fails. Each line stands alone:
-
-  ```sh
-  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\n' "$(dpkg --print-architecture)" > ~/.cache/dotfiles-bootstrap/gh-apt/github-cli.list
-  printf '%s  %s\n' <sha256> ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg | sha256sum -c --status - && sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
-  sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/github-cli.list /etc/apt/sources.list.d/github-cli.list
-  sudo apt-get update
-  sudo apt-get install -y gh
-  ```
-
-  By hand: `f=$(fetch_pinned gh-apt)` checks the keyring's digest; then the
-  lines above with `"$f"` as the keyring.
-- **Verify:** `/usr/bin/gh --version` is at least the `gh-apt` floor in
-  `tools.tsv`; doctor row `gh-apt` is `ok`.
-- **Human:** yes (sudo: adds an apt signing key and source)
 
 ### H1-fcitx5: fcitx5 input method
 
@@ -1335,7 +1305,8 @@ interactive `claude` or `codex`.
     to upload the public key). Do not run `gh auth setup-git`: it writes
     `git config --global`, which goes through the stowed `~/.gitconfig` into
     `common/git/.gitconfig`. Hosts that need gh as a credential helper already
-    name it in their `.gitconfig_local` (lab-ubuntu, marlowe).
+    name it by full path in their `.gitconfig_local`: lab-ubuntu the Linuxbrew
+    gh, marlowe the login env's.
   - Claude Code: run `claude` once in a terminal, or `claude auth login`.
   - Codex: `codex login` (`codex login --device-auth` on a headless host).
   - Kerberos for Sherlock and Marlowe: `kinit <SUNetID>@stanford.edu` on the

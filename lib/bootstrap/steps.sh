@@ -35,7 +35,6 @@ H1-homebrew sudo - yes macos
 H1-apt-core sudo - yes debian
 H1-locale sudo - no debian
 H1-linuxbrew sudo - yes debian
-H1-gh-apt-repo sudo cli no lab-ubuntu
 H1-fcitx5 gui - no lab-ubuntu
 S2-brew-bundle auto - - macos,debian
 S2-micromamba auto core - hpc

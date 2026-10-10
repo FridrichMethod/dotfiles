@@ -187,7 +187,7 @@ row() {
     row login-tool core sherlock,marlowe doctor-login --version - 'login env tool missing' S2-login-env
     row lmod host sherlock,marlowe env:LMOD_DIR - - 'module is undefined' S2-modules
     row gh cli all gh --version 2.50.0 'gh fails' S2-brew-bundle
-    row gh-apt cli lab-ubuntu 'file:$HOME/.fake-gh-apt' --version 2.50.0 'credential helper fails' H1-gh-apt-repo
+    row file-tool cli lab-ubuntu 'file:$HOME/.fake-file-tool' --version 2.50.0 'file tool fails' X-host-tools
     row claude ai all claude --version - 'Claude Code is unavailable' S5-claude
     row codex ai all codex --version - 'Codex is unavailable' S5-codex
     row desk-tool desktop all doctor-absent-desktop - - 'no terminal' S6-kitty
@@ -227,10 +227,10 @@ write_fake "$TEST_HOME/.local/bin/doctor-local" <<'SH'
 printf 'doctor-local 2.0\n'
 SH
 printf 'theme\n' >"$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme"
-# An executable that a file: probe names, with a version floor (gh-apt).
-write_fake "$TEST_HOME/.fake-gh-apt" <<'SH'
+# An executable that a file: probe names, with a version floor (file-tool).
+write_fake "$TEST_HOME/.fake-file-tool" <<'SH'
 #!/bin/sh
-printf 'gh version %s\n' "${GH_APT_VERSION:-2.81.0}"
+printf 'file-tool version %s\n' "${FILE_TOOL_VERSION:-2.81.0}"
 SH
 ln -s ../fixture/common/zsh/.zshrc "$TEST_HOME/.zshrc"
 ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
@@ -569,12 +569,12 @@ run_doctor font-mac-missing BOOTSTRAP_UNAME_S=Darwin BOOTSTRAP_CLT_SHIMS= -- --h
 assert_row nerd-font missing
 
 # A file: probe of an executable reports its version against the floor, so
-# Ubuntu's own older /usr/bin/gh is outdated rather than ok.
+# an older executable at that path is outdated rather than ok.
 run_doctor file-version -- --host lab-ubuntu --tsv
-assert_row gh-apt ok "2.81.0 >= 2.50.0 at $TEST_HOME/.fake-gh-apt"
-run_doctor file-version-old GH_APT_VERSION=2.45.0 -- --host lab-ubuntu --tsv
+assert_row file-tool ok "2.81.0 >= 2.50.0 at $TEST_HOME/.fake-file-tool"
+run_doctor file-version-old FILE_TOOL_VERSION=2.45.0 -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row gh-apt outdated "2.45.0 < 2.50.0 at $TEST_HOME/.fake-gh-apt" 'docs/bootstrap.md H1-gh-apt-repo'
+assert_row file-tool outdated "2.45.0 < 2.50.0 at $TEST_HOME/.fake-file-tool" 'docs/bootstrap.md X-host-tools'
 
 run_doctor zsh-custom "ZSH_CUSTOM=$TEST_TMP/custom" -- --host lab-ubuntu --tsv
 assert_rc 1

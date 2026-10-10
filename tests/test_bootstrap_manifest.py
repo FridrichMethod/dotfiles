@@ -28,12 +28,12 @@ HUMANS = ("-", "sudo", "inspect")
 TOKENS = ("$HOME", "$ZSH_CUSTOM", "$NVM_DIR", "$XDG_CONFIG_HOME", "$XDG_DATA_HOME", "$BAT_CONFIG_DIR")
 STEP_IDS = (
     "P0-preflight", "H1-xcode-clt", "H1-homebrew", "H1-apt-core", "H1-locale", "H1-linuxbrew",
-    "H1-gh-apt-repo", "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env",
-    "S2-modules", "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S5-claude",
-    "S5-codex", "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-sync-skills",
-    "H7-doctor", "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync",
-    "HW-clone", "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl",
-    "HW-auth", "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
+    "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env", "S2-modules",
+    "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S5-claude", "S5-codex",
+    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-sync-skills", "H7-doctor",
+    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync", "HW-clone",
+    "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
+    "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
 # checks, doctor.ps1's core-symlinks, and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
@@ -58,12 +58,7 @@ REQUIRED_INSTALLERS = {
     ("nerd-font", "any"): ("archive", "lab-ubuntu", "desktop", "-", "$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont",
                            GH + "ryanoasis/nerd-fonts/releases/download/v*/CascadiaMono.tar.xz"),
     ("bat-theme", "any"): ("file", "all", "core", "-", "$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme",
-                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme"),
-    ("gh-apt", "any"): ("file", "lab-ubuntu", "cli", "sudo", "/etc/apt/keyrings/githubcli-archive-keyring.gpg",
-                        "https://cli.github.com/packages/githubcli-archive-keyring.gpg")}
-# Rows whose url names no version, because the vendor publishes one fixed url:
-# the sha256 alone pins them, and a changed file fails closed.
-UNVERSIONED_INSTALLERS = {("gh-apt", "any")}
+                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme")}
 for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64", "arm64")):
     REQUIRED_INSTALLERS[("micromamba", _arch)] = ("binary", "sherlock,marlowe", "core", "-", "$HOME/.local/bin/micromamba",
                                                   f"{GH}mamba-org/micromamba-releases/releases/download/*/micromamba-linux-{_mamba}")
@@ -272,7 +267,7 @@ def check_tools(rows, errors):
         report(errors, "probe", where, probe_error(row["probe"], row["hosts"]))
         report(errors, "vocab", where, flag not in VERSION_FLAGS and f"unknown version_flag {flag!r}")
         report(errors, "floor", where, floor != "-" and not FLOOR_RE.match(floor) and f"floor {floor!r} is not X.Y[.Z]")
-        # A file probe may name an executable (gh-apt's /usr/bin/gh), so it may have a version.
+        # A file probe may name an executable outside PATH, so it may have a version.
         presence = ":" in row["probe"] and not row["probe"].startswith("file:") and (flag != "-" or floor != "-")
         report(errors, "probe-version", where, presence and "dir, font, env and psmodule probes are presence-only")
         report(errors, "probe-version", where, floor != "-" and flag == "-" and "a floor needs a version_flag")
@@ -318,9 +313,7 @@ def check_installers(rows, tools, errors):
             report(errors, "sha256", where, sha != "-" and not SHA256_RE.match(sha) and "must be - or 64 lowercase hex")
         else:
             report(errors, "sha256", where, not SHA256_RE.match(sha) and "must be 64 lowercase hex (- only for inspect)")
-            unversioned = (row["id"], row["arch"]) in UNVERSIONED_INSTALLERS
-            report(errors, "installer-pin", where, not unversioned and not PINNED_URL_RE.search(url)
-                   and "url must name a commit or version")
+            report(errors, "installer-pin", where, not PINNED_URL_RE.search(url) and "url must name a commit or version")
         if row["kind"] == "script":
             report(errors, "installer-dest", where, dest != "-" and "scripts have dest -")
         else:
@@ -763,7 +756,6 @@ class RejectionTests(unittest.TestCase):
             ("installer-set", "kitty arch asset", self.installers("kitty", "url", lambda url: url.replace("x86_64", "arm64"))),
             ("installer-set", "nerd-font dest", self.installers("nerd-font", "dest", "$XDG_DATA_HOME/fonts")),
             ("installer-set", "bat-theme kind", self.installers("bat-theme", "kind", "archive")),
-            ("installer-set", "gh-apt keyring human", self.installers("gh-apt", "human", "-")),
             ("installer-pin", "unversioned url", self.installers("kitty", "url", "https://example.com/kitty.txz")),
         ])
 
