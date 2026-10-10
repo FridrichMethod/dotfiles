@@ -286,7 +286,9 @@ earlier steps installed; neither script writes this to an rc file, and the
 doctor's `path-order` check still judges the PATH you started it with.
 Downloads use `curl -fsSL --proto '=https' --tlsv1.2 --retry 3` into a `.part`
 file that must match the pinned sha256 before it is used; a mismatch deletes
-it and fails the step.
+it and fails the step. Without curl, pinned downloads fall back to `wget`,
+whose digest check still holds; the unpinned `inspect` download needs curl,
+because wget follows a redirect to plain http.
 
 | Exit | Meaning |
 | --- | --- |

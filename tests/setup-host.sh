@@ -1358,6 +1358,14 @@ fetch_case fetch-inspect "$CURL_ONLY" --inspect "$URL_CLAUDE" "$FETCH_DIR/claude
 expect_rc fetch-inspect 0
 cmp -s "$FIXTURES/artifacts/claude-install" "$FETCH_DIR/claude" || fail 'fetch --inspect'
 
+# wget follows a redirect to http, and nothing pins an inspect download, so
+# --inspect needs curl; it writes nothing without it.
+fetch_case fetch-inspect-wget "$WGET_ONLY" --inspect "$URL_CLAUDE" "$FETCH_DIR/inspect-wget/claude" -
+expect_rc fetch-inspect-wget 1
+expect_text fetch-inspect-wget err 'an unpinned download needs curl'
+expect_no_events fetch-inspect-wget
+[ ! -e "$FETCH_DIR/inspect-wget" ] || fail 'fetch --inspect without curl wrote files'
+
 fetch_case fetch-http "$CURL_ONLY" http://example.invalid/x "$FETCH_DIR/http" "$SHA_MICROMAMBA"
 expect_rc fetch-http 2
 expect_no_events fetch-http

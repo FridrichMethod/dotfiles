@@ -36,13 +36,16 @@ bootstrap_sha256() {
 }
 
 # bootstrap_fetch [--inspect] URL DEST SHA256: download the https URL to
-# DEST.part with curl (wget as the fallback), verify SHA256, then move it to
-# DEST. On a mismatch DEST.part is removed, DEST is left untouched, and the
-# expected and actual digests are reported. SHA256 "-" (an unpinnable vendor
-# script that a person reads before running) needs the explicit --inspect.
+# DEST.part with curl (wget as the fallback for pinned downloads), verify
+# SHA256, then move it to DEST. On a mismatch DEST.part is removed, DEST is
+# left untouched, and the expected and actual digests are reported. SHA256
+# "-" (an unpinnable vendor script that a person reads before running) needs
+# the explicit --inspect, and curl: curl's --proto =https also holds for
+# redirects, while wget follows a redirect to plain http (its --https-only
+# applies only to recursive downloads), which only a digest would catch.
 # Returns 0 on success, 1 on a download or digest failure, 2 on misuse.
 bootstrap_fetch() {
-    local inspect=0 url dest sha part actual
+    local inspect=0 url dest sha part actual fetcher
     if [ "${1:-}" = --inspect ]; then
         inspect=1
         shift
@@ -87,15 +90,25 @@ bootstrap_fetch() {
             ;;
     esac
 
-    mkdir -p -- "$(dirname -- "$dest")" || return 1
-    rm -f -- "$part" || return 1
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$part" "$url" </dev/null
+        fetcher=curl
+    elif [ "$inspect" = 1 ]; then
+        bootstrap_fetch_error "an unpinned download needs curl, whose --proto =https also covers redirects; cannot download $url"
+        return 1
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --https-only -O "$part" "$url" </dev/null
+        fetcher=wget
     else
         bootstrap_fetch_error "neither curl nor wget is installed; cannot download $url"
         return 1
+    fi
+
+    mkdir -p -- "$(dirname -- "$dest")" || return 1
+    rm -f -- "$part" || return 1
+    if [ "$fetcher" = curl ]; then
+        curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$part" "$url" </dev/null
+    else
+        # The sha256 check below is what protects a wget download.
+        wget -q -O "$part" "$url" </dev/null
     fi || {
         rm -f -- "$part"
         bootstrap_fetch_error "download failed: $url"
