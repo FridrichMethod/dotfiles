@@ -216,6 +216,7 @@ f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &
     cp "$f" "$d/Catppuccin Mocha.tmTheme" && bat cache --build    # S3-bat-theme
 mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 ./setup-sync.sh                                                    # S4-setup-sync
+# H7-stow: move aside each file Stow reports (mv -n ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt
 ./stow-all.sh                              # H7-stow without a host argument: common only
 # H7-sync-skills: decide before you open a new terminal
 exec zsh -l
@@ -227,9 +228,15 @@ exec zsh -l
 ### doctor.sh
 
 ```text
-./doctor.sh (--host H | --platform P) [--tier LIST] [--tsv] [--quiet] [--online] [--smoke]
-./doctor.sh --list | --help
+./doctor.sh [--host H | --platform P] [--tier LIST] [--tsv] [--quiet] [--online] [--smoke]
+./doctor.sh [--host H | --platform P] --list
+./doctor.sh --help
 ```
+
+`--list` resolves the host like every other mode: without `--host` or
+`--platform` it needs `DOTFILES_HOST` or a host `./stow-all.sh` recorded for
+this home, and exits 2 otherwise (for example in a fresh clone or a linked
+worktree).
 
 | Flag | Meaning |
 | --- | --- |
@@ -404,6 +411,15 @@ kind.
   HUMAN block runs a downloaded script only behind a digest gate: the pinned
   sha256, or for an `inspect` download the digest of the copy the person read,
   which later runs keep instead of downloading it again.
+- The pins cover what setup-host downloads and clones itself. What a package
+  manager installs follows that manager's own current version and trust:
+  Homebrew (`brew bundle`), apt, conda-forge (the login env, within the yml's
+  floors), winget (`winget.json` names packages, not versions), PSGallery
+  (W1-psresources runs `Install-PSResource -TrustRepository -AcceptLicense`
+  for the current PSFzf, CompletionPredictor and
+  Microsoft.WinGet.CommandNotFound, skipping PSGallery's untrusted-repository
+  prompt) and oh-my-posh's font installer (W1-font fetches the current Nerd
+  Fonts release, while S6-nerd-font on Linux uses a pinned archive).
 - Everything a person must do ends up in a HUMAN block; exit 3 means work
   remains: a blocking block is pending, or automatic steps are still to apply.
 
@@ -1297,7 +1313,8 @@ PowerShell 7 profile uses only when present.
 
 - **Check:** `Get-InstalledPSResource PSFzf, CompletionPredictor, Microsoft.WinGet.CommandNotFound`
 - **Install:** automatic via setup-host.ps1, only for the missing ones, one at
-  a time with `Install-PSResource -Name <module> -Scope CurrentUser -TrustRepository -AcceptLicense`.
+  a time with `Install-PSResource -Name <module> -Scope CurrentUser -TrustRepository -AcceptLicense`:
+  the current PSGallery version, not a pin (see [Guarantees](#guarantees)).
   By hand:
   `Install-PSResource -Name PSFzf, CompletionPredictor, Microsoft.WinGet.CommandNotFound -Scope CurrentUser`
   (PSGallery is untrusted by default, so a manual run asks to confirm).
@@ -1309,7 +1326,9 @@ PowerShell 7 profile uses only when present.
 Runs only when oh-my-posh is installed (W1-winget).
 
 - **Check:** `Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Windows\Fonts", "$env:WINDIR\Fonts" -Filter 'CaskaydiaMono*' -ErrorAction Ignore`
-- **Install:** automatic via setup-host.ps1: `oh-my-posh font install CascadiaMono`
+- **Install:** automatic via setup-host.ps1: `oh-my-posh font install CascadiaMono`,
+  which fetches the current Nerd Fonts release, unpinned (see
+  [Guarantees](#guarantees)).
 - **Verify:** the check lists the font files; restart Windows Terminal and WezTerm.
 - **Human:** no
 
@@ -1495,9 +1514,11 @@ quick start runs them as one sequence.
 
 `~/.zshrc`, `~/.bashrc`, `~/.profile` and `~/.gitconfig` are Stow symlinks, so
 anything a third-party installer appends lands in `common/` and dirties the
-checkout. The doctor's `rc-pollution` check looks for `~/.zshrc.pre-oh-my-zsh`,
-a `# >>> Codex installer >>>` block and duplicated conda blocks. Keep every
-installer away from rc files:
+checkout. The doctor's `rc-pollution` check reports `human` for
+`~/.zshrc.pre-oh-my-zsh`, and for a `# >>> Codex installer >>>` block, any
+conda or mamba initialize block or an nvm loader in a `common/` rc file, and
+`warn` for other uncommitted changes under `common/`. Keep every installer away
+from rc files:
 
 - nvm: `PROFILE=/dev/null`.
 - uv's standalone installer: `UV_NO_MODIFY_PATH=1` (the bootstrap installs uv

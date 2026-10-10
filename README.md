@@ -35,6 +35,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 ```
 
 ```powershell
+# new machine: .\doctor.ps1 and .\setup-host.ps1 first (docs/bootstrap.md Native Windows)
 .\setup-sync.ps1          # once per clone; Python 3.11+
 .\stow-all.ps1 win         # native Windows (elevated PowerShell 7+)
 ```
@@ -157,14 +158,18 @@ For an agent started outside the clone, paste the [prompt in docs/bootstrap.md](
 
 ### On Windows
 
-GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead — same layering, same `.stowrc` ignores, same idempotency. Run it from an **elevated** PowerShell 7+:
+GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead — same layering, same `.stowrc` ignores, same idempotency. Turn on Developer Mode first (Settings > System > For developers), so Git can create the tracked symlinks, then clone with `core.symlinks` and run `stow-all.ps1` from an **elevated** PowerShell 7+:
 
 ```powershell
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
+git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
-.\setup-sync.ps1         # Python 3.11+; isolated environment inside this clone
-.\stow-all.ps1 win        # add -WhatIf for a dry run
+.\doctor.ps1 -Host win        # read-only: what is missing or outdated
+.\setup-host.ps1 -Host win    # a new machine: winget tools, modules, font, bat theme and .venv-sync; prints the HW-* blocks
+.\setup-sync.ps1              # an existing machine instead: Python 3.11+; isolated environment inside this clone
+.\stow-all.ps1 win            # elevated; add -WhatIf for a dry run
 ```
+
+The [Native Windows quick start](docs/bootstrap.md#native-windows) has the full order, including the HW-* steps that need a person.
 
 Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point at a file inside ext4. A WSL distro keeps its own clone and uses `./stow-all.sh wsl-ubuntu` as usual.
 
