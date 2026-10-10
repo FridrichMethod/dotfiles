@@ -805,7 +805,7 @@ class RejectionTests(unittest.TestCase):
     def test_coverage_and_declarations(self):
         self.check([
             ("coverage", "alias removed", lambda: self.replace("tools.tsv", "# alias: fzf junegunn.fzf\n", "")),
-            ("coverage", "manual removed", lambda: self.replace("tools.tsv", "# manual: claude hpc\n", "")),
+            ("coverage", "manual removed", lambda: self.replace("tools.tsv", "# manual: col macos,hpc\n", "")),
             ("coverage", "brew entry removed", lambda: self.replace("brew/cli.Brewfile", 'brew "jq"\n', "")),
             ("coverage", "login node removed", lambda: self.replace("tools.tsv", "# alias: node nodejs\n", "")),
             ("declaration", "malformed", lambda: self.append("tools.tsv", "# alias: fzf\n")),

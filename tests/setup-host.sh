@@ -1142,6 +1142,11 @@ expect_line hpc-login 'sh_dev -t 1:00:00'
 expect_text hpc-login out 'S2-login-env todo blocked by H2-alloc'
 expect_text hpc-login out 'S4-setup-sync todo blocked by S2-login-env'
 expect_line hpc-login 'HUMAN-BEGIN S2-modules judgment'
+# No site module provides claude or codex here, so H7-auth does not name them.
+expect_line hpc-login 'HUMAN-BEGIN H7-auth auth'
+expect_line hpc-login 'kinit'
+expect_no_text hpc-login out 'codex login'
+expect_no_text hpc-login out '# Claude Code signs in'
 [ -x "$CASE_HOME/.local/bin/micromamba" ] || fail 'micromamba not installed'
 [ "$(sha "$CASE_HOME/.local/bin/micromamba")" = "$SHA_MICROMAMBA" ] || fail 'micromamba digest'
 

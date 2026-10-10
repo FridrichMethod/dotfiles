@@ -251,8 +251,8 @@ Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides th
 `submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order` and
 `nvm-homebrew`. The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
-Brewfile rows point at S2-login-env, nvm/Claude/Codex rows at S2-modules and
-the locale check at P0-preflight; on `macos` the apt rows (git-lfs, tmux and
+Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
+locale check at P0-preflight (`claude` and `codex` are not checked there); on `macos` the apt rows (git-lfs, tmux and
 the macOS baseline tools) point at S2-brew-bundle; under `--platform other`
 every apt, Homebrew, Brewfile, nvm, Claude, Codex and locale reference points
 at X-other-linux; on `windows` they point at the `W1-*` and `HW-*` steps (git
@@ -847,10 +847,13 @@ and would take the login shell with it. A package cache there is fine.
 
 ### S2-modules: HPC modules and manual AI CLIs
 
-Applies to `sherlock` and `marlowe`, and is where the doctor points for `nvm`,
-`node`, `claude` and `codex` on hpc. There is no installer for this step: the
-cluster provides Lmod. Sherlock's overlay zsh rc pins the modules it loads;
-Marlowe's only initialises Lmod and loads none.
+Applies to `sherlock` and `marlowe`, and is where the doctor points for
+`node` on hpc. There is no installer for this step: the cluster provides Lmod.
+Sherlock's overlay zsh rc pins the modules it loads; Marlowe's only
+initialises Lmod and loads none. Claude Code and Codex come only from optional
+site modules here, so `tools.tsv` does not check them on hpc and the
+completion gate does not depend on them; setup-host prints this block while
+they are not on PATH, and H7-auth names them only once they are.
 
 - **Check:** `echo "$LMOD_DIR"; ml spider claude-code codex pi-coding-agent; node --version`
 - **Install:** none; `ml <module>` in your own session, or the overlay line for
@@ -1461,8 +1464,8 @@ Debian machine that is neither WSL nor the lab desktop can use
 overlay, so its four platform-neutral steps are done by hand; the Other Linux
 quick start runs them as one sequence.
 
-- **Check:** `./doctor.sh --platform other` (its apt, Homebrew, nvm, Claude,
-  Codex and locale references all point here)
+- **Check:** `./doctor.sh --platform other` (its apt, Homebrew, Brewfile, nvm
+  and locale references all point here)
 - **Install:** with the distribution's package manager, the equivalents of
   [`apt/common.txt`](../config/bootstrap/apt/common.txt) and the Brewfile tools,
   meeting every floor in [`tools.tsv`](../config/bootstrap/tools.tsv) (distro
@@ -1477,12 +1480,12 @@ quick start runs them as one sequence.
   S3-bat-theme; `mkdir -p ~/.vim/undo ~/.vim/tmp` (S3-dirs); `./setup-sync.sh`
   (S4-setup-sync). Finally `./stow-all.sh` with no host.
 - **Install, `ai` tier:** the default tiers also check `node` (at the floor in
-  `tools.tsv`), `claude` and `codex`. Node: the by-hand recipe of
-  [S4-nvm](#s4-nvm-nvm-and-nodejs), or the distribution's Node.js if it meets
-  the floor. Claude Code: `f=$(fetch_pinned claude)`, read it, then `bash "$f"`
-  ([S5-claude](#s5-claude-claude-code)). Codex: the by-hand recipe of
-  [S5-codex](#s5-codex-codex-cli). Until then, `./doctor.sh --platform other --tier core,cli`
-  checks the rest.
+  `tools.tsv`, for the Claude Code hooks and status line): the by-hand recipe
+  of [S4-nvm](#s4-nvm-nvm-and-nodejs), or the distribution's Node.js if it
+  meets the floor. Claude Code and Codex are optional here and not checked; to
+  add them, `f=$(fetch_pinned claude)`, read it, then `bash "$f"`
+  ([S5-claude](#s5-claude-claude-code)), and the by-hand recipe of
+  [S5-codex](#s5-codex-codex-cli).
 - **Verify:** `./doctor.sh --platform other --smoke` exits 0.
 - **Human:** yes (sudo: distribution packages)
 

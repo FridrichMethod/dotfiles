@@ -151,8 +151,8 @@ prints) appear at the start of the When absent cell.
 | --- | --- | --- | --- | --- | --- | --- |
 | `nvm` | mac, wsl-ubuntu, lab-ubuntu | pinned `nvm` | pinned `nvm` | - | - | no default node on PATH and no nvm function |
 | `node` | all | nvm `lts/*` | nvm `lts/*` | marlowe: login env `nodejs`; sherlock: Lmod `nodejs/24.13.0` | winget `OpenJS.NodeJS.LTS` | >= 22.0. Claude hooks and the status line fail |
-| `claude` | all | cask `claude-code` | pinned `claude` (inspect) | manual (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
-| `codex` | all | cask `codex` | pinned `codex` (codex-package) | manual (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
+| `claude` | mac, wsl-ubuntu, lab-ubuntu, win | cask `claude-code` | pinned `claude` (inspect) | not checked: optional site module (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
+| `codex` | mac, wsl-ubuntu, lab-ubuntu, win | cask `codex` | pinned `codex` (codex-package) | not checked: optional site module (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
 
 ### Desktop tier
 

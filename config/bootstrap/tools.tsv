@@ -74,9 +74,11 @@ xclip	cli	lab-ubuntu	xclip	-	-	fzf Ctrl-Y cannot copy to the X clipboard	H1-apt-
 wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	H1-apt-core
 nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
 node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
-claude	ai	all	claude	--version	-	Claude Code is unavailable	S5-claude
+# Claude Code and Codex are not checked on sherlock and marlowe: there they come from optional site
+# modules (S2-modules), so the hpc completion gate cannot depend on them.
+claude	ai	mac,wsl-ubuntu,lab-ubuntu,win	claude	--version	-	Claude Code is unavailable	S5-claude
 # Presence-only: `codex --version` writes $CODEX_HOME/tmp/arg0 once ~/.codex exists.
-codex	ai	all	codex	-	-	Codex is unavailable	S5-codex
+codex	ai	mac,wsl-ubuntu,lab-ubuntu,win	codex	-	-	Codex is unavailable	S5-codex
 kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the stowed kitty.conf has no terminal to configure	S6-kitty
 wezterm	desktop	mac,win	wezterm	-	-	the stowed .wezterm.lua has no terminal to configure	S2-brew-bundle
 nerd-font	desktop	mac,lab-ubuntu,win	font:CaskaydiaMono Nerd Font	-	-	prompt, eza and terminal icons render as boxes	S6-nerd-font
@@ -160,7 +162,5 @@ lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so over
 # alias: node nodejs
 # alias: claude claude-code
 # alias: claude Anthropic.ClaudeCode
-# manual: claude hpc
 # alias: codex OpenAI.Codex
-# manual: codex hpc
 # alias: shfmt go-shfmt

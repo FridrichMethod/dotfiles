@@ -258,8 +258,10 @@ step_H2_alloc_plan() {
 
 # --- S2-modules (hpc, judgment, reminder) ----------------------------------
 
+# tools.tsv does not check claude and codex on a cluster (they are optional
+# site modules), so this reminder looks them up on PATH itself.
 step_S2_modules_check() {
-    if steps_probe claude && steps_probe codex; then
+    if command -v claude >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
         STEP_DETAIL='claude and codex are on PATH'
         return 0
     fi
@@ -503,17 +505,30 @@ step_H7_auth_check() {
     return 1
 }
 
+# On a cluster the AI CLIs exist only when a site module provides them
+# (S2-modules), so their sign-in lines are printed only for those on PATH;
+# --print-manual names them with that condition.
 step_H7_auth_plan() {
+    local claude=1 codex=1
+    if [ "$STEPS_PROFILE" = hpc ] && [ "$STEPS_MODE" != manual ]; then
+        command -v claude >/dev/null 2>&1 || claude=0
+        command -v codex >/dev/null 2>&1 || codex=0
+    fi
     steps_block_begin H7-auth auth
     if [ "$STEPS_MODE" = manual ] || [ ! -f "$HOME/.ssh/id_ed25519" ]; then
         printf '%s\n' 'ssh-keygen -t ed25519'
     fi
     printf '%s\n' 'gh auth login --git-protocol ssh' \
-        '# do not run gh auth setup-git: it writes the stowed ~/.gitconfig; .gitconfig_local sets the helper' \
-        '# Claude Code signs in on its first interactive run' \
-        'claude' \
-        '# add --device-auth on a host without a browser' \
-        'codex login'
+        '# do not run gh auth setup-git: it writes the stowed ~/.gitconfig; .gitconfig_local sets the helper'
+    if [ "$STEPS_PROFILE" = hpc ] && [ "$STEPS_MODE" = manual ]; then
+        printf '%s\n' '# claude and codex only where a site module provides them (S2-modules)'
+    fi
+    if [ "$claude" = 1 ]; then
+        printf '%s\n' '# Claude Code signs in on its first interactive run' 'claude'
+    fi
+    if [ "$codex" = 1 ]; then
+        printf '%s\n' '# add --device-auth on a host without a browser' 'codex login'
+    fi
     if [ "$STEPS_PROFILE" = hpc ]; then
         printf '%s\n' 'kinit'
     fi
