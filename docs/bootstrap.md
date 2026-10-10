@@ -206,7 +206,7 @@ and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-
 into your shell first:
 
 ```sh
-# with your package manager: git zsh curl rsync tar file tmux man, python3 >= 3.11, GNU Stow >= 2.3.1,
+# with your package manager: git zsh curl rsync tar file tmux man ssh, python3 >= 3.11, GNU Stow >= 2.3.1,
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
@@ -724,7 +724,10 @@ Applies to `wsl-ubuntu` and `lab-ubuntu`: the packages in
 `wslview`, libnotify-bin for `notify-send`) or
 [`apt/lab-ubuntu.txt`](../config/bootstrap/apt/lab-ubuntu.txt) (xclip,
 wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
-git-lfs, tmux, man, locales, build tools) and Python: `python3` and
+git-lfs, tmux, man, locales, build tools, and `openssh-client` for the
+`ssh`, `ssh-agent` and `ssh-keygen` that the stowed `~/.ssh` config, the
+overlays' ssh-agent plugin and [H7-auth](#h7-auth-authentication) need; a
+minimal Ubuntu has none of them) and Python: `python3` and
 `python3-venv` meet the 3.11 floor of setup-sync (Ubuntu 24.04 ships 3.12), so
 no Linuxbrew python is bundled ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
 The interactive tools come from

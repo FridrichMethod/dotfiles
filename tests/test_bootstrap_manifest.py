@@ -68,8 +68,8 @@ for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64",
                                              f"{GH}kovidgoyal/kitty/releases/download/v*/kitty-*-{_kitty}.txz")
 BREW_TIERS = ("core", "cli", "ai", "desktop", "contributor")
 APT_COMMON = ("zsh", "git", "git-lfs", "curl", "rsync", "tar", "file", "procps", "build-essential",
-              "gnupg", "python3", "python3-venv", "python3-pip", "tmux", "bsdextrautils", "man-db",
-              "locales", "ca-certificates", "unzip", "xz-utils", "fontconfig")
+              "gnupg", "openssh-client", "python3", "python3-venv", "python3-pip", "tmux",
+              "bsdextrautils", "man-db", "locales", "ca-certificates", "unzip", "xz-utils", "fontconfig")
 APT_HOST_REQUIRED = {"wsl-ubuntu": ("wslu", "libnotify-bin"), "lab-ubuntu": ("xclip", "wl-clipboard", "fcitx5")}
 LOGIN_REQUIRED = ("python", "zsh", "git", "git-lfs", "gh", "stow", "tmux", "rsync", "curl", "fzf",
                   "zoxide", "eza", "bat", "fd-find", "ripgrep", "nvim", "jq", "tealdeer", "aria2",
