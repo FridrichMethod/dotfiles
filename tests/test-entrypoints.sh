@@ -49,7 +49,7 @@ else
 fi
 
 # Every entry point drops the same dotfiles knobs, tests/run.ps1 too, and the
-# list names every DOTFILES_* and AWESOME_SKILLS_* variable the scripts read
+# list names every DOTFILES_* and AWESOME_SKILLS_* variable the code can read
 # (but DOTFILES_SYNC_PYTHON, which tests/run.sh provisions), so a shell that
 # exports DOTFILES_AUTO_UPDATE=0 while provisioning cannot fail a suite.
 REPO_ROOT="$(cd -- "$TEST_DIR/.." && pwd)"
@@ -75,18 +75,23 @@ if [[ "$PS_KNOBS" != "$KNOBS" ]]; then
     printf 'ERROR: tests/run.ps1 does not remove the dotfiles knobs that tests/run.sh unsets.\n' >&2
     exit 1
 fi
-READ_KNOBS=$(
-    cd "$REPO_ROOT" &&
-        grep -ohE '\$\{?_?(DOTFILES|AWESOME_SKILLS)_[A-Z_]+|\$env:_?(DOTFILES|AWESOME_SKILLS)_[A-Za-z_]+' \
-            doctor.sh setup-host.sh stow-all.sh stow-all.ps1 doctor.ps1 setup-host.ps1 \
-            scripts/*.sh scripts/*.ps1 lib/*.sh lib/*.ps1 lib/bootstrap/*.sh common/sh/.profile \
-            common/zsh/.zshrc win/powershell/Documents/PowerShell/profile.ps1 |
-        sed -E 's/^\$(\{|env:)?//' | LC_ALL=C sort -u
-)
+# The names come from every tracked file outside tests/, docs/, .github/ and
+# Markdown, whatever reads them: $NAME and ${NAME in shell, $env:NAME,
+# Env:NAME and GetEnvironmentVariable('NAME') in PowerShell, os.environ in
+# Python. A name embedded in a longer identifier does not count.
+if ! KNOB_NAMES=$(git -C "$REPO_ROOT" -c grep.lineNumber=false -c grep.column=false \
+    grep -I -h -o --no-color -E '(^|[^A-Za-z0-9_])_?(DOTFILES|AWESOME_SKILLS)_[A-Z_]+' \
+    -- ':!tests' ':!docs' ':!.github' ':!*.md'); then
+    printf 'ERROR: git grep found no DOTFILES_* or AWESOME_SKILLS_* name in %s.\n' "$REPO_ROOT" >&2
+    exit 1
+fi
+READ_KNOBS=$(printf '%s\n' "$KNOB_NAMES" | sed -E 's/^[^A-Z_]//' | LC_ALL=C sort -u)
 for knob in $READ_KNOBS; do
-    [[ "$knob" != DOTFILES_SYNC_PYTHON ]] || continue
+    case $knob in
+        DOTFILES_SYNC_PYTHON | DOTFILES_TEST_*) continue ;;
+    esac
     if ! grep -Fxq -- "$knob" <<<"$KNOBS"; then
-        printf 'ERROR: the scripts read %s, which the test entry points do not unset.\n' "$knob" >&2
+        printf 'ERROR: tracked code reads %s, which the test entry points do not unset.\n' "$knob" >&2
         exit 1
     fi
 done

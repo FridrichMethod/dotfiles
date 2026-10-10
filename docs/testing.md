@@ -29,9 +29,10 @@ session markers. The bootstrap playbook tells people to export
 test or `pre-commit run` started from such a shell must behave as in CI; each
 case sets the knobs it exercises. `tests/test-entrypoints.sh` checks that every
 entry point carries the same list, that it covers every `DOTFILES_*` and
-`AWESOME_SKILLS_*` variable the scripts read (`DOTFILES_SYNC_PYTHON` excepted,
-since `tests/run.sh` provisions it), and that a suite passes under those
-exports.
+`AWESOME_SKILLS_*` name in a tracked file outside `tests/`, `docs/`,
+`.github/` and Markdown, whatever reads it (shell, PowerShell or Python;
+`DOTFILES_SYNC_PYTHON` excepted, since `tests/run.sh` provisions it), and that
+a suite passes under those exports.
 
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
 runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
