@@ -1097,23 +1097,39 @@ with a relative `codex -> bin/codex` link inside,
 
 - **Check:** `codex --version; readlink ~/.local/bin/codex`
 - **Install:** automatic via setup-host.sh. By hand (version and target come
-  from the package's own `codex-package.json`):
+  from the package's own `codex-package.json`), as one block: the subshell
+  stops at the first failing command (`set -eu`) and refuses an empty or
+  path-like version or target, so a failed download, unpack or JSON read never
+  repoints `current` at `releases/` itself or removes a working install:
 
   ```sh
-  f=$(fetch_pinned codex "$(uname -m)")
-  dest=$HOME/.codex/packages/standalone
-  mkdir -p "$dest/releases" ~/.local/bin
-  tmp=$(mktemp -d "$dest/.extract.XXXXXX")
-  tar -C "$tmp" -xzf "$f"
-  rel=$(python3 -I -c 'import json, sys; p = json.load(open(sys.argv[1])); print(p["version"] + "-" + p["target"])' "$tmp/codex-package.json")
-  if [ -d "$dest/releases/$rel" ]; then
-      rm -rf "$tmp"    # this release is already unpacked
-  else
-      ln -s bin/codex "$tmp/codex"
-      mv "$tmp" "$dest/releases/$rel"
-  fi
-  ln -sfn "$dest/releases/$rel" "$dest/current"
-  ln -sfn "$dest/current/bin/codex" ~/.local/bin/codex
+  (
+      set -eu
+      f=$(fetch_pinned codex "$(uname -m)")
+      dest=$HOME/.codex/packages/standalone
+      mkdir -p "$dest/releases" "$HOME/.local/bin"
+      tmp=$(mktemp -d "$dest/.extract.XXXXXX")
+      trap 'rm -rf "$tmp"' EXIT    # gone once moved into releases/
+      tar -C "$tmp" -xzf "$f"
+      ver=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$tmp/codex-package.json")
+      tgt=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["target"])' "$tmp/codex-package.json")
+      for name in "$ver" "$tgt"; do
+          case $name in
+              '' | .* | *[!A-Za-z0-9._-]*)
+                  echo "codex-package.json: unusable version or target [$ver] [$tgt]" >&2
+                  exit 1
+                  ;;
+          esac
+      done
+      test -x "$tmp/bin/codex"
+      rel=$dest/releases/$ver-$tgt
+      if [ ! -d "$rel" ]; then    # else this release is already unpacked
+          ln -s bin/codex "$tmp/codex"
+          mv "$tmp" "$rel"
+      fi
+      ln -sfn "$rel" "$dest/current"
+      ln -sfn "$dest/current/bin/codex" "$HOME/.local/bin/codex"
+  )
   ```
 
 - **Verify:** `codex --version` reports the release named in `installers.tsv`.
