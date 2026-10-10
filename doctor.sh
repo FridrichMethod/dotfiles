@@ -250,6 +250,9 @@ while [[ -n "$lines" ]]; do
     SEEN_IDS="$SEEN_IDS$id "
 done
 ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
+# The row fields bootstrap_split assigns by name below, declared so a lint of
+# this file alone (a pre-commit run without the libraries) sees them.
+probe='' flag='' floor='' absent='' doc=''
 
 # A fresh Homebrew's bin, ~/.local/bin (micromamba, codex, claude, kitty)
 # and, on hpc, the login env's bin stay off PATH until the stowed rc files
