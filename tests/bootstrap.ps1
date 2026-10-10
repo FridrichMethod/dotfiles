@@ -854,6 +854,13 @@ try {
         [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
         Add-Content -LiteralPath $tools -Value "bad`tcore`twin`turl:x`t-`t-`tbroken`tW1-winget"
         Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{}) 2 'unknown probe kind'
+        foreach ($case in @(@('core-symlinks', 'is reserved for a doctor check'), @('git', 'repeats id'))) {
+            [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
+            Add-Content -LiteralPath $tools -Value "$($case[0])`tcore`twin`tgit`t-`t-`tbroken`tHW-clone"
+            $run = Invoke-Fixture $fixture doctor.ps1 @{}
+            Assert-Exit $run 2 "tools.tsv id $($case[0])"
+            Assert-True ($run.Stdout.Contains($case[1])) "id $($case[0]) message: $($run.Stdout)"
+        }
     }
 
     Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 only for blocking HUMAN steps' {

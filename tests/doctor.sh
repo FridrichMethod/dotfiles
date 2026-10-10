@@ -841,6 +841,9 @@ row git core all,fedora git --version - x P0-preflight |
     row git cli all git --version - x P0-preflight
 } | bad_manifest duplicate 'duplicate id git'
 row locale core all locale - - x H1-locale | bad_manifest reserved 'id locale is reserved for a doctor check'
+row core-symlinks core all git - - x P0-preflight |
+    bad_manifest reserved-windows 'id core-symlinks is reserved for a doctor check'
+row zsh-smoke core all zsh - - x P0-preflight | bad_manifest reserved-smoke 'id zsh-smoke is reserved for a doctor check'
 row git core all git --version 1.x x P0-preflight | bad_manifest floor "invalid floor '1.x'"
 # shellcheck disable=SC2016 # manifest tokens are literal
 row rc core all 'file:$PWD/.zshrc' - - x P0-preflight | bad_manifest token 'cannot be expanded'

@@ -34,8 +34,11 @@ STEP_IDS = (
     "H7-doctor", "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync",
     "HW-clone", "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl",
     "HW-auth", "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
+# Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
+# checks, doctor.ps1's core-symlinks, and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
-                "omz-order", "nvm-homebrew")
+                "omz-order", "nvm-homebrew", "core-symlinks", "gh-auth", "claude-auth", "codex-auth",
+                "zsh-smoke")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
@@ -258,7 +261,7 @@ def check_tools(rows, errors):
     for row in rows:
         where, flag, floor = f"tools.tsv:{row.line}", row["version_flag"], row["floor"]
         report(errors, "vocab", where, not ID_RE.match(row["id"]) and f"bad id {row['id']!r}")
-        report(errors, "reserved-id", where, row["id"] in RESERVED_IDS and f"{row['id']} is a structural check")
+        report(errors, "reserved-id", where, row["id"] in RESERVED_IDS and f"{row['id']} is a doctor check id")
         report(errors, "vocab", where, row["tier"] not in TIERS and f"unknown tier {row['tier']!r}")
         report(errors, "vocab", where, hosts_error(row["hosts"]))
         report(errors, "probe", where, probe_error(row["probe"], row["hosts"]))
@@ -662,6 +665,9 @@ class RejectionTests(unittest.TestCase):
             ("vocab", "installer arch", self.installers("nvm", "arch", "arm64")),
             ("vocab", "installer human", self.installers("nvm", "human", "maybe")),
             ("reserved-id", "locale", self.tools("fzf", "id", "locale")),
+            ("reserved-id", "online row", self.tools("fzf", "id", "gh-auth")),
+            ("reserved-id", "smoke row", self.tools("fzf", "id", "zsh-smoke")),
+            ("reserved-id", "windows check", self.tools("pwsh", "id", "core-symlinks")),
         ])
 
     def test_probes_versions_and_floors(self):

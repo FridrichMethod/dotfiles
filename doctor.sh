@@ -214,9 +214,10 @@ header=$(awk '/^#/ { next } /^[ \t\r]*$/ { next } { print; exit }' "$TOOLS_TSV")
 [[ "$header" == "$TOOLS_HEADER" ]] || invalid_manifest 'the header is not: id tier hosts probe version_flag floor absent doc'
 ALL_ROWS=$(bootstrap_rows "$TOOLS_TSV") || invalid_manifest 'unreadable'
 [[ -n "$ALL_ROWS" ]] || invalid_manifest 'no data rows'
-# Ids that tools.tsv must not use: the --online and --smoke rows and the
-# structural checks.
-RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke '
+# Ids that tools.tsv must not use: the --online and --smoke rows, doctor.ps1's
+# core-symlinks and the structural checks (tests/test_bootstrap_manifest.py
+# RESERVED_IDS is the same list).
+RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke core-symlinks '
 while IFS=' ' read -r id _ <&3; do
     [[ -z "$id" ]] || RESERVED_IDS="$RESERVED_IDS$id "
 done 3<<EOF

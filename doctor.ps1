@@ -91,6 +91,11 @@ function New-DoctorResult {
 }
 
 $FailingStatuses = @('missing', 'outdated', 'human')
+# Ids the doctors report besides tools.tsv rows (doctor.sh's structural
+# checks, core-symlinks, the -Online and --smoke rows); tools.tsv never uses
+# them (tests/test_bootstrap_manifest.py RESERVED_IDS).
+$ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
+    'nvm-homebrew', 'core-symlinks', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.
@@ -109,6 +114,7 @@ function Assert-DoctorToolRow {
         ($Row.floor -ceq '-' -or $Row.floor -cmatch '^[0-9]+\.[0-9]+(\.[0-9]+)?$') -and
         $Row.doc -cmatch '^[A-Za-z0-9-]+$'
     if (-not $valid) { throw [IO.InvalidDataException]::new("Invalid tools.tsv row '$($Row.id)'") }
+    if ($Row.id -cin $ReservedIds) { throw [IO.InvalidDataException]::new("tools.tsv id '$($Row.id)' is reserved for a doctor check") }
     [void](Get-BootstrapProbe $Row.probe)
 }
 
@@ -236,7 +242,11 @@ function Invoke-BootstrapDoctor {
     try {
         $rows = @(Get-BootstrapManifestRows -Path (Join-Path $RepoRoot 'config/bootstrap/tools.tsv') -Header $ToolHeader |
                 Where-Object { Test-BootstrapHostMatch $_.hosts $canonicalHost })
-        foreach ($row in $rows) { Assert-DoctorToolRow $row }
+        $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($row in $rows) {
+            Assert-DoctorToolRow $row
+            if (-not $seen.Add($row.id)) { throw [IO.InvalidDataException]::new("tools.tsv repeats id '$($row.id)'") }
+        }
         if (-not $Tsv -and -not $Quiet) { Write-DotfilesLog step "Checking host win (windows); required tiers: $Tier" }
         foreach ($row in $rows) { $results.Add((Get-DoctorToolResult $row $Tier)) }
     }
