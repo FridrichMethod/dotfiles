@@ -33,7 +33,9 @@ tmux	core	unix	tmux	-V	-	fzf --tmux popups and tmux sessions are unavailable	H1-
 # doctor and setup-host first prepend the directory of bootstrap_brew_bin
 # (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to
 # their own PATH; the brew probe and every Brewfile tool probe rely on that.
-homebrew	core	mac	brew	--version	-	Brewfile bundles cannot run	H1-homebrew
+# The brew probe is presence-only: `brew --version` can rewrite
+# $HOMEBREW_REPOSITORY/.git/describe-cache, and the doctor writes nothing.
+homebrew	core	mac	brew	-	-	Brewfile bundles cannot run	H1-homebrew
 linuxbrew	core	wsl-ubuntu,lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/brew	-	-	Brewfile bundles cannot run and the overlay brew shellenv line fails	H1-linuxbrew
 python3	core	all	python3,python	--version	3.11	setup-sync and the AI config sync helpers cannot run	S2-brew-bundle
 stow	core	unix	stow	--version	2.3.1	stow-all.sh refuses to run	S2-brew-bundle

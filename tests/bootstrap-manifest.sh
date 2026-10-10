@@ -523,6 +523,10 @@ assert_eq "$(bootstrap_brewfiles core,cli,ai | sed 's#.*/##' | tr '\n' ' ')" \
     'core.Brewfile cli.Brewfile ai.Brewfile ' 'default-tier Brewfiles'
 assert_eq "$(bootstrap_expand_path "$(bootstrap_field "$(bootstrap_installer_row bat-theme mac any)" 5)")" \
     "$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" 'bat theme destination'
+# The doctor writes nothing, and `brew --version` can rewrite Homebrew's
+# .git/describe-cache, so a row that probes brew is presence-only.
+bad=$(bootstrap_rows "$BOOTSTRAP_CONFIG/tools.tsv" | awk -F '\t' '$4 ~ /(^|,)brew(,|$)/ && $5 != "-"')
+[ -z "$bad" ] || fail "tools.tsv runs brew for its version: $bad"
 assert_events
 
 # ----------------------------------------------------------- validator
