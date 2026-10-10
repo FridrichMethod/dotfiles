@@ -1,7 +1,9 @@
 # shellcheck shell=bash
-# Doctor checks for doctor.sh. Sourced only; defines functions and changes no
-# shell options. Bash 3.2 compatible and `set -u` safe; every split sets its
-# own IFS, and no here-document creates a temporary file (see manifest.sh).
+# Doctor checks for doctor.sh; setup-host.sh's S2-brew-bundle judges a
+# Brewfile entry with bootstrap_check_tool too. Sourced only; defines
+# functions and changes no shell options. Bash 3.2 compatible and `set -u`
+# safe; every split sets its own IFS, and no here-document creates a
+# temporary file (see manifest.sh).
 # Each check prints one line, STATUS<TAB>DETAIL, and returns 0; doctor.sh
 # maps STATUS through the tier selection to a log level.
 #   ok        present (and at or above its floor)

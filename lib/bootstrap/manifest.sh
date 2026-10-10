@@ -203,6 +203,15 @@ bootstrap_tool_rows() {
     bootstrap_rows_for_host "$BOOTSTRAP_CONFIG/tools.tsv" 3 "${1:-}"
 }
 
+# bootstrap_tool_aliases NAME: the TOOL-IDs that tools.tsv installs under
+# NAME, from its "# alias: TOOL-ID NAME" declarations, one per line in file
+# order. Returns 1 if tools.tsv is unreadable.
+bootstrap_tool_aliases() {
+    [ -f "$BOOTSTRAP_CONFIG/tools.tsv" ] && [ -r "$BOOTSTRAP_CONFIG/tools.tsv" ] || return 1
+    awk -v name="$1" 'index($0, "# alias: ") == 1 && NF == 4 && $4 == name { print $3 }' \
+        "$BOOTSTRAP_CONFIG/tools.tsv"
+}
+
 # bootstrap_clone_rows HOST: git-clones.tsv rows applicable to HOST.
 bootstrap_clone_rows() {
     bootstrap_rows_for_host "$BOOTSTRAP_CONFIG/git-clones.tsv" 5 "${1:-}"
@@ -296,7 +305,7 @@ bootstrap_doc_ref() {
             printf '%s\n' X-other-linux
             ;;
         windows:P0-preflight) printf '%s\n' HW-clone ;;
-        windows:S2-brew-bundle | windows:S4-nvm | windows:S5-claude | windows:S5-codex)
+        windows:H1-apt-core | windows:S2-brew-bundle | windows:S4-nvm | windows:S5-claude | windows:S5-codex)
             printf '%s\n' W1-winget
             ;;
         windows:S3-bat-theme) printf '%s\n' W1-bat-theme ;;

@@ -21,7 +21,9 @@ FIXTURES="$REPO_ROOT/tests/fixtures/bootstrap"
 REAL_GIT=$(command -v git)
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-setup-host.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
-trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
+# The shared-prefix cases make a fixture Cellar read-only; give write back
+# first, so a failing case cannot leave its contents behind.
+trap 'chmod -R u+w "$TEST_TMP" 2>/dev/null; rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
 FIXTURE="$TEST_TMP/repo"
 FAKE_BIN="$TEST_TMP/bin"
@@ -179,7 +181,7 @@ case_command() {
     shift
     CASE_CMD=(env -i
         HOME="$CASE_HOME"
-        PATH="$FAKE_BIN:/usr/bin:/bin"
+        PATH="$FAKE_BIN:$SYS_BIN"
         LC_ALL=C
         DOTFILES_COLOR=never
         TMPDIR="$TEST_TMP"
@@ -315,32 +317,55 @@ SH
 
 cat >"$TEST_TMP/brew-stub" <<'SH'
 #!/bin/sh
-# Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file,
-# bundle check looks for those links (as the offline --check estimate does).
+# Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file
+# (opt/x for a tap's tap/x), bundle check looks for those links (as the
+# offline --check estimate does). Like Homebrew's, it skips an "if OS.mac?"
+# entry off macOS (the case's BOOTSTRAP_UNAME_S) and an "if OS.linux?" one on
+# it, and --file=- reads the Brewfile on stdin (logged as "stdin"). bundle
+# logs each tap, brew and cask line it was given. install --formula links
+# opt/<formula> for each name.
 prefix=$(cd "$(dirname "$0")/.." && pwd) file='' prev=''
 for arg do
     [ "$prev" != --file ] || file=$arg
+    case $arg in
+        --file=*) file=${arg#--file=} ;;
+    esac
     prev=$arg
 done
+[ "$file" != - ] || file=/dev/stdin
 name=${file##*/}
-formulas=$(sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p' "$file" 2>/dev/null)
+other_os='if OS.mac?'
+[ "${BOOTSTRAP_UNAME_S:-Linux}" != Darwin ] || other_os='if OS.linux?'
+brewfile=$(cat "$file" 2>/dev/null)
+formulas=$(printf '%s\n' "$brewfile" | grep -vF "$other_os" |
+    sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p')
 case "${1:-} ${2:-}" in
     'bundle check')
         printf 'brew-check:%s\n' "$name" >>"$EVENT_LOG"
         for formula in $formulas; do
-            [ -e "$prefix/opt/$formula" ] || exit 1
+            [ -e "$prefix/opt/${formula##*/}" ] || exit 1
         done
         ;;
     'bundle --no-upgrade')
         printf 'brew:bundle %s\n' "$name" >>"$EVENT_LOG"
+        printf '%s\n' "$brewfile" | sed -nE "s/^(tap|brew|cask) /brew-line:$name &/p" >>"$EVENT_LOG"
         printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} AWESOME_SKILLS_AUTO_UPDATE=${AWESOME_SKILLS_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
         [ "${BREW_FAIL:-0}" != 1 ] || exit 1
         if [ -n "${BREW_POLLUTE:-}" ]; then
             printf '%s\n' '# appended by a brew installer' >>"$BREW_POLLUTE"
         fi
         for formula in $formulas; do
-            mkdir -p "$prefix/Cellar/$formula/1.0" "$prefix/opt" &&
-                ln -sfn "../Cellar/$formula/1.0" "$prefix/opt/$formula" || exit 1
+            mkdir -p "$prefix/Cellar/${formula##*/}/1.0" "$prefix/opt" &&
+                ln -sfn "../Cellar/${formula##*/}/1.0" "$prefix/opt/${formula##*/}" || exit 1
+        done
+        ;;
+    'install --formula')
+        shift 2
+        printf 'brew:install --formula %s\n' "$*" >>"$EVENT_LOG"
+        printf 'brew-env:%s\n' "HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} HOMEBREW_NO_INSTALL_UPGRADE=${HOMEBREW_NO_INSTALL_UPGRADE-}" >>"$EVENT_LOG"
+        for formula do
+            mkdir -p "$prefix/Cellar/${formula##*/}/1.0" "$prefix/opt" &&
+                ln -sfn "../Cellar/${formula##*/}/1.0" "$prefix/opt/${formula##*/}" || exit 1
         done
         ;;
     '--version '*) echo 'Homebrew 4.6.0' ;;
@@ -404,6 +429,25 @@ exit 99
 SH
 done
 chmod 755 "$FAKE_BIN"/* "$TEST_TMP/brew-stub"
+
+# The system commands every case sees, as links in SYS_BIN, less those that
+# the fixture Brewfiles' entries are probed by (their tools.tsv rows): a jq,
+# python3 or shellcheck in the test machine's /usr/bin would otherwise
+# satisfy an entry, so S2-brew-bundle would judge this machine, not the case.
+# A case that wants one puts its own fake on PATH.
+SYS_BIN="$TEST_TMP/sys-bin"
+HIDDEN_TOOLS=' fzf jq tldr python3 python shellcheck shfmt stylua kitty nvim '
+mkdir -p "$SYS_BIN"
+for dir in /usr/bin /bin; do
+    for tool in "$dir"/*; do
+        name=${tool##*/}
+        case $HIDDEN_TOOLS in
+            *" $name "*) continue ;;
+        esac
+        [ -x "$tool" ] && [ ! -d "$tool" ] || continue
+        [ -e "$SYS_BIN/$name" ] || [ -L "$SYS_BIN/$name" ] || ln -s "$tool" "$SYS_BIN/$name"
+    done
+done
 
 # A PATH dir whose id reports root, for the refusal case.
 ROOT_BIN="$TEST_TMP/bin-root"
@@ -807,7 +851,7 @@ expect_rc check-fresh 3
 expect_text check-fresh out 'P0-preflight done host lab-ubuntu, profile debian, Linux x86_64'
 expect_text check-fresh out 'H1-apt-core done 4 apt packages installed'
 expect_text check-fresh out "H1-linuxbrew done brew at $CASE_BREW/bin/brew"
-expect_text check-fresh out "S2-brew-bundle todo Brewfiles to bundle: core cli (offline estimate from $CASE_BREW/opt"
+expect_text check-fresh out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf; cli: jq tldr (offline estimate from $CASE_BREW/opt and the doctor's probes; apply runs brew bundle check)"
 expect_text check-fresh out 'S3-clones todo to clone: oh-my-zsh (master) powerlevel10k (master) fzf-tab (master) conda-zsh-completion (main)'
 expect_text check-fresh out 'S3-dirs todo'
 expect_text check-fresh out 'S4-nvm todo'
@@ -855,6 +899,9 @@ expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
 expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
 expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
+# Linux takes python3 from apt (H1-apt-core): the core Brewfile's python is
+# macOS-only.
+[ ! -e "$CASE_BREW/opt/python" ] || fail 'S2-brew-bundle bundled python on Linux'
 expect_no_event TRIPWIRE
 # A missing clone is a shallow clone of the branch its ref names.
 expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CASE_HOME/.oh-my-zsh/custom/plugins/conda-zsh-completion"
@@ -1155,6 +1202,28 @@ run_case brew-conflict-installed -- --host lab-ubuntu --check --only S2-brew-bun
 expect_rc brew-conflict-installed 0
 expect_text brew-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_no_text brew-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
+# Nor is a conflicting keg whose own tool the doctor accepts: here tlrc links
+# a tldr into the prefix's bin, so tldr is provided, brew bundle never gets
+# it, and nothing conflicts. The step neither stops nor bundles tldr, and the
+# tlrc keg stays.
+new_home brew-conflict-provided
+mkdir -p "$CASE_BREW/Cellar/tlrc/1.11.1/bin"
+printf '#!/bin/sh\necho "tlrc v1.11.1"\n' >"$CASE_BREW/Cellar/tlrc/1.11.1/bin/tldr"
+chmod 755 "$CASE_BREW/Cellar/tlrc/1.11.1/bin/tldr"
+ln -s ../Cellar/tlrc/1.11.1/bin/tldr "$CASE_BREW/bin/tldr"
+run_case brew-conflict-provided-check -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-provided-check 3
+expect_text brew-conflict-provided-check out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf; cli: jq (offline estimate from $CASE_BREW/opt"
+expect_no_text brew-conflict-provided-check out 'HUMAN-BEGIN S2-brew-bundle'
+expect_no_text brew-conflict-provided-check out 'uninstall'
+expect_no_events brew-conflict-provided-check
+run_case brew-conflict-provided-apply -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc brew-conflict-provided-apply 0
+expect_event 'brew-line:stdin brew "jq"'
+expect_no_event 'brew-line:stdin brew "tldr"'
+expect_no_event 'brew:bundle cli.Brewfile'
+[ ! -e "$CASE_BREW/opt/tldr" ] || fail 'S2-brew-bundle bundled tldr beside the tlrc that provides it'
+[ -d "$CASE_BREW/Cellar/tlrc/1.11.1" ] || fail 'S2-brew-bundle removed the tlrc keg'
 
 # --- S2-brew-bundle: a conflicting cask, judged only where it installs -------
 
@@ -1190,6 +1259,24 @@ expect_no_text cask-conflict-linux out 'kitty@nightly'
 run_case cask-conflict-linux-manual -- --host lab-ubuntu --print-manual --tier desktop
 expect_rc cask-conflict-linux-manual 0
 expect_no_text cask-conflict-linux-manual out 'kitty@nightly'
+# Nothing in that Brewfile applies on Linux (as in the real ai.Brewfile), so
+# apply runs no brew for it at all, not even brew bundle check, whose API
+# refresh would go online.
+run_case cask-conflict-linux-apply -- --host lab-ubuntu --yes --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-linux-apply 0
+expect_text cask-conflict-linux-apply out 'S2-brew-bundle done Brewfiles satisfied: desktop'
+expect_no_events cask-conflict-linux-apply
+# A kitty the doctor finds (here a fake, as from the @nightly twin's own
+# link) satisfies the entry, so the twin conflicts with nothing.
+mkdir -p "$TEST_TMP/kitty-provided"
+printf '#!/bin/sh\necho "kitty 0.44.0 created by Kovid Goyal"\n' >"$TEST_TMP/kitty-provided/kitty"
+chmod 755 "$TEST_TMP/kitty-provided/kitty"
+run_case cask-conflict-provided "${CASK_MAC[@]}" "PATH=$FAKE_BIN:$TEST_TMP/kitty-provided:$SYS_BIN" -- \
+    --host mac --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-provided 0
+expect_text cask-conflict-provided out 'S2-brew-bundle done Brewfiles satisfied: desktop'
+expect_no_text cask-conflict-provided out 'HUMAN-BEGIN S2-brew-bundle'
+expect_no_events cask-conflict-provided
 # Once kitty itself is installed, its @nightly twin is no conflict.
 mkdir -p "$CASE_BREW/Caskroom/kitty/0.44.0"
 run_case cask-conflict-installed "${CASK_MAC[@]}" -- --host mac --check --tier desktop --only S2-brew-bundle
@@ -1197,6 +1284,395 @@ expect_rc cask-conflict-installed 0
 expect_text cask-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: desktop'
 expect_no_text cask-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
 rm -f "$DESKTOP_BREWFILE"
+
+# --- S2-brew-bundle: Homebrew's python only on macOS -------------------------
+
+# The core Brewfile bundles python "if OS.mac?": Debian and Ubuntu take
+# python3 from apt (H1-apt-core), so a prefix that is complete on Linux still
+# lacks python on macOS, whose Command Line Tools python3 is too old.
+new_home brew-python
+for formula in fzf jq tldr; do
+    mkdir -p "$CASE_BREW/opt/$formula"
+done
+run_case python-linux -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc python-linux 0
+expect_text python-linux out 'S2-brew-bundle done Brewfiles satisfied: core cli'
+run_case python-mac "${CASK_MAC[@]}" -- --host mac --check --only S2-brew-bundle
+expect_rc python-mac 3
+expect_text python-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: python (offline estimate from $CASE_BREW/opt"
+expect_no_events python-mac
+run_case python-mac-apply "${CASK_MAC[@]}" -- --host mac --yes --only S2-brew-bundle
+expect_rc python-mac-apply 0
+expect_event 'brew:bundle core.Brewfile'
+expect_no_event 'brew:bundle cli.Brewfile'
+[ -e "$CASE_BREW/opt/python" ] || fail 'S2-brew-bundle did not bundle python on macOS'
+
+# --- S2-brew-bundle: a shared Homebrew prefix this user cannot write ---------
+
+# Homebrew's repository as the step derives it from the prefix (what
+# `brew --repository` prints): PREFIX/Homebrew on Linux and for /usr/local,
+# the prefix itself for /opt/homebrew and any other macOS prefix.
+for row in 'macos /opt/homebrew /opt/homebrew' 'macos /usr/local /usr/local/Homebrew' \
+    "macos $TEST_TMP/brew/x $TEST_TMP/brew/x" \
+    'debian /home/linuxbrew/.linuxbrew /home/linuxbrew/.linuxbrew/Homebrew' \
+    'hpc /usr/local /usr/local/Homebrew'; do
+    profile=${row%% *} prefix=${row#* }
+    want=${prefix#* } prefix=${prefix%% *}
+    got=$(STEPS_PROFILE=$profile "$BASH" -c '. "$1" && steps_brew_repository "$2"' _ \
+        "$FIXTURE/lib/bootstrap/steps-packages.sh" "$prefix")
+    [ "$got" = "$want" ] || fail "steps_brew_repository on $profile: $prefix gave [$got], expected [$want]"
+done
+
+# brew refuses to install into a prefix whose Cellar, bin or repository its
+# user cannot write, as on a shared Linuxbrew owned by another account. The
+# step stops before any brew command and prints a sudo block that installs,
+# by name, what each pending Brewfile lists and the prefix lacks, as the
+# prefix's owner, never a chown. Root can write any directory, so these cases
+# need an ordinary user.
+SHARED_CASES=''
+if [ "$(id -u)" = 0 ]; then
+    printf '%s\n' 'setup-host: SKIP the shared Homebrew prefix cases ([ -w ] is always true for root)' >&2
+else
+    SHARED_CASES='brew-shared-check brew-shared-manual brew-shared-conflict brew-shared-repo'
+    new_home brew-shared
+    mkdir -p "$CASE_BREW/Cellar"
+    chmod 555 "$CASE_BREW/Cellar"
+    SHARED_OWNER=$(LC_ALL=C ls -ld "$CASE_BREW/Cellar" | awk '{ print $3 }')
+    # owner_line WORDS [ENV]: the block line that runs the fixture brew as the
+    # owner.
+    owner_line() {
+        printf '(cd /tmp && sudo -u %s -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1%s %s %s)\n' \
+            "$SHARED_OWNER" "${2:+ $2}" "$CASE_BREW/bin/brew" "$1"
+    }
+    SHARED_CORE=$(owner_line 'install --formula fzf' HOMEBREW_NO_INSTALL_UPGRADE=1)
+    SHARED_CLI=$(owner_line 'install --formula jq tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)
+    run_case brew-shared-check -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc brew-shared-check 3
+    expect_text brew-shared-check out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW (owned by $SHARED_OWNER), so its owner installs the missing entries: core: fzf; cli: jq tldr (offline estimate from $CASE_BREW/opt and the doctor's probes)"
+    expect_line brew-shared-check 'HUMAN-BEGIN S2-brew-bundle sudo'
+    expect_line brew-shared-check '# docs/bootstrap.md S2-brew-bundle'
+    expect_line brew-shared-check "# the Homebrew prefix $CASE_BREW is shared and owned by $SHARED_OWNER; you cannot write $CASE_BREW/Cellar"
+    expect_line brew-shared-check "# never chown a shared prefix: it belongs to $SHARED_OWNER and serves every account here"
+    expect_line brew-shared-check "$SHARED_CORE"
+    expect_line brew-shared-check "$SHARED_CLI"
+    # Two command lines, one per pending Brewfile, none that chowns, and
+    # none that hands brew a Brewfile: the owner may not be able to read it.
+    [ "$(sed -n '/^HUMAN-BEGIN S2-brew-bundle/,/^HUMAN-END/p' "$TEST_TMP/brew-shared-check.out" |
+        grep -cv -e '^#' -e '^HUMAN-')" = 2 ] || fail 'the shared-prefix block has other command lines'
+    grep -v '^#' "$TEST_TMP/brew-shared-check.out" | grep -q chown && fail 'the shared-prefix block suggests chown'
+    grep -v '^#' "$TEST_TMP/brew-shared-check.out" | grep -q Brewfile && fail 'a shared-prefix line hands brew a Brewfile'
+    expect_text brew-shared-check err 'HUMAN steps pending: S2-brew-bundle'
+    expect_no_events brew-shared-check
+    # Apply stops too, before brew bundle check or brew bundle.
+    run_case brew-shared-apply -- --host lab-ubuntu --yes --only S2-brew-bundle
+    expect_rc brew-shared-apply 3
+    expect_line brew-shared-apply 'HUMAN-BEGIN S2-brew-bundle sudo'
+    expect_line brew-shared-apply "$SHARED_CORE"
+    expect_no_events brew-shared-apply
+    [ ! -e "$CASE_BREW/opt" ] || fail 'S2-brew-bundle ran brew bundle on a prefix it cannot write'
+    # --print-manual names every entry of every selected Brewfile, with the
+    # condition.
+    run_case brew-shared-manual -- --host lab-ubuntu --print-manual
+    expect_rc brew-shared-manual 0
+    expect_line brew-shared-manual '# applies while you cannot write the Homebrew prefix (one shared with other accounts);'
+    expect_line brew-shared-manual "$SHARED_CORE"
+    expect_line brew-shared-manual "$SHARED_CLI"
+    # A Brewfile this user cannot read gets a note, and the block still ends.
+    chmod 000 "$FIXTURE/config/bootstrap/brew/core.Brewfile"
+    run_case brew-shared-unreadable -- --host lab-ubuntu --print-manual
+    chmod 644 "$FIXTURE/config/bootstrap/brew/core.Brewfile"
+    expect_rc brew-shared-unreadable 0
+    expect_line brew-shared-unreadable "# cannot read $FIXTURE/config/bootstrap/brew/core.Brewfile, so this block has no line for it"
+    expect_line brew-shared-unreadable "$SHARED_CLI"
+    # A conflicting keg there is uninstalled as the owner, too, and the next
+    # run prints the owner's lines rather than bundling.
+    chmod 755 "$CASE_BREW/Cellar"
+    mkdir -p "$CASE_BREW/Cellar/tlrc/1.11.1"
+    chmod 555 "$CASE_BREW/Cellar"
+    run_case brew-shared-conflict -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc brew-shared-conflict 3
+    expect_line brew-shared-conflict 'HUMAN-BEGIN S2-brew-bundle judgment'
+    expect_line brew-shared-conflict "$(owner_line 'uninstall --formula tlrc')"
+    expect_line brew-shared-conflict "# uninstall each conflicting formula or cask below as the owner; the next ./setup-host.sh run then prints the owner's lines that install the Brewfile one"
+    expect_no_text brew-shared-conflict out 'the next ./setup-host.sh run then bundles'
+    if grep -Fxq -- "$CASE_BREW/bin/brew uninstall --formula tlrc" "$TEST_TMP/brew-shared-conflict.out"; then
+        fail 'the shared-prefix conflict block uninstalls as this user'
+    fi
+    expect_no_text brew-shared-conflict out 'HUMAN-BEGIN S2-brew-bundle sudo'
+    expect_no_events brew-shared-conflict
+    # Each line names only what the prefix lacks; --print-manual still names
+    # every entry.
+    chmod 755 "$CASE_BREW/Cellar"
+    rm -rf "${CASE_BREW:?}/Cellar/tlrc"
+    chmod 555 "$CASE_BREW/Cellar"
+    mkdir -p "$CASE_BREW/opt/jq"
+    run_case brew-shared-partial -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc brew-shared-partial 3
+    expect_line brew-shared-partial "$SHARED_CORE"
+    expect_line brew-shared-partial "$(owner_line 'install --formula tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)"
+    expect_no_text brew-shared-partial out 'install --formula jq'
+    run_case brew-shared-partial-manual -- --host lab-ubuntu --print-manual
+    expect_line brew-shared-partial-manual "$SHARED_CLI"
+    # What the prefix already has needs no owner: done, still without brew.
+    for formula in fzf jq tldr; do
+        mkdir -p "$CASE_BREW/opt/$formula"
+    done
+    run_case brew-shared-done -- --host lab-ubuntu --yes --only S2-brew-bundle
+    expect_rc brew-shared-done 0
+    expect_text brew-shared-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate from $CASE_BREW/opt and the doctor's probes); $CASE_BREW is shared, owned by $SHARED_OWNER"
+    expect_no_text brew-shared-done out 'HUMAN-BEGIN S2-brew-bundle'
+    expect_no_events brew-shared-done
+    # The printed line runs brew from /tmp and never opens the Brewfile, so
+    # it works while the Brewfile is unreadable (a checkout made under umask
+    # 077 has 0600 Brewfiles the owner cannot read; mode 000 stands in for
+    # that here). A stand-in sudo checks its arguments and runs the rest as
+    # this user.
+    chmod 755 "$CASE_BREW/Cellar"
+    rm -rf "${CASE_BREW:?}/opt"
+    mkdir -p "$TEST_TMP/bin-sudo"
+    printf '%s\n' '#!/bin/sh' \
+        'printf "sudo-as:%s %s cwd:%s\n" "$2" "$3" "$PWD" >>"$EVENT_LOG"' \
+        '[ "$1" = -u ] && [ "$3" = -H ] || exit 98' 'shift 3' 'exec "$@"' >"$TEST_TMP/bin-sudo/sudo"
+    chmod 755 "$TEST_TMP/bin-sudo/sudo"
+    : >"$EVENT_LOG"
+    chmod 000 "$FIXTURE/config/bootstrap/brew/core.Brewfile"
+    SHARED_RC=0
+    (cd "$FIXTURE" && env -i PATH="$TEST_TMP/bin-sudo:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
+        /bin/sh -c "$SHARED_CORE" </dev/null) || SHARED_RC=$?
+    chmod 644 "$FIXTURE/config/bootstrap/brew/core.Brewfile"
+    [ "$SHARED_RC" = 0 ] || fail "the shared-prefix line failed with an unreadable Brewfile: $SHARED_CORE"
+    expect_event "sudo-as:$SHARED_OWNER -H cwd:/tmp"
+    expect_event 'brew:install --formula fzf'
+    expect_event 'HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_INSTALL_UPGRADE=1'
+    [ -e "$CASE_BREW/opt/fzf" ] || fail 'the shared-prefix line did not install the Brewfile entry'
+    # Homebrew's repository counts on its own: with Cellar and bin writable
+    # and only PREFIX/Homebrew locked, brew still refuses, so the owner
+    # installs on Linux. On macOS a prefix other than /usr/local is its own
+    # repository, so the same layout is writable there.
+    new_home brew-shared-repo
+    mkdir -p "$CASE_BREW/Cellar" "$CASE_BREW/Homebrew"
+    chmod 555 "$CASE_BREW/Homebrew"
+    run_case brew-shared-repo -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc brew-shared-repo 3
+    expect_text brew-shared-repo out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW"
+    expect_line brew-shared-repo "# the Homebrew prefix $CASE_BREW is shared and owned by $SHARED_OWNER; you cannot write $CASE_BREW/Homebrew"
+    expect_line brew-shared-repo "$(owner_line 'install --formula fzf' HOMEBREW_NO_INSTALL_UPGRADE=1)"
+    expect_no_events brew-shared-repo
+    run_case brew-shared-repo-mac "${CASK_MAC[@]}" -- --host mac --check --only S2-brew-bundle
+    expect_text brew-shared-repo-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf python; cli: jq tldr (offline estimate from $CASE_BREW/opt"
+    expect_no_text brew-shared-repo-mac out 'HUMAN-BEGIN S2-brew-bundle'
+    chmod 755 "$CASE_BREW/Homebrew"
+fi
+
+# --- S2-brew-bundle: tools that apt, conda or the OS already provide ---------
+
+# An entry whose tool the doctor already finds at or above its floor (the
+# tools.tsv row named like the entry, or one a "# alias:" line names) is
+# satisfied, whatever installed it: no Homebrew copy beside an apt one. A
+# provider directory stands in for /usr/bin. In PROVIDED_SOME, jq and
+# ShellCheck have no floor and pass, fzf 0.44.1 and shfmt 3.7.0 are below
+# theirs (0.58.0, 3.13.0) and tldr is absent. A contributor Brewfile for
+# these cases adds a tap, a tap's formula, a macOS-only entry, and neovim,
+# which reaches its tools.tsv row (nvim, presence-only) only through
+# "# alias: nvim neovim".
+CONTRIB_BREWFILE="$FIXTURE/config/bootstrap/brew/contributor.Brewfile"
+printf '%s\n' '# Fixture contributor Brewfile, for these cases only.' 'tap "fixture/tools"' \
+    'brew "shellcheck"' 'brew "fixture/tools/shfmt"' 'brew "stylua" if OS.mac?' 'brew "neovim"' >"$CONTRIB_BREWFILE"
+# fake_tool DIR NAME OUTPUT: an executable NAME in DIR that prints OUTPUT.
+fake_tool() {
+    mkdir -p "$1"
+    printf '#!/bin/sh\necho %s\n' "'$3'" >"$1/$2"
+    chmod 755 "$1/$2"
+}
+PROVIDED_SOME="$TEST_TMP/provided-some"
+fake_tool "$PROVIDED_SOME" jq jq-1.7.1
+fake_tool "$PROVIDED_SOME" shellcheck 'ShellCheck - shell script analysis tool, version: 0.9.0'
+fake_tool "$PROVIDED_SOME" fzf '0.44.1 (debian)'
+fake_tool "$PROVIDED_SOME" shfmt v3.7.0
+fake_tool "$PROVIDED_SOME" nvim 'NVIM v0.9.5'
+# PROVIDED_ALL meets every floor. Its tldr is a C client whose page cache is
+# stale: it refreshes ~/.tldrc on any command unless TLDR_AUTO_UPDATE_DISABLED
+# is set, which setup-host exports before it probes.
+PROVIDED_ALL="$TEST_TMP/provided-all"
+fake_tool "$PROVIDED_ALL" jq jq-1.7.1
+fake_tool "$PROVIDED_ALL" shellcheck 'ShellCheck - shell script analysis tool, version: 0.9.0'
+fake_tool "$PROVIDED_ALL" fzf '0.65.2 (brew)'
+fake_tool "$PROVIDED_ALL" shfmt v3.13.1
+fake_tool "$PROVIDED_ALL" kitty 'kitty 0.44.0 created by Kovid Goyal'
+fake_tool "$PROVIDED_ALL" nvim 'NVIM v0.10.4'
+printf '%s\n' '#!/bin/sh' \
+    '[ -n "${TLDR_AUTO_UPDATE_DISABLED:-}" ] || { mkdir -p "$HOME/.tldrc" && : >"$HOME/.tldrc/refreshed"; }' \
+    'echo "tldr v1.6.1 (v1.6.1)"' >"$PROVIDED_ALL/tldr"
+chmod 755 "$PROVIDED_ALL/tldr"
+SOME_PATH="PATH=$FAKE_BIN:$PROVIDED_SOME:$SYS_BIN"
+ALL_PATH="PATH=$FAKE_BIN:$PROVIDED_ALL:$SYS_BIN"
+
+new_home brew-provided
+snapshot >"$TEST_TMP/before"
+touch "$MARKER"
+run_case provided-check "$SOME_PATH" -- --host lab-ubuntu --check --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-check 3
+expect_text provided-check out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf; cli: tldr; contributor: fixture/tools/shfmt (offline estimate from $CASE_BREW/opt and the doctor's probes; apply runs brew bundle check)"
+expect_no_events provided-check
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'a --check that probes tools created or removed files'
+[ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail 'a --check that probes tools modified files'
+# Apply bundles only the rest. Nothing in core.Brewfile is provided, so brew
+# bundle reads that file itself, as without the filter; cli and contributor
+# reach it on stdin, without jq and shellcheck, with the tap line, and never
+# with the macOS-only stylua.
+run_case provided-apply "$SOME_PATH" -- --host lab-ubuntu --yes --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-apply 0
+expect_text provided-apply out 'S2-brew-bundle done applied: brew bundle --no-upgrade for each config/bootstrap/brew/<tier>.Brewfile, less the entries whose tools the doctor already finds (Brewfile entries to bundle: core: fzf; cli: tldr; contributor: fixture/tools/shfmt)'
+expect_order 'brew:bundle core.Brewfile' 'brew-line:core.Brewfile brew "fzf"' \
+    'brew:bundle stdin' 'brew-line:stdin brew "tldr"' \
+    'brew-line:stdin tap "fixture/tools"' 'brew-line:stdin brew "fixture/tools/shfmt"'
+[ "$(grep -c '^brew-line:stdin ' "$EVENT_LOG")" = 3 ] || {
+    cat "$EVENT_LOG" >&2
+    fail 'brew bundle got more on stdin than tldr, the tap and its shfmt'
+}
+expect_no_event 'brew:bundle cli.Brewfile'
+expect_no_event 'brew:bundle contributor.Brewfile'
+expect_no_event 'brew "neovim"'
+for formula in fzf tldr shfmt; do
+    [ -e "$CASE_BREW/opt/$formula" ] || fail "S2-brew-bundle did not bundle $formula"
+done
+for formula in jq shellcheck stylua neovim; do
+    [ ! -e "$CASE_BREW/opt/$formula" ] || fail "S2-brew-bundle bundled $formula, which is provided or macOS-only"
+done
+run_case provided-reapply "$SOME_PATH" -- --host lab-ubuntu --yes --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-reapply 0
+expect_text provided-reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli contributor'
+expect_no_installs provided-reapply
+
+# A tool of unknown version against a floor is no provider: the doctor
+# reports it warn, not ok, so its entry is still bundled. This fzf prints no
+# X.Y version against fzf's 0.58.0 floor.
+PROVIDED_WARN="$TEST_TMP/provided-warn"
+fake_tool "$PROVIDED_WARN" fzf 'fzf (devel)'
+WARN_STATUS=$(PATH="$PROVIDED_WARN:$SYS_BIN" "$BASH" -c 'for lib do . "$lib" || exit 1; done
+    bootstrap_check_tool fzf --version 0.58.0 x' _ "$FIXTURE/lib/terminal.sh" \
+    "$FIXTURE/lib/bootstrap/manifest.sh" "$FIXTURE/lib/bootstrap/platform.sh" \
+    "$FIXTURE/lib/bootstrap/version.sh" "$FIXTURE/lib/bootstrap/checks.sh")
+case $WARN_STATUS in
+    "warn$TAB"*'version unknown'*) ;;
+    *) fail "the doctor's probe of an fzf without a version gave [$WARN_STATUS], expected warn" ;;
+esac
+new_home brew-provided-warn
+run_case provided-warn-check "PATH=$FAKE_BIN:$PROVIDED_WARN:$SYS_BIN" -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc provided-warn-check 3
+expect_text provided-warn-check out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf; cli: jq tldr (offline estimate"
+run_case provided-warn-apply "PATH=$FAKE_BIN:$PROVIDED_WARN:$SYS_BIN" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc provided-warn-apply 0
+expect_event 'brew-line:core.Brewfile brew "fzf"'
+[ -e "$CASE_BREW/opt/fzf" ] || fail 'S2-brew-bundle took an fzf of unknown version for one at its floor'
+
+# Every entry that applies here provided (stylua is macOS-only): done in
+# --check and in apply without running brew at all, not even brew bundle
+# check, and the stale tldr refreshed nothing.
+new_home brew-provided-all
+snapshot >"$TEST_TMP/before"
+run_case provided-all-check "$ALL_PATH" -- --host lab-ubuntu --check --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-all-check 0
+expect_text provided-all-check out "S2-brew-bundle done Brewfiles satisfied: core cli contributor (offline estimate from $CASE_BREW/opt and the doctor's probes; apply runs brew bundle check)"
+expect_no_events provided-all-check
+run_case provided-all-apply "$ALL_PATH" -- --host lab-ubuntu --yes --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-all-apply 0
+expect_text provided-all-apply out 'S2-brew-bundle done Brewfiles satisfied: core cli contributor'
+expect_no_events provided-all-apply
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
+    diff -u "$TEST_TMP/before" "$TEST_TMP/after" >&2 || true
+    fail 'probing provided tools wrote files (a tldr page-cache refresh?)'
+}
+# On macOS the macOS-only entries count: python (no python3 here) and
+# stylua; a cask is judged the same way (kitty is provided), the font cask
+# through "# alias: nerd-font font-caskaydia-mono-nerd-font" by the doctor's
+# font probe: missing until a CaskaydiaMono Nerd Font file is in
+# ~/Library/Fonts, however it got there.
+DESKTOP_BREWFILE="$FIXTURE/config/bootstrap/brew/desktop.Brewfile"
+printf '%s\n' 'cask "kitty" if OS.mac?' 'cask "font-caskaydia-mono-nerd-font" if OS.mac?' >"$DESKTOP_BREWFILE"
+run_case provided-all-mac "${CASK_MAC[@]}" "$ALL_PATH" BOOTSTRAP_SYSTEM_FONT_DIRS= -- \
+    --host mac --check --tier core,cli,desktop,contributor --only S2-brew-bundle
+expect_rc provided-all-mac 3
+expect_text provided-all-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: python; desktop: font-caskaydia-mono-nerd-font; contributor: stylua (offline estimate"
+expect_no_events provided-all-mac
+mkdir -p "$CASE_HOME/Library/Fonts"
+printf 'fixture font\n' >"$CASE_HOME/Library/Fonts/CaskaydiaMonoNerdFont-Regular.ttf"
+run_case provided-font-mac "${CASK_MAC[@]}" "$ALL_PATH" BOOTSTRAP_SYSTEM_FONT_DIRS= -- \
+    --host mac --check --tier core,cli,desktop,contributor --only S2-brew-bundle
+expect_rc provided-font-mac 3
+expect_text provided-font-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: python; contributor: stylua (offline estimate"
+expect_no_events provided-font-mac
+rm -f "$DESKTOP_BREWFILE"
+
+# A shared prefix: the owner's block names only the missing entries, and a
+# Brewfile whose entries are all provided gets no line. Here core's fzf is
+# provided (0.65.2), and so is every contributor entry that applies here
+# (neovim through its alias), so only cli's tldr is left.
+if [ "$(id -u)" != 0 ]; then
+    SHARED_CASES="$SHARED_CASES provided-shared provided-shared-manual"
+    PROVIDED_SHARED="$TEST_TMP/provided-shared"
+    fake_tool "$PROVIDED_SHARED" jq jq-1.7.1
+    fake_tool "$PROVIDED_SHARED" fzf '0.65.2 (brew)'
+    fake_tool "$PROVIDED_SHARED" shellcheck 'ShellCheck - shell script analysis tool, version: 0.9.0'
+    fake_tool "$PROVIDED_SHARED" shfmt v3.13.1
+    fake_tool "$PROVIDED_SHARED" nvim 'NVIM v0.9.5'
+    SHARED_PATH="PATH=$FAKE_BIN:$PROVIDED_SHARED:$SYS_BIN"
+    new_home brew-provided-shared
+    mkdir -p "$CASE_BREW/Cellar"
+    chmod 555 "$CASE_BREW/Cellar"
+    SHARED_OWNER=$(LC_ALL=C ls -ld "$CASE_BREW/Cellar" | awk '{ print $3 }')
+    run_case provided-shared "$SHARED_PATH" -- --host lab-ubuntu --check --tier core,cli,contributor --only S2-brew-bundle
+    expect_rc provided-shared 3
+    expect_text provided-shared out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW (owned by $SHARED_OWNER), so its owner installs the missing entries: cli: tldr (offline estimate from $CASE_BREW/opt and the doctor's probes)"
+    expect_line provided-shared '# an entry is missing when the prefix lacks it and the doctor does not find its tool installed another way (apt, conda, the OS): no second copy in the shared prefix'
+    expect_line provided-shared "$(owner_line 'install --formula tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)"
+    [ "$(sed -n '/^HUMAN-BEGIN S2-brew-bundle/,/^HUMAN-END/p' "$TEST_TMP/provided-shared.out" |
+        grep -cv -e '^#' -e '^HUMAN-')" = 1 ] || fail 'the shared-prefix block has a line for a provided entry'
+    expect_no_text provided-shared out 'install --formula fzf'
+    expect_no_text provided-shared out 'install --formula jq'
+    expect_no_text provided-shared out neovim
+    expect_no_events provided-shared
+    # --print-manual leaves those out too: pasted, it would otherwise put a
+    # Homebrew jq in front of apt's on every account's PATH. An entry the
+    # prefix already has stays (HOMEBREW_NO_INSTALL_UPGRADE=1 leaves it
+    # alone), provided or not.
+    run_case provided-shared-manual "$SHARED_PATH" -- --host lab-ubuntu --tier core,cli,contributor --print-manual
+    expect_rc provided-shared-manual 0
+    expect_line provided-shared-manual '# an entry the prefix lacks is left out when the doctor finds its tool installed another way (apt, conda, the OS): no second copy in the shared prefix'
+    expect_line provided-shared-manual "$(owner_line 'install --formula tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)"
+    [ "$(sed -n '/^HUMAN-BEGIN S2-brew-bundle sudo/,/^HUMAN-END/p' "$TEST_TMP/provided-shared-manual.out" |
+        grep -cv -e '^#' -e '^HUMAN-')" = 1 ] || fail 'the manual shared-prefix block names a provided entry'
+    mkdir -p "$CASE_BREW/opt/jq"
+    run_case provided-shared-manual-opt "$SHARED_PATH" -- --host lab-ubuntu --tier core,cli,contributor --print-manual
+    expect_line provided-shared-manual-opt "$(owner_line 'install --formula jq tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)"
+    rm -rf "${CASE_BREW:?}/opt"
+    # A tlrc keg whose tldr the doctor accepts is no conflict here either: no
+    # judgment block that would uninstall it for every account.
+    chmod 755 "$CASE_BREW/Cellar"
+    mkdir -p "$CASE_BREW/Cellar/tlrc/1.11.1/bin"
+    printf '#!/bin/sh\necho "tlrc v1.11.1"\n' >"$CASE_BREW/Cellar/tlrc/1.11.1/bin/tldr"
+    chmod 755 "$CASE_BREW/Cellar/tlrc/1.11.1/bin/tldr"
+    ln -s ../Cellar/tlrc/1.11.1/bin/tldr "$CASE_BREW/bin/tldr"
+    chmod 555 "$CASE_BREW/Cellar"
+    run_case provided-shared-tlrc "$SHARED_PATH" -- --host lab-ubuntu --check --tier core,cli,contributor --only S2-brew-bundle
+    expect_rc provided-shared-tlrc 0
+    expect_text provided-shared-tlrc out "S2-brew-bundle done Brewfiles satisfied: core cli contributor (offline estimate from $CASE_BREW/opt and the doctor's probes); $CASE_BREW is shared, owned by $SHARED_OWNER"
+    expect_no_text provided-shared-tlrc out 'HUMAN-BEGIN S2-brew-bundle'
+    expect_no_text provided-shared-tlrc out uninstall
+    expect_no_events provided-shared-tlrc
+    chmod 755 "$CASE_BREW/Cellar"
+    rm -rf "${CASE_BREW:?}/Cellar/tlrc" "${CASE_BREW:?}/bin/tldr"
+    chmod 555 "$CASE_BREW/Cellar"
+    run_case provided-shared-done "$ALL_PATH" -- --host lab-ubuntu --yes --only S2-brew-bundle
+    expect_rc provided-shared-done 0
+    expect_text provided-shared-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate from $CASE_BREW/opt and the doctor's probes); $CASE_BREW is shared, owned by $SHARED_OWNER"
+    expect_no_text provided-shared-done out 'HUMAN-BEGIN S2-brew-bundle'
+    expect_no_events provided-shared-done
+    chmod 755 "$CASE_BREW/Cellar"
+fi
+rm -f "$CONTRIB_BREWFILE"
 
 # --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
@@ -1656,6 +2132,7 @@ curl -o "$download" https://example.invalid/key
 cd /tmp
 gh auth setup-git
 NONINTERACTIVE=1 /bin/bash /tmp/install.sh
+(cd /tmp && sudo -u owner -H env HOMEBREW_NO_AUTO_UPDATE=1 /x/bin/brew install --formula fzf)
 HUMAN-END
 EOF
 VIOLATIONS=$(block_violations "$TEST_TMP/carried.out")
@@ -1675,7 +2152,7 @@ for host in wsl-ubuntu sherlock marlowe; do
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
     check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts \
-    brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty; do
+    brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty $SHARED_CASES; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
@@ -1713,6 +2190,8 @@ no_tmp_case no-tmp-list 0 -- --host lab-ubuntu --list
 no_tmp_case no-tmp-manual 0 -- --host lab-ubuntu --print-manual
 no_tmp_case no-tmp-mac 3 "${MAC_ENV[@]}" -- --host mac --check
 no_tmp_case no-tmp-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
+no_tmp_case no-tmp-provided 0 "$ALL_PATH" -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_text no-tmp-provided out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 no_tmp_case no-tmp-help 0 -- --help
 no_tmp_case no-tmp-usage 2 -- --host lab-ubuntu --check --tier core,gui
 
