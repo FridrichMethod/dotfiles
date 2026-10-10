@@ -31,12 +31,12 @@
 
     Exit codes: 0 done (non-blocking HUMAN blocks may still be printed);
     1 a step failed; 2 usage error, invalid manifest, or refusal (a
-    non-interactive run without -Yes, or a declined prompt); 3 a blocking
-    HUMAN step is pending: HW-clone or HW-stow. As in setup-host.sh, the
-    other HUMAN steps (HW-auto-stow-task, HW-execution-policy, HW-ssh-agent,
-    HW-wsl, HW-auth) are printed while pending but leave the exit code
-    alone; .\doctor.ps1 -Online then shows whether sign-in is done. -Check
-    uses the same codes, so todo steps alone exit 0.
+    non-interactive run without -Yes, or a declined prompt); 3 work remains:
+    a blocking HUMAN step is pending (HW-clone or HW-stow), or, under
+    -Check, a step is still to apply. As in setup-host.sh, the other HUMAN
+    steps (HW-auto-stow-task, HW-execution-policy, HW-ssh-agent, HW-wsl,
+    HW-auth) are printed while pending but leave the exit code alone;
+    .\doctor.ps1 -Online then shows whether sign-in is done.
 
 .PARAMETER HostName
     Alias -Host. Only win is accepted; use ./setup-host.sh on Unix.
@@ -47,7 +47,8 @@
 
 .PARAMETER Check
     Print one plan line per step, "<step-id> <done|todo|human|skip> <detail>",
-    and change nothing: no writes and no network.
+    and change nothing: no writes and no network. Exits 3 while a step is
+    todo or a blocking HUMAN step is pending, as setup-host.sh --check does.
 
 .PARAMETER Yes
     Apply without asking. Required when the session is not interactive.
@@ -506,9 +507,11 @@ function Invoke-BootstrapSetup {
     }
 
     if ($Check) {
+        # As setup-host.sh --check: 0 only when nothing is left to apply.
         foreach ($state in $plan.Values) { "$($state.Id) $($state.Status) $($state.Detail)" }
         $held = @($plan.Values | Where-Object { $_.Status -ceq 'human' -and $_.Id -cin $BlockingHumanSteps }).Count
-        $script:SetupStatus = if ($held) { 3 } else { 0 }
+        $todo = @($plan.Values | Where-Object { $_.Status -ceq 'todo' }).Count
+        $script:SetupStatus = if ($held -or $todo) { 3 } else { 0 }
         return
     }
 

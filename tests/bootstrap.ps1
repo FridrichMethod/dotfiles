@@ -863,7 +863,7 @@ try {
         }
     }
 
-    Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 only for blocking HUMAN steps' {
+    Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 while work remains' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
         $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' }
@@ -884,7 +884,8 @@ try {
         Assert-Equal @(Get-InstallEvents $fixture).Count 0 '-Check installed something'
         Assert-True (-not @(Get-FixtureEvents $fixture | Where-Object { $_ -match 'PSResource|Invoke-WebRequest' }).Count) '-Check queried the network or PSResourceGet'
         # A ~/.gitconfig symlink into this checkout marks HW-stow done; with
-        # HW-clone done too, nothing blocks, and todo steps alone exit 0.
+        # HW-clone done too nothing blocks, but todo steps still exit 3, as in
+        # setup-host.sh --check.
         $gitconfig = Join-Path $fixture.Repo 'common/git/.gitconfig'
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $gitconfig)); [IO.File]::WriteAllText($gitconfig, '')
         try { [void](New-Item -ItemType SymbolicLink -Path (Join-Path $fixture.Home '.gitconfig') -Target $gitconfig) } catch { }
@@ -892,7 +893,7 @@ try {
         Assert-True ($default.Lines -contains 'W1-psresources skip no selected tier needs PowerShell modules') 'desktop modules under default tiers'
         Assert-True ($default.Lines -contains 'W1-font skip no selected tier needs the Nerd Font') 'font under default tiers'
         if (Test-Path -LiteralPath (Join-Path $fixture.Home '.gitconfig')) {
-            Assert-Exit $default 0 'check with only non-blocking HUMAN steps and todo steps'
+            Assert-Exit $default 3 'check with only non-blocking HUMAN steps and todo steps'
             Assert-True ($default.Lines -contains 'HW-stow done already done') 'stowed .gitconfig'
             Assert-True (@($default.Lines -like 'W1-winget todo missing: python3, fzf, *').Count -eq 1) "winget todo: $($default.Stdout)"
         }
@@ -1038,6 +1039,9 @@ try {
             Skip-Assertion 'cannot create a symlink here; the exit 0 apply after HW-stow is not checked.'
             return
         }
+        # FAKE_PSRESOURCE_INSTALLED has PSResourceGet report CompletionPredictor
+        # without its module directory; give it one, so no step is left todo.
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Modules 'CompletionPredictor'))
         $final = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment
         Assert-Exit $final 0 'apply with only non-blocking HUMAN steps'
         $finalBlocks = Get-HumanBlocks $final.Lines

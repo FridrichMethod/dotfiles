@@ -335,12 +335,13 @@ themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `venv-sync`, `submodule` and
 `core-symlinks`, and `-Online` reports a signed-out tool as `warn`, as on Unix.
-`.\setup-host.ps1` exits 3 only while HW-clone or HW-stow is pending; the other
-HW blocks are printed but leave the exit code alone. Its `-Check` prints only
+`.\setup-host.ps1` exits 3 while HW-clone or HW-stow is pending; the other HW
+blocks are printed but leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
-ending in `blocks completion` or `does not block`) and uses the same codes, so
-todo steps alone exit 0 there. A declined prompt, like a non-interactive run
-without `-Yes`, exits 2 and changes nothing.
+ending in `blocks completion` or `does not block`) and, like the Unix
+`--check`, exits 3 while a step is todo, so a `-Check` that exits 0 has
+nothing left to apply. A declined prompt, like a non-interactive run without
+`-Yes`, exits 2 and changes nothing.
 
 ### HUMAN blocks
 
@@ -546,7 +547,10 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    (native Windows: follow HW-clone in docs/bootstrap.md first). Work only inside ~/dotfiles.
 2. Read ~/dotfiles/docs/bootstrap.md completely. It is the contract; follow it over your defaults.
 3. Ask me which host this is: mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win,
-   or another Linux (then follow X-other-linux). Never guess.
+   or another Linux (then follow X-other-linux). Never guess. On win, use the
+   PowerShell twins in every step below: .\doctor.ps1 -Host win -Tsv,
+   .\setup-host.ps1 -Host win -Check, then -Yes; the stow is the HW-stow block
+   (an elevated shell, so mine to run), and the finish is .\doctor.ps1 -Host win.
 4. Run every command with DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0.
 5. Run ./doctor.sh --host H --tsv and ./setup-host.sh --host H --check and show me the plan.
 6. After I agree, run ./setup-host.sh --host H --yes. For each HUMAN block

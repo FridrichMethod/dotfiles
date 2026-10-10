@@ -51,7 +51,8 @@ from this checkout, stop and say so.
     its `docs/bootstrap.md <step-id>` reference.
 
 On native Windows use the twins (`.\doctor.ps1 -Host win -Tsv`,
-`.\setup-host.ps1 -Host win -Check`, then `-Yes`); there `-Check` exits 0 even
-with todo steps, so read its plan lines. `sudo` blocks and anything elevated
-belong to the person. Never run `git lfs install`, `gh auth setup-git`,
-`conda init` or `micromamba shell init`, never edit rc files, and never commit.
+`.\setup-host.ps1 -Host win -Check`, then `-Yes`), with the same exit codes;
+the stow is the HW-stow block and the finish is `.\doctor.ps1 -Host win`.
+`sudo` blocks and anything elevated belong to the person.
+Never run `git lfs install`, `gh auth setup-git`, `conda init` or
+`micromamba shell init`, never edit rc files, and never commit.
