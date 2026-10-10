@@ -56,14 +56,15 @@ steps_clone_state() {
 # steps_clone_rows: git-clones.tsv rows of this host with expanded dests,
 # oh-my-zsh first (every other clone lands under its custom/ dir).
 steps_clone_rows() {
-    local rows row id dest rest pass
+    local rows lines row id dest rest pass
     rows=$(bootstrap_clone_rows "$STEPS_HOST") || return 1
     for pass in first rest; do
-        while IFS= read -r row; do
+        lines=$rows$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            row=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
             [ -n "$row" ] || continue
-            IFS="$BOOTSTRAP_TAB" read -r id dest rest <<EOF
-$row
-EOF
+            bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest rest
             case $pass:$id in
                 first:oh-my-zsh | rest:*) ;;
                 *) continue ;;
@@ -71,14 +72,12 @@ EOF
             [ "$pass:$id" != rest:oh-my-zsh ] || continue
             dest=$(bootstrap_expand_path "$dest") || return 1
             printf '%s\t%s\t%s\n' "$id" "$dest" "$rest"
-        done <<EOF
-$rows
-EOF
+        done
     done
 }
 
 step_S3_clones_check() {
-    local rows id dest url ref state pinned=0 todo='' bad=''
+    local rows lines row id dest url ref state pinned=0 todo='' bad=''
     STEPS_OMZ_RECOVERY=
     if ! rows=$(steps_clone_rows); then
         STEP_DETAIL='cannot read config/bootstrap/git-clones.tsv'
@@ -88,7 +87,11 @@ step_S3_clones_check() {
         STEP_DETAIL="no clones for $STEPS_HOST"
         return 2
     fi
-    while IFS="$BOOTSTRAP_TAB" read -r id dest url ref _; do
+    lines=$rows$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest url ref _
         [ -n "$id" ] || continue
         state=$(steps_clone_state "$id" "$dest" "$url" "$ref")
         case $state in
@@ -97,9 +100,7 @@ step_S3_clones_check() {
             clone | repin) todo="$todo${todo:+ }$id ($state)" ;;
             *) bad="$bad${bad:+ }$id ($state)" ;;
         esac
-    done <<EOF
-$rows
-EOF
+    done
     if [ -n "$STEPS_OMZ_RECOVERY" ]; then
         STEP_DETAIL="$STEPS_OMZ_RECOVERY exists without oh-my-zsh.sh (stow ran before the clone); recover it by hand"
         return 3
@@ -115,16 +116,18 @@ EOF
 # steps_omz_recovery_block DEST: put an oh-my-zsh checkout under the dir that
 # ./stow-all.sh created first; the stowed custom/ files stay untracked there.
 steps_omz_recovery_block() {
-    local dest url='' q key row_url
+    local dest url='' q lines row key row_url
     dest=$1
-    while IFS="$BOOTSTRAP_TAB" read -r key _ row_url _ _; do
+    lines=$(bootstrap_clone_rows "$STEPS_HOST")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" key _ row_url _ _
         if [ "$key" = oh-my-zsh ]; then
             url=$row_url
             break
         fi
-    done <<EOF
-$(bootstrap_clone_rows "$STEPS_HOST")
-EOF
+    done
     [ -n "$url" ] || url=https://github.com/ohmyzsh/ohmyzsh.git
     q=$(steps_quote "$dest")
     steps_block_begin X-recovery judgment
@@ -221,9 +224,13 @@ steps_clone_apply() {
 }
 
 step_S3_clones_apply() {
-    local rows id dest url ref failed=''
+    local rows lines row id dest url ref failed=''
     rows=$(steps_clone_rows) || return 1
-    while IFS="$BOOTSTRAP_TAB" read -r id dest url ref _; do
+    lines=$rows$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest url ref _
         [ -n "$id" ] || continue
         if ! steps_clone_apply "$id" "$dest" "$url" "$ref"; then
             if [ "$id" = oh-my-zsh ]; then
@@ -233,9 +240,7 @@ step_S3_clones_apply() {
             fi
             failed="$failed${failed:+ }$id"
         fi
-    done <<EOF
-$rows
-EOF
+    done
     if [ -n "$failed" ]; then
         dotfiles_log error "clones not at their pins: $failed"
         return 1
@@ -263,7 +268,7 @@ steps_bat_theme_ok() {
     name=${STEPS_DEST##*/}
     name=${name%.tmTheme}
     themes=$(bat --list-themes --color=never 2>/dev/null </dev/null) || themes=
-    if steps_text_has -F "$name" "$themes"; then
+    if bootstrap_text_has -F "$name" "$themes"; then
         STEP_DETAIL="theme pinned and known to bat"
         return 0
     fi

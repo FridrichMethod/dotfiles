@@ -12,25 +12,30 @@
 # does not consider satisfied, one per line. Apply mode only: brew refreshes
 # its API data over the network even with HOMEBREW_NO_AUTO_UPDATE.
 steps_brew_pending() {
-    local brew=$1 file
-    while IFS= read -r file; do
+    local brew=$1 lines file
+    lines=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         if ! "$brew" bundle check --no-upgrade --file "$file" >/dev/null 2>&1 </dev/null; then
             printf '%s\n' "$file"
         fi
-    done <<EOF
-$(bootstrap_brewfiles "$STEPS_TIERS")
-EOF
+    done
 }
 
 # steps_brewfile_missing PREFIX FILE: the brew and cask entries of FILE with
 # no opt/ link or Caskroom/ dir under PREFIX, space-separated. A read-only,
 # offline estimate for --check (Homebrew links opt/ for aliases too).
 steps_brewfile_missing() {
-    local prefix=$1 entries kind name rest missing=''
+    local prefix=$1 entries lines line kind name rest missing=''
     entries=$(sed -nE 's/^[[:space:]]*(brew|cask)[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/\1 \2 \3/p' "$2") ||
         return 1
-    while IFS=' ' read -r kind name rest; do
+    lines=$entries$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" kind name rest
         [ -n "$kind" ] || continue
         case $rest in
             *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] || continue ;;
@@ -42,36 +47,36 @@ steps_brewfile_missing() {
             cask) [ -d "$prefix/Caskroom/$name" ] && continue ;;
         esac
         missing="$missing${missing:+ }$name"
-    done <<EOF
-$entries
-EOF
+    done
     printf '%s\n' "$missing"
 }
 
 # steps_brew_pending_offline PREFIX: the selected Brewfiles with an entry
 # missing from PREFIX, one per line, without running brew.
 steps_brew_pending_offline() {
-    local file
-    while IFS= read -r file; do
+    local lines file
+    lines=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         if [ -n "$(steps_brewfile_missing "$1" "$file")" ]; then
             printf '%s\n' "$file"
         fi
-    done <<EOF
-$(bootstrap_brewfiles "$STEPS_TIERS")
-EOF
+    done
 }
 
 # steps_brewfile_names FILES: "core cli" from Brewfile paths.
 steps_brewfile_names() {
-    local file names=''
-    while IFS= read -r file; do
+    local lines file names=''
+    lines=$1$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         file=${file##*/}
         names="$names${names:+ }${file%.Brewfile}"
-    done <<EOF
-$1
-EOF
+    done
     printf '%s\n' "$names"
 }
 
@@ -105,20 +110,21 @@ step_S2_brew_bundle_plan() {
 }
 
 step_S2_brew_bundle_apply() {
-    local brew file
+    local brew lines file
     if ! brew=$(bootstrap_brew_bin); then
         dotfiles_log error 'brew is not installed (H1-homebrew or H1-linuxbrew)'
         return 1
     fi
-    while IFS= read -r file; do
+    lines=$(steps_brew_pending "$brew")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         "$brew" bundle --no-upgrade --file "$file" >&2 </dev/null || {
             dotfiles_log error "brew bundle failed for $file"
             return 1
         }
-    done <<EOF
-$(steps_brew_pending "$brew")
-EOF
+    done
 }
 
 # --- S2-micromamba (hpc) ---------------------------------------------------

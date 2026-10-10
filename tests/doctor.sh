@@ -241,7 +241,9 @@ BASE_ENV=(
 # --- helpers -------------------------------------------------------------
 
 # run_doctor CASE [VAR=VALUE ...] -- [doctor arguments]: a clean environment
-# (env -i) plus BASE_ENV and the overrides; stdout/stderr land in $OUT.
+# (env -i) plus BASE_ENV and the overrides; stdout/stderr land in $OUT. The
+# doctor runs under the Bash running this file ($BASH), so `bash-3.2
+# tests/doctor.sh` tests the doctor under Bash 3.2 too.
 run_doctor() {
     CASE=$1
     shift
@@ -252,7 +254,7 @@ run_doctor() {
     done
     [ "$#" -eq 0 ] || shift
     : >"$EVENT_LOG"
-    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} bash "$FIXTURE/doctor.sh" "$@" \
+    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" "$@" \
         >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
@@ -932,5 +934,41 @@ chmod -R u+w "$TEST_HOME" "$FIXTURE"
 assert_rc 0
 ! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
 assert_no_event NETWORK
+
+# --- no temporary files ----------------------------------------------------
+
+# Every mode but --smoke creates no file in TMPDIR, not even one it removes
+# again: TMPDIR is an empty directory with an old mtime, which any file
+# created or unlinked there would update. That catches mktemp and the
+# here-document files of Bash 4 and later (5.1 and later only for a document
+# larger than a pipe buffer). Bash 3.2 puts its here-document files in the
+# C library's P_tmpdir whatever TMPDIR says, so bootstrap-manifest.sh scans
+# these scripts for here-documents as well.
+NO_TMP="$TEST_TMP/no-tmp"
+NO_TMP_REF="$TEST_TMP/no-tmp.ref"
+mkdir "$NO_TMP"
+no_tmp_case() {
+    touch -t 200001010000 "$NO_TMP" "$NO_TMP_REF"
+    run_doctor "$@"
+    [ -z "$(ls -A "$NO_TMP")" ] || case_fail "the doctor left files in TMPDIR: $(ls -A "$NO_TMP")"
+    [ -z "$(find "$NO_TMP" -maxdepth 0 -newer "$NO_TMP_REF" -print)" ] ||
+        case_fail 'the doctor created and removed a file in TMPDIR'
+}
+no_tmp_case no-tmp-log TMPDIR="$NO_TMP" -- --host lab-ubuntu
+assert_rc 0
+no_tmp_case no-tmp-tsv TMPDIR="$NO_TMP" -- --host lab-ubuntu --tier all --tsv
+assert_rc 1
+no_tmp_case no-tmp-quiet TMPDIR="$NO_TMP" -- --host lab-ubuntu --quiet --online
+assert_rc 0
+no_tmp_case no-tmp-list TMPDIR="$NO_TMP" -- --host lab-ubuntu --list
+assert_rc 0
+no_tmp_case no-tmp-platform TMPDIR="$NO_TMP" -- --platform other --tsv
+assert_rc 0
+no_tmp_case no-tmp-mac TMPDIR="$NO_TMP" BOOTSTRAP_UNAME_S=Darwin -- --host mac --tsv
+assert_rc 0
+no_tmp_case no-tmp-help TMPDIR="$NO_TMP" -- --help
+assert_rc 0
+no_tmp_case no-tmp-usage TMPDIR="$NO_TMP" -- --tier gui
+assert_rc 2
 
 echo "doctor=PASS"

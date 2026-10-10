@@ -2,6 +2,7 @@
 # Host, profile and platform detection for doctor.sh and setup-host.sh.
 # Sourced only; defines functions and changes no shell options. Bash 3.2
 # compatible and `set -u` safe; nothing here splits words by the caller's IFS.
+# No here-documents (see manifest.sh): text reaches awk through a pipe.
 # Test overrides: BOOTSTRAP_UNAME_S, BOOTSTRAP_UNAME_M, BOOTSTRAP_OS_RELEASE,
 # BOOTSTRAP_PROC_VERSION, BOOTSTRAP_BREW_CANDIDATES.
 
@@ -124,9 +125,9 @@ bootstrap_glibc_version() {
         *[Gg][Ll][Ii][Bb][Cc]* | *'GNU libc'*) ;;
         *) return 0 ;;
     esac
-    awk 'match($0, /[0-9]+\.[0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<EOF
-$first
-EOF
+    # awk reads to the end, so the writer never dies of SIGPIPE under pipefail.
+    printf '%s\n' "$first" |
+        awk '!found && match($0, /[0-9]+\.[0-9]+/) { print substr($0, RSTART, RLENGTH); found = 1 }'
 }
 
 # bootstrap_brew_bin: the brew executable this process should use: brew on

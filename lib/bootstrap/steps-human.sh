@@ -75,16 +75,16 @@ step_H1_linuxbrew_plan() { steps_homebrew_block H1-linuxbrew; }
 # steps_apt_missing PACKAGES: the packages of the newline list that dpkg does
 # not report as installed, space-separated. Read-only (dpkg-query).
 steps_apt_missing() {
-    local IFS=' ' nl='
-' package list='' status missing=''
-    while IFS= read -r package; do
+    local IFS=' ' nl=$BOOTSTRAP_NL lines package list='' status missing=''
+    lines=$1$nl
+    while [ -n "$lines" ]; do
+        package=${lines%%"$nl"*}
+        lines=${lines#*"$nl"}
         case $package in
             '' | -* | *[!A-Za-z0-9.+:-]*) continue ;;
         esac
         list="$list $package"
-    done <<EOF
-$1
-EOF
+    done
     [ -n "$list" ] || return 0
     # shellcheck disable=SC2016,SC2086 # dpkg format fields; names checked above
     status=$(dpkg-query -W -f='${Package} ${db:Status-Abbrev}\n' $list 2>/dev/null </dev/null) || true
@@ -132,7 +132,7 @@ step_H1_apt_core_plan() {
 step_H1_locale_check() {
     local locales
     locales=$(locale -a 2>/dev/null) || locales=
-    if steps_text_has -Ei '^en_US\.utf-?8$' "$locales"; then
+    if bootstrap_text_has -Ei '^en_US\.utf-?8$' "$locales"; then
         STEP_DETAIL='en_US.UTF-8 is available'
         return 0
     fi
@@ -360,12 +360,15 @@ steps_stowed() {
 # stow --adopt would overwrite the tracked copies instead, so the H7-stow
 # block moves each aside first. Read-only: git ls-files and the home.
 steps_stow_conflicts() {
-    local files ignores pattern path rel target resolved
+    local files ignores pattern lines path rel target resolved
     files=$(git -c core.quotePath=false --no-optional-locks -C "$STEPS_ROOT" ls-files -- common "$STEPS_HOST" \
         2>/dev/null </dev/null) || return 0
     ignores=$(sed -n 's/^--ignore=//p' "$STEPS_ROOT/.stowrc" 2>/dev/null) || ignores=
     pattern=$(printf '%s\n' "$ignores" | awk 'NF { printf "%s(%s)$", sep, $0; sep = "|" }')
-    while IFS= read -r path; do
+    lines=$files$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        path=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         case $path in
             \"* | */*/.stow-local-ignore) continue ;;
             */*/*) ;;
@@ -373,7 +376,7 @@ steps_stow_conflicts() {
         esac
         rel=${path#*/}
         rel=${rel#*/}
-        if [ -n "$pattern" ] && steps_text_has -E "$pattern" "$rel"; then
+        if [ -n "$pattern" ] && bootstrap_text_has -E "$pattern" "$rel"; then
             continue
         fi
         target=$HOME/$rel
@@ -386,9 +389,7 @@ steps_stow_conflicts() {
             continue
         fi
         printf '%s\n' "$rel"
-    done <<EOF
-$files
-EOF
+    done
 }
 
 step_H7_stow_check() {
@@ -436,17 +437,18 @@ steps_stow_path_prefix() {
 }
 
 step_H7_stow_plan() {
-    local rel
+    local lines rel
     steps_block_begin H7-stow judgment
     if [ -n "${STEPS_STOW_CONFLICTS:-}" ]; then
         printf '%s\n' '# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;' \
             '# merge what you still need into the overlay later'
-        while IFS= read -r rel; do
+        lines=$STEPS_STOW_CONFLICTS$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            rel=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
             [ -n "$rel" ] || continue
             printf 'mv -n %s %s\n' "$(steps_quote "$HOME/$rel")" "$(steps_quote "$HOME/$rel.pre-dotfiles")"
-        done <<EOF
-$STEPS_STOW_CONFLICTS
-EOF
+        done
     elif [ "$STEPS_MODE" = manual ]; then
         printf '%s\n' '# Stow never replaces a regular file (a fresh ~/.bashrc or ~/.profile from /etc/skel);' \
             '# ./setup-host.sh lists each one in this block with a mv line that moves it aside first'

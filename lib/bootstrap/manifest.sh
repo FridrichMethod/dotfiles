@@ -5,8 +5,18 @@
 # tests/test_bootstrap_manifest.py validates config/bootstrap, and this file
 # trusts what it validated. A caller's IFS (Bash `local` is dynamically
 # scoped) never changes a result: every split sets its own IFS.
+#
+# No here-documents or here-strings, here or in any file doctor.sh and
+# setup-host.sh run: Bash 3.2 (macOS /bin/bash) backs each one with a
+# temporary file, which the read-only modes must not create. Nor process
+# substitution: Bash 3.2 keeps its descriptors open until the outermost
+# function returns. Lines and fields are split with parameter expansion
+# (BOOTSTRAP_NL, bootstrap_split), and text reaches a command through a pipe
+# (bootstrap_text_has). tests/bootstrap-manifest.sh enforces the rule.
 
 BOOTSTRAP_TAB=$(printf '\t')
+BOOTSTRAP_NL='
+'
 BOOTSTRAP_TIER_ORDER='core cli ai desktop contributor host'
 
 # bootstrap_init ROOT: set BOOTSTRAP_ROOT and, unless a test preset it,
@@ -26,6 +36,61 @@ bootstrap_rows() {
         !seen_header { seen_header = 1; next }
         { print }
     ' "$1"
+}
+
+# bootstrap_split SEP LINE NAME...: assign the fields of LINE to the NAMEs
+# exactly as `IFS=SEP read -r NAME...` would for a one-line LINE and a SEP
+# of one space or one tab: leading and trailing SEPs are dropped, a run of
+# SEPs separates two fields, the last NAME takes the rest of the line, and
+# NAMEs past the last field are set empty. A NAME of _ is skipped. The NAMEs
+# are the caller's variables (its locals too); none may start with _bs_.
+bootstrap_split() {
+    local _bs_sep=$1 _bs_rest=$2 _bs_field
+    shift 2
+    while :; do
+        case $_bs_rest in
+            "$_bs_sep"*) _bs_rest=${_bs_rest#"$_bs_sep"} ;;
+            *) break ;;
+        esac
+    done
+    while [ "$#" -gt 1 ]; do
+        case $_bs_rest in
+            *"$_bs_sep"*)
+                _bs_field=${_bs_rest%%"$_bs_sep"*}
+                _bs_rest=${_bs_rest#*"$_bs_sep"}
+                while :; do
+                    case $_bs_rest in
+                        "$_bs_sep"*) _bs_rest=${_bs_rest#"$_bs_sep"} ;;
+                        *) break ;;
+                    esac
+                done
+                ;;
+            *)
+                _bs_field=$_bs_rest
+                _bs_rest=
+                ;;
+        esac
+        [ "$1" = _ ] || printf -v "$1" '%s' "$_bs_field"
+        shift
+    done
+    while :; do
+        case $_bs_rest in
+            *"$_bs_sep") _bs_rest=${_bs_rest%"$_bs_sep"} ;;
+            *) break ;;
+        esac
+    done
+    [ "$#" -eq 0 ] || [ "$1" = _ ] || printf -v "$1" '%s' "$_bs_rest"
+}
+
+# bootstrap_text_has OPTIONS PATTERN TEXT: grep OPTIONS (-F, -Ei, ...) for
+# PATTERN in the lines of TEXT and return grep's status. pipefail is off in
+# the subshell only, so grep -q stopping at its first match of a long TEXT
+# never fails the pipe through the writer's SIGPIPE.
+bootstrap_text_has() {
+    (
+        set +o pipefail
+        printf '%s\n' "$3" | grep -q "$1" -- "$2"
+    )
 }
 
 # bootstrap_field LINE N: print tab-separated field N (1-based) of LINE.
@@ -119,17 +184,18 @@ bootstrap_tier_selected() {
 # bootstrap_rows_for_host FILE COLUMN HOST: data rows whose hosts column
 # matches HOST.
 bootstrap_rows_for_host() {
-    local file=$1 column=$2 host=${3:-} rows line hosts
+    local file=$1 column=$2 host=${3:-} rows lines line hosts
     rows=$(bootstrap_rows "$file") || return 1
     [ -n "$rows" ] || return 0
-    while IFS= read -r line; do
+    lines=$rows$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         hosts=$(bootstrap_field "$line" "$column") || continue
         if bootstrap_host_matches "$hosts" "$host"; then
             printf '%s\n' "$line"
         fi
-    done <<EOF
-$rows
-EOF
+    done
 }
 
 # bootstrap_tool_rows HOST: tools.tsv rows applicable to HOST.
@@ -146,17 +212,18 @@ bootstrap_clone_rows() {
 # that applies to HOST and whose arch is ARCH or "any" (an exact arch wins).
 # Returns 1 when there is none.
 bootstrap_installer_row() {
-    local id=$1 host=${2:-} arch=${3:-} rows exact='' generic='' line
+    local id=$1 host=${2:-} arch=${3:-} rows exact='' generic='' lines line
     rows=$(bootstrap_installer_rows_for "$id" "$host") || return 1
     [ -n "$rows" ] || return 1
-    while IFS= read -r line; do
+    lines=$rows$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         case $(bootstrap_field "$line" 7) in
             "$arch") [ -n "$exact" ] || exact=$line ;;
             any) [ -n "$generic" ] || generic=$line ;;
         esac
-    done <<EOF
-$rows
-EOF
+    done
     if [ -n "$exact" ]; then
         printf '%s\n' "$exact"
     elif [ -n "$generic" ]; then

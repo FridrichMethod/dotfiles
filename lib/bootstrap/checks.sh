@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # Doctor checks for doctor.sh. Sourced only; defines functions and changes no
 # shell options. Bash 3.2 compatible and `set -u` safe; every split sets its
-# own IFS. Each check prints one line, STATUS<TAB>DETAIL, and returns 0;
-# doctor.sh maps STATUS through the tier selection to a log level.
+# own IFS, and no here-document creates a temporary file (see manifest.sh).
+# Each check prints one line, STATUS<TAB>DETAIL, and returns 0; doctor.sh
+# maps STATUS through the tier selection to a log level.
 #   ok        present (and at or above its floor)
 #   outdated  present below its floor
 #   missing   absent, or a structural requirement is not met
@@ -135,10 +136,8 @@ bootstrap_tool_row_valid() {
         return 1
     fi
     # Exactly seven single tabs separate eight non-empty cells, so this
-    # read splits the row the same way bootstrap_field does.
-    IFS=$BOOTSTRAP_TAB read -r id tier hosts probe flag floor absent doc <<EOF
-$row
-EOF
+    # split matches bootstrap_field's.
+    bootstrap_split "$BOOTSTRAP_TAB" "$row" id tier hosts probe flag floor absent doc
     case $id in
         [a-z0-9]*) ;;
         *)
@@ -296,9 +295,12 @@ bootstrap_font_dirs() {
 # levels below a font directory. A read-only scan on every platform: fc-list
 # would create fontconfig caches in a fresh home.
 bootstrap_check_font() {
-    local family=$1 absent=$2 needle dir found
+    local family=$1 absent=$2 needle dirs dir found
     needle=$(printf '%s' "$family" | tr -d ' ')
-    while IFS= read -r dir; do
+    dirs=$(bootstrap_font_dirs)$BOOTSTRAP_NL || true
+    while [ -n "$dirs" ]; do
+        dir=${dirs%%"$BOOTSTRAP_NL"*}
+        dirs=${dirs#*"$BOOTSTRAP_NL"}
         if [ -z "$dir" ] || [ ! -d "$dir" ]; then
             continue
         fi
@@ -310,9 +312,7 @@ bootstrap_check_font() {
             bootstrap_check_result ok "font $family at $found"
             return 0
         fi
-    done <<EOF
-$(bootstrap_font_dirs)
-EOF
+    done
     bootstrap_check_result missing "font $family: no font file named like $needle in the user, system or Homebrew font directories; $absent"
 }
 
@@ -380,10 +380,7 @@ bootstrap_check_locale() {
         return 0
     }
     list=$("$locale_bin" -a </dev/null 2>/dev/null) || list=
-    if grep -Eqi '^en_US\.utf-?8$' <<EOF
-$list
-EOF
-    then
+    if bootstrap_text_has -Ei '^en_US\.utf-?8$' "$list"; then
         bootstrap_check_result ok "en_US.UTF-8 is generated"
     else
         bootstrap_check_result missing "en_US.UTF-8 is not generated; LANG from ~/.profile falls back to C"
@@ -501,7 +498,7 @@ BOOTSTRAP_LOCAL_BIN_TOOLS='claude codex micromamba kitty kitten'
 # caller's PATH before doctor.sh prepended anything.
 bootstrap_check_path_order() {
     local local_bin=${HOME%/}/.local/bin login=${HOME%/}/micromamba/envs/login/bin
-    local rest=$1: entry earlier='' found=0 file name shadows='' count=0 IFS=' '
+    local rest=$1: entry earlier='' found=0 file name shadows='' count=0 IFS=' ' lines
     while [ -n "$rest" ]; do
         entry=${rest%%:*}
         rest=${rest#*:}
@@ -521,16 +518,17 @@ bootstrap_check_path_order() {
     for name in $BOOTSTRAP_LOCAL_BIN_TOOLS; do
         file=$local_bin/$name
         [ -f "$file" ] && [ -x "$file" ] || continue
-        while IFS= read -r entry; do
+        lines=$earlier$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            entry=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
             [ -n "$entry" ] || continue
             if [ -f "$entry/$name" ] && [ -x "$entry/$name" ] && ! [ "$entry/$name" -ef "$file" ]; then
                 count=$((count + 1))
                 [ "$count" -gt 3 ] || shadows="$shadows, $entry/$name"
                 break
             fi
-        done <<EOF
-$earlier
-EOF
+        done
     done
     if [ "$count" -gt 0 ]; then
         bootstrap_check_result warn "$count command(s) in ~/.local/bin are shadowed by an earlier PATH entry: ${shadows#, }; two installs of one tool, remove the one you do not use"
@@ -545,11 +543,14 @@ EOF
 # it through the stow symlink), and uncommitted changes under common/.
 # shellcheck disable=SC2016 # the nvm marker is literal installer text
 bootstrap_check_rc_pollution() {
-    local root=$1 findings='' file dirty='' count first git_bin
+    local root=$1 findings='' files file dirty='' count first git_bin
     if [ -e "$HOME/.zshrc.pre-oh-my-zsh" ] || [ -L "$HOME/.zshrc.pre-oh-my-zsh" ]; then
         findings="$findings; ~/.zshrc.pre-oh-my-zsh exists (the upstream oh-my-zsh installer replaced ~/.zshrc)"
     fi
-    while IFS= read -r file; do
+    files=$BOOTSTRAP_RC_FILES$BOOTSTRAP_NL
+    while [ -n "$files" ]; do
+        file=${files%%"$BOOTSTRAP_NL"*}
+        files=${files#*"$BOOTSTRAP_NL"}
         if [ -z "$file" ] || [ ! -f "$root/$file" ]; then
             continue
         fi
@@ -562,9 +563,7 @@ bootstrap_check_rc_pollution() {
         if grep -Fq -e '# This loads nvm' -e '[ -s "$NVM_DIR/nvm.sh" ]' "$root/$file" 2>/dev/null; then
             findings="$findings; $file has an nvm installer loader"
         fi
-    done <<EOF
-$BOOTSTRAP_RC_FILES
-EOF
+    done
     if git_bin=$(bootstrap_find_command git); then
         if dirty=$("$git_bin" --no-optional-locks -C "$root" status --porcelain -- common </dev/null 2>/dev/null); then
             if [ -n "$dirty" ]; then

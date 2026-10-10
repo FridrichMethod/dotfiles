@@ -421,6 +421,37 @@ done
 doc_case H1-apt-core debian H1-apt-core
 doc_case H1-locale debian H1-locale
 
+# bootstrap_split replaces `IFS=SEP read -r NAME... <<EOF` in the scripts
+# (no here-documents there); it must split every line exactly as read does.
+echo '==> line splitting matches read'
+split_case() {
+    # split_case SEP LINE: compare one to five NAMEs with IFS=SEP read -r.
+    local sep=$1 line=$2 r1 r2 r3 r4 r5 s1 s2 s3 s4 s5
+    IFS=$sep read -r r1 <<<"$line"
+    bootstrap_split "$sep" "$line" s1
+    assert_eq "[$s1]" "[$r1]" "split one name of [$line]"
+    IFS=$sep read -r r1 r2 <<<"$line"
+    bootstrap_split "$sep" "$line" s1 s2
+    assert_eq "[$s1][$s2]" "[$r1][$r2]" "split two names of [$line]"
+    IFS=$sep read -r r1 r2 r3 <<<"$line"
+    bootstrap_split "$sep" "$line" s1 s2 s3
+    assert_eq "[$s1][$s2][$s3]" "[$r1][$r2][$r3]" "split three names of [$line]"
+    IFS=$sep read -r r1 _ r3 r4 r5 <<<"$line"
+    bootstrap_split "$sep" "$line" s1 _ s3 s4 s5
+    assert_eq "[$s1][$s3][$s4][$s5]" "[$r1][$r3][$r4][$r5]" "split five names of [$line]"
+}
+for sep in ' ' "$tab"; do
+    for line in '' a " a" "a " "  a  b  " 'a b c d e f' " a b c " 'x\y z' "a${tab}b c" \
+        "a ${tab} b" '%s *' "a${tab}${tab}b${tab}" "${tab}a${tab}b c${tab}d${tab}${tab}"; do
+        split_case "$sep" "$line"
+    done
+done
+big=$(awk 'BEGIN { print "needle"; for (i = 0; i < 20000; i++) print "hay hay hay hay" }')
+assert_status 0 'text_has: an early match in a long text under pipefail' bootstrap_text_has -F needle "$big"
+assert_status 1 'text_has: no match' bootstrap_text_has -F absent "$big"
+assert_status 0 'text_has: per-line anchors' bootstrap_text_has -Ei '^EN_us\.utf-?8$' "$(printf 'C\nen_US.utf8\n')"
+assert_status 2 'text_has: a grep error' bootstrap_text_has -E '(' text
+
 # Bash `local` is dynamically scoped: a TSV loop's `local IFS=$tab` reaches
 # every library function it calls, so none of them may split by the caller's IFS.
 echo '==> a caller IFS does not reach the libraries'
@@ -438,6 +469,11 @@ caller_ifs_case() {
     assert_eq "$(bootstrap_tool_rows mac | cut -f1 | tr '\n' ' ')" 'alpha beta gamma ' "tool rows with a $label IFS"
     assert_eq "$(bootstrap_installer_row beta sherlock aarch64 | cut -f3)" https://e.test/v1.0/b-aarch64 \
         "installer row with a $label IFS"
+    local f1 f2 f3
+    bootstrap_split "$tab" " a b${tab}${tab}c d${tab}e " f1 f2 f3
+    assert_eq "[$f1][$f2][$f3]" '[ a b][c d][e ]' "tab split with a $label IFS"
+    bootstrap_split ' ' " a${tab}b  c d " f1 f2
+    assert_eq "[$f1][$f2]" "[a${tab}b][c d]" "space split with a $label IFS"
 }
 caller_ifs_case "$tab" tab
 caller_ifs_case $'\n' newline
@@ -561,6 +597,37 @@ offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}")
 [ -z "$offenders" ] || fail "gh auth setup-git outside a warning: $offenders"
 printf '%s\n' '# never run gh auth setup-git' 'gh auth login && gh auth setup-git' >"$TEST_TMP/setup-git.md"
 assert_eq "$(setup_git_offenders "$TEST_TMP/setup-git.md" | cut -d: -f2)" 2 'the setup-git check finds a command'
+
+# -------------------------------------------------- no here-documents
+echo '==> no here-document, here-string or process substitution in the Unix bootstrap'
+# Bash 3.2 (macOS /bin/bash) backs every here-document and here-string with a
+# temporary file in the C library's P_tmpdir (/tmp with glibc) whatever
+# TMPDIR says, so ./doctor.sh and ./setup-host.sh --check would write, and its
+# process substitution keeps each descriptor open until the outermost
+# function returns. The dynamic TMPDIR checks in doctor.sh and setup-host.sh
+# cannot see P_tmpdir, so this scan is the guard. It covers apply-only code
+# too (there is no allowlist) and skips comment lines.
+heredoc_offenders() {
+    local file
+    for file in "$@"; do
+        if [ ! -f "$file" ]; then
+            printf '%s: missing\n' "$file"
+            continue
+        fi
+        grep -Hn -e '<<' -e '<(' -e '>(' -- "$file" | grep -Ev '^[^:]*:[0-9]+:[[:space:]]*#' || true
+    done
+}
+# The glob expands inside the checkout, so an empty match cannot pass.
+offenders=$(cd "$REPO_ROOT" && heredoc_offenders doctor.sh setup-host.sh lib/terminal.sh lib/bootstrap/*.sh)
+[ -z "$offenders" ] || fail "here-document, here-string or process substitution in the Unix bootstrap: $offenders"
+[ "$(cd "$REPO_ROOT" && printf '%s\n' lib/bootstrap/*.sh | grep -c '^lib/bootstrap/steps')" -ge 8 ] ||
+    fail 'the here-document scan found too few lib/bootstrap/steps*.sh files'
+printf '%s\n' '# a comment may name <<EOF' 'cat <<EOF' 'cat <<-EOF' 'read -r x <<<"$y"' \
+    'done < <(rows)' 'tee >(cat)' 'printf %s "$x" | grep -q y' >"$TEST_TMP/heredoc.sh"
+assert_eq "$(heredoc_offenders "$TEST_TMP/heredoc.sh" | cut -d: -f2 | tr '\n' ' ')" '2 3 4 5 6 ' \
+    'the here-document scan finds each form and skips comments and pipes'
+assert_eq "$(heredoc_offenders "$TEST_TMP/absent.sh")" "$TEST_TMP/absent.sh: missing" \
+    'the here-document scan reports a missing file'
 
 # ----------------------------------------------------------- validator
 echo '==> manifest validator'

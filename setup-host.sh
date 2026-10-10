@@ -32,39 +32,38 @@ else
 fi
 
 usage() {
-    cat <<'EOF'
-Usage: ./setup-host.sh --host HOST [options]
-
-Installs the day-zero tools for HOST without sudo, then prints the HUMAN
-blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.
-
-  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults
-                    to DOTFILES_HOST or the host ./stow-all.sh recorded.
-                    The win host uses setup-host.ps1.
-  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host
-                    (default core,cli,ai)
-  --check           print one plan line per step and the pending HUMAN blocks;
-                    writes nothing and makes no network calls
-  --yes             apply without asking (required when stdin is not a terminal)
-  --only ID         run only this step (repeatable)
-  --skip ID         skip this step (repeatable)
-  --keep-going      continue after a failed step
-  --list            print the steps for HOST: id, kind, tier, blocking
-  --print-manual    print every HUMAN block for HOST, pending or not
-  -h, --help        show this help
-
-Plan lines: <step-id> <done|todo|human|skip|failed> <detail>
-HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run);
-              '# ' lines are notes, every other line one self-contained command
-Exit: 0 every selected step is done or not applicable (non-blocking
-        HUMAN blocks may still be printed)
-      1 a step failed
-      2 usage or refusal (unknown host, win, root, not this platform,
-        no terminal without --yes, invalid manifest)
-      3 work remains: a blocking HUMAN step pending, or auto steps still to
-        apply (--check, a declined prompt, or waiting on a HUMAN step)
-Run it as your user, never with sudo.
-EOF
+    printf '%s\n' \
+        'Usage: ./setup-host.sh --host HOST [options]' \
+        '' \
+        'Installs the day-zero tools for HOST without sudo, then prints the HUMAN' \
+        'blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.' \
+        '' \
+        '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
+        '                    to DOTFILES_HOST or the host ./stow-all.sh recorded.' \
+        '                    The win host uses setup-host.ps1.' \
+        '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
+        '                    (default core,cli,ai)' \
+        '  --check           print one plan line per step and the pending HUMAN blocks;' \
+        '                    writes nothing and makes no network calls' \
+        '  --yes             apply without asking (required when stdin is not a terminal)' \
+        '  --only ID         run only this step (repeatable)' \
+        '  --skip ID         skip this step (repeatable)' \
+        '  --keep-going      continue after a failed step' \
+        '  --list            print the steps for HOST: id, kind, tier, blocking' \
+        '  --print-manual    print every HUMAN block for HOST, pending or not' \
+        '  -h, --help        show this help' \
+        '' \
+        'Plan lines: <step-id> <done|todo|human|skip|failed> <detail>' \
+        'HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run);' \
+        "              '# ' lines are notes, every other line one self-contained command" \
+        'Exit: 0 every selected step is done or not applicable (non-blocking' \
+        '        HUMAN blocks may still be printed)' \
+        '      1 a step failed' \
+        '      2 usage or refusal (unknown host, win, root, not this platform,' \
+        '        no terminal without --yes, invalid manifest)' \
+        '      3 work remains: a blocking HUMAN step pending, or auto steps still to' \
+        '        apply (--check, a declined prompt, or waiting on a HUMAN step)' \
+        'Run it as your user, never with sudo.'
 }
 
 usage_error() {
@@ -104,6 +103,11 @@ done
 . "$REPO_ROOT/lib/bootstrap/steps-runtimes.sh"
 # shellcheck source=lib/bootstrap/steps-archives.sh
 . "$REPO_ROOT/lib/bootstrap/steps-archives.sh"
+
+# No here-documents or here-strings here or in the libraries: Bash 3.2 backs
+# each one with a temporary file, and --check writes nothing (see
+# lib/bootstrap/manifest.sh). Lines are split with parameter expansion,
+# fields with bootstrap_split.
 
 HOST=''
 TIERS=core,cli,ai
@@ -223,14 +227,15 @@ comma_items() {
 }
 
 if [[ "$TIERS" != all ]]; then
-    while IFS= read -r tier; do
+    lines=$(comma_items "$TIERS")$BOOTSTRAP_NL
+    while [[ -n "$lines" ]]; do
+        tier=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         case $tier in
             core | cli | ai | desktop | contributor | host) ;;
             *) usage_error "unknown tier: '$tier' (core, cli, ai, desktop, contributor, host or all)" ;;
         esac
-    done <<EOF
-$(comma_items "$TIERS")
-EOF
+    done
 fi
 
 # The run state that the step libraries read; a lint run without those files
@@ -250,12 +255,13 @@ fi
 }
 bootstrap_init "$REPO_ROOT"
 
-while IFS= read -r id; do
+lines=$(comma_items "${ONLY#,}${ONLY:+,}${SKIP#,}")$BOOTSTRAP_NL
+while [[ -n "$lines" ]]; do
+    id=${lines%%"$BOOTSTRAP_NL"*}
+    lines=${lines#*"$BOOTSTRAP_NL"}
     [[ -n "$id" ]] || continue
     steps_has "$id" || usage_error "unknown step for $HOST: '$id' (see ./setup-host.sh --host $HOST --list)"
-done <<EOF
-$(comma_items "${ONLY#,}${ONLY:+,}${SKIP#,}")
-EOF
+done
 
 if [[ "$MODE" == list ]]; then
     steps_list

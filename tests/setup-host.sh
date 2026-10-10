@@ -160,7 +160,9 @@ snapshot() {
 
 # case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
 # setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
-# WSL); a VAR=VALUE overrides a default of the same name.
+# WSL); a VAR=VALUE overrides a default of the same name. setup-host runs
+# under the Bash running this file ($BASH), so `bash-3.2 tests/setup-host.sh`
+# tests it under Bash 3.2 too.
 case_command() {
     local extra=()
     while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
@@ -187,7 +189,7 @@ case_command() {
         BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew"
         FAKE_DPKG_INSTALLED="$DPKG_ALL"
         ${extra[@]+"${extra[@]}"}
-        bash "$FIXTURE/setup-host.sh" "$@")
+        "$BASH" "$FIXTURE/setup-host.sh" "$@")
 }
 
 # run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
@@ -1396,6 +1398,41 @@ for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
 done
+
+# --- no temporary files ------------------------------------------------------
+
+# --check, --list and --print-manual create no file in TMPDIR, not even one
+# they remove again: TMPDIR is an empty directory with an old mtime, which
+# any file created or unlinked there would update. That catches mktemp and
+# the here-document files of Bash 4 and later; Bash 3.2 puts its own in
+# P_tmpdir whatever TMPDIR says, so bootstrap-manifest.sh scans these
+# scripts for here-documents as well.
+NO_TMP="$TEST_TMP/no-tmp"
+NO_TMP_REF="$TEST_TMP/no-tmp.ref"
+mkdir "$NO_TMP"
+# no_tmp_case NAME RC [VAR=VALUE...] -- ARGS...: run_case, its exit code, an
+# untouched TMPDIR.
+no_tmp_case() {
+    local name=$1 rc=$2
+    shift 2
+    touch -t 200001010000 "$NO_TMP" "$NO_TMP_REF"
+    run_case "$name" TMPDIR="$NO_TMP" "$@"
+    expect_rc "$name" "$rc"
+    [ -z "$(ls -A "$NO_TMP")" ] || fail "$name left files in TMPDIR: $(ls -A "$NO_TMP")"
+    [ -z "$(find "$NO_TMP" -maxdepth 0 -newer "$NO_TMP_REF" -print)" ] ||
+        fail "$name created and removed a file in TMPDIR"
+}
+new_home no-tmp
+no_tmp_case no-tmp-check 3 -- --host lab-ubuntu --check --tier all
+expect_text no-tmp-check out 'S3-clones todo'
+no_tmp_case no-tmp-check-missing 3 FAKE_DPKG_INSTALLED="$DPKG_PARTIAL" -- --host lab-ubuntu --check
+expect_line no-tmp-check-missing 'HUMAN-BEGIN H1-apt-core sudo'
+no_tmp_case no-tmp-list 0 -- --host lab-ubuntu --list
+no_tmp_case no-tmp-manual 0 -- --host lab-ubuntu --print-manual
+no_tmp_case no-tmp-mac 3 "${MAC_ENV[@]}" -- --host mac --check
+no_tmp_case no-tmp-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
+no_tmp_case no-tmp-help 0 -- --help
+no_tmp_case no-tmp-usage 2 -- --host lab-ubuntu --check --tier core,gui
 
 # --- bootstrap_fetch ---------------------------------------------------------
 

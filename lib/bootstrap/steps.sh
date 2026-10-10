@@ -5,7 +5,9 @@
 # Helpers live in steps-common.sh, the rc-pollution guard in steps-guard.sh;
 # the steps in steps-human.sh, steps-packages.sh, steps-files.sh,
 # steps-runtimes.sh and steps-archives.sh.
-# Bash 3.2 compatible and `set -u` safe: no associative arrays, no mapfile.
+# Bash 3.2 compatible and `set -u` safe: no associative arrays, no mapfile,
+# and no here-documents in any step file (see manifest.sh): lines are split
+# with parameter expansion, fields with bootstrap_split.
 #
 # A step id names four functions, its dashes turned into underscores:
 #   step_<id>_check   read-only and offline. Sets STEP_DETAIL and returns
@@ -64,29 +66,33 @@ STEPS_FAILED='' STEPS_PENDING='' STEPS_HELD='' STEPS_TODO='' STEPS_STOPPED=''
 
 # steps_rows: "id kind tier blocking" for every registry step of STEPS_HOST.
 steps_rows() {
-    local id kind tier blocking scopes
-    while IFS=' ' read -r id kind tier blocking scopes; do
+    local lines line id kind tier blocking scopes
+    lines=$STEPS_REGISTRY$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" id kind tier blocking scopes
         [ -n "$id" ] || continue
         case ",$scopes," in
             *",$STEPS_PROFILE,"* | *",$STEPS_HOST,"*) ;;
             *) continue ;;
         esac
         printf '%s %s %s %s\n' "$id" "$kind" "$tier" "$blocking"
-    done <<EOF
-$STEPS_REGISTRY
-EOF
+    done
 }
 
 # steps_ids: the step ids of STEPS_HOST, space-separated, in phase order.
 steps_ids() {
-    local id rest ids=''
-    while IFS=' ' read -r id rest; do
+    local lines line id rest ids=''
+    lines=$(steps_rows)$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" id rest
         if [ -n "$id" ]; then
             ids="$ids${ids:+ }$id"
         fi
-    done <<EOF
-$(steps_rows)
-EOF
+    done
     printf '%s\n' "$ids"
 }
 
@@ -100,17 +106,19 @@ steps_has() {
 
 # steps_meta ID: set STEP_KIND, STEP_TIER and STEP_BLOCKING from the registry.
 steps_meta() {
-    local id kind tier blocking
-    while IFS=' ' read -r id kind tier blocking; do
+    local lines line id kind tier blocking
+    lines=$(steps_rows)$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" id kind tier blocking
         if [ "$id" = "$1" ]; then
             STEP_KIND=$kind
             STEP_TIER=$tier
             STEP_BLOCKING=$blocking
             return 0
         fi
-    done <<EOF
-$(steps_rows)
-EOF
+    done
     return 1
 }
 
@@ -413,13 +421,15 @@ steps_run() {
 
 # steps_list: the registry of STEPS_HOST (id, kind, tier, blocking).
 steps_list() {
-    local id kind tier blocking
+    local lines line id kind tier blocking
     printf 'id\tkind\ttier\tblocking\n'
-    while IFS=' ' read -r id kind tier blocking; do
+    lines=$(steps_rows)$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" id kind tier blocking
         printf '%s\t%s\t%s\t%s\n' "$id" "$kind" "$tier" "$blocking"
-    done <<EOF
-$(steps_rows)
-EOF
+    done
 }
 
 # steps_print_manual: every HUMAN block of STEPS_HOST, pending or not. Reads
