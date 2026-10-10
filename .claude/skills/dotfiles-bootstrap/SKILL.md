@@ -1,6 +1,6 @@
 ---
 name: dotfiles-bootstrap
-description: Set up or diagnose a fresh machine for this dotfiles repository (hosts mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win). Use when asked to bootstrap, provision or check a host before or after stowing the dotfiles.
+description: Provision or check a machine for this dotfiles repository (hosts mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win, or another Linux with --platform other). Diagnoses with doctor.sh, installs pinned tools with setup-host.sh, hands sudo, login, GUI and allocation steps to the person, then stows. Use when asked to bootstrap, provision, set up or check a host, or when doctor.sh reports missing tools.
 compatibility: Needs a clone of this dotfiles repository, Bash 3.2 or newer on macOS and Linux, and PowerShell 7 on Windows.
 metadata:
   playbook: docs/bootstrap.md
@@ -9,18 +9,33 @@ disable-model-invocation: true
 
 # Dotfiles bootstrap
 
-1. Read `docs/bootstrap.md` first. It is the playbook and the contract for
-   every step, flag, exit code and HUMAN block below. If `./doctor.sh` or
-   `./setup-host.sh` is missing from this checkout, stop and say so: the
-   bootstrap scripts are not installed yet.
-2. Diagnose without changing anything: `./doctor.sh --host <host>`
-   (`.\doctor.ps1 -Host win` on Windows).
-3. Preview the plan, which writes nothing: `./setup-host.sh --host <host> --check`.
-4. Run `./setup-host.sh --host <host>` only after the person agrees. It stops
-   before stow and prints HUMAN blocks instead of running them.
-5. Never run `sudo` from a script, a `sh -c` wrapper or a chained command. A
-   `sudo` HUMAN block runs only after the person approves it in chat, as one
-   visible top-level command. Hand `auth`, `gui`, `alloc` and `chsh` blocks to
-   the person.
-6. Run `./stow-all.sh <host>` only as its own visible top-level command.
-7. Finish with `./doctor.sh --host <host>`; exit status 0 is the completion gate.
+Use this to provision a fresh machine for this repository, finish a partial
+setup, or fix what `./doctor.sh` reports. `docs/bootstrap.md` is the contract
+for every step, flag, exit code and HUMAN block: read it before acting and
+follow it over your defaults. If `./doctor.sh` or `./setup-host.sh` is missing
+from this checkout, stop and say so.
+
+1. Resolve the host: ask the person which overlay this is (`mac`, `wsl-ubuntu`,
+   `lab-ubuntu`, `sherlock`, `marlowe`, `win`) or whether it needs
+   `--platform other`. Never guess an overlay from the OS.
+2. Run every command with `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0`.
+3. Diagnose: `./doctor.sh --host H --tsv`.
+4. Plan: `./setup-host.sh --host H --check` writes nothing and makes no network
+   calls. Show the plan and wait for the person to agree.
+5. Apply: `./setup-host.sh --host H --yes`.
+6. Handle each HUMAN block by kind, as `docs/bootstrap.md` ("Running it with an
+   agent") says. `sudo`: only after the person approves it in chat, each line as
+   one visible top-level command, never through `sh -c`, a script or a chain.
+   `auth`, `gui`, `alloc`, `chsh`: hand them to the person and wait. `inspect`:
+   show the script's digest and contents first. `judgment`: the person decides.
+7. Re-run step 5 until it exits 0; exit 3 means HUMAN blocks are still pending.
+8. Run `./stow-all.sh H` only as its own visible top-level command that the
+   person approves; it writes under `~/.claude` and `~/.codex`.
+9. Finish with `./doctor.sh --host H --smoke`; exit 0 is the completion gate.
+10. Report what was installed, which HUMAN blocks remain, and every failure with
+    its `docs/bootstrap.md <step-id>` reference.
+
+On native Windows use the twins (`.\doctor.ps1 -Host win -Tsv`,
+`.\setup-host.ps1 -Host win -Check`, then `-Yes`); elevated steps belong to the
+person. Never run `git lfs install`, `gh auth setup-git`, `conda init` or
+`micromamba shell init`, never edit rc files, and never commit.
