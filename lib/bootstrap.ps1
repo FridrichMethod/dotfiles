@@ -293,8 +293,12 @@ function Test-BootstrapTool {
     $version = ''
     switch -CaseSensitive ($parsed.Kind) {
         'file' {
+            # An executable file (doctor.sh's file: probes) may name a version flag.
             $candidate = Expand-BootstrapPath $parsed.Value
-            if ([IO.File]::Exists($candidate)) { $path = $candidate }
+            if ([IO.File]::Exists($candidate)) {
+                $path = $candidate
+                if ($VersionFlag -cne '-') { $version = Get-BootstrapToolVersion -Path $candidate -Flag $VersionFlag }
+            }
         }
         'dir' {
             $candidate = Expand-BootstrapPath $parsed.Value

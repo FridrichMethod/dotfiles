@@ -508,6 +508,7 @@ sha() {
 }
 
 printf '<plist><!-- fixture Catppuccin Mocha --></plist>\n' >"$ARTIFACTS/theme"
+printf 'fixture GitHub CLI keyring\n' >"$ARTIFACTS/gh-keyring"
 printf '#!/bin/sh\necho bad micromamba\n' >"$ARTIFACTS/micromamba-bad"
 
 mkdir -p "$TEST_TMP/build/codex/bin" "$TEST_TMP/build/codex/codex-path" "$TEST_TMP/build/codex/codex-resources"
@@ -553,6 +554,7 @@ URL_CLAUDE=https://claude.ai/install.sh
 URL_FONT=https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/CascadiaMono.tar.xz
 URL_KITTY=https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-x86_64.txz
 URL_THEME='https://raw.githubusercontent.com/catppuccin/bat/0123456789abcdef0123456789abcdef01234567/themes/Catppuccin%20Mocha.tmTheme'
+URL_GH_KEY=https://cli.github.com/packages/githubcli-archive-keyring.gpg
 
 {
     printf '%s\t%s\n' "$URL_HOMEBREW" "$FIXTURES/artifacts/homebrew-install"
@@ -563,6 +565,7 @@ URL_THEME='https://raw.githubusercontent.com/catppuccin/bat/0123456789abcdef0123
     printf '%s\t%s\n' "$URL_FONT" "$ARTIFACTS/font.tar.xz"
     printf '%s\t%s\n' "$URL_KITTY" "$ARTIFACTS/kitty.txz"
     printf '%s\t%s\n' "$URL_THEME" "$ARTIFACTS/theme"
+    printf '%s\t%s\n' "$URL_GH_KEY" "$ARTIFACTS/gh-keyring"
 } >"$URL_MAP"
 awk -F '\t' -v OFS='\t' -v url="$URL_MICROMAMBA" -v bad="$ARTIFACTS/micromamba-bad" \
     '$1 == url { $2 = bad } { print }' "$URL_MAP" >"$URL_MAP_BAD"
@@ -571,6 +574,7 @@ SHA_HOMEBREW=$(sha "$FIXTURES/artifacts/homebrew-install")
 SHA_MICROMAMBA=$(sha "$FIXTURES/artifacts/micromamba")
 SHA_MICROMAMBA_BAD=$(sha "$ARTIFACTS/micromamba-bad")
 SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
+SHA_GH_KEY=$(sha "$ARTIFACTS/gh-keyring")
 
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/common/zsh"
 cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
@@ -603,7 +607,8 @@ write_clones
         claude script "$URL_CLAUDE" - - wsl-ubuntu,lab-ubuntu any ai inspect \
         nerd-font archive "$URL_FONT" "$(sha "$ARTIFACTS/font.tar.xz")" '$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont' lab-ubuntu any desktop - \
         kitty archive "$URL_KITTY" "$(sha "$ARTIFACTS/kitty.txz")" '$HOME/.local/kitty.app' lab-ubuntu x86_64 desktop - \
-        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core -
+        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core - \
+        gh-apt file "$URL_GH_KEY" "$SHA_GH_KEY" /etc/apt/keyrings/githubcli-archive-keyring.gpg lab-ubuntu any cli sudo
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
@@ -634,6 +639,7 @@ printf 'Linux version 5.15.167.4-microsoft-standard-WSL2 (root@runner) #1 SMP\n'
 printf '%s\n' zsh git curl xclip >"$DPKG_ALL"
 printf '%s\n' curl xclip >"$DPKG_PARTIAL"
 HOMEBREW_SCRATCH_REL=.cache/dotfiles-bootstrap/homebrew/install.sh
+GH_KEY_SCRATCH_REL=.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg
 CLAUDE_SCRATCH_REL=.cache/dotfiles-bootstrap/claude/install.sh
 
 # --- refusals ----------------------------------------------------------------
@@ -763,6 +769,7 @@ expect_text check-fresh out 'that runs it only while that sha256 holds'
 expect_no_text check-fresh out "&& bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_text check-fresh out 'H1-locale done'
 expect_line check-fresh 'HUMAN-BEGIN H1-gh-apt-repo sudo'
+expect_text check-fresh out "downloads $URL_GH_KEY"
 expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-sync-skills judgment'
@@ -800,6 +807,26 @@ expect_line apply "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubunt
 expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 
 [ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
+# The GitHub CLI keyring is pinned: staged after its digest check, and the
+# sudo block installs it as an apt trust anchor only behind a digest gate.
+expect_event "curl:$URL_GH_KEY"
+[ "$(sha "$CASE_HOME/$GH_KEY_SCRATCH_REL")" = "$SHA_GH_KEY" ] || fail 'gh keyring not staged'
+expect_line apply "# sha256 $SHA_GH_KEY verified"
+GH_KEY_GATE="printf '%s  %s\\n' $SHA_GH_KEY $CASE_HOME/$GH_KEY_SCRATCH_REL | sha256sum -c --status - && sudo install -D -m 0644 $CASE_HOME/$GH_KEY_SCRATCH_REL /etc/apt/keyrings/githubcli-archive-keyring.gpg"
+expect_line apply "$GH_KEY_GATE"
+expect_no_text apply out 'gpg --show-keys'
+if command -v sha256sum >/dev/null 2>&1; then
+    # sudo is a tripwire stub here: it records that the gate let it run.
+    : >"$EVENT_LOG"
+    PATH="$FAKE_BIN:$PATH" EVENT_LOG="$EVENT_LOG" bash -c "$GH_KEY_GATE" >/dev/null 2>&1 || true
+    grep -q 'TRIPWIRE sudo install -D -m 0644' "$EVENT_LOG" || fail 'the keyring gate did not reach sudo install'
+    cp "$CASE_HOME/$GH_KEY_SCRATCH_REL" "$TEST_TMP/gh-keyring.saved"
+    printf 'tampered\n' >>"$CASE_HOME/$GH_KEY_SCRATCH_REL"
+    : >"$EVENT_LOG"
+    PATH="$FAKE_BIN:$PATH" EVENT_LOG="$EVENT_LOG" bash -c "$GH_KEY_GATE" >/dev/null 2>&1 || true
+    [ ! -s "$EVENT_LOG" ] || fail 'the keyring gate installed a tampered keyring'
+    mv "$TEST_TMP/gh-keyring.saved" "$CASE_HOME/$GH_KEY_SCRATCH_REL"
+fi
 [ -f "$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh" ] || fail 'oh-my-zsh not cloned'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh" config oh-my-zsh.branch)" = master ] || fail 'oh-my-zsh clone config'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" rev-parse HEAD)" = "$P10K_PIN" ] ||
@@ -918,6 +945,22 @@ expect_text check-cloned out 'S3-clones done 3 clones at their pins'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
+
+# --- H1-gh-apt-repo: Ubuntu's own /usr/bin/gh is below the floor ------------
+
+new_home gh-apt
+printf '#!/bin/sh\necho "gh version 2.45.0 (2026-03-17 Ubuntu 2.45.0-1ubuntu0.3+esm3)"\n' >"$CASE_HOME/.fake-gh-apt"
+chmod 755 "$CASE_HOME/.fake-gh-apt"
+run_case gh-apt-old -- --host lab-ubuntu --check --only H1-gh-apt-repo
+expect_rc gh-apt-old 0
+expect_text gh-apt-old out "H1-gh-apt-repo human $CASE_HOME/.fake-gh-apt 2.45.0 is below 2.50.0 (Ubuntu's own gh"
+expect_line gh-apt-old 'HUMAN-BEGIN H1-gh-apt-repo sudo'
+expect_no_events gh-apt-old
+printf '#!/bin/sh\necho "gh version 2.81.0 (2025-09-01)"\n' >"$CASE_HOME/.fake-gh-apt"
+run_case gh-apt-new -- --host lab-ubuntu --check --only H1-gh-apt-repo
+expect_rc gh-apt-new 0
+expect_text gh-apt-new out "H1-gh-apt-repo done $CASE_HOME/.fake-gh-apt 2.81.0 >= 2.50.0"
+expect_no_text gh-apt-new out 'HUMAN-BEGIN H1-gh-apt-repo'
 
 # --- nvm: a checkout off the pinned commit is never sourced ------------------
 

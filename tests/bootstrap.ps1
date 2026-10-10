@@ -545,6 +545,7 @@ try {
             [IO.File]::WriteAllText((Join-Path $local 'Microsoft/Windows/Fonts/caskaydiamononerdfontmono-bold.ttf'), '')
             Assert-True (Test-BootstrapTool -Probe 'font:CaskaydiaMono Nerd Font').Found 'per-user font, any case'
             Assert-True (Test-BootstrapTool -Probe "file:$($bin.Replace('\', '/'))/fzf.ps1").Found 'file'
+            Assert-Equal (Test-BootstrapTool -Probe "file:$($bin.Replace('\', '/'))/fzf.ps1" -VersionFlag '--version').Version '0.60.0' 'file probe version'
             Assert-True (Test-BootstrapTool -Probe "dir:$($modules.Replace('\', '/'))").Found 'dir'
             foreach ($bad in @('url:x', 'a b', 'C:\tools\x.exe', 'file:~/x')) {
                 Assert-Throws { Test-BootstrapTool -Probe $bad } "Accepted probe $bad." -InvalidData

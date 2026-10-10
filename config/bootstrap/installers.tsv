@@ -41,5 +41,11 @@ nerd-font	archive	https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5
 # (tar -C dest -xJof), then link dest/bin/kitty and dest/bin/kitten into $HOME/.local/bin.
 kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-x86_64.txz	d573618b911e9c461bd421b96c13c74c7f1cb2f1ac9c327818d4ff84366cf5c6	$HOME/.local/kitty.app	lab-ubuntu	x86_64	desktop	-
 kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-arm64.txz	0c81a995614426cccf0fecaf7d104d47cd63bbccf173d14976e9f92e3d60fce6	$HOME/.local/kitty.app	lab-ubuntu	aarch64	desktop	-
+# GitHub CLI apt keyring: the sha256 GitHub publishes for it in cli/cli docs/install_linux.md, which
+# also lists its two signing keys, 2C6106201985B60E6C7AC87323F3D4EA75716059 and
+# 7F38BBB59D064DBCB3D84D725612B36462313325; 4528 bytes. The url is unversioned, so a key rotation
+# fails the digest check until this pin is reviewed. setup-host stages it; the H1-gh-apt-repo sudo
+# block installs it at dest behind a digest gate.
+gh-apt	file	https://cli.github.com/packages/githubcli-archive-keyring.gpg	6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b	/etc/apt/keyrings/githubcli-archive-keyring.gpg	lab-ubuntu	any	cli	sudo
 # catppuccin/bat main head 2025-06-29 (commit 6810349b28055dce54076712fc05fc68da4b8ec0); run bat cache --build after.
 bat-theme	file	https://raw.githubusercontent.com/catppuccin/bat/6810349b28055dce54076712fc05fc68da4b8ec0/themes/Catppuccin%20Mocha.tmTheme	395566f08ceb301b936b91c077690ef94f7aeb651b121553f201c99c2bd4aa77	$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	all	any	core	-

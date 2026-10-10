@@ -55,7 +55,12 @@ REQUIRED_INSTALLERS = {
     ("nerd-font", "any"): ("archive", "lab-ubuntu", "desktop", "-", "$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont",
                            GH + "ryanoasis/nerd-fonts/releases/download/v*/CascadiaMono.tar.xz"),
     ("bat-theme", "any"): ("file", "all", "core", "-", "$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme",
-                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme")}
+                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme"),
+    ("gh-apt", "any"): ("file", "lab-ubuntu", "cli", "sudo", "/etc/apt/keyrings/githubcli-archive-keyring.gpg",
+                        "https://cli.github.com/packages/githubcli-archive-keyring.gpg")}
+# Rows whose url names no version, because the vendor publishes one fixed url:
+# the sha256 alone pins them, and a changed file fails closed.
+UNVERSIONED_INSTALLERS = {("gh-apt", "any")}
 for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64", "arm64")):
     REQUIRED_INSTALLERS[("micromamba", _arch)] = ("binary", "sherlock,marlowe", "core", "-", "$HOME/.local/bin/micromamba",
                                                   f"{GH}mamba-org/micromamba-releases/releases/download/*/micromamba-linux-{_mamba}")
@@ -259,8 +264,9 @@ def check_tools(rows, errors):
         report(errors, "probe", where, probe_error(row["probe"], row["hosts"]))
         report(errors, "vocab", where, flag not in VERSION_FLAGS and f"unknown version_flag {flag!r}")
         report(errors, "floor", where, floor != "-" and not FLOOR_RE.match(floor) and f"floor {floor!r} is not X.Y[.Z]")
-        presence = ":" in row["probe"] and (flag != "-" or floor != "-")
-        report(errors, "probe-version", where, presence and "file, dir, font, env and psmodule probes are presence-only")
+        # A file probe may name an executable (gh-apt's /usr/bin/gh), so it may have a version.
+        presence = ":" in row["probe"] and not row["probe"].startswith("file:") and (flag != "-" or floor != "-")
+        report(errors, "probe-version", where, presence and "dir, font, env and psmodule probes are presence-only")
         report(errors, "probe-version", where, floor != "-" and flag == "-" and "a floor needs a version_flag")
         report(errors, "doc", where, row["doc"] not in STEP_IDS and f"unknown step id {row['doc']!r}")
 
@@ -304,7 +310,9 @@ def check_installers(rows, tools, errors):
             report(errors, "sha256", where, sha != "-" and not SHA256_RE.match(sha) and "must be - or 64 lowercase hex")
         else:
             report(errors, "sha256", where, not SHA256_RE.match(sha) and "must be 64 lowercase hex (- only for inspect)")
-            report(errors, "installer-pin", where, not PINNED_URL_RE.search(url) and "url must name a commit or version")
+            unversioned = (row["id"], row["arch"]) in UNVERSIONED_INSTALLERS
+            report(errors, "installer-pin", where, not unversioned and not PINNED_URL_RE.search(url)
+                   and "url must name a commit or version")
         if row["kind"] == "script":
             report(errors, "installer-dest", where, dest != "-" and "scripts have dest -")
         else:
@@ -668,7 +676,9 @@ class RejectionTests(unittest.TestCase):
             ("probe", "psmodule host", self.tools("psfzf", "hosts", "all")),
             ("probe", "env", self.tools("lmod", "probe", "env:lmod-dir")),
             ("floor", "floor", self.tools("fzf", "floor", "0.58.x")),
-            ("probe-version", "presence with flag", self.tools("oh-my-zsh", "version_flag", "--version")),
+            ("probe-version", "presence with flag", self.tools("zsh-completions", "version_flag", "--version")),
+            ("probe-version", "font with floor", lambda: (self.tools("nerd-font", "version_flag", "--version")(),
+                                                         self.tools("nerd-font", "floor", "3.0")())),
             ("probe-version", "floor without flag", self.tools("fzf", "version_flag", "-")),
         ])
 
@@ -725,6 +735,8 @@ class RejectionTests(unittest.TestCase):
             ("installer-set", "kitty arch asset", self.installers("kitty", "url", lambda url: url.replace("x86_64", "arm64"))),
             ("installer-set", "nerd-font dest", self.installers("nerd-font", "dest", "$XDG_DATA_HOME/fonts")),
             ("installer-set", "bat-theme kind", self.installers("bat-theme", "kind", "archive")),
+            ("installer-set", "gh-apt keyring human", self.installers("gh-apt", "human", "-")),
+            ("installer-pin", "unversioned url", self.installers("kitty", "url", "https://example.com/kitty.txz")),
         ])
 
     def test_forbidden_characters_and_home_literals(self):

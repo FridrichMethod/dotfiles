@@ -676,32 +676,39 @@ the overlay already has them.
 
 ### H1-gh-apt-repo: GitHub CLI apt repository
 
-Applies to `lab-ubuntu` (manual row `gh-apt`): its `.gitconfig_local` uses
+Applies to `lab-ubuntu` (row `gh-apt`): its `.gitconfig_local` uses
 `!/usr/bin/gh auth git-credential` for github.com, so `/usr/bin/gh` must be the
-current GitHub CLI from cli.github.com, not Ubuntu's older package. The
-Linuxbrew `gh` stays first on PATH; both share `~/.config/gh`.
+current GitHub CLI from cli.github.com, not Ubuntu's older package, which
+installs the same path. The doctor's `gh-apt` row and this step's check both
+run `/usr/bin/gh --version` against the `gh-apt` floor in `tools.tsv`, so
+Ubuntu's gh shows as `outdated` and the block stays pending. The Linuxbrew `gh`
+stays first on PATH; both share `~/.config/gh`.
 
 - **Check:** `/usr/bin/gh --version | head -n 1; apt-cache policy gh | grep -c cli.github.com`
-- **Install:** the printed sudo block. It downloads the keyring and writes the
-  source list as you, under `~/.cache/dotfiles-bootstrap/gh-apt` (or
-  `$XDG_CACHE_HOME/dotfiles-bootstrap/gh-apt`), shows the keyring's
-  fingerprint, and only then installs both with sudo. Compare the fingerprint
-  with the one GitHub publishes in
-  [its Linux install guide](https://github.com/cli/cli/blob/trunk/docs/install_linux.md)
-  before the sudo lines; each line stands alone:
+- **Install:** the printed sudo block. setup-host first downloads the apt
+  keyring through the `gh-apt` row of
+  [`installers.tsv`](../config/bootstrap/installers.tsv), checks it against the
+  sha256 GitHub publishes for it, and stages it under
+  `~/.cache/dotfiles-bootstrap/gh-apt` (or
+  `$XDG_CACHE_HOME/dotfiles-bootstrap/gh-apt`). The keyring holds GitHub's two
+  signing keys, `2C6106201985B60E6C7AC87323F3D4EA75716059` and
+  `7F38BBB59D064DBCB3D84D725612B36462313325` (`gpg --show-keys <file>` lists
+  them). The block writes the source list as you, then installs the keyring
+  with sudo only behind a digest gate on the pinned sha256; stop if that line
+  fails. Each line stands alone:
 
   ```sh
-  curl -fsSL --proto '=https' --tlsv1.2 --create-dirs -o ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg
-  gpg --show-keys ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg
   printf 'deb [arch=%s signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\n' "$(dpkg --print-architecture)" > ~/.cache/dotfiles-bootstrap/gh-apt/github-cli.list
-  sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  printf '%s  %s\n' <sha256> ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg | sha256sum -c --status - && sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
   sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/github-cli.list /etc/apt/sources.list.d/github-cli.list
   sudo apt-get update
   sudo apt-get install -y gh
   ```
 
-- **Verify:** `/usr/bin/gh --version` is at least the `gh` floor in `tools.tsv`;
-  doctor row `gh-apt` is `ok`.
+  By hand: `f=$(fetch_pinned gh-apt)` checks the keyring's digest; then the
+  lines above with `"$f"` as the keyring.
+- **Verify:** `/usr/bin/gh --version` is at least the `gh-apt` floor in
+  `tools.tsv`; doctor row `gh-apt` is `ok`.
 - **Human:** yes (sudo: adds an apt signing key and source)
 
 ### H1-fcitx5: fcitx5 input method

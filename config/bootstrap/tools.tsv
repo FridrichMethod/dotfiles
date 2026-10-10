@@ -10,7 +10,9 @@
 #                 env:VAR | psmodule:Name. PATH is absolute or starts with one
 #                 token: $HOME $ZSH_CUSTOM $NVM_DIR $XDG_CONFIG_HOME
 #                 $XDG_DATA_HOME $BAT_CONFIG_DIR.
-#   version_flag  --version, -V, -v, version, or - (presence only)
+#   version_flag  --version, -V, -v, version, or - (presence only); dir, font,
+#                 env and psmodule probes are presence only, a file probe of an
+#                 executable may name a flag
 #   floor         X.Y or X.Y.Z, compared with the first X.Y[.Z] the tool prints
 #   doc           a step id; docs/bootstrap.md has one "### <id>:" heading each
 # Floors: fzf 0.58.0 (--style full, --input-label in fzf.zsh and fzf-tab.zsh),
@@ -66,7 +68,8 @@ nvim	cli	all	nvim	-	-	the vi alias fails	S2-brew-bundle
 aria2	cli	all	aria2c	--version	-	aria2c downloads with the stowed aria2.conf fail	S2-brew-bundle
 uv	cli	all	uv	--version	-	uv and the oh-my-zsh uv plugin are unavailable	S2-brew-bundle
 gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows fail	S2-brew-bundle
-gh-apt	cli	lab-ubuntu	file:/usr/bin/gh	-	-	the github.com credential helper in .gitconfig_local fails	H1-gh-apt-repo
+# /usr/bin/gh is versioned: Ubuntu's own gh package (2.45) installs the same path below the floor.
+gh-apt	cli	lab-ubuntu	file:/usr/bin/gh	--version	2.50.0	the github.com credential helper in .gitconfig_local fails	H1-gh-apt-repo
 xclip	cli	lab-ubuntu	xclip	-	-	fzf Ctrl-Y cannot copy to the X clipboard	H1-apt-core
 wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	H1-apt-core
 nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
