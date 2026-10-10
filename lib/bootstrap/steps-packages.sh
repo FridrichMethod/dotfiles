@@ -80,8 +80,105 @@ steps_brewfile_names() {
     printf '%s\n' "$names"
 }
 
+# steps_brew_declared_conflicts: "FORMULA OTHER BREWFILE" for every pair that
+# a selected Brewfile declares with a "# conflicts: FORMULA OTHER..." line:
+# Homebrew refuses to install FORMULA while OTHER is installed (its
+# conflicts_with), and brew bundle then fails with no more than that.
+# tests/test_bootstrap_manifest.py validates the lines.
+steps_brew_declared_conflicts() {
+    local files decls file decl formula others other
+    files=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
+    while [ -n "$files" ]; do
+        file=${files%%"$BOOTSTRAP_NL"*}
+        files=${files#*"$BOOTSTRAP_NL"}
+        [ -n "$file" ] || continue
+        decls=$(sed -n 's/^# conflicts: //p' "$file")$BOOTSTRAP_NL || continue
+        while [ -n "$decls" ]; do
+            decl=${decls%%"$BOOTSTRAP_NL"*}
+            decls=${decls#*"$BOOTSTRAP_NL"}
+            bootstrap_split ' ' "$decl" formula others
+            while [ -n "$others" ]; do
+                bootstrap_split ' ' "$others" other others
+                if steps_safe_formula "$formula" && steps_safe_formula "$other"; then
+                    printf '%s %s %s\n' "$formula" "$other" "${file##*/}"
+                fi
+            done
+        done
+    done
+}
+
+# steps_safe_formula NAME: 0 for a formula name that is a single path segment.
+steps_safe_formula() {
+    case $1 in
+        '' | .* | *[!a-z0-9@+._-]*) return 1 ;;
+    esac
+}
+
+# steps_brew_keg PREFIX NAME: 0 when formula NAME has a keg under PREFIX's
+# Cellar, or under $HOMEBREW_CELLAR when that is set. Read-only and offline.
+steps_brew_keg() {
+    [ -d "$1/Cellar/$2" ] && return 0
+    [ -n "${HOMEBREW_CELLAR:-}" ] && [ -d "$HOMEBREW_CELLAR/$2" ]
+}
+
+# steps_brew_conflicts PREFIX: the declared pairs that would stop brew bundle
+# here: OTHER has a keg while FORMULA has neither a keg nor an opt/ link.
+steps_brew_conflicts() {
+    local lines line formula other
+    lines=$(steps_brew_declared_conflicts)$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" formula other _
+        [ -n "$other" ] || continue
+        if [ -e "$1/opt/$formula" ] || steps_brew_keg "$1" "$formula"; then
+            continue
+        fi
+        if steps_brew_keg "$1" "$other"; then
+            printf '%s\n' "$line"
+        fi
+    done
+}
+
+# steps_brew_conflict_block MODE PAIRS: the judgment block that uninstalls
+# each conflicting formula of PAIRS ("FORMULA OTHER BREWFILE" lines). MODE
+# manual lists every declared pair with the condition under which it applies.
+steps_brew_conflict_block() {
+    local brew lines line formula other file seen=' '
+    brew=$(steps_quote "$(steps_brew_default)")
+    steps_block_begin S2-brew-bundle judgment
+    if [ "$1" = manual ]; then
+        printf '%s\n' '# applies only when a conflicting formula below is installed and the Brewfile formula is not;' \
+            '# ./setup-host.sh then stops S2-brew-bundle before running brew and prints this block'
+    fi
+    lines=$2$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" formula other file
+        [ -n "$file" ] || continue
+        printf '# Homebrew does not install %s (%s) while the %s formula is installed (conflicts_with), so brew bundle would fail\n' \
+            "$formula" "$file" "$other"
+    done
+    printf '%s\n' '# uninstall each conflicting formula below; the next ./setup-host.sh run then bundles the Brewfile one'
+    lines=$2$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" formula other file
+        [ -n "$other" ] || continue
+        case $seen in
+            *" $other "*) continue ;;
+        esac
+        seen="$seen$other "
+        printf '%s uninstall --formula %s\n' "$brew" "$other"
+    done
+    steps_block_end
+}
+
 step_S2_brew_bundle_check() {
-    local files brew pending note=''
+    local files brew pending note='' lines line formula other file
+    STEPS_BREW_CONFLICTS=
     files=$(bootstrap_brewfiles "$STEPS_TIERS")
     if [ -z "$files" ]; then
         STEP_DETAIL="no Brewfile for tiers $STEPS_TIERS"
@@ -90,6 +187,21 @@ step_S2_brew_bundle_check() {
     if ! brew=$(bootstrap_brew_bin); then
         STEP_DETAIL="brew is not installed; Brewfiles: $(steps_brewfile_names "$files")"
         return 1
+    fi
+    # Before any brew command: a conflicting formula is a person's call.
+    STEPS_BREW_CONFLICTS=$(steps_brew_conflicts "${brew%/bin/brew}")
+    if [ -n "$STEPS_BREW_CONFLICTS" ]; then
+        STEP_DETAIL=
+        lines=$STEPS_BREW_CONFLICTS$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            line=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
+            bootstrap_split ' ' "$line" formula other file
+            [ -n "$file" ] || continue
+            STEP_DETAIL="$STEP_DETAIL${STEP_DETAIL:+; }the installed $other formula conflicts with $formula ($file)"
+        done
+        STEP_DETAIL="$STEP_DETAIL; brew bundle would fail, so uninstall it first"
+        return 3
     fi
     if [ "$STEPS_MODE" = apply ]; then
         pending=$(steps_brew_pending "$brew")
@@ -106,7 +218,17 @@ step_S2_brew_bundle_check() {
 }
 
 step_S2_brew_bundle_plan() {
+    if [ -n "${STEPS_BREW_CONFLICTS:-}" ]; then
+        steps_brew_conflict_block pending "$STEPS_BREW_CONFLICTS"
+        return 0
+    fi
     printf 'brew bundle --no-upgrade --file config/bootstrap/brew/<tier>.Brewfile (%s)\n' "$STEP_DETAIL"
+}
+
+step_S2_brew_bundle_manual() {
+    local pairs
+    pairs=$(steps_brew_declared_conflicts)
+    [ -z "$pairs" ] || steps_brew_conflict_block manual "$pairs"
 }
 
 step_S2_brew_bundle_apply() {

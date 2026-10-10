@@ -182,6 +182,22 @@ steps_resolve() {
     printf '%s/%s\n' "${dir%/}" "${path##*/}"
 }
 
+# steps_brew_default: the brew executable a HUMAN block names: the one this
+# run found, else the profile's default Homebrew (Linux, Intel macOS or Apple
+# Silicon). Only the stowed rc files put it on PATH, so blocks name it by path.
+steps_brew_default() {
+    local brew
+    if brew=$(bootstrap_brew_bin); then
+        printf '%s\n' "$brew"
+    elif [ "$STEPS_PROFILE" != macos ]; then
+        printf '%s\n' /home/linuxbrew/.linuxbrew/bin/brew
+    elif [ "$STEPS_ARCH" = x86_64 ]; then
+        printf '%s\n' /usr/local/bin/brew
+    else
+        printf '%s\n' /opt/homebrew/bin/brew
+    fi
+}
+
 # steps_path_prepend DIR: put an existing DIR first on PATH (this process).
 steps_path_prepend() {
     [ -d "$1" ] || return 0

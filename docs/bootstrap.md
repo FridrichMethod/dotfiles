@@ -800,7 +800,34 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
 - **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`python3`, `stow`,
   `fzf`, `eza`, `fd`, `gh`, ...) `ok` with their floors.
-- **Human:** no
+- **Human:** no, unless a conflicting formula is installed (judgment, below)
+
+**Conflicting formulae.** Homebrew refuses to install a formula next to one it
+`conflicts_with`, and `brew bundle` then fails with no more than "brew bundle
+failed". A Brewfile names each such pair in a `# conflicts: FORMULA OTHER...`
+line (validated by `tests/bootstrap-manifest.sh`); today that is `cli`'s
+`# conflicts: tlrc tldr tealdeer`, since all three install a `tldr` command.
+Before it runs brew at all, in `--check` and apply alike, S2-brew-bundle looks
+for a keg of each OTHER (`Cellar/OTHER` under the Homebrew prefix it found, or
+under `$HOMEBREW_CELLAR`) while FORMULA has neither a keg nor an `opt/` link.
+When it finds one, the step is `human` and blocking (exit 3), and setup-host
+prints a judgment block whose command line uninstalls it with the brew it found,
+by full path:
+
+```text
+HUMAN-BEGIN S2-brew-bundle judgment
+# docs/bootstrap.md S2-brew-bundle
+# Homebrew does not install tlrc (cli.Brewfile) while the tldr formula is installed (conflicts_with), so brew bundle would fail
+# uninstall each conflicting formula below; the next ./setup-host.sh run then bundles the Brewfile one
+/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr
+HUMAN-END
+```
+
+The `tldr` command comes back from tlrc on the next run. The conflict holds
+back the whole step, every selected Brewfile, so keeping the old formula
+instead means leaving the `cli` tier out (`--tier core,ai`). `--print-manual`
+prints the block for every declared pair. See also
+[X-recovery](#x-recovery-recovery-recipes).
 
 ### S2-micromamba: micromamba
 
@@ -1587,6 +1614,19 @@ Look at them (`git -C DEST status`, `git -C DEST diff`), move the directory asid
 if you want to keep them (`mv DEST DEST.local`), then
 `./setup-host.sh --host H --only S3-clones`. A dirty `~/dotfiles` checkout after
 an installer is [X-rc-protection](#x-rc-protection-rc-file-protection).
+
+**Conflicting Homebrew formula.** S2-brew-bundle is `human` with "the installed
+tldr formula conflicts with tlrc (cli.Brewfile)", or `brew bundle` failed with
+"Cannot install tlrc because conflicting formulae are installed". Check with
+`ls "$(brew --prefix)/Cellar"`, then uninstall the old formula by the path
+setup-host printed, for example
+`/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr` (tealdeer the
+same way), and run `./setup-host.sh --host H --only S2-brew-bundle`; tlrc then
+provides `tldr`. If brew refuses because another formula depends on it, keep it
+and leave the `cli` tier out instead
+([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). On a Linuxbrew prefix
+owned by another account (a shared lab install), only that account can
+uninstall or bundle; ask its owner.
 
 **Digest mismatch.** setup-host deletes the `.part` file and fails the step with
 the expected and actual sha256. Never edit the digest just to make it pass.

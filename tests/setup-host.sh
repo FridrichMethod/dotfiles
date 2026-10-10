@@ -1006,6 +1006,48 @@ expect_rc gh-apt-new 0
 expect_text gh-apt-new out "H1-gh-apt-repo done $CASE_HOME/.fake-gh-apt 2.81.0 >= 2.50.0"
 expect_no_text gh-apt-new out 'HUMAN-BEGIN H1-gh-apt-repo'
 
+# --- S2-brew-bundle: a conflicting formula stops it before brew runs ---------
+
+# The fixture cli.Brewfile declares "# conflicts: tlrc tldr tealdeer", as the
+# real one does: Homebrew will not install tlrc next to a tldr keg, and
+# brew bundle then fails with no more than that.
+new_home brew-conflict
+mkdir -p "$CASE_BREW/Cellar/tldr/1.6.1"
+run_case brew-conflict-check -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-check 3
+expect_text brew-conflict-check out 'S2-brew-bundle human the installed tldr formula conflicts with tlrc (cli.Brewfile); brew bundle would fail'
+expect_line brew-conflict-check 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line brew-conflict-check '# docs/bootstrap.md S2-brew-bundle'
+expect_line brew-conflict-check "$CASE_BREW/bin/brew uninstall --formula tldr"
+expect_no_text brew-conflict-check out 'uninstall --formula tealdeer'
+expect_text brew-conflict-check err 'HUMAN steps pending: S2-brew-bundle'
+expect_no_events brew-conflict-check
+# Apply stops too, before brew bundle check or brew bundle.
+run_case brew-conflict-apply -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc brew-conflict-apply 3
+expect_line brew-conflict-apply "$CASE_BREW/bin/brew uninstall --formula tldr"
+expect_no_events brew-conflict-apply
+[ ! -e "$CASE_BREW/opt" ] || fail 'S2-brew-bundle ran brew bundle next to a conflicting formula'
+# A keg in $HOMEBREW_CELLAR counts as well.
+mkdir -p "$TEST_TMP/cellar-elsewhere/tealdeer/1.7.0"
+run_case brew-conflict-cellar HOMEBREW_CELLAR="$TEST_TMP/cellar-elsewhere" -- \
+    --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-cellar 3
+expect_line brew-conflict-cellar "$CASE_BREW/bin/brew uninstall --formula tldr"
+expect_line brew-conflict-cellar "$CASE_BREW/bin/brew uninstall --formula tealdeer"
+# Without the keg the bundle runs; once tlrc is installed a tldr keg is no
+# conflict any more (brew bundle has nothing left to install).
+rm -rf "$CASE_BREW/Cellar/tldr"
+run_case brew-conflict-gone -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc brew-conflict-gone 0
+expect_event 'brew:bundle cli.Brewfile'
+[ -e "$CASE_BREW/opt/tlrc" ] || fail 'tlrc was not bundled once the conflicting keg was gone'
+mkdir -p "$CASE_BREW/Cellar/tldr/1.6.1"
+run_case brew-conflict-installed -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-installed 0
+expect_text brew-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: core cli'
+expect_no_text brew-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
+
 # --- nvm: a checkout off the pinned commit is never sourced ------------------
 
 new_home nvm-moved
@@ -1270,6 +1312,9 @@ expect_line manual 'sudo apt-get install -y --no-install-recommends zsh git curl
 expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
 expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
+expect_line manual 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line manual "$CASE_BREW/bin/brew uninstall --formula tldr"
+expect_line manual "$CASE_BREW/bin/brew uninstall --formula tealdeer"
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
 expect_line manual "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
@@ -1393,7 +1438,8 @@ for host in wsl-ubuntu sherlock marlowe; do
     run_case "manual-$host" -- --host "$host" --print-manual
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
-    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts; do
+    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts \
+    brew-conflict-check brew-conflict-cellar; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"

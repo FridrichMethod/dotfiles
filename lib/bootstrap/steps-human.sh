@@ -415,21 +415,14 @@ step_H7_stow_check() {
 # Apple Silicon, Intel macOS or Linux), and only the stowed rc files put
 # those on PATH.
 steps_stow_path_prefix() {
-    local brew dir
+    local dir
     if [ "$STEPS_PROFILE" = hpc ]; then
         # shellcheck disable=SC2016 # expanded by the shell the block is pasted into
         printf '%s\n' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'
         return 0
     fi
-    if brew=$(bootstrap_brew_bin); then
-        dir=${brew%/brew}
-    elif [ "$STEPS_PROFILE" != macos ]; then
-        dir=/home/linuxbrew/.linuxbrew/bin
-    elif [ "$STEPS_ARCH" = x86_64 ]; then
-        dir=/usr/local/bin
-    else
-        dir=/opt/homebrew/bin
-    fi
+    dir=$(steps_brew_default)
+    dir=${dir%/brew}
     case $dir in
         *[!A-Za-z0-9_./-]*) printf 'PATH=%s:"$PATH"\n' "$(steps_quote "$dir")" ;;
         *) printf 'PATH="%s:$PATH"\n' "$dir" ;;
