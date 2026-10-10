@@ -21,7 +21,9 @@ FIXTURES="$REPO_ROOT/tests/fixtures/bootstrap"
 REAL_GIT=$(command -v git)
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-setup-host.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
-trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
+# The shared-prefix cases make a fixture Cellar read-only; give write back
+# first, so a failing case cannot leave its contents behind.
+trap 'chmod -R u+w "$TEST_TMP" 2>/dev/null; rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
 FIXTURE="$TEST_TMP/repo"
 FAKE_BIN="$TEST_TMP/bin"
@@ -317,11 +319,16 @@ cat >"$TEST_TMP/brew-stub" <<'SH'
 #!/bin/sh
 # Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file,
 # bundle check looks for those links (as the offline --check estimate does).
+# --file=- reads the Brewfile on stdin, as Homebrew's does.
 prefix=$(cd "$(dirname "$0")/.." && pwd) file='' prev=''
 for arg do
     [ "$prev" != --file ] || file=$arg
+    case $arg in
+        --file=*) file=${arg#--file=} ;;
+    esac
     prev=$arg
 done
+[ "$file" != - ] || file=/dev/stdin
 name=${file##*/}
 formulas=$(sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p' "$file" 2>/dev/null)
 case "${1:-} ${2:-}" in
@@ -1198,6 +1205,98 @@ expect_text cask-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied
 expect_no_text cask-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
 rm -f "$DESKTOP_BREWFILE"
 
+# --- S2-brew-bundle: a shared Homebrew prefix this user cannot write ---------
+
+# brew refuses to install into a prefix whose Cellar, bin or repository its
+# user cannot write, as on a shared Linuxbrew owned by another account. The
+# step stops before any brew command and prints a sudo block that bundles
+# each pending Brewfile as the prefix's owner, never a chown. Root can write
+# any directory, so these cases need an ordinary user.
+SHARED_CASES=''
+if [ "$(id -u)" = 0 ]; then
+    printf '%s\n' 'setup-host: SKIP the shared Homebrew prefix cases ([ -w ] is always true for root)' >&2
+else
+    SHARED_CASES='brew-shared-check brew-shared-manual brew-shared-conflict'
+    new_home brew-shared
+    mkdir -p "$CASE_BREW/Cellar"
+    chmod 555 "$CASE_BREW/Cellar"
+    SHARED_OWNER=$(LC_ALL=C ls -ld "$CASE_BREW/Cellar" | awk '{ print $3 }')
+    # owner_line WORDS: the block line that runs the fixture brew as the owner.
+    owner_line() {
+        printf '(cd /tmp && sudo -u %s -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 %s %s)\n' \
+            "$SHARED_OWNER" "$CASE_BREW/bin/brew" "$1"
+    }
+    SHARED_CORE=$(owner_line "bundle --no-upgrade --file=- < $FIXTURE/config/bootstrap/brew/core.Brewfile")
+    SHARED_CLI=$(owner_line "bundle --no-upgrade --file=- < $FIXTURE/config/bootstrap/brew/cli.Brewfile")
+    run_case brew-shared-check -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc brew-shared-check 3
+    expect_text brew-shared-check out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW (owned by $SHARED_OWNER), so its owner bundles: core cli (offline estimate from $CASE_BREW/opt)"
+    expect_line brew-shared-check 'HUMAN-BEGIN S2-brew-bundle sudo'
+    expect_line brew-shared-check '# docs/bootstrap.md S2-brew-bundle'
+    expect_line brew-shared-check "# the Homebrew prefix $CASE_BREW is shared and owned by $SHARED_OWNER; you cannot write $CASE_BREW/Cellar"
+    expect_line brew-shared-check "# never chown a shared prefix: it belongs to $SHARED_OWNER and serves every account here"
+    expect_line brew-shared-check "$SHARED_CORE"
+    expect_line brew-shared-check "$SHARED_CLI"
+    # Two command lines, one per pending Brewfile, and none that chowns.
+    [ "$(sed -n '/^HUMAN-BEGIN S2-brew-bundle/,/^HUMAN-END/p' "$TEST_TMP/brew-shared-check.out" |
+        grep -cv -e '^#' -e '^HUMAN-')" = 2 ] || fail 'the shared-prefix block has other command lines'
+    grep -v '^#' "$TEST_TMP/brew-shared-check.out" | grep -q chown && fail 'the shared-prefix block suggests chown'
+    expect_text brew-shared-check err 'HUMAN steps pending: S2-brew-bundle'
+    expect_no_events brew-shared-check
+    # Apply stops too, before brew bundle check or brew bundle.
+    run_case brew-shared-apply -- --host lab-ubuntu --yes --only S2-brew-bundle
+    expect_rc brew-shared-apply 3
+    expect_line brew-shared-apply 'HUMAN-BEGIN S2-brew-bundle sudo'
+    expect_line brew-shared-apply "$SHARED_CORE"
+    expect_no_events brew-shared-apply
+    [ ! -e "$CASE_BREW/opt" ] || fail 'S2-brew-bundle ran brew bundle on a prefix it cannot write'
+    # --print-manual names every selected Brewfile, with the condition.
+    run_case brew-shared-manual -- --host lab-ubuntu --print-manual
+    expect_rc brew-shared-manual 0
+    expect_line brew-shared-manual '# applies while you cannot write the Homebrew prefix (one shared with other accounts);'
+    expect_line brew-shared-manual "$SHARED_CORE"
+    expect_line brew-shared-manual "$SHARED_CLI"
+    # A conflicting keg there is uninstalled as the owner, too.
+    chmod 755 "$CASE_BREW/Cellar"
+    mkdir -p "$CASE_BREW/Cellar/tlrc/1.11.1"
+    chmod 555 "$CASE_BREW/Cellar"
+    run_case brew-shared-conflict -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc brew-shared-conflict 3
+    expect_line brew-shared-conflict 'HUMAN-BEGIN S2-brew-bundle judgment'
+    expect_line brew-shared-conflict "$(owner_line 'uninstall --formula tlrc')"
+    if grep -Fxq -- "$CASE_BREW/bin/brew uninstall --formula tlrc" "$TEST_TMP/brew-shared-conflict.out"; then
+        fail 'the shared-prefix conflict block uninstalls as this user'
+    fi
+    expect_no_text brew-shared-conflict out 'HUMAN-BEGIN S2-brew-bundle sudo'
+    expect_no_events brew-shared-conflict
+    # What the prefix already has needs no owner: done, still without brew.
+    for formula in fzf jq tldr; do
+        mkdir -p "$CASE_BREW/opt/$formula"
+    done
+    run_case brew-shared-done -- --host lab-ubuntu --yes --only S2-brew-bundle
+    expect_rc brew-shared-done 0
+    expect_text brew-shared-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate from $CASE_BREW/opt); $CASE_BREW is shared, owned by $SHARED_OWNER"
+    expect_no_text brew-shared-done out 'HUMAN-BEGIN S2-brew-bundle'
+    expect_no_events brew-shared-done
+    # The printed line runs brew from /tmp with the Brewfile on stdin, which
+    # the caller's shell opens. A stand-in sudo checks its arguments and runs
+    # the rest as this user.
+    chmod 755 "$CASE_BREW/Cellar"
+    rm -rf "$CASE_BREW/opt" "$CASE_BREW/Cellar/tlrc"
+    mkdir -p "$TEST_TMP/bin-sudo"
+    printf '%s\n' '#!/bin/sh' \
+        'printf "sudo-as:%s %s cwd:%s\n" "$2" "$3" "$PWD" >>"$EVENT_LOG"' \
+        '[ "$1" = -u ] && [ "$3" = -H ] || exit 98' 'shift 3' 'exec "$@"' >"$TEST_TMP/bin-sudo/sudo"
+    chmod 755 "$TEST_TMP/bin-sudo/sudo"
+    : >"$EVENT_LOG"
+    (cd "$FIXTURE" && env -i PATH="$TEST_TMP/bin-sudo:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
+        /bin/sh -c "$SHARED_CORE" </dev/null) || fail "the shared-prefix line failed: $SHARED_CORE"
+    expect_event "sudo-as:$SHARED_OWNER -H cwd:/tmp"
+    expect_event 'brew:bundle stdin'
+    expect_event 'HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1'
+    [ -e "$CASE_BREW/opt/fzf" ] || fail 'the shared-prefix line did not bundle the Brewfile from stdin'
+fi
+
 # --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
 new_home nvm-moved
@@ -1656,6 +1755,7 @@ curl -o "$download" https://example.invalid/key
 cd /tmp
 gh auth setup-git
 NONINTERACTIVE=1 /bin/bash /tmp/install.sh
+(cd /tmp && sudo -u owner -H env HOMEBREW_NO_AUTO_UPDATE=1 /x/bin/brew bundle --no-upgrade --file=- < /x/core.Brewfile)
 HUMAN-END
 EOF
 VIOLATIONS=$(block_violations "$TEST_TMP/carried.out")
@@ -1675,7 +1775,7 @@ for host in wsl-ubuntu sherlock marlowe; do
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
     check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts \
-    brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty; do
+    brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty $SHARED_CASES; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"

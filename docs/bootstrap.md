@@ -127,7 +127,10 @@ exec zsh -l
 
 `lab-ubuntu` adds one gui step (H1-fcitx5: `im-config -n fcitx5` as you, then
 a relogin); add `--tier all` to get kitty and the Nerd Font. An agent CLI
-first, if wanted: the Claude Code installer as on macOS.
+first, if wanted: the Claude Code installer as on macOS. Where
+`/home/linuxbrew/.linuxbrew` belongs to a shared lab account, S2-brew-bundle
+prints a `sudo` block that runs `brew bundle` as that account; never `chown`
+the prefix ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
 
 ### Sherlock and Marlowe
 
@@ -294,7 +297,7 @@ at HW-clone).
 | `--only STEP`, `--skip STEP` | Run only, or skip, that step id from this file; both repeat |
 | `--keep-going` | Continue past a failed step instead of stopping there; the run still exits 1 |
 | `--list` | The steps for this host as TSV: `id`, `kind` (`auto` or a HUMAN kind), `tier`, `blocking` |
-| `--print-manual` | Every HUMAN block for this host, pending or not, then exit 0; that includes the judgment blocks an automatic step prints only in one situation, each with a note saying when: X-recovery (`~/.oh-my-zsh` without `oh-my-zsh.sh`), S2-brew-bundle (a conflicting formula or cask is installed) and S4-nvm (an `nvm.sh` that is not the pinned checkout) |
+| `--print-manual` | Every HUMAN block for this host, pending or not, then exit 0; that includes the judgment blocks an automatic step prints only in one situation, each with a note saying when: X-recovery (`~/.oh-my-zsh` without `oh-my-zsh.sh`), S2-brew-bundle (a conflicting formula or cask is installed) and S4-nvm (an `nvm.sh` that is not the pinned checkout). S2-brew-bundle's `sudo` block for a Homebrew prefix you cannot write names the prefix's owner, so it is printed only while that holds, for every Brewfile of the selected tiers |
 
 Every step runs check, plan, apply, verify; a satisfied step is skipped, so a
 second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
@@ -339,7 +342,9 @@ installer, stow) holds back the steps that need it and makes the run exit 3,
 and so does an automatic step that needs a person's decision first: it shows
 as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
 conflicting Homebrew formula or cask in S2-brew-bundle, an `nvm.sh` S4-nvm will not
-source). A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
+source). S2-brew-bundle on a Homebrew prefix you cannot write (a shared
+Linuxbrew) likewise shows as `human`, not `todo`, and prints a blocking `sudo`
+block for the prefix's owner instead of running brew. A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
 dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
 `--tier` or `--only` leaves out does not. Non-blocking blocks (locale, fcitx5,
 site modules, `chsh`, sign-in, skill sync, the final doctor run) are printed
@@ -390,12 +395,17 @@ The first line names the step and the kind. Every other line up to
   `printf '%s  %s\n' <sha256> <path> | sha256sum -c --status - && <command>`
   (`shasum -a 256 -c --status -` on macOS) is a digest gate: `<command>` runs
   only while the file still has that sha256, so the file that was verified or
-  read is the file that runs. It is the one place where a block chains two
-  commands; run it as printed, as one command.
+  read is the file that runs. Run it as printed, as one command.
+- A line of the form
+  `(cd /tmp && sudo -u <owner> -H env HOMEBREW_NO_AUTO_UPDATE=1 ... <brew> <arguments>)`
+  runs brew as the owner of a Homebrew prefix you cannot write
+  ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). The parentheses keep
+  the `cd` in a subshell, so your shell stays where it was. Run it as printed,
+  as one command, too. These two forms are the only lines that chain commands.
 
 | Kind | Who runs it | Meaning |
 | --- | --- | --- |
-| `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root: system packages, the system locale, `/home/linuxbrew`; on Windows, services |
+| `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root or another account: system packages, the system locale, `/home/linuxbrew`, a shared Homebrew prefix its owner installs into; on Windows, services |
 | `auth` | The person | Browser or device-code login, passwords, keys, Kerberos tickets |
 | `gui` | The person | A dialog, a Settings toggle or a relogin (Xcode CLT, Developer Mode, the fcitx5 session) |
 | `alloc` | The person | A Slurm allocation; heavy work on hpc runs only inside one |
@@ -552,9 +562,10 @@ short and send the agent here. The rules they follow:
 - **`sudo` blocks** run only after the person approves the block in chat. Each
   command line is then run as one visible top-level shell command, exactly as
   printed: never wrapped in `sh -c`, never inside a script, never chained to
-  another command. The one exception is a digest gate the block prints as a
-  single line (`printf ... | sha256sum -c --status - && <command>`): run it as
-  printed, as one command. If sudo would ask for a password and the agent's
+  another command. The exceptions are the two forms a block prints as a single
+  line, a digest gate (`printf ... | sha256sum -c --status - && <command>`) and
+  S2-brew-bundle's shared-prefix line (`(cd /tmp && sudo -u <owner> ...)`): run
+  each as printed, as one command. If sudo would ask for a password and the agent's
   shell has no terminal, the person runs the block in their own terminal
   instead. On native Windows a `sudo` block needs an elevated shell, so it is
   always the person's.
@@ -764,6 +775,17 @@ files guard their `brew shellenv` line, so shells stay quiet before it exists.
 Never append the installer's "Next steps" lines to `~/.bashrc` or `~/.zshrc`;
 the overlay already has them.
 
+**A Linuxbrew owned by another account.** On a lab machine,
+`/home/linuxbrew/.linuxbrew` may already exist and belong to a shared lab
+account whose group you are not in (`ls -ld /home/linuxbrew/.linuxbrew`
+names it). H1-linuxbrew is then `done`, since `brew` runs, but brew refuses to
+install there as you ("The following directories are not writable by your
+user"). S2-brew-bundle notices this before it runs brew and prints a `sudo`
+block that bundles as that account
+([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). Never follow brew's own
+advice to `sudo chown -R` the prefix: that takes it away from the account that
+maintains it and from everyone else who uses it.
+
 ### H1-fcitx5: fcitx5 input method
 
 Applies to `lab-ubuntu`. The fcitx5 packages arrive with H1-apt-core;
@@ -803,7 +825,8 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
 - **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`python3`, `stow`,
   `fzf`, `eza`, `fd`, `gh`, ...) `ok` with their floors.
-- **Human:** no, unless a conflicting formula or cask is installed (judgment, below)
+- **Human:** no, unless a conflicting formula or cask is installed (judgment,
+  below) or you cannot write the Homebrew prefix (sudo, below)
 
 **Conflicting formulae and casks.** Homebrew refuses to install a formula or
 cask next to one it `conflicts_with`, and `brew bundle` then fails with no more
@@ -847,6 +870,53 @@ the other package instead means leaving its tier out (for tldr,
 that applies on this platform. A conflict Homebrew adds later is not judged
 until a Brewfile line names it ([Known limitations](#known-limitations)). See
 also [X-recovery](#x-recovery-recovery-recipes).
+
+**A shared Homebrew prefix.** brew refuses to install into a prefix whose
+directories its user cannot write ("The following directories are not
+writable by your user", then a `sudo chown -R` suggestion), as on a lab
+machine whose `/home/linuxbrew/.linuxbrew` belongs to a shared lab account
+(H1-linuxbrew). So before it runs brew at all, in `--check` and apply alike,
+S2-brew-bundle takes the prefix from the brew it found (the parent of its
+`bin`) and tests with `[ -w ]` whether you can write the prefix's `Cellar`,
+its `bin` and Homebrew's repository (what `brew --repository` prints:
+`PREFIX/Homebrew` on Linux and for `/usr/local`, while `/opt/homebrew` is its
+own); a directory that does not exist yet counts as its parent, where brew
+would create it. When one is not writable, it runs no brew command, not even
+`brew bundle check`. The Brewfiles that the offline estimate (`opt/` links)
+finds incomplete are pending: then the step is `human`, not `todo`, and
+blocking (exit 3), and setup-host prints a `sudo` block with one line per
+pending Brewfile that installs it as the account owning the first unwritable
+directory (`stat`, else `ls -ld`):
+
+```text
+HUMAN-BEGIN S2-brew-bundle sudo
+# docs/bootstrap.md S2-brew-bundle
+# the Homebrew prefix /home/linuxbrew/.linuxbrew is shared and owned by lab; you cannot write /home/linuxbrew/.linuxbrew/Cellar, /home/linuxbrew/.linuxbrew/bin, /home/linuxbrew/.linuxbrew/Homebrew
+# the lines below run brew as lab and change the prefix for everyone on this machine
+# never chown a shared prefix: it belongs to lab and serves every account here
+# each line installs one Brewfile, read on stdin and run from /tmp, since lab may not be able to read your home
+(cd /tmp && sudo -u lab -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 /home/linuxbrew/.linuxbrew/bin/brew bundle --no-upgrade --file=- < /home/you/dotfiles/config/bootstrap/brew/cli.Brewfile)
+HUMAN-END
+```
+
+Each line is self-contained. `sudo` resets the environment, so `env` passes
+the Homebrew variables after it, and `-H` gives brew the owner's home for its
+cache. Your home is often closed to other accounts (mode `0750`), so the
+owner's brew could neither open a Brewfile inside your checkout nor start in
+it: brew refuses a working directory its user cannot read. Hence your own
+shell opens the Brewfile and hands it over on stdin (`--file=-`, which
+`brew bundle` reads as `/dev/stdin`), and the line starts in `/tmp`, inside
+parentheses so the `cd` stays in a subshell. Whatever the lines install lands
+in the shared prefix for every account on the machine, which is the point of
+a shared install; Homebrew links it there for everyone, and `--no-upgrade`
+leaves what is already installed alone. Never `chown` a shared prefix, even
+though brew's own error suggests it: that takes it from the account that
+maintains it and from everyone using it. When every Brewfile is already
+satisfied, the step is `done` without the owner. A conflicting formula or cask
+there is uninstalled the same way: the judgment block above then prints its
+`brew uninstall` as such a line, with the same notes. `--print-manual` prints
+the block for every Brewfile of the selected tiers while you cannot write the
+prefix, and nothing otherwise, since it names the owner.
 
 ### S2-micromamba: micromamba
 
@@ -1731,7 +1801,9 @@ it and leave its tier out instead
 conflict no Brewfile declares is the same fix by hand; add its
 `# conflicts:` line to the Brewfile as well. On a Linuxbrew prefix owned by
 another account (a shared lab install), only that account can uninstall or
-bundle; ask its owner.
+bundle: setup-host prints the uninstall as a `(cd /tmp && sudo -u <owner> ...)`
+line, and a conflict found by hand is uninstalled the same way; never `chown`
+the prefix.
 
 **Digest mismatch.** setup-host deletes the `.part` file and fails the step with
 the expected and actual sha256. Never edit the digest just to make it pass.
@@ -1796,10 +1868,16 @@ fail-closed behavior beyond what is stated.
   when its Brewfile was pinned (the `# pinned` date at its top). A conflict
   Homebrew adds later fails `brew bundle` with "brew bundle failed for <file>"
   until a Brewfile line names it ([X-recovery](#x-recovery-recovery-recipes)).
-- **A Linuxbrew prefix owned by another account.** H1-linuxbrew is `done` once
-  `brew` runs, whoever owns `/home/linuxbrew/.linuxbrew`. On a shared lab
-  install owned by another user, `brew bundle` (and `brew uninstall`) as you
-  fail inside brew; only that account, or a prefix of your own, can install.
+- **A Homebrew prefix owned by another account.** H1-linuxbrew is `done` once
+  `brew` runs, whoever owns `/home/linuxbrew/.linuxbrew`. S2-brew-bundle tests
+  only `[ -w ]` on the prefix's `Cellar`, `bin` and repository, so a prefix
+  that other directories (an ACL, a read-only `opt` or `var`) keep you out of
+  still runs `brew bundle` as you, and it fails inside brew. With a prefix you
+  cannot write it decides what is pending from the offline estimate (`opt/`
+  links) alone, never `brew bundle check`. The owner it names is that of the
+  first unwritable directory; when you own it yourself (a mode you changed),
+  the block's `sudo -u` line names you and cannot help: restore the mode
+  instead.
 
 ## Known follow-ups
 
