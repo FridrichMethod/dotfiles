@@ -91,6 +91,8 @@ CLAUDE_KEYS = CODEX_KEYS | {"disable-model-invocation"}
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+# A clone ref is the branch S3-clones clones: the upstream default branch.
+BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FLOOR_RE = re.compile(r"^[0-9]+\.[0-9]+(\.[0-9]+)?$")
 COMMAND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
@@ -112,7 +114,11 @@ CONFLICTS_NEAR_RE = re.compile(r"^#\s*conflicts?\s*:", re.I)
 DEP_RE = re.compile(r"^([a-z0-9][a-z0-9._-]*)((?:[<>=!~]=?[0-9][0-9a-z.*]*,?)*)$")
 ALIAS_RE = re.compile(r"^# alias: ([a-z0-9][a-z0-9-]*) ([A-Za-z0-9@+._-]+)$")
 MANUAL_RE = re.compile(r"^# manual: ([a-z0-9][a-z0-9-]*) ([a-z0-9-]+(?:,[a-z0-9-]+)*)$")
-PINNED_RE = re.compile(r"^#.*\bpinned [0-9]{4}-[0-9]{2}-[0-9]{2}\b", re.MULTILINE)
+# Each manifest dates its pins; git-clones.tsv pins nothing, so it dates the
+# check of its default branches instead.
+DATED_RE = {word: re.compile(rf"^#.*\b{word} [0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}\b", re.MULTILINE)
+            for word in ("pinned", "checked")}
+DATED_WORD = {"git-clones.tsv": "checked"}
 HOME_RE = re.compile(r"/home/(?!linuxbrew(?:/|\b))[A-Za-z0-9._-]+|/users/|[a-z]:[\\/]+users\b", re.I)
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 CELL_FORBIDDEN = ("|", ";", "&", "$(", "`", "\r")
@@ -274,6 +280,15 @@ def check_tools(rows, errors):
         report(errors, "doc", where, row["doc"] not in STEP_IDS and f"unknown step id {row['doc']!r}")
 
 
+def branch_error(ref):
+    """Return why REF is not a branch name to clone, or None."""
+    if COMMIT_RE.match(ref):
+        return "ref must be a branch name, not a commit (clones track their upstream default branch)"
+    bad = (not BRANCH_RE.match(ref) or ref.startswith(("-", "/", ".")) or ref.endswith(("/", ".", ".lock"))
+           or ".." in ref or "//" in ref)
+    return bad and f"ref {ref!r} is not a branch name"
+
+
 def check_clones(rows, tools, errors):
     check_unique(rows, lambda r: r["id"], "git-clones.tsv", errors)
     for row in rows:
@@ -283,10 +298,9 @@ def check_clones(rows, tools, errors):
         fixed = REQUIRED_CLONES.get(row["id"], row["dest"])
         report(errors, "clone-set", where, fixed != row["dest"] and f"{row['id']} dest must be {fixed}")
         report(errors, "clone-url", where, not GITHUB_RE.match(row["url"]) and "url must be https://github.com/O/R.git")
+        report(errors, "clone-ref", where, branch_error(ref))
         if row["id"] == "oh-my-zsh":
             report(errors, "clone-ref", where, ref != "master" and "oh-my-zsh must track master (self-updating)")
-        else:
-            report(errors, "clone-ref", where, not COMMIT_RE.match(ref) and "ref must be a 40-hex commit")
         problem = hosts_error(row["hosts"])
         report(errors, "vocab", where, problem)
         windows = not problem and "win" in expand_hosts(row["hosts"])
@@ -514,8 +528,9 @@ def check_file_text(config, errors):
         text = read_text(path, rel, errors) or ""
         for number, line in enumerate(text.splitlines(), 1):
             report(errors, "home-literal", f"{rel}:{number}", HOME_RE.search(line) and "machine-specific home path")
-        missing = path.suffix != ".json" and not PINNED_RE.search(text)
-        report(errors, "pinned-header", rel, missing and "needs a '# pinned YYYY-MM-DD' comment")
+        word = DATED_WORD.get(rel, "pinned")
+        missing = path.suffix != ".json" and not DATED_RE[word].search(text)
+        report(errors, "pinned-header", rel, missing and f"needs a '# {word} YYYY-MM-DD' comment")
 
 
 def check_docs(repo, tools, errors):
@@ -715,9 +730,11 @@ class RejectionTests(unittest.TestCase):
     def test_clones(self):
         self.check([
             ("clone-id", "unknown id", self.clones("fzf-tab", "id", "fzf-tabs")),
-            ("clone-ref", "branch", self.clones("fzf-tab", "ref", "master")),
-            ("clone-ref", "short sha", self.clones("fzf-tab", "ref", "d7e0234")),
+            ("clone-ref", "commit", self.clones("fzf-tab", "ref", "d7e0234614dbe5369fdd760907d12c0e05a4dccc")),
+            ("clone-ref", "option", self.clones("fzf-tab", "ref", "-b")),
+            ("clone-ref", "range", self.clones("fzf-tab", "ref", "master..main")),
             ("clone-ref", "omz pinned", self.clones("oh-my-zsh", "ref", "42a4ccb1b14dbeffe81259105a5243b4f4cb618e")),
+            ("clone-ref", "omz branch", self.clones("oh-my-zsh", "ref", "main")),
             ("clone-url", "not github .git", self.clones("fzf-tab", "url", "https://gitlab.com/a/b")),
             ("clone-hosts", "windows", self.clones("fzf-tab", "hosts", "all")),
             ("clone-dest", "token", self.clones("fzf-tab", "dest", "$ZSH/custom/plugins/fzf-tab")),
@@ -772,6 +789,9 @@ class RejectionTests(unittest.TestCase):
             ("home-literal", "cluster home", lambda: self.append("hpc-login-env.yml", "# /users/alice\n")),
             ("home-literal", "windows home", lambda: self.append("brew/core.Brewfile", "# C:\\Users\\alice\n")),
             ("pinned-header", "missing", lambda: self.replace("apt/wsl-ubuntu.txt", "# pinned", "# fixed")),
+            ("pinned-header", "clones undated", lambda: self.replace("git-clones.tsv", "# checked", "# fixed")),
+            ("pinned-header", "clones claim a pin",
+             lambda: self.replace("git-clones.tsv", "# checked 2026", "# pinned 2026")),
         ])
 
     def test_brewfiles_and_apt_lists(self):

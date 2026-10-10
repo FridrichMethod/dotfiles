@@ -16,7 +16,7 @@ backend is deliberately small; no general application framework is involved.
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Optional skill downloads | Bash, curl, tar, rsync |
 | Contributor checks | pre-commit, Node, Python/parser runtime; pinned lint tools; Stow integration; PowerShell required on Windows CI |
-| Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is pinned in `config/bootstrap/` (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
+| Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
 The configured applications (Zsh, Vim, terminals, Codex, Claude, etc.) are needed
 to use their respective settings, not all to copy or symlink the repository.
@@ -81,7 +81,9 @@ How to read a cell:
 - `login env X`: a dependency in
   [`hpc-login-env.yml`](../config/bootstrap/hpc-login-env.yml).
 - `winget X`: a package in [`winget.json`](../config/bootstrap/winget.json).
-- `clone`: a row of [`git-clones.tsv`](../config/bootstrap/git-clones.tsv).
+- `clone`: a row of [`git-clones.tsv`](../config/bootstrap/git-clones.tsv): a
+  shallow clone of the upstream default branch, which setup-host never
+  updates.
 - `pinned X`: a row of [`installers.tsv`](../config/bootstrap/installers.tsv)
   (URL plus sha256; `inspect` rows have no digest).
 - `manual`: nothing in `config/bootstrap/` installs it there: the OS baseline,

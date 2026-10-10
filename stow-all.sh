@@ -83,7 +83,7 @@ if [[ "$NEEDS_OMZ" == 1 && ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" && "${DOTFILES_S
         dotfiles_log error "$HOME/.oh-my-zsh exists without oh-my-zsh.sh, as after a stow before the oh-my-zsh clone; turn it into the clone first (docs/bootstrap.md X-recovery)."
     else
         dotfiles_log error "oh-my-zsh is not cloned yet, and stowing now would create a real $HOME/.oh-my-zsh/custom that blocks the clone."
-        dotfiles_log error "Clone it first: ./setup-host.sh --host ${HOST:-HOST} (S3-clones), or clone_pinned oh-my-zsh on another Linux (docs/bootstrap.md X-other-linux)."
+        dotfiles_log error "Clone it first: ./setup-host.sh --host ${HOST:-HOST} (S3-clones), or clone_listed oh-my-zsh on another Linux (docs/bootstrap.md X-other-linux)."
     fi
     dotfiles_log error 'Nothing was changed. To stow without oh-my-zsh anyway, rerun with DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1.'
     exit 1

@@ -1,25 +1,21 @@
-# Pinned git clones for the zsh framework, theme and plugins (S3-clones).
-# pinned 2026-10-09
+# Git clones for the zsh framework, theme and plugins (S3-clones).
+# checked 2026-10-10: each ref is the repository's default branch, as
+# `git ls-remote --symref URL HEAD` reported it that day.
 # Tab-separated; columns: id dest url ref hosts. ids match tools.tsv rows.
-# ref is a 40-hex commit (resolved with git ls-remote; a release tag's peeled
-# ^{} commit), except oh-my-zsh, which tracks master so that its own
-# `zstyle ':omz:update' mode auto` (common/zsh/.zshrc) keeps updating it.
-# Policy: the newest release tag when one exists from the last 18 months,
-# otherwise the default branch head on 2026-10-09.
+# ref is a branch name, never a commit: nothing here is pinned. A missing
+# clone is made with `git clone --depth=1 --branch REF URL DEST`, and an
+# existing one is never touched, so each tracks its upstream default branch
+# the way oh-my-zsh's own `zstyle ':omz:update' mode auto` (common/zsh/.zshrc)
+# keeps ~/.oh-my-zsh on master. docs/bootstrap.md S3-clones says how to update
+# the theme and plugins by hand; downloads stay sha256-pinned in installers.tsv.
 id	dest	url	ref	hosts
-# ohmyzsh/ohmyzsh master (self-updating; head was 42a4ccb1b14dbeffe81259105a5243b4f4cb618e)
+# ohmyzsh/ohmyzsh, cloned with the flags of its own installer (self-updating).
 oh-my-zsh	$HOME/.oh-my-zsh	https://github.com/ohmyzsh/ohmyzsh.git	master	unix
-# romkatv/powerlevel10k master head 2026-09-06 (newest tag v1.20.0 is from 2024-01)
-powerlevel10k	$ZSH_CUSTOM/themes/powerlevel10k	https://github.com/romkatv/powerlevel10k.git	d05a1b00f9a61f9578bf9dc19b8451942dde8734	unix
-# Aloxaf/fzf-tab tag v1.3.0 (2026-03-15, lightweight tag)
-fzf-tab	$ZSH_CUSTOM/plugins/fzf-tab	https://github.com/Aloxaf/fzf-tab.git	d7e0234614dbe5369fdd760907d12c0e05a4dccc	unix
-# zdharma-continuum/fast-syntax-highlighting tag v1.56 (2025-07-16, peeled)
-fast-syntax-highlighting	$ZSH_CUSTOM/plugins/fast-syntax-highlighting	https://github.com/zdharma-continuum/fast-syntax-highlighting.git	5ecd353c81214f82bdeca5483fab6ccc5a2d5494	unix
-# zsh-users/zsh-autosuggestions master head 2025-06-24 (newest tag v0.7.1 is from 2024-11)
-zsh-autosuggestions	$ZSH_CUSTOM/plugins/zsh-autosuggestions	https://github.com/zsh-users/zsh-autosuggestions.git	85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5	unix
-# MichaelAquilina/zsh-you-should-use tag 1.11.1 (2026-02-18, peeled)
-you-should-use	$ZSH_CUSTOM/plugins/you-should-use	https://github.com/MichaelAquilina/zsh-you-should-use.git	ff371d6a11b653e1fa8dda4e61c896c78de26bfa	unix
-# conda-incubator/conda-zsh-completion main head 2025-10-22 (newest tag v0.11 is from 2024-03)
-conda-zsh-completion	$ZSH_CUSTOM/plugins/conda-zsh-completion	https://github.com/conda-incubator/conda-zsh-completion.git	632655aab6e147b90f75cf3d195ae2b48e7beec9	unix
-# zsh-users/zsh-completions tag 0.36.0 (2026-03-09, lightweight tag)
-zsh-completions	$ZSH_CUSTOM/plugins/zsh-completions	https://github.com/zsh-users/zsh-completions.git	28c5bdcaf81bb89e56d0df8267d822c3b8aed9e0	unix
+powerlevel10k	$ZSH_CUSTOM/themes/powerlevel10k	https://github.com/romkatv/powerlevel10k.git	master	unix
+fzf-tab	$ZSH_CUSTOM/plugins/fzf-tab	https://github.com/Aloxaf/fzf-tab.git	master	unix
+fast-syntax-highlighting	$ZSH_CUSTOM/plugins/fast-syntax-highlighting	https://github.com/zdharma-continuum/fast-syntax-highlighting.git	master	unix
+zsh-autosuggestions	$ZSH_CUSTOM/plugins/zsh-autosuggestions	https://github.com/zsh-users/zsh-autosuggestions.git	master	unix
+you-should-use	$ZSH_CUSTOM/plugins/you-should-use	https://github.com/MichaelAquilina/zsh-you-should-use.git	master	unix
+# conda-incubator/conda-zsh-completion's default branch is main.
+conda-zsh-completion	$ZSH_CUSTOM/plugins/conda-zsh-completion	https://github.com/conda-incubator/conda-zsh-completion.git	main	unix
+zsh-completions	$ZSH_CUSTOM/plugins/zsh-completions	https://github.com/zsh-users/zsh-completions.git	master	unix

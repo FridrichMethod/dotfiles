@@ -306,11 +306,18 @@ steps_validate_manifests() {
             https://*) ;;
             *) steps_invalid "git-clones.tsv $id: url is not https: $url" || return 1 ;;
         esac
-        case $id:$ref in
-            oh-my-zsh:master) ;;
-            *:*[!0-9a-f]* | *:) steps_invalid "git-clones.tsv $id: ref is not a commit: $ref" || return 1 ;;
-            *) [ "${#ref}" -eq 40 ] || steps_invalid "git-clones.tsv $id: ref is not a commit: $ref" || return 1 ;;
+        # ref is the branch to clone (clones track their upstream default
+        # branch), never a commit; oh-my-zsh updates itself on master.
+        case $ref in
+            '' | -* | /* | .* | *..* | */ | *. | *.lock | *[!A-Za-z0-9._/-]*)
+                steps_invalid "git-clones.tsv $id: ref is not a branch name: $ref" || return 1
+                ;;
+            *[!0-9a-f]*) ;;
+            *) [ "${#ref}" -ne 40 ] || steps_invalid "git-clones.tsv $id: ref is a commit, not a branch: $ref" || return 1 ;;
         esac
+        if [ "$id" = oh-my-zsh ] && [ "$ref" != master ]; then
+            steps_invalid "git-clones.tsv $id: ref must be master (oh-my-zsh updates itself there): $ref" || return 1
+        fi
         bootstrap_expand_path "$dest" >/dev/null ||
             steps_invalid "git-clones.tsv $id: unsupported dest $dest" || return 1
     done

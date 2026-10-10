@@ -14,16 +14,17 @@ update hooks never install a tool; only these entry points do, and only when
 you run them. (The skill-library hook fetches skills, not tools, and is on by
 default once stowed; see [H7-sync-skills](#h7-sync-skills-skill-library-sync).)
 
-[`config/bootstrap/`](../config/bootstrap/) is the single pinned source for
+[`config/bootstrap/`](../config/bootstrap/) is the single source for
 everything they install: [`tools.tsv`](../config/bootstrap/tools.tsv) (what the
 doctor checks: tier, hosts, probe, version floor, and the step that fixes each
 row), the tiered Brewfiles in [`brew/`](../config/bootstrap/brew/), the apt
 lists in [`apt/`](../config/bootstrap/apt/),
 [`hpc-login-env.yml`](../config/bootstrap/hpc-login-env.yml),
 [`winget.json`](../config/bootstrap/winget.json),
-[`git-clones.tsv`](../config/bootstrap/git-clones.tsv) (commit-pinned) and
+[`git-clones.tsv`](../config/bootstrap/git-clones.tsv) (default branches,
+tracked and never pinned) and
 [`installers.tsv`](../config/bootstrap/installers.tsv) (URL plus sha256). This
-playbook links those files instead of repeating their pins.
+playbook links those files instead of repeating their pins and branches.
 `tests/bootstrap-manifest.sh` validates them, checks that this file has exactly
 one `### <step-id>:` heading per step, and checks that
 [dependencies.md](dependencies.md#day-zero-tools) lists every tool.
@@ -197,8 +198,8 @@ wanted: `winget install --id Anthropic.ClaudeCode -e`.
 There is no Fedora, Arch or generic Ubuntu overlay, and `./setup-host.sh` takes
 only `--host`. Stow `common/` only, install packages yourself, and do the four
 platform-neutral setup steps by hand
-([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_pinned`
-and `fetch_pinned` from [Pinned artifacts by hand](#pinned-artifacts-by-hand)
+([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_listed`
+and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-hand)
 into your shell first:
 
 ```sh
@@ -209,7 +210,7 @@ cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
 ./doctor.sh --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
-    clone_pinned "$id" || break                                    # S3-clones, oh-my-zsh first
+    clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first
 done
 f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &&
     cp "$f" "$d/Catppuccin Mocha.tmTheme" && bat cache --build    # S3-bat-theme
@@ -434,8 +435,15 @@ kind.
   HUMAN block runs a downloaded script only behind a digest gate: the pinned
   sha256, or for an `inspect` download the digest of the copy the person read,
   which later runs keep instead of downloading it again.
-- The pins cover what setup-host downloads and clones itself. What a package
-  manager installs follows that manager's own current version and trust:
+- The pins cover what setup-host downloads itself: every `installers.tsv`
+  row but the `inspect` one is sha256-pinned. The theme and plugin clones of
+  `git-clones.tsv` are not pinned: each tracks its upstream default branch,
+  like oh-my-zsh's own auto-update, and setup-host clones only a missing one
+  and never modifies an existing clone
+  ([S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones)). Unpinned plugin
+  code runs in every shell, the same trust model as oh-my-zsh's auto-update.
+  What a package manager installs follows that manager's own current version
+  and trust:
   Homebrew (`brew bundle`), apt, conda-forge (the login env, within the yml's
   floors), winget (`winget.json` names packages, not versions), PSGallery
   (W1-psresources runs `Install-PSResource -TrustRepository -AcceptLicense`
@@ -446,12 +454,12 @@ kind.
 - Everything a person must do ends up in a HUMAN block; exit 3 means work
   remains: a blocking block is pending, or automatic steps are still to apply.
 
-### Pinned artifacts by hand
+### Downloads and clones by hand
 
 The automatic steps below also list a manual equivalent. Those that download or
-clone use these two helpers, which read the URL, digest or ref from
-`installers.tsv` and `git-clones.tsv` instead of copying them here. Paste them
-into the shell you are working in:
+clone use these two helpers, which read the URL and digest from
+`installers.tsv`, or the URL and branch from `git-clones.tsv`, instead of
+copying them here. Paste them into the shell you are working in:
 
 ```sh
 # fetch_pinned ID [ARCH]: download one installers.tsv row into a fresh temporary
@@ -478,21 +486,22 @@ fetch_pinned() {
     printf '%s\n' "$_out"
 }
 
-# clone_pinned ID: make one git-clones.tsv row's clone the way S3-clones does.
-clone_pinned() {
+# clone_listed ID: make one git-clones.tsv row's clone the way S3-clones does:
+# a shallow clone of the row's branch, and an existing clone left as it is.
+clone_listed() {
     _row=$(awk -F '\t' -v id="$1" '$1 == id { print; exit }' \
         "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/git-clones.tsv")
-    [ -n "$_row" ] || { echo "clone_pinned: no row for $1" >&2; return 1; }
+    [ -n "$_row" ] || { echo "clone_listed: no row for $1" >&2; return 1; }
     _dest=$(printf '%s\n' "$_row" | cut -f 2)
     _url=$(printf '%s\n' "$_row" | cut -f 3)
     _ref=$(printf '%s\n' "$_row" | cut -f 4)
     case $_dest in
         '$HOME/'*) _dest=$HOME/${_dest#'$HOME/'} ;;
         '$ZSH_CUSTOM/'*) _dest=${ZSH_CUSTOM:-${ZSH:-$HOME/.oh-my-zsh}/custom}/${_dest#'$ZSH_CUSTOM/'} ;;
-        *) echo "clone_pinned: unsupported dest $_dest" >&2; return 1 ;;
+        *) echo "clone_listed: unsupported dest $_dest" >&2; return 1 ;;
     esac
     if [ -e "$_dest/.git" ]; then
-        echo "clone_pinned: $_dest is already a clone; compare its HEAD with $_ref" >&2
+        echo "clone_listed: $_dest is already a clone; left as it is" >&2
         return 0
     fi
     if [ "$1" = oh-my-zsh ]; then
@@ -501,9 +510,7 @@ clone_pinned() {
             -c receive.fsck.zeroPaddedFilemode=ignore -c oh-my-zsh.remote=origin \
             -c oh-my-zsh.branch="$_ref" "$_url" "$_dest"
     else
-        git init -q "$_dest" && git -C "$_dest" remote add origin "$_url" &&
-            git -C "$_dest" fetch --depth=1 origin "$_ref" &&
-            git -C "$_dest" checkout -q --detach FETCH_HEAD
+        git clone --depth=1 --branch "$_ref" "$_url" "$_dest"
     fi
 }
 ```
@@ -952,34 +959,47 @@ Applies to every Unix host, **before** `./stow-all.sh`. Rows in
 `~/.oh-my-zsh`, powerlevel10k under `$ZSH_CUSTOM/themes`, and fzf-tab,
 fast-syntax-highlighting, zsh-autosuggestions, you-should-use,
 conda-zsh-completion and zsh-completions under `$ZSH_CUSTOM/plugins`
-(`$ZSH_CUSTOM` defaults to `~/.oh-my-zsh/custom`). oh-my-zsh tracks `master`
-because `zstyle ':omz:update' mode auto` updates it; every other clone is
-pinned to a commit.
+(`$ZSH_CUSTOM` defaults to `~/.oh-my-zsh/custom`). Nothing here is pinned:
+each row's `ref` is the repository's default branch (`master`, and `main` for
+conda-zsh-completion), and every clone tracks it, the way oh-my-zsh's own
+auto-update (`zstyle ':omz:update' mode auto` in `common/zsh/.zshrc`) keeps
+`~/.oh-my-zsh` on `master`. Downloads stay sha256-pinned in
+[`installers.tsv`](../config/bootstrap/installers.tsv), the Catppuccin bat
+theme file of S3-bat-theme included. The trade-off: unpinned theme and plugin
+code runs in every shell, the same trust model as oh-my-zsh's auto-update.
 
-- **Check:** `test -f ~/.oh-my-zsh/oh-my-zsh.sh && git -C ~/.oh-my-zsh/custom/plugins/fzf-tab rev-parse HEAD`
-  (compare with the `ref` column)
-- **Install:** automatic via setup-host.sh. oh-my-zsh is cloned the way its own
-  installer does:
+- **Check:** `test -f ~/.oh-my-zsh/oh-my-zsh.sh && git -C ~/.oh-my-zsh/custom/plugins/fzf-tab log -1 --oneline --decorate`
+- **Install:** automatic via setup-host.sh, only for a clone that is missing.
+  oh-my-zsh is cloned the way its own installer does:
   `git clone --depth=1 --branch master -c core.eol=lf -c core.autocrlf=false -c fsck.zeroPaddedFilemode=ignore -c fetch.fsck.zeroPaddedFilemode=ignore -c receive.fsck.zeroPaddedFilemode=ignore -c oh-my-zsh.remote=origin -c oh-my-zsh.branch=master https://github.com/ohmyzsh/ohmyzsh.git ~/.oh-my-zsh`.
-  Every other row: `git init DEST`, `git -C DEST remote add origin URL`,
-  `git -C DEST fetch --depth=1 origin REF`, `git -C DEST checkout --detach FETCH_HEAD`.
-  By hand: `clone_pinned ID` per row, oh-my-zsh first (the Other Linux quick
-  start loops over all of them).
+  Every other row: `git clone --depth=1 --branch REF URL DEST`. By hand:
+  `clone_listed ID` per row, oh-my-zsh first (the Other Linux quick start
+  loops over all of them).
 - **Verify:** doctor rows `oh-my-zsh`, `powerlevel10k` and the six plugins are
-  `ok`; `git -C DEST rev-parse HEAD` equals each pinned `ref`.
+  `ok`.
 - **Human:** no
 
-A clean clone on another commit is re-pinned; a clone with local changes is
-refused (see [X-recovery](#x-recovery-recovery-recipes)). Never run the upstream
-oh-my-zsh installer: it replaces `~/.zshrc` and can change your login shell.
+setup-host never modifies an existing clone: a destination that is a git
+checkout is left as it is, whatever its branch, commit or local changes; no
+fetch, pull, checkout or status check runs there, and the step reports it
+`done` with its branch and commit (`fzf-tab master@24105b1`) for information.
+A destination that exists but is not a git checkout fails the step; move it
+aside and re-run ([X-recovery](#x-recovery-recovery-recipes)). Never run the
+upstream oh-my-zsh installer: it replaces `~/.zshrc` and can change your login
+shell.
 
-On a host that is already set up, an apply re-pins every clean theme and plugin
-clone to its commit in `git-clones.tsv`, even when that moves it back from a
-newer upstream commit you pulled yourself; oh-my-zsh, which tracks `master`, is
-left alone. A clone with local changes is never moved: S3-clones fails and
-names it. `--check` shows both beforehand: its S3-clones line lists each clone
-to move as `(repin)` (and a missing one as `(clone)`), and a dirty one under
-`apply fails for:`.
+Updating is yours to do. oh-my-zsh updates itself, or with `omz update`, which
+updates only oh-my-zsh itself. For the theme and plugins, fast-forward each
+clone to its upstream branch:
+
+```sh
+for d in "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"/plugins/* "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"/themes/powerlevel10k; do git -C "$d" pull --ff-only; done
+```
+
+A clone with local changes in the way or a diverged history makes its
+`pull --ff-only` stop and say so, and the loop goes on with the next one.
+`plugins/example`, which oh-my-zsh ships, lies inside the oh-my-zsh checkout,
+so the loop fast-forwards oh-my-zsh as well.
 
 ### S3-bat-theme: bat theme
 
@@ -1030,7 +1050,7 @@ so the alias must exist.
   `nvm alias default 'lts/*'`) only when `$NVM_DIR` is a git checkout at that
   commit with no change to a tracked file; it removes a checkout it just made
   that is not. By hand, as one block that sources nothing unless that holds
-  (paste `fetch_pinned` from [Pinned artifacts by hand](#pinned-artifacts-by-hand)
+  (paste `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-hand)
   first):
 
   ```sh
@@ -1591,8 +1611,8 @@ quick start runs them as one sequence.
   yourself and run
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1 brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade`
   (then stow needs that brew's directory as its H7-stow prefix). Then, with
-  `clone_pinned` and `fetch_pinned` from
-  [Pinned artifacts by hand](#pinned-artifacts-by-hand): `clone_pinned ID` for
+  `clone_listed` and `fetch_pinned` from
+  [Downloads and clones by hand](#downloads-and-clones-by-hand): `clone_listed ID` for
   every `git-clones.tsv` row, oh-my-zsh first (S3-clones); the by-hand recipe of
   S3-bat-theme; `mkdir -p ~/.vim/undo ~/.vim/tmp` (S3-dirs); `./setup-sync.sh`
   (S4-setup-sync). Finally `./stow-all.sh` with no host.
@@ -1678,11 +1698,14 @@ S3-clones refuses, setup-host prints this recipe with your paths as an
 X-recovery block, with the clone settings of
 [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones) set before the fetch.
 
-**Dirty clone.** S3-clones refuses a theme or plugin clone with local changes.
-Look at them (`git -C DEST status`, `git -C DEST diff`), move the directory aside
-if you want to keep them (`mv DEST DEST.local`), then
-`./setup-host.sh --host H --only S3-clones`. A dirty `~/dotfiles` checkout after
-an installer is [X-rc-protection](#x-rc-protection-rc-file-protection).
+**Clone destination that is not a git checkout.** S3-clones fails with
+"DEST exists and is not a git checkout": a plugin or theme directory that was
+copied by hand, or left by another plugin manager. Look at it, move it aside
+(`mv DEST DEST.pre-dotfiles`), then `./setup-host.sh --host H --only S3-clones`
+clones it afresh. An existing clone, dirty or not, is never touched; to
+update one, see [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones). A
+dirty `~/dotfiles` checkout after an installer is
+[X-rc-protection](#x-rc-protection-rc-file-protection).
 
 **Conflicting Homebrew formula or cask.** S2-brew-bundle is `human` with "the
 installed tlrc formula conflicts with tldr (cli.Brewfile)" (or, on macOS, for

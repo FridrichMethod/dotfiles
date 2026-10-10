@@ -492,8 +492,12 @@ make_remote() {
 
 make_remote ohmyzsh/ohmyzsh oh-my-zsh.sh custom/example.zsh \
     custom/plugins/example/example.plugin.zsh custom/themes/example.zsh-theme >/dev/null
-P10K_PIN=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
-FZF_TAB_PIN=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+P10K_HEAD=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
+FZF_TAB_HEAD=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+# A remote whose default branch is main, as conda-zsh-completion's is.
+CONDA_HEAD=$(make_remote conda-incubator/conda-zsh-completion conda-zsh-completion.plugin.zsh)
+"$REAL_GIT" -C "$REMOTES/conda-incubator/conda-zsh-completion.git" branch -q -m master main
+"$REAL_GIT" -C "$REMOTES/conda-incubator/conda-zsh-completion.git" symbolic-ref HEAD refs/heads/main
 # nvm: the pinned commit, then a later one, as when a release tag moves.
 NVM_PIN=$(make_remote nvm-sh/nvm README.md)
 printf '# moved\n' >>"$TEST_TMP/work/nvm-sh/nvm/README.md"
@@ -594,8 +598,10 @@ write_clones() {
         # shellcheck disable=SC2016 # literal manifest tokens
         printf '%s\t%s\t%s\t%s\t%s\n' \
             oh-my-zsh '$HOME/.oh-my-zsh' https://github.com/ohmyzsh/ohmyzsh.git master unix \
-            powerlevel10k '$ZSH_CUSTOM/themes/powerlevel10k' https://github.com/romkatv/powerlevel10k.git "$P10K_PIN" unix \
-            fzf-tab '$ZSH_CUSTOM/plugins/fzf-tab' https://github.com/Aloxaf/fzf-tab.git "$FZF_TAB_PIN" unix
+            powerlevel10k '$ZSH_CUSTOM/themes/powerlevel10k' https://github.com/romkatv/powerlevel10k.git master unix \
+            fzf-tab '$ZSH_CUSTOM/plugins/fzf-tab' https://github.com/Aloxaf/fzf-tab.git master unix \
+            conda-zsh-completion '$ZSH_CUSTOM/plugins/conda-zsh-completion' \
+            https://github.com/conda-incubator/conda-zsh-completion.git main unix
     } >"$FIXTURE/config/bootstrap/git-clones.tsv"
 }
 write_clones
@@ -802,7 +808,7 @@ expect_text check-fresh out 'P0-preflight done host lab-ubuntu, profile debian, 
 expect_text check-fresh out 'H1-apt-core done 4 apt packages installed'
 expect_text check-fresh out "H1-linuxbrew done brew at $CASE_BREW/bin/brew"
 expect_text check-fresh out "S2-brew-bundle todo Brewfiles to bundle: core cli (offline estimate from $CASE_BREW/opt"
-expect_text check-fresh out 'S3-clones todo to clone or re-pin: oh-my-zsh (clone) powerlevel10k (clone) fzf-tab (clone)'
+expect_text check-fresh out 'S3-clones todo to clone: oh-my-zsh (master) powerlevel10k (master) fzf-tab (master) conda-zsh-completion (main)'
 expect_text check-fresh out 'S3-dirs todo'
 expect_text check-fresh out 'S4-nvm todo'
 expect_text check-fresh out 'S5-codex todo codex is not installed; pinned 0.161.0'
@@ -842,13 +848,16 @@ expect_event 'curl:https://raw.githubusercontent.com/FridrichMethod/awesome-skil
 run_case apply -- --host lab-ubuntu --yes --tier all
 expect_rc apply 3
 expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
-    'git:clone -q --depth=1 --branch master' "git:-C $CASE_HOME/.oh-my-zsh/custom/themes/" \
+    'git:clone -q --depth=1 --branch master -c core.eol=lf' \
+    "git:clone -q --depth=1 --branch master https://github.com/romkatv/powerlevel10k.git $CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" \
     "curl:$URL_THEME" 'bat:cache --build' \
     "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
 expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1'
 expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
 expect_no_event TRIPWIRE
+# A missing clone is a shallow clone of the branch its ref names.
+expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CASE_HOME/.oh-my-zsh/custom/plugins/conda-zsh-completion"
 expect_text apply out 'S3-clones done applied:'
 expect_text apply out 'S5-codex done applied:'
 expect_event 'codex-run:--version'
@@ -863,10 +872,18 @@ expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 [ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
 [ -f "$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh" ] || fail 'oh-my-zsh not cloned'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh" config oh-my-zsh.branch)" = master ] || fail 'oh-my-zsh clone config'
-[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" rev-parse HEAD)" = "$P10K_PIN" ] ||
-    fail 'powerlevel10k not at its pin'
-[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab" rev-parse HEAD)" = "$FZF_TAB_PIN" ] ||
-    fail 'fzf-tab not at its pin'
+P10K_DIR="$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+FZF_TAB_DIR="$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab"
+CONDA_DIR="$CASE_HOME/.oh-my-zsh/custom/plugins/conda-zsh-completion"
+# clone_at DIR BRANCH COMMIT: DIR is a shallow clone on BRANCH at COMMIT.
+clone_at() {
+    [ "$("$REAL_GIT" -C "$1" symbolic-ref --short HEAD)" = "$2" ] &&
+        [ "$("$REAL_GIT" -C "$1" rev-parse HEAD)" = "$3" ] &&
+        [ "$("$REAL_GIT" -C "$1" rev-parse --is-shallow-repository)" = true ]
+}
+clone_at "$P10K_DIR" master "$P10K_HEAD" || fail 'powerlevel10k is not a shallow clone of master'
+clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'fzf-tab is not a shallow clone of master'
+clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'conda-zsh-completion is not a shallow clone of main'
 cmp -s "$ARTIFACTS/theme" "$CASE_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" || fail 'bat theme'
 [ -d "$CASE_HOME/.vim/undo" ] && [ -d "$CASE_HOME/.vim/tmp" ] || fail 'vim dirs'
 [ -x "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node" ] && [ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'nvm node'
@@ -947,27 +964,76 @@ expect_no_text check-todo err 'HUMAN steps pending'
 expect_no_events check-todo
 mkdir -p "$CASE_HOME/.vim/undo" "$CASE_HOME/.vim/tmp"
 
-# --- clones: re-pin a clean drifted clone, refuse a dirty one ----------------
+# --- clones: an existing checkout is never touched --------------------------
 
+# Upstream moves on, a clone is behind, another has local edits and a third
+# is detached at its commit: S3-clones runs no git command that could change
+# them (no fetch, checkout, pull or reset), leaves every byte as it was and
+# reports each one done with its branch and commit.
 FZF_TAB_WORK="$TEST_TMP/work/Aloxaf/fzf-tab"
 printf '# v2\n' >>"$FZF_TAB_WORK/fzf-tab.plugin.zsh"
 "$REAL_GIT" -C "$FZF_TAB_WORK" commit -q -am v2
 "$REAL_GIT" -C "$FZF_TAB_WORK" push -q "$REMOTES/Aloxaf/fzf-tab.git" master
-FZF_TAB_PIN=$("$REAL_GIT" -C "$FZF_TAB_WORK" rev-parse HEAD)
-write_clones
-"$REAL_GIT" -C "$FIXTURE" commit -q -am 're-pin fzf-tab'
-P10K_DIR="$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+[ "$("$REAL_GIT" -C "$FZF_TAB_WORK" rev-parse HEAD)" != "$FZF_TAB_HEAD" ] || fail 'the fzf-tab remote did not move'
 printf '# local edit\n' >>"$P10K_DIR/powerlevel10k.zsh-theme"
-run_case repin -- --host lab-ubuntu --yes --only S3-clones
-expect_rc repin 1
-expect_event "git:-C $CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab fetch -q --depth=1 origin $FZF_TAB_PIN"
-[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab" rev-parse HEAD)" = "$FZF_TAB_PIN" ] ||
-    fail 'fzf-tab was not re-pinned'
-[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_PIN" ] || fail 'dirty powerlevel10k moved'
-expect_text repin err "$P10K_DIR has local changes"
-expect_text repin out 'S3-clones failed'
-expect_no_event "git:-C $P10K_DIR"
+"$REAL_GIT" -C "$CONDA_DIR" checkout -q --detach
+clones_before=$(cd "$CASE_HOME/.oh-my-zsh" && find . -path '*/.git' -prune -o -type f -print | LC_ALL=C sort |
+    while IFS= read -r file; do cksum "$file"; done)
+run_case existing-clones -- --host lab-ubuntu --check --only S3-clones
+expect_rc existing-clones 0
+expect_text existing-clones out "S3-clones done 4 clones present, left as they are: oh-my-zsh master@"
+expect_text existing-clones out "powerlevel10k master@$(printf '%.7s' "$P10K_HEAD")"
+expect_text existing-clones out "fzf-tab master@$(printf '%.7s' "$FZF_TAB_HEAD")"
+expect_text existing-clones out "conda-zsh-completion detached@$(printf '%.7s' "$CONDA_HEAD")"
+expect_no_events existing-clones
+run_case existing-clones-apply -- --host lab-ubuntu --yes --only S3-clones
+expect_rc existing-clones-apply 0
+expect_text existing-clones-apply out 'S3-clones done 4 clones present, left as they are'
+expect_no_events existing-clones-apply
+clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'the clean fzf-tab clone moved'
+[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_HEAD" ] || fail 'the dirty powerlevel10k clone moved'
+[ -n "$("$REAL_GIT" -C "$P10K_DIR" status --porcelain)" ] || fail 'the local powerlevel10k edit is gone'
+[ "$("$REAL_GIT" -C "$CONDA_DIR" rev-parse HEAD)" = "$CONDA_HEAD" ] || fail 'the detached clone moved'
+"$REAL_GIT" -C "$CONDA_DIR" symbolic-ref -q HEAD >/dev/null && fail 'the detached clone was checked out on a branch'
+clones_after=$(cd "$CASE_HOME/.oh-my-zsh" && find . -path '*/.git' -prune -o -type f -print | LC_ALL=C sort |
+    while IFS= read -r file; do cksum "$file"; done)
+[ "$clones_before" = "$clones_after" ] || fail 'S3-clones changed a file in an existing clone'
 "$REAL_GIT" -C "$P10K_DIR" checkout -q -- powerlevel10k.zsh-theme
+"$REAL_GIT" -C "$CONDA_DIR" checkout -q main
+
+# A destination that exists but is not a git checkout fails the step with the
+# recovery hint; the other clones are still made, and it is left as it is.
+mv "$FZF_TAB_DIR" "$TEST_TMP/fzf-tab.saved"
+mkdir -p "$FZF_TAB_DIR"
+printf '# copied by hand\n' >"$FZF_TAB_DIR/fzf-tab.plugin.zsh"
+mv "$CONDA_DIR" "$TEST_TMP/conda.saved"
+run_case foreign-clone -- --host lab-ubuntu --check --only S3-clones
+expect_rc foreign-clone 3
+expect_text foreign-clone out 'S3-clones todo to clone: conda-zsh-completion (main); apply fails, not a git checkout: fzf-tab'
+run_case foreign-clone-apply -- --host lab-ubuntu --yes --only S3-clones
+expect_rc foreign-clone-apply 1
+expect_text foreign-clone-apply err "$FZF_TAB_DIR exists and is not a git checkout; move it aside, then rerun"
+expect_text foreign-clone-apply out 'S3-clones failed'
+expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CONDA_DIR"
+expect_no_event "$FZF_TAB_DIR"
+clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'the missing clone next to a foreign one was not made'
+[ "$(cat "$FZF_TAB_DIR/fzf-tab.plugin.zsh")" = '# copied by hand' ] || fail 'the foreign fzf-tab dir changed'
+[ ! -e "$FZF_TAB_DIR/.git" ] || fail 'S3-clones turned the foreign dir into a checkout'
+rm -rf "$FZF_TAB_DIR" "$CONDA_DIR"
+mv "$TEST_TMP/fzf-tab.saved" "$FZF_TAB_DIR"
+mv "$TEST_TMP/conda.saved" "$CONDA_DIR"
+
+# A clone ref names a branch: a commit, as the old pinned manifests had, is
+# an invalid manifest, refused before any step runs.
+cp "$FIXTURE/config/bootstrap/git-clones.tsv" "$TEST_TMP/git-clones.saved"
+awk -F '\t' -v OFS='\t' -v sha="$FZF_TAB_HEAD" '$1 == "fzf-tab" { $4 = sha } { print }' \
+    "$TEST_TMP/git-clones.saved" >"$FIXTURE/config/bootstrap/git-clones.tsv"
+run_case clone-commit-ref -- --host lab-ubuntu --check --only S3-clones
+expect_rc clone-commit-ref 2
+expect_text clone-commit-ref err "invalid manifest: git-clones.tsv fzf-tab: ref is a commit, not a branch: $FZF_TAB_HEAD"
+expect_no_text clone-commit-ref out 'S3-clones'
+expect_no_events clone-commit-ref
+cp "$TEST_TMP/git-clones.saved" "$FIXTURE/config/bootstrap/git-clones.tsv"
 
 # A --check never hands out ./stow-all.sh while an auto prerequisite is todo.
 new_home cloned-only
@@ -975,7 +1041,7 @@ run_case cloned-only -- --host lab-ubuntu --yes --only S3-clones
 expect_rc cloned-only 0
 run_case check-cloned -- --host lab-ubuntu --check
 expect_rc check-cloned 3
-expect_text check-cloned out 'S3-clones done 3 clones at their pins'
+expect_text check-cloned out 'S3-clones done 4 clones present, left as they are'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
