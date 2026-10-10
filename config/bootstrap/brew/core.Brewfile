@@ -4,7 +4,11 @@
 # Never add openssh (the macOS ssh config uses Apple's UseKeychain) or nvm
 # (Homebrew-installed nvm is unsupported; see installers.tsv).
 brew "stow"
-brew "python@3.14"
+# python is Homebrew's alias for its default python@3.x, the only formula that
+# links an unversioned python3; the others install python3.N alone, so a
+# versioned pin loses python3 when the default moves (python resolved to
+# python@3.15 on 2026-10-09, after python@3.14).
+brew "python"
 brew "fzf"
 brew "zoxide"
 brew "eza"

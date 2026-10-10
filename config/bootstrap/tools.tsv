@@ -125,7 +125,6 @@ lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so over
 # alias: man man-db
 # manual: man macos,hpc
 # alias: linuxbrew homebrew
-# alias: python3 python@3.14
 # alias: python3 python
 # alias: python3 Python.Python.3.12
 # alias: fzf junegunn.fzf
