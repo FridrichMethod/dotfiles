@@ -130,20 +130,37 @@ function Test-BootstrapHostMatch {
 
 function Find-BootstrapCommand {
     # The first PATH entry holding Name.exe, .cmd, .bat or .ps1 (in that
-    # order within an entry), or $null. Off Windows an extensionless file
-    # also counts, so Unix pwsh runs of the twins and their tests work.
-    param([Parameter(Mandatory)][string]$Name)
+    # order within an entry), or $null. With -All, every such file in PATH
+    # order, one per entry. Off Windows an extensionless file also counts,
+    # so Unix pwsh runs of the twins and their tests work.
+    param([Parameter(Mandatory)][string]$Name, [switch]$All)
     $extensions = @('.exe', '.cmd', '.bat', '.ps1')
     if (-not $IsWindows) { $extensions += '' }
+    $found = [Collections.Generic.List[string]]::new()
     foreach ($entry in ([string]$env:PATH).Split([IO.Path]::PathSeparator)) {
         $directory = $entry.Trim().Trim('"')
         if (-not $directory) { continue }
         foreach ($extension in $extensions) {
             $candidate = [IO.Path]::Combine($directory, $Name + $extension)
-            if ([IO.File]::Exists($candidate)) { return $candidate }
+            if (-not [IO.File]::Exists($candidate)) { continue }
+            if (-not $All) { return $candidate }
+            if (-not ($found -contains $candidate)) { $found.Add($candidate) }
+            break
         }
     }
+    if ($All) { return $found.ToArray() }
     return $null
+}
+
+function Test-BootstrapStoreAlias {
+    # True for a file directly in %LOCALAPPDATA%\Microsoft\WindowsApps, where
+    # the Microsoft Store keeps its app execution aliases. Without the Store
+    # app, python.exe and python3.exe there print only an install hint.
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not $env:LOCALAPPDATA) { return $false }
+    $aliases = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps')).TrimEnd('\', '/')
+    $directory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Path))
+    return [string]$directory.TrimEnd('\', '/') -eq $aliases
 }
 
 function ConvertFrom-BootstrapVersionText {
@@ -265,12 +282,14 @@ function Find-BootstrapModuleDirectory {
 function Test-BootstrapTool {
     # Probe one tools.tsv row: Found, Path and (with a VersionFlag) Version.
     # For comma alternatives the first found wins, except that a candidate
-    # printing no version yields to a later one that does: a Microsoft Store
-    # alias stub (python3.exe in WindowsApps) prints only an install hint.
+    # printing no version yields to a later one that does. A Microsoft Store
+    # alias that prints no version is an install hint, not the tool: the
+    # search goes on along PATH, and a row with only such stubs is missing.
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Probe, [string]$VersionFlag = '-')
     $parsed = Get-BootstrapProbe $Probe
     $path = $null
+    $fallback = $null
     $version = ''
     switch -CaseSensitive ($parsed.Kind) {
         'file' {
@@ -288,16 +307,46 @@ function Test-BootstrapTool {
         'psmodule' { $path = Find-BootstrapModuleDirectory $parsed.Value }
         'command' {
             foreach ($name in $parsed.Value.Split(',')) {
-                $candidate = Find-BootstrapCommand $name
-                if (-not $candidate) { continue }
-                if ($VersionFlag -ceq '-') { $path = $candidate; break }
-                $candidateVersion = Get-BootstrapToolVersion -Path $candidate -Flag $VersionFlag
-                if ($candidateVersion) { $path = $candidate; $version = $candidateVersion; break }
-                if (-not $path) { $path = $candidate }
+                $candidates = @(Find-BootstrapCommand $name -All)
+                if (-not $candidates.Count) { continue }
+                if ($VersionFlag -ceq '-') { $path = $candidates[0]; break }
+                foreach ($candidate in $candidates) {
+                    $version = Get-BootstrapToolVersion -Path $candidate -Flag $VersionFlag
+                    if ($version) { $path = $candidate; break }
+                    if (Test-BootstrapStoreAlias $candidate) { continue }
+                    if (-not $fallback) { $fallback = $candidate }
+                    break
+                }
+                if ($version) { break }
             }
+            if (-not $path) { $path = $fallback }
         }
     }
     return [pscustomobject]@{ Found = [bool]$path; Path = [string]$path; Version = $version }
+}
+
+function Select-BootstrapCommand {
+    # The first PATH candidate, over the comma alternatives of a command
+    # Probe in order, whose VersionFlag output carries a version >= Floor:
+    # Path and Version, or empty ones. Rejected lists every candidate passed
+    # over, with its version or "no version" (a Store alias stub).
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Probe, [Parameter(Mandatory)][string]$VersionFlag,
+        [Parameter(Mandatory)][string]$Floor)
+    $parsed = Get-BootstrapProbe $Probe
+    if ($parsed.Kind -cne 'command') { throw [IO.InvalidDataException]::new("Not a command probe: '$Probe'") }
+    $rejected = [Collections.Generic.List[string]]::new()
+    foreach ($name in $parsed.Value.Split(',')) {
+        foreach ($candidate in @(Find-BootstrapCommand $name -All)) {
+            $version = Get-BootstrapToolVersion -Path $candidate -Flag $VersionFlag
+            if ($version -and (Compare-BootstrapVersion $version $Floor) -eq 0) {
+                return [pscustomobject]@{ Path = $candidate; Version = $version; Rejected = $rejected.ToArray() }
+            }
+            $shown = if ($version) { $version } else { 'no version' }
+            $rejected.Add("$candidate ($shown)")
+        }
+    }
+    return [pscustomobject]@{ Path = ''; Version = ''; Rejected = $rejected.ToArray() }
 }
 
 function New-BootstrapResult {
@@ -418,20 +467,78 @@ function Install-BootstrapFile {
     finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-function Update-BootstrapSessionPath {
-    # Windows only: append the machine and user PATH entries that installers
-    # just registered to this process's PATH, keeping its order and entries.
-    if (-not $IsWindows) { return }
-    $entries = [Collections.Generic.List[string]]::new()
-    foreach ($scope in @('Process', 'Machine', 'User')) {
-        $value = [Environment]::GetEnvironmentVariable('Path', $scope)
-        if (-not $value) { continue }
-        foreach ($entry in $value.Split(';')) {
-            $expanded = [Environment]::ExpandEnvironmentVariables($entry.Trim())
-            if ($expanded -and -not ($entries -contains $expanded)) { $entries.Add($expanded) }
-        }
+function Get-BootstrapVenvPython {
+    # The interpreter setup-sync creates in RepoRoot/.venv-sync: bin/python
+    # when it exists, else Scripts\python.exe, the order lib/sync-runtime.sh
+    # uses.
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    $unix = Join-Path $RepoRoot '.venv-sync/bin/python'
+    if ([IO.File]::Exists($unix)) { return $unix }
+    return Join-Path $RepoRoot '.venv-sync/Scripts/python.exe'
+}
+
+function Get-BootstrapSyncPython {
+    # The interpreter the AI config sync helpers run (lib/sync-runtime.sh):
+    # DOTFILES_SYNC_PYTHON whenever it is set, else the .venv-sync one.
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    $override = [Environment]::GetEnvironmentVariable('DOTFILES_SYNC_PYTHON')
+    if ($null -ne $override) { return [pscustomobject]@{ Path = $override; Source = 'DOTFILES_SYNC_PYTHON' } }
+    return [pscustomobject]@{ Path = (Get-BootstrapVenvPython $RepoRoot); Source = '.venv-sync' }
+}
+
+function Test-BootstrapSyncRuntime {
+    # True when Python passes lib/config_sync.py --runtime-check (Python
+    # 3.11+ and the pinned tomlkit), the check setup-sync itself ends with.
+    # Read-only: -B writes no bytecode, and its output is discarded.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Python, [Parameter(Mandatory)][string]$RepoRoot)
+    if (-not $Python -or -not [IO.File]::Exists($Python)) { return $false }
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    try { $null | & $Python -I -B -X utf8 (Join-Path $RepoRoot 'lib/config_sync.py') --runtime-check *> $null }
+    catch { return $false }
+    return $LASTEXITCODE -eq 0
+}
+
+function Split-BootstrapPathList {
+    # Non-empty, environment-expanded entries of a ;-separated PATH value.
+    param([AllowEmptyString()][AllowNull()][string]$Value)
+    foreach ($entry in ([string]$Value).Split(';')) {
+        $expanded = [Environment]::ExpandEnvironmentVariables($entry.Trim())
+        if ($expanded) { $expanded }
     }
-    $env:PATH = $entries -join ';'
+}
+
+function Merge-BootstrapPath {
+    # A Windows PATH value: the entries only this process has (an activated
+    # venv, a caller's own prepend) first and in their order, then Machine
+    # and User entries in the order a new terminal reads them. A process
+    # PATH keeps the order it had at launch, so an installer's User-scope
+    # PrependPath entry (winget's Python) would otherwise land after the
+    # WindowsApps Store aliases already in it. Entries are deduplicated
+    # case-insensitively, ignoring a trailing separator.
+    param([AllowEmptyString()][AllowNull()][string]$Process, [AllowEmptyString()][AllowNull()][string]$Machine,
+        [AllowEmptyString()][AllowNull()][string]$User)
+    $registry = @(Split-BootstrapPathList $Machine) + @(Split-BootstrapPathList $User)
+    $known = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $registry) { [void]$known.Add($entry.TrimEnd('\', '/')) }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $merged = [Collections.Generic.List[string]]::new()
+    foreach ($entry in @(Split-BootstrapPathList $Process)) {
+        $key = $entry.TrimEnd('\', '/')
+        if (-not $known.Contains($key) -and $seen.Add($key)) { $merged.Add($entry) }
+    }
+    foreach ($entry in $registry) {
+        if ($seen.Add($entry.TrimEnd('\', '/'))) { $merged.Add($entry) }
+    }
+    return $merged -join ';'
+}
+
+function Update-BootstrapSessionPath {
+    # Windows only: rebuild this process's PATH with Merge-BootstrapPath, so
+    # entries installers just registered resolve as in a new terminal.
+    if (-not $IsWindows) { return }
+    $env:PATH = Merge-BootstrapPath -Process $env:PATH -Machine ([Environment]::GetEnvironmentVariable('Path', 'Machine')) `
+        -User ([Environment]::GetEnvironmentVariable('Path', 'User'))
 }
 
 function Write-BootstrapHumanBlock {

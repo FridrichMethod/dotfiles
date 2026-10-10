@@ -13,7 +13,11 @@
       W1-font         oh-my-posh font install CascadiaMono (needs oh-my-posh)
       W1-bat-theme    the pinned Catppuccin Mocha theme, sha256-checked, into
                       %APPDATA%\bat\themes, then bat cache --build
-      W1-setup-sync   .\setup-sync.ps1 (the only write inside this checkout)
+      W1-setup-sync   .\setup-sync.ps1 -Python <the first python3 or python on
+                      PATH that reports 3.11 or newer; a Microsoft Store
+                      alias does not count> (the only write inside this
+                      checkout); done when .venv-sync passes
+                      lib/config_sync.py --runtime-check
 
     A step runs when a selected tier needs it: tools.tsv rows whose Windows
     docs step is W1-winget, W1-psresources, W1-font or W1-bat-theme decide
@@ -25,9 +29,14 @@
     elevates itself, never runs stow-all.ps1 and never edits a profile or rc
     file; elevated steps are left to a person.
 
-    Exit codes: 0 done; 1 a step failed; 2 usage error, invalid manifest, or
-    refusal (a non-interactive run without -Yes, or a declined prompt);
-    3 HUMAN steps are pending. With -Check, 3 also means a step is todo.
+    Exit codes: 0 done (non-blocking HUMAN blocks may still be printed);
+    1 a step failed; 2 usage error, invalid manifest, or refusal (a
+    non-interactive run without -Yes, or a declined prompt); 3 a blocking
+    HUMAN step is pending: HW-clone or HW-stow. As in setup-host.sh, the
+    other HUMAN steps (HW-auto-stow-task, HW-execution-policy, HW-ssh-agent,
+    HW-wsl, HW-auth) are printed while pending but leave the exit code
+    alone; .\doctor.ps1 -Online then shows whether sign-in is done. -Check
+    uses the same codes, so todo steps alone exit 0.
 
 .PARAMETER HostName
     Alias -Host. Only win is accepted; use ./setup-host.sh on Unix.
@@ -78,6 +87,8 @@ try {
 
 $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-setup-sync')
 $HumanSteps = @('HW-clone', 'HW-stow', 'HW-auto-stow-task', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
+# A pending blocking step makes the run exit 3 (setup-host.sh's "blocking").
+$BlockingHumanSteps = @('HW-clone', 'HW-stow')
 
 function New-SetupState {
     param([string]$Id, [ValidateSet('done', 'todo', 'human', 'skip')][string]$Status, [string]$Detail)
@@ -94,8 +105,13 @@ function Get-SetupStepRows {
 }
 
 function Get-SetupMissingNames {
+    # Rows with a floor are probed with their version flag, so a Microsoft
+    # Store alias stub (python.exe in WindowsApps) does not pass for Python.
     param([object[]]$Rows)
-    return @($Rows | Where-Object { -not (Test-BootstrapTool -Probe $_.probe).Found } | ForEach-Object { $_.id })
+    return @($Rows | Where-Object {
+            $flag = if ($_.floor -cne '-') { $_.version_flag } else { '-' }
+            -not (Test-BootstrapTool -Probe $_.probe -VersionFlag $flag).Found
+        } | ForEach-Object { $_.id })
 }
 
 function Get-SetupBatThemeRow {
@@ -104,6 +120,9 @@ function Get-SetupBatThemeRow {
         })
     if ($rows.Count -ne 1 -or $rows[0].kind -cne 'file') {
         throw [IO.InvalidDataException]::new('installers.tsv needs exactly one any-arch file row for bat-theme on win')
+    }
+    if ($rows[0].url -cnotmatch '^https://' -or $rows[0].sha256 -cnotmatch '^[0-9a-f]{64}$') {
+        throw [IO.InvalidDataException]::new('installers.tsv bat-theme needs an https url and a 64-digit lowercase hex sha256')
     }
     return $rows[0]
 }
@@ -120,10 +139,18 @@ function Assert-SetupWingetManifest {
     if (-not $count) { throw [IO.InvalidDataException]::new("${Path}: no PackageIdentifier entries") }
 }
 
-function Get-SetupVenvPython {
-    # setup-sync.ps1 creates this interpreter; its path is platform specific.
-    $python = if ($IsWindows) { '.venv-sync/Scripts/python.exe' } else { '.venv-sync/bin/python' }
-    return Join-Path $RepoRoot $python
+function Get-SetupSyncPythonSpec {
+    # What W1-setup-sync hands to setup-sync.ps1 -Python: the tools.tsv
+    # python3 row's probe, version flag and floor (Select-BootstrapCommand).
+    $row = @($script:ToolRows | Where-Object { $_.id -ceq 'python3' -and $_.floor -cne '-' }) | Select-Object -First 1
+    if ($row) { return @{ Probe = $row.probe; VersionFlag = $row.version_flag; Floor = $row.floor } }
+    return @{ Probe = 'python3,python'; VersionFlag = '--version'; Floor = '3.11' }
+}
+
+function Test-SetupVenvReady {
+    # Ready means runnable with the pinned dependency, not merely present: a
+    # failed first setup-sync.ps1 leaves a venv without tomlkit.
+    return Test-BootstrapSyncRuntime -Python (Get-BootstrapVenvPython $RepoRoot) -RepoRoot $RepoRoot
 }
 
 function Get-SetupStepState {
@@ -166,8 +193,11 @@ function Get-SetupStepState {
         }
         'W1-setup-sync' {
             if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }
-            if ([IO.File]::Exists((Get-SetupVenvPython))) { return New-SetupState $Id done '.venv-sync is ready' }
-            return New-SetupState $Id todo 'run .\setup-sync.ps1'
+            if (Test-SetupVenvReady) { return New-SetupState $Id done '.venv-sync passes the runtime check' }
+            $spec = Get-SetupSyncPythonSpec
+            $python = Select-BootstrapCommand @spec
+            if ($python.Path) { return New-SetupState $Id todo "run .\setup-sync.ps1 -Python $($python.Path)" }
+            return New-SetupState $Id todo "run .\setup-sync.ps1 once Python >= $($spec.Floor) is on PATH (W1-winget installs it)"
         }
     }
     throw "Unknown step $Id"
@@ -183,6 +213,33 @@ function Test-SetupStowed {
     $expected = [IO.Path]::GetFullPath((Join-Path $RepoRoot 'common/git/.gitconfig'))
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     return [IO.Path]::GetFullPath($target).Equals($expected, $comparison)
+}
+
+function Get-SetupFirstPolicy {
+    # The first execution policy in precedence order that is set, or ''.
+    param([AllowNull()][object[]]$Values)
+    foreach ($value in $Values) { if ("$value" -and "$value" -cne 'Undefined') { return "$value" } }
+    return ''
+}
+
+function Test-SetupExecutionPolicy {
+    # Both shells' own scopes must allow local scripts. PowerShell 7: Group
+    # Policy, then CurrentUser; LocalMachine is no evidence, because pwsh's
+    # $PSHOME\powershell.config.json already sets it to RemoteSigned on
+    # Windows. Windows PowerShell 5.1 (it loads the stowed WindowsPowerShell
+    # profile) keeps its own settings in the registry, Restricted by default.
+    $allowed = @('RemoteSigned', 'Unrestricted', 'Bypass')
+    $list = @(Get-ExecutionPolicy -List -ErrorAction SilentlyContinue)
+    $pwsh = foreach ($scope in @('MachinePolicy', 'UserPolicy', 'CurrentUser')) {
+        $list | Where-Object { "$($_.Scope)" -ceq $scope } | Select-Object -First 1 | ForEach-Object { "$($_.ExecutionPolicy)" }
+    }
+    $desktop = foreach ($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell',
+            'HKCU:\SOFTWARE\Policies\Microsoft\Windows\PowerShell',
+            'HKCU:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell')) {
+        Get-ItemProperty -LiteralPath $key -Name ExecutionPolicy -ErrorAction SilentlyContinue |
+            ForEach-Object { "$($_.ExecutionPolicy)" }
+    }
+    return (Get-SetupFirstPolicy $pwsh) -cin $allowed -and (Get-SetupFirstPolicy $desktop) -cin $allowed
 }
 
 function Test-SetupHumanDone {
@@ -207,13 +264,7 @@ function Test-SetupHumanDone {
         }
         'HW-execution-policy' {
             if (-not $IsWindows) { return $false }
-            $policies = Get-ExecutionPolicy -List -ErrorAction SilentlyContinue
-            foreach ($scope in @('MachinePolicy', 'UserPolicy', 'CurrentUser', 'LocalMachine')) {
-                $entry = @($policies | Where-Object { "$($_.Scope)" -ceq $scope })
-                if (-not $entry.Count -or "$($entry[0].ExecutionPolicy)" -ceq 'Undefined') { continue }
-                return "$($entry[0].ExecutionPolicy)" -cin @('RemoteSigned', 'Unrestricted', 'Bypass')
-            }
-            return $false
+            return Test-SetupExecutionPolicy
         }
         'HW-ssh-agent' {
             if (-not $IsWindows) { return $false }
@@ -231,37 +282,45 @@ function Test-SetupHumanDone {
     return $false
 }
 
+function ConvertTo-SetupQuoted {
+    # A single-quoted PowerShell literal, so a pasted path never expands $
+    # or backticks (CodeGeneration also doubles the typographic quotes).
+    param([Parameter(Mandatory)][string]$Text)
+    return "'" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($Text) + "'"
+}
+
 function Get-SetupHumanBlock {
     # Kind and lines for one HUMAN step; comment lines start with #.
     param([Parameter(Mandatory)][string]$Id)
-    $repo = $RepoRoot
+    $repo = ConvertTo-SetupQuoted $RepoRoot
     switch -CaseSensitive ($Id) {
         'HW-clone' {
             return @{ Kind = 'gui'; Lines = @(
                     '# Turn on Developer Mode (Settings > System > For developers) so Git can create symlinks.'
-                    '# A fresh clone: git clone --recurse-submodules -c core.symlinks=true <repository URL>'
-                    "git -C `"$repo`" config core.symlinks true"
-                    "git -C `"$repo`" checkout -- common/pymol"
+                    '# A fresh clone: git clone -c core.symlinks=true --recurse-submodules <repository URL>'
+                    "git -C $repo config core.symlinks true"
+                    "git -C $repo checkout -- common/pymol"
                 ) }
         }
         'HW-stow' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# From an elevated PowerShell (Run as administrator); it writes ~\.claude, ~\.codex and ~\.ssh.'
-                    "Set-Location `"$repo`""
+                    '# From an elevated PowerShell 7 (Run as administrator); it writes ~\.claude, ~\.codex and ~\.ssh.'
+                    "Set-Location -LiteralPath $repo"
                     '.\stow-all.ps1 win'
                 ) }
         }
         'HW-auto-stow-task' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# Optional, elevated PowerShell: lets the login updater restow without a UAC prompt.'
-                    "Set-Location `"$repo`""
+                    '# Optional, elevated PowerShell 7: lets the login updater restow without a UAC prompt.'
+                    "Set-Location -LiteralPath $repo"
                     '.\scripts\dotfiles-auto-stow.ps1 -Register'
                 ) }
         }
         'HW-execution-policy' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# Lets the stowed profile.ps1 and these scripts run.'
+                    '# Lets the stowed profiles and these scripts run. PowerShell 7 and Windows PowerShell 5.1 keep separate settings.'
                     'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
+                    'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
                 ) }
         }
         'HW-ssh-agent' {
@@ -269,22 +328,24 @@ function Get-SetupHumanBlock {
                     '# Elevated PowerShell (Run as administrator):'
                     'Set-Service -Name ssh-agent -StartupType Automatic'
                     'Start-Service -Name ssh-agent'
+                    '# Then, as yourself, once HW-auth has created the key: ssh-add $HOME\.ssh\id_ed25519'
                 ) }
         }
         'HW-wsl' {
             return @{ Kind = 'judgment'; Lines = @(
                     '# Optional, elevated PowerShell. Windows Terminal and WezTerm profiles need the distro named exactly Ubuntu.'
-                    '# win\wsl (wsl.conf, mount.vbs, .wslconfig) is not stowed; review it before copying anything by hand.'
+                    '# .\stow-all.ps1 win links win\wsl into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
+                    '# ~\wsl.conf applies only when copied to /etc/wsl.conf inside the distro; the tracked one runs /usr/local/bin/mount-data.sh, which this repository does not ship, and hardcodes a default user.'
+                    '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.'
                     'wsl --install -d Ubuntu'
                 ) }
         }
         'HW-auth' {
             return @{ Kind = 'auth'; Lines = @(
-                    '# Sign in, then confirm with .\doctor.ps1 -Online.'
-                    'ssh-keygen -t ed25519'
+                    '# Sign in, then check with .\doctor.ps1 -Online. Skip gh auth setup-git: it would write the stowed ~\.gitconfig.'
+                    'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519'
                     'gh auth login --git-protocol ssh'
-                    'gh auth setup-git'
-                    'claude'
+                    'claude auth login'
                     'codex login'
                 ) }
         }
@@ -347,12 +408,22 @@ function Invoke-SetupStep {
             return $result
         }
         'W1-setup-sync' {
-            try { & (Join-Path $RepoRoot 'setup-sync.ps1') | Out-Host }
-            catch { return New-BootstrapResult failed "setup-sync.ps1 failed: $($_.Exception.Message)" }
-            if (-not [IO.File]::Exists((Get-SetupVenvPython))) {
-                return New-BootstrapResult failed 'setup-sync.ps1 finished without creating .venv-sync'
+            # setup-sync.ps1 defaults to "python", which can resolve to the
+            # Store alias even after winget installed a real one; pass a
+            # probed interpreter instead.
+            $spec = Get-SetupSyncPythonSpec
+            $python = Select-BootstrapCommand @spec
+            if (-not $python.Path) {
+                $seen = if ($python.Rejected.Count) { " (passed over: $($python.Rejected -join ', '))" } else { '' }
+                return New-BootstrapResult failed ("no Python >= $($spec.Floor) on PATH$seen; a Microsoft Store alias does not count. " +
+                    'Open a new terminal so the W1-winget PATH applies, or run .\setup-sync.ps1 -Python <path> (py -0p lists interpreters)')
             }
-            return New-BootstrapResult installed '.venv-sync is ready'
+            try { & (Join-Path $RepoRoot 'setup-sync.ps1') -Python $python.Path | Out-Host }
+            catch { return New-BootstrapResult failed "setup-sync.ps1 -Python $($python.Path) failed: $($_.Exception.Message)" }
+            if (-not (Test-SetupVenvReady)) {
+                return New-BootstrapResult failed "setup-sync.ps1 finished, but $(Get-BootstrapVenvPython $RepoRoot) fails lib/config_sync.py --runtime-check"
+            }
+            return New-BootstrapResult installed "AI-sync runtime ready, from Python $($python.Version) at $($python.Path)"
         }
     }
     throw "Unknown step $Id"
@@ -363,8 +434,9 @@ function Get-SetupPlan {
     foreach ($id in $AutomatedSteps) { $states[$id] = Get-SetupStepState -Id $id -Earlier $states }
     foreach ($id in $HumanSteps) {
         $done = Test-SetupHumanDone $id
+        $blocking = if ($id -cin $BlockingHumanSteps) { 'blocks completion' } else { 'does not block' }
         $states[$id] = if ($done) { New-SetupState $id done 'already done' }
-        else { New-SetupState $id human "$((Get-SetupHumanBlock $id).Kind) step for a person" }
+        else { New-SetupState $id human "$((Get-SetupHumanBlock $id).Kind) step for a person; $blocking" }
     }
     return $states
 }
@@ -436,8 +508,8 @@ function Invoke-BootstrapSetup {
 
     if ($Check) {
         foreach ($state in $plan.Values) { "$($state.Id) $($state.Status) $($state.Detail)" }
-        $pending = @($plan.Values | Where-Object { $_.Status -cin @('todo', 'human') }).Count
-        $script:SetupStatus = if ($pending) { 3 } else { 0 }
+        $held = @($plan.Values | Where-Object { $_.Status -ceq 'human' -and $_.Id -cin $BlockingHumanSteps }).Count
+        $script:SetupStatus = if ($held) { 3 } else { 0 }
         return
     }
 
@@ -461,7 +533,12 @@ function Invoke-BootstrapSetup {
         $env:AWESOME_SKILLS_AUTO_UPDATE = '0'
         $env:GIT_TERMINAL_PROMPT = '0'
         $applied = @(Invoke-SetupApply)
-        if ($applied.Count -ne 1 -or $applied[0] -isnot [bool] -or -not $applied[0]) {
+        if ($applied.Count -ne 1 -or $applied[0] -isnot [bool]) {
+            Write-DotfilesLog error "Internal error: a step leaked $($applied.Count) output objects into the apply result."
+            $script:SetupStatus = 1
+            return
+        }
+        if (-not $applied[0]) {
             $script:SetupStatus = 1
             return
         }
@@ -472,7 +549,14 @@ function Invoke-BootstrapSetup {
 
     $pending = @($HumanSteps | Where-Object { -not (Test-SetupHumanDone $_) })
     foreach ($id in $pending) { Write-SetupHumanBlock $id }
-    $script:SetupStatus = if ($pending.Count) { 3 } else { 0 }
+    $held = @($pending | Where-Object { $_ -cin $BlockingHumanSteps })
+    if ($held.Count) {
+        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1"
+        $script:SetupStatus = 3
+        return
+    }
+    Write-DotfilesLog ok 'setup-host: nothing blocking remains for win'
+    $script:SetupStatus = 0
 }
 
 $libraryPath = Join-Path $RepoRoot 'lib/bootstrap.ps1'

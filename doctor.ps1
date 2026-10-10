@@ -5,25 +5,31 @@
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
-    three structural checks (venv-sync, submodule, core-symlinks), and prints
-    one line per check:
+    three structural checks (venv-sync, submodule, core-symlinks), prints
+    one line per check and then a summary:
 
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
 
-    Statuses are ok, outdated, missing, warn, skip and human. A missing or
-    outdated row outside the selected tiers is reported as warn. Executables
-    are found by probing PATH entries for .exe, .cmd, .bat and .ps1 files;
+    Statuses are ok, outdated, missing, warn, skip and human, with the same
+    meaning as in doctor.sh: missing, outdated and human are errors, and
+    outside the selected tiers they are reported as warn. Executables are
+    found by probing PATH entries for .exe, .cmd, .bat and .ps1 files (a
+    Microsoft Store alias that prints no version does not count);
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
+    venv-sync passes when the interpreter the AI config sync helpers use
+    (DOTFILES_SYNC_PYTHON when set, else .venv-sync) passes
+    lib/config_sync.py --runtime-check.
 
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
-    claude auth status and codex login status, reported as human when signed
-    out.
+    claude auth status and codex login status; as in doctor.sh, a tool that
+    is signed out warns and one that is absent is skipped.
 
-    Exit codes: 0 every selected-tier check is ok (warn, skip and human do
-    not fail); 1 a selected-tier row is missing or outdated, or a structural
-    check failed; 2 usage error, unknown host or invalid manifest.
+    Exit codes: 0 no selected-tier check is missing, outdated or human (warn
+    and skip do not fail); 1 a selected-tier check, tools.tsv row or
+    structural, is missing, outdated or human; 2 usage error, unknown host
+    or invalid manifest.
 
 .PARAMETER HostName
     Alias -Host. Only win is accepted; use ./doctor.sh --host <host> on Unix.
@@ -37,7 +43,8 @@
     status, id, tier, detail, fix (docs/bootstrap.md <step>, or -).
 
 .PARAMETER Quiet
-    Print only checks that are not ok, and the summary only on failure.
+    Print only checks that are neither ok nor skip, then the summary; with
+    -Tsv, only those rows after the header.
 
 .PARAMETER Online
     Also run the network auth probes.
@@ -76,17 +83,19 @@ $ToolHeader = @('id', 'tier', 'hosts', 'probe', 'version_flag', 'floor', 'absent
 
 function New-DoctorResult {
     param([string]$Status, [string]$Id, [string]$Tier, [string]$Detail, [string]$Step)
-    $fix = if ($Status -ceq 'ok' -or -not $Step) { '-' } else { "docs/bootstrap.md $Step" }
+    $fix = if ($Status -cin @('ok', 'skip') -or -not $Step) { '-' } else { "docs/bootstrap.md $Step" }
     return [pscustomobject]@{
         Status = $Status; Id = $Id; Tier = $Tier; Fix = $fix
         Detail = ($Detail -replace '[\t\r\n]+', ' ')
     }
 }
 
+$FailingStatuses = @('missing', 'outdated', 'human')
+
 function Limit-DoctorResult {
-    # Missing or outdated rows outside the selected tiers only warn.
+    # Missing, outdated and human rows outside the selected tiers only warn.
     param([Parameter(Mandatory)]$Result, [string]$Selection)
-    if ($Result.Status -cin @('missing', 'outdated') -and -not (Test-BootstrapTierSelected $Result.Tier $Selection)) {
+    if ($Result.Status -cin $FailingStatuses -and -not (Test-BootstrapTierSelected $Result.Tier $Selection)) {
         $Result.Detail = "$($Result.Detail) (tier $($Result.Tier) not selected)"
         $Result.Status = 'warn'
     }
@@ -126,15 +135,25 @@ function Get-DoctorToolResult {
     return Limit-DoctorResult $result $Selection
 }
 
+function Get-DoctorSyncRuntimeResult {
+    # The interpreter lib/sync-runtime.sh would run for stow-all.ps1's
+    # helpers must pass lib/config_sync.py --runtime-check (read-only).
+    $step = Get-BootstrapDocRef -Step S4-setup-sync -ProfileName windows
+    $runtime = Get-BootstrapSyncPython $RepoRoot
+    $ready = Test-BootstrapSyncRuntime -Python $runtime.Path -RepoRoot $RepoRoot
+    if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
+        if ($ready) { return New-DoctorResult ok venv-sync core "DOTFILES_SYNC_PYTHON=$($runtime.Path) passes the runtime check" $step }
+        return New-DoctorResult missing venv-sync core "DOTFILES_SYNC_PYTHON='$($runtime.Path)' fails lib/config_sync.py --runtime-check; the AI config sync helpers cannot run" $step
+    }
+    if ($ready) { return New-DoctorResult ok venv-sync core "AI-sync runtime ready at $($runtime.Path)" $step }
+    if (-not [IO.File]::Exists($runtime.Path)) {
+        return New-DoctorResult missing venv-sync core "no $($runtime.Path); setup-sync.ps1 has not run, so stow-all.ps1 cannot sync AI configs" $step
+    }
+    return New-DoctorResult missing venv-sync core "$($runtime.Path) fails lib/config_sync.py --runtime-check; rerun setup-sync.ps1" $step
+}
+
 function Get-DoctorStructuralResults {
-    $python = if ($IsWindows) { '.venv-sync/Scripts/python.exe' } else { '.venv-sync/bin/python' }
-    $setupSync = Get-BootstrapDocRef -Step S4-setup-sync -ProfileName windows
-    if ([IO.File]::Exists((Join-Path $RepoRoot $python))) {
-        New-DoctorResult ok venv-sync core 'present' $setupSync
-    }
-    else {
-        New-DoctorResult missing venv-sync core 'missing: setup-sync.ps1 has not run, so stow-all.ps1 cannot sync AI configs' $setupSync
-    }
+    Get-DoctorSyncRuntimeResult
 
     $paths = @()
     $modules = Join-Path $RepoRoot '.gitmodules'
@@ -170,18 +189,19 @@ function Get-DoctorOnlineResults {
         @{ Id = 'codex-auth'; Tier = 'ai'; Tool = 'codex'; Arguments = @('login', 'status') }
     )
     foreach ($probe in $probes) {
+        # doctor.sh's bootstrap_check_auth: absent is skip, signed out is warn.
         $path = Find-BootstrapCommand $probe.Tool
         if (-not $path) {
-            New-DoctorResult skip $probe.Id $probe.Tier "$($probe.Tool) is not on PATH" HW-auth
+            New-DoctorResult skip $probe.Id $probe.Tier "$($probe.Tool) not found, auth not checked" HW-auth
             continue
         }
         $arguments = $probe.Arguments
         $null | & $path @arguments *> $null
         if ($LASTEXITCODE -eq 0) {
-            New-DoctorResult ok $probe.Id $probe.Tier "$($probe.Tool) $($arguments -join ' ') succeeded" HW-auth
+            New-DoctorResult ok $probe.Id $probe.Tier "$($probe.Tool) is authenticated" HW-auth
         }
         else {
-            New-DoctorResult human $probe.Id $probe.Tier "$($probe.Tool) $($arguments -join ' ') exited $LASTEXITCODE; sign in" HW-auth
+            New-DoctorResult warn $probe.Id $probe.Tier "$($probe.Tool) is not authenticated or could not reach its service ($($probe.Tool) $($arguments -join ' ') exited $LASTEXITCODE)" HW-auth
         }
     }
 }
@@ -190,11 +210,10 @@ function Write-DoctorResult {
     param([Parameter(Mandatory)]$Result)
     $level = switch -CaseSensitive ($Result.Status) {
         ok { 'ok' }
-        { $_ -cin @('missing', 'outdated') } { 'error' }
+        { $_ -cin $FailingStatuses } { 'error' }
         skip { 'info' }
         default { 'warn' }
     }
-    if ($Quiet -and $level -cin @('ok', 'info')) { return }
     $suffix = if ($Result.Fix -cne '-') { " ($($Result.Fix))" } else { '' }
     Write-DotfilesLog $level "$($Result.Tier) $($Result.Id): $($Result.Detail)$suffix"
 }
@@ -218,30 +237,32 @@ function Invoke-BootstrapDoctor {
         $rows = @(Get-BootstrapManifestRows -Path (Join-Path $RepoRoot 'config/bootstrap/tools.tsv') -Header $ToolHeader |
                 Where-Object { Test-BootstrapHostMatch $_.hosts $canonicalHost })
         foreach ($row in $rows) { Assert-DoctorToolRow $row }
-        if (-not $Tsv -and -not $Quiet) { Write-DotfilesLog step "doctor win (tiers $Tier)" }
+        if (-not $Tsv -and -not $Quiet) { Write-DotfilesLog step "Checking host win (windows); required tiers: $Tier" }
         foreach ($row in $rows) { $results.Add((Get-DoctorToolResult $row $Tier)) }
     }
     catch [IO.InvalidDataException] {
         Write-DotfilesLog error "Invalid manifest: $($_.Exception.Message)"
         return
     }
-    foreach ($result in @(Get-DoctorStructuralResults)) { $results.Add((Limit-DoctorResult $result $Tier)) }
-    if ($Online) { foreach ($result in @(Get-DoctorOnlineResults)) { $results.Add($result) } }
+    $checks = @(Get-DoctorStructuralResults)
+    if ($Online) { $checks += @(Get-DoctorOnlineResults) }
+    foreach ($result in $checks) { $results.Add((Limit-DoctorResult $result $Tier)) }
 
-    $failed = @($results | Where-Object { $_.Status -cin @('missing', 'outdated') }).Count
+    $failed = @($results | Where-Object { $_.Status -cin $FailingStatuses }).Count
+    # As in doctor.sh, -Quiet hides ok and skip rows in both formats.
+    $shown = @($results | Where-Object { -not $Quiet -or $_.Status -cnotin @('ok', 'skip') })
     if ($Tsv) {
         "status`tid`ttier`tdetail`tfix"
-        foreach ($result in $results) {
+        foreach ($result in $shown) {
             @($result.Status, $result.Id, $result.Tier, $result.Detail, $result.Fix) -join "`t"
         }
     }
     else {
-        foreach ($result in $results) { Write-DoctorResult $result }
+        foreach ($result in $shown) { Write-DoctorResult $result }
         $counts = foreach ($status in @('ok', 'outdated', 'missing', 'warn', 'skip', 'human')) {
             "$(@($results | Where-Object { $_.Status -ceq $status }).Count) $status"
         }
-        if ($failed) { Write-DotfilesLog error "doctor win: $($counts -join ', ')" }
-        elseif (-not $Quiet) { Write-DotfilesLog ok "doctor win: $($counts -join ', ')" }
+        Write-DotfilesLog info "summary: $($counts -join ', ') (win, required tiers: $Tier)"
     }
     $script:DoctorStatus = if ($failed) { 1 } else { 0 }
 }
