@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # Host, profile and platform detection for doctor.sh and setup-host.sh.
 # Sourced only; defines functions and changes no shell options. Bash 3.2
-# compatible and `set -u` safe. Test overrides: BOOTSTRAP_UNAME_S,
-# BOOTSTRAP_UNAME_M, BOOTSTRAP_OS_RELEASE, BOOTSTRAP_PROC_VERSION.
+# compatible and `set -u` safe; nothing here splits words by the caller's IFS.
+# Test overrides: BOOTSTRAP_UNAME_S, BOOTSTRAP_UNAME_M, BOOTSTRAP_OS_RELEASE,
+# BOOTSTRAP_PROC_VERSION.
 
 # bootstrap_known_hosts: the host overlays, one per line.
 bootstrap_known_hosts() {
@@ -73,7 +74,7 @@ bootstrap_os_release_value() {
 # bootstrap_detect_platform: macos, debian, hpc or other. Lmod (LMOD_DIR)
 # marks a cluster before os-release is read, since Marlowe runs Ubuntu.
 bootstrap_detect_platform() {
-    local id like word
+    local id like
     case $(bootstrap_os) in
         Darwin)
             printf '%s\n' macos
@@ -91,15 +92,12 @@ bootstrap_detect_platform() {
     fi
     id=$(bootstrap_os_release_value ID)
     like=$(bootstrap_os_release_value ID_LIKE)
-    for word in $id $like; do
-        case $word in
-            debian | ubuntu)
-                printf '%s\n' debian
-                return 0
-                ;;
-        esac
-    done
-    printf '%s\n' other
+    # Whole-word match on the space-separated ID and ID_LIKE, without word
+    # splitting or pathname expansion of os-release data.
+    case " $id $like " in
+        *' debian '* | *' ubuntu '*) printf '%s\n' debian ;;
+        *) printf '%s\n' other ;;
+    esac
 }
 
 # bootstrap_is_wsl: 0 under WSL (WSL_DISTRO_NAME, or a Microsoft kernel).

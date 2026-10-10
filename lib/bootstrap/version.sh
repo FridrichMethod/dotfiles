@@ -1,7 +1,9 @@
 # shellcheck shell=bash
 # Version extraction and comparison for doctor.sh and setup-host.sh. Sourced
 # only; defines functions and changes no shell options. Bash 3.2 compatible
-# and `set -u` safe; no `sort -V`.
+# and `set -u` safe; no `sort -V`. Bash `local` is dynamically scoped, so a
+# caller's IFS (a TSV loop's tab, say) reaches these functions: each one that
+# splits words sets its own IFS.
 
 # bootstrap_extract_version TEXT: print the first X.Y or X.Y.Z in TEXT (the
 # first match `grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n 1` would give),
@@ -30,7 +32,7 @@ EOF
 # bootstrap_version_ge HAVE FLOOR: 0 iff HAVE >= FLOOR, compared as three
 # numeric components. 1 when lower, 2 when either side is not a version.
 bootstrap_version_ge() {
-    local have floor h1 h2 h3 f1 f2 f3
+    local IFS=' ' have floor h1 h2 h3 f1 f2 f3
     have=$(bootstrap_version_parts "${1:-}") || return 2
     floor=$(bootstrap_version_parts "${2:-}") || return 2
     read -r h1 h2 h3 <<EOF

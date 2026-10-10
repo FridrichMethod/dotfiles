@@ -3,7 +3,8 @@
 # functions and changes no shell options. Bash 3.2 compatible and `set -u`
 # safe. Manifest data is split with parameter expansion and awk, never eval'd:
 # tests/test_bootstrap_manifest.py validates config/bootstrap, and this file
-# trusts what it validated.
+# trusts what it validated. A caller's IFS (Bash `local` is dynamically
+# scoped) never changes a result: every split sets its own IFS.
 
 BOOTSTRAP_TAB=$(printf '\t')
 BOOTSTRAP_TIER_ORDER='core cli ai desktop contributor host'
@@ -203,7 +204,7 @@ bootstrap_apt_packages() {
 # bootstrap_brewfiles TIERS: existing Brewfile paths for the selected tiers,
 # in tier order (core cli ai desktop contributor), whatever order TIERS uses.
 bootstrap_brewfiles() {
-    local tier
+    local IFS=' ' tier
     for tier in $BOOTSTRAP_TIER_ORDER; do
         bootstrap_tier_selected "$tier" "$1" || continue
         if [ -f "$BOOTSTRAP_CONFIG/brew/$tier.Brewfile" ]; then

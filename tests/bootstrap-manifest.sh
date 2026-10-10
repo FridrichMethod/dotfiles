@@ -392,6 +392,35 @@ for step in S2-brew-bundle S4-nvm S5-claude S3-bat-theme H7-stow; do
     doc_case "$step" macos "$step"
 done
 
+# Bash `local` is dynamically scoped: a TSV loop's `local IFS=$tab` reaches
+# every library function it calls, so none of them may split by the caller's IFS.
+echo '==> a caller IFS does not reach the libraries'
+printf '%s\n' 'NAME="Linux Mint"' ID=linuxmint 'ID_LIKE="ubuntu debian"' >"$OS_RELEASE"
+caller_ifs_case() {
+    local IFS=$1 label=$2
+    version_case 0.58.0 0.58 ge
+    version_case 0.44.1 0.58.0 lt
+    version_case 10.5.0 8.3 ge
+    version_case v3.14.1 3.13 ge
+    assert_eq "$(bootstrap_brewfiles core,cli | sed 's#.*/##' | tr '\n' ' ')" \
+        'core.Brewfile cli.Brewfile ' "Brewfiles with a $label IFS"
+    assert_eq "$(BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS_RELEASE" bootstrap_detect_platform)" \
+        debian "Linux Mint with a $label IFS"
+    assert_eq "$(bootstrap_tool_rows mac | cut -f1 | tr '\n' ' ')" 'alpha beta gamma ' "tool rows with a $label IFS"
+    assert_eq "$(bootstrap_installer_row beta sherlock aarch64 | cut -f3)" https://e.test/v1.0/b-aarch64 \
+        "installer row with a $label IFS"
+}
+caller_ifs_case "$tab" tab
+caller_ifs_case $'\n' newline
+caller_ifs_case '' empty
+printf '%s\n' 'ID=*' 'ID_LIKE="debian ?"' >"$OS_RELEASE"
+touch "$TEST_TMP/debian"
+assert_eq "$(cd "$TEST_TMP" && BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS_RELEASE" bootstrap_detect_platform)" \
+    debian 'os-release words are not globbed'
+printf '%s\n' 'ID=*' >"$OS_RELEASE"
+assert_eq "$(cd "$TEST_TMP" && BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS_RELEASE" bootstrap_detect_platform)" \
+    other 'a glob ID does not match a file named debian'
+
 # --------------------------------------------------------- host resolution
 echo '==> host resolution'
 REPO="$TEST_TMP/repo"
