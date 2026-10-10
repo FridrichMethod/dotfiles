@@ -362,8 +362,9 @@ kind.
 
 - `./doctor.sh` without `--smoke`, and `./setup-host.sh --check`, write nothing
   anywhere and make no network calls (`--online` adds only the three auth probes).
-  The doctor never runs brew; `fc-list` may refresh a stale fontconfig cache, as
-  any program that loads fonts does.
+  The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
+  `nvim` and `pre-commit` rows are presence-only); `fc-list` may refresh a
+  stale fontconfig cache, as any program that loads fonts does.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
   `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
   rc file. The only write it causes inside the checkout is `.venv-sync`, through

@@ -13,8 +13,9 @@
 # the index. One probed program can write its own cache, outside this
 # checkout and the rc files: fc-list reads fontconfig's caches, and
 # fontconfig itself rewrites only a stale one, as any program that loads
-# fonts does. brew is never run (the homebrew row is presence-only, since
-# `brew --version` can rewrite Homebrew's .git/describe-cache). Only
+# fonts does. Tools whose version flag writes are presence-only rows in
+# tools.tsv, so they never run: brew (.git/describe-cache), codex
+# (~/.codex/tmp/arg0), nvim (its log) and pre-commit (__pycache__). Only
 # bootstrap_check_auth (doctor.sh --online) may reach the network,
 # and only bootstrap_check_smoke (doctor.sh --smoke) starts a shell, which
 # may write shell caches. Test overrides: BOOTSTRAP_NVM_KEG_CANDIDATES and

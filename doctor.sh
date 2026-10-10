@@ -46,8 +46,9 @@ done
 . "$REPO_ROOT/lib/bootstrap/checks.sh"
 
 # git never refreshes the index or takes other optional locks, in this
-# process or in a git that a probed tool starts with this environment. brew
-# itself is never run (see lib/bootstrap/checks.sh).
+# process or in a git that a probed tool starts with this environment. Tools
+# whose version flag writes, brew among them, are never run (see
+# lib/bootstrap/checks.sh).
 export GIT_OPTIONAL_LOCKS=0
 
 usage() {

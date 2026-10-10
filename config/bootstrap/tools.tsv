@@ -61,7 +61,8 @@ git-delta	cli	all	delta	--version	-	fzf-tab git diff and show previews are empty
 tldr	cli	all	tldr	--version	-	fzf-tab command and tldr previews fall back to man	S2-brew-bundle
 chafa	cli	unix	chafa	--version	-	fzf image previews outside kitty show only file details	S2-brew-bundle
 jq	cli	all	jq	--version	-	JSON filtering on the command line fails	S2-brew-bundle
-nvim	cli	all	nvim	--version	-	the vi alias fails	S2-brew-bundle
+# Presence-only: `nvim --version` creates ~/.local/state/nvim/nvim.log.
+nvim	cli	all	nvim	-	-	the vi alias fails	S2-brew-bundle
 aria2	cli	all	aria2c	--version	-	aria2c downloads with the stowed aria2.conf fail	S2-brew-bundle
 uv	cli	all	uv	--version	-	uv and the oh-my-zsh uv plugin are unavailable	S2-brew-bundle
 gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows fail	S2-brew-bundle
@@ -71,7 +72,8 @@ wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	
 nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
 node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
 claude	ai	all	claude	--version	-	Claude Code is unavailable	S5-claude
-codex	ai	all	codex	--version	-	Codex is unavailable	S5-codex
+# Presence-only: `codex --version` writes $CODEX_HOME/tmp/arg0 once ~/.codex exists.
+codex	ai	all	codex	-	-	Codex is unavailable	S5-codex
 kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the stowed kitty.conf has no terminal to configure	S6-kitty
 wezterm	desktop	mac,win	wezterm	-	-	the stowed .wezterm.lua has no terminal to configure	S2-brew-bundle
 nerd-font	desktop	mac,lab-ubuntu,win	font:CaskaydiaMono Nerd Font	-	-	prompt, eza and terminal icons render as boxes	S6-nerd-font
@@ -80,7 +82,8 @@ oh-my-posh	desktop	win	oh-my-posh	version	-	the default PowerShell prompt replac
 psfzf	desktop	win	psmodule:PSFzf	-	-	Ctrl+R, Ctrl+T and Alt+C keep PSReadLine defaults	W1-psresources
 completionpredictor	desktop	win	psmodule:CompletionPredictor	-	-	predictions come from history only	W1-psresources
 commandnotfound	desktop	win	psmodule:Microsoft.WinGet.CommandNotFound	-	-	no winget suggestions for unknown commands	W1-psresources
-pre-commit	contributor	all	pre-commit	--version	-	pre-commit run --all-files cannot run	X-contributor
+# Presence-only: `pre-commit --version` imports Python modules, writing __pycache__.
+pre-commit	contributor	all	pre-commit	-	-	pre-commit run --all-files cannot run	X-contributor
 shfmt	contributor	unix	shfmt	--version	3.13.0	manual shfmt runs miss the zsh dialect	X-contributor
 shellcheck	contributor	unix	shellcheck	--version	-	manual shellcheck runs fail	X-contributor
 stylua	contributor	unix	stylua	--version	-	manual Lua formatting of .wezterm.lua fails	X-contributor
