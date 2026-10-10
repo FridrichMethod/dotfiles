@@ -302,11 +302,15 @@ fi
 # Provisioning never triggers the login updaters, git prompts or Homebrew
 # auto-update, hints and cleanup. Older brew bundle wrote Brewfile.lock.json
 # next to the Brewfile, inside this checkout. --check never runs brew. No
-# step runs gh, but recent gh releases answer any command, --version
-# included, by writing ~/.local/state/gh/device-id unless GH_TELEMETRY=0.
+# step runs gh or tldr, but a tool a step starts may: recent gh releases
+# answer any command, --version included, by writing
+# ~/.local/state/gh/device-id unless GH_TELEMETRY=0, and the tldr C client
+# (Homebrew's tldr formula), once its page cache is two weeks old, answers
+# any command but --update by downloading the tldr-pages archive into
+# ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set.
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-    HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1
+    HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1
 steps_extend_path
 
 if [[ "$MODE" == check ]]; then

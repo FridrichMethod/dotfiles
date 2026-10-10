@@ -123,6 +123,24 @@ printf 'NETWORK $tool %s\n' "\$*" >>"\$EVENT_LOG"
 [ "\${AUTH_OK:-0}" = 1 ]
 SH
 done
+# The tldr C client (Homebrew's tldr formula) checks the age of its page
+# cache before it handles --version and, once ~/.tldrc/date is two weeks old,
+# first downloads the tldr-pages archive into ~/.tldrc, unless
+# TLDR_AUTO_UPDATE_DISABLED is set. The fake takes its cache to be stale.
+write_fake "$FAKE_BIN/tldr" <<'SH'
+#!/bin/sh
+if [ -z "${TLDR_AUTO_UPDATE_DISABLED+set}" ]; then
+    printf 'NETWORK tldr update\n' >>"$EVENT_LOG"
+    mkdir -p "$HOME/.tldrc/tmp" && : >"$HOME/.tldrc/tmp/main.zip"
+    printf 'Local database is older than two weeks, attempting to update it...\n'
+fi
+if [ "${1:-}" = --version ]; then
+    printf 'tldr v1.6.1 (v1.6.1)\n'
+    exit 0
+fi
+printf 'NETWORK tldr %s\n' "$*" >>"$EVENT_LOG"
+exit 1
+SH
 for tool in curl wget; do
     write_fake "$FAKE_BIN/$tool" <<SH
 #!/bin/sh
@@ -187,6 +205,7 @@ row() {
     row login-tool core sherlock,marlowe doctor-login --version - 'login env tool missing' S2-login-env
     row lmod host sherlock,marlowe env:LMOD_DIR - - 'module is undefined' S2-modules
     row gh cli all gh --version 2.50.0 'gh fails' S2-brew-bundle
+    row tldr cli all tldr --version - 'previews fall back to man' S2-brew-bundle
     row file-tool cli lab-ubuntu 'file:$HOME/.fake-file-tool' --version 2.50.0 'file tool fails' X-host-tools
     row claude ai all claude --version - 'Claude Code is unavailable' S5-claude
     row codex ai all codex --version - 'Codex is unavailable' S5-codex
@@ -460,7 +479,7 @@ assert_rc 0
 assert_tsv_shape
 [ ! -s "$OUT/$CASE.err" ] ||
     case_fail "--tsv wrote to stderr"
-for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh claude codex \
+for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr claude codex \
     locale venv-sync submodule stow-links path-order rc-pollution omz-order nvm-homebrew; do
     assert_row "$id" ok '' -
 done
@@ -468,6 +487,7 @@ assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
 assert_row alt ok "1.2.3 >= 1.0 at $FAKE_BIN/doctor-alt"
 assert_row brew-only ok "at $BREW_BIN/doctor-brew-only"
 assert_row bat-theme ok "$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme"
+assert_row tldr ok "1.6.1 at $FAKE_BIN/tldr"
 assert_row desk-tool warn 'not found; no terminal' 'docs/bootstrap.md S6-kitty'
 assert_row nerd-font warn
 assert_row host-tool warn
@@ -478,6 +498,7 @@ done
 assert_event 'fzf --version'
 assert_no_event 'fc-list'
 [ ! -e "$TEST_HOME/.local/state/gh/device-id" ] || case_fail 'gh --version wrote its telemetry device id'
+[ ! -e "$TEST_HOME/.tldrc" ] || case_fail 'tldr --version updated its page cache'
 assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'

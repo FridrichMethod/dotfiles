@@ -59,7 +59,11 @@ done
 # lib/bootstrap/checks.sh). Recent gh releases write ~/.local/state/gh/device-id
 # for telemetry on any command, `gh --version` included, unless GH_TELEMETRY=0;
 # GH_NO_UPDATE_NOTIFIER=1 keeps gh's release check (network, state file) off.
-export GIT_OPTIONAL_LOCKS=0 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1
+# The tldr C client (Homebrew's tldr formula) checks the age of its page
+# cache before it handles any flag but --update, `--version` included, and
+# once ~/.tldrc/date is two weeks old downloads the tldr-pages archive into
+# ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set; tlrc and tealdeer ignore it.
+export GIT_OPTIONAL_LOCKS=0 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1
 
 usage() {
     printf '%s\n' \

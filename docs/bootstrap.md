@@ -302,9 +302,10 @@ AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
 `Brewfile.lock.json` into the checkout), and in every mode
-`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1`: no step runs gh, and the export keeps
-a gh that any tool it starts may run from writing its device id
-([Guarantees](#guarantees)).
+`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1`: no step
+runs gh or tldr, and the export keeps a gh that any tool it starts may run
+from writing its device id, and a tldr C client from refreshing its page
+cache over the network ([Guarantees](#guarantees)).
 Before probing anything, both scripts prepend to their own PATH, when they
 exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
@@ -420,9 +421,14 @@ kind.
   scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
   them around each probe and restore yours): recent gh releases otherwise write
   `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
-  send telemetry for other commands). Not even a temporary file: the Unix
-  scripts use no here-documents or here-strings, which macOS's Bash 3.2 backs
-  with files in the system temporary directory.
+  send telemetry for other commands). They also export
+  `TLDR_AUTO_UPDATE_DISABLED=1`: the tldr C client (Homebrew's `tldr`
+  formula) checks its page cache before it handles `--version`, and once
+  `~/.tldrc/date` is two weeks old it otherwise downloads the tldr-pages
+  archive into `~/.tldrc` first (tlrc, the Windows client, and tealdeer ignore
+  the variable and never update on `--version`). Not even a temporary file:
+  the Unix scripts use no here-documents or here-strings, which macOS's Bash
+  3.2 backs with files in the system temporary directory.
   `tests/doctor.sh` runs the real doctor with the real manifest on the machine
   running the tests (`--platform debian` and `other`, an empty `HOME`) and
   checks that it changed nothing.

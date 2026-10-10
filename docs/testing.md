@@ -89,7 +89,10 @@ the installer suite; find snapshots prove that the doctor and
 and the home, `TMPDIR` and checkout must stay unchanged, so a runner whose
 tools print unexpected versions or write state on `--version` fails CI. The
 checkout scan skips `.git`, where any other git process may write meanwhile;
-the fixture cases cover the doctor's own git.
+the fixture cases cover the doctor's own git. An empty home cannot show
+writes that depend on state, so fixture fakes model them: gh writes its
+device id unless `GH_TELEMETRY=0`, and the tldr C client refreshes a stale
+page cache unless `TLDR_AUTO_UPDATE_DISABLED` is set.
 `tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
 against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
 Windows job runs that suite and the validator from `tests/run.ps1`. None of
