@@ -616,16 +616,30 @@ echo '==> no bootstrap script or doc tells anyone to run gh auth setup-git'
 setup_git_offenders() {
     local file
     for file in "$@"; do
+        if [ ! -f "$file" ]; then
+            printf '%s: missing\n' "$file"
+            continue
+        fi
         grep -Hn -e 'setup-git' -- "$file" | grep -Eiv "never|do not run|don't run|skip" || true
     done
 }
+# Paths relative to the checkout. The lib/bootstrap/*.sh glob expands inside
+# it, below, whatever directory runs this test, and a file that is missing
+# (or a glob that matches nothing) is an offender, so the scan cannot pass
+# by checking nothing.
 SETUP_GIT_FILES=(README.md AGENTS.md docs/bootstrap.md docs/dependencies.md doctor.sh setup-host.sh
-    doctor.ps1 setup-host.ps1 lib/bootstrap.ps1 lib/bootstrap/*.sh
+    doctor.ps1 setup-host.ps1 lib/bootstrap.ps1
     .claude/skills/dotfiles-bootstrap/SKILL.md .agents/skills/dotfiles-bootstrap/SKILL.md)
-offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}")
+offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}" lib/bootstrap/*.sh)
 [ -z "$offenders" ] || fail "gh auth setup-git outside a warning: $offenders"
+[ "$(cd "$REPO_ROOT" && printf '%s\n' lib/bootstrap/*.sh | grep -c '^lib/bootstrap/steps')" -ge 8 ] ||
+    fail 'the setup-git scan found too few lib/bootstrap/steps*.sh files'
 printf '%s\n' '# never run gh auth setup-git' 'gh auth login && gh auth setup-git' >"$TEST_TMP/setup-git.md"
 assert_eq "$(setup_git_offenders "$TEST_TMP/setup-git.md" | cut -d: -f2)" 2 'the setup-git check finds a command'
+assert_eq "$(setup_git_offenders "$TEST_TMP/absent.md")" "$TEST_TMP/absent.md: missing" \
+    'the setup-git check reports a missing file'
+assert_eq "$(cd "$TEST_TMP" && setup_git_offenders lib/bootstrap/*.sh)" 'lib/bootstrap/*.sh: missing' \
+    'the setup-git check reports a glob that matches nothing'
 
 # -------------------------------------------------- no here-documents
 echo '==> no here-document, here-string or process substitution in the Unix bootstrap'
