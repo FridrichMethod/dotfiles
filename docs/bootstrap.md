@@ -408,6 +408,9 @@ kind.
   `gh --version`. Not even a temporary file: the Unix scripts use no
   here-documents or here-strings, which macOS's Bash 3.2 backs with files in
   the system temporary directory.
+  `tests/doctor.sh` runs the real doctor with the real manifest on the machine
+  running the tests (`--platform debian` and `other`, an empty `HOME`) and
+  checks that it changed nothing.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
   `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
   rc file. The only write it causes inside the checkout is `.venv-sync`, through

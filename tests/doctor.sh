@@ -928,6 +928,64 @@ assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tX-other-linux')"
 assert_no_out "$(printf 'pwsh\t')"
 assert_quiet_events '--list probed tools with the real manifest on --platform other'
 
+# --- the real doctor on this machine keeps the TSV contract -----------------
+
+# The real ./doctor.sh, config/bootstrap and docs probe the tools of the
+# machine running the tests (in CI the runner's) on the caller's PATH, so
+# whatever those tools print, every line keeps the TSV contract: the header,
+# five columns, a known status, and a fix that is - or a docs/bootstrap.md
+# step with a heading. HOME is an empty temporary home (the caller's own home
+# changes too often to snapshot), TMPDIR an empty dir with an old mtime, and
+# neither nor the checkout may change. The exit code depends on what this
+# machine has installed: 0 or 1, never 2.
+REAL_HOME="$TEST_TMP/real-home"
+REAL_TMP="$TEST_TMP/real-tmp"
+REAL_REF="$TEST_TMP/real.ref"
+REAL_MARKER="$TEST_TMP/real.marker"
+mkdir "$REAL_HOME" "$REAL_TMP"
+DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
+real_doctor_case() {
+    local fix
+    CASE=$1
+    shift
+    touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
+    : >"$REAL_MARKER"
+    : >"$EVENT_LOG"
+    if env -i HOME="$REAL_HOME" PATH="$PATH" TMPDIR="$REAL_TMP" LC_ALL=C TERM=dumb \
+        "$BASH" "$REPO_ROOT/doctor.sh" "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
+        RC=0
+    else
+        RC=$?
+    fi
+    case $RC in
+        0 | 1) ;;
+        *) case_fail "exit $RC, expected 0 or 1" ;;
+    esac
+    assert_tsv_shape
+    for id in git locale venv-sync rc-pollution; do
+        [ "$(tsv_field "$id" 1)" != '<no row>' ] || case_fail "no $id row"
+    done
+    awk -F '\t' 'NR > 1 { print $5 }' "$OUT/$CASE.out" | LC_ALL=C sort -u >"$OUT/$CASE.fixes"
+    while IFS= read -r fix; do
+        case $fix in
+            -) ;;
+            'docs/bootstrap.md '*)
+                printf '%s\n' "$DOC_STEPS" | grep -Fxq -- "${fix#docs/bootstrap.md }" ||
+                    case_fail "fix cites a step without a '###' heading: $fix"
+                ;;
+            *) case_fail "fix is neither - nor docs/bootstrap.md <step>: $fix" ;;
+        esac
+    done <"$OUT/$CASE.fixes"
+    [ -z "$(find "$REAL_HOME" "$REAL_TMP" -mindepth 1 -print)" ] ||
+        case_fail "the real doctor wrote into HOME or TMPDIR: $(find "$REAL_HOME" "$REAL_TMP" -mindepth 1 -print)"
+    [ -z "$(find "$REAL_HOME" "$REAL_TMP" -maxdepth 0 -newer "$REAL_REF" -print)" ] ||
+        case_fail 'the real doctor created and removed a file in HOME or TMPDIR'
+    [ -z "$(find "$REPO_ROOT" -newer "$REAL_MARKER" -print)" ] ||
+        case_fail "the real doctor wrote into the checkout: $(find "$REPO_ROOT" -newer "$REAL_MARKER" -print)"
+}
+real_doctor_case real-debian --platform debian --tsv
+real_doctor_case real-other --platform other --tsv
+
 # --- read-only and offline -----------------------------------------------------
 
 MARKER="$TEST_TMP/marker"
