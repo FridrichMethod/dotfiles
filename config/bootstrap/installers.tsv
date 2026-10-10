@@ -13,8 +13,10 @@ id	kind	url	sha256	dest	hosts	arch	tier	human
 # Homebrew/install main head 2026-10-07 (commit 8ab1549dfa1189fd4d818a2116592d8f0ee06d8c); 35651 bytes.
 # Also installs Linuxbrew under /home/linuxbrew/.linuxbrew on wsl-ubuntu and lab-ubuntu.
 homebrew	script	https://raw.githubusercontent.com/Homebrew/install/8ab1549dfa1189fd4d818a2116592d8f0ee06d8c/install.sh	5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148	-	mac,wsl-ubuntu,lab-ubuntu	any	core	sudo
-# nvm-sh/nvm tag v0.40.8 (peeled a885b885fef16fac4bc544188fb25e9e37ae83e8); the script clones that same tag. 17883 bytes.
-nvm	script	https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh	48a0eee9a60e07422dce0eb5774754c83889570ca1ee2566c516acbe8af03a9e	-	mac,wsl-ubuntu,lab-ubuntu	any	ai	-
+# nvm-sh/nvm v0.40.8, by the commit its tag peels to; 17883 bytes. The script would clone the
+# mutable tag, so S4-nvm runs it with NVM_INSTALL_VERSION set to the commit in this url and
+# then requires the checkout's HEAD to be that commit.
+nvm	script	https://raw.githubusercontent.com/nvm-sh/nvm/a885b885fef16fac4bc544188fb25e9e37ae83e8/install.sh	48a0eee9a60e07422dce0eb5774754c83889570ca1ee2566c516acbe8af03a9e	-	mac,wsl-ubuntu,lab-ubuntu	any	ai	-
 # mamba-org/micromamba-releases 2.9.0-0: a bare static executable, chmod 755; digests match upstream .sha256 files.
 micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64	366cd9cd8be14df1ab8ed50352a82111082a36686b2d389fdb79a92c3fafb3e3	$HOME/.local/bin/micromamba	sherlock,marlowe	x86_64	core	-
 micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-aarch64	9f93b974adcb4d166996af969b6cd371287d1a3e52733704727884d9b74cb7a7	$HOME/.local/bin/micromamba	sherlock,marlowe	aarch64	core	-

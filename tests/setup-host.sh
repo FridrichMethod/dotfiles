@@ -485,6 +485,11 @@ make_remote ohmyzsh/ohmyzsh oh-my-zsh.sh custom/example.zsh \
     custom/plugins/example/example.plugin.zsh custom/themes/example.zsh-theme >/dev/null
 P10K_PIN=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
 FZF_TAB_PIN=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+# nvm: the pinned commit, then a later one, as when a release tag moves.
+NVM_PIN=$(make_remote nvm-sh/nvm README.md)
+printf '# moved\n' >>"$TEST_TMP/work/nvm-sh/nvm/README.md"
+"$REAL_GIT" -C "$TEST_TMP/work/nvm-sh/nvm" commit -q -am moved
+"$REAL_GIT" -C "$TEST_TMP/work/nvm-sh/nvm" push -q "$REMOTES/nvm-sh/nvm.git" master
 
 # --- artifacts and manifests -------------------------------------------------
 
@@ -541,7 +546,7 @@ printf 'lib\n' >"$TEST_TMP/build/kitty/lib/kitty.so"
 tar -C "$TEST_TMP/build/kitty" -cJf "$ARTIFACTS/kitty.txz" .
 
 URL_HOMEBREW=https://raw.githubusercontent.com/Homebrew/install/0123456789abcdef0123456789abcdef01234567/install.sh
-URL_NVM=https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh
+URL_NVM=https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_PIN/install.sh
 URL_MICROMAMBA=https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64
 URL_CODEX=https://github.com/openai/codex/releases/download/rust-v0.161.0/codex-package-x86_64-unknown-linux-musl.tar.gz
 URL_CLAUDE=https://claude.ai/install.sh
@@ -781,7 +786,7 @@ expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
     "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
 expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1'
-expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm"
+expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
 expect_no_event TRIPWIRE
 expect_text apply out 'S3-clones done applied:'
 expect_text apply out 'S5-codex done applied:'
@@ -804,6 +809,7 @@ expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 cmp -s "$ARTIFACTS/theme" "$CASE_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" || fail 'bat theme'
 [ -d "$CASE_HOME/.vim/undo" ] && [ -d "$CASE_HOME/.vim/tmp" ] || fail 'vim dirs'
 [ -x "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node" ] && [ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'nvm node'
+[ "$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)" = "$NVM_PIN" ] || fail 'nvm not at its pinned commit'
 [ -f "$FIXTURE/.venv-sync/pyvenv.cfg" ] || fail 'setup-sync did not run'
 CODEX_RELEASE="$CASE_HOME/.codex/packages/standalone/releases/0.161.0-x86_64-unknown-linux-musl"
 [ "$(readlink "$CODEX_RELEASE/codex")" = bin/codex ] || fail 'codex release link'
@@ -912,6 +918,16 @@ expect_text check-cloned out 'S3-clones done 3 clones at their pins'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
+
+# --- nvm: a checkout off the pinned commit is never sourced ------------------
+
+new_home nvm-moved
+run_case nvm-moved FAKE_NVM_REF=master -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-moved 1
+expect_text nvm-moved err "not the pinned nvm commit $NVM_PIN"
+expect_event "curl:$URL_NVM"
+expect_no_event 'nvm:'
+[ ! -e "$CASE_HOME/.nvm" ] || fail 'an nvm checkout off its pin was left in place'
 
 # --- oh-my-zsh recovery: stow ran before the clone ---------------------------
 

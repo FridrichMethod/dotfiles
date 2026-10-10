@@ -49,7 +49,8 @@ BREW_HOSTS, DEBIAN_HOSTS = "mac,wsl-ubuntu,lab-ubuntu", "wsl-ubuntu,lab-ubuntu"
 GH, RAW = "https://github.com/", "https://raw.githubusercontent.com/"
 REQUIRED_INSTALLERS = {
     ("homebrew", "any"): ("script", BREW_HOSTS, "core", "sudo", "-", RAW + "Homebrew/install/*/install.sh"),
-    ("nvm", "any"): ("script", BREW_HOSTS, "ai", "-", "-", RAW + "nvm-sh/nvm/v*/install.sh"),
+    # S4-nvm hands the commit in this url to the installer and checks it.
+    ("nvm", "any"): ("script", BREW_HOSTS, "ai", "-", "-", RAW + "nvm-sh/nvm/" + "[0-9a-f]" * 40 + "/install.sh"),
     ("claude", "any"): ("script", DEBIAN_HOSTS, "ai", "inspect", "-", "https://claude.ai/install.sh"),
     ("nerd-font", "any"): ("archive", "lab-ubuntu", "desktop", "-", "$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont",
                            GH + "ryanoasis/nerd-fonts/releases/download/v*/CascadiaMono.tar.xz"),
@@ -709,6 +710,8 @@ class RejectionTests(unittest.TestCase):
             ("installer-dest", "bad token", self.installers("nerd-font", "dest", "$FONTS/x")),
             ("installer-id", "unknown", self.installers("nvm", "id", "nvm-sh")),
             ("installer-set", "missing", lambda: self.replace("installers.tsv", self.row("installers.tsv", "claude") + "\n", "")),
+            ("installer-set", "nvm tag url",
+             self.installers("nvm", "url", "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh")),
             ("installer-set", "claude not inspect", lambda: (self.installers("claude", "human", "-")(),
                                                              self.installers("claude", "sha256", "a" * 64)())),
             ("installer-set", "claude digest", self.installers("claude", "sha256", "a" * 64)),

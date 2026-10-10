@@ -45,21 +45,51 @@ step_S4_nvm_check() {
 }
 
 step_S4_nvm_plan() {
-    printf '%s\n' "pinned nvm install.sh with PROFILE=/dev/null, then nvm install --lts && nvm alias default 'lts/*'"
+    printf '%s\n' "pinned nvm install.sh at its pinned commit with PROFILE=/dev/null, then nvm install --lts && nvm alias default 'lts/*'"
 }
 
+# steps_nvm_commit URL: the 40-hex commit that a commit-pinned
+# raw.githubusercontent.com/nvm-sh/nvm/<commit>/install.sh URL names.
+steps_nvm_commit() {
+    local commit=${1#https://raw.githubusercontent.com/nvm-sh/nvm/}
+    [ "$commit" != "$1" ] || return 1
+    commit=${commit%%/*}
+    case $commit in
+        '' | *[!0-9a-f]*) return 1 ;;
+    esac
+    [ "${#commit}" -eq 40 ] || return 1
+    printf '%s\n' "$commit"
+}
+
+# The installer clones nvm itself, by default from a release tag, which can
+# move. NVM_INSTALL_VERSION makes it fetch the commit the installers.tsv URL
+# names, by its id; the checkout must be at that commit before anything here
+# sources nvm.sh, and a checkout this run created is removed when it is not.
 step_S4_nvm_apply() {
-    local dir script
+    local dir script commit head created=0
     # shellcheck disable=SC2016 # a manifest token, expanded by the library
     dir=$(bootstrap_expand_path '$NVM_DIR') || return 1
     if [ ! -s "$dir/nvm.sh" ]; then
         steps_installer_fields nvm || return 1
+        if ! commit=$(steps_nvm_commit "$STEPS_URL"); then
+            dotfiles_log error "the installers.tsv nvm url must name a 40-hex nvm-sh/nvm commit: $STEPS_URL"
+            return 1
+        fi
         script=$(steps_scratch_file nvm "$STEPS_URL")
         steps_make_scratch nvm || return 1
         steps_fetch_pinned "$STEPS_URL" "$script" "$STEPS_SHA" || return 1
         # The installer refuses an NVM_DIR that does not exist yet.
+        [ -e "$dir" ] || created=1
         mkdir -p "$dir" || return 1
-        PROFILE=/dev/null NVM_DIR=$dir bash "$script" >&2 </dev/null || return 1
+        NVM_INSTALL_VERSION=$commit PROFILE=/dev/null NVM_DIR=$dir bash "$script" >&2 </dev/null || return 1
+        head=$(git -C "$dir" rev-parse HEAD 2>/dev/null </dev/null) || head=
+        if [ "$head" != "$commit" ]; then
+            if [ "$created" = 1 ]; then
+                rm -rf "$dir"
+            fi
+            dotfiles_log error "$dir is at ${head:-no commit}, not the pinned nvm commit $commit; nothing sourced it here"
+            return 1
+        fi
     fi
     # shellcheck disable=SC2016 # expanded by the child bash
     NVM_DIR=$dir bash -c '. "$NVM_DIR/nvm.sh" --no-use && nvm install --lts && nvm alias default "lts/*"' \

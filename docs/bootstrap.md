@@ -918,10 +918,17 @@ status line; its floor in `tools.tsv` is 22 (18 and 20 are end of life).
 so the alias must exist.
 
 - **Check:** `test -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" && cat "${NVM_DIR:-$HOME/.nvm}/alias/default" && node --version`
-- **Install:** automatic via setup-host.sh with the tag-pinned `nvm` row:
-  `PROFILE=/dev/null bash install.sh` (so it edits no rc file), then
+- **Install:** automatic via setup-host.sh with the commit-pinned `nvm` row:
+  `NVM_INSTALL_VERSION=<commit> PROFILE=/dev/null bash install.sh`, where
+  `<commit>` is the commit in the row's URL. The installer would otherwise
+  clone its release tag, which can move; with the commit it fetches exactly
+  that commit, and `PROFILE=/dev/null` keeps it out of every rc file.
+  setup-host then requires `git -C ~/.nvm rev-parse HEAD` to be that commit
+  (and removes a checkout it just made that is not) before it runs
   `nvm install --lts` and `nvm alias default 'lts/*'`. By hand:
-  `f=$(fetch_pinned nvm) && PROFILE=/dev/null bash "$f"`, then
+  `c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' ~/dotfiles/config/bootstrap/installers.tsv)`,
+  `f=$(fetch_pinned nvm) && NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f"`,
+  check that `git -C ~/.nvm rev-parse HEAD` prints `$c`, then
   `. ~/.nvm/nvm.sh && nvm install --lts && nvm alias default 'lts/*'`.
 - **Verify:** in a new shell, `command -v node` is under `~/.nvm/versions` and
   `node --version` meets the floor.
