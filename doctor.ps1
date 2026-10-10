@@ -24,7 +24,8 @@
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
     claude auth status and codex login status; as in doctor.sh, a tool that
-    is signed out warns and one that is absent is skipped.
+    is signed out warns and one that is absent is skipped, and the probed
+    tools may write their own state (claude rewrites ~/.claude.json).
 
     Exit codes: 0 no selected-tier check is missing, outdated or human (warn
     and skip do not fail); 1 a selected-tier check, tools.tsv row or
@@ -47,7 +48,7 @@
     -Tsv, only those rows after the header.
 
 .PARAMETER Online
-    Also run the network auth probes.
+    Also run the network auth probes, which may write the tools' own state.
 
 .EXAMPLE
     .\doctor.ps1
@@ -202,7 +203,7 @@ function Get-DoctorOnlineResults {
             continue
         }
         $arguments = $probe.Arguments
-        $null | & $path @arguments *> $null
+        Use-BootstrapToolEnvironment { $null | & $path @arguments *> $null }
         if ($LASTEXITCODE -eq 0) {
             New-DoctorResult ok $probe.Id $probe.Tier "$($probe.Tool) is authenticated" HW-auth
         }

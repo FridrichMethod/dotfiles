@@ -16,7 +16,7 @@ backend is deliberately small; no general application framework is involved.
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Optional skill downloads | Bash, curl, tar, rsync |
 | Contributor checks | pre-commit, Node, Python/parser runtime; pinned lint tools; Stow integration; PowerShell required on Windows CI |
-| Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is pinned in `config/bootstrap/` (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
+| Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
 The configured applications (Zsh, Vim, terminals, Codex, Claude, etc.) are needed
 to use their respective settings, not all to copy or symlink the repository.
@@ -81,7 +81,9 @@ How to read a cell:
 - `login env X`: a dependency in
   [`hpc-login-env.yml`](../config/bootstrap/hpc-login-env.yml).
 - `winget X`: a package in [`winget.json`](../config/bootstrap/winget.json).
-- `clone`: a row of [`git-clones.tsv`](../config/bootstrap/git-clones.tsv).
+- `clone`: a row of [`git-clones.tsv`](../config/bootstrap/git-clones.tsv): a
+  shallow clone of the upstream default branch, which setup-host never
+  updates.
 - `pinned X`: a row of [`installers.tsv`](../config/bootstrap/installers.tsv)
   (URL plus sha256; `inspect` rows have no digest).
 - `manual`: nothing in `config/bootstrap/` installs it there: the OS baseline,
@@ -134,14 +136,13 @@ prints) appear at the start of the When absent cell.
 | --- | --- | --- | --- | --- | --- | --- |
 | `ripgrep` | all | brew `ripgrep` | brew `ripgrep` | login env `ripgrep` | winget `BurntSushi.ripgrep.MSVC` | rg searches fail |
 | `git-delta` | all | brew `git-delta` | brew `git-delta` | login env `git-delta` | winget `dandavison.delta` | fzf-tab git diff and show previews are empty |
-| `tldr` | all | brew `tlrc` | brew `tlrc` | login env `tealdeer` | winget `tldr-pages.tlrc` | fzf-tab command and tldr previews fall back to man |
+| `tldr` | all | brew `tldr` (the C client) | brew `tldr` (the C client) | login env `tealdeer` | winget `tldr-pages.tlrc` | fzf-tab command and tldr previews fall back to man |
 | `chafa` | unix | brew `chafa` | brew `chafa` | login env `chafa` | - | fzf image previews outside kitty show only file details |
 | `jq` | all | brew `jq` | brew `jq` | login env `jq` | winget `jqlang.jq` | JSON filtering on the command line fails |
 | `nvim` | all | brew `neovim` | brew `neovim` | login env `nvim` | winget `Neovim.Neovim` | the vi alias fails |
 | `aria2` | all | brew `aria2` | brew `aria2` | login env `aria2` | winget `aria2.aria2` | aria2c downloads with the stowed aria2.conf fail |
 | `uv` | all | brew `uv` | brew `uv` | login env `uv` | winget `astral-sh.uv` | uv and the oh-my-zsh uv plugin are unavailable |
-| `gh` | all | brew `gh` | brew `gh` | login env `gh` | winget `GitHub.cli` | >= 2.50.0. gh auth git-credential and GitHub CLI workflows fail |
-| `gh-apt` | lab-ubuntu | - | lab-ubuntu: `/usr/bin/gh` from the cli.github.com apt repository (sudo block; keyring pinned as `gh-apt`) | - | - | >= 2.50.0. the github.com credential helper in .gitconfig_local fails |
+| `gh` | all | brew `gh` | brew `gh` (on lab-ubuntu also git's github.com credential helper, by full path) | login env `gh` | winget `GitHub.cli` | >= 2.50.0. gh auth git-credential and GitHub CLI workflows fail |
 | `xclip` | lab-ubuntu | - | lab-ubuntu: apt `xclip` | - | - | fzf Ctrl-Y cannot copy to the X clipboard |
 | `wl-clipboard` | lab-ubuntu | - | lab-ubuntu: apt `wl-clipboard` | - | - | no clipboard copy from Wayland sessions |
 
@@ -153,6 +154,15 @@ prints) appear at the start of the When absent cell.
 | `node` | all | nvm `lts/*` | nvm `lts/*` | marlowe: login env `nodejs`; sherlock: Lmod `nodejs/24.13.0` | winget `OpenJS.NodeJS.LTS` | >= 22.0. Claude hooks and the status line fail |
 | `claude` | mac, wsl-ubuntu, lab-ubuntu, win | cask `claude-code` | pinned `claude` (inspect) | not checked: optional site module (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
 | `codex` | mac, wsl-ubuntu, lab-ubuntu, win | cask `codex` | pinned `codex` (codex-package) | not checked: optional site module (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
+
+Opt-in, outside every tier: the pinned Sherlock toolkit (`shk`), which the
+global agent instructions name for work on or connections to Sherlock. Neither
+`./setup-host.sh` nor the doctor touches it; on a host where agents work with
+Sherlock, run `./setup-sherlock-kit.sh` explicitly, then
+`./stow-all.sh <host>`, which links the `shk` launcher. On Windows run
+`./setup-sherlock-kit.ps1 -Python python`, which also writes the native
+`~/.local/bin/shk.cmd`, then the normal `./stow-all.ps1 win`. See the README's
+Pinned Sherlock toolkit section and [sherlock-kit.md](sherlock-kit.md).
 
 ### Desktop tier
 

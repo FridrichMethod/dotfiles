@@ -9,6 +9,13 @@
 # shellcheck disable=SC2088 # doctor details spell ~ literally
 set -euo pipefail
 
+# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
+# docs/bootstrap.md) and other dotfiles knobs never reach the code under
+# test from the caller; each case sets what it needs.
+unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 REAL_GIT=$(command -v git) || {
     echo 'ERROR: git is required for the doctor fixture repo.' >&2
@@ -93,14 +100,21 @@ exit "${SMOKE_RC:-0}"
 SH
 
 # gh, claude and codex answer --version locally; anything else is network.
+# Like recent real gh releases, the fake gh writes a telemetry device id on
+# every command, --version included, unless GH_TELEMETRY=0.
 for tool in gh claude codex; do
+    telemetry=:
     case $tool in
-        gh) version='gh version 2.81.0 (2025-09-01)' ;;
+        gh)
+            version='gh version 2.81.0 (2025-09-01)'
+            telemetry='[ "${GH_TELEMETRY:-}" = 0 ] || { mkdir -p "$HOME/.local/state/gh" && : >"$HOME/.local/state/gh/device-id"; }'
+            ;;
         claude) version='2.1.0 (Claude Code)' ;;
         codex) version='codex-cli 0.161.0' ;;
     esac
     write_fake "$FAKE_BIN/$tool" <<SH
 #!/bin/sh
+$telemetry
 if [ "\${1:-}" = --version ]; then
     printf '%s\n' '$version'
     exit 0
@@ -109,6 +123,24 @@ printf 'NETWORK $tool %s\n' "\$*" >>"\$EVENT_LOG"
 [ "\${AUTH_OK:-0}" = 1 ]
 SH
 done
+# The tldr C client (Homebrew's tldr formula) checks the age of its page
+# cache before it handles --version and, once ~/.tldrc/date is two weeks old,
+# first downloads the tldr-pages archive into ~/.tldrc, unless
+# TLDR_AUTO_UPDATE_DISABLED is set. The fake takes its cache to be stale.
+write_fake "$FAKE_BIN/tldr" <<'SH'
+#!/bin/sh
+if [ -z "${TLDR_AUTO_UPDATE_DISABLED+set}" ]; then
+    printf 'NETWORK tldr update\n' >>"$EVENT_LOG"
+    mkdir -p "$HOME/.tldrc/tmp" && : >"$HOME/.tldrc/tmp/main.zip"
+    printf 'Local database is older than two weeks, attempting to update it...\n'
+fi
+if [ "${1:-}" = --version ]; then
+    printf 'tldr v1.6.1 (v1.6.1)\n'
+    exit 0
+fi
+printf 'NETWORK tldr %s\n' "$*" >>"$EVENT_LOG"
+exit 1
+SH
 for tool in curl wget; do
     write_fake "$FAKE_BIN/$tool" <<SH
 #!/bin/sh
@@ -173,7 +205,8 @@ row() {
     row login-tool core sherlock,marlowe doctor-login --version - 'login env tool missing' S2-login-env
     row lmod host sherlock,marlowe env:LMOD_DIR - - 'module is undefined' S2-modules
     row gh cli all gh --version 2.50.0 'gh fails' S2-brew-bundle
-    row gh-apt cli lab-ubuntu 'file:$HOME/.fake-gh-apt' --version 2.50.0 'credential helper fails' H1-gh-apt-repo
+    row tldr cli all tldr --version - 'previews fall back to man' S2-brew-bundle
+    row file-tool cli lab-ubuntu 'file:$HOME/.fake-file-tool' --version 2.50.0 'file tool fails' X-host-tools
     row claude ai all claude --version - 'Claude Code is unavailable' S5-claude
     row codex ai all codex --version - 'Codex is unavailable' S5-codex
     row desk-tool desktop all doctor-absent-desktop - - 'no terminal' S6-kitty
@@ -213,10 +246,10 @@ write_fake "$TEST_HOME/.local/bin/doctor-local" <<'SH'
 printf 'doctor-local 2.0\n'
 SH
 printf 'theme\n' >"$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme"
-# An executable that a file: probe names, with a version floor (gh-apt).
-write_fake "$TEST_HOME/.fake-gh-apt" <<'SH'
+# An executable that a file: probe names, with a version floor (file-tool).
+write_fake "$TEST_HOME/.fake-file-tool" <<'SH'
 #!/bin/sh
-printf 'gh version %s\n' "${GH_APT_VERSION:-2.81.0}"
+printf 'file-tool version %s\n' "${FILE_TOOL_VERSION:-2.81.0}"
 SH
 ln -s ../fixture/common/zsh/.zshrc "$TEST_HOME/.zshrc"
 ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
@@ -241,7 +274,9 @@ BASE_ENV=(
 # --- helpers -------------------------------------------------------------
 
 # run_doctor CASE [VAR=VALUE ...] -- [doctor arguments]: a clean environment
-# (env -i) plus BASE_ENV and the overrides; stdout/stderr land in $OUT.
+# (env -i) plus BASE_ENV and the overrides; stdout/stderr land in $OUT. The
+# doctor runs under the Bash running this file ($BASH), so `bash-3.2
+# tests/doctor.sh` tests the doctor under Bash 3.2 too.
 run_doctor() {
     CASE=$1
     shift
@@ -252,7 +287,7 @@ run_doctor() {
     done
     [ "$#" -eq 0 ] || shift
     : >"$EVENT_LOG"
-    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} bash "$FIXTURE/doctor.sh" "$@" \
+    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" "$@" \
         >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
@@ -374,6 +409,69 @@ run_doctor env-host DOTFILES_HOST=lab-ubuntu -- --tsv
 assert_rc 0
 assert_row host-tool warn
 
+# A set but empty DOTFILES_HOST means common only, as the login updater reads
+# it: the detected platform without an overlay, even with a recorded host
+# (sherlock would fail on login-tool); --host and --platform still win.
+OS_UBUNTU="$TEST_TMP/os-release-ubuntu"
+printf 'ID=ubuntu\nID_LIKE=debian\n' >"$OS_UBUNTU"
+printf '%s\n' "$TEST_HOME" Linux sherlock test-head >"$STATE_FILE"
+run_doctor env-empty DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_tsv_shape
+assert_err 'DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform debian'
+assert_row fzf ok '' -
+assert_no_row login-tool
+assert_no_row host-tool
+run_doctor env-empty-log DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" --
+assert_rc 0
+assert_out 'Checking platform debian without a host overlay'
+assert_out '(platform debian, required tiers: core,cli,ai)'
+run_doctor env-empty-host DOTFILES_HOST= -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'set but empty'
+run_doctor env-empty-platform DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --platform other --tsv
+assert_rc 0
+assert_not_in "$OUT/$CASE.err" 'set but empty'
+assert_row zsh ok
+
+# So does a common-only install that ./stow-all.sh recorded (an empty host
+# line), as the login updater reads it: the detected platform, with a
+# warning, never "none recorded". DOTFILES_HOST, --host and --platform still
+# win, and a state that is not all four lines (which the updater ignores)
+# records nothing.
+printf '%s\n' "$TEST_HOME" Linux '' test-head >"$STATE_FILE"
+run_doctor state-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_tsv_shape
+assert_err './stow-all.sh recorded a common-only install for this home (no host overlay): checking as --platform debian'
+assert_not_in "$OUT/$CASE.err" 'none recorded'
+assert_row fzf ok '' -
+assert_no_row login-tool
+assert_no_row host-tool
+run_doctor state-common-only-list BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --list
+assert_rc 0
+assert_err 'recorded a common-only install'
+run_doctor state-common-only-env DOTFILES_HOST=lab-ubuntu -- --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'common-only'
+run_doctor state-common-only-host -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'common-only'
+run_doctor state-common-only-empty DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_err 'DOTFILES_HOST is set but empty'
+assert_not_in "$OUT/$CASE.err" 'recorded a common-only'
+printf '%s\n' "$TEST_TMP/elsewhere" Linux '' test-head >"$STATE_FILE"
+expect_usage_error state-common-only-other-home 'none recorded for this home' --
+printf '%s\n' "$TEST_HOME" Darwin '' test-head >"$STATE_FILE"
+expect_usage_error state-common-only-other-kernel 'none recorded for this home' --
+printf '%s\n' "$TEST_HOME" Linux '' >"$STATE_FILE"
+expect_usage_error state-common-only-truncated 'none recorded for this home' --
+rm -f "$STATE_FILE"
+
 # --- baseline: every required row ok ---------------------------------------
 
 run_doctor baseline-tsv -- --host lab-ubuntu --tsv
@@ -381,7 +479,7 @@ assert_rc 0
 assert_tsv_shape
 [ ! -s "$OUT/$CASE.err" ] ||
     case_fail "--tsv wrote to stderr"
-for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh claude codex \
+for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr claude codex \
     locale venv-sync submodule stow-links path-order rc-pollution omz-order nvm-homebrew; do
     assert_row "$id" ok '' -
 done
@@ -389,6 +487,7 @@ assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
 assert_row alt ok "1.2.3 >= 1.0 at $FAKE_BIN/doctor-alt"
 assert_row brew-only ok "at $BREW_BIN/doctor-brew-only"
 assert_row bat-theme ok "$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme"
+assert_row tldr ok "1.6.1 at $FAKE_BIN/tldr"
 assert_row desk-tool warn 'not found; no terminal' 'docs/bootstrap.md S6-kitty'
 assert_row nerd-font warn
 assert_row host-tool warn
@@ -398,6 +497,8 @@ for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-aut
 done
 assert_event 'fzf --version'
 assert_no_event 'fc-list'
+[ ! -e "$TEST_HOME/.local/state/gh/device-id" ] || case_fail 'gh --version wrote its telemetry device id'
+[ ! -e "$TEST_HOME/.tldrc" ] || case_fail 'tldr --version updated its page cache'
 assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'
@@ -489,12 +590,12 @@ run_doctor font-mac-missing BOOTSTRAP_UNAME_S=Darwin BOOTSTRAP_CLT_SHIMS= -- --h
 assert_row nerd-font missing
 
 # A file: probe of an executable reports its version against the floor, so
-# Ubuntu's own older /usr/bin/gh is outdated rather than ok.
+# an older executable at that path is outdated rather than ok.
 run_doctor file-version -- --host lab-ubuntu --tsv
-assert_row gh-apt ok "2.81.0 >= 2.50.0 at $TEST_HOME/.fake-gh-apt"
-run_doctor file-version-old GH_APT_VERSION=2.45.0 -- --host lab-ubuntu --tsv
+assert_row file-tool ok "2.81.0 >= 2.50.0 at $TEST_HOME/.fake-file-tool"
+run_doctor file-version-old FILE_TOOL_VERSION=2.45.0 -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row gh-apt outdated "2.45.0 < 2.50.0 at $TEST_HOME/.fake-gh-apt" 'docs/bootstrap.md H1-gh-apt-repo'
+assert_row file-tool outdated "2.45.0 < 2.50.0 at $TEST_HOME/.fake-file-tool" 'docs/bootstrap.md X-host-tools'
 
 run_doctor zsh-custom "ZSH_CUSTOM=$TEST_TMP/custom" -- --host lab-ubuntu --tsv
 assert_rc 1
@@ -911,6 +1012,68 @@ assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tX-other-linux')"
 assert_no_out "$(printf 'pwsh\t')"
 assert_quiet_events '--list probed tools with the real manifest on --platform other'
 
+# --- the real doctor on this machine keeps the TSV contract -----------------
+
+# The real ./doctor.sh, config/bootstrap and docs probe the tools of the
+# machine running the tests (in CI the runner's) on the caller's PATH, so
+# whatever those tools print, every line keeps the TSV contract: the header,
+# five columns, a known status, and a fix that is - or a docs/bootstrap.md
+# step with a heading. HOME is an empty temporary home (the caller's own home
+# changes too often to snapshot), TMPDIR an empty dir with an old mtime, and
+# neither of them nor the checkout may change. The checkout scan leaves out its
+# git metadata (every .git): another git process (an editor refreshing the
+# index, the login updater's fetch, a parallel session) may write there at
+# any time, and the read-only fixture cases below already cover the doctor's
+# own git, whose find includes the fixture's .git. The exit code depends on
+# what this machine has installed: 0 or 1, never 2.
+REAL_HOME="$TEST_TMP/real-home"
+REAL_TMP="$TEST_TMP/real-tmp"
+REAL_REF="$TEST_TMP/real.ref"
+REAL_MARKER="$TEST_TMP/real.marker"
+mkdir "$REAL_HOME" "$REAL_TMP"
+DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
+real_doctor_case() {
+    local fix changed
+    CASE=$1
+    shift
+    touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
+    : >"$REAL_MARKER"
+    : >"$EVENT_LOG"
+    if env -i HOME="$REAL_HOME" PATH="$PATH" TMPDIR="$REAL_TMP" LC_ALL=C TERM=dumb \
+        "$BASH" "$REPO_ROOT/doctor.sh" "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
+        RC=0
+    else
+        RC=$?
+    fi
+    case $RC in
+        0 | 1) ;;
+        *) case_fail "exit $RC, expected 0 or 1" ;;
+    esac
+    assert_tsv_shape
+    for id in git locale venv-sync rc-pollution; do
+        [ "$(tsv_field "$id" 1)" != '<no row>' ] || case_fail "no $id row"
+    done
+    awk -F '\t' 'NR > 1 { print $5 }' "$OUT/$CASE.out" | LC_ALL=C sort -u >"$OUT/$CASE.fixes"
+    while IFS= read -r fix; do
+        case $fix in
+            -) ;;
+            'docs/bootstrap.md '*)
+                printf '%s\n' "$DOC_STEPS" | grep -Fxq -- "${fix#docs/bootstrap.md }" ||
+                    case_fail "fix cites a step without a '###' heading: $fix"
+                ;;
+            *) case_fail "fix is neither - nor docs/bootstrap.md <step>: $fix" ;;
+        esac
+    done <"$OUT/$CASE.fixes"
+    [ -z "$(find "$REAL_HOME" "$REAL_TMP" -mindepth 1 -print)" ] ||
+        case_fail "the real doctor wrote into HOME or TMPDIR: $(find "$REAL_HOME" "$REAL_TMP" -mindepth 1 -print)"
+    [ -z "$(find "$REAL_HOME" "$REAL_TMP" -maxdepth 0 -newer "$REAL_REF" -print)" ] ||
+        case_fail 'the real doctor created and removed a file in HOME or TMPDIR'
+    changed=$(find "$REPO_ROOT" -name .git -prune -o -newer "$REAL_MARKER" -print)
+    [ -z "$changed" ] || case_fail "the real doctor wrote into the checkout: $changed"
+}
+real_doctor_case real-debian --platform debian --tsv
+real_doctor_case real-other --platform other --tsv
+
 # --- read-only and offline -----------------------------------------------------
 
 MARKER="$TEST_TMP/marker"
@@ -932,5 +1095,41 @@ chmod -R u+w "$TEST_HOME" "$FIXTURE"
 assert_rc 0
 ! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
 assert_no_event NETWORK
+
+# --- no temporary files ----------------------------------------------------
+
+# Every mode but --smoke creates no file in TMPDIR, not even one it removes
+# again: TMPDIR is an empty directory with an old mtime, which any file
+# created or unlinked there would update. That catches mktemp and the
+# here-document files of Bash 4 and later (5.1 and later only for a document
+# larger than a pipe buffer). Bash 3.2 puts its here-document files in the
+# C library's P_tmpdir whatever TMPDIR says, so bootstrap-manifest.sh scans
+# these scripts for here-documents as well.
+NO_TMP="$TEST_TMP/no-tmp"
+NO_TMP_REF="$TEST_TMP/no-tmp.ref"
+mkdir "$NO_TMP"
+no_tmp_case() {
+    touch -t 200001010000 "$NO_TMP" "$NO_TMP_REF"
+    run_doctor "$@"
+    [ -z "$(ls -A "$NO_TMP")" ] || case_fail "the doctor left files in TMPDIR: $(ls -A "$NO_TMP")"
+    [ -z "$(find "$NO_TMP" -maxdepth 0 -newer "$NO_TMP_REF" -print)" ] ||
+        case_fail 'the doctor created and removed a file in TMPDIR'
+}
+no_tmp_case no-tmp-log TMPDIR="$NO_TMP" -- --host lab-ubuntu
+assert_rc 0
+no_tmp_case no-tmp-tsv TMPDIR="$NO_TMP" -- --host lab-ubuntu --tier all --tsv
+assert_rc 1
+no_tmp_case no-tmp-quiet TMPDIR="$NO_TMP" -- --host lab-ubuntu --quiet --online
+assert_rc 0
+no_tmp_case no-tmp-list TMPDIR="$NO_TMP" -- --host lab-ubuntu --list
+assert_rc 0
+no_tmp_case no-tmp-platform TMPDIR="$NO_TMP" -- --platform other --tsv
+assert_rc 0
+no_tmp_case no-tmp-mac TMPDIR="$NO_TMP" BOOTSTRAP_UNAME_S=Darwin -- --host mac --tsv
+assert_rc 0
+no_tmp_case no-tmp-help TMPDIR="$NO_TMP" -- --help
+assert_rc 0
+no_tmp_case no-tmp-usage TMPDIR="$NO_TMP" -- --tier gui
+assert_rc 2
 
 echo "doctor=PASS"

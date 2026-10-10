@@ -171,6 +171,32 @@ function ConvertFrom-BootstrapVersionText {
     return ''
 }
 
+function Use-BootstrapToolEnvironment {
+    # Run Action with GH_TELEMETRY=0 and GH_NO_UPDATE_NOTIFIER=1, which
+    # doctor.sh and setup-host.sh export: recent gh releases write a telemetry
+    # device id on any command, --version included, and the notifier checks
+    # GitHub for a release. The process environment outlives this script in
+    # an interactive session, so the caller's values are restored.
+    param([Parameter(Mandatory)][scriptblock]$Action)
+    $saved = @{}
+    foreach ($name in @('GH_TELEMETRY', 'GH_NO_UPDATE_NOTIFIER')) {
+        $saved[$name] = [Environment]::GetEnvironmentVariable($name)
+    }
+    try {
+        $env:GH_TELEMETRY = '0'
+        $env:GH_NO_UPDATE_NOTIFIER = '1'
+        & $Action
+    }
+    finally {
+        foreach ($name in $saved.Keys) {
+            # PowerShell passes $null to a string parameter as '', which sets
+            # an empty variable off Windows instead of removing it.
+            if ($null -eq $saved[$name]) { Remove-Item -LiteralPath "Env:$name" -ErrorAction Ignore }
+            else { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+        }
+    }
+}
+
 function Get-BootstrapToolVersion {
     # bootstrap_tool_version: run Path with Flag (stdin closed, stderr merged),
     # keep the first five lines and extract a version; '' for Flag "-", a tool
@@ -183,7 +209,9 @@ function Get-BootstrapToolVersion {
     $ErrorActionPreference = 'Continue'
     $PSNativeCommandUseErrorActionPreference = $false
     try {
-        $lines = @($null | & $Path $Flag 2>&1 | Select-Object -First 5 | ForEach-Object { "$_" })
+        $lines = @(Use-BootstrapToolEnvironment {
+                $null | & $Path $Flag 2>&1 | Select-Object -First 5 | ForEach-Object { "$_" }
+            })
     }
     catch { return '' }
     return ConvertFrom-BootstrapVersionText ($lines -join "`n")

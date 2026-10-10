@@ -75,16 +75,16 @@ step_H1_linuxbrew_plan() { steps_homebrew_block H1-linuxbrew; }
 # steps_apt_missing PACKAGES: the packages of the newline list that dpkg does
 # not report as installed, space-separated. Read-only (dpkg-query).
 steps_apt_missing() {
-    local IFS=' ' nl='
-' package list='' status missing=''
-    while IFS= read -r package; do
+    local IFS=' ' nl=$BOOTSTRAP_NL lines package list='' status missing=''
+    lines=$1$nl
+    while [ -n "$lines" ]; do
+        package=${lines%%"$nl"*}
+        lines=${lines#*"$nl"}
         case $package in
             '' | -* | *[!A-Za-z0-9.+:-]*) continue ;;
         esac
         list="$list $package"
-    done <<EOF
-$1
-EOF
+    done
     [ -n "$list" ] || return 0
     # shellcheck disable=SC2016,SC2086 # dpkg format fields; names checked above
     status=$(dpkg-query -W -f='${Package} ${db:Status-Abbrev}\n' $list 2>/dev/null </dev/null) || true
@@ -132,7 +132,7 @@ step_H1_apt_core_plan() {
 step_H1_locale_check() {
     local locales
     locales=$(locale -a 2>/dev/null) || locales=
-    if steps_text_has -Ei '^en_US\.utf-?8$' "$locales"; then
+    if bootstrap_text_has -Ei '^en_US\.utf-?8$' "$locales"; then
         STEP_DETAIL='en_US.UTF-8 is available'
         return 0
     fi
@@ -143,67 +143,6 @@ step_H1_locale_check() {
 step_H1_locale_plan() {
     steps_block_begin H1-locale sudo
     printf '%s\n' 'sudo locale-gen en_US.UTF-8'
-    steps_block_end
-}
-
-# --- H1-gh-apt-repo (lab-ubuntu, sudo, reminder) ---------------------------
-
-# Done only when /usr/bin/gh meets the gh-apt floor in tools.tsv: Ubuntu's
-# own, older gh package installs the same path. Its version flag is read
-# from the row, as the doctor does.
-step_H1_gh_apt_repo_check() {
-    local flag floor version
-    if ! steps_probe gh-apt; then
-        STEP_DETAIL='the GitHub CLI apt package (named by .gitconfig_local) is not installed'
-        return 1
-    fi
-    flag=$(steps_tool_cell gh-apt 5) || flag=-
-    floor=$(steps_tool_cell gh-apt 6) || floor=-
-    if [ "$flag" = - ] || [ "$floor" = - ]; then
-        STEP_DETAIL="$STEPS_PROBE_FOUND is installed"
-        return 0
-    fi
-    version=$(bootstrap_tool_version "$STEPS_PROBE_FOUND" "$flag")
-    if [ -n "$version" ] && bootstrap_version_ge "$version" "$floor"; then
-        STEP_DETAIL="$STEPS_PROBE_FOUND $version >= $floor"
-        return 0
-    fi
-    STEP_DETAIL="$STEPS_PROBE_FOUND ${version:-of unknown version} is below $floor (Ubuntu's own gh, not the cli.github.com package)"
-    return 1
-}
-
-# The pinned keyring (installers.tsv gh-apt) to its scratch file.
-step_H1_gh_apt_repo_apply() { steps_fetch_installer gh-apt; }
-
-# The keyring and source list are staged as you under a fixed scratch path,
-# so every line of the block stands alone (no shell variable carries over).
-# The keyring becomes an apt trust anchor only through a digest gate on the
-# pinned sha256.
-step_H1_gh_apt_repo_plan() {
-    local key list
-    steps_block_begin H1-gh-apt-repo sudo
-    if ! steps_installer_fields gh-apt; then
-        printf '# no installers.tsv gh-apt row for %s\n' "$STEPS_HOST"
-        steps_block_end
-        return 0
-    fi
-    key=$(steps_scratch_file gh-apt "$STEPS_URL")
-    list=$(steps_quote "$(steps_scratch_base)/gh-apt/github-cli.list")
-    printf '%s\n' '# the cli.github.com apt repository; .gitconfig_local runs /usr/bin/gh auth git-credential'
-    if [ "$STEPS_MODE" = apply ] && steps_has_digest "$key" "$STEPS_SHA"; then
-        printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
-    else
-        printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
-        printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
-    fi
-    printf '%s\n' \
-        "printf 'deb [arch=%s signed-by=$STEPS_DEST] https://cli.github.com/packages stable main\\n' \"\$(dpkg --print-architecture)\" >$list" \
-        '# the keyring is installed only while its sha256 is still the pinned one; stop if this line fails'
-    steps_digest_gate "$STEPS_SHA" "$key" "sudo install -D -m 0644 $(steps_quote "$key") $(steps_quote "$STEPS_DEST")"
-    printf '%s\n' \
-        "sudo install -D -m 0644 $list /etc/apt/sources.list.d/github-cli.list" \
-        'sudo apt-get update' \
-        'sudo apt-get install -y gh'
     steps_block_end
 }
 
@@ -360,12 +299,15 @@ steps_stowed() {
 # stow --adopt would overwrite the tracked copies instead, so the H7-stow
 # block moves each aside first. Read-only: git ls-files and the home.
 steps_stow_conflicts() {
-    local files ignores pattern path rel target resolved
+    local files ignores pattern lines path rel target resolved
     files=$(git -c core.quotePath=false --no-optional-locks -C "$STEPS_ROOT" ls-files -- common "$STEPS_HOST" \
         2>/dev/null </dev/null) || return 0
     ignores=$(sed -n 's/^--ignore=//p' "$STEPS_ROOT/.stowrc" 2>/dev/null) || ignores=
     pattern=$(printf '%s\n' "$ignores" | awk 'NF { printf "%s(%s)$", sep, $0; sep = "|" }')
-    while IFS= read -r path; do
+    lines=$files$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        path=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         case $path in
             \"* | */*/.stow-local-ignore) continue ;;
             */*/*) ;;
@@ -373,7 +315,7 @@ steps_stow_conflicts() {
         esac
         rel=${path#*/}
         rel=${rel#*/}
-        if [ -n "$pattern" ] && steps_text_has -E "$pattern" "$rel"; then
+        if [ -n "$pattern" ] && bootstrap_text_has -E "$pattern" "$rel"; then
             continue
         fi
         target=$HOME/$rel
@@ -386,9 +328,7 @@ steps_stow_conflicts() {
             continue
         fi
         printf '%s\n' "$rel"
-    done <<EOF
-$files
-EOF
+    done
 }
 
 step_H7_stow_check() {
@@ -414,21 +354,14 @@ step_H7_stow_check() {
 # Apple Silicon, Intel macOS or Linux), and only the stowed rc files put
 # those on PATH.
 steps_stow_path_prefix() {
-    local brew dir
+    local dir
     if [ "$STEPS_PROFILE" = hpc ]; then
         # shellcheck disable=SC2016 # expanded by the shell the block is pasted into
         printf '%s\n' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'
         return 0
     fi
-    if brew=$(bootstrap_brew_bin); then
-        dir=${brew%/brew}
-    elif [ "$STEPS_PROFILE" != macos ]; then
-        dir=/home/linuxbrew/.linuxbrew/bin
-    elif [ "$STEPS_ARCH" = x86_64 ]; then
-        dir=/usr/local/bin
-    else
-        dir=/opt/homebrew/bin
-    fi
+    dir=$(steps_brew_default)
+    dir=${dir%/brew}
     case $dir in
         *[!A-Za-z0-9_./-]*) printf 'PATH=%s:"$PATH"\n' "$(steps_quote "$dir")" ;;
         *) printf 'PATH="%s:$PATH"\n' "$dir" ;;
@@ -436,17 +369,18 @@ steps_stow_path_prefix() {
 }
 
 step_H7_stow_plan() {
-    local rel
+    local lines rel
     steps_block_begin H7-stow judgment
     if [ -n "${STEPS_STOW_CONFLICTS:-}" ]; then
         printf '%s\n' '# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;' \
             '# merge what you still need into the overlay later'
-        while IFS= read -r rel; do
+        lines=$STEPS_STOW_CONFLICTS$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            rel=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
             [ -n "$rel" ] || continue
             printf 'mv -n %s %s\n' "$(steps_quote "$HOME/$rel")" "$(steps_quote "$HOME/$rel.pre-dotfiles")"
-        done <<EOF
-$STEPS_STOW_CONFLICTS
-EOF
+        done
     elif [ "$STEPS_MODE" = manual ]; then
         printf '%s\n' '# Stow never replaces a regular file (a fresh ~/.bashrc or ~/.profile from /etc/skel);' \
             '# ./setup-host.sh lists each one in this block with a mv line that moves it aside first'

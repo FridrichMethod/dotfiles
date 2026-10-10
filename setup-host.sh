@@ -32,39 +32,40 @@ else
 fi
 
 usage() {
-    cat <<'EOF'
-Usage: ./setup-host.sh --host HOST [options]
-
-Installs the day-zero tools for HOST without sudo, then prints the HUMAN
-blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.
-
-  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults
-                    to DOTFILES_HOST or the host ./stow-all.sh recorded.
-                    The win host uses setup-host.ps1.
-  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host
-                    (default core,cli,ai)
-  --check           print one plan line per step and the pending HUMAN blocks;
-                    writes nothing and makes no network calls
-  --yes             apply without asking (required when stdin is not a terminal)
-  --only ID         run only this step (repeatable)
-  --skip ID         skip this step (repeatable)
-  --keep-going      continue after a failed step
-  --list            print the steps for HOST: id, kind, tier, blocking
-  --print-manual    print every HUMAN block for HOST, pending or not
-  -h, --help        show this help
-
-Plan lines: <step-id> <done|todo|human|skip|failed> <detail>
-HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run);
-              '# ' lines are notes, every other line one self-contained command
-Exit: 0 every selected step is done or not applicable (non-blocking
-        HUMAN blocks may still be printed)
-      1 a step failed
-      2 usage or refusal (unknown host, win, root, not this platform,
-        no terminal without --yes, invalid manifest)
-      3 work remains: a blocking HUMAN step pending, or auto steps still to
-        apply (--check, a declined prompt, or waiting on a HUMAN step)
-Run it as your user, never with sudo.
-EOF
+    printf '%s\n' \
+        'Usage: ./setup-host.sh --host HOST [options]' \
+        '' \
+        'Installs the day-zero tools for HOST without sudo, then prints the HUMAN' \
+        'blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.' \
+        '' \
+        '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
+        '                    to DOTFILES_HOST or the host ./stow-all.sh recorded;' \
+        '                    common only (a set but empty DOTFILES_HOST, or a' \
+        '                    common-only install ./stow-all.sh recorded) needs --host.' \
+        '                    The win host uses setup-host.ps1.' \
+        '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
+        '                    (default core,cli,ai)' \
+        '  --check           print one plan line per step and the pending HUMAN blocks;' \
+        '                    writes nothing and makes no network calls' \
+        '  --yes             apply without asking (required when stdin is not a terminal)' \
+        '  --only ID         run only this step (repeatable)' \
+        '  --skip ID         skip this step (repeatable)' \
+        '  --keep-going      continue after a failed step' \
+        '  --list            print the steps for HOST: id, kind, tier, blocking' \
+        '  --print-manual    print every HUMAN block for HOST, pending or not' \
+        '  -h, --help        show this help' \
+        '' \
+        'Plan lines: <step-id> <done|todo|human|skip|failed> <detail>' \
+        'HUMAN blocks: HUMAN-BEGIN <step-id> <kind> ... HUMAN-END (printed, never run);' \
+        "              '# ' lines are notes, every other line one self-contained command" \
+        'Exit: 0 every selected step is done or not applicable (non-blocking' \
+        '        HUMAN blocks may still be printed)' \
+        '      1 a step failed' \
+        '      2 usage or refusal (unknown host, win, root, not this platform,' \
+        '        no terminal without --yes, invalid manifest)' \
+        '      3 work remains: a blocking HUMAN step pending, or auto steps still to' \
+        '        apply (--check, a declined prompt, or waiting on a HUMAN step)' \
+        'Run it as your user, never with sudo.'
 }
 
 usage_error() {
@@ -104,6 +105,11 @@ done
 . "$REPO_ROOT/lib/bootstrap/steps-runtimes.sh"
 # shellcheck source=lib/bootstrap/steps-archives.sh
 . "$REPO_ROOT/lib/bootstrap/steps-archives.sh"
+
+# No here-documents or here-strings here or in the libraries: Bash 3.2 backs
+# each one with a temporary file, and --check writes nothing (see
+# lib/bootstrap/manifest.sh). Lines are split with parameter expansion,
+# fields with bootstrap_split.
 
 HOST=''
 TIERS=core,cli,ai
@@ -200,6 +206,17 @@ if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
     exit 2
 fi
 
+# A set but empty DOTFILES_HOST, and without DOTFILES_HOST a common-only
+# install that ./stow-all.sh recorded for this home, mean common only (as the
+# login updater reads them), and there is no --platform here: every step
+# needs an overlay.
+COMMON_ONLY_HINT='setup-host needs one: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe), or follow X-other-linux in docs/bootstrap.md'
+if [[ -z "$HOST" ]] && bootstrap_host_env_empty; then
+    usage_error "DOTFILES_HOST is set but empty, which means common only (no host overlay); $COMMON_ONLY_HINT"
+fi
+if [[ -z "$HOST" && -z "${DOTFILES_HOST:-}" ]] && bootstrap_recorded_common_only "$REPO_ROOT"; then
+    usage_error "./stow-all.sh recorded a common-only install for this home (no host overlay); $COMMON_ONLY_HINT"
+fi
 if [[ -z "$HOST" ]]; then
     HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
         usage_error 'no host: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)'
@@ -223,14 +240,15 @@ comma_items() {
 }
 
 if [[ "$TIERS" != all ]]; then
-    while IFS= read -r tier; do
+    lines=$(comma_items "$TIERS")$BOOTSTRAP_NL
+    while [[ -n "$lines" ]]; do
+        tier=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         case $tier in
             core | cli | ai | desktop | contributor | host) ;;
             *) usage_error "unknown tier: '$tier' (core, cli, ai, desktop, contributor, host or all)" ;;
         esac
-    done <<EOF
-$(comma_items "$TIERS")
-EOF
+    done
 fi
 
 # The run state that the step libraries read; a lint run without those files
@@ -250,12 +268,13 @@ fi
 }
 bootstrap_init "$REPO_ROOT"
 
-while IFS= read -r id; do
+lines=$(comma_items "${ONLY#,}${ONLY:+,}${SKIP#,}")$BOOTSTRAP_NL
+while [[ -n "$lines" ]]; do
+    id=${lines%%"$BOOTSTRAP_NL"*}
+    lines=${lines#*"$BOOTSTRAP_NL"}
     [[ -n "$id" ]] || continue
     steps_has "$id" || usage_error "unknown step for $HOST: '$id' (see ./setup-host.sh --host $HOST --list)"
-done <<EOF
-$(comma_items "${ONLY#,}${ONLY:+,}${SKIP#,}")
-EOF
+done
 
 if [[ "$MODE" == list ]]; then
     steps_list
@@ -282,10 +301,16 @@ fi
 
 # Provisioning never triggers the login updaters, git prompts or Homebrew
 # auto-update, hints and cleanup. Older brew bundle wrote Brewfile.lock.json
-# next to the Brewfile, inside this checkout. --check never runs brew.
+# next to the Brewfile, inside this checkout. --check never runs brew. No
+# step runs gh or tldr, but a tool a step starts may: recent gh releases
+# answer any command, --version included, by writing
+# ~/.local/state/gh/device-id unless GH_TELEMETRY=0, and the tldr C client
+# (Homebrew's tldr formula), once its page cache is two weeks old, answers
+# any command but --update by downloading the tldr-pages archive into
+# ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set.
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-    HOMEBREW_BUNDLE_NO_LOCK=1
+    HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1
 steps_extend_path
 
 if [[ "$MODE" == check ]]; then

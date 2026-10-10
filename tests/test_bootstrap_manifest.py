@@ -28,12 +28,12 @@ HUMANS = ("-", "sudo", "inspect")
 TOKENS = ("$HOME", "$ZSH_CUSTOM", "$NVM_DIR", "$XDG_CONFIG_HOME", "$XDG_DATA_HOME", "$BAT_CONFIG_DIR")
 STEP_IDS = (
     "P0-preflight", "H1-xcode-clt", "H1-homebrew", "H1-apt-core", "H1-locale", "H1-linuxbrew",
-    "H1-gh-apt-repo", "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env",
-    "S2-modules", "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S5-claude",
-    "S5-codex", "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-sync-skills",
-    "H7-doctor", "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync",
-    "HW-clone", "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl",
-    "HW-auth", "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
+    "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env", "S2-modules",
+    "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S5-claude", "S5-codex",
+    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-sync-skills", "H7-doctor",
+    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync", "HW-clone",
+    "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
+    "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
 # checks, doctor.ps1's core-symlinks, and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
@@ -58,12 +58,7 @@ REQUIRED_INSTALLERS = {
     ("nerd-font", "any"): ("archive", "lab-ubuntu", "desktop", "-", "$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont",
                            GH + "ryanoasis/nerd-fonts/releases/download/v*/CascadiaMono.tar.xz"),
     ("bat-theme", "any"): ("file", "all", "core", "-", "$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme",
-                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme"),
-    ("gh-apt", "any"): ("file", "lab-ubuntu", "cli", "sudo", "/etc/apt/keyrings/githubcli-archive-keyring.gpg",
-                        "https://cli.github.com/packages/githubcli-archive-keyring.gpg")}
-# Rows whose url names no version, because the vendor publishes one fixed url:
-# the sha256 alone pins them, and a changed file fails closed.
-UNVERSIONED_INSTALLERS = {("gh-apt", "any")}
+                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme")}
 for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64", "arm64")):
     REQUIRED_INSTALLERS[("micromamba", _arch)] = ("binary", "sherlock,marlowe", "core", "-", "$HOME/.local/bin/micromamba",
                                                   f"{GH}mamba-org/micromamba-releases/releases/download/*/micromamba-linux-{_mamba}")
@@ -96,6 +91,8 @@ CLAUDE_KEYS = CODEX_KEYS | {"disable-model-invocation"}
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+# A clone ref is the branch S3-clones clones: the upstream default branch.
+BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FLOOR_RE = re.compile(r"^[0-9]+\.[0-9]+(\.[0-9]+)?$")
 COMMAND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
@@ -109,10 +106,19 @@ APT_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]+$")
 WINGET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_+-]*(\.[A-Za-z0-9][A-Za-z0-9_+-]*)+$")
 BREW_RE = re.compile(r'^(brew|cask) "([a-z0-9][a-z0-9@+._/-]*)"(?: if OS\.(mac|linux)\?)?$')
 TAP_RE = re.compile(r'^tap "[a-z0-9_-]+/[a-z0-9_-]+"$')
+# "# conflicts: FORMULA OTHER..." and "# conflicts: cask TOKEN OTHER...":
+# S2-brew-bundle stops before brew bundle while an OTHER keg (or Caskroom
+# directory) exists and FORMULA (TOKEN) is not installed.
+CONFLICTS_RE = re.compile(r"^# conflicts: (cask )?([a-z0-9][a-z0-9@+._-]*)((?: [a-z0-9][a-z0-9@+._-]*)+)$")
+CONFLICTS_NEAR_RE = re.compile(r"^#\s*conflicts?\s*:", re.I)
 DEP_RE = re.compile(r"^([a-z0-9][a-z0-9._-]*)((?:[<>=!~]=?[0-9][0-9a-z.*]*,?)*)$")
 ALIAS_RE = re.compile(r"^# alias: ([a-z0-9][a-z0-9-]*) ([A-Za-z0-9@+._-]+)$")
 MANUAL_RE = re.compile(r"^# manual: ([a-z0-9][a-z0-9-]*) ([a-z0-9-]+(?:,[a-z0-9-]+)*)$")
-PINNED_RE = re.compile(r"^#.*\bpinned [0-9]{4}-[0-9]{2}-[0-9]{2}\b", re.MULTILINE)
+# Each manifest dates its pins; git-clones.tsv pins nothing, so it dates the
+# check of its default branches instead.
+DATED_RE = {word: re.compile(rf"^#.*\b{word} [0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}\b", re.MULTILINE)
+            for word in ("pinned", "checked")}
+DATED_WORD = {"git-clones.tsv": "checked"}
 HOME_RE = re.compile(r"/home/(?!linuxbrew(?:/|\b))[A-Za-z0-9._-]+|/users/|[a-z]:[\\/]+users\b", re.I)
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 CELL_FORBIDDEN = ("|", ";", "&", "$(", "`", "\r")
@@ -267,11 +273,20 @@ def check_tools(rows, errors):
         report(errors, "probe", where, probe_error(row["probe"], row["hosts"]))
         report(errors, "vocab", where, flag not in VERSION_FLAGS and f"unknown version_flag {flag!r}")
         report(errors, "floor", where, floor != "-" and not FLOOR_RE.match(floor) and f"floor {floor!r} is not X.Y[.Z]")
-        # A file probe may name an executable (gh-apt's /usr/bin/gh), so it may have a version.
+        # A file probe may name an executable outside PATH, so it may have a version.
         presence = ":" in row["probe"] and not row["probe"].startswith("file:") and (flag != "-" or floor != "-")
         report(errors, "probe-version", where, presence and "dir, font, env and psmodule probes are presence-only")
         report(errors, "probe-version", where, floor != "-" and flag == "-" and "a floor needs a version_flag")
         report(errors, "doc", where, row["doc"] not in STEP_IDS and f"unknown step id {row['doc']!r}")
+
+
+def branch_error(ref):
+    """Return why REF is not a branch name to clone, or None."""
+    if COMMIT_RE.match(ref):
+        return "ref must be a branch name, not a commit (clones track their upstream default branch)"
+    bad = (not BRANCH_RE.match(ref) or ref.startswith(("-", "/", ".")) or ref.endswith(("/", ".", ".lock"))
+           or ".." in ref or "//" in ref)
+    return bad and f"ref {ref!r} is not a branch name"
 
 
 def check_clones(rows, tools, errors):
@@ -283,10 +298,9 @@ def check_clones(rows, tools, errors):
         fixed = REQUIRED_CLONES.get(row["id"], row["dest"])
         report(errors, "clone-set", where, fixed != row["dest"] and f"{row['id']} dest must be {fixed}")
         report(errors, "clone-url", where, not GITHUB_RE.match(row["url"]) and "url must be https://github.com/O/R.git")
+        report(errors, "clone-ref", where, branch_error(ref))
         if row["id"] == "oh-my-zsh":
             report(errors, "clone-ref", where, ref != "master" and "oh-my-zsh must track master (self-updating)")
-        else:
-            report(errors, "clone-ref", where, not COMMIT_RE.match(ref) and "ref must be a 40-hex commit")
         problem = hosts_error(row["hosts"])
         report(errors, "vocab", where, problem)
         windows = not problem and "win" in expand_hosts(row["hosts"])
@@ -313,9 +327,7 @@ def check_installers(rows, tools, errors):
             report(errors, "sha256", where, sha != "-" and not SHA256_RE.match(sha) and "must be - or 64 lowercase hex")
         else:
             report(errors, "sha256", where, not SHA256_RE.match(sha) and "must be 64 lowercase hex (- only for inspect)")
-            unversioned = (row["id"], row["arch"]) in UNVERSIONED_INSTALLERS
-            report(errors, "installer-pin", where, not unversioned and not PINNED_URL_RE.search(url)
-                   and "url must name a commit or version")
+            report(errors, "installer-pin", where, not PINNED_URL_RE.search(url) and "url must name a commit or version")
         if row["kind"] == "script":
             report(errors, "installer-dest", where, dest != "-" and "scripts have dest -")
         else:
@@ -335,12 +347,22 @@ def check_installers(rows, tools, errors):
 
 
 def read_brewfiles(config, errors):
-    """Return [(name, os_guard)] across all tier Brewfiles."""
-    entries, seen = [], {}
+    """Return [(name, os_guard)] across all tier Brewfiles; check their conflicts lines."""
+    entries, seen, declared = [], {}, []
+    bundled = {"brew": {}, "cask": {}}
     for tier in BREW_TIERS:
         rel = f"brew/{tier}.Brewfile"
+        bundled["brew"][rel], bundled["cask"][rel] = set(), set()
         for number, line in enumerate((read_text(config / rel, rel, errors) or "").splitlines(), 1):
             where, match = f"{rel}:{number}", BREW_RE.match(line)
+            if CONFLICTS_NEAR_RE.match(line):
+                conflict = CONFLICTS_RE.match(line)
+                report(errors, "brewfile-conflicts", where, not conflict and
+                       "write '# conflicts: FORMULA OTHER...' or '# conflicts: cask TOKEN OTHER...' (names one space apart)")
+                if conflict:
+                    kind = "cask" if conflict.group(1) else "brew"
+                    declared.append((where, rel, kind, conflict.group(2), conflict.group(3).split()))
+                continue
             if line == "" or line.startswith("#") or TAP_RE.match(line):
                 continue
             if not match:
@@ -354,6 +376,13 @@ def read_brewfiles(config, errors):
             report(errors, "brewfile", where, name in seen and f"{name} repeats {seen.get(name)}")
             seen[name] = where
             entries.append((name, guard))
+            bundled[kind][rel].add(name)
+    for where, rel, kind, name, others in declared:
+        report(errors, "brewfile-conflicts", where, name not in bundled[kind][rel] and f"{name} is not a {kind} entry of {rel}")
+        for other in others:
+            repeated = other == name or others.count(other) > 1
+            report(errors, "brewfile-conflicts", where, repeated and f"{other} is named twice")
+            report(errors, "brewfile-conflicts", where, other in seen and f"{other} is bundled too ({seen.get(other)})")
     return entries
 
 
@@ -499,8 +528,9 @@ def check_file_text(config, errors):
         text = read_text(path, rel, errors) or ""
         for number, line in enumerate(text.splitlines(), 1):
             report(errors, "home-literal", f"{rel}:{number}", HOME_RE.search(line) and "machine-specific home path")
-        missing = path.suffix != ".json" and not PINNED_RE.search(text)
-        report(errors, "pinned-header", rel, missing and "needs a '# pinned YYYY-MM-DD' comment")
+        word = DATED_WORD.get(rel, "pinned")
+        missing = path.suffix != ".json" and not DATED_RE[word].search(text)
+        report(errors, "pinned-header", rel, missing and f"needs a '# {word} YYYY-MM-DD' comment")
 
 
 def check_docs(repo, tools, errors):
@@ -700,9 +730,11 @@ class RejectionTests(unittest.TestCase):
     def test_clones(self):
         self.check([
             ("clone-id", "unknown id", self.clones("fzf-tab", "id", "fzf-tabs")),
-            ("clone-ref", "branch", self.clones("fzf-tab", "ref", "master")),
-            ("clone-ref", "short sha", self.clones("fzf-tab", "ref", "d7e0234")),
+            ("clone-ref", "commit", self.clones("fzf-tab", "ref", "d7e0234614dbe5369fdd760907d12c0e05a4dccc")),
+            ("clone-ref", "option", self.clones("fzf-tab", "ref", "-b")),
+            ("clone-ref", "range", self.clones("fzf-tab", "ref", "master..main")),
             ("clone-ref", "omz pinned", self.clones("oh-my-zsh", "ref", "42a4ccb1b14dbeffe81259105a5243b4f4cb618e")),
+            ("clone-ref", "omz branch", self.clones("oh-my-zsh", "ref", "main")),
             ("clone-url", "not github .git", self.clones("fzf-tab", "url", "https://gitlab.com/a/b")),
             ("clone-hosts", "windows", self.clones("fzf-tab", "hosts", "all")),
             ("clone-dest", "token", self.clones("fzf-tab", "dest", "$ZSH/custom/plugins/fzf-tab")),
@@ -741,7 +773,6 @@ class RejectionTests(unittest.TestCase):
             ("installer-set", "kitty arch asset", self.installers("kitty", "url", lambda url: url.replace("x86_64", "arm64"))),
             ("installer-set", "nerd-font dest", self.installers("nerd-font", "dest", "$XDG_DATA_HOME/fonts")),
             ("installer-set", "bat-theme kind", self.installers("bat-theme", "kind", "archive")),
-            ("installer-set", "gh-apt keyring human", self.installers("gh-apt", "human", "-")),
             ("installer-pin", "unversioned url", self.installers("kitty", "url", "https://example.com/kitty.txz")),
         ])
 
@@ -758,6 +789,9 @@ class RejectionTests(unittest.TestCase):
             ("home-literal", "cluster home", lambda: self.append("hpc-login-env.yml", "# /users/alice\n")),
             ("home-literal", "windows home", lambda: self.append("brew/core.Brewfile", "# C:\\Users\\alice\n")),
             ("pinned-header", "missing", lambda: self.replace("apt/wsl-ubuntu.txt", "# pinned", "# fixed")),
+            ("pinned-header", "clones undated", lambda: self.replace("git-clones.tsv", "# checked", "# fixed")),
+            ("pinned-header", "clones claim a pin",
+             lambda: self.replace("git-clones.tsv", "# checked 2026", "# pinned 2026")),
         ])
 
     def test_brewfiles_and_apt_lists(self):
@@ -768,6 +802,27 @@ class RejectionTests(unittest.TestCase):
             ("brewfile", "options", lambda: self.append("brew/cli.Brewfile", 'brew "jq", args: ["HEAD"]\n')),
             ("brewfile", "unguarded cask", lambda: self.append("brew/desktop.Brewfile", 'cask "iterm2"\n')),
             ("brewfile", "repeat", lambda: self.append("brew/contributor.Brewfile", 'brew "fzf"\n')),
+            ("brewfile-conflicts", "one name", lambda: self.append("brew/cli.Brewfile", "# conflicts: tldr\n")),
+            ("brewfile-conflicts", "near miss", lambda: self.append("brew/cli.Brewfile", "#conflicts: tldr tlrc\n")),
+            ("brewfile-conflicts", "bad name", lambda: self.append("brew/cli.Brewfile", "# conflicts: tldr ../tlrc\n")),
+            ("brewfile-conflicts", "other Brewfile",
+             lambda: self.append("brew/core.Brewfile", "# conflicts: tldr tealdeer\n")),
+            ("brewfile-conflicts", "conflict bundled",
+             lambda: self.append("brew/cli.Brewfile", 'brew "tlrc"\n')),
+            ("brewfile-conflicts", "bundled", lambda: self.append("brew/cli.Brewfile", "# conflicts: jq ripgrep\n")),
+            ("brewfile-conflicts", "twice", lambda: self.append("brew/cli.Brewfile", "# conflicts: jq yq yq\n")),
+            ("brewfile-conflicts", "cask without others",
+             lambda: self.append("brew/desktop.Brewfile", "# conflicts: cask kitty\n")),
+            ("brewfile-conflicts", "formula line for a cask",
+             lambda: self.append("brew/ai.Brewfile", "# conflicts: codex codex@nightly\n")),
+            ("brewfile-conflicts", "cask line for a formula",
+             lambda: self.append("brew/core.Brewfile", "# conflicts: cask fzf fzf@nightly\n")),
+            ("brewfile-conflicts", "cask of another Brewfile",
+             lambda: self.append("brew/ai.Brewfile", "# conflicts: cask kitty kitty@nightly\n")),
+            ("brewfile-conflicts", "cask bundled",
+             lambda: self.append("brew/desktop.Brewfile", "# conflicts: cask kitty wezterm\n")),
+            ("brewfile-conflicts", "cask named twice",
+             lambda: self.append("brew/desktop.Brewfile", "# conflicts: cask wezterm wezterm\n")),
             ("apt", "version", lambda: self.append("apt/lab-ubuntu.txt", "zsh=5.9\n")),
             ("apt", "trailing comment", lambda: self.append("apt/wsl-ubuntu.txt", "jq # json\n")),
             ("apt", "overlap", lambda: self.append("apt/lab-ubuntu.txt", "tmux\n")),

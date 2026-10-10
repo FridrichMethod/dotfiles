@@ -14,16 +14,17 @@ update hooks never install a tool; only these entry points do, and only when
 you run them. (The skill-library hook fetches skills, not tools, and is on by
 default once stowed; see [H7-sync-skills](#h7-sync-skills-skill-library-sync).)
 
-[`config/bootstrap/`](../config/bootstrap/) is the single pinned source for
+[`config/bootstrap/`](../config/bootstrap/) is the single source for
 everything they install: [`tools.tsv`](../config/bootstrap/tools.tsv) (what the
 doctor checks: tier, hosts, probe, version floor, and the step that fixes each
 row), the tiered Brewfiles in [`brew/`](../config/bootstrap/brew/), the apt
 lists in [`apt/`](../config/bootstrap/apt/),
 [`hpc-login-env.yml`](../config/bootstrap/hpc-login-env.yml),
 [`winget.json`](../config/bootstrap/winget.json),
-[`git-clones.tsv`](../config/bootstrap/git-clones.tsv) (commit-pinned) and
+[`git-clones.tsv`](../config/bootstrap/git-clones.tsv) (default branches,
+tracked and never pinned) and
 [`installers.tsv`](../config/bootstrap/installers.tsv) (URL plus sha256). This
-playbook links those files instead of repeating their pins.
+playbook links those files instead of repeating their pins and branches.
 `tests/bootstrap-manifest.sh` validates them, checks that this file has exactly
 one `### <step-id>:` heading per step, and checks that
 [dependencies.md](dependencies.md#day-zero-tools) lists every tool.
@@ -124,10 +125,9 @@ exec zsh -l
 ./doctor.sh --host wsl-ubuntu --smoke
 ```
 
-`lab-ubuntu` adds one sudo block (H1-gh-apt-repo) and one gui step (H1-fcitx5:
-`im-config -n fcitx5` as you, then a relogin); add `--tier all` to get kitty and
-the Nerd Font. An agent CLI first, if wanted: the Claude Code installer as on
-macOS.
+`lab-ubuntu` adds one gui step (H1-fcitx5: `im-config -n fcitx5` as you, then
+a relogin); add `--tier all` to get kitty and the Nerd Font. An agent CLI
+first, if wanted: the Claude Code installer as on macOS.
 
 ### Sherlock and Marlowe
 
@@ -198,8 +198,8 @@ wanted: `winget install --id Anthropic.ClaudeCode -e`.
 There is no Fedora, Arch or generic Ubuntu overlay, and `./setup-host.sh` takes
 only `--host`. Stow `common/` only, install packages yourself, and do the four
 platform-neutral setup steps by hand
-([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_pinned`
-and `fetch_pinned` from [Pinned artifacts by hand](#pinned-artifacts-by-hand)
+([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_listed`
+and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-hand)
 into your shell first:
 
 ```sh
@@ -210,7 +210,7 @@ cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
 ./doctor.sh --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
-    clone_pinned "$id" || break                                    # S3-clones, oh-my-zsh first
+    clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first
 done
 f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &&
     cp "$f" "$d/Catppuccin Mocha.tmTheme" && bat cache --build    # S3-bat-theme
@@ -236,17 +236,22 @@ exec zsh -l
 `--list` resolves the host like every other mode: without `--host` or
 `--platform` it needs `DOTFILES_HOST` or a host `./stow-all.sh` recorded for
 this home, and exits 2 otherwise (for example in a fresh clone or a linked
-worktree).
+worktree). Common only, as the login updater reads it, is either a
+`DOTFILES_HOST` that is set but empty or, without `DOTFILES_HOST`, a
+common-only install that `./stow-all.sh` (no host argument) recorded for this
+home and kernel: the doctor then checks the platform it detects (`macos`,
+`debian`, `hpc` or `other`) without an overlay, exactly as `--platform` would,
+and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) means the detected platform without an overlay. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
 | `--quiet` | Only rows that are neither `ok` nor `skip`, then the summary |
-| `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in |
-| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails on `plugin .* not found`, `command not found` or `no such file` in its stderr. The one mode that may write (zsh's own caches) |
+| `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in. The probes may write the tools' own state in your home (claude rewrites `~/.claude.json` and keeps backups of it; some codex releases create `~/.codex/tmp`); the doctor itself still writes nothing |
+| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails on `plugin .* not found`, `command not found` or `no such file` in its stderr. It may write zsh's own caches |
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
@@ -282,21 +287,25 @@ at HW-clone).
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor; `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)) |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor; `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |
 | `--only STEP`, `--skip STEP` | Run only, or skip, that step id from this file; both repeat |
 | `--keep-going` | Continue past a failed step instead of stopping there; the run still exits 1 |
 | `--list` | The steps for this host as TSV: `id`, `kind` (`auto` or a HUMAN kind), `tier`, `blocking` |
-| `--print-manual` | Every HUMAN block for this host, pending or not (with the X-recovery block, which applies only when `~/.oh-my-zsh` exists without `oh-my-zsh.sh`), then exit 0 |
+| `--print-manual` | Every HUMAN block for this host, pending or not, then exit 0; that includes the judgment blocks an automatic step prints only in one situation, each with a note saying when: X-recovery (`~/.oh-my-zsh` without `oh-my-zsh.sh`), S2-brew-bundle (a conflicting formula or cask is installed) and S4-nvm (an `nvm.sh` that is not the pinned checkout) |
 
 Every step runs check, plan, apply, verify; a satisfied step is skipped, so a
 second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
-`Brewfile.lock.json` into the checkout).
+`Brewfile.lock.json` into the checkout), and in every mode
+`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1`: no step
+runs gh or tldr, and the export keeps a gh that any tool it starts may run
+from writing its device id, and a tldr C client from refreshing its page
+cache over the network ([Guarantees](#guarantees)).
 Before probing anything, both scripts prepend to their own PATH, when they
 exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
@@ -321,18 +330,21 @@ because wget follows a redirect to plain http.
 | --- | --- |
 | 0 | Done: every selected step is done or does not apply; non-blocking HUMAN blocks may still be printed |
 | 1 | A step failed |
-| 2 | Usage error or refusal: unknown host, `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
+| 2 | Usage error or refusal: unknown host (or none: no `--host`, an empty `DOTFILES_HOST`, nothing recorded), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
 | 3 | Work remains: a blocking HUMAN step is pending, or automatic steps are still to apply (under `--check`, after a declined prompt, or while they wait on a HUMAN step); handle the printed blocks and run it again |
 
 `--list` shows which HUMAN steps block. A pending blocking step (Xcode CLT,
 Homebrew, apt packages, Linuxbrew, the Slurm allocation, the Claude Code
-installer, stow) holds back the steps that need it and makes the run exit 3.
-A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
+installer, stow) holds back the steps that need it and makes the run exit 3,
+and so does an automatic step that needs a person's decision first: it shows
+as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
+conflicting Homebrew formula or cask in S2-brew-bundle, an `nvm.sh` S4-nvm will not
+source). A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
 dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
-`--tier` or `--only` leaves out does not. Non-blocking blocks (locale, the gh
-apt repository, fcitx5, site modules, `chsh`, sign-in, skill sync, the final
-doctor run) are printed but leave the exit code alone. Since H7-stow blocks,
-every run before the first stow exits 3.
+`--tier` or `--only` leaves out does not. Non-blocking blocks (locale, fcitx5,
+site modules, `chsh`, sign-in, skill sync, the final doctor run) are printed
+but leave the exit code alone. Since H7-stow blocks, every run before the
+first stow exits 3.
 
 The Windows twins take the same ideas as PowerShell parameters:
 `.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
@@ -341,7 +353,8 @@ The Windows twins take the same ideas as PowerShell parameters:
 themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `venv-sync`, `submodule` and
-`core-symlinks`, and `-Online` reports a signed-out tool as `warn`, as on Unix.
+`core-symlinks`, and `-Online` reports a signed-out tool as `warn`, as on Unix
+(its auth probes, too, may write the tools' own state).
 `.\setup-host.ps1` exits 3 while HW-clone or HW-stow is pending; the other HW
 blocks are printed but leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
@@ -382,7 +395,7 @@ The first line names the step and the kind. Every other line up to
 
 | Kind | Who runs it | Meaning |
 | --- | --- | --- |
-| `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root: system packages, `/home/linuxbrew`, apt sources; on Windows, services |
+| `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root: system packages, the system locale, `/home/linuxbrew`; on Windows, services |
 | `auth` | The person | Browser or device-code login, passwords, keys, Kerberos tickets |
 | `gui` | The person | A dialog, a Settings toggle or a relogin (Xcode CLT, Developer Mode, the fcitx5 session) |
 | `alloc` | The person | A Slurm allocation; heavy work on hpc runs only inside one |
@@ -396,12 +409,29 @@ kind.
 
 ### Guarantees
 
-- `./doctor.sh` without `--smoke`, and `./setup-host.sh --check`, write nothing
-  anywhere and make no network calls (`--online` adds only the three auth probes).
+- `./doctor.sh` without `--online` or `--smoke`, and `./setup-host.sh --check`,
+  write nothing anywhere and make no network calls. `--online` adds the three
+  auth probes, which go online and may write the tools' own state
+  (`~/.claude.json`; `~/.codex/tmp` for some codex releases); `--smoke` may
+  write zsh's caches.
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
   `nvim` and `pre-commit` rows are presence-only), finds fonts by file name
   instead of through `fc-list` (which creates fontconfig caches), and runs the
-  `venv-sync` interpreter with `-I -B`, so it writes no bytecode.
+  `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Both Unix
+  scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
+  them around each probe and restore yours): recent gh releases otherwise write
+  `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
+  send telemetry for other commands). They also export
+  `TLDR_AUTO_UPDATE_DISABLED=1`: the tldr C client (Homebrew's `tldr`
+  formula) checks its page cache before it handles `--version`, and once
+  `~/.tldrc/date` is two weeks old it otherwise downloads the tldr-pages
+  archive into `~/.tldrc` first (tlrc, the Windows client, and tealdeer ignore
+  the variable and never update on `--version`). Not even a temporary file:
+  the Unix scripts use no here-documents or here-strings, which macOS's Bash
+  3.2 backs with files in the system temporary directory.
+  `tests/doctor.sh` runs the real doctor with the real manifest on the machine
+  running the tests (`--platform debian` and `other`, an empty `HOME`) and
+  checks that it changed nothing.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
   `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
   rc file. The only write it causes inside the checkout is `.venv-sync`, through
@@ -411,8 +441,15 @@ kind.
   HUMAN block runs a downloaded script only behind a digest gate: the pinned
   sha256, or for an `inspect` download the digest of the copy the person read,
   which later runs keep instead of downloading it again.
-- The pins cover what setup-host downloads and clones itself. What a package
-  manager installs follows that manager's own current version and trust:
+- The pins cover what setup-host downloads itself: every `installers.tsv`
+  row but the `inspect` one is sha256-pinned. The theme and plugin clones of
+  `git-clones.tsv` are not pinned: each tracks its upstream default branch,
+  like oh-my-zsh's own auto-update, and setup-host clones only a missing one
+  and never modifies an existing clone
+  ([S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones)). Unpinned plugin
+  code runs in every shell, the same trust model as oh-my-zsh's auto-update.
+  What a package manager installs follows that manager's own current version
+  and trust:
   Homebrew (`brew bundle`), apt, conda-forge (the login env, within the yml's
   floors), winget (`winget.json` names packages, not versions), PSGallery
   (W1-psresources runs `Install-PSResource -TrustRepository -AcceptLicense`
@@ -423,12 +460,12 @@ kind.
 - Everything a person must do ends up in a HUMAN block; exit 3 means work
   remains: a blocking block is pending, or automatic steps are still to apply.
 
-### Pinned artifacts by hand
+### Downloads and clones by hand
 
 The automatic steps below also list a manual equivalent. Those that download or
-clone use these two helpers, which read the URL, digest or ref from
-`installers.tsv` and `git-clones.tsv` instead of copying them here. Paste them
-into the shell you are working in:
+clone use these two helpers, which read the URL and digest from
+`installers.tsv`, or the URL and branch from `git-clones.tsv`, instead of
+copying them here. Paste them into the shell you are working in:
 
 ```sh
 # fetch_pinned ID [ARCH]: download one installers.tsv row into a fresh temporary
@@ -455,21 +492,22 @@ fetch_pinned() {
     printf '%s\n' "$_out"
 }
 
-# clone_pinned ID: make one git-clones.tsv row's clone the way S3-clones does.
-clone_pinned() {
+# clone_listed ID: make one git-clones.tsv row's clone the way S3-clones does:
+# a shallow clone of the row's branch, and an existing clone left as it is.
+clone_listed() {
     _row=$(awk -F '\t' -v id="$1" '$1 == id { print; exit }' \
         "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/git-clones.tsv")
-    [ -n "$_row" ] || { echo "clone_pinned: no row for $1" >&2; return 1; }
+    [ -n "$_row" ] || { echo "clone_listed: no row for $1" >&2; return 1; }
     _dest=$(printf '%s\n' "$_row" | cut -f 2)
     _url=$(printf '%s\n' "$_row" | cut -f 3)
     _ref=$(printf '%s\n' "$_row" | cut -f 4)
     case $_dest in
         '$HOME/'*) _dest=$HOME/${_dest#'$HOME/'} ;;
         '$ZSH_CUSTOM/'*) _dest=${ZSH_CUSTOM:-${ZSH:-$HOME/.oh-my-zsh}/custom}/${_dest#'$ZSH_CUSTOM/'} ;;
-        *) echo "clone_pinned: unsupported dest $_dest" >&2; return 1 ;;
+        *) echo "clone_listed: unsupported dest $_dest" >&2; return 1 ;;
     esac
     if [ -e "$_dest/.git" ]; then
-        echo "clone_pinned: $_dest is already a clone; compare its HEAD with $_ref" >&2
+        echo "clone_listed: $_dest is already a clone; left as it is" >&2
         return 0
     fi
     if [ "$1" = oh-my-zsh ]; then
@@ -478,9 +516,7 @@ clone_pinned() {
             -c receive.fsck.zeroPaddedFilemode=ignore -c oh-my-zsh.remote=origin \
             -c oh-my-zsh.branch="$_ref" "$_url" "$_dest"
     else
-        git init -q "$_dest" && git -C "$_dest" remote add origin "$_url" &&
-            git -C "$_dest" fetch --depth=1 origin "$_ref" &&
-            git -C "$_dest" checkout -q --detach FETCH_HEAD
+        git clone --depth=1 --branch "$_ref" "$_url" "$_dest"
     fi
 }
 ```
@@ -677,7 +713,13 @@ Applies to `wsl-ubuntu` and `lab-ubuntu`: the packages in
 wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
 git-lfs, tmux, man, locales, build tools). The interactive tools come from
 Linuxbrew because Ubuntu 24.04's apt is below the floors (fzf 0.44.1,
-gh 2.45) and renames bat and fd to `batcat` and `fdfind`.
+gh 2.45) and renames bat and fd to `batcat` and `fdfind`. Ubuntu's apt gh is
+too old and is not used, even where it is installed: the Linuxbrew gh of the
+`cli` Brewfile comes first on PATH in the stowed shells, and it is what git's
+github.com credential helper calls on lab-ubuntu, by its full path
+`/home/linuxbrew/.linuxbrew/bin/gh` in `lab-ubuntu/git/.gitconfig_local`
+(git started from a GUI or another non-login context may not have Linuxbrew
+on PATH). gh needs no sudo on any host.
 
 - **Check:** `grep -hv '^#' config/bootstrap/apt/common.txt config/bootstrap/apt/wsl-ubuntu.txt | xargs dpkg -s >/dev/null && echo ok`
   (use `lab-ubuntu.txt` on lab-ubuntu)
@@ -722,43 +764,6 @@ files guard their `brew shellenv` line, so shells stay quiet before it exists.
 Never append the installer's "Next steps" lines to `~/.bashrc` or `~/.zshrc`;
 the overlay already has them.
 
-### H1-gh-apt-repo: GitHub CLI apt repository
-
-Applies to `lab-ubuntu` (row `gh-apt`): its `.gitconfig_local` uses
-`!/usr/bin/gh auth git-credential` for github.com, so `/usr/bin/gh` must be the
-current GitHub CLI from cli.github.com, not Ubuntu's older package, which
-installs the same path. The doctor's `gh-apt` row and this step's check both
-run `/usr/bin/gh --version` against the `gh-apt` floor in `tools.tsv`, so
-Ubuntu's gh shows as `outdated` and the block stays pending. The Linuxbrew `gh`
-stays first on PATH; both share `~/.config/gh`.
-
-- **Check:** `/usr/bin/gh --version | head -n 1; apt-cache policy gh | grep -c cli.github.com`
-- **Install:** the printed sudo block. setup-host first downloads the apt
-  keyring through the `gh-apt` row of
-  [`installers.tsv`](../config/bootstrap/installers.tsv), checks it against the
-  sha256 GitHub publishes for it, and stages it under
-  `~/.cache/dotfiles-bootstrap/gh-apt` (or
-  `$XDG_CACHE_HOME/dotfiles-bootstrap/gh-apt`). The keyring holds GitHub's two
-  signing keys, `2C6106201985B60E6C7AC87323F3D4EA75716059` and
-  `7F38BBB59D064DBCB3D84D725612B36462313325` (`gpg --show-keys <file>` lists
-  them). The block writes the source list as you, then installs the keyring
-  with sudo only behind a digest gate on the pinned sha256; stop if that line
-  fails. Each line stands alone:
-
-  ```sh
-  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\n' "$(dpkg --print-architecture)" > ~/.cache/dotfiles-bootstrap/gh-apt/github-cli.list
-  printf '%s  %s\n' <sha256> ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg | sha256sum -c --status - && sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg
-  sudo install -D -m 0644 ~/.cache/dotfiles-bootstrap/gh-apt/github-cli.list /etc/apt/sources.list.d/github-cli.list
-  sudo apt-get update
-  sudo apt-get install -y gh
-  ```
-
-  By hand: `f=$(fetch_pinned gh-apt)` checks the keyring's digest; then the
-  lines above with `"$f"` as the keyring.
-- **Verify:** `/usr/bin/gh --version` is at least the `gh-apt` floor in
-  `tools.tsv`; doctor row `gh-apt` is `ok`.
-- **Human:** yes (sudo: adds an apt signing key and source)
-
 ### H1-fcitx5: fcitx5 input method
 
 Applies to `lab-ubuntu`. The fcitx5 packages arrive with H1-apt-core;
@@ -782,7 +787,7 @@ that Ubuntu gets from apt point here too: git-lfs and tmux come from the core
 Brewfile, and the rest (zsh, curl, rsync, tar, file, col, man) are macOS
 baseline. One Brewfile per tier in
 [`brew/`](../config/bootstrap/brew/): `core` (stow, python, fzf, zoxide, eza,
-fd, bat; on macOS also git-lfs and tmux), `cli` (ripgrep, git-delta, tlrc,
+fd, bat; on macOS also git-lfs and tmux), `cli` (ripgrep, git-delta, tldr,
 chafa, jq, neovim, aria2, uv, gh), `ai` and `desktop` (macOS casks only:
 claude-code and codex; kitty, wezterm and the CaskaydiaMono Nerd Font) and
 `contributor`. `--no-upgrade` never upgrades what is already installed, so an
@@ -798,7 +803,50 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
 - **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`python3`, `stow`,
   `fzf`, `eza`, `fd`, `gh`, ...) `ok` with their floors.
-- **Human:** no
+- **Human:** no, unless a conflicting formula or cask is installed (judgment, below)
+
+**Conflicting formulae and casks.** Homebrew refuses to install a formula or
+cask next to one it `conflicts_with`, and `brew bundle` then fails with no more
+than "brew bundle failed". A Brewfile names the conflicts the bootstrap knows
+of, taken from each entry's `conflicts_with` on formulae.brew.sh when it was
+pinned, in `# conflicts: FORMULA OTHER...` lines and, for casks,
+`# conflicts: cask TOKEN OTHER...` lines (validated by
+`tests/bootstrap-manifest.sh`). Today they are `core`'s `fd fdclone` (both
+install `fd`), `cli`'s `tldr tlrc tealdeer` (all three install `tldr`), and the
+macOS casks `claude-code` (`ai`, against `claude-code@latest`), `kitty` and
+`wezterm` (`desktop`, each against its `@nightly` cask). Before it runs brew at
+all, in `--check` and apply alike, S2-brew-bundle looks for each OTHER that is
+installed while the Brewfile's own entry is not: a formula keg (`Cellar/OTHER`
+under the Homebrew prefix it found, or under `$HOMEBREW_CELLAR`) while FORMULA
+has neither a keg nor an `opt/` link, or a cask's `Caskroom/OTHER` while
+`Caskroom/TOKEN` is absent. A pair whose Brewfile entry brew bundle skips on
+this platform (the casks are `if OS.mac?`) is never judged. When it finds one,
+the step is `human` and blocking (exit 3), and setup-host prints a judgment
+block whose command line uninstalls it (`--formula` or `--cask`) with the brew
+it found, by full path:
+
+```text
+HUMAN-BEGIN S2-brew-bundle judgment
+# docs/bootstrap.md S2-brew-bundle
+# Homebrew does not install tldr (cli.Brewfile) while the tlrc formula is installed (conflicts_with), so brew bundle would fail
+# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one
+/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc
+HUMAN-END
+```
+
+The `tldr` command comes back from the `tldr` formula on the next run (a cask
+such as `wezterm@nightly` likewise gives way to `wezterm`). That formula is
+the C client (tldr-c-client), whose `-C`/`--color` takes no argument; the
+fzf-tab previews try `tldr --color always` (tlrc, tealdeer) and then
+`tldr -C`, so they color with every client, and run both with
+`TLDR_AUTO_UPDATE_DISABLED=1`, so the C client answers from its local cache
+and never fetches a missing page or a stale archive while you tab-complete.
+The conflict holds back the whole step, every selected Brewfile, so keeping
+the other package instead means leaving its tier out (for tldr,
+`--tier core,ai`). `--print-manual` prints the block for every declared pair
+that applies on this platform. A conflict Homebrew adds later is not judged
+until a Brewfile line names it ([Known limitations](#known-limitations)). See
+also [X-recovery](#x-recovery-recovery-recipes).
 
 ### S2-micromamba: micromamba
 
@@ -898,6 +946,15 @@ in the environment it starts from, so sessions on several nodes do not race its
 updater over the shared home. Do not leave agents running unattended on login
 nodes.
 
+**Sherlock toolkit (opt-in).** `shk`, the pinned Sherlock toolkit that the
+global agent instructions name, is neither a site module nor part of a tier:
+setup-host does not install it and the doctor does not check it. On a host
+where agents work on or connect to Sherlock, install it explicitly with
+`./setup-sherlock-kit.sh`, then `./stow-all.sh <host>`, which links the `shk`
+launcher (Windows: `./setup-sherlock-kit.ps1 -Python python`, which writes the
+native `~/.local/bin/shk.cmd`, then `./stow-all.ps1 win`);
+[sherlock-kit.md](sherlock-kit.md) is its contract.
+
 **OS and glibc.** Record `cat /etc/os-release` and `ldd --version` on each
 cluster; vendor binaries and conda-forge builds each need a minimum glibc.
 
@@ -910,34 +967,47 @@ Applies to every Unix host, **before** `./stow-all.sh`. Rows in
 `~/.oh-my-zsh`, powerlevel10k under `$ZSH_CUSTOM/themes`, and fzf-tab,
 fast-syntax-highlighting, zsh-autosuggestions, you-should-use,
 conda-zsh-completion and zsh-completions under `$ZSH_CUSTOM/plugins`
-(`$ZSH_CUSTOM` defaults to `~/.oh-my-zsh/custom`). oh-my-zsh tracks `master`
-because `zstyle ':omz:update' mode auto` updates it; every other clone is
-pinned to a commit.
+(`$ZSH_CUSTOM` defaults to `~/.oh-my-zsh/custom`). Nothing here is pinned:
+each row's `ref` is the repository's default branch (`master`, and `main` for
+conda-zsh-completion), and every clone tracks it, the way oh-my-zsh's own
+auto-update (`zstyle ':omz:update' mode auto` in `common/zsh/.zshrc`) keeps
+`~/.oh-my-zsh` on `master`. Downloads stay sha256-pinned in
+[`installers.tsv`](../config/bootstrap/installers.tsv), the Catppuccin bat
+theme file of S3-bat-theme included. The trade-off: unpinned theme and plugin
+code runs in every shell, the same trust model as oh-my-zsh's auto-update.
 
-- **Check:** `test -f ~/.oh-my-zsh/oh-my-zsh.sh && git -C ~/.oh-my-zsh/custom/plugins/fzf-tab rev-parse HEAD`
-  (compare with the `ref` column)
-- **Install:** automatic via setup-host.sh. oh-my-zsh is cloned the way its own
-  installer does:
+- **Check:** `test -f ~/.oh-my-zsh/oh-my-zsh.sh && git -C ~/.oh-my-zsh/custom/plugins/fzf-tab log -1 --oneline --decorate`
+- **Install:** automatic via setup-host.sh, only for a clone that is missing.
+  oh-my-zsh is cloned the way its own installer does:
   `git clone --depth=1 --branch master -c core.eol=lf -c core.autocrlf=false -c fsck.zeroPaddedFilemode=ignore -c fetch.fsck.zeroPaddedFilemode=ignore -c receive.fsck.zeroPaddedFilemode=ignore -c oh-my-zsh.remote=origin -c oh-my-zsh.branch=master https://github.com/ohmyzsh/ohmyzsh.git ~/.oh-my-zsh`.
-  Every other row: `git init DEST`, `git -C DEST remote add origin URL`,
-  `git -C DEST fetch --depth=1 origin REF`, `git -C DEST checkout --detach FETCH_HEAD`.
-  By hand: `clone_pinned ID` per row, oh-my-zsh first (the Other Linux quick
-  start loops over all of them).
+  Every other row: `git clone --depth=1 --branch REF URL DEST`. By hand:
+  `clone_listed ID` per row, oh-my-zsh first (the Other Linux quick start
+  loops over all of them).
 - **Verify:** doctor rows `oh-my-zsh`, `powerlevel10k` and the six plugins are
-  `ok`; `git -C DEST rev-parse HEAD` equals each pinned `ref`.
+  `ok`.
 - **Human:** no
 
-A clean clone on another commit is re-pinned; a clone with local changes is
-refused (see [X-recovery](#x-recovery-recovery-recipes)). Never run the upstream
-oh-my-zsh installer: it replaces `~/.zshrc` and can change your login shell.
+setup-host never modifies an existing clone: a destination that is a git
+checkout is left as it is, whatever its branch, commit or local changes; no
+fetch, pull, checkout or status check runs there, and the step reports it
+`done` with its branch and commit (`fzf-tab master@24105b1`) for information.
+A destination that exists but is not a git checkout fails the step; move it
+aside and re-run ([X-recovery](#x-recovery-recovery-recipes)). Never run the
+upstream oh-my-zsh installer: it replaces `~/.zshrc` and can change your login
+shell.
 
-On a host that is already set up, an apply re-pins every clean theme and plugin
-clone to its commit in `git-clones.tsv`, even when that moves it back from a
-newer upstream commit you pulled yourself; oh-my-zsh, which tracks `master`, is
-left alone. A clone with local changes is never moved: S3-clones fails and
-names it. `--check` shows both beforehand: its S3-clones line lists each clone
-to move as `(repin)` (and a missing one as `(clone)`), and a dirty one under
-`apply fails for:`.
+Updating is yours to do. oh-my-zsh updates itself, or with `omz update`, which
+updates only oh-my-zsh itself. For the theme and plugins, fast-forward each
+clone to its upstream branch:
+
+```sh
+for d in "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"/plugins/* "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"/themes/powerlevel10k; do git -C "$d" pull --ff-only; done
+```
+
+A clone with local changes in the way or a diverged history makes its
+`pull --ff-only` stop and say so, and the loop goes on with the next one.
+`plugins/example`, which oh-my-zsh ships, lies inside the oh-my-zsh checkout,
+so the loop fast-forwards oh-my-zsh as well.
 
 ### S3-bat-theme: bat theme
 
@@ -984,16 +1054,55 @@ so the alias must exist.
   `<commit>` is the commit in the row's URL. The installer would otherwise
   clone its release tag, which can move; with the commit it fetches exactly
   that commit, and `PROFILE=/dev/null` keeps it out of every rc file.
-  setup-host then requires `git -C ~/.nvm rev-parse HEAD` to be that commit
-  (and removes a checkout it just made that is not) before it runs
-  `nvm install --lts` and `nvm alias default 'lts/*'`. By hand:
-  `c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' ~/dotfiles/config/bootstrap/installers.tsv)`,
-  `f=$(fetch_pinned nvm) && NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f"`,
-  check that `git -C ~/.nvm rev-parse HEAD` prints `$c`, then
-  `. ~/.nvm/nvm.sh && nvm install --lts && nvm alias default 'lts/*'`.
+  setup-host sources `nvm.sh` (to run `nvm install --lts` and
+  `nvm alias default 'lts/*'`) only when `$NVM_DIR` is a git checkout at that
+  commit with no change to a tracked file; it removes a checkout it just made
+  that is not. By hand, as one block that sources nothing unless that holds
+  (paste `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-hand)
+  first):
+
+  ```sh
+  (
+      set -eu
+      d=${NVM_DIR:-$HOME/.nvm}
+      c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' \
+          "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
+      case $c in
+          '' | *[!0-9a-f]*) echo "installers.tsv names no nvm commit: [$c]" >&2 && exit 1 ;;
+      esac
+      test "${#c}" -eq 40
+      if [ ! -s "$d/nvm.sh" ]; then
+          f=$(fetch_pinned nvm)
+          mkdir -p "$d"
+          NVM_DIR=$d NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f"
+      fi
+      head=$(git -C "$d" rev-parse HEAD)
+      changed=$(git -C "$d" status --porcelain --untracked-files=no)
+      if [ "$head" != "$c" ] || [ -n "$changed" ]; then
+          echo "$d is at $head (or has local changes), not the pinned nvm commit $c; not sourced" >&2
+          exit 1
+      fi
+  ) && . "${NVM_DIR:-$HOME/.nvm}/nvm.sh" && nvm install --lts && nvm alias default 'lts/*'
+  ```
+
 - **Verify:** in a new shell, `command -v node` is under `~/.nvm/versions` and
   `node --version` meets the floor.
-- **Human:** no
+- **Human:** no, unless an existing nvm is not the pinned checkout (judgment,
+  below)
+
+**An nvm that is already there.** S4-nvm is `done` whenever `$NVM_DIR` has a
+node at the floor and a `default` alias, whatever installed nvm: those are
+files, and nothing needs `nvm.sh`. Only when node or the alias is missing does
+setup-host have to source `nvm.sh`, and then an `nvm.sh` that is not the pinned,
+unmodified checkout (an older install, a checkout at another commit, a
+directory that is not a git checkout, local edits) makes the step `human` and
+blocking, with a judgment block instead of a source: `git -C ~/.nvm fetch` and
+`git -C ~/.nvm checkout --detach` to the pinned commit (its `versions/` and
+`alias/` stay), `git -C ~/.nvm status --short` and `checkout -- .` for local
+edits, or `mv -n ~/.nvm ~/.nvm.pre-dotfiles` for a directory that is not a git
+checkout, after which the next run installs the pinned nvm there. Each block
+names the alternative of moving the directory aside in a note.
+`--print-manual` prints the commit case.
 
 Never install nvm with Homebrew; the doctor's `nvm-homebrew` check warns about
 it and [X-recovery](#x-recovery-recovery-recipes) moves you off it. Install Node
@@ -1061,23 +1170,39 @@ with a relative `codex -> bin/codex` link inside,
 
 - **Check:** `codex --version; readlink ~/.local/bin/codex`
 - **Install:** automatic via setup-host.sh. By hand (version and target come
-  from the package's own `codex-package.json`):
+  from the package's own `codex-package.json`), as one block: the subshell
+  stops at the first failing command (`set -eu`) and refuses an empty or
+  path-like version or target, so a failed download, unpack or JSON read never
+  repoints `current` at `releases/` itself or removes a working install:
 
   ```sh
-  f=$(fetch_pinned codex "$(uname -m)")
-  dest=$HOME/.codex/packages/standalone
-  mkdir -p "$dest/releases" ~/.local/bin
-  tmp=$(mktemp -d "$dest/.extract.XXXXXX")
-  tar -C "$tmp" -xzf "$f"
-  rel=$(python3 -I -c 'import json, sys; p = json.load(open(sys.argv[1])); print(p["version"] + "-" + p["target"])' "$tmp/codex-package.json")
-  if [ -d "$dest/releases/$rel" ]; then
-      rm -rf "$tmp"    # this release is already unpacked
-  else
-      ln -s bin/codex "$tmp/codex"
-      mv "$tmp" "$dest/releases/$rel"
-  fi
-  ln -sfn "$dest/releases/$rel" "$dest/current"
-  ln -sfn "$dest/current/bin/codex" ~/.local/bin/codex
+  (
+      set -eu
+      f=$(fetch_pinned codex "$(uname -m)")
+      dest=$HOME/.codex/packages/standalone
+      mkdir -p "$dest/releases" "$HOME/.local/bin"
+      tmp=$(mktemp -d "$dest/.extract.XXXXXX")
+      trap 'rm -rf "$tmp"' EXIT    # gone once moved into releases/
+      tar -C "$tmp" -xzf "$f"
+      ver=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$tmp/codex-package.json")
+      tgt=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["target"])' "$tmp/codex-package.json")
+      for name in "$ver" "$tgt"; do
+          case $name in
+              '' | .* | *[!A-Za-z0-9._-]*)
+                  echo "codex-package.json: unusable version or target [$ver] [$tgt]" >&2
+                  exit 1
+                  ;;
+          esac
+      done
+      test -x "$tmp/bin/codex"
+      rel=$dest/releases/$ver-$tgt
+      if [ ! -d "$rel" ]; then    # else this release is already unpacked
+          ln -s bin/codex "$tmp/codex"
+          mv "$tmp" "$rel"
+      fi
+      ln -sfn "$rel" "$dest/current"
+      ln -sfn "$dest/current/bin/codex" "$HOME/.local/bin/codex"
+  )
   ```
 
 - **Verify:** `codex --version` reports the release named in `installers.tsv`.
@@ -1211,7 +1336,8 @@ interactive `claude` or `codex`.
     to upload the public key). Do not run `gh auth setup-git`: it writes
     `git config --global`, which goes through the stowed `~/.gitconfig` into
     `common/git/.gitconfig`. Hosts that need gh as a credential helper already
-    name it in their `.gitconfig_local` (lab-ubuntu, marlowe).
+    name it by full path in their `.gitconfig_local`: lab-ubuntu the Linuxbrew
+    gh, marlowe the login env's.
   - Claude Code: run `claude` once in a terminal, or `claude auth login`.
   - Codex: `codex login` (`codex login --device-auth` on a headless host).
   - Kerberos for Sherlock and Marlowe: `kinit <SUNetID>@stanford.edu` on the
@@ -1493,8 +1619,8 @@ quick start runs them as one sequence.
   yourself and run
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1 brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade`
   (then stow needs that brew's directory as its H7-stow prefix). Then, with
-  `clone_pinned` and `fetch_pinned` from
-  [Pinned artifacts by hand](#pinned-artifacts-by-hand): `clone_pinned ID` for
+  `clone_listed` and `fetch_pinned` from
+  [Downloads and clones by hand](#downloads-and-clones-by-hand): `clone_listed ID` for
   every `git-clones.tsv` row, oh-my-zsh first (S3-clones); the by-hand recipe of
   S3-bat-theme; `mkdir -p ~/.vim/undo ~/.vim/tmp` (S3-dirs); `./setup-sync.sh`
   (S4-setup-sync). Finally `./stow-all.sh` with no host.
@@ -1580,11 +1706,32 @@ S3-clones refuses, setup-host prints this recipe with your paths as an
 X-recovery block, with the clone settings of
 [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones) set before the fetch.
 
-**Dirty clone.** S3-clones refuses a theme or plugin clone with local changes.
-Look at them (`git -C DEST status`, `git -C DEST diff`), move the directory aside
-if you want to keep them (`mv DEST DEST.local`), then
-`./setup-host.sh --host H --only S3-clones`. A dirty `~/dotfiles` checkout after
-an installer is [X-rc-protection](#x-rc-protection-rc-file-protection).
+**Clone destination that is not a git checkout.** S3-clones fails with
+"DEST exists and is not a git checkout": a plugin or theme directory that was
+copied by hand, or left by another plugin manager. Look at it, move it aside
+(`mv DEST DEST.pre-dotfiles`), then `./setup-host.sh --host H --only S3-clones`
+clones it afresh. An existing clone, dirty or not, is never touched; to
+update one, see [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones). A
+dirty `~/dotfiles` checkout after an installer is
+[X-rc-protection](#x-rc-protection-rc-file-protection).
+
+**Conflicting Homebrew formula or cask.** S2-brew-bundle is `human` with "the
+installed tlrc formula conflicts with tldr (cli.Brewfile)" (or, on macOS, for
+example "the installed wezterm@nightly cask conflicts with wezterm
+(desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tldr
+because conflicting formulae are installed" or a cask conflict. Check with
+`ls "$(brew --prefix)/Cellar" "$(brew --prefix)/Caskroom"`, then uninstall the
+other package by the path setup-host printed, for example
+`/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc` (tealdeer the
+same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
+`./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
+takes its place. If brew refuses because another formula depends on it, keep
+it and leave its tier out instead
+([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). A failure that names a
+conflict no Brewfile declares is the same fix by hand; add its
+`# conflicts:` line to the Brewfile as well. On a Linuxbrew prefix owned by
+another account (a shared lab install), only that account can uninstall or
+bundle; ask its owner.
 
 **Digest mismatch.** setup-host deletes the `.part` file and fails the step with
 the expected and actual sha256. Never edit the digest just to make it pass.
@@ -1612,6 +1759,77 @@ your stowed `~/.zshrc` link to `~/.zshrc.pre-oh-my-zsh`, wrote its template
 it is the link into `~/dotfiles`; then `./stow-all.sh H`, with the
 [H7-stow](#h7-stow-stow-the-dotfiles) prefix when `stow` is not on PATH, and, if
 needed, [H7-chsh](#h7-chsh-login-shell).
+
+## Known limitations
+
+Accepted gaps, each low in impact; none of them weakens a step's
+fail-closed behavior beyond what is stated.
+
+- **rc-pollution guard granularity.** The guard
+  ([X-rc-protection](#x-rc-protection-rc-file-protection)) fingerprints each
+  top-level `git status --porcelain` entry of the checkout: a file's content,
+  a link's target. A submodule is one entry and a nested repository that git
+  does not track is one `?? dir/` entry, so an installer that edits a file
+  inside the PyMOL submodule after it is already dirty, or inside a nested
+  untracked repository, goes unnoticed. Nothing the bootstrap runs writes
+  there.
+- **Execution policy set only through `EnableScripts`.**
+  [HW-execution-policy](#hw-execution-policy-execution-policy) reads the
+  `ExecutionPolicy` values (the policy keys, then CurrentUser and Windows
+  PowerShell 5.1's key). A "Turn on Script Execution: Disabled" policy stored
+  only as `EnableScripts=0` is not detected, so its non-blocking judgment
+  block may not be printed; `Get-ExecutionPolicy -List` still shows it.
+- **lab-ubuntu zsh overlay outside an interactive shell.** Sourcing
+  `lab-ubuntu/zsh/.config/zsh/.zshrc` in a non-interactive `zsh` with Linuxbrew
+  and the `/apps/miniconda3` mamba hook present prints
+  `compinit: initialization aborted` and `command not found: compdef`. This
+  predates the bootstrap; interactive shells are fine, and
+  `tests/host-overlays.sh` points the conda and mamba prefixes at missing
+  paths to test only the Linuxbrew guard.
+- **A conflicting formula is judged by its keg.** S2-brew-bundle stops when
+  `Cellar/<formula>` of a declared conflict exists, linked or not (a cask, when
+  its `Caskroom/<token>` exists). Homebrew itself refuses only a linked
+  formula, so an unlinked keg stops the step although `brew bundle` would
+  succeed; uninstalling it is still the fix.
+- **Only declared conflicts are judged.** The `# conflicts:` lines record the
+  `conflicts_with` data that formulae.brew.sh listed for each Brewfile entry
+  when its Brewfile was pinned (the `# pinned` date at its top). A conflict
+  Homebrew adds later fails `brew bundle` with "brew bundle failed for <file>"
+  until a Brewfile line names it ([X-recovery](#x-recovery-recovery-recipes)).
+- **A Linuxbrew prefix owned by another account.** H1-linuxbrew is `done` once
+  `brew` runs, whoever owns `/home/linuxbrew/.linuxbrew`. On a shared lab
+  install owned by another user, `brew bundle` (and `brew uninstall`) as you
+  fail inside brew; only that account, or a prefix of your own, can install.
+
+## Known follow-ups
+
+Deferred on purpose; each is a separate change.
+
+- **StyLua hook without Rust.** `.pre-commit-config.yaml` uses the StyLua
+  hook id `stylua`, which builds StyLua with cargo, so a contributor needs
+  Rust; switch to the `stylua-github` id, which downloads the release binary.
+- **Windows ssh RemoteCommand.** `win/ssh/.ssh/config.d/legacy.conf` still
+  runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
+  the login-env form the other overlays use
+  (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
+- **Hardcoded conda and mamba prefixes.** The overlays' `conda initialize`
+  blocks and `MAMBA_*` exports name one machine's prefix (for example
+  `/Users/<name>/miniconda3` in `mac/`); re-aim them at `$HOME`, as AGENTS.md
+  asks of machine-specific paths ([X-host-tools](#x-host-tools-host-specific-tools)).
+- **`win/wsl` is not a `$HOME`-shaped package.** `stow-all.ps1` links
+  `wsl.conf` and `mount.vbs` into `%USERPROFILE%`, where neither does
+  anything: `wsl.conf` only works as `/etc/wsl.conf` inside the distribution,
+  and its `mount-data.sh` is not shipped
+  ([HW-wsl](#hw-wsl-wsl-distribution)). Split it into what belongs in the
+  Windows home (`.wslconfig`) and a documented by-hand copy.
+- **Doctor quota note on hpc.** The doctor does not mention the home quota
+  (`sh_quota` on Sherlock) that a login env and package cache count against;
+  [S2-login-env](#s2-login-env-hpc-login-environment) documents it instead.
+- **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows CI
+  jobs have not run this bootstrap yet, and the PowerShell twins have run only
+  under PowerShell 7 on Linux. The fresh-machine
+  [acceptance checklist](#acceptance-checklist) below is pending; docker, VM
+  and CI end-to-end runs are being built separately.
 
 ## Acceptance checklist
 

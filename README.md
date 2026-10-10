@@ -91,7 +91,7 @@ and install what the configs assume before step 2 (`<host>` is `mac`,
 ```bash
 ./doctor.sh --host <host>               # read-only, offline: what is missing or outdated
 ./setup-host.sh --host <host> --check   # the plan; writes nothing
-./setup-host.sh --host <host>           # pinned installs without sudo; prints HUMAN blocks for the rest
+./setup-host.sh --host <host>           # installs without sudo; prints HUMAN blocks for the rest
 ```
 
 `setup-host.sh` exits 3 while work remains: run the HUMAN blocks it prints and
@@ -107,12 +107,15 @@ to replace a regular file such as the `~/.bashrc` a fresh Ubuntu home gets
 from `/etc/skel`; the H7-stow block lists each such file with an `mv -n` line
 that moves it aside (never `stow --adopt`, which would overwrite the tracked
 copy).
-`setup-host.sh` clones oh-my-zsh and never runs sudo, `chsh` or stow itself. On native
-Windows the twins are `.\doctor.ps1` and `.\setup-host.ps1`. Other Linux
-distributions have no overlay: install the tools yourself and stow `common/`
-only with `./stow-all.sh` (no host). [docs/bootstrap.md](docs/bootstrap.md) is
-the full playbook: per-platform quick starts, every step and the recovery
-recipes.
+`setup-host.sh` clones oh-my-zsh and never runs sudo, `chsh` or stow itself.
+Its downloads are sha256-pinned; the theme and plugin clones track their
+upstream default branch, and setup-host never touches an existing clone (see
+[S3-clones](docs/bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones) for
+updating them). On native Windows the twins are `.\doctor.ps1` and
+`.\setup-host.ps1`. Other Linux distributions have no overlay: install the
+tools yourself and stow `common/` only with `./stow-all.sh` (no host).
+[docs/bootstrap.md](docs/bootstrap.md) is the full playbook: per-platform
+quick starts, every step and the recovery recipes.
 
 **1.** Clone with submodules:
 
@@ -225,7 +228,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
 | **Submodule** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) — auto-updated daily by GitHub Actions |
-| **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (pinned, no sudo), then the first stow |
+| **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
 | **CI** | `shellcheck` · `shfmt` · `stylua` · YAML/JSON/TOML hygiene |
@@ -288,7 +291,7 @@ dotfiles/
 ├── .gitattributes                LF everywhere (Windows clones set autocrlf)
 ├── .pre-commit-config.yaml       shellcheck · shfmt · stylua · hygiene
 ├── .stowrc                       Stow defaults (--target=~, ignores)
-├── config/bootstrap/             pinned day-zero manifests (tools, Brewfiles, apt, clones, installers)
+├── config/bootstrap/             day-zero manifests (tools, Brewfiles, apt, clones, pinned installers)
 ├── docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
 ├── lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
 ├── doctor.sh                     read-only day-zero check (POSIX)
@@ -386,7 +389,7 @@ The installer stores the selected host and last successfully applied commit in l
 | `DOTFILES_AUTO_UPDATE` | `1` | `0` disables the entire login update hook |
 | `DOTFILES_AUTO_STOW` | `1` | `0` keeps pull enabled but skips automatic stow |
 | `DOTFILES_DIR` | `~/dotfiles` | repository path |
-| `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only |
+| `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only, like a remembered common-only setup (on Unix `./doctor.sh` then checks the detected platform without an overlay and `./setup-host.sh` asks for `--host`; `doctor.ps1` and `setup-host.ps1` always check `win`) |
 | `DOTFILES_STOW_WITHOUT_OH_MY_ZSH` | `0` | `1` lets `./stow-all.sh` stow the zsh package before `~/.oh-my-zsh/oh-my-zsh.sh` exists |
 | `DOTFILES_COLOR` | `auto` | `always` forces ANSI color; `never` disables it |
 | `NO_COLOR` | unset | any nonempty value disables color, including `0` |

@@ -2,6 +2,7 @@
 # Host, profile and platform detection for doctor.sh and setup-host.sh.
 # Sourced only; defines functions and changes no shell options. Bash 3.2
 # compatible and `set -u` safe; nothing here splits words by the caller's IFS.
+# No here-documents (see manifest.sh): text reaches awk through a pipe.
 # Test overrides: BOOTSTRAP_UNAME_S, BOOTSTRAP_UNAME_M, BOOTSTRAP_OS_RELEASE,
 # BOOTSTRAP_PROC_VERSION, BOOTSTRAP_BREW_CANDIDATES.
 
@@ -124,9 +125,9 @@ bootstrap_glibc_version() {
         *[Gg][Ll][Ii][Bb][Cc]* | *'GNU libc'*) ;;
         *) return 0 ;;
     esac
-    awk 'match($0, /[0-9]+\.[0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<EOF
-$first
-EOF
+    # awk reads to the end, so the writer never dies of SIGPIPE under pipefail.
+    printf '%s\n' "$first" |
+        awk '!found && match($0, /[0-9]+\.[0-9]+/) { print substr($0, RSTART, RLENGTH); found = 1 }'
 }
 
 # bootstrap_brew_bin: the brew executable this process should use: brew on
@@ -159,17 +160,18 @@ bootstrap_brew_bin() {
     return 1
 }
 
-# bootstrap_resolve_host ROOT: DOTFILES_HOST when set (it must be a known
-# host), else the host that ./stow-all.sh recorded for this home and kernel in
-# $(git rev-parse --git-path dotfiles-sync-unix): lines HOME, uname -s, HOST,
-# APPLIED_HEAD. Returns 1 when unknown; never guesses an overlay.
-bootstrap_resolve_host() {
-    local root=$1 state home_line os_line host_line
-    if [ -n "${DOTFILES_HOST:-}" ]; then
-        bootstrap_profile_for_host "$DOTFILES_HOST" >/dev/null || return 1
-        printf '%s\n' "$DOTFILES_HOST"
-        return 0
-    fi
+# bootstrap_host_env_empty: 0 when DOTFILES_HOST is set but empty, which the
+# login updater (scripts/dotfiles-update.sh) reads as common only: no overlay.
+bootstrap_host_env_empty() {
+    [ "${DOTFILES_HOST+set}" = set ] && [ -z "$DOTFILES_HOST" ]
+}
+
+# bootstrap_state_file ROOT: the readable file in which ./stow-all.sh records
+# its install for the checkout ROOT, $(git rev-parse --git-path
+# dotfiles-sync-unix), with lines HOME, uname -s, HOST (empty for common
+# only) and APPLIED_HEAD. Returns 1 when there is none.
+bootstrap_state_file() {
+    local root=$1 state
     state=$(git -C "$root" rev-parse --git-path dotfiles-sync-unix 2>/dev/null) || return 1
     [ -n "$state" ] || return 1
     case $state in
@@ -177,6 +179,42 @@ bootstrap_resolve_host() {
         *) state=$root/$state ;;
     esac
     [ -f "$state" ] && [ -r "$state" ] || return 1
+    printf '%s\n' "$state"
+}
+
+# bootstrap_recorded_common_only ROOT: 0 when ./stow-all.sh recorded a
+# common-only install (an empty HOST line) for this home and kernel, which
+# the login updater reads as common only, as it does a set but empty
+# DOTFILES_HOST. Like the updater, it needs all four lines.
+bootstrap_recorded_common_only() {
+    local state home_line os_line host_line
+    state=$(bootstrap_state_file "$1") || return 1
+    {
+        IFS= read -r home_line && IFS= read -r os_line &&
+            IFS= read -r host_line && IFS= read -r _
+    } <"$state" || return 1
+    [ -n "${HOME:-}" ] && [ "$home_line" = "$HOME" ] || return 1
+    [ "$os_line" = "$(bootstrap_os)" ] || return 1
+    [ -z "$host_line" ]
+}
+
+# bootstrap_resolve_host ROOT: DOTFILES_HOST when set (it must be a known
+# host), else the host that ./stow-all.sh recorded for this home and kernel
+# (bootstrap_state_file). Returns 1 when unknown, and for common only: a set
+# but empty DOTFILES_HOST (the recorded host does not apply) or a recorded
+# common-only install (bootstrap_recorded_common_only tells that case apart).
+# Never guesses an overlay.
+bootstrap_resolve_host() {
+    local root=$1 state home_line os_line host_line
+    if bootstrap_host_env_empty; then
+        return 1
+    fi
+    if [ -n "${DOTFILES_HOST:-}" ]; then
+        bootstrap_profile_for_host "$DOTFILES_HOST" >/dev/null || return 1
+        printf '%s\n' "$DOTFILES_HOST"
+        return 0
+    fi
+    state=$(bootstrap_state_file "$root") || return 1
     home_line='' os_line='' host_line=''
     {
         IFS= read -r home_line && IFS= read -r os_line &&

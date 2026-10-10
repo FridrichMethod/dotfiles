@@ -20,6 +20,20 @@ integration check, installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
 
+Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
+knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
+`DOTFILES_AUTO_STOW`, `DOTFILES_HOST`, `DOTFILES_DIR`, `DOTFILES_COLOR`,
+`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, the `AWESOME_SKILLS_*` controls and both
+session markers. The bootstrap playbook tells people to export
+`DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0` while provisioning, and a
+test or `pre-commit run` started from such a shell must behave as in CI; each
+case sets the knobs it exercises. `tests/test-entrypoints.sh` checks that every
+entry point carries the same list, that it covers every `DOTFILES_*` and
+`AWESOME_SKILLS_*` name in a tracked file outside `tests/`, `docs/`,
+`.github/` and Markdown, whatever reads it (shell, PowerShell or Python;
+`DOTFILES_SYNC_PYTHON` excepted, since `tests/run.sh` provisions it), and that
+a suite passes under those exports.
+
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
 runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
 PowerShell behavior tests directly and fails if any assigned suite fails; it
@@ -53,6 +67,12 @@ three levels deep with a fake `brew shellenv` and conda prepends: PATH, FPATH
 and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
 (activated env or brew first) is kept, a conda-style activate and deactivate
 keeps an entry already on PATH, and nothing assigns PATH after oh-my-zsh.
+It also evaluates the fzf-tab tldr previews of `custom/fzf-tab.zsh`, as
+fzf-tab does, with a fake C client (Homebrew's `tldr`, which takes only `-C`)
+and a fake tlrc (only `--color always`): both must show the colored page, a
+client's missing-page error must never reach the preview, and the C client
+must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
+fetches a missing page from GitHub.
 
 The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
 unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs
@@ -64,7 +84,17 @@ against fixture checkouts, homes and Homebrew prefixes with stubbed tools and
 local clone remotes. Network commands outside `--online` fail the doctor
 suite; `sudo`, `chsh`, `stow`, `apt-get`, `conda` and `git lfs` are tripwires in
 the installer suite; find snapshots prove that the doctor and
-`setup-host.sh --check` write nothing.
+`setup-host.sh --check` write nothing. `tests/doctor.sh` also runs the real
+`./doctor.sh` with the real manifest against the test machine's own tools
+(`--platform debian` and `--platform other` with `--tsv`, an empty temporary
+`HOME`): every line must keep the TSV contract, the exit code must be 0 or 1,
+and the home, `TMPDIR` and checkout must stay unchanged, so a runner whose
+tools print unexpected versions or write state on `--version` fails CI. The
+checkout scan skips `.git`, where any other git process may write meanwhile;
+the fixture cases cover the doctor's own git. An empty home cannot show
+writes that depend on state, so fixture fakes model them: gh writes its
+device id unless `GH_TELEMETRY=0`, and the tldr C client refreshes a stale
+page cache unless `TLDR_AUTO_UPDATE_DISABLED` is set.
 `tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
 against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
 Windows job runs that suite and the validator from `tests/run.ps1`. None of

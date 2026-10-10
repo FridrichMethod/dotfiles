@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# Home-file steps of setup-host.sh: S3-clones (pinned git clones),
+# Home-file steps of setup-host.sh: S3-clones (git clones of default branches),
 # S3-bat-theme and S3-dirs.
 # Checks are read-only and offline; apply functions run in steps_guarded
 # and report each failure explicitly. Sourced only (after steps.sh and
@@ -8,62 +8,60 @@
 
 # --- S3-clones (unix) ------------------------------------------------------
 
-# steps_repo_key URL: host/owner/repo, lower case, for comparing remotes.
-steps_repo_key() {
-    local url=${1%/}
-    url=${url%.git}
-    case $url in
-        https://* | http://* | ssh://* | git://* | file://*) url=${url#*://} ;;
-        *@*:*)
-            url=${url#*@}
-            url=${url%%:*}/${url#*:}
-            ;;
-    esac
-    url=${url#*@}
-    printf '%s\n' "$url" | tr '[:upper:]' '[:lower:]'
-}
+# Clones track their upstream default branch (the ref column names it): a
+# missing one is cloned shallowly from that branch, and an existing git
+# checkout is never fetched, moved or checked for local changes, the way
+# oh-my-zsh's own auto-update owns ~/.oh-my-zsh. Updating them is a person's
+# call (docs/bootstrap.md S3-clones).
 
-# steps_clone_state ID DEST URL REF: done, clone, repin, recovery (an
-# oh-my-zsh dir without oh-my-zsh.sh), dirty, origin, or foreign.
+# steps_clone_state ID DEST: clone (missing), done (an existing checkout, left
+# as it is), recovery (an oh-my-zsh dir without oh-my-zsh.sh) or foreign (it
+# exists but is not a git checkout).
 steps_clone_state() {
-    local id=$1 dest=$2 url=$3 ref=$4 origin status head
-    if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+    if [ ! -e "$2" ] && [ ! -L "$2" ]; then
         echo clone
         return 0
     fi
-    if [ "$id" = oh-my-zsh ]; then
-        if [ -f "$dest/oh-my-zsh.sh" ]; then echo 'done'; else echo recovery; fi
+    if [ "$1" = oh-my-zsh ]; then
+        if [ -f "$2/oh-my-zsh.sh" ]; then echo 'done'; else echo recovery; fi
         return 0
     fi
-    if [ ! -d "$dest" ] || { [ ! -d "$dest/.git" ] && [ ! -f "$dest/.git" ]; }; then
+    if [ -d "$2" ] && { [ -d "$2/.git" ] || [ -f "$2/.git" ]; }; then
+        echo 'done'
+    else
         echo foreign
+    fi
+}
+
+# steps_clone_head DEST: "BRANCH@COMMIT" of the checkout DEST, for the plan
+# line only ("detached" for a detached HEAD, "?" when git cannot tell).
+# Read-only and offline.
+steps_clone_head() {
+    local branch commit
+    if [ ! -d "$1/.git" ] && [ ! -f "$1/.git" ]; then
+        printf '%s\n' 'not a git checkout'
         return 0
     fi
-    origin=$(git -C "$dest" config --get remote.origin.url 2>/dev/null </dev/null) || origin=
-    if [ "$(steps_repo_key "$origin")" != "$(steps_repo_key "$url")" ]; then
-        echo origin
-        return 0
-    fi
-    if ! status=$(git --no-optional-locks -C "$dest" status --porcelain --untracked-files=no 2>/dev/null </dev/null) ||
-        [ -n "$status" ]; then
-        echo dirty
-        return 0
-    fi
-    head=$(git -C "$dest" rev-parse HEAD 2>/dev/null </dev/null) || head=
-    if [ "$head" = "$ref" ]; then echo 'done'; else echo repin; fi
+    # symbolic-ref -q exits 1 for a detached HEAD, 128 for an error.
+    branch=$(git -C "$1" symbolic-ref -q --short HEAD 2>/dev/null </dev/null) || {
+        if [ "$?" = 1 ]; then branch=detached; else branch='?'; fi
+    }
+    commit=$(git -C "$1" rev-parse -q --verify --short HEAD 2>/dev/null </dev/null) || commit='?'
+    printf '%s@%s\n' "${branch:-?}" "${commit:-?}"
 }
 
 # steps_clone_rows: git-clones.tsv rows of this host with expanded dests,
 # oh-my-zsh first (every other clone lands under its custom/ dir).
 steps_clone_rows() {
-    local rows row id dest rest pass
+    local rows lines row id dest rest pass
     rows=$(bootstrap_clone_rows "$STEPS_HOST") || return 1
     for pass in first rest; do
-        while IFS= read -r row; do
+        lines=$rows$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            row=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
             [ -n "$row" ] || continue
-            IFS="$BOOTSTRAP_TAB" read -r id dest rest <<EOF
-$row
-EOF
+            bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest rest
             case $pass:$id in
                 first:oh-my-zsh | rest:*) ;;
                 *) continue ;;
@@ -71,14 +69,12 @@ EOF
             [ "$pass:$id" != rest:oh-my-zsh ] || continue
             dest=$(bootstrap_expand_path "$dest") || return 1
             printf '%s\t%s\t%s\n' "$id" "$dest" "$rest"
-        done <<EOF
-$rows
-EOF
+        done
     done
 }
 
 step_S3_clones_check() {
-    local rows id dest url ref state pinned=0 todo='' bad=''
+    local rows lines row id dest url ref present='' count=0 todo='' bad=''
     STEPS_OMZ_RECOVERY=
     if ! rows=$(steps_clone_rows); then
         STEP_DETAIL='cannot read config/bootstrap/git-clones.tsv'
@@ -88,43 +84,50 @@ step_S3_clones_check() {
         STEP_DETAIL="no clones for $STEPS_HOST"
         return 2
     fi
-    while IFS="$BOOTSTRAP_TAB" read -r id dest url ref _; do
+    lines=$rows$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest url ref _
         [ -n "$id" ] || continue
-        state=$(steps_clone_state "$id" "$dest" "$url" "$ref")
-        case $state in
-            done) pinned=$((pinned + 1)) ;;
+        case $(steps_clone_state "$id" "$dest") in
+            done)
+                count=$((count + 1))
+                present="$present${present:+, }$id $(steps_clone_head "$dest")"
+                ;;
             recovery) STEPS_OMZ_RECOVERY=$dest ;;
-            clone | repin) todo="$todo${todo:+ }$id ($state)" ;;
-            *) bad="$bad${bad:+ }$id ($state)" ;;
+            clone) todo="$todo${todo:+ }$id ($ref)" ;;
+            *) bad="$bad${bad:+ }$id" ;;
         esac
-    done <<EOF
-$rows
-EOF
+    done
     if [ -n "$STEPS_OMZ_RECOVERY" ]; then
         STEP_DETAIL="$STEPS_OMZ_RECOVERY exists without oh-my-zsh.sh (stow ran before the clone); recover it by hand"
         return 3
     fi
     if [ -z "$todo$bad" ]; then
-        STEP_DETAIL="$pinned clones at their pins"
+        STEP_DETAIL="$count clones present, left as they are: $present"
         return 0
     fi
-    STEP_DETAIL="${todo:+to clone or re-pin: $todo}${todo:+${bad:+; }}${bad:+apply fails for: $bad}"
+    STEP_DETAIL="${todo:+to clone: $todo}${todo:+${bad:+; }}${bad:+apply fails, not a git checkout: $bad}"
+    STEP_DETAIL="$STEP_DETAIL${present:+; present, left as they are: $present}"
     return 1
 }
 
 # steps_omz_recovery_block DEST: put an oh-my-zsh checkout under the dir that
 # ./stow-all.sh created first; the stowed custom/ files stay untracked there.
 steps_omz_recovery_block() {
-    local dest url='' q key row_url
+    local dest url='' q lines row key row_url
     dest=$1
-    while IFS="$BOOTSTRAP_TAB" read -r key _ row_url _ _; do
+    lines=$(bootstrap_clone_rows "$STEPS_HOST")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" key _ row_url _ _
         if [ "$key" = oh-my-zsh ]; then
             url=$row_url
             break
         fi
-    done <<EOF
-$(bootstrap_clone_rows "$STEPS_HOST")
-EOF
+    done
     [ -n "$url" ] || url=https://github.com/ohmyzsh/ohmyzsh.git
     q=$(steps_quote "$dest")
     steps_block_begin X-recovery judgment
@@ -146,7 +149,7 @@ step_S3_clones_plan() {
     if [ -n "${STEPS_OMZ_RECOVERY:-}" ]; then
         steps_omz_recovery_block "$STEPS_OMZ_RECOVERY"
     else
-        printf 'pinned git clones from config/bootstrap/git-clones.tsv: %s\n' "$STEP_DETAIL"
+        printf 'shallow clones of the branches in config/bootstrap/git-clones.tsv: %s\n' "$STEP_DETAIL"
     fi
 }
 
@@ -155,36 +158,15 @@ step_S3_clones_manual() {
     steps_omz_recovery_block "$(bootstrap_expand_path "\$HOME/.oh-my-zsh")"
 }
 
-# steps_git_pin DIR URL REF MODE: MODE init makes DIR a new repository with
-# origin URL; then check out REF detached, fetching it shallowly unless the
-# commit is already present.
-steps_git_pin() {
-    local dir=$1 url=$2 ref=$3 target=FETCH_HEAD head
-    if [ "$4" = init ]; then
-        git -c init.defaultBranch=main init -q "$dir" </dev/null || return 1
-        git -C "$dir" remote add origin "$url" </dev/null || return 1
-    fi
-    if [ "$4" = repin ] && git -C "$dir" cat-file -e "$ref^{commit}" 2>/dev/null </dev/null; then
-        target=$ref
-    else
-        git -C "$dir" fetch -q --depth=1 origin "$ref" </dev/null || return 1
-    fi
-    git -c advice.detachedHead=false -C "$dir" checkout -q --detach "$target" </dev/null || return 1
-    head=$(git -C "$dir" rev-parse HEAD </dev/null) || return 1
-    if [ "$head" != "$ref" ]; then
-        dotfiles_log error "$dir is at $head, not the pinned $ref"
-        return 1
-    fi
-}
-
-# steps_clone_apply ID DEST URL REF: bring one clone to its pin.
+# steps_clone_apply ID DEST URL REF: clone a missing DEST from branch REF;
+# leave an existing checkout alone. git clone removes what it created when it
+# fails, so a failed clone leaves no partial DEST behind.
 steps_clone_apply() {
-    local id=$1 dest=$2 url=$3 ref=$4 parent tmp
-    case $(steps_clone_state "$id" "$dest" "$url" "$ref") in
+    local id=$1 dest=$2 url=$3 ref=$4
+    case $(steps_clone_state "$id" "$dest") in
         done) return 0 ;;
         clone)
-            parent=$(dirname "$dest")
-            mkdir -p "$parent" || return 1
+            mkdir -p "$(dirname "$dest")" || return 1
             if [ "$id" = oh-my-zsh ]; then
                 # As the official installer clones it, so its self-update works.
                 git clone -q --depth=1 --branch "$ref" -c core.eol=lf -c core.autocrlf=false \
@@ -193,37 +175,27 @@ steps_clone_apply() {
                     -c "oh-my-zsh.branch=$ref" "$url" "$dest" </dev/null
                 return
             fi
-            tmp=$(steps_new_dir "$parent" "setup-host-$id") || return 1
-            if steps_git_pin "$tmp" "$url" "$ref" init && mv "$tmp" "$dest"; then
-                return 0
-            fi
-            rm -rf "$tmp"
-            return 1
-            ;;
-        repin) steps_git_pin "$dest" "$url" "$ref" repin ;;
-        dirty)
-            dotfiles_log error "$dest has local changes; commit, stash or move it aside, then rerun"
-            return 1
-            ;;
-        origin)
-            dotfiles_log error "$dest is a clone of another remote, not $url; move it aside"
-            return 1
+            git clone -q --depth=1 --branch "$ref" "$url" "$dest" </dev/null
             ;;
         recovery)
             dotfiles_log error "$dest exists without oh-my-zsh.sh; follow the X-recovery block"
             return 1
             ;;
         *)
-            dotfiles_log error "$dest exists and is not a git checkout; move it aside"
+            dotfiles_log error "$dest exists and is not a git checkout; move it aside, then rerun"
             return 1
             ;;
     esac
 }
 
 step_S3_clones_apply() {
-    local rows id dest url ref failed=''
+    local rows lines row id dest url ref failed=''
     rows=$(steps_clone_rows) || return 1
-    while IFS="$BOOTSTRAP_TAB" read -r id dest url ref _; do
+    lines=$rows$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest url ref _
         [ -n "$id" ] || continue
         if ! steps_clone_apply "$id" "$dest" "$url" "$ref"; then
             if [ "$id" = oh-my-zsh ]; then
@@ -233,11 +205,9 @@ step_S3_clones_apply() {
             fi
             failed="$failed${failed:+ }$id"
         fi
-    done <<EOF
-$rows
-EOF
+    done
     if [ -n "$failed" ]; then
-        dotfiles_log error "clones not at their pins: $failed"
+        dotfiles_log error "S3-clones failed for: $failed"
         return 1
     fi
 }
@@ -263,7 +233,7 @@ steps_bat_theme_ok() {
     name=${STEPS_DEST##*/}
     name=${name%.tmTheme}
     themes=$(bat --list-themes --color=never 2>/dev/null </dev/null) || themes=
-    if steps_text_has -F "$name" "$themes"; then
+    if bootstrap_text_has -F "$name" "$themes"; then
         STEP_DETAIL="theme pinned and known to bat"
         return 0
     fi

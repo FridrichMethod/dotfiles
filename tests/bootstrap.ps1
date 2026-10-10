@@ -529,8 +529,23 @@ try {
         [IO.File]::WriteAllText((Join-Path $bin 'both.exe'), '')
         [IO.File]::WriteAllText((Join-Path $bin 'both.ps1'), '')
         [IO.File]::WriteAllText((Join-Path $bin 'batch.cmd'), '')
+        # Like recent real gh releases, this gh writes a telemetry device id on
+        # every command, --version included, unless GH_TELEMETRY=0.
+        $deviceId = Join-Path $root 'device-id'
+        New-Shim $bin 'gh' @'
+if ($env:GH_TELEMETRY -ne '0') { [IO.File]::WriteAllText($env:BOOTSTRAP_TEST_DEVICE_ID, 'id') }
+Write-Output 'gh version 2.81.0 (2025-09-01)'
+'@
         Use-Environment @{ PATH = $bin; PSModulePath = $modules; WINDIR = $windir; LOCALAPPDATA = $local
-            BOOTSTRAP_TEST_EVENTS = (Join-Path $root 'events.log'); BOOTSTRAP_TEST_FLAG = 'set' } {
+            BOOTSTRAP_TEST_EVENTS = (Join-Path $root 'events.log'); BOOTSTRAP_TEST_FLAG = 'set'
+            BOOTSTRAP_TEST_DEVICE_ID = $deviceId; GH_TELEMETRY = 'caller'; GH_NO_UPDATE_NOTIFIER = 'caller' } {
+            Assert-Equal (Get-BootstrapToolVersion -Path (Join-Path $bin 'gh.ps1') -Flag '--version') '2.81.0' 'gh version'
+            Assert-True (-not (Test-Path -LiteralPath $deviceId)) 'gh --version wrote its telemetry device id'
+            Assert-Equal $env:GH_TELEMETRY 'caller' 'the caller GH_TELEMETRY was not restored'
+            Assert-Equal $env:GH_NO_UPDATE_NOTIFIER 'caller' 'the caller GH_NO_UPDATE_NOTIFIER was not restored'
+            Remove-Item -LiteralPath Env:GH_TELEMETRY
+            [void](Get-BootstrapToolVersion -Path (Join-Path $bin 'gh.ps1') -Flag '--version')
+            Assert-True (-not (Test-Path -LiteralPath Env:GH_TELEMETRY)) 'an unset GH_TELEMETRY was left set'
             Assert-Equal (Find-BootstrapCommand both) (Join-Path $bin 'both.exe') '.exe before .ps1'
             Assert-Equal (Find-BootstrapCommand batch) (Join-Path $bin 'batch.cmd') '.cmd'
             Assert-True ($null -eq (Find-BootstrapCommand missing)) 'missing command'

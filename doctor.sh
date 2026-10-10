@@ -11,7 +11,10 @@ set -euo pipefail
 # offline: it installs nothing, writes nothing and uses no network unless
 # --online (auth status probes) or --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
-# for this home; it is never guessed. The win host is checked by doctor.ps1.
+# for this home; it is never guessed. Common only, as the login updater reads
+# it (a set but empty DOTFILES_HOST, or a common-only install ./stow-all.sh
+# recorded), means the detected platform, as --platform. The win host is
+# checked by doctor.ps1.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
 # row or a structural check); 2 usage error, invalid manifest, unknown host
 # or win.
@@ -45,46 +48,59 @@ done
 # shellcheck source=lib/bootstrap/checks.sh
 . "$REPO_ROOT/lib/bootstrap/checks.sh"
 
+# No here-documents or here-strings here or in the libraries: Bash 3.2 backs
+# each one with a temporary file, and the doctor writes nothing (see
+# lib/bootstrap/manifest.sh). Lines are split with parameter expansion,
+# fields with bootstrap_split.
+
 # git never refreshes the index or takes other optional locks, in this
 # process or in a git that a probed tool starts with this environment. Tools
 # whose version flag writes, brew among them, are never run (see
-# lib/bootstrap/checks.sh).
-export GIT_OPTIONAL_LOCKS=0
+# lib/bootstrap/checks.sh). Recent gh releases write ~/.local/state/gh/device-id
+# for telemetry on any command, `gh --version` included, unless GH_TELEMETRY=0;
+# GH_NO_UPDATE_NOTIFIER=1 keeps gh's release check (network, state file) off.
+# The tldr C client (Homebrew's tldr formula) checks the age of its page
+# cache before it handles any flag but --update, `--version` included, and
+# once ~/.tldrc/date is two weeks old downloads the tldr-pages archive into
+# ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set; tlrc and tealdeer ignore it.
+export GIT_OPTIONAL_LOCKS=0 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1
 
 usage() {
-    cat <<'EOF'
-Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [options]
-
-Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv
-and of the structural setup (locale, venv-sync, submodule, stow-links,
-path-order, rc-pollution, omz-order, nvm-homebrew).
-
-Host selection (default: DOTFILES_HOST, else the host ./stow-all.sh recorded):
-  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe
-                      (win: pwsh -File doctor.ps1 -Host win)
-  --platform PLATFORM macos, debian, hpc or other: rows for every host only,
-                      without a host overlay
-
-Options:
-  --tier LIST|all     required tiers, comma list of core, cli, ai, desktop,
-                      contributor, host (default core,cli,ai); rows of other
-                      tiers report warn instead of missing or outdated
-  --tsv               print only TSV: status, id, tier, detail, fix
-  --quiet             print only rows that need attention, then the summary
-  --online            also run gh auth status, claude auth status and
-                      codex login status (failures are warn)
-  --smoke             also run zsh -ic true with the update hooks off and
-                      report missing plugins, commands and files (may write
-                      shell caches)
-  --list              print the applicable rows (id, tier, probe, floor, doc)
-                      without probing
-  -h, --help          show this help
-
-Statuses: ok outdated missing warn skip human. Fixes cite docs/bootstrap.md.
-Exit: 0 no required-tier row is missing, outdated or human (warn and skip
-never fail); 1 a required-tier row or structural check is missing, outdated
-or human; 2 usage error, invalid manifest, unknown host or win.
-EOF
+    printf '%s\n' \
+        'Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [options]' \
+        '' \
+        'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
+        'and of the structural setup (locale, venv-sync, submodule, stow-links,' \
+        'path-order, rc-pollution, omz-order, nvm-homebrew).' \
+        '' \
+        'Host selection (default: DOTFILES_HOST, else the host ./stow-all.sh recorded):' \
+        '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \
+        '                      (win: pwsh -File doctor.ps1 -Host win)' \
+        '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
+        '                      without a host overlay' \
+        'Common only (a set but empty DOTFILES_HOST, or a common-only install' \
+        './stow-all.sh recorded) means the detected platform without an overlay.' \
+        '' \
+        'Options:' \
+        '  --tier LIST|all     required tiers, comma list of core, cli, ai, desktop,' \
+        '                      contributor, host (default core,cli,ai); rows of other' \
+        '                      tiers report warn instead of missing or outdated' \
+        '  --tsv               print only TSV: status, id, tier, detail, fix' \
+        '  --quiet             print only rows that need attention, then the summary' \
+        '  --online            also run gh auth status, claude auth status and' \
+        '                      codex login status (failures are warn; the tools' \
+        '                      may write their own state)' \
+        '  --smoke             also run zsh -ic true with the update hooks off and' \
+        '                      report missing plugins, commands and files (may write' \
+        '                      shell caches)' \
+        '  --list              print the applicable rows (id, tier, probe, floor, doc)' \
+        '                      without probing' \
+        '  -h, --help          show this help' \
+        '' \
+        'Statuses: ok outdated missing warn skip human. Fixes cite docs/bootstrap.md.' \
+        'Exit: 0 no required-tier row is missing, outdated or human (warn and skip' \
+        'never fail); 1 a required-tier row or structural check is missing, outdated' \
+        'or human; 2 usage error, invalid manifest, unknown host or win.'
 }
 
 usage_error() {
@@ -175,6 +191,20 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 
 # Host and profile. --platform runs without an overlay: only all/unix rows.
+# A DOTFILES_HOST that is set but empty, and without DOTFILES_HOST a
+# common-only install that ./stow-all.sh recorded for this home, mean common
+# only, as the login updater reads them, so without --host or --platform the
+# doctor checks the platform it detects, without an overlay, and says so.
+if [[ -z "$PLATFORM" && $HOST_SET == 0 ]]; then
+    if bootstrap_host_env_empty; then
+        PLATFORM=$(bootstrap_detect_platform)
+        dotfiles_log warn "DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+    elif [[ -z "${DOTFILES_HOST:-}" ]] && bootstrap_find_command git >/dev/null &&
+        bootstrap_recorded_common_only "$REPO_ROOT"; then
+        PLATFORM=$(bootstrap_detect_platform)
+        dotfiles_log warn "./stow-all.sh recorded a common-only install for this home (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+    fi
+fi
 if [[ -n "$PLATFORM" ]]; then
     case $PLATFORM in
         macos | debian | hpc | other) PROFILE=$PLATFORM ;;
@@ -218,16 +248,21 @@ ALL_ROWS=$(bootstrap_rows "$TOOLS_TSV") || invalid_manifest 'unreadable'
 # core-symlinks and the structural checks (tests/test_bootstrap_manifest.py
 # RESERVED_IDS is the same list).
 RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke core-symlinks '
-while IFS=' ' read -r id _ <&3; do
+lines=$BOOTSTRAP_STRUCTURAL_CHECKS$BOOTSTRAP_NL
+while [[ -n "$lines" ]]; do
+    line=${lines%%"$BOOTSTRAP_NL"*}
+    lines=${lines#*"$BOOTSTRAP_NL"}
+    bootstrap_split ' ' "$line" id _
     [[ -z "$id" ]] || RESERVED_IDS="$RESERVED_IDS$id "
-done 3<<EOF
-$BOOTSTRAP_STRUCTURAL_CHECKS
-EOF
+done
 # Every row's doc step must have a heading in docs/bootstrap.md, the file
 # each fix cites (checked only when the file is there).
 DOC_STEPS=$(bootstrap_doc_steps "$REPO_ROOT/docs/bootstrap.md") || DOC_STEPS=
 SEEN_IDS=' '
-while IFS= read -r row <&3; do
+lines=$ALL_ROWS$BOOTSTRAP_NL
+while [[ -n "$lines" ]]; do
+    row=${lines%%"$BOOTSTRAP_NL"*}
+    lines=${lines#*"$BOOTSTRAP_NL"}
     reason=$(bootstrap_tool_row_valid "$row" "$DOC_STEPS") || invalid_manifest "$reason"
     id=${row%%"$BOOTSTRAP_TAB"*}
     case $RESERVED_IDS in
@@ -237,10 +272,11 @@ while IFS= read -r row <&3; do
         *" $id "*) invalid_manifest "duplicate id $id" ;;
     esac
     SEEN_IDS="$SEEN_IDS$id "
-done 3<<EOF
-$ALL_ROWS
-EOF
+done
 ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
+# The row fields bootstrap_split assigns by name below, declared so a lint of
+# this file alone (a pre-commit run without the libraries) sees them.
+probe='' flag='' floor='' absent='' doc=''
 
 # A fresh Homebrew's bin, ~/.local/bin (micromamba, codex, claude, kitty)
 # and, on hpc, the login env's bin stay off PATH until the stowed rc files
@@ -268,22 +304,23 @@ export PATH
 
 if [[ $LIST == 1 ]]; then
     printf 'id\ttier\tprobe\tfloor\tdoc\n'
-    while IFS= read -r row <&3; do
+    lines=$ROWS$BOOTSTRAP_NL
+    while [[ -n "$lines" ]]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [[ -n "$row" ]] || continue
-        IFS=$BOOTSTRAP_TAB read -r id tier _ probe flag floor absent doc <<EOF
-$row
-EOF
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id tier _ probe flag floor absent doc
         printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$tier" "$probe" "$floor" \
             "$(bootstrap_doc_ref "$doc" "$PROFILE")"
-    done 3<<EOF
-$ROWS
-EOF
-    while IFS=' ' read -r id tier step <&3; do
+    done
+    lines=$BOOTSTRAP_STRUCTURAL_CHECKS$BOOTSTRAP_NL
+    while [[ -n "$lines" ]]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" id tier step
         [[ -n "$id" ]] || continue
         printf '%s\t%s\tcheck\t-\t%s\n' "$id" "$tier" "$(bootstrap_doc_ref "$step" "$PROFILE")"
-    done 3<<EOF
-$BOOTSTRAP_STRUCTURAL_CHECKS
-EOF
+    done
     exit 0
 fi
 
@@ -370,24 +407,25 @@ elif [[ $QUIET == 0 ]]; then
 fi
 
 # Every row passed bootstrap_tool_row_valid (eight non-empty cells), so a
-# tab-IFS read splits it exactly.
-while IFS= read -r row <&3; do
+# tab split matches it exactly.
+lines=$ROWS$BOOTSTRAP_NL
+while [[ -n "$lines" ]]; do
+    row=${lines%%"$BOOTSTRAP_NL"*}
+    lines=${lines#*"$BOOTSTRAP_NL"}
     [[ -n "$row" ]] || continue
-    IFS=$BOOTSTRAP_TAB read -r id tier _ probe flag floor absent doc <<EOF
-$row
-EOF
+    bootstrap_split "$BOOTSTRAP_TAB" "$row" id tier _ probe flag floor absent doc
     report_result "$(bootstrap_check_tool "$probe" "$flag" "$floor" "$absent")" "$id" "$tier" "$doc"
-done 3<<EOF
-$ROWS
-EOF
+done
 
-while IFS=' ' read -r id tier step <&3; do
+lines=$BOOTSTRAP_STRUCTURAL_CHECKS$BOOTSTRAP_NL
+while [[ -n "$lines" ]]; do
+    line=${lines%%"$BOOTSTRAP_NL"*}
+    lines=${lines#*"$BOOTSTRAP_NL"}
+    bootstrap_split ' ' "$line" id tier step
     [[ -n "$id" ]] || continue
     report_result "$(bootstrap_check_structural "$id" "$REPO_ROOT" "$PROFILE" "$ORIG_PATH")" \
         "$id" "$tier" "$step"
-done 3<<EOF
-$BOOTSTRAP_STRUCTURAL_CHECKS
-EOF
+done
 
 if [[ $ONLINE == 1 ]]; then
     report_result "$(bootstrap_check_auth gh)" gh-auth cli H7-auth

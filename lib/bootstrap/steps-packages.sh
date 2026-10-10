@@ -12,25 +12,30 @@
 # does not consider satisfied, one per line. Apply mode only: brew refreshes
 # its API data over the network even with HOMEBREW_NO_AUTO_UPDATE.
 steps_brew_pending() {
-    local brew=$1 file
-    while IFS= read -r file; do
+    local brew=$1 lines file
+    lines=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         if ! "$brew" bundle check --no-upgrade --file "$file" >/dev/null 2>&1 </dev/null; then
             printf '%s\n' "$file"
         fi
-    done <<EOF
-$(bootstrap_brewfiles "$STEPS_TIERS")
-EOF
+    done
 }
 
 # steps_brewfile_missing PREFIX FILE: the brew and cask entries of FILE with
 # no opt/ link or Caskroom/ dir under PREFIX, space-separated. A read-only,
 # offline estimate for --check (Homebrew links opt/ for aliases too).
 steps_brewfile_missing() {
-    local prefix=$1 entries kind name rest missing=''
+    local prefix=$1 entries lines line kind name rest missing=''
     entries=$(sed -nE 's/^[[:space:]]*(brew|cask)[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/\1 \2 \3/p' "$2") ||
         return 1
-    while IFS=' ' read -r kind name rest; do
+    lines=$entries$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" kind name rest
         [ -n "$kind" ] || continue
         case $rest in
             *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] || continue ;;
@@ -42,41 +47,180 @@ steps_brewfile_missing() {
             cask) [ -d "$prefix/Caskroom/$name" ] && continue ;;
         esac
         missing="$missing${missing:+ }$name"
-    done <<EOF
-$entries
-EOF
+    done
     printf '%s\n' "$missing"
 }
 
 # steps_brew_pending_offline PREFIX: the selected Brewfiles with an entry
 # missing from PREFIX, one per line, without running brew.
 steps_brew_pending_offline() {
-    local file
-    while IFS= read -r file; do
+    local lines file
+    lines=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         if [ -n "$(steps_brewfile_missing "$1" "$file")" ]; then
             printf '%s\n' "$file"
         fi
-    done <<EOF
-$(bootstrap_brewfiles "$STEPS_TIERS")
-EOF
+    done
 }
 
 # steps_brewfile_names FILES: "core cli" from Brewfile paths.
 steps_brewfile_names() {
-    local file names=''
-    while IFS= read -r file; do
+    local lines file names=''
+    lines=$1$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         file=${file##*/}
         names="$names${names:+ }${file%.Brewfile}"
-    done <<EOF
-$1
-EOF
+    done
     printf '%s\n' "$names"
 }
 
+# steps_brew_declared_conflicts: "KIND NAME OTHER BREWFILE" (KIND formula or
+# cask) for every pair that a selected Brewfile declares, in a
+# "# conflicts: FORMULA OTHER..." or "# conflicts: cask TOKEN OTHER..." line:
+# Homebrew refuses to install NAME while OTHER is installed (its
+# conflicts_with), and brew bundle then fails with no more than that. A pair
+# counts only where brew bundle installs NAME (a cask under "if OS.mac?"
+# never on Linux). tests/test_bootstrap_manifest.py validates the lines.
+steps_brew_declared_conflicts() {
+    local files decls file decl kind name others other
+    files=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
+    while [ -n "$files" ]; do
+        file=${files%%"$BOOTSTRAP_NL"*}
+        files=${files#*"$BOOTSTRAP_NL"}
+        [ -n "$file" ] || continue
+        decls=$(sed -n 's/^# conflicts: //p' "$file")$BOOTSTRAP_NL || continue
+        while [ -n "$decls" ]; do
+            decl=${decls%%"$BOOTSTRAP_NL"*}
+            decls=${decls#*"$BOOTSTRAP_NL"}
+            kind=formula
+            case $decl in
+                'cask '*)
+                    kind=cask
+                    decl=${decl#cask }
+                    ;;
+            esac
+            bootstrap_split ' ' "$decl" name others
+            steps_safe_formula "$name" || continue
+            steps_brew_entry_applies "$file" "$kind" "$name" || continue
+            while [ -n "$others" ]; do
+                bootstrap_split ' ' "$others" other others
+                if steps_safe_formula "$other"; then
+                    printf '%s %s %s %s\n' "$kind" "$name" "$other" "${file##*/}"
+                fi
+            done
+        done
+    done
+}
+
+# steps_brew_entry_applies FILE KIND NAME: 0 when FILE has a KIND (formula
+# or cask) entry NAME that brew bundle installs on STEPS_PROFILE: one
+# without an OS guard, or with the matching "if OS.mac?" or "if OS.linux?".
+steps_brew_entry_applies() {
+    local word=brew entry
+    [ "$2" = formula ] || word=cask
+    entry=$(awk -v word="$word" -v name="\"$3\"" \
+        '$1 == word && $2 == name { print "entry " $0; exit }' "$1") || return 1
+    case $entry in
+        '') return 1 ;;
+        *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] ;;
+        *'if OS.linux?'*) [ "$STEPS_PROFILE" != macos ] ;;
+    esac
+}
+
+# steps_safe_formula NAME: 0 for a formula or cask name that is a single
+# path segment.
+steps_safe_formula() {
+    case $1 in
+        '' | .* | *[!a-z0-9@+._-]*) return 1 ;;
+    esac
+}
+
+# steps_brew_keg PREFIX NAME: 0 when formula NAME has a keg under PREFIX's
+# Cellar, or under $HOMEBREW_CELLAR when that is set. Read-only and offline.
+steps_brew_keg() {
+    [ -d "$1/Cellar/$2" ] && return 0
+    [ -n "${HOMEBREW_CELLAR:-}" ] && [ -d "$HOMEBREW_CELLAR/$2" ]
+}
+
+# steps_brew_installed PREFIX KIND NAME: 0 when formula NAME has a keg
+# (steps_brew_keg) or cask NAME a Caskroom/ dir under PREFIX. Read-only and
+# offline.
+steps_brew_installed() {
+    case $2 in
+        cask) [ -d "$1/Caskroom/$3" ] ;;
+        *) steps_brew_keg "$1" "$3" ;;
+    esac
+}
+
+# steps_brew_conflicts PREFIX: the declared pairs that would stop brew bundle
+# here: OTHER is installed (a keg, or a Caskroom/ dir) while NAME is not
+# (neither a keg nor an opt/ link, or no Caskroom/ dir).
+steps_brew_conflicts() {
+    local lines line kind name other
+    lines=$(steps_brew_declared_conflicts)$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" kind name other _
+        [ -n "$other" ] || continue
+        if steps_brew_installed "$1" "$kind" "$name"; then
+            continue
+        fi
+        if [ "$kind" = formula ] && [ -e "$1/opt/$name" ]; then
+            continue
+        fi
+        if steps_brew_installed "$1" "$kind" "$other"; then
+            printf '%s\n' "$line"
+        fi
+    done
+}
+
+# steps_brew_conflict_block MODE PAIRS: the judgment block that uninstalls
+# each conflicting formula or cask of PAIRS ("KIND NAME OTHER BREWFILE"
+# lines). MODE manual lists every declared pair with the condition under
+# which it applies.
+steps_brew_conflict_block() {
+    local brew lines line kind name other file seen=' '
+    brew=$(steps_quote "$(steps_brew_default)")
+    steps_block_begin S2-brew-bundle judgment
+    if [ "$1" = manual ]; then
+        printf '%s\n' '# applies only when a conflicting formula or cask below is installed and the Brewfile one is not;' \
+            '# ./setup-host.sh then stops S2-brew-bundle before running brew and prints this block'
+    fi
+    lines=$2$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" kind name other file
+        [ -n "$file" ] || continue
+        printf '# Homebrew does not install %s (%s) while the %s %s is installed (conflicts_with), so brew bundle would fail\n' \
+            "$name" "$file" "$other" "$kind"
+    done
+    printf '%s\n' '# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one'
+    lines=$2$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        bootstrap_split ' ' "$line" kind name other file
+        [ -n "$other" ] || continue
+        case $seen in
+            *" $kind:$other "*) continue ;;
+        esac
+        seen="$seen$kind:$other "
+        printf '%s uninstall --%s %s\n' "$brew" "$kind" "$other"
+    done
+    steps_block_end
+}
+
 step_S2_brew_bundle_check() {
-    local files brew pending note=''
+    local files brew pending note='' lines line kind name other file
+    STEPS_BREW_CONFLICTS=
     files=$(bootstrap_brewfiles "$STEPS_TIERS")
     if [ -z "$files" ]; then
         STEP_DETAIL="no Brewfile for tiers $STEPS_TIERS"
@@ -85,6 +229,21 @@ step_S2_brew_bundle_check() {
     if ! brew=$(bootstrap_brew_bin); then
         STEP_DETAIL="brew is not installed; Brewfiles: $(steps_brewfile_names "$files")"
         return 1
+    fi
+    # Before any brew command: a conflicting formula is a person's call.
+    STEPS_BREW_CONFLICTS=$(steps_brew_conflicts "${brew%/bin/brew}")
+    if [ -n "$STEPS_BREW_CONFLICTS" ]; then
+        STEP_DETAIL=
+        lines=$STEPS_BREW_CONFLICTS$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            line=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
+            bootstrap_split ' ' "$line" kind name other file
+            [ -n "$file" ] || continue
+            STEP_DETAIL="$STEP_DETAIL${STEP_DETAIL:+; }the installed $other $kind conflicts with $name ($file)"
+        done
+        STEP_DETAIL="$STEP_DETAIL; brew bundle would fail, so uninstall it first"
+        return 3
     fi
     if [ "$STEPS_MODE" = apply ]; then
         pending=$(steps_brew_pending "$brew")
@@ -101,24 +260,35 @@ step_S2_brew_bundle_check() {
 }
 
 step_S2_brew_bundle_plan() {
+    if [ -n "${STEPS_BREW_CONFLICTS:-}" ]; then
+        steps_brew_conflict_block pending "$STEPS_BREW_CONFLICTS"
+        return 0
+    fi
     printf 'brew bundle --no-upgrade --file config/bootstrap/brew/<tier>.Brewfile (%s)\n' "$STEP_DETAIL"
 }
 
+step_S2_brew_bundle_manual() {
+    local pairs
+    pairs=$(steps_brew_declared_conflicts)
+    [ -z "$pairs" ] || steps_brew_conflict_block manual "$pairs"
+}
+
 step_S2_brew_bundle_apply() {
-    local brew file
+    local brew lines file
     if ! brew=$(bootstrap_brew_bin); then
         dotfiles_log error 'brew is not installed (H1-homebrew or H1-linuxbrew)'
         return 1
     fi
-    while IFS= read -r file; do
+    lines=$(steps_brew_pending "$brew")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
         "$brew" bundle --no-upgrade --file "$file" >&2 </dev/null || {
             dotfiles_log error "brew bundle failed for $file"
             return 1
         }
-    done <<EOF
-$(steps_brew_pending "$brew")
-EOF
+    done
 }
 
 # --- S2-micromamba (hpc) ---------------------------------------------------

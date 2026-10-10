@@ -5,14 +5,6 @@
 # manifest shape check, the platform refusal and P0-preflight. Sourced only
 # (after steps.sh); defines functions and changes no shell options.
 
-# steps_text_has OPTIONS PATTERN TEXT: grep OPTIONS (-F, -Ei, ...) for
-# PATTERN in TEXT without a pipe (no SIGPIPE under pipefail).
-steps_text_has() {
-    grep -q "$1" -- "$2" <<EOF
-$3
-EOF
-}
-
 # steps_quote WORD: WORD quoted for a HUMAN block a person pastes.
 steps_quote() {
     printf '%q' "$1"
@@ -29,20 +21,27 @@ steps_block_end() {
     printf '%s\n' HUMAN-END
 }
 
+# steps_load_tools: set STEPS_TOOL_ROWS to the tools.tsv rows of STEPS_HOST,
+# unless it already holds them. steps_run loads them once in the main shell,
+# so the lookups below, often in $(...), never filter tools.tsv again.
+steps_load_tools() {
+    [ "$STEPS_TOOLS_LOADED" != "$STEPS_HOST ${BOOTSTRAP_CONFIG-}" ] || return 0
+    STEPS_TOOL_ROWS=$(bootstrap_tool_rows "$STEPS_HOST") || STEPS_TOOL_ROWS=
+    STEPS_TOOLS_LOADED="$STEPS_HOST ${BOOTSTRAP_CONFIG-}"
+}
+
 # steps_tool_cell ID COLUMN: one tools.tsv cell of the row ID for this host.
 steps_tool_cell() {
     local row
-    while IFS= read -r row; do
-        case $row in
-            "$1$BOOTSTRAP_TAB"*)
-                bootstrap_field "$row" "$2"
-                return
-                ;;
-        esac
-    done <<EOF
-$(bootstrap_tool_rows "$STEPS_HOST")
-EOF
-    return 1
+    steps_load_tools
+    row=$BOOTSTRAP_NL$STEPS_TOOL_ROWS$BOOTSTRAP_NL
+    case $row in
+        *"$BOOTSTRAP_NL$1$BOOTSTRAP_TAB"*) ;;
+        *) return 1 ;;
+    esac
+    row=${row#*"$BOOTSTRAP_NL$1$BOOTSTRAP_TAB"}
+    row=${row%%"$BOOTSTRAP_NL"*}
+    bootstrap_field "$1$BOOTSTRAP_TAB$row" "$2"
 }
 
 # steps_probe ID: evaluate the tools.tsv probe of ID (command list, file:,
@@ -51,6 +50,7 @@ EOF
 steps_probe() {
     local probe rest name path
     STEPS_PROBE_FOUND=
+    steps_load_tools
     probe=$(steps_tool_cell "$1" 4) || return 2
     case $probe in
         file:*)
@@ -97,9 +97,7 @@ steps_installer_fields() {
     local row id hosts arch tier dest
     row=$(bootstrap_installer_row "$1" "$STEPS_HOST" "$STEPS_ARCH") || return 1
     [ -n "$row" ] || return 1
-    IFS="$BOOTSTRAP_TAB" read -r id STEPS_KIND STEPS_URL STEPS_SHA dest hosts arch tier STEPS_HUMAN <<EOF
-$row
-EOF
+    bootstrap_split "$BOOTSTRAP_TAB" "$row" id STEPS_KIND STEPS_URL STEPS_SHA dest hosts arch tier STEPS_HUMAN
     if [ "$dest" = - ]; then
         STEPS_DEST=-
     else
@@ -191,6 +189,22 @@ steps_resolve() {
     printf '%s/%s\n' "${dir%/}" "${path##*/}"
 }
 
+# steps_brew_default: the brew executable a HUMAN block names: the one this
+# run found, else the profile's default Homebrew (Linux, Intel macOS or Apple
+# Silicon). Only the stowed rc files put it on PATH, so blocks name it by path.
+steps_brew_default() {
+    local brew
+    if brew=$(bootstrap_brew_bin); then
+        printf '%s\n' "$brew"
+    elif [ "$STEPS_PROFILE" != macos ]; then
+        printf '%s\n' /home/linuxbrew/.linuxbrew/bin/brew
+    elif [ "$STEPS_ARCH" = x86_64 ]; then
+        printf '%s\n' /usr/local/bin/brew
+    else
+        printf '%s\n' /opt/homebrew/bin/brew
+    fi
+}
+
 # steps_path_prepend DIR: put an existing DIR first on PATH (this process).
 steps_path_prepend() {
     [ -d "$1" ] || return 0
@@ -245,7 +259,7 @@ steps_invalid() {
 # steps_validate_manifests: the shape setup-host relies on before it runs
 # anything. tests/test_bootstrap_manifest.py is the full validator.
 steps_validate_manifests() {
-    local file row id kind url sha dest human ref
+    local file lines row id kind url sha dest human ref
     for file in tools.tsv git-clones.tsv installers.tsv; do
         [ -f "$BOOTSTRAP_CONFIG/$file" ] && [ -r "$BOOTSTRAP_CONFIG/$file" ] ||
             steps_invalid "$BOOTSTRAP_CONFIG/$file is missing or unreadable" || return 1
@@ -257,12 +271,13 @@ steps_validate_manifests() {
     esac
     [ -r "$BOOTSTRAP_CONFIG/$file" ] ||
         steps_invalid "$BOOTSTRAP_CONFIG/$file is missing or unreadable" || return 1
-    while IFS= read -r row; do
+    lines=$(bootstrap_rows "$BOOTSTRAP_CONFIG/installers.tsv")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$row" ] || continue
         steps_field_count "$row" 9 || steps_invalid "installers.tsv row needs 9 fields: $row" || return 1
-        IFS="$BOOTSTRAP_TAB" read -r id kind url sha dest _ _ _ human <<EOF
-$row
-EOF
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id kind url sha dest _ _ _ human
         case $kind in
             script | binary | archive | file) ;;
             *) steps_invalid "installers.tsv $id: unknown kind $kind" || return 1 ;;
@@ -279,29 +294,33 @@ EOF
         if [ "$dest" != - ] && ! bootstrap_expand_path "$dest" >/dev/null; then
             steps_invalid "installers.tsv $id: unsupported dest $dest" || return 1
         fi
-    done <<EOF
-$(bootstrap_rows "$BOOTSTRAP_CONFIG/installers.tsv")
-EOF
-    while IFS= read -r row; do
+    done
+    lines=$(bootstrap_rows "$BOOTSTRAP_CONFIG/git-clones.tsv")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        row=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$row" ] || continue
         steps_field_count "$row" 5 || steps_invalid "git-clones.tsv row needs 5 fields: $row" || return 1
-        IFS="$BOOTSTRAP_TAB" read -r id dest url ref _ <<EOF
-$row
-EOF
+        bootstrap_split "$BOOTSTRAP_TAB" "$row" id dest url ref _
         case $url in
             https://*) ;;
             *) steps_invalid "git-clones.tsv $id: url is not https: $url" || return 1 ;;
         esac
-        case $id:$ref in
-            oh-my-zsh:master) ;;
-            *:*[!0-9a-f]* | *:) steps_invalid "git-clones.tsv $id: ref is not a commit: $ref" || return 1 ;;
-            *) [ "${#ref}" -eq 40 ] || steps_invalid "git-clones.tsv $id: ref is not a commit: $ref" || return 1 ;;
+        # ref is the branch to clone (clones track their upstream default
+        # branch), never a commit; oh-my-zsh updates itself on master.
+        case $ref in
+            '' | -* | /* | .* | *..* | */ | *. | *.lock | *[!A-Za-z0-9._/-]*)
+                steps_invalid "git-clones.tsv $id: ref is not a branch name: $ref" || return 1
+                ;;
+            *[!0-9a-f]*) ;;
+            *) [ "${#ref}" -ne 40 ] || steps_invalid "git-clones.tsv $id: ref is a commit, not a branch: $ref" || return 1 ;;
         esac
+        if [ "$id" = oh-my-zsh ] && [ "$ref" != master ]; then
+            steps_invalid "git-clones.tsv $id: ref must be master (oh-my-zsh updates itself there): $ref" || return 1
+        fi
         bootstrap_expand_path "$dest" >/dev/null ||
             steps_invalid "git-clones.tsv $id: unsupported dest $dest" || return 1
-    done <<EOF
-$(bootstrap_rows "$BOOTSTRAP_CONFIG/git-clones.tsv")
-EOF
+    done
 }
 
 # steps_platform_mismatch: print why this machine cannot be STEPS_HOST, so
@@ -348,18 +367,20 @@ steps_platform_mismatch() {
 }
 
 step_P0_preflight_check() {
-    local glibc platform detail paths path dirty missing=''
+    local glibc platform detail paths lines line path dirty missing=''
     glibc=$(bootstrap_glibc_version)
     platform=$(bootstrap_detect_platform)
     detail="host $STEPS_HOST, profile $STEPS_PROFILE, $(bootstrap_os) $STEPS_ARCH${glibc:+, glibc $glibc}, detected $platform, checkout $STEPS_ROOT"
     if [ -f "$STEPS_ROOT/.gitmodules" ]; then
         paths=$(git config -f "$STEPS_ROOT/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null </dev/null) || paths=
-        while IFS=' ' read -r _ path; do
+        lines=$paths$BOOTSTRAP_NL
+        while [ -n "$lines" ]; do
+            line=${lines%%"$BOOTSTRAP_NL"*}
+            lines=${lines#*"$BOOTSTRAP_NL"}
+            bootstrap_split ' ' "$line" _ path
             [ -n "$path" ] || continue
             [ -e "$STEPS_ROOT/$path/.git" ] || missing="$missing${missing:+ }$path"
-        done <<EOF
-$paths
-EOF
+        done
     fi
     if [ -n "$missing" ]; then
         dotfiles_log warn "submodule not checked out ($missing): run git submodule update --init --recursive in $STEPS_ROOT"

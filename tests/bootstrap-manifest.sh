@@ -6,6 +6,13 @@
 
 set -euo pipefail
 
+# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
+# docs/bootstrap.md) and other dotfiles knobs never reach the code under
+# test from the caller; each case sets what it needs.
+unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$TEST_DIR/.." && pwd)"
 TEST_PYTHON=${DOTFILES_SYNC_PYTHON:-$(command -v python3 || true)}
@@ -421,6 +428,37 @@ done
 doc_case H1-apt-core debian H1-apt-core
 doc_case H1-locale debian H1-locale
 
+# bootstrap_split replaces `IFS=SEP read -r NAME... <<EOF` in the scripts
+# (no here-documents there); it must split every line exactly as read does.
+echo '==> line splitting matches read'
+split_case() {
+    # split_case SEP LINE: compare one to five NAMEs with IFS=SEP read -r.
+    local sep=$1 line=$2 r1 r2 r3 r4 r5 s1 s2 s3 s4 s5
+    IFS=$sep read -r r1 <<<"$line"
+    bootstrap_split "$sep" "$line" s1
+    assert_eq "[$s1]" "[$r1]" "split one name of [$line]"
+    IFS=$sep read -r r1 r2 <<<"$line"
+    bootstrap_split "$sep" "$line" s1 s2
+    assert_eq "[$s1][$s2]" "[$r1][$r2]" "split two names of [$line]"
+    IFS=$sep read -r r1 r2 r3 <<<"$line"
+    bootstrap_split "$sep" "$line" s1 s2 s3
+    assert_eq "[$s1][$s2][$s3]" "[$r1][$r2][$r3]" "split three names of [$line]"
+    IFS=$sep read -r r1 _ r3 r4 r5 <<<"$line"
+    bootstrap_split "$sep" "$line" s1 _ s3 s4 s5
+    assert_eq "[$s1][$s3][$s4][$s5]" "[$r1][$r3][$r4][$r5]" "split five names of [$line]"
+}
+for sep in ' ' "$tab"; do
+    for line in '' a " a" "a " "  a  b  " 'a b c d e f' " a b c " 'x\y z' "a${tab}b c" \
+        "a ${tab} b" '%s *' "a${tab}${tab}b${tab}" "${tab}a${tab}b c${tab}d${tab}${tab}"; do
+        split_case "$sep" "$line"
+    done
+done
+big=$(awk 'BEGIN { print "needle"; for (i = 0; i < 20000; i++) print "hay hay hay hay" }')
+assert_status 0 'text_has: an early match in a long text under pipefail' bootstrap_text_has -F needle "$big"
+assert_status 1 'text_has: no match' bootstrap_text_has -F absent "$big"
+assert_status 0 'text_has: per-line anchors' bootstrap_text_has -Ei '^EN_us\.utf-?8$' "$(printf 'C\nen_US.utf8\n')"
+assert_status 2 'text_has: a grep error' bootstrap_text_has -E '(' text
+
 # Bash `local` is dynamically scoped: a TSV loop's `local IFS=$tab` reaches
 # every library function it calls, so none of them may split by the caller's IFS.
 echo '==> a caller IFS does not reach the libraries'
@@ -438,6 +476,11 @@ caller_ifs_case() {
     assert_eq "$(bootstrap_tool_rows mac | cut -f1 | tr '\n' ' ')" 'alpha beta gamma ' "tool rows with a $label IFS"
     assert_eq "$(bootstrap_installer_row beta sherlock aarch64 | cut -f3)" https://e.test/v1.0/b-aarch64 \
         "installer row with a $label IFS"
+    local f1 f2 f3
+    bootstrap_split "$tab" " a b${tab}${tab}c d${tab}e " f1 f2 f3
+    assert_eq "[$f1][$f2][$f3]" '[ a b][c d][e ]' "tab split with a $label IFS"
+    bootstrap_split ' ' " a${tab}b  c d " f1 f2
+    assert_eq "[$f1][$f2]" "[a${tab}b][c d]" "space split with a $label IFS"
 }
 caller_ifs_case "$tab" tab
 caller_ifs_case $'\n' newline
@@ -476,12 +519,34 @@ printf '%s\n' "$TEST_HOME" "$(uname -s)" sherlock abc123 >"$STATE"
 assert_eq "$(resolve "$REPO")" sherlock 'recorded host'
 assert_eq "$(resolve "$REPO" DOTFILES_HOST=marlowe)" marlowe 'DOTFILES_HOST wins'
 assert_status 1 'invalid DOTFILES_HOST' resolve "$REPO" DOTFILES_HOST=fedora
+# Set but empty means common only, as for the login updater: the recorded
+# host does not apply.
+assert_status 1 'empty DOTFILES_HOST' resolve "$REPO" DOTFILES_HOST=
 assert_status 1 'other HOME' resolve "$REPO" HOME="$TEST_TMP/elsewhere"
 assert_status 1 'other kernel' resolve "$REPO" BOOTSTRAP_UNAME_S=Plan9
 printf '%s\n' "$TEST_HOME" Plan9 mac '' >"$STATE"
 assert_eq "$(resolve "$REPO" BOOTSTRAP_UNAME_S=Plan9)" mac 'kernel override matches'
 printf '%s\n' "$TEST_HOME" "$(uname -s)" '' '' >"$STATE"
 assert_status 1 'common-only stow' resolve "$REPO"
+# A recorded common-only install, which resolve cannot tell from no record:
+# all four lines, as the login updater reads them, for this home and kernel.
+common_only() {
+    # common_only ROOT [VAR=VALUE...]
+    local root=$1
+    shift
+    env "$@" bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only "$2"' _ \
+        "$FIXTURE/lib/bootstrap/platform.sh" "$root"
+}
+assert_status 0 'recorded common only' common_only "$REPO"
+assert_status 0 'the record alone (DOTFILES_HOST is for the caller)' common_only "$REPO" DOTFILES_HOST=sherlock
+assert_status 1 'common only, other HOME' common_only "$REPO" HOME="$TEST_TMP/elsewhere"
+assert_status 1 'common only, other kernel' common_only "$REPO" BOOTSTRAP_UNAME_S=Plan9
+printf '%s\n' "$TEST_HOME" "$(uname -s)" '' >"$STATE"
+assert_status 1 'common only, three lines' common_only "$REPO"
+printf '%s\n' "$TEST_HOME" "$(uname -s)" sherlock '' >"$STATE"
+assert_status 1 'a recorded host is not common only' common_only "$REPO"
+rm -f "$STATE"
+assert_status 1 'no state is not common only' common_only "$REPO"
 printf '%s\n' "$TEST_HOME" "$(uname -s)" ubuntu '' >"$STATE"
 assert_status 1 'unknown recorded host' resolve "$REPO"
 printf '%s\n%s\n%s' "$TEST_HOME" "$(uname -s)" lab-ubuntu >"$STATE"
@@ -512,14 +577,14 @@ for file in tools.tsv:8 git-clones.tsv:5 installers.tsv:9; do
     [ -z "$bad" ] || fail "${file%%:*} rows without ${file#*:} fields: $bad"
 done
 case " $(real_ids bootstrap_tool_rows lab-ubuntu)" in
-    *' fzf '*' gh-apt '*) ;;
-    *) fail 'lab-ubuntu tools miss fzf or gh-apt' ;;
+    *' fzf '*' xclip '*) ;;
+    *) fail 'lab-ubuntu tools miss fzf or xclip' ;;
 esac
 case " $(real_ids bootstrap_tool_rows lab-ubuntu)" in
     *' pwsh '* | *' login-env '*) fail 'lab-ubuntu tools include another host' ;;
 esac
 case " $(real_ids bootstrap_tool_rows '')" in
-    *' gh-apt '* | *' pwsh '* | *' micromamba '*) fail 'platform mode includes host-list rows' ;;
+    *' xclip '* | *' pwsh '* | *' micromamba '*) fail 'platform mode includes host-list rows' ;;
 esac
 assert_eq "$(bootstrap_clone_rows sherlock | wc -l | tr -d ' ')" 8 'eight clones on sherlock'
 assert_eq "$(bootstrap_clone_rows win | wc -l | tr -d ' ')" 0 'no clones on win'
@@ -551,16 +616,61 @@ echo '==> no bootstrap script or doc tells anyone to run gh auth setup-git'
 setup_git_offenders() {
     local file
     for file in "$@"; do
+        if [ ! -f "$file" ]; then
+            printf '%s: missing\n' "$file"
+            continue
+        fi
         grep -Hn -e 'setup-git' -- "$file" | grep -Eiv "never|do not run|don't run|skip" || true
     done
 }
+# Paths relative to the checkout. The lib/bootstrap/*.sh glob expands inside
+# it, below, whatever directory runs this test, and a file that is missing
+# (or a glob that matches nothing) is an offender, so the scan cannot pass
+# by checking nothing.
 SETUP_GIT_FILES=(README.md AGENTS.md docs/bootstrap.md docs/dependencies.md doctor.sh setup-host.sh
-    doctor.ps1 setup-host.ps1 lib/bootstrap.ps1 lib/bootstrap/*.sh
+    doctor.ps1 setup-host.ps1 lib/bootstrap.ps1
     .claude/skills/dotfiles-bootstrap/SKILL.md .agents/skills/dotfiles-bootstrap/SKILL.md)
-offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}")
+offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}" lib/bootstrap/*.sh)
 [ -z "$offenders" ] || fail "gh auth setup-git outside a warning: $offenders"
+[ "$(cd "$REPO_ROOT" && printf '%s\n' lib/bootstrap/*.sh | grep -c '^lib/bootstrap/steps')" -ge 8 ] ||
+    fail 'the setup-git scan found too few lib/bootstrap/steps*.sh files'
 printf '%s\n' '# never run gh auth setup-git' 'gh auth login && gh auth setup-git' >"$TEST_TMP/setup-git.md"
 assert_eq "$(setup_git_offenders "$TEST_TMP/setup-git.md" | cut -d: -f2)" 2 'the setup-git check finds a command'
+assert_eq "$(setup_git_offenders "$TEST_TMP/absent.md")" "$TEST_TMP/absent.md: missing" \
+    'the setup-git check reports a missing file'
+assert_eq "$(cd "$TEST_TMP" && setup_git_offenders lib/bootstrap/*.sh)" 'lib/bootstrap/*.sh: missing' \
+    'the setup-git check reports a glob that matches nothing'
+
+# -------------------------------------------------- no here-documents
+echo '==> no here-document, here-string or process substitution in the Unix bootstrap'
+# Bash 3.2 (macOS /bin/bash) backs every here-document and here-string with a
+# temporary file in the C library's P_tmpdir (/tmp with glibc) whatever
+# TMPDIR says, so ./doctor.sh and ./setup-host.sh --check would write, and its
+# process substitution keeps each descriptor open until the outermost
+# function returns. The dynamic TMPDIR checks in doctor.sh and setup-host.sh
+# cannot see P_tmpdir, so this scan is the guard. It covers apply-only code
+# too (there is no allowlist) and skips comment lines.
+heredoc_offenders() {
+    local file
+    for file in "$@"; do
+        if [ ! -f "$file" ]; then
+            printf '%s: missing\n' "$file"
+            continue
+        fi
+        grep -Hn -e '<<' -e '<(' -e '>(' -- "$file" | grep -Ev '^[^:]*:[0-9]+:[[:space:]]*#' || true
+    done
+}
+# The glob expands inside the checkout, so an empty match cannot pass.
+offenders=$(cd "$REPO_ROOT" && heredoc_offenders doctor.sh setup-host.sh lib/terminal.sh lib/bootstrap/*.sh)
+[ -z "$offenders" ] || fail "here-document, here-string or process substitution in the Unix bootstrap: $offenders"
+[ "$(cd "$REPO_ROOT" && printf '%s\n' lib/bootstrap/*.sh | grep -c '^lib/bootstrap/steps')" -ge 8 ] ||
+    fail 'the here-document scan found too few lib/bootstrap/steps*.sh files'
+printf '%s\n' '# a comment may name <<EOF' 'cat <<EOF' 'cat <<-EOF' 'read -r x <<<"$y"' \
+    'done < <(rows)' 'tee >(cat)' 'printf %s "$x" | grep -q y' >"$TEST_TMP/heredoc.sh"
+assert_eq "$(heredoc_offenders "$TEST_TMP/heredoc.sh" | cut -d: -f2 | tr '\n' ' ')" '2 3 4 5 6 ' \
+    'the here-document scan finds each form and skips comments and pipes'
+assert_eq "$(heredoc_offenders "$TEST_TMP/absent.sh")" "$TEST_TMP/absent.sh: missing" \
+    'the here-document scan reports a missing file'
 
 # ----------------------------------------------------------- validator
 echo '==> manifest validator'

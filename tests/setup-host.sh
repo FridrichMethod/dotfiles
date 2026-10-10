@@ -9,6 +9,13 @@
 
 set -euo pipefail
 
+# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
+# docs/bootstrap.md) and other dotfiles knobs never reach the code under
+# test from the caller; each case sets what it needs.
+unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURES="$REPO_ROOT/tests/fixtures/bootstrap"
 REAL_GIT=$(command -v git)
@@ -160,7 +167,9 @@ snapshot() {
 
 # case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
 # setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
-# WSL); a VAR=VALUE overrides a default of the same name.
+# WSL); a VAR=VALUE overrides a default of the same name. setup-host runs
+# under the Bash running this file ($BASH), so `bash-3.2 tests/setup-host.sh`
+# tests it under Bash 3.2 too.
 case_command() {
     local extra=()
     while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
@@ -187,7 +196,7 @@ case_command() {
         BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew"
         FAKE_DPKG_INSTALLED="$DPKG_ALL"
         ${extra[@]+"${extra[@]}"}
-        bash "$FIXTURE/setup-host.sh" "$@")
+        "$BASH" "$FIXTURE/setup-host.sh" "$@")
 }
 
 # run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
@@ -324,7 +333,7 @@ case "${1:-} ${2:-}" in
         ;;
     'bundle --no-upgrade')
         printf 'brew:bundle %s\n' "$name" >>"$EVENT_LOG"
-        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} AWESOME_SKILLS_AUTO_UPDATE=${AWESOME_SKILLS_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-}" >>"$EVENT_LOG"
+        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} AWESOME_SKILLS_AUTO_UPDATE=${AWESOME_SKILLS_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
         [ "${BREW_FAIL:-0}" != 1 ] || exit 1
         if [ -n "${BREW_POLLUTE:-}" ]; then
             printf '%s\n' '# appended by a brew installer' >>"$BREW_POLLUTE"
@@ -483,8 +492,12 @@ make_remote() {
 
 make_remote ohmyzsh/ohmyzsh oh-my-zsh.sh custom/example.zsh \
     custom/plugins/example/example.plugin.zsh custom/themes/example.zsh-theme >/dev/null
-P10K_PIN=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
-FZF_TAB_PIN=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+P10K_HEAD=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
+FZF_TAB_HEAD=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+# A remote whose default branch is main, as conda-zsh-completion's is.
+CONDA_HEAD=$(make_remote conda-incubator/conda-zsh-completion conda-zsh-completion.plugin.zsh)
+"$REAL_GIT" -C "$REMOTES/conda-incubator/conda-zsh-completion.git" branch -q -m master main
+"$REAL_GIT" -C "$REMOTES/conda-incubator/conda-zsh-completion.git" symbolic-ref HEAD refs/heads/main
 # nvm: the pinned commit, then a later one, as when a release tag moves.
 NVM_PIN=$(make_remote nvm-sh/nvm README.md)
 printf '# moved\n' >>"$TEST_TMP/work/nvm-sh/nvm/README.md"
@@ -508,7 +521,6 @@ sha() {
 }
 
 printf '<plist><!-- fixture Catppuccin Mocha --></plist>\n' >"$ARTIFACTS/theme"
-printf 'fixture GitHub CLI keyring\n' >"$ARTIFACTS/gh-keyring"
 printf '#!/bin/sh\necho bad micromamba\n' >"$ARTIFACTS/micromamba-bad"
 
 mkdir -p "$TEST_TMP/build/codex/bin" "$TEST_TMP/build/codex/codex-path" "$TEST_TMP/build/codex/codex-resources"
@@ -554,7 +566,6 @@ URL_CLAUDE=https://claude.ai/install.sh
 URL_FONT=https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/CascadiaMono.tar.xz
 URL_KITTY=https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-x86_64.txz
 URL_THEME='https://raw.githubusercontent.com/catppuccin/bat/0123456789abcdef0123456789abcdef01234567/themes/Catppuccin%20Mocha.tmTheme'
-URL_GH_KEY=https://cli.github.com/packages/githubcli-archive-keyring.gpg
 
 {
     printf '%s\t%s\n' "$URL_HOMEBREW" "$FIXTURES/artifacts/homebrew-install"
@@ -565,7 +576,6 @@ URL_GH_KEY=https://cli.github.com/packages/githubcli-archive-keyring.gpg
     printf '%s\t%s\n' "$URL_FONT" "$ARTIFACTS/font.tar.xz"
     printf '%s\t%s\n' "$URL_KITTY" "$ARTIFACTS/kitty.txz"
     printf '%s\t%s\n' "$URL_THEME" "$ARTIFACTS/theme"
-    printf '%s\t%s\n' "$URL_GH_KEY" "$ARTIFACTS/gh-keyring"
 } >"$URL_MAP"
 awk -F '\t' -v OFS='\t' -v url="$URL_MICROMAMBA" -v bad="$ARTIFACTS/micromamba-bad" \
     '$1 == url { $2 = bad } { print }' "$URL_MAP" >"$URL_MAP_BAD"
@@ -574,25 +584,24 @@ SHA_HOMEBREW=$(sha "$FIXTURES/artifacts/homebrew-install")
 SHA_MICROMAMBA=$(sha "$FIXTURES/artifacts/micromamba")
 SHA_MICROMAMBA_BAD=$(sha "$ARTIFACTS/micromamba-bad")
 SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
-SHA_GH_KEY=$(sha "$ARTIFACTS/gh-keyring")
 
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/common/zsh"
 cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
 cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/terminal.sh"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 cp -R "$FIXTURES/config/." "$FIXTURE/config/bootstrap/"
-# The real tools.tsv, with the lab gh probe moved into the fixture home.
-# shellcheck disable=SC2016 # a literal manifest token
-sed 's#file:/usr/bin/gh#file:$HOME/.fake-gh-apt#' "$REPO_ROOT/config/bootstrap/tools.tsv" \
-    >"$FIXTURE/config/bootstrap/tools.tsv"
+# The real tools.tsv.
+cp "$REPO_ROOT/config/bootstrap/tools.tsv" "$FIXTURE/config/bootstrap/tools.tsv"
 write_clones() {
     {
         printf 'id\tdest\turl\tref\thosts\n'
         # shellcheck disable=SC2016 # literal manifest tokens
         printf '%s\t%s\t%s\t%s\t%s\n' \
             oh-my-zsh '$HOME/.oh-my-zsh' https://github.com/ohmyzsh/ohmyzsh.git master unix \
-            powerlevel10k '$ZSH_CUSTOM/themes/powerlevel10k' https://github.com/romkatv/powerlevel10k.git "$P10K_PIN" unix \
-            fzf-tab '$ZSH_CUSTOM/plugins/fzf-tab' https://github.com/Aloxaf/fzf-tab.git "$FZF_TAB_PIN" unix
+            powerlevel10k '$ZSH_CUSTOM/themes/powerlevel10k' https://github.com/romkatv/powerlevel10k.git master unix \
+            fzf-tab '$ZSH_CUSTOM/plugins/fzf-tab' https://github.com/Aloxaf/fzf-tab.git master unix \
+            conda-zsh-completion '$ZSH_CUSTOM/plugins/conda-zsh-completion' \
+            https://github.com/conda-incubator/conda-zsh-completion.git main unix
     } >"$FIXTURE/config/bootstrap/git-clones.tsv"
 }
 write_clones
@@ -607,8 +616,7 @@ write_clones
         claude script "$URL_CLAUDE" - - wsl-ubuntu,lab-ubuntu any ai inspect \
         nerd-font archive "$URL_FONT" "$(sha "$ARTIFACTS/font.tar.xz")" '$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont' lab-ubuntu any desktop - \
         kitty archive "$URL_KITTY" "$(sha "$ARTIFACTS/kitty.txz")" '$HOME/.local/kitty.app' lab-ubuntu x86_64 desktop - \
-        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core - \
-        gh-apt file "$URL_GH_KEY" "$SHA_GH_KEY" /etc/apt/keyrings/githubcli-archive-keyring.gpg lab-ubuntu any cli sudo
+        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core -
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
@@ -645,7 +653,6 @@ printf 'Linux version 5.15.167.4-microsoft-standard-WSL2 (root@runner) #1 SMP\n'
 printf '%s\n' zsh git curl xclip >"$DPKG_ALL"
 printf '%s\n' curl xclip >"$DPKG_PARTIAL"
 HOMEBREW_SCRATCH_REL=.cache/dotfiles-bootstrap/homebrew/install.sh
-GH_KEY_SCRATCH_REL=.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg
 CLAUDE_SCRATCH_REL=.cache/dotfiles-bootstrap/claude/install.sh
 
 # --- refusals ----------------------------------------------------------------
@@ -690,6 +697,44 @@ expect_rc wrong-distro 2
 run_case env-host DOTFILES_HOST=win -- --check
 expect_rc env-host 2
 expect_text env-host err 'setup-host.ps1'
+
+# A set but empty DOTFILES_HOST means common only, as the login updater reads
+# it, and setup-host has no --platform: it asks for --host instead of using
+# the host ./stow-all.sh recorded.
+printf '%s\n' "$CASE_HOME" Linux lab-ubuntu recorded-head >"$FIXTURE/.git/dotfiles-sync-unix"
+run_case env-host-recorded -- --check --only S3-dirs
+expect_rc env-host-recorded 3
+expect_text env-host-recorded out 'P0-preflight done host lab-ubuntu'
+run_case env-host-empty DOTFILES_HOST= -- --check --only S3-dirs
+expect_rc env-host-empty 2
+expect_text env-host-empty err 'DOTFILES_HOST is set but empty, which means common only (no host overlay)'
+expect_text env-host-empty err 'pass --host HOST'
+expect_no_text env-host-empty out 'P0-preflight'
+expect_no_events env-host-empty
+run_case env-host-empty-explicit DOTFILES_HOST= -- --host lab-ubuntu --check --only S3-dirs
+expect_rc env-host-empty-explicit 3
+expect_text env-host-empty-explicit out 'P0-preflight done host lab-ubuntu'
+# So is a common-only install that ./stow-all.sh recorded (an empty host
+# line): exit 2 asking for --host, not the generic "no host"; DOTFILES_HOST
+# and --host still win.
+printf '%s\n' "$CASE_HOME" Linux '' recorded-head >"$FIXTURE/.git/dotfiles-sync-unix"
+run_case state-common-only -- --check --only S3-dirs
+expect_rc state-common-only 2
+expect_text state-common-only err './stow-all.sh recorded a common-only install for this home (no host overlay)'
+expect_text state-common-only err 'pass --host HOST'
+expect_no_text state-common-only err 'no host: pass --host'
+expect_no_text state-common-only out 'P0-preflight'
+expect_no_events state-common-only
+run_case state-common-only-list -- --list
+expect_rc state-common-only-list 2
+expect_text state-common-only-list err 'recorded a common-only install'
+run_case state-common-only-env DOTFILES_HOST=lab-ubuntu -- --check --only S3-dirs
+expect_rc state-common-only-env 3
+expect_text state-common-only-env out 'P0-preflight done host lab-ubuntu'
+run_case state-common-only-host -- --host lab-ubuntu --check --only S3-dirs
+expect_rc state-common-only-host 3
+expect_text state-common-only-host out 'P0-preflight done host lab-ubuntu'
+rm -f "$FIXTURE/.git/dotfiles-sync-unix"
 
 # Never as root: it would install into /root or leave root-owned files.
 run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
@@ -763,7 +808,7 @@ expect_text check-fresh out 'P0-preflight done host lab-ubuntu, profile debian, 
 expect_text check-fresh out 'H1-apt-core done 4 apt packages installed'
 expect_text check-fresh out "H1-linuxbrew done brew at $CASE_BREW/bin/brew"
 expect_text check-fresh out "S2-brew-bundle todo Brewfiles to bundle: core cli (offline estimate from $CASE_BREW/opt"
-expect_text check-fresh out 'S3-clones todo to clone or re-pin: oh-my-zsh (clone) powerlevel10k (clone) fzf-tab (clone)'
+expect_text check-fresh out 'S3-clones todo to clone: oh-my-zsh (master) powerlevel10k (master) fzf-tab (master) conda-zsh-completion (main)'
 expect_text check-fresh out 'S3-dirs todo'
 expect_text check-fresh out 'S4-nvm todo'
 expect_text check-fresh out 'S5-codex todo codex is not installed; pinned 0.161.0'
@@ -774,8 +819,6 @@ expect_text check-fresh out "downloads $URL_CLAUDE (unpinned)"
 expect_text check-fresh out 'that runs it only while that sha256 holds'
 expect_no_text check-fresh out "&& bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_text check-fresh out 'H1-locale done'
-expect_line check-fresh 'HUMAN-BEGIN H1-gh-apt-repo sudo'
-expect_text check-fresh out "downloads $URL_GH_KEY"
 expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-sync-skills judgment'
@@ -805,13 +848,16 @@ expect_event 'curl:https://raw.githubusercontent.com/FridrichMethod/awesome-skil
 run_case apply -- --host lab-ubuntu --yes --tier all
 expect_rc apply 3
 expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
-    'git:clone -q --depth=1 --branch master' "git:-C $CASE_HOME/.oh-my-zsh/custom/themes/" \
+    'git:clone -q --depth=1 --branch master -c core.eol=lf' \
+    "git:clone -q --depth=1 --branch master https://github.com/romkatv/powerlevel10k.git $CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" \
     "curl:$URL_THEME" 'bat:cache --build' \
     "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
-expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1'
+expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
 expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
 expect_no_event TRIPWIRE
+# A missing clone is a shallow clone of the branch its ref names.
+expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CASE_HOME/.oh-my-zsh/custom/plugins/conda-zsh-completion"
 expect_text apply out 'S3-clones done applied:'
 expect_text apply out 'S5-codex done applied:'
 expect_event 'codex-run:--version'
@@ -824,32 +870,20 @@ expect_line apply "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubunt
 expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 
 [ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
-# The GitHub CLI keyring is pinned: staged after its digest check, and the
-# sudo block installs it as an apt trust anchor only behind a digest gate.
-expect_event "curl:$URL_GH_KEY"
-[ "$(sha "$CASE_HOME/$GH_KEY_SCRATCH_REL")" = "$SHA_GH_KEY" ] || fail 'gh keyring not staged'
-expect_line apply "# sha256 $SHA_GH_KEY verified"
-GH_KEY_GATE="printf '%s  %s\\n' $SHA_GH_KEY $CASE_HOME/$GH_KEY_SCRATCH_REL | sha256sum -c --status - && sudo install -D -m 0644 $CASE_HOME/$GH_KEY_SCRATCH_REL /etc/apt/keyrings/githubcli-archive-keyring.gpg"
-expect_line apply "$GH_KEY_GATE"
-expect_no_text apply out 'gpg --show-keys'
-if command -v sha256sum >/dev/null 2>&1; then
-    # sudo is a tripwire stub here: it records that the gate let it run.
-    : >"$EVENT_LOG"
-    PATH="$FAKE_BIN:$PATH" EVENT_LOG="$EVENT_LOG" bash -c "$GH_KEY_GATE" >/dev/null 2>&1 || true
-    grep -q 'TRIPWIRE sudo install -D -m 0644' "$EVENT_LOG" || fail 'the keyring gate did not reach sudo install'
-    cp "$CASE_HOME/$GH_KEY_SCRATCH_REL" "$TEST_TMP/gh-keyring.saved"
-    printf 'tampered\n' >>"$CASE_HOME/$GH_KEY_SCRATCH_REL"
-    : >"$EVENT_LOG"
-    PATH="$FAKE_BIN:$PATH" EVENT_LOG="$EVENT_LOG" bash -c "$GH_KEY_GATE" >/dev/null 2>&1 || true
-    [ ! -s "$EVENT_LOG" ] || fail 'the keyring gate installed a tampered keyring'
-    mv "$TEST_TMP/gh-keyring.saved" "$CASE_HOME/$GH_KEY_SCRATCH_REL"
-fi
 [ -f "$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh" ] || fail 'oh-my-zsh not cloned'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh" config oh-my-zsh.branch)" = master ] || fail 'oh-my-zsh clone config'
-[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" rev-parse HEAD)" = "$P10K_PIN" ] ||
-    fail 'powerlevel10k not at its pin'
-[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab" rev-parse HEAD)" = "$FZF_TAB_PIN" ] ||
-    fail 'fzf-tab not at its pin'
+P10K_DIR="$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+FZF_TAB_DIR="$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab"
+CONDA_DIR="$CASE_HOME/.oh-my-zsh/custom/plugins/conda-zsh-completion"
+# clone_at DIR BRANCH COMMIT: DIR is a shallow clone on BRANCH at COMMIT.
+clone_at() {
+    [ "$("$REAL_GIT" -C "$1" symbolic-ref --short HEAD)" = "$2" ] &&
+        [ "$("$REAL_GIT" -C "$1" rev-parse HEAD)" = "$3" ] &&
+        [ "$("$REAL_GIT" -C "$1" rev-parse --is-shallow-repository)" = true ]
+}
+clone_at "$P10K_DIR" master "$P10K_HEAD" || fail 'powerlevel10k is not a shallow clone of master'
+clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'fzf-tab is not a shallow clone of master'
+clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'conda-zsh-completion is not a shallow clone of main'
 cmp -s "$ARTIFACTS/theme" "$CASE_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" || fail 'bat theme'
 [ -d "$CASE_HOME/.vim/undo" ] && [ -d "$CASE_HOME/.vim/tmp" ] || fail 'vim dirs'
 [ -x "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node" ] && [ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'nvm node'
@@ -930,27 +964,119 @@ expect_no_text check-todo err 'HUMAN steps pending'
 expect_no_events check-todo
 mkdir -p "$CASE_HOME/.vim/undo" "$CASE_HOME/.vim/tmp"
 
-# --- clones: re-pin a clean drifted clone, refuse a dirty one ----------------
+# --- clones: an existing checkout is never touched --------------------------
 
+# Upstream moves on, a clone is behind, another has local edits and a third
+# is detached at its commit: S3-clones runs no git command that could change
+# them (no fetch, checkout, pull or reset), leaves every byte as it was and
+# reports each one done with its branch and commit.
 FZF_TAB_WORK="$TEST_TMP/work/Aloxaf/fzf-tab"
 printf '# v2\n' >>"$FZF_TAB_WORK/fzf-tab.plugin.zsh"
 "$REAL_GIT" -C "$FZF_TAB_WORK" commit -q -am v2
 "$REAL_GIT" -C "$FZF_TAB_WORK" push -q "$REMOTES/Aloxaf/fzf-tab.git" master
-FZF_TAB_PIN=$("$REAL_GIT" -C "$FZF_TAB_WORK" rev-parse HEAD)
-write_clones
-"$REAL_GIT" -C "$FIXTURE" commit -q -am 're-pin fzf-tab'
-P10K_DIR="$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+[ "$("$REAL_GIT" -C "$FZF_TAB_WORK" rev-parse HEAD)" != "$FZF_TAB_HEAD" ] || fail 'the fzf-tab remote did not move'
 printf '# local edit\n' >>"$P10K_DIR/powerlevel10k.zsh-theme"
-run_case repin -- --host lab-ubuntu --yes --only S3-clones
-expect_rc repin 1
-expect_event "git:-C $CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab fetch -q --depth=1 origin $FZF_TAB_PIN"
-[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab" rev-parse HEAD)" = "$FZF_TAB_PIN" ] ||
-    fail 'fzf-tab was not re-pinned'
-[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_PIN" ] || fail 'dirty powerlevel10k moved'
-expect_text repin err "$P10K_DIR has local changes"
-expect_text repin out 'S3-clones failed'
-expect_no_event "git:-C $P10K_DIR"
+"$REAL_GIT" -C "$CONDA_DIR" checkout -q --detach
+# omz_sums [SKIP]: cksum of each file under ~/.oh-my-zsh, the clones in it
+# included, outside every .git and outside ~/.oh-my-zsh/SKIP.
+omz_sums() {
+    local skip=${1:+./$1}
+    (cd "$CASE_HOME/.oh-my-zsh" && find . \( -path '*/.git' -o -path "${skip:-*/.git}" \) -prune -o -type f -print |
+        LC_ALL=C sort | while IFS= read -r file; do cksum "$file"; done)
+}
+clones_before=$(omz_sums)
+run_case existing-clones -- --host lab-ubuntu --check --only S3-clones
+expect_rc existing-clones 0
+expect_text existing-clones out "S3-clones done 4 clones present, left as they are: oh-my-zsh master@"
+expect_text existing-clones out "powerlevel10k master@$(printf '%.7s' "$P10K_HEAD")"
+expect_text existing-clones out "fzf-tab master@$(printf '%.7s' "$FZF_TAB_HEAD")"
+expect_text existing-clones out "conda-zsh-completion detached@$(printf '%.7s' "$CONDA_HEAD")"
+expect_no_events existing-clones
+run_case existing-clones-apply -- --host lab-ubuntu --yes --only S3-clones
+expect_rc existing-clones-apply 0
+expect_text existing-clones-apply out 'S3-clones done 4 clones present, left as they are'
+expect_no_events existing-clones-apply
+clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'the clean fzf-tab clone moved'
+[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_HEAD" ] || fail 'the dirty powerlevel10k clone moved'
+[ -n "$("$REAL_GIT" -C "$P10K_DIR" status --porcelain)" ] || fail 'the local powerlevel10k edit is gone'
+[ "$("$REAL_GIT" -C "$CONDA_DIR" rev-parse HEAD)" = "$CONDA_HEAD" ] || fail 'the detached clone moved'
+"$REAL_GIT" -C "$CONDA_DIR" symbolic-ref -q HEAD >/dev/null && fail 'the detached clone was checked out on a branch'
+[ "$clones_before" = "$(omz_sums)" ] || fail 'S3-clones changed a file in an existing clone'
+
+# With every clone present S3-clones is done and its apply never runs, so the
+# apply above proves little: with one missing, it does run. Move
+# conda-zsh-completion aside and detach oh-my-zsh in its place: the clone of
+# the missing one is the only git command apply may run, and the detached
+# oh-my-zsh, the dirty powerlevel10k and the behind fzf-tab keep their
+# commits, their branches and every byte.
+OMZ_DIR="$CASE_HOME/.oh-my-zsh"
+CONDA_REL=custom/plugins/conda-zsh-completion
+mv "$CONDA_DIR" "$TEST_TMP/conda.detached"
+"$REAL_GIT" -C "$OMZ_DIR" checkout -q --detach
+OMZ_HEAD=$("$REAL_GIT" -C "$OMZ_DIR" rev-parse HEAD)
+run_case missing-clone -- --host lab-ubuntu --check --only S3-clones
+expect_rc missing-clone 3
+expect_text missing-clone out "S3-clones todo to clone: conda-zsh-completion (main); present, left as they are: oh-my-zsh detached@$(printf '%.7s' "$OMZ_HEAD"), powerlevel10k master@$(printf '%.7s' "$P10K_HEAD"), fzf-tab master@$(printf '%.7s' "$FZF_TAB_HEAD")"
+expect_no_events missing-clone
+clones_before=$(omz_sums "$CONDA_REL")
+run_case missing-clone-apply -- --host lab-ubuntu --yes --only S3-clones
+expect_rc missing-clone-apply 0
+expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CONDA_DIR"
+[ "$(grep -c . "$EVENT_LOG")" = 1 ] || {
+    cat "$EVENT_LOG" >&2
+    fail 'missing-clone-apply: S3-clones ran more than the clone of the missing checkout'
+}
+clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'the missing clone was not made'
+[ "$("$REAL_GIT" -C "$OMZ_DIR" rev-parse HEAD)" = "$OMZ_HEAD" ] || fail 'the detached oh-my-zsh clone moved'
+"$REAL_GIT" -C "$OMZ_DIR" symbolic-ref -q HEAD >/dev/null && fail 'the detached oh-my-zsh clone was checked out on a branch'
+clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'the behind fzf-tab clone moved'
+[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_HEAD" ] || fail 'the dirty powerlevel10k clone moved'
+[ -n "$("$REAL_GIT" -C "$P10K_DIR" status --porcelain)" ] || fail 'the local powerlevel10k edit is gone'
+[ "$clones_before" = "$(omz_sums "$CONDA_REL")" ] || fail 'S3-clones changed a file in an existing clone'
+rm -rf "$CONDA_DIR"
+mv "$TEST_TMP/conda.detached" "$CONDA_DIR"
+"$REAL_GIT" -C "$OMZ_DIR" checkout -q master
 "$REAL_GIT" -C "$P10K_DIR" checkout -q -- powerlevel10k.zsh-theme
+"$REAL_GIT" -C "$CONDA_DIR" checkout -q main
+
+# A destination that exists but is not a git checkout fails the step with the
+# recovery hint; the other clones are still made, and it is left as it is.
+mv "$FZF_TAB_DIR" "$TEST_TMP/fzf-tab.saved"
+mkdir -p "$FZF_TAB_DIR"
+printf '# copied by hand\n' >"$FZF_TAB_DIR/fzf-tab.plugin.zsh"
+mv "$CONDA_DIR" "$TEST_TMP/conda.saved"
+run_case foreign-clone -- --host lab-ubuntu --check --only S3-clones
+expect_rc foreign-clone 3
+expect_text foreign-clone out 'S3-clones todo to clone: conda-zsh-completion (main); apply fails, not a git checkout: fzf-tab; present, left as they are: oh-my-zsh master@'
+expect_text foreign-clone out "powerlevel10k master@$(printf '%.7s' "$P10K_HEAD")"
+run_case foreign-clone-apply -- --host lab-ubuntu --yes --only S3-clones
+expect_rc foreign-clone-apply 1
+expect_text foreign-clone-apply err "$FZF_TAB_DIR exists and is not a git checkout; move it aside, then rerun"
+expect_text foreign-clone-apply out 'S3-clones failed'
+expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CONDA_DIR"
+expect_no_event "$FZF_TAB_DIR"
+[ "$(grep -c '^git:' "$EVENT_LOG")" = 1 ] || {
+    cat "$EVENT_LOG" >&2
+    fail 'foreign-clone-apply: S3-clones ran a git command on an existing clone'
+}
+clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'the missing clone next to a foreign one was not made'
+[ "$(cat "$FZF_TAB_DIR/fzf-tab.plugin.zsh")" = '# copied by hand' ] || fail 'the foreign fzf-tab dir changed'
+[ ! -e "$FZF_TAB_DIR/.git" ] || fail 'S3-clones turned the foreign dir into a checkout'
+rm -rf "$FZF_TAB_DIR" "$CONDA_DIR"
+mv "$TEST_TMP/fzf-tab.saved" "$FZF_TAB_DIR"
+mv "$TEST_TMP/conda.saved" "$CONDA_DIR"
+
+# A clone ref names a branch: a commit, as the old pinned manifests had, is
+# an invalid manifest, refused before any step runs.
+cp "$FIXTURE/config/bootstrap/git-clones.tsv" "$TEST_TMP/git-clones.saved"
+awk -F '\t' -v OFS='\t' -v sha="$FZF_TAB_HEAD" '$1 == "fzf-tab" { $4 = sha } { print }' \
+    "$TEST_TMP/git-clones.saved" >"$FIXTURE/config/bootstrap/git-clones.tsv"
+run_case clone-commit-ref -- --host lab-ubuntu --check --only S3-clones
+expect_rc clone-commit-ref 2
+expect_text clone-commit-ref err "invalid manifest: git-clones.tsv fzf-tab: ref is a commit, not a branch: $FZF_TAB_HEAD"
+expect_no_text clone-commit-ref out 'S3-clones'
+expect_no_events clone-commit-ref
+cp "$TEST_TMP/git-clones.saved" "$FIXTURE/config/bootstrap/git-clones.tsv"
 
 # A --check never hands out ./stow-all.sh while an auto prerequisite is todo.
 new_home cloned-only
@@ -958,7 +1084,7 @@ run_case cloned-only -- --host lab-ubuntu --yes --only S3-clones
 expect_rc cloned-only 0
 run_case check-cloned -- --host lab-ubuntu --check
 expect_rc check-cloned 3
-expect_text check-cloned out 'S3-clones done 3 clones at their pins'
+expect_text check-cloned out 'S3-clones done 4 clones present, left as they are'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
@@ -988,23 +1114,91 @@ run_case stow-own-link -- --host lab-ubuntu --check --only H7-stow
 expect_text stow-own-link out '1 home file(s) to move aside first: .zshrc'
 expect_no_text stow-own-link out "mv -n $CASE_HOME/.bashrc"
 
-# --- H1-gh-apt-repo: Ubuntu's own /usr/bin/gh is below the floor ------------
+# --- S2-brew-bundle: a conflicting formula stops it before brew runs ---------
 
-new_home gh-apt
-printf '#!/bin/sh\necho "gh version 2.45.0 (2026-03-17 Ubuntu 2.45.0-1ubuntu0.3+esm3)"\n' >"$CASE_HOME/.fake-gh-apt"
-chmod 755 "$CASE_HOME/.fake-gh-apt"
-run_case gh-apt-old -- --host lab-ubuntu --check --only H1-gh-apt-repo
-expect_rc gh-apt-old 0
-expect_text gh-apt-old out "H1-gh-apt-repo human $CASE_HOME/.fake-gh-apt 2.45.0 is below 2.50.0 (Ubuntu's own gh"
-expect_line gh-apt-old 'HUMAN-BEGIN H1-gh-apt-repo sudo'
-expect_no_events gh-apt-old
-printf '#!/bin/sh\necho "gh version 2.81.0 (2025-09-01)"\n' >"$CASE_HOME/.fake-gh-apt"
-run_case gh-apt-new -- --host lab-ubuntu --check --only H1-gh-apt-repo
-expect_rc gh-apt-new 0
-expect_text gh-apt-new out "H1-gh-apt-repo done $CASE_HOME/.fake-gh-apt 2.81.0 >= 2.50.0"
-expect_no_text gh-apt-new out 'HUMAN-BEGIN H1-gh-apt-repo'
+# The fixture cli.Brewfile declares "# conflicts: tldr tlrc tealdeer", as the
+# real one does: Homebrew will not install the tldr formula (the C client)
+# next to a tlrc keg, and brew bundle then fails with no more than that.
+new_home brew-conflict
+mkdir -p "$CASE_BREW/Cellar/tlrc/1.11.1"
+run_case brew-conflict-check -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-check 3
+expect_text brew-conflict-check out 'S2-brew-bundle human the installed tlrc formula conflicts with tldr (cli.Brewfile); brew bundle would fail'
+expect_line brew-conflict-check 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line brew-conflict-check '# docs/bootstrap.md S2-brew-bundle'
+expect_line brew-conflict-check "$CASE_BREW/bin/brew uninstall --formula tlrc"
+expect_no_text brew-conflict-check out 'uninstall --formula tealdeer'
+expect_text brew-conflict-check err 'HUMAN steps pending: S2-brew-bundle'
+expect_no_events brew-conflict-check
+# Apply stops too, before brew bundle check or brew bundle.
+run_case brew-conflict-apply -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc brew-conflict-apply 3
+expect_line brew-conflict-apply "$CASE_BREW/bin/brew uninstall --formula tlrc"
+expect_no_events brew-conflict-apply
+[ ! -e "$CASE_BREW/opt" ] || fail 'S2-brew-bundle ran brew bundle next to a conflicting formula'
+# A keg in $HOMEBREW_CELLAR counts as well.
+mkdir -p "$TEST_TMP/cellar-elsewhere/tealdeer/1.7.0"
+run_case brew-conflict-cellar HOMEBREW_CELLAR="$TEST_TMP/cellar-elsewhere" -- \
+    --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-cellar 3
+expect_line brew-conflict-cellar "$CASE_BREW/bin/brew uninstall --formula tlrc"
+expect_line brew-conflict-cellar "$CASE_BREW/bin/brew uninstall --formula tealdeer"
+# Without the keg the bundle runs; once tldr is installed a tlrc keg is no
+# conflict any more (brew bundle has nothing left to install).
+rm -rf "$CASE_BREW/Cellar/tlrc"
+run_case brew-conflict-gone -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc brew-conflict-gone 0
+expect_event 'brew:bundle cli.Brewfile'
+[ -e "$CASE_BREW/opt/tldr" ] || fail 'tldr was not bundled once the conflicting keg was gone'
+mkdir -p "$CASE_BREW/Cellar/tlrc/1.11.1"
+run_case brew-conflict-installed -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc brew-conflict-installed 0
+expect_text brew-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: core cli'
+expect_no_text brew-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
 
-# --- nvm: a checkout off the pinned commit is never sourced ------------------
+# --- S2-brew-bundle: a conflicting cask, judged only where it installs -------
+
+# A desktop Brewfile like the real one, for these cases only: a macOS-only
+# cask whose "# conflicts: cask TOKEN OTHER" line names its @nightly twin.
+# On mac a Caskroom/kitty@nightly directory stops the step before brew runs;
+# on Linux brew bundle skips the cask, so the pair never applies.
+DESKTOP_BREWFILE="$FIXTURE/config/bootstrap/brew/desktop.Brewfile"
+printf '%s\n' '# conflicts: cask kitty kitty@nightly' 'cask "kitty" if OS.mac?' >"$DESKTOP_BREWFILE"
+CASK_MAC=(BOOTSTRAP_UNAME_S=Darwin BOOTSTRAP_UNAME_M=aarch64 FAKE_XCODE=1)
+new_home cask-conflict
+mkdir -p "$CASE_BREW/Caskroom/kitty@nightly/0.44.0"
+run_case cask-conflict-check "${CASK_MAC[@]}" -- --host mac --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-check 3
+expect_text cask-conflict-check out 'S2-brew-bundle human the installed kitty@nightly cask conflicts with kitty (desktop.Brewfile); brew bundle would fail'
+expect_line cask-conflict-check 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line cask-conflict-check '# Homebrew does not install kitty (desktop.Brewfile) while the kitty@nightly cask is installed (conflicts_with), so brew bundle would fail'
+expect_line cask-conflict-check "$CASE_BREW/bin/brew uninstall --cask kitty@nightly"
+expect_no_text cask-conflict-check out 'uninstall --formula'
+expect_no_events cask-conflict-check
+run_case cask-conflict-apply "${CASK_MAC[@]}" -- --host mac --yes --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-apply 3
+expect_line cask-conflict-apply "$CASE_BREW/bin/brew uninstall --cask kitty@nightly"
+expect_no_events cask-conflict-apply
+run_case cask-conflict-manual "${CASK_MAC[@]}" -- --host mac --print-manual --tier desktop
+expect_rc cask-conflict-manual 0
+expect_line cask-conflict-manual "$CASE_BREW/bin/brew uninstall --cask kitty@nightly"
+# The pair is not judged on Linux, in --check or --print-manual.
+run_case cask-conflict-linux -- --host lab-ubuntu --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-linux 0
+expect_text cask-conflict-linux out 'S2-brew-bundle done Brewfiles satisfied: desktop'
+expect_no_text cask-conflict-linux out 'kitty@nightly'
+run_case cask-conflict-linux-manual -- --host lab-ubuntu --print-manual --tier desktop
+expect_rc cask-conflict-linux-manual 0
+expect_no_text cask-conflict-linux-manual out 'kitty@nightly'
+# Once kitty itself is installed, its @nightly twin is no conflict.
+mkdir -p "$CASE_BREW/Caskroom/kitty/0.44.0"
+run_case cask-conflict-installed "${CASK_MAC[@]}" -- --host mac --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-installed 0
+expect_text cask-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: desktop'
+expect_no_text cask-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
+rm -f "$DESKTOP_BREWFILE"
+
+# --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
 new_home nvm-moved
 run_case nvm-moved FAKE_NVM_REF=master -- --host lab-ubuntu --yes --only S4-nvm
@@ -1013,6 +1207,91 @@ expect_text nvm-moved err "not the pinned nvm commit $NVM_PIN"
 expect_event "curl:$URL_NVM"
 expect_no_event 'nvm:'
 [ ! -e "$CASE_HOME/.nvm" ] || fail 'an nvm checkout off its pin was left in place'
+
+# nvm_checkout HOME REF: HOME/.nvm as the fixture installer lays it out at REF
+# (empty: the pinned commit), with an nvm.sh that records being sourced.
+nvm_checkout() {
+    mkdir -p "$1/.nvm"
+    EVENT_LOG="$TEST_TMP/nvm-setup.log" NVM_DIR="$1/.nvm" NVM_INSTALL_VERSION="$NVM_PIN" FAKE_NVM_REF="$2" \
+        sh "$FIXTURES/artifacts/nvm-install" >/dev/null
+    printf '%s\n' 'printf "nvm-sourced\n" >>"$EVENT_LOG"' | cat - "$1/.nvm/nvm.sh" >"$1/.nvm/nvm.sh.new"
+    mv "$1/.nvm/nvm.sh.new" "$1/.nvm/nvm.sh"
+}
+
+# The pinned checkout without node: sourced, and node installed.
+new_home nvm-pinned
+nvm_checkout "$CASE_HOME" ''
+run_case nvm-pinned -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-pinned 0
+expect_no_event "curl:$URL_NVM"
+expect_order 'nvm-sourced' 'nvm:install --lts' 'nvm:alias default lts/*'
+[ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'the pinned nvm checkout got no default alias'
+
+# A checkout off the pin with no default node: a judgment block, never sourced.
+new_home nvm-foreign
+nvm_checkout "$CASE_HOME" master
+NVM_MOVED=$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)
+[ "$NVM_MOVED" != "$NVM_PIN" ] || fail 'the moved nvm fixture is at the pin'
+run_case nvm-foreign-check -- --host lab-ubuntu --check --only S4-nvm
+expect_rc nvm-foreign-check 3
+expect_text nvm-foreign-check out "S4-nvm human nvm has no node >= 22.0; $CASE_HOME/.nvm is at $NVM_MOVED, not the pinned nvm commit $NVM_PIN, so its nvm.sh is not sourced"
+expect_line nvm-foreign-check 'HUMAN-BEGIN S4-nvm judgment'
+expect_line nvm-foreign-check "git -C $CASE_HOME/.nvm fetch --depth=1 https://github.com/nvm-sh/nvm.git $NVM_PIN"
+expect_line nvm-foreign-check "git -C $CASE_HOME/.nvm -c advice.detachedHead=false checkout --detach $NVM_PIN"
+expect_text nvm-foreign-check err 'HUMAN steps pending: S4-nvm'
+expect_no_events nvm-foreign-check
+run_case nvm-foreign -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-foreign 3
+expect_line nvm-foreign 'HUMAN-BEGIN S4-nvm judgment'
+expect_no_event 'nvm-sourced'
+expect_no_event 'nvm:'
+expect_no_event "curl:$URL_NVM"
+[ ! -e "$CASE_HOME/.nvm/alias/default" ] || fail 'an nvm checkout off its pin got a default alias'
+# The block's command lines, each run on its own, bring it to the pin; the
+# next apply sources it.
+sed -n '/^HUMAN-BEGIN S4-nvm /,/^HUMAN-END$/p' "$TEST_TMP/nvm-foreign.out" |
+    grep -v -e '^HUMAN-' -e '^#' >"$TEST_TMP/nvm-block.lines"
+[ "$(grep -c . "$TEST_TMP/nvm-block.lines")" = 2 ] || fail "nvm block: $(cat "$TEST_TMP/nvm-block.lines")"
+while IFS= read -r line; do
+    bash -c "$line" >/dev/null 2>&1 </dev/null || fail "the nvm block line failed: $line"
+done <"$TEST_TMP/nvm-block.lines"
+[ "$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)" = "$NVM_PIN" ] || fail 'the nvm block did not reach the pin'
+run_case nvm-foreign-fixed -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-foreign-fixed 0
+expect_order 'nvm-sourced' 'nvm:install --lts'
+
+# With node at the floor and a default alias, any checkout is done, unsourced.
+new_home nvm-done
+nvm_checkout "$CASE_HOME" master
+mkdir -p "$CASE_HOME/.nvm/versions/node/v24.11.1/bin" "$CASE_HOME/.nvm/alias"
+printf '#!/bin/sh\necho v24.11.1\n' >"$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
+chmod 755 "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
+printf 'lts/*\n' >"$CASE_HOME/.nvm/alias/default"
+run_case nvm-done -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-done 0
+expect_text nvm-done out "S4-nvm done nvm in $CASE_HOME/.nvm with node 24.11.1 and a default alias"
+expect_no_event 'nvm-sourced'
+expect_no_event 'nvm:'
+
+# An nvm.sh outside a git checkout cannot be checked: moved aside, not sourced.
+new_home nvm-plain
+mkdir -p "$CASE_HOME/.nvm"
+printf '%s\n' 'printf "nvm-sourced\n" >>"$EVENT_LOG"' >"$CASE_HOME/.nvm/nvm.sh"
+run_case nvm-plain -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-plain 3
+expect_text nvm-plain out "$CASE_HOME/.nvm is not a git checkout, so its nvm.sh cannot be checked against the pinned commit and is not sourced"
+expect_line nvm-plain "mv -n $CASE_HOME/.nvm $CASE_HOME/.nvm.pre-dotfiles"
+expect_no_event 'nvm-sourced'
+
+# The pinned commit with a changed tracked file is not the pinned nvm.sh.
+new_home nvm-dirty
+nvm_checkout "$CASE_HOME" ''
+printf '# a local edit\n' >>"$CASE_HOME/.nvm/README.md"
+run_case nvm-dirty -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-dirty 3
+expect_text nvm-dirty out "$CASE_HOME/.nvm has local changes at the pinned commit, so its nvm.sh is not sourced"
+expect_line nvm-dirty "git -C $CASE_HOME/.nvm checkout -- ."
+expect_no_event 'nvm-sourced'
 
 # --- oh-my-zsh recovery: stow ran before the clone ---------------------------
 
@@ -1268,6 +1547,10 @@ expect_line manual 'sudo apt-get install -y --no-install-recommends zsh git curl
 expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
 expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
+expect_line manual 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line manual 'HUMAN-BEGIN S4-nvm judgment'
+expect_line manual "$CASE_BREW/bin/brew uninstall --formula tlrc"
+expect_line manual "$CASE_BREW/bin/brew uninstall --formula tealdeer"
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
 expect_line manual "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
@@ -1391,11 +1674,47 @@ for host in wsl-ubuntu sherlock marlowe; do
     run_case "manual-$host" -- --host "$host" --print-manual
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
-    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts; do
+    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts \
+    brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
 done
+
+# --- no temporary files ------------------------------------------------------
+
+# --check, --list and --print-manual create no file in TMPDIR, not even one
+# they remove again: TMPDIR is an empty directory with an old mtime, which
+# any file created or unlinked there would update. That catches mktemp and
+# the here-document files of Bash 4 and later; Bash 3.2 puts its own in
+# P_tmpdir whatever TMPDIR says, so bootstrap-manifest.sh scans these
+# scripts for here-documents as well.
+NO_TMP="$TEST_TMP/no-tmp"
+NO_TMP_REF="$TEST_TMP/no-tmp.ref"
+mkdir "$NO_TMP"
+# no_tmp_case NAME RC [VAR=VALUE...] -- ARGS...: run_case, its exit code, an
+# untouched TMPDIR.
+no_tmp_case() {
+    local name=$1 rc=$2
+    shift 2
+    touch -t 200001010000 "$NO_TMP" "$NO_TMP_REF"
+    run_case "$name" TMPDIR="$NO_TMP" "$@"
+    expect_rc "$name" "$rc"
+    [ -z "$(ls -A "$NO_TMP")" ] || fail "$name left files in TMPDIR: $(ls -A "$NO_TMP")"
+    [ -z "$(find "$NO_TMP" -maxdepth 0 -newer "$NO_TMP_REF" -print)" ] ||
+        fail "$name created and removed a file in TMPDIR"
+}
+new_home no-tmp
+no_tmp_case no-tmp-check 3 -- --host lab-ubuntu --check --tier all
+expect_text no-tmp-check out 'S3-clones todo'
+no_tmp_case no-tmp-check-missing 3 FAKE_DPKG_INSTALLED="$DPKG_PARTIAL" -- --host lab-ubuntu --check
+expect_line no-tmp-check-missing 'HUMAN-BEGIN H1-apt-core sudo'
+no_tmp_case no-tmp-list 0 -- --host lab-ubuntu --list
+no_tmp_case no-tmp-manual 0 -- --host lab-ubuntu --print-manual
+no_tmp_case no-tmp-mac 3 "${MAC_ENV[@]}" -- --host mac --check
+no_tmp_case no-tmp-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
+no_tmp_case no-tmp-help 0 -- --help
+no_tmp_case no-tmp-usage 2 -- --host lab-ubuntu --check --tier core,gui
 
 # --- bootstrap_fetch ---------------------------------------------------------
 

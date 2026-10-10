@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
+# docs/bootstrap.md) and other dotfiles knobs never reach the code under
+# test from the caller; each case sets what it needs.
+unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-shell-profile.XXXXXX")"
 trap 'rm -rf "$TEST_TMP"' EXIT
@@ -291,5 +298,84 @@ if command -v zsh >/dev/null 2>&1; then
     fi
 fi
 
-[ "$nvm_failures" = 0 ] || exit 1
+# common/zsh/.oh-my-zsh/custom/fzf-tab.zsh: both tldr previews color the page
+# with every tldr client. tlrc and tealdeer take `--color always`; the C
+# client (Homebrew's tldr formula) takes a bare -C and, given
+# `--color always ls`, looks up a page named "always-ls", prints "This page
+# doesn't exist yet!" and exits 1. Each fake prints the colored page only for
+# the arguments its client accepts, and that error for any other. The C
+# client goes online (a page its cache lacks, a cache two weeks old) unless
+# TLDR_AUTO_UPDATE_DISABLED is set, so its fake logs every call made without
+# it, and no preview may make one. The previews are evaluated as fzf-tab
+# does, in zsh with $word and $desc set.
+preview_failures=0
+TLDR_ONLINE_LOG=$TEST_TMP/tldr-online.log
+if command -v zsh >/dev/null 2>&1; then
+    # write_tldr DIR ACCEPTED [ONLINE_LOG]: a fake tldr in DIR that accepts
+    # only ACCEPTED and, given ONLINE_LOG, appends to it the arguments of each
+    # call made without TLDR_AUTO_UPDATE_DISABLED.
+    write_tldr() {
+        mkdir -p "$1"
+        {
+            printf '#!/bin/sh\naccepted=%s\nonline_log=%s\n' "'$2'" "'${3:-}'"
+            cat <<'SH'
+if [ -n "$online_log" ] && [ -z "${TLDR_AUTO_UPDATE_DISABLED+set}" ]; then
+    printf '%s\n' "$*" >>"$online_log"
+fi
+if [ "$*" = "$accepted" ]; then
+    printf '\033[1mls\033[0m\nList directory contents.\n'
+    exit 0
+fi
+echo "This page doesn't exist yet!"
+exit 1
+SH
+        } >"$1/tldr"
+        chmod +x "$1/tldr"
+    }
+    # preview DIR CONTEXT WORD: stdout of the fzf-preview zstyle for CONTEXT,
+    # evaluated with the fake tldr of DIR first on PATH.
+    preview() {
+        env -i HOME="$TEST_TMP/home" PATH="$1:/usr/bin:/bin" TERM=dumb \
+            zsh -f -c '
+                source $1
+                zstyle -s $2 fzf-preview preview || exit 97
+                word=$3 desc=$3
+                eval "$preview"
+            ' fzf-tab "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/fzf-tab.zsh" "$2" "$3" 2>/dev/null
+    }
+    want=$(printf '\033[1mls\033[0m\nList directory contents.')
+    for client in 'c:-C ls' 'tlrc:--color always ls'; do
+        dir=$TEST_TMP/tldr-${client%%:*}
+        online_log=
+        [ "${client%%:*}" != c ] || online_log=$TLDR_ONLINE_LOG
+        write_tldr "$dir" "${client#*:}" "$online_log"
+        for context in ':fzf-tab:complete:tldr:argument-1' ':fzf-tab:complete:-command-:'; do
+            got=$(preview "$dir" "$context" ls || true)
+            if [ "$got" != "$want" ]; then
+                printf 'FAIL fzf-tab %s preview with the %s client: %s\n' "$context" "${client%%:*}" \
+                    "$(printf '%s' "$got" | od -c | head -n 3)" >&2
+                preview_failures=$((preview_failures + 1))
+            fi
+            # A page no client has never shows a client's error text.
+            case $(preview "$dir" "$context" no-such-page || true) in
+                *"doesn't exist"*)
+                    printf 'FAIL fzf-tab %s preview printed the %s client error\n' "$context" "${client%%:*}" >&2
+                    preview_failures=$((preview_failures + 1))
+                    ;;
+            esac
+        done
+    done
+    got=$(preview "$TEST_TMP/tldr-c" ':fzf-tab:complete:tldr:argument-1' no-such-page || true)
+    if [ -n "$got" ]; then
+        printf 'FAIL fzf-tab tldr preview of a missing page printed: %s\n' "$got" >&2
+        preview_failures=$((preview_failures + 1))
+    fi
+    if [ -s "$TLDR_ONLINE_LOG" ]; then
+        printf 'FAIL fzf-tab previews ran the C client without TLDR_AUTO_UPDATE_DISABLED: %s\n' \
+            "$(tr '\n' ';' <"$TLDR_ONLINE_LOG")" >&2
+        preview_failures=$((preview_failures + 1))
+    fi
+fi
+
+[ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

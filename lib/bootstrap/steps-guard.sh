@@ -21,12 +21,15 @@ steps_git_status() {
 # a file which was already modified or untracked, whose status line stays the
 # same.
 steps_status_snapshot() {
-    local status line path sum
+    local status lines line path sum
     if ! status=$(steps_git_status); then
         printf '%s\n' '(git status failed)'
         return 0
     fi
-    while IFS= read -r line; do
+    lines=$status$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$line" ] || continue
         path=${line#???}
         case $line in
@@ -44,16 +47,16 @@ steps_status_snapshot() {
                 ;;
         esac
         printf '%s\t%s\n' "$line" "$sum"
-    done <<EOF
-$status
-EOF
+    done
 }
 
 # steps_status_lost A B: the paths of the snapshot lines of A that B lacks.
 steps_status_lost() {
-    local nl='
-' line path
-    while IFS= read -r line; do
+    local nl=$BOOTSTRAP_NL lines line path
+    lines=$1$nl
+    while [ -n "$lines" ]; do
+        line=${lines%%"$nl"*}
+        lines=${lines#*"$nl"}
         [ -n "$line" ] || continue
         case "$nl$2$nl" in
             *"$nl$line$nl"*) continue ;;
@@ -66,25 +69,23 @@ steps_status_lost() {
             *) path=$line ;;
         esac
         printf '%s\n' "$path"
-    done <<EOF
-$1
-EOF
+    done
 }
 
 # steps_status_changes BEFORE AFTER: the paths a step modified, added or
 # reverted, space-separated and each listed once.
 steps_status_changes() {
-    local path changed=''
-    while IFS= read -r path; do
+    local lines path changed=''
+    lines=$(steps_status_lost "$2" "$1")$BOOTSTRAP_NL$(steps_status_lost "$1" "$2")$BOOTSTRAP_NL || true
+    while [ -n "$lines" ]; do
+        path=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$path" ] || continue
         case " $changed " in
             *" $path "*) ;;
             *) changed="$changed${changed:+ }$path" ;;
         esac
-    done <<EOF
-$(steps_status_lost "$2" "$1")
-$(steps_status_lost "$1" "$2")
-EOF
+    done
     printf '%s\n' "${changed:-git status changed}"
 }
 
@@ -92,15 +93,16 @@ EOF
 # paths and a count, for the P0-preflight warning. Returns 1 when git status
 # fails, which turns the guard blind.
 steps_dirty_summary() {
-    local status line paths='' count=0
+    local status lines line paths='' count=0
     status=$(steps_git_status) || return 1
-    while IFS= read -r line; do
+    lines=$status$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$line" ] || continue
         count=$((count + 1))
         [ "$count" -gt 5 ] || paths="$paths${paths:+ }${line#???}"
-    done <<EOF
-$status
-EOF
+    done
     [ "$count" -gt 0 ] || return 0
     if [ "$count" -gt 5 ]; then
         printf '%s and %s more\n' "$paths" "$((count - 5))"
