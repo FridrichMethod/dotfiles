@@ -127,16 +127,18 @@ printf '%s\n' C C.utf8
 awk 'BEGIN { for (i = 0; i < 8000; i++) print "xx_XX" i ".utf8" }'
 SH
 
+# fc-list would create fontconfig caches; the font check scans file names.
 write_fake "$FAKE_BIN/fc-list" <<'SH'
 #!/bin/sh
 printf 'fc-list %s\n' "$*" >>"$EVENT_LOG"
-[ -z "${FC_FAMILIES:-}" ] || printf '%s\n' "$FC_FAMILIES"
-awk 'BEGIN { for (i = 0; i < 8000; i++) print "Filler Sans " i }'
 SH
 
+# A sync interpreter: it passes lib/config_sync.py --runtime-check unless
+# SYNC_RUNTIME_RC says otherwise (a venv without tomlkit), and logs the call.
 write_fake "$FAKE_BIN/sync-python" <<'SH'
 #!/bin/sh
-exit 0
+printf 'sync-python %s\n' "$*" >>"$EVENT_LOG"
+exit "${SYNC_RUNTIME_RC:-0}"
 SH
 
 # A fresh Homebrew prefix that is not on PATH yet.
@@ -231,6 +233,7 @@ BASE_ENV=(
     BOOTSTRAP_UNAME_S=Linux
     BOOTSTRAP_BREW_CANDIDATES="$BREW_BIN/brew"
     BOOTSTRAP_NVM_KEG_CANDIDATES="$TEST_TMP/kegs/nvm"
+    BOOTSTRAP_SYSTEM_FONT_DIRS="$TEST_TMP/system-fonts"
     GIT_CONFIG_GLOBAL=/dev/null
     GIT_CONFIG_NOSYSTEM=1
 )
@@ -394,7 +397,8 @@ for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-aut
     assert_no_row "$id"
 done
 assert_event 'fzf --version'
-assert_event 'fc-list : family'
+assert_no_event 'fc-list'
+assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'
 
@@ -457,9 +461,21 @@ assert_row brew-only missing
 
 # --- probe kinds -----------------------------------------------------------
 
-run_doctor font-present 'FC_FAMILIES=CaskaydiaMono Nerd Font,CaskaydiaMono NF' -- \
-    --host lab-ubuntu --tier all --tsv
-assert_row nerd-font ok 'font CaskaydiaMono Nerd Font (fc-list)'
+# Fonts are found by file name (any case, up to four levels deep) in the
+# user's, the system's and Homebrew's font directories; fc-list never runs.
+mkdir -p "$TEST_TMP/system-fonts/truetype/caskaydia"
+printf 'ttf\n' >"$TEST_TMP/system-fonts/truetype/caskaydia/caskaydiamononerdfontmono-bold.ttf"
+run_doctor font-system -- --host lab-ubuntu --tier all --tsv
+assert_row nerd-font ok "$TEST_TMP/system-fonts/truetype/caskaydia/caskaydiamononerdfontmono-bold.ttf"
+assert_no_event 'fc-list'
+rm -rf "$TEST_TMP/system-fonts"
+mkdir -p "$TEST_TMP/xdg-data/fonts/CaskaydiaMonoNerdFont"
+printf 'ttf\n' >"$TEST_TMP/xdg-data/fonts/CaskaydiaMonoNerdFont/CaskaydiaMonoNerdFont-Regular.ttf"
+run_doctor font-user "XDG_DATA_HOME=$TEST_TMP/xdg-data" -- --host lab-ubuntu --tier all --tsv
+assert_row nerd-font ok 'CaskaydiaMonoNerdFont/CaskaydiaMonoNerdFont-Regular.ttf'
+rm -rf "$TEST_TMP/xdg-data"
+run_doctor font-absent -- --host lab-ubuntu --tier all --tsv
+assert_row nerd-font missing 'no font file named like CaskaydiaMonoNerdFont'
 
 mkdir -p "$TEST_HOME/Library/Fonts"
 printf 'ttf\n' >"$TEST_HOME/Library/Fonts/CaskaydiaMonoNerdFont-Regular.ttf"
@@ -633,7 +649,17 @@ assert_row venv-sync ok
 mv "$TEST_TMP/venv.hidden" "$FIXTURE/.venv-sync"
 run_doctor venv-env-bad "DOTFILES_SYNC_PYTHON=$TEST_TMP/no-python" -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row venv-sync missing
+assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$TEST_TMP/no-python' fails lib/config_sync.py --runtime-check"
+# An executable that fails the runtime check (an interrupted setup-sync.sh
+# leaves a venv without tomlkit) is missing, as doctor.ps1 and setup-host's
+# S4-setup-sync judge it.
+run_doctor venv-env-broken "DOTFILES_SYNC_PYTHON=$FAKE_BIN/sync-python" SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$FAKE_BIN/sync-python' fails lib/config_sync.py --runtime-check" \
+    'docs/bootstrap.md S4-setup-sync'
+run_doctor venv-broken SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
 
 mv "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc" "$TEST_TMP/pymolrc.hidden"
 run_doctor submodule-missing -- --host lab-ubuntu --tsv

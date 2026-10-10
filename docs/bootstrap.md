@@ -371,8 +371,9 @@ kind.
 - `./doctor.sh` without `--smoke`, and `./setup-host.sh --check`, write nothing
   anywhere and make no network calls (`--online` adds only the three auth probes).
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
-  `nvim` and `pre-commit` rows are presence-only); `fc-list` may refresh a
-  stale fontconfig cache, as any program that loads fonts does.
+  `nvim` and `pre-commit` rows are presence-only), finds fonts by file name
+  instead of through `fc-list` (which creates fontconfig caches), and runs the
+  `venv-sync` interpreter with `-I -B`, so it writes no bytecode.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
   `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
   rc file. The only write it causes inside the checkout is `.venv-sync`, through
@@ -959,7 +960,9 @@ It needs Python 3.11 or newer.
   Ubuntu 24.04 `./setup-sync.sh` (system Python 3.12; on 22.04 use
   `--python /home/linuxbrew/.linuxbrew/bin/python3`);
   hpc `./setup-sync.sh --python "$HOME/micromamba/envs/login/bin/python3"`.
-- **Verify:** it prints `AI-sync runtime ready`; the doctor's `venv-sync` check is `ok`.
+- **Verify:** it prints `AI-sync runtime ready`; the doctor's `venv-sync` check,
+  which runs the same `--runtime-check` (on `DOTFILES_SYNC_PYTHON` when that is
+  set), is `ok`.
 - **Human:** no
 
 ## Phase 5: AI CLIs
@@ -1043,13 +1046,16 @@ CaskaydiaMono Nerd Font `.ttf` files); macOS uses the
 `font-caskaydia-mono-nerd-font` cask, Windows W1-font. On `wsl-ubuntu` the font
 belongs to the Windows terminal, not the distribution.
 
-- **Check:** `fc-list | grep -qi 'CaskaydiaMono Nerd Font' && echo ok`
-  (macOS: `ls ~/Library/Fonts /Library/Fonts | grep -i CaskaydiaMono`)
+- **Check:** `find ~/.local/share/fonts ~/.fonts /usr/share/fonts /usr/local/share/fonts -maxdepth 4 -iname '*CaskaydiaMonoNerdFont*' 2>/dev/null | head -n 1`
+  (macOS: `ls ~/Library/Fonts /Library/Fonts | grep -i CaskaydiaMono`); the
+  doctor's `nerd-font` row looks for the same file names, also under
+  Homebrew's `share/fonts`.
 - **Install:** automatic via setup-host.sh: extract into
   `$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont` (default
   `~/.local/share/fonts/...`), then `fc-cache -f`. By hand:
   `f=$(fetch_pinned nerd-font) && d=~/.local/share/fonts/CaskaydiaMonoNerdFont && mkdir -p "$d" && tar -C "$d" -xJf "$f" && fc-cache -f`
-- **Verify:** the check prints `ok`; prompt and `eza` icons render in kitty and WezTerm.
+- **Verify:** the check prints a font file and `fc-list | grep -i 'CaskaydiaMono Nerd Font'`
+  lists the family; prompt and `eza` icons render in kitty and WezTerm.
 - **Human:** no
 
 ### S6-kitty: kitty

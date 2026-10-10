@@ -10,16 +10,16 @@
 #   skip      not checkable here (a PowerShell module on unix, macOS locale)
 #   human     a person must repair it (installer edits, stow before oh-my-zsh)
 # Checks only read. git runs with --no-optional-locks, so it never refreshes
-# the index. One probed program can write its own cache, outside this
-# checkout and the rc files: fc-list reads fontconfig's caches, and
-# fontconfig itself rewrites only a stale one, as any program that loads
-# fonts does. Tools whose version flag writes are presence-only rows in
-# tools.tsv, so they never run: brew (.git/describe-cache), codex
-# (~/.codex/tmp/arg0), nvim (its log) and pre-commit (__pycache__). Only
-# bootstrap_check_auth (doctor.sh --online) may reach the network,
-# and only bootstrap_check_smoke (doctor.sh --smoke) starts a shell, which
-# may write shell caches. Test overrides: BOOTSTRAP_NVM_KEG_CANDIDATES and
-# BOOTSTRAP_CLT_SHIMS (colon-separated paths).
+# the index. Fonts are found by file name, never through fc-list, which
+# creates fontconfig caches under ~/.cache and in its prefix. venv-sync runs
+# Python with -I -B, so it writes no bytecode. Tools whose version flag writes
+# are presence-only rows in tools.tsv, so they never run: brew
+# (.git/describe-cache), codex (~/.codex/tmp/arg0), nvim (its log) and
+# pre-commit (__pycache__). Only bootstrap_check_auth (doctor.sh --online)
+# may reach the network, and only bootstrap_check_smoke (doctor.sh --smoke)
+# starts a shell, which may write shell caches. Test overrides:
+# BOOTSTRAP_NVM_KEG_CANDIDATES, BOOTSTRAP_CLT_SHIMS and
+# BOOTSTRAP_SYSTEM_FONT_DIRS (colon-separated paths).
 
 # Structural checks run after the tools.tsv rows: id, tier, generic doc step
 # (doctor.sh maps the step with bootstrap_doc_ref). These ids are reserved;
@@ -266,43 +266,54 @@ bootstrap_check_version() {
     esac
 }
 
-# bootstrap_check_font FAMILY ABSENT: fc-list on Linux; on macOS a file-name
-# match (FAMILY without spaces, any case) in ~/Library/Fonts and /Library/Fonts.
-bootstrap_check_font() {
-    local family=$1 absent=$2 fc needle dir file name families
-    if [ "$(bootstrap_os)" = Darwin ]; then
-        needle=$(printf '%s' "$family" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
-        for dir in "$HOME/Library/Fonts" /Library/Fonts; do
-            [ -d "$dir" ] || continue
-            for file in "$dir"/*; do
-                [ -f "$file" ] || continue
-                name=$(printf '%s' "${file##*/}" | tr '[:upper:]' '[:lower:]')
-                case $name in
-                    *"$needle"*)
-                        bootstrap_check_result ok "font $family at $file"
-                        return 0
-                        ;;
-                esac
-            done
-        done
-        bootstrap_check_result missing "font $family not in ~/Library/Fonts or /Library/Fonts; $absent"
-        return 0
-    fi
-    fc=$(bootstrap_find_command fc-list) || {
-        bootstrap_check_result warn "fc-list not found, cannot check font $family; $absent"
-        return 0
-    }
-    families=$("$fc" : family </dev/null 2>/dev/null) || families=
-    # A here-document, not a pipe: grep -q exits at the first match, and the
-    # writer's SIGPIPE would fail the test under the caller's pipefail.
-    if grep -Fqi -- "$family" <<EOF
-$families
-EOF
-    then
-        bootstrap_check_result ok "font $family (fc-list)"
+# bootstrap_font_dirs: the font directories, one per line: the user's, then
+# the system's and Homebrew's (BOOTSTRAP_SYSTEM_FONT_DIRS, a colon list,
+# replaces those two in tests).
+bootstrap_font_dirs() {
+    local darwin=0 brew
+    [ "$(bootstrap_os)" != Darwin ] || darwin=1
+    if [ "$darwin" = 1 ]; then
+        printf '%s\n' "$HOME/Library/Fonts"
     else
-        bootstrap_check_result missing "font $family unknown to fc-list; $absent"
+        printf '%s\n' "${XDG_DATA_HOME:-$HOME/.local/share}/fonts" "$HOME/.fonts"
     fi
+    if [ "${BOOTSTRAP_SYSTEM_FONT_DIRS+x}" = x ]; then
+        printf '%s\n' "$BOOTSTRAP_SYSTEM_FONT_DIRS" | tr ':' '\n'
+        return 0
+    fi
+    if [ "$darwin" = 1 ]; then
+        printf '%s\n' /Library/Fonts
+    else
+        printf '%s\n' /usr/share/fonts /usr/local/share/fonts
+    fi
+    if brew=$(bootstrap_brew_bin); then
+        printf '%s\n' "${brew%/bin/brew}/share/fonts"
+    fi
+}
+
+# bootstrap_check_font FAMILY ABSENT: a font file whose name holds FAMILY
+# without spaces, in any case (CaskaydiaMonoNerdFont-Regular.ttf), up to four
+# levels below a font directory. A read-only scan on every platform: fc-list
+# would create fontconfig caches in a fresh home.
+bootstrap_check_font() {
+    local family=$1 absent=$2 needle dir found
+    needle=$(printf '%s' "$family" | tr -d ' ')
+    while IFS= read -r dir; do
+        if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+            continue
+        fi
+        found=$(
+            find "$dir" -maxdepth 4 -iname "*$needle*" \( -type f -o -type l \) -print 2>/dev/null | sed -n 1p
+            true
+        )
+        if [ -n "$found" ]; then
+            bootstrap_check_result ok "font $family at $found"
+            return 0
+        fi
+    done <<EOF
+$(bootstrap_font_dirs)
+EOF
+    bootstrap_check_result missing "font $family: no font file named like $needle in the user, system or Homebrew font directories; $absent"
 }
 
 # bootstrap_check_tool PROBE VERSION_FLAG FLOOR ABSENT: one tools.tsv probe.
@@ -379,24 +390,36 @@ EOF
     fi
 }
 
+# bootstrap_sync_runtime_ok PYTHON ROOT: 0 when PYTHON passes
+# ROOT/lib/config_sync.py --runtime-check (Python 3.11+ and the pinned
+# tomlkit), as setup-sync.sh, setup-host's S4-setup-sync and doctor.ps1
+# judge it. -I -B: isolated, and no bytecode is written.
+bootstrap_sync_runtime_ok() {
+    [ -n "$1" ] && [ -f "$1" ] && [ -x "$1" ] || return 1
+    "$1" -I -B -X utf8 "$2/lib/config_sync.py" --runtime-check </dev/null >/dev/null 2>&1
+}
+
 # bootstrap_check_venv_sync ROOT: the AI-sync interpreter lib/sync-runtime.sh
-# would use (DOTFILES_SYNC_PYTHON when set, else ROOT/.venv-sync).
+# would use (DOTFILES_SYNC_PYTHON when set, else ROOT/.venv-sync) passes the
+# runtime check; an interrupted setup-sync.sh leaves a venv that does not.
 bootstrap_check_venv_sync() {
     local python
     if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
         python=$DOTFILES_SYNC_PYTHON
-        if [ -n "$python" ] && [ -f "$python" ] && [ -x "$python" ]; then
-            bootstrap_check_result ok "DOTFILES_SYNC_PYTHON=$python"
+        if bootstrap_sync_runtime_ok "$python" "$1"; then
+            bootstrap_check_result ok "DOTFILES_SYNC_PYTHON=$python passes the runtime check"
         else
-            bootstrap_check_result missing "DOTFILES_SYNC_PYTHON='$python' is not an executable file; the AI config sync helpers cannot run"
+            bootstrap_check_result missing "DOTFILES_SYNC_PYTHON='$python' fails lib/config_sync.py --runtime-check; the AI config sync helpers cannot run"
         fi
         return 0
     fi
     python=$1/.venv-sync/bin/python
-    if [ -f "$python" ] && [ -x "$python" ]; then
-        bootstrap_check_result ok "found $python"
+    if bootstrap_sync_runtime_ok "$python" "$1"; then
+        bootstrap_check_result ok "AI-sync runtime ready at $python"
+    elif [ -f "$python" ] && [ -x "$python" ]; then
+        bootstrap_check_result missing "$python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
     else
-        bootstrap_check_result missing "no executable $python; the AI config sync helpers cannot run (./setup-sync.sh)"
+        bootstrap_check_result missing "no executable $python; ./setup-sync.sh has not run, so ./stow-all.sh cannot sync the AI configs"
     fi
 }
 
