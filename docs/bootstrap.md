@@ -299,7 +299,8 @@ second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
-`Brewfile.lock.json` into the checkout).
+`Brewfile.lock.json` into the checkout), and in every mode
+`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1`, so a check that runs gh writes nothing.
 Before probing anything, both scripts prepend to their own PATH, when they
 exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
