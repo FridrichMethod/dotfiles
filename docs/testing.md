@@ -67,6 +67,10 @@ three levels deep with a fake `brew shellenv` and conda prepends: PATH, FPATH
 and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
 (activated env or brew first) is kept, a conda-style activate and deactivate
 keeps an entry already on PATH, and nothing assigns PATH after oh-my-zsh.
+It also evaluates the fzf-tab tldr previews of `custom/fzf-tab.zsh`, as
+fzf-tab does, with a fake C client (Homebrew's `tldr`, which takes only `-C`)
+and a fake tlrc (only `--color always`): both must show the colored page, and
+a client's missing-page error must never reach the preview.
 
 The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
 unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs

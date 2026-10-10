@@ -134,7 +134,7 @@ prints) appear at the start of the When absent cell.
 | --- | --- | --- | --- | --- | --- | --- |
 | `ripgrep` | all | brew `ripgrep` | brew `ripgrep` | login env `ripgrep` | winget `BurntSushi.ripgrep.MSVC` | rg searches fail |
 | `git-delta` | all | brew `git-delta` | brew `git-delta` | login env `git-delta` | winget `dandavison.delta` | fzf-tab git diff and show previews are empty |
-| `tldr` | all | brew `tlrc` | brew `tlrc` | login env `tealdeer` | winget `tldr-pages.tlrc` | fzf-tab command and tldr previews fall back to man |
+| `tldr` | all | brew `tldr` (the C client) | brew `tldr` (the C client) | login env `tealdeer` | winget `tldr-pages.tlrc` | fzf-tab command and tldr previews fall back to man |
 | `chafa` | unix | brew `chafa` | brew `chafa` | login env `chafa` | - | fzf image previews outside kitty show only file details |
 | `jq` | all | brew `jq` | brew `jq` | login env `jq` | winget `jqlang.jq` | JSON filtering on the command line fails |
 | `nvim` | all | brew `neovim` | brew `neovim` | login env `nvim` | winget `Neovim.Neovim` | the vi alias fails |

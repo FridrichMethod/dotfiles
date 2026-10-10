@@ -298,5 +298,68 @@ if command -v zsh >/dev/null 2>&1; then
     fi
 fi
 
-[ "$nvm_failures" = 0 ] || exit 1
+# common/zsh/.oh-my-zsh/custom/fzf-tab.zsh: both tldr previews color the page
+# with every tldr client. tlrc and tealdeer take `--color always`; the C
+# client (Homebrew's tldr formula) takes a bare -C and, given
+# `--color always ls`, looks up a page named "always", prints "This page
+# doesn't exist yet!" and exits 1. Each fake prints the colored page only for
+# the arguments its client accepts, and that error for any other. The
+# previews are evaluated as fzf-tab does, in zsh with $word and $desc set.
+preview_failures=0
+if command -v zsh >/dev/null 2>&1; then
+    # write_tldr DIR ACCEPTED: a fake tldr in DIR that accepts only ACCEPTED.
+    write_tldr() {
+        mkdir -p "$1"
+        {
+            printf '#!/bin/sh\naccepted=%s\n' "'$2'"
+            cat <<'SH'
+if [ "$*" = "$accepted" ]; then
+    printf '\033[1mls\033[0m\nList directory contents.\n'
+    exit 0
+fi
+echo "This page doesn't exist yet!"
+exit 1
+SH
+        } >"$1/tldr"
+        chmod +x "$1/tldr"
+    }
+    # preview DIR CONTEXT WORD: stdout of the fzf-preview zstyle for CONTEXT,
+    # evaluated with the fake tldr of DIR first on PATH.
+    preview() {
+        env -i HOME="$TEST_TMP/home" PATH="$1:/usr/bin:/bin" TERM=dumb \
+            zsh -f -c '
+                source $1
+                zstyle -s $2 fzf-preview preview || exit 97
+                word=$3 desc=$3
+                eval "$preview"
+            ' fzf-tab "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/fzf-tab.zsh" "$2" "$3" 2>/dev/null
+    }
+    want=$(printf '\033[1mls\033[0m\nList directory contents.')
+    for client in 'c:-C ls' 'tlrc:--color always ls'; do
+        dir=$TEST_TMP/tldr-${client%%:*}
+        write_tldr "$dir" "${client#*:}"
+        for context in ':fzf-tab:complete:tldr:argument-1' ':fzf-tab:complete:-command-:'; do
+            got=$(preview "$dir" "$context" ls || true)
+            if [ "$got" != "$want" ]; then
+                printf 'FAIL fzf-tab %s preview with the %s client: %s\n' "$context" "${client%%:*}" \
+                    "$(printf '%s' "$got" | od -c | head -n 3)" >&2
+                preview_failures=$((preview_failures + 1))
+            fi
+            # A page no client has never shows a client's error text.
+            case $(preview "$dir" "$context" no-such-page || true) in
+                *"doesn't exist"*)
+                    printf 'FAIL fzf-tab %s preview printed the %s client error\n' "$context" "${client%%:*}" >&2
+                    preview_failures=$((preview_failures + 1))
+                    ;;
+            esac
+        done
+    done
+    got=$(preview "$TEST_TMP/tldr-c" ':fzf-tab:complete:tldr:argument-1' no-such-page || true)
+    if [ -n "$got" ]; then
+        printf 'FAIL fzf-tab tldr preview of a missing page printed: %s\n' "$got" >&2
+        preview_failures=$((preview_failures + 1))
+    fi
+fi
+
+[ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

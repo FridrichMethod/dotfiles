@@ -6,7 +6,7 @@
 # conda-forge name traps:
 #   nvim is the editor; `neovim` there is the 0.3 Python client.
 #   fd-find provides fd; go-shfmt provides shfmt; git-delta provides delta.
-#   tealdeer provides tldr (brew and winget use tlrc).
+#   tealdeer provides tldr (brew uses its tldr formula, the C client; winget tlrc).
 #   stow has no linux-aarch64 build; both hosts are x86_64.
 #   nodejs provides node (>= 22 for the Claude hooks); on sherlock the
 #   overlay's later `ml nodejs/24.13.0` puts the Lmod node first on PATH.

@@ -774,7 +774,7 @@ that Ubuntu gets from apt point here too: git-lfs and tmux come from the core
 Brewfile, and the rest (zsh, curl, rsync, tar, file, col, man) are macOS
 baseline. One Brewfile per tier in
 [`brew/`](../config/bootstrap/brew/): `core` (stow, python, fzf, zoxide, eza,
-fd, bat; on macOS also git-lfs and tmux), `cli` (ripgrep, git-delta, tlrc,
+fd, bat; on macOS also git-lfs and tmux), `cli` (ripgrep, git-delta, tldr,
 chafa, jq, neovim, aria2, uv, gh), `ai` and `desktop` (macOS casks only:
 claude-code and codex; kitty, wezterm and the CaskaydiaMono Nerd Font) and
 `contributor`. `--no-upgrade` never upgrades what is already installed, so an
@@ -799,7 +799,7 @@ of, taken from each entry's `conflicts_with` on formulae.brew.sh when it was
 pinned, in `# conflicts: FORMULA OTHER...` lines and, for casks,
 `# conflicts: cask TOKEN OTHER...` lines (validated by
 `tests/bootstrap-manifest.sh`). Today they are `core`'s `fd fdclone` (both
-install `fd`), `cli`'s `tlrc tldr tealdeer` (all three install `tldr`), and the
+install `fd`), `cli`'s `tldr tlrc tealdeer` (all three install `tldr`), and the
 macOS casks `claude-code` (`ai`, against `claude-code@latest`), `kitty` and
 `wezterm` (`desktop`, each against its `@nightly` cask). Before it runs brew at
 all, in `--check` and apply alike, S2-brew-bundle looks for each OTHER that is
@@ -815,16 +815,19 @@ it found, by full path:
 ```text
 HUMAN-BEGIN S2-brew-bundle judgment
 # docs/bootstrap.md S2-brew-bundle
-# Homebrew does not install tlrc (cli.Brewfile) while the tldr formula is installed (conflicts_with), so brew bundle would fail
+# Homebrew does not install tldr (cli.Brewfile) while the tlrc formula is installed (conflicts_with), so brew bundle would fail
 # uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one
-/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr
+/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc
 HUMAN-END
 ```
 
-The `tldr` command comes back from tlrc on the next run (a cask such as
-`wezterm@nightly` likewise gives way to `wezterm`). The conflict holds back
-the whole step, every selected Brewfile, so keeping the other package instead
-means leaving its tier out (for tldr, `--tier core,ai`). `--print-manual`
+The `tldr` command comes back from the `tldr` formula on the next run (a cask
+such as `wezterm@nightly` likewise gives way to `wezterm`). That formula is
+the C client (tldr-c-client), whose `-C`/`--color` takes no argument; the
+fzf-tab previews try `tldr --color always` (tlrc, tealdeer) and then
+`tldr -C`, so they color with every client. The conflict holds back the whole
+step, every selected Brewfile, so keeping the other package instead means
+leaving its tier out (for tldr, `--tier core,ai`). `--print-manual`
 prints the block for every declared pair that applies on this platform. A
 conflict Homebrew adds later is not judged until a Brewfile line names it
 ([Known limitations](#known-limitations)). See also
@@ -1682,13 +1685,13 @@ if you want to keep them (`mv DEST DEST.local`), then
 an installer is [X-rc-protection](#x-rc-protection-rc-file-protection).
 
 **Conflicting Homebrew formula or cask.** S2-brew-bundle is `human` with "the
-installed tldr formula conflicts with tlrc (cli.Brewfile)" (or, on macOS, for
+installed tlrc formula conflicts with tldr (cli.Brewfile)" (or, on macOS, for
 example "the installed wezterm@nightly cask conflicts with wezterm
-(desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tlrc
+(desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tldr
 because conflicting formulae are installed" or a cask conflict. Check with
 `ls "$(brew --prefix)/Cellar" "$(brew --prefix)/Caskroom"`, then uninstall the
 other package by the path setup-host printed, for example
-`/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr` (tealdeer the
+`/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc` (tealdeer the
 same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
 `./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
 takes its place. If brew refuses because another formula depends on it, keep
@@ -1759,9 +1762,9 @@ fail-closed behavior beyond what is stated.
   succeed; uninstalling it is still the fix.
 - **Only declared conflicts are judged.** The `# conflicts:` lines record the
   `conflicts_with` data that formulae.brew.sh listed for each Brewfile entry
-  when the Brewfiles were pinned (2026-10-09). A conflict Homebrew adds later
-  fails `brew bundle` with "brew bundle failed for <file>" until a Brewfile
-  line names it ([X-recovery](#x-recovery-recovery-recipes)).
+  when its Brewfile was pinned (the `# pinned` date at its top). A conflict
+  Homebrew adds later fails `brew bundle` with "brew bundle failed for <file>"
+  until a Brewfile line names it ([X-recovery](#x-recovery-recovery-recipes)).
 - **A Linuxbrew prefix owned by another account.** H1-linuxbrew is `done` once
   `brew` runs, whoever owns `/home/linuxbrew/.linuxbrew`. On a shared lab
   install owned by another user, `brew bundle` (and `brew uninstall`) as you

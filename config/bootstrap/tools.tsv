@@ -145,7 +145,6 @@ lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so over
 # alias: pwsh Microsoft.PowerShell
 # alias: ripgrep BurntSushi.ripgrep.MSVC
 # alias: git-delta dandavison.delta
-# alias: tldr tlrc
 # alias: tldr tealdeer
 # alias: tldr tldr-pages.tlrc
 # alias: jq jqlang.jq

@@ -84,12 +84,17 @@ zstyle ':fzf-tab:complete:git-checkout:*' fzf-preview \
 # brew
 zstyle ':fzf-tab:complete:brew-(install|uninstall|search|info):*-argument-rest' fzf-preview 'HOMEBREW_COLOR=1 brew info $word'
 
-# tldr
-zstyle ':fzf-tab:complete:tldr:argument-1' fzf-preview 'tldr --color always $word'
+# tldr: tlrc and tealdeer take `--color always`; the C client (Homebrew's tldr
+# formula) takes a bare -C and reads `--color always` as a page named
+# "always". A client that fails prints nothing, so the next one runs.
+zstyle ':fzf-tab:complete:tldr:argument-1' fzf-preview \
+    '(out=$(tldr --color always "$word" 2>/dev/null) && echo "$out") || \
+    (out=$(tldr -C "$word" 2>/dev/null) && echo "$out")'
 
 # commands
 zstyle ':fzf-tab:complete:-command-:*' fzf-preview \
     '(out=$(tldr --color always "$word" 2>/dev/null) && echo "$out") || \
+    (out=$(tldr -C "$word" 2>/dev/null) && echo "$out") || \
     (man -w "$word" >/dev/null 2>&1 && MANWIDTH=$((FZF_PREVIEW_COLUMNS < 40 ? 80 : FZF_PREVIEW_COLUMNS)) man -P cat "$word" 2>/dev/null | col -bx | bat --language=man --color=always --style=plain --wrap=character) || \
     (out=$(which "$word" 2>/dev/null) && echo "$out" | bat --color=always --language=zsh --style=plain --wrap=character) || \
     (out="${(P)word}"; [[ -n "$out" ]] && echo "$out" | bat --color=always --language=zsh --style=plain --wrap=character) || \
