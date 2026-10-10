@@ -963,8 +963,12 @@ assert_quiet_events '--list probed tools with the real manifest on --platform ot
 # five columns, a known status, and a fix that is - or a docs/bootstrap.md
 # step with a heading. HOME is an empty temporary home (the caller's own home
 # changes too often to snapshot), TMPDIR an empty dir with an old mtime, and
-# neither nor the checkout may change. The exit code depends on what this
-# machine has installed: 0 or 1, never 2.
+# neither of them nor the checkout may change. The checkout scan leaves out its
+# git metadata (every .git): another git process (an editor refreshing the
+# index, the login updater's fetch, a parallel session) may write there at
+# any time, and the read-only fixture cases below already cover the doctor's
+# own git, whose find includes the fixture's .git. The exit code depends on
+# what this machine has installed: 0 or 1, never 2.
 REAL_HOME="$TEST_TMP/real-home"
 REAL_TMP="$TEST_TMP/real-tmp"
 REAL_REF="$TEST_TMP/real.ref"
@@ -972,7 +976,7 @@ REAL_MARKER="$TEST_TMP/real.marker"
 mkdir "$REAL_HOME" "$REAL_TMP"
 DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
 real_doctor_case() {
-    local fix
+    local fix changed
     CASE=$1
     shift
     touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
@@ -1007,8 +1011,8 @@ real_doctor_case() {
         case_fail "the real doctor wrote into HOME or TMPDIR: $(find "$REAL_HOME" "$REAL_TMP" -mindepth 1 -print)"
     [ -z "$(find "$REAL_HOME" "$REAL_TMP" -maxdepth 0 -newer "$REAL_REF" -print)" ] ||
         case_fail 'the real doctor created and removed a file in HOME or TMPDIR'
-    [ -z "$(find "$REPO_ROOT" -newer "$REAL_MARKER" -print)" ] ||
-        case_fail "the real doctor wrote into the checkout: $(find "$REPO_ROOT" -newer "$REAL_MARKER" -print)"
+    changed=$(find "$REPO_ROOT" -name .git -prune -o -newer "$REAL_MARKER" -print)
+    [ -z "$changed" ] || case_fail "the real doctor wrote into the checkout: $changed"
 }
 real_doctor_case real-debian --platform debian --tsv
 real_doctor_case real-other --platform other --tsv

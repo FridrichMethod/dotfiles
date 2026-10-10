@@ -82,7 +82,9 @@ the installer suite; find snapshots prove that the doctor and
 (`--platform debian` and `--platform other` with `--tsv`, an empty temporary
 `HOME`): every line must keep the TSV contract, the exit code must be 0 or 1,
 and the home, `TMPDIR` and checkout must stay unchanged, so a runner whose
-tools print unexpected versions or write state on `--version` fails CI.
+tools print unexpected versions or write state on `--version` fails CI. The
+checkout scan skips `.git`, where any other git process may write meanwhile;
+the fixture cases cover the doctor's own git.
 `tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
 against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
 Windows job runs that suite and the validator from `tests/run.ps1`. None of
