@@ -784,7 +784,7 @@ account whose group you are not in (`ls -ld /home/linuxbrew/.linuxbrew`
 names it). H1-linuxbrew is then `done`, since `brew` runs, but brew refuses to
 install there as you ("The following directories are not writable by your
 user"). S2-brew-bundle notices this before it runs brew and prints a `sudo`
-block that bundles as that account
+block that installs the missing Brewfile entries as that account
 ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). Never follow brew's own
 advice to `sudo chown -R` the prefix: that takes it away from the account that
 maintains it and from everyone else who uses it.
@@ -860,6 +860,12 @@ HUMAN-BEGIN S2-brew-bundle judgment
 HUMAN-END
 ```
 
+On a prefix you cannot write (a shared Homebrew prefix, below), the line runs
+brew as the prefix's owner and the last note reads "uninstall each
+conflicting formula or cask below as the owner; the next ./setup-host.sh run
+then prints the owner's lines that install the Brewfile one", since that run
+stops again at the owner's `sudo` block rather than bundling.
+
 The `tldr` command comes back from the `tldr` formula on the next run (a cask
 such as `wezterm@nightly` likewise gives way to `wezterm`). That formula is
 the C client (tldr-c-client), whose `-C`/`--color` takes no argument; the
@@ -902,8 +908,9 @@ would create it. When one is not writable, it runs no brew command, not even
 `brew bundle check`. The Brewfiles that the offline estimate (`opt/` links)
 finds incomplete are pending: then the step is `human`, not `todo`, and
 blocking (exit 3), and setup-host prints a `sudo` block with one line per
-pending Brewfile that installs it as the account owning the first unwritable
-directory (`stat`, else `ls -ld`):
+pending Brewfile (one for its formulae, one for its casks) that installs, by
+name, the entries the prefix lacks, as the account owning the first
+unwritable directory (`stat`, else `ls -ld`):
 
 ```text
 HUMAN-BEGIN S2-brew-bundle sudo
@@ -911,29 +918,38 @@ HUMAN-BEGIN S2-brew-bundle sudo
 # the Homebrew prefix /home/linuxbrew/.linuxbrew is shared and owned by lab; you cannot write /home/linuxbrew/.linuxbrew/Cellar, /home/linuxbrew/.linuxbrew/bin, /home/linuxbrew/.linuxbrew/Homebrew
 # the lines below run brew as lab and change the prefix for everyone on this machine
 # never chown a shared prefix: it belongs to lab and serves every account here
-# each line installs one Brewfile, read on stdin and run from /tmp, since lab may not be able to read your home
-(cd /tmp && sudo -u lab -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 /home/linuxbrew/.linuxbrew/bin/brew bundle --no-upgrade --file=- < /home/you/dotfiles/config/bootstrap/brew/cli.Brewfile)
+# each line installs by name the entries of one Brewfile that the prefix lacks, from /tmp: brew never opens the Brewfile or your home, which lab may not be able to read
+# HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed formula or cask alone, as brew bundle --no-upgrade does
+(cd /tmp && sudo -u lab -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_INSTALL_UPGRADE=1 /home/linuxbrew/.linuxbrew/bin/brew install --formula gh tldr)
 HUMAN-END
 ```
 
 Each line is self-contained. `sudo` resets the environment, so `env` passes
 the Homebrew variables after it, and `-H` gives brew the owner's home for its
-cache. Your home is often closed to other accounts (mode `0750`), so the
-owner's brew could neither open a Brewfile inside your checkout nor start in
-it: brew refuses a working directory its user cannot read. Hence your own
-shell opens the Brewfile and hands it over on stdin (`--file=-`, which
-`brew bundle` reads as `/dev/stdin`), and the line starts in `/tmp`, inside
-parentheses so the `cd` stays in a subshell. Whatever the lines install lands
-in the shared prefix for every account on the machine, which is the point of
-a shared install; Homebrew links it there for everyone, and `--no-upgrade`
-leaves what is already installed alone. Never `chown` a shared prefix, even
-though brew's own error suggests it: that takes it from the account that
-maintains it and from everyone using it. When every Brewfile is already
-satisfied, the step is `done` without the owner. A conflicting formula or cask
-there is uninstalled the same way: the judgment block above then prints its
-`brew uninstall` as such a line, with the same notes. `--print-manual` prints
-the block for every Brewfile of the selected tiers while you cannot write the
-prefix, and nothing otherwise, since it names the owner.
+cache. The owner's brew never reads a file of yours: setup-host reads the
+Brewfile as you and puts the names on the command line. Another account often
+cannot read a Brewfile in your checkout, either because your home is closed
+to it (mode `0750`) or because the file itself is (a clone made under
+`umask 077` has `0600` Brewfiles), and handing the file over on stdin does not
+help: `brew bundle --file=-` reopens `/dev/stdin` by path, and Linux then
+checks the file's own mode against the owner. brew also refuses a working
+directory its user cannot read, so the line starts in `/tmp`, inside
+parentheses so the `cd` stays in a subshell. The names are the offline
+estimate's missing entries, with the OS guards applied and a tap's formula as
+`user/tap/name`, which `brew install` taps by itself (a `tap` line alone gets
+no line). brew bundle installs its missing entries with this same
+`brew install`, and `HOMEBREW_NO_INSTALL_UPGRADE=1` leaves an entry that turns
+out to be installed alone, as `--no-upgrade` does. Whatever the lines install
+lands in the shared prefix for every account on the machine, which is the
+point of a shared install; Homebrew links it there for everyone. Never
+`chown` a shared prefix, even though brew's own error suggests it: that takes
+it from the account that maintains it and from everyone using it. When every
+Brewfile is already satisfied, the step is `done` without the owner. A
+conflicting formula or cask there is uninstalled the same way: the judgment
+block above then prints its `brew uninstall` as such a line, with the same
+notes. `--print-manual` prints the block while you cannot write the prefix,
+with every entry of each selected Brewfile that applies on this platform, and
+nothing otherwise, since it names the owner.
 
 ### S2-micromamba: micromamba
 
@@ -1820,7 +1836,7 @@ it and leave its tier out instead
 conflict no Brewfile declares is the same fix by hand; add its
 `# conflicts:` line to the Brewfile as well. On a Linuxbrew prefix owned by
 another account (a shared lab install), only that account can uninstall or
-bundle: setup-host prints the uninstall as a `(cd /tmp && sudo -u <owner> ...)`
+install: setup-host prints the uninstall as a `(cd /tmp && sudo -u <owner> ...)`
 line, and a conflict found by hand is uninstalled the same way; never `chown`
 the prefix.
 

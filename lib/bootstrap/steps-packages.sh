@@ -24,31 +24,44 @@ steps_brew_pending() {
     done
 }
 
-# steps_brewfile_missing PREFIX FILE: the brew and cask entries of FILE with
-# no opt/ link or Caskroom/ dir under PREFIX, space-separated. A read-only,
-# offline estimate for --check (Homebrew links opt/ for aliases too).
-steps_brewfile_missing() {
-    local prefix=$1 entries lines line kind name rest missing=''
-    entries=$(sed -nE 's/^[[:space:]]*(brew|cask)[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/\1 \2 \3/p' "$2") ||
+# steps_brewfile_entries FILE KIND [PREFIX]: the KIND (brew or cask)
+# entries of FILE that brew bundle installs on STEPS_PROFILE (OS guards
+# honoured), space-separated as written (tap/name for a tap's formula); with
+# PREFIX, only those with no opt/ link or Caskroom/ dir under it. A
+# read-only, offline estimate for --check (Homebrew links opt/ for aliases
+# too).
+steps_brewfile_entries() {
+    local prefix=${3:-} entries lines line kind name rest found=''
+    entries=$(sed -nE 's/^[[:space:]]*(brew|cask)[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/\1 \2 \3/p' "$1") ||
         return 1
     lines=$entries$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         line=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
         bootstrap_split ' ' "$line" kind name rest
-        [ -n "$kind" ] || continue
+        [ "$kind" = "$2" ] || continue
         case $rest in
             *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] || continue ;;
             *'if OS.linux?'*) [ "$STEPS_PROFILE" != macos ] || continue ;;
         esac
-        name=${name##*/}
-        case $kind in
-            brew) [ -e "$prefix/opt/$name" ] && continue ;;
-            cask) [ -d "$prefix/Caskroom/$name" ] && continue ;;
-        esac
-        missing="$missing${missing:+ }$name"
+        if [ -n "$prefix" ]; then
+            case $kind in
+                brew) [ ! -e "$prefix/opt/${name##*/}" ] || continue ;;
+                cask) [ ! -d "$prefix/Caskroom/${name##*/}" ] || continue ;;
+            esac
+        fi
+        found="$found${found:+ }$name"
     done
-    printf '%s\n' "$missing"
+    printf '%s\n' "$found"
+}
+
+# steps_brewfile_missing PREFIX FILE: the brew and cask entries of FILE with
+# no opt/ link or Caskroom/ dir under PREFIX, space-separated.
+steps_brewfile_missing() {
+    local brews casks
+    brews=$(steps_brewfile_entries "$2" brew "$1") || return 1
+    casks=$(steps_brewfile_entries "$2" cask "$1") || return 1
+    printf '%s\n' "$brews${brews:+${casks:+ }}$casks"
 }
 
 # steps_brew_pending_offline PREFIX: the selected Brewfiles with an entry
@@ -230,8 +243,9 @@ steps_brew_access() {
     done
 }
 
-# steps_brew_owner_line WORDS: one self-contained line that runs the
-# STEPS_BREW_PREFIX brew with WORDS (already quoted) as STEPS_BREW_OWNER:
+# steps_brew_owner_line WORDS [ENV]: one self-contained line that runs the
+# STEPS_BREW_PREFIX brew with WORDS (already quoted) as STEPS_BREW_OWNER,
+# with ENV (VAR=VALUE words) after the Homebrew variables every line sets:
 # from /tmp, since brew refuses a working directory its user cannot read, in
 # a subshell, so the cd never reaches the reader's shell. A note instead when
 # no owner could be named.
@@ -239,11 +253,40 @@ steps_brew_owner_line() {
     local brew
     brew=$(steps_quote "$STEPS_BREW_PREFIX/bin/brew")
     if [ -z "$STEPS_BREW_OWNER" ]; then
-        printf '# run as the owner of %s, which this run cannot name: %s %s\n' "$STEPS_BREW_PREFIX" "$brew" "$1"
+        printf '# run as the owner of %s, which this run cannot name: %s%s %s\n' \
+            "$STEPS_BREW_PREFIX" "${2:+$2 }" "$brew" "$1"
         return 0
     fi
-    printf '(cd /tmp && sudo -u %s -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 %s %s)\n' \
-        "$(steps_quote "$STEPS_BREW_OWNER")" "$brew" "$1"
+    printf '(cd /tmp && sudo -u %s -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1%s %s %s)\n' \
+        "$(steps_quote "$STEPS_BREW_OWNER")" "${2:+ $2}" "$brew" "$1"
+}
+
+# steps_brew_install_lines MODE FILE: the owner lines that install by name,
+# formulae and casks apart, the entries of FILE that the prefix lacks (MODE
+# manual: every entry that applies here). brew never opens FILE, which the
+# owner may not be able to read (a 0600 Brewfile, a closed home), and
+# HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed one alone, as
+# --no-upgrade does. A FILE this user cannot read gets a note instead.
+steps_brew_install_lines() {
+    local kind names name words prefix=$STEPS_BREW_PREFIX
+    [ "$1" != manual ] || prefix=''
+    for kind in brew cask; do
+        if ! names=$(steps_brewfile_entries "$2" "$kind" "$prefix" 2>/dev/null); then
+            printf '# cannot read %s, so this block has no line for it\n' "$2"
+            return 0
+        fi
+        words=''
+        while [ -n "$names" ]; do
+            bootstrap_split ' ' "$names" name names
+            words="$words $(steps_quote "$name")"
+        done
+        [ -n "$words" ] || continue
+        case $kind in
+            brew) words="install --formula$words" ;;
+            *) words="install --cask$words" ;;
+        esac
+        steps_brew_owner_line "$words" HOMEBREW_NO_INSTALL_UPGRADE=1
+    done
 }
 
 # steps_brew_shared_notes: the notes of a block that runs brew as the owner
@@ -256,27 +299,29 @@ steps_brew_shared_notes() {
     printf '# never chown a shared prefix: it belongs to %s and serves every account here\n' "$owner"
 }
 
-# steps_brew_shared_block MODE FILES: the sudo block that bundles each of
-# FILES (Brewfile paths, one per line) as the owner of the Homebrew prefix
-# that steps_brew_access found locked. brew reads each Brewfile on stdin,
-# which your shell opens, because the owner may not be able to read your
-# home. MODE manual adds the condition under which the block applies.
+# steps_brew_shared_block MODE FILES: the sudo block that installs, as the
+# owner of the Homebrew prefix that steps_brew_access found locked, the
+# entries of each of FILES (Brewfile paths, one per line) that the prefix
+# lacks (steps_brew_install_lines). MODE manual names every entry and adds
+# the condition under which the block applies.
 steps_brew_shared_block() {
-    local lines file
+    local lines file what='the entries of one Brewfile that the prefix lacks'
     steps_block_begin S2-brew-bundle sudo
     if [ "$1" = manual ]; then
         printf '%s\n' '# applies while you cannot write the Homebrew prefix (one shared with other accounts);' \
-            '# ./setup-host.sh then stops S2-brew-bundle before running brew and prints this block for the pending Brewfiles'
+            '# ./setup-host.sh then stops S2-brew-bundle before running brew and prints this block for the missing entries'
+        what='every entry of one Brewfile that applies here'
     fi
     steps_brew_shared_notes
-    printf '# each line installs one Brewfile, read on stdin and run from /tmp, since %s may not be able to read your home\n' \
-        "${STEPS_BREW_OWNER:-the owner}"
+    printf '# each line installs by name %s, from /tmp: brew never opens the Brewfile or your home, which %s may not be able to read\n' \
+        "$what" "${STEPS_BREW_OWNER:-the owner}"
+    printf '%s\n' '# HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed formula or cask alone, as brew bundle --no-upgrade does'
     lines=$2$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         file=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
-        steps_brew_owner_line "bundle --no-upgrade --file=- < $(steps_quote "$file")"
+        steps_brew_install_lines "$1" "$file"
     done
     steps_block_end
 }
@@ -304,7 +349,11 @@ steps_brew_conflict_block() {
         printf '# Homebrew does not install %s (%s) while the %s %s is installed (conflicts_with), so brew bundle would fail\n' \
             "$name" "$file" "$other" "$kind"
     done
-    printf '%s\n' '# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one'
+    if [ -n "$STEPS_BREW_LOCKED" ]; then
+        printf '%s\n' "# uninstall each conflicting formula or cask below as the owner; the next ./setup-host.sh run then prints the owner's lines that install the Brewfile one"
+    else
+        printf '%s\n' '# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one'
+    fi
     lines=$2$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         line=${lines%%"$BOOTSTRAP_NL"*}
@@ -354,7 +403,7 @@ step_S2_brew_bundle_check() {
         return 3
     fi
     # A prefix this user cannot write: brew bundle would fail, so its owner
-    # bundles what the offline estimate finds missing, in apply mode too.
+    # installs what the offline estimate finds missing, in apply mode too.
     if [ -n "$STEPS_BREW_LOCKED" ]; then
         pending=$(steps_brew_pending_offline "$prefix")
         note=" (offline estimate from $prefix/opt)"
@@ -363,7 +412,7 @@ step_S2_brew_bundle_check() {
             return 0
         fi
         STEPS_BREW_SHARED=$pending
-        STEP_DETAIL="you cannot write the shared Homebrew prefix $prefix (owned by ${STEPS_BREW_OWNER:-another account}), so its owner bundles: $(steps_brewfile_names "$pending")$note"
+        STEP_DETAIL="you cannot write the shared Homebrew prefix $prefix (owned by ${STEPS_BREW_OWNER:-another account}), so its owner installs what is missing from: $(steps_brewfile_names "$pending")$note"
         return 3
     fi
     if [ "$STEPS_MODE" = apply ]; then
@@ -413,7 +462,7 @@ step_S2_brew_bundle_apply() {
     fi
     steps_brew_access "${brew%/bin/brew}"
     if [ -n "$STEPS_BREW_LOCKED" ]; then
-        dotfiles_log error "you cannot write $STEPS_BREW_LOCKED; its owner bundles (the S2-brew-bundle sudo block)"
+        dotfiles_log error "you cannot write $STEPS_BREW_LOCKED; its owner installs (the S2-brew-bundle sudo block)"
         return 1
     fi
     lines=$(steps_brew_pending "$brew")$BOOTSTRAP_NL || true
