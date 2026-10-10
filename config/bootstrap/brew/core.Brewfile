@@ -7,8 +7,13 @@ brew "stow"
 # python is Homebrew's alias for its default python@3.x, the only formula that
 # links an unversioned python3; the others install python3.N alone, so a
 # versioned pin loses python3 when the default moves (python resolved to
-# python@3.15 on 2026-10-09, after python@3.14).
-brew "python"
+# python@3.15 on 2026-10-09, after python@3.14). Even with --no-upgrade, brew
+# bundle installs the new default whenever the alias moves (the old keg stays
+# beside it), so python is bundled on macOS only, where it is needed (the CLT
+# python3 is 3.9). Debian and Ubuntu use apt's python3 and python3-venv
+# (apt/common.txt, H1-apt-core; 24.04 ships 3.12), and a Linuxbrew python
+# would relink python3 for every user of a shared prefix.
+brew "python" if OS.mac?
 brew "fzf"
 brew "zoxide"
 brew "eza"

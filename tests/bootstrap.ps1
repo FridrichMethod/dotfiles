@@ -490,8 +490,8 @@ try {
         Assert-True (-not (Test-BootstrapTierSelection '')) 'empty tiers'
         Assert-True (Test-BootstrapTierSelected host all) 'all tiers'
         Assert-True (-not (Test-BootstrapTierSelected desktop 'core,cli,ai')) 'default tiers'
-        $refs = [ordered]@{ 'S2-brew-bundle' = 'W1-winget'; 'S4-nvm' = 'W1-winget'; 'S5-claude' = 'W1-winget'
-            'S5-codex' = 'W1-winget'; 'S3-bat-theme' = 'W1-bat-theme'; 'S6-nerd-font' = 'W1-font'
+        $refs = [ordered]@{ 'H1-apt-core' = 'W1-winget'; 'S2-brew-bundle' = 'W1-winget'; 'S4-nvm' = 'W1-winget'
+            'S5-claude' = 'W1-winget'; 'S5-codex' = 'W1-winget'; 'S3-bat-theme' = 'W1-bat-theme'; 'S6-nerd-font' = 'W1-font'
             'S4-setup-sync' = 'W1-setup-sync'; 'H7-stow' = 'HW-stow'; 'H7-auth' = 'HW-auth'; 'X-contributor' = 'X-contributor'
         }
         foreach ($step in $refs.Keys) { Assert-Equal (Get-BootstrapDocRef $step) $refs[$step] "windows $step" }

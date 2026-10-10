@@ -319,7 +319,9 @@ cat >"$TEST_TMP/brew-stub" <<'SH'
 #!/bin/sh
 # Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file,
 # bundle check looks for those links (as the offline --check estimate does).
-# --file=- reads the Brewfile on stdin, as Homebrew's does.
+# Like Homebrew's, it skips an "if OS.mac?" entry off macOS (the case's
+# BOOTSTRAP_UNAME_S) and an "if OS.linux?" one on it, and --file=- reads the
+# Brewfile on stdin.
 prefix=$(cd "$(dirname "$0")/.." && pwd) file='' prev=''
 for arg do
     [ "$prev" != --file ] || file=$arg
@@ -330,7 +332,10 @@ for arg do
 done
 [ "$file" != - ] || file=/dev/stdin
 name=${file##*/}
-formulas=$(sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p' "$file" 2>/dev/null)
+other_os='if OS.mac?'
+[ "${BOOTSTRAP_UNAME_S:-Linux}" != Darwin ] || other_os='if OS.linux?'
+formulas=$(grep -vF "$other_os" "$file" 2>/dev/null |
+    sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p')
 case "${1:-} ${2:-}" in
     'bundle check')
         printf 'brew-check:%s\n' "$name" >>"$EVENT_LOG"
@@ -862,6 +867,9 @@ expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
 expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
 expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
+# Linux takes python3 from apt (H1-apt-core): the core Brewfile's python is
+# macOS-only.
+[ ! -e "$CASE_BREW/opt/python" ] || fail 'S2-brew-bundle bundled python on Linux'
 expect_no_event TRIPWIRE
 # A missing clone is a shallow clone of the branch its ref names.
 expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CASE_HOME/.oh-my-zsh/custom/plugins/conda-zsh-completion"
@@ -1204,6 +1212,28 @@ expect_rc cask-conflict-installed 0
 expect_text cask-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: desktop'
 expect_no_text cask-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
 rm -f "$DESKTOP_BREWFILE"
+
+# --- S2-brew-bundle: Homebrew's python only on macOS -------------------------
+
+# The core Brewfile bundles python "if OS.mac?": Debian and Ubuntu take
+# python3 from apt (H1-apt-core), so a prefix that is complete on Linux still
+# lacks python on macOS, whose Command Line Tools python3 is too old.
+new_home brew-python
+for formula in fzf jq tldr; do
+    mkdir -p "$CASE_BREW/opt/$formula"
+done
+run_case python-linux -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_rc python-linux 0
+expect_text python-linux out 'S2-brew-bundle done Brewfiles satisfied: core cli'
+run_case python-mac "${CASK_MAC[@]}" -- --host mac --check --only S2-brew-bundle
+expect_rc python-mac 3
+expect_text python-mac out "S2-brew-bundle todo Brewfiles to bundle: core (offline estimate from $CASE_BREW/opt"
+expect_no_events python-mac
+run_case python-mac-apply "${CASK_MAC[@]}" -- --host mac --yes --only S2-brew-bundle
+expect_rc python-mac-apply 0
+expect_event 'brew:bundle core.Brewfile'
+expect_no_event 'brew:bundle cli.Brewfile'
+[ -e "$CASE_BREW/opt/python" ] || fail 'S2-brew-bundle did not bundle python on macOS'
 
 # --- S2-brew-bundle: a shared Homebrew prefix this user cannot write ---------
 

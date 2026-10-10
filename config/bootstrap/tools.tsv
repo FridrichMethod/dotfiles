@@ -39,7 +39,10 @@ tmux	core	unix	tmux	-V	-	fzf --tmux popups and tmux sessions are unavailable	H1-
 # $HOMEBREW_REPOSITORY/.git/describe-cache, and the doctor writes nothing.
 homebrew	core	mac	brew	-	-	Brewfile bundles cannot run	H1-homebrew
 linuxbrew	core	wsl-ubuntu,lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/brew	-	-	Brewfile bundles cannot run and the overlay brew shellenv line fails	H1-linuxbrew
-python3	core	all	python3,python	--version	3.11	setup-sync and the AI config sync helpers cannot run	S2-brew-bundle
+# python3 is apt's on Debian and Ubuntu (24.04 ships 3.12); the core Brewfile
+# bundles Homebrew's python on macOS only (the CLT python3 is 3.9), where
+# bootstrap_doc_ref maps H1-apt-core to S2-brew-bundle.
+python3	core	all	python3,python	--version	3.11	setup-sync and the AI config sync helpers cannot run	H1-apt-core
 stow	core	unix	stow	--version	2.3.1	stow-all.sh refuses to run	S2-brew-bundle
 fzf	core	all	fzf	--version	0.58.0	Ctrl-R/T, Alt-C and fzf-tab fail	S2-brew-bundle
 zoxide	core	all	zoxide	--version	-	z and zi are not defined	S2-brew-bundle

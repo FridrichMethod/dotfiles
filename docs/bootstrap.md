@@ -722,7 +722,10 @@ Applies to `wsl-ubuntu` and `lab-ubuntu`: the packages in
 `wslview`, libnotify-bin for `notify-send`) or
 [`apt/lab-ubuntu.txt`](../config/bootstrap/apt/lab-ubuntu.txt) (xclip,
 wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
-git-lfs, tmux, man, locales, build tools). The interactive tools come from
+git-lfs, tmux, man, locales, build tools) and Python: `python3` and
+`python3-venv` meet the 3.11 floor of setup-sync (Ubuntu 24.04 ships 3.12), so
+no Linuxbrew python is bundled ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
+The interactive tools come from
 Linuxbrew because Ubuntu 24.04's apt is below the floors (fzf 0.44.1,
 gh 2.45) and renames bat and fd to `batcat` and `fdfind`. Ubuntu's apt gh is
 too old and is not used, even where it is installed: the Linuxbrew gh of the
@@ -738,8 +741,8 @@ on PATH). gh needs no sudo on any host.
   `sudo apt-get update` and then
   `sudo apt-get install -y --no-install-recommends` followed by every package of
   both lists.
-- **Verify:** the check prints `ok`; doctor rows `zsh`, `git-lfs`, `tmux`, `col`
-  and `man` are `ok`.
+- **Verify:** the check prints `ok`; doctor rows `zsh`, `git-lfs`, `tmux`, `col`,
+  `man` and `python3` are `ok`.
 - **Human:** yes (sudo: installs system packages)
 
 On `wsl-ubuntu`, Windows PATH entries are appended inside the distribution, so
@@ -805,11 +808,11 @@ Applies to `lab-ubuntu`. The fcitx5 packages arrive with H1-apt-core;
 ### S2-brew-bundle: Brewfile bundles
 
 Applies to `mac`, `wsl-ubuntu` and `lab-ubuntu`. On macOS the doctor's rows
-that Ubuntu gets from apt point here too: git-lfs and tmux come from the core
-Brewfile, and the rest (zsh, curl, rsync, tar, file, col, man) are macOS
-baseline. One Brewfile per tier in
-[`brew/`](../config/bootstrap/brew/): `core` (stow, python, fzf, zoxide, eza,
-fd, bat; on macOS also git-lfs and tmux), `cli` (ripgrep, git-delta, tldr,
+that Ubuntu gets from apt point here too: python3, git-lfs and tmux come from
+the core Brewfile, and the rest (zsh, curl, rsync, tar, file, col, man) are
+macOS baseline. One Brewfile per tier in
+[`brew/`](../config/bootstrap/brew/): `core` (stow, fzf, zoxide, eza, fd, bat;
+on macOS also python, git-lfs and tmux), `cli` (ripgrep, git-delta, tldr,
 chafa, jq, neovim, aria2, uv, gh), `ai` and `desktop` (macOS casks only:
 claude-code and codex; kitty, wezterm and the CaskaydiaMono Nerd Font) and
 `contributor`. `--no-upgrade` never upgrades what is already installed, so an
@@ -823,8 +826,8 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
 - **Install:** automatic via setup-host.sh, for each selected tier:
   `brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade` with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
-- **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`python3`, `stow`,
-  `fzf`, `eza`, `fd`, `gh`, ...) `ok` with their floors.
+- **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`stow`, `fzf`,
+  `eza`, `fd`, `gh`, ..., and on macOS `python3`) `ok` with their floors.
 - **Human:** no, unless a conflicting formula or cask is installed (judgment,
   below) or you cannot write the Homebrew prefix (sudo, below)
 
@@ -870,6 +873,20 @@ the other package instead means leaving its tier out (for tldr,
 that applies on this platform. A conflict Homebrew adds later is not judged
 until a Brewfile line names it ([Known limitations](#known-limitations)). See
 also [X-recovery](#x-recovery-recovery-recipes).
+
+**Python on macOS only.** The core Brewfile's `brew "python" if OS.mac?`
+names Homebrew's `python` alias for its default `python@3.x`, the only formula
+that links an unversioned `python3`. `--no-upgrade` never upgrades an
+installed formula, but it resolves the alias each time: when Homebrew's
+default moves (it became `python@3.15` on 2026-10-09, after `python@3.14`),
+the next bundle installs the new `python@3.x` alongside the old one, which
+stays installed until you remove it. On Debian and Ubuntu, apt's `python3`
+and `python3-venv` from H1-apt-core already meet the 3.11 floor, and a
+Linuxbrew python would add a whole new formula at every such move and, on a
+shared prefix, relink `python3` for every account, so it is bundled on macOS
+only, where it is needed (the Command Line Tools' `python3` is 3.9). The
+manifest validator rejects a `python` or `python@3.x` Brewfile entry without
+`if OS.mac?`.
 
 **A shared Homebrew prefix.** brew refuses to install into a prefix whose
 directories its user cannot write ("The following directories are not
@@ -1189,8 +1206,10 @@ It needs Python 3.11 or newer.
 - **Install:** automatic via setup-host.sh. By hand, by platform:
   macOS `./setup-sync.sh --python /opt/homebrew/bin/python3` (Intel:
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
-  Ubuntu 24.04 `./setup-sync.sh` (system Python 3.12; on 22.04 use
-  `--python /home/linuxbrew/.linuxbrew/bin/python3`);
+  Ubuntu 24.04 `./setup-sync.sh` (apt's Python 3.12; the Brewfiles bundle no
+  Linux python, so on 22.04, whose apt Python is 3.10, install a newer one
+  first, for example `brew install python@3.13`, and pass its `python3.13`
+  with `--python`);
   hpc `./setup-sync.sh --python "$HOME/micromamba/envs/login/bin/python3"`.
 - **Verify:** it prints `AI-sync runtime ready`; the doctor's `venv-sync` check,
   which runs the same `--runtime-check` (on `DOTFILES_SYNC_PYTHON` when that is

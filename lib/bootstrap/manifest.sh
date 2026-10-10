@@ -296,7 +296,7 @@ bootstrap_doc_ref() {
             printf '%s\n' X-other-linux
             ;;
         windows:P0-preflight) printf '%s\n' HW-clone ;;
-        windows:S2-brew-bundle | windows:S4-nvm | windows:S5-claude | windows:S5-codex)
+        windows:H1-apt-core | windows:S2-brew-bundle | windows:S4-nvm | windows:S5-claude | windows:S5-codex)
             printf '%s\n' W1-winget
             ;;
         windows:S3-bat-theme) printf '%s\n' W1-bat-theme ;;

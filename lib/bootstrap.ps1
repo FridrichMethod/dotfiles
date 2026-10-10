@@ -255,7 +255,8 @@ function Get-BootstrapDocRef {
         { $_ -cin @('other:H1-apt-core', 'other:H1-locale', 'other:H1-homebrew', 'other:H1-linuxbrew',
                 'other:S2-brew-bundle', 'other:S4-nvm', 'other:S5-claude', 'other:S5-codex') } { return 'X-other-linux' }
         'windows:P0-preflight' { return 'HW-clone' }
-        { $_ -cin @('windows:S2-brew-bundle', 'windows:S4-nvm', 'windows:S5-claude', 'windows:S5-codex') } {
+        { $_ -cin @('windows:H1-apt-core', 'windows:S2-brew-bundle', 'windows:S4-nvm', 'windows:S5-claude',
+                'windows:S5-codex') } {
             return 'W1-winget'
         }
         'windows:S3-bat-theme' { return 'W1-bat-theme' }

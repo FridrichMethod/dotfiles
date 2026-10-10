@@ -110,7 +110,7 @@ prints) appear at the start of the When absent cell.
 | `tmux` | unix | brew `tmux` | apt `tmux` | login env `tmux` | - | fzf --tmux popups and tmux sessions are unavailable |
 | `homebrew` | mac | pinned `homebrew` (sudo) | - | - | - | Brewfile bundles cannot run |
 | `linuxbrew` | wsl-ubuntu, lab-ubuntu | - | pinned `homebrew` (sudo) | - | - | Brewfile bundles cannot run and the overlay brew shellenv line fails |
-| `python3` | all | brew `python` | apt `python3`, brew `python` | login env `python` | winget `Python.Python.3.12` | >= 3.11. setup-sync and the AI config sync helpers cannot run |
+| `python3` | all | brew `python` | apt `python3` (no Linuxbrew python) | login env `python` | winget `Python.Python.3.12` | >= 3.11. setup-sync and the AI config sync helpers cannot run |
 | `stow` | unix | brew `stow` | brew `stow` | login env `stow` | - | >= 2.3.1. stow-all.sh refuses to run |
 | `fzf` | all | brew `fzf` | brew `fzf` | login env `fzf` | winget `junegunn.fzf` | >= 0.58.0. Ctrl-R/T, Alt-C and fzf-tab fail |
 | `zoxide` | all | brew `zoxide` | brew `zoxide` | login env `zoxide` | winget `ajeetdsouza.zoxide` | z and zi are not defined |

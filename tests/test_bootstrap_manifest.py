@@ -373,6 +373,10 @@ def read_brewfiles(config, errors):
             report(errors, "brewfile", where, kind == "cask" and guard != "mac" and "casks need if OS.mac?")
             forbidden = base in ("nvm", "openssh") or base.startswith("openssh@")
             report(errors, "brewfile-forbidden", where, forbidden and f"{base} must never be bundled")
+            linux_python = (base == "python" or base.startswith("python@")) and guard != "mac"
+            report(errors, "brewfile-forbidden", where, linux_python and
+                   f'{base} needs if OS.mac?: Debian and Ubuntu use apt python3 (H1-apt-core), and a Linuxbrew '
+                   "python would relink python3 for every user of a shared prefix")
             report(errors, "brewfile", where, name in seen and f"{name} repeats {seen.get(name)}")
             seen[name] = where
             entries.append((name, guard))
@@ -798,6 +802,11 @@ class RejectionTests(unittest.TestCase):
         self.check([
             ("brewfile-forbidden", "openssh", lambda: self.append("brew/core.Brewfile", 'brew "openssh"\n')),
             ("brewfile-forbidden", "nvm", lambda: self.append("brew/ai.Brewfile", 'brew "nvm"\n')),
+            ("brewfile-forbidden", "python on Linux",
+             lambda: self.replace("brew/core.Brewfile", 'brew "python" if OS.mac?\n', 'brew "python"\n')),
+            ("brewfile-forbidden", "python if OS.linux?",
+             lambda: self.replace("brew/core.Brewfile", 'brew "python" if OS.mac?\n', 'brew "python" if OS.linux?\n')),
+            ("brewfile-forbidden", "versioned python", lambda: self.append("brew/cli.Brewfile", 'brew "python@3.13"\n')),
             ("brewfile", "ruby", lambda: self.append("brew/cli.Brewfile", 'system "curl x | sh"\n')),
             ("brewfile", "options", lambda: self.append("brew/cli.Brewfile", 'brew "jq", args: ["HEAD"]\n')),
             ("brewfile", "unguarded cask", lambda: self.append("brew/desktop.Brewfile", 'cask "iterm2"\n')),

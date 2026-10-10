@@ -402,7 +402,7 @@ doc_case S5-claude hpc S2-modules
 doc_case S5-codex hpc S2-modules
 doc_case S3-clones hpc S3-clones
 doc_case H7-stow hpc H7-stow
-for step in S2-brew-bundle S4-nvm S5-claude S5-codex; do
+for step in H1-apt-core S2-brew-bundle S4-nvm S5-claude S5-codex; do
     doc_case "$step" windows W1-winget
 done
 doc_case S3-bat-theme windows W1-bat-theme
