@@ -1723,6 +1723,71 @@ it is the link into `~/dotfiles`; then `./stow-all.sh H`, with the
 [H7-stow](#h7-stow-stow-the-dotfiles) prefix when `stow` is not on PATH, and, if
 needed, [H7-chsh](#h7-chsh-login-shell).
 
+## Known limitations
+
+Accepted gaps, each low in impact; none of them weakens a step's
+fail-closed behavior beyond what is stated.
+
+- **rc-pollution guard granularity.** The guard
+  ([X-rc-protection](#x-rc-protection-rc-file-protection)) fingerprints each
+  top-level `git status --porcelain` entry of the checkout: a file's content,
+  a link's target. A submodule is one entry and a nested repository that git
+  does not track is one `?? dir/` entry, so an installer that edits a file
+  inside the PyMOL submodule after it is already dirty, or inside a nested
+  untracked repository, goes unnoticed. Nothing the bootstrap runs writes
+  there.
+- **Execution policy set only through `EnableScripts`.**
+  [HW-execution-policy](#hw-execution-policy-execution-policy) reads the
+  `ExecutionPolicy` values (the policy keys, then CurrentUser and Windows
+  PowerShell 5.1's key). A "Turn on Script Execution: Disabled" policy stored
+  only as `EnableScripts=0` is not detected, so its non-blocking judgment
+  block may not be printed; `Get-ExecutionPolicy -List` still shows it.
+- **lab-ubuntu zsh overlay outside an interactive shell.** Sourcing
+  `lab-ubuntu/zsh/.config/zsh/.zshrc` in a non-interactive `zsh` with Linuxbrew
+  and the `/apps/miniconda3` mamba hook present prints
+  `compinit: initialization aborted` and `command not found: compdef`. This
+  predates the bootstrap; interactive shells are fine, and
+  `tests/host-overlays.sh` points the conda and mamba prefixes at missing
+  paths to test only the Linuxbrew guard.
+- **A conflicting formula is judged by its keg.** S2-brew-bundle stops when
+  `Cellar/<formula>` of a declared conflict exists, linked or not. Homebrew
+  itself refuses only a linked one, so an unlinked keg stops the step although
+  `brew bundle` would succeed; uninstalling it is still the fix.
+- **A Linuxbrew prefix owned by another account.** H1-linuxbrew is `done` once
+  `brew` runs, whoever owns `/home/linuxbrew/.linuxbrew`. On a shared lab
+  install owned by another user, `brew bundle` (and `brew uninstall`) as you
+  fail inside brew; only that account, or a prefix of your own, can install.
+
+## Known follow-ups
+
+Deferred on purpose; each is a separate change.
+
+- **StyLua hook without Rust.** `.pre-commit-config.yaml` uses the StyLua
+  hook id `stylua`, which builds StyLua with cargo, so a contributor needs
+  Rust; switch to the `stylua-github` id, which downloads the release binary.
+- **Windows ssh RemoteCommand.** `win/ssh/.ssh/config.d/legacy.conf` still
+  runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
+  the login-env form the other overlays use
+  (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
+- **Hardcoded conda and mamba prefixes.** The overlays' `conda initialize`
+  blocks and `MAMBA_*` exports name one machine's prefix (for example
+  `/Users/<name>/miniconda3` in `mac/`); re-aim them at `$HOME`, as AGENTS.md
+  asks of machine-specific paths ([X-host-tools](#x-host-tools-host-specific-tools)).
+- **`win/wsl` is not a `$HOME`-shaped package.** `stow-all.ps1` links
+  `wsl.conf` and `mount.vbs` into `%USERPROFILE%`, where neither does
+  anything: `wsl.conf` only works as `/etc/wsl.conf` inside the distribution,
+  and its `mount-data.sh` is not shipped
+  ([HW-wsl](#hw-wsl-wsl-distribution)). Split it into what belongs in the
+  Windows home (`.wslconfig`) and a documented by-hand copy.
+- **Doctor quota note on hpc.** The doctor does not mention the home quota
+  (`sh_quota` on Sherlock) that a login env and package cache count against;
+  [S2-login-env](#s2-login-env-hpc-login-environment) documents it instead.
+- **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows CI
+  jobs have not run this bootstrap yet, and the PowerShell twins have run only
+  under PowerShell 7 on Linux. The fresh-machine
+  [acceptance checklist](#acceptance-checklist) below is pending; docker, VM
+  and CI end-to-end runs are being built separately.
+
 ## Acceptance checklist
 
 Not yet run. Each run starts from a fresh machine, follows the quick start for
