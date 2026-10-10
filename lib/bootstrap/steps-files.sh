@@ -109,6 +109,7 @@ step_S3_clones_check() {
         return 0
     fi
     STEP_DETAIL="${todo:+to clone: $todo}${todo:+${bad:+; }}${bad:+apply fails, not a git checkout: $bad}"
+    STEP_DETAIL="$STEP_DETAIL${present:+; present, left as they are: $present}"
     return 1
 }
 

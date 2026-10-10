@@ -1009,7 +1009,8 @@ printf '# copied by hand\n' >"$FZF_TAB_DIR/fzf-tab.plugin.zsh"
 mv "$CONDA_DIR" "$TEST_TMP/conda.saved"
 run_case foreign-clone -- --host lab-ubuntu --check --only S3-clones
 expect_rc foreign-clone 3
-expect_text foreign-clone out 'S3-clones todo to clone: conda-zsh-completion (main); apply fails, not a git checkout: fzf-tab'
+expect_text foreign-clone out 'S3-clones todo to clone: conda-zsh-completion (main); apply fails, not a git checkout: fzf-tab; present, left as they are: oh-my-zsh master@'
+expect_text foreign-clone out "powerlevel10k master@$(printf '%.7s' "$P10K_HEAD")"
 run_case foreign-clone-apply -- --host lab-ubuntu --yes --only S3-clones
 expect_rc foreign-clone-apply 1
 expect_text foreign-clone-apply err "$FZF_TAB_DIR exists and is not a git checkout; move it aside, then rerun"
