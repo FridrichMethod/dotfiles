@@ -5,6 +5,7 @@ list means valid. Standard library only, so it runs before any dependency is
 installed. tests/bootstrap-manifest.sh runs this module; the Bash libraries in
 lib/bootstrap/ trust the manifests it accepts.
 """
+import fnmatch
 import json
 import re
 import shutil
@@ -38,21 +39,38 @@ RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", 
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
-REQUIRED_CLONES = ("oh-my-zsh", "powerlevel10k", "fzf-tab", "fast-syntax-highlighting",
-                   "zsh-autosuggestions", "you-should-use", "conda-zsh-completion", "zsh-completions")
-REQUIRED_INSTALLERS = (("homebrew", "any"), ("nvm", "any"), ("micromamba", "x86_64"),
-                       ("micromamba", "aarch64"), ("codex", "x86_64"), ("codex", "aarch64"),
-                       ("claude", "any"), ("nerd-font", "any"), ("kitty", "x86_64"),
-                       ("kitty", "aarch64"), ("bat-theme", "any"))
+# Clone ids with their dests, and installer rows, as the bootstrap contract fixes them.
+REQUIRED_CLONES = {"oh-my-zsh": "$HOME/.oh-my-zsh", "powerlevel10k": "$ZSH_CUSTOM/themes/powerlevel10k",
+                   **{plugin: f"$ZSH_CUSTOM/plugins/{plugin}" for plugin in (
+                       "fzf-tab", "fast-syntax-highlighting", "zsh-autosuggestions", "you-should-use",
+                       "conda-zsh-completion", "zsh-completions")}}
+INSTALLER_FIXED = ("kind", "hosts", "tier", "human", "dest", "url")  # url is an fnmatch glob
+BREW_HOSTS, DEBIAN_HOSTS = "mac,wsl-ubuntu,lab-ubuntu", "wsl-ubuntu,lab-ubuntu"
+GH, RAW = "https://github.com/", "https://raw.githubusercontent.com/"
+REQUIRED_INSTALLERS = {
+    ("homebrew", "any"): ("script", BREW_HOSTS, "core", "sudo", "-", RAW + "Homebrew/install/*/install.sh"),
+    ("nvm", "any"): ("script", BREW_HOSTS, "ai", "-", "-", RAW + "nvm-sh/nvm/v*/install.sh"),
+    ("claude", "any"): ("script", DEBIAN_HOSTS, "ai", "inspect", "-", "https://claude.ai/install.sh"),
+    ("nerd-font", "any"): ("archive", "lab-ubuntu", "desktop", "-", "$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont",
+                           GH + "ryanoasis/nerd-fonts/releases/download/v*/CascadiaMono.tar.xz"),
+    ("bat-theme", "any"): ("file", "all", "core", "-", "$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme",
+                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme")}
+for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64", "arm64")):
+    REQUIRED_INSTALLERS[("micromamba", _arch)] = ("binary", "sherlock,marlowe", "core", "-", "$HOME/.local/bin/micromamba",
+                                                  f"{GH}mamba-org/micromamba-releases/releases/download/*/micromamba-linux-{_mamba}")
+    REQUIRED_INSTALLERS[("codex", _arch)] = ("archive", DEBIAN_HOSTS, "ai", "-", "$HOME/.local/bin/codex",
+                                             f"{GH}openai/codex/releases/download/rust-v*/codex-{_arch}-unknown-linux-musl.tar.gz")
+    REQUIRED_INSTALLERS[("kitty", _arch)] = ("archive", "lab-ubuntu", "desktop", "-", "$HOME/.local/kitty.app",
+                                             f"{GH}kovidgoyal/kitty/releases/download/v*/kitty-*-{_kitty}.txz")
 BREW_TIERS = ("core", "cli", "ai", "desktop", "contributor")
 APT_COMMON = ("zsh", "git", "git-lfs", "curl", "rsync", "tar", "file", "procps", "build-essential",
               "gnupg", "python3", "python3-venv", "python3-pip", "tmux", "bsdextrautils", "man-db",
               "locales", "ca-certificates", "unzip", "xz-utils", "fontconfig")
-APT_HOST_REQUIRED = {"wsl-ubuntu": ("wslu", "libnotify-bin"),
-                     "lab-ubuntu": ("xclip", "wl-clipboard", "fcitx5")}
+APT_HOST_REQUIRED = {"wsl-ubuntu": ("wslu", "libnotify-bin", "bubblewrap"),
+                     "lab-ubuntu": ("xclip", "wl-clipboard", "fcitx5", "bubblewrap")}
 LOGIN_REQUIRED = ("python", "zsh", "git", "git-lfs", "gh", "stow", "tmux", "rsync", "curl", "fzf",
                   "zoxide", "eza", "bat", "fd-find", "ripgrep", "nvim", "jq", "tealdeer", "aria2",
-                  "uv", "go-shfmt", "shellcheck", "pre-commit", "file")
+                  "uv", "go-shfmt", "shellcheck", "pre-commit", "file", "nodejs")
 LOGIN_TRAPS = {"neovim": "nvim (conda-forge neovim is the Python client)", "fd": "fd-find",
                "shfmt": "go-shfmt", "delta": "git-delta"}
 WINGET_REQUIRED = (
@@ -253,6 +271,8 @@ def check_clones(rows, tools, errors):
         where, ref = f"git-clones.tsv:{row.line}", row["ref"]
         report(errors, "clone-id", where, row["id"] not in tools and f"{row['id']} is not a tools.tsv id")
         report(errors, "clone-dest", where, path_error(row["dest"]))
+        fixed = REQUIRED_CLONES.get(row["id"], row["dest"])
+        report(errors, "clone-set", where, fixed != row["dest"] and f"{row['id']} dest must be {fixed}")
         report(errors, "clone-url", where, not GITHUB_RE.match(row["url"]) and "url must be https://github.com/O/R.git")
         if row["id"] == "oh-my-zsh":
             report(errors, "clone-ref", where, ref != "master" and "oh-my-zsh must track master (self-updating)")
@@ -289,9 +309,18 @@ def check_installers(rows, tools, errors):
             report(errors, "installer-dest", where, dest != "-" and "scripts have dest -")
         else:
             report(errors, "installer-dest", where, "dest - is only for scripts" if dest == "-" else path_error(dest))
-    present = {(row["id"], row["arch"]) for row in rows}
+    present = {(row["id"], row["arch"]): row for row in rows}
     missing = [f"{i}/{a}" for i, a in REQUIRED_INSTALLERS if (i, a) not in present]
     report(errors, "installer-set", "installers.tsv", missing and f"missing {', '.join(missing)}")
+    for key, expected in REQUIRED_INSTALLERS.items():
+        row = present.get(key)
+        if row is None:
+            continue
+        wrong = [f"{column} {row[column]!r}, expected {value!r}" for column, value in zip(INSTALLER_FIXED, expected)
+                 if not (fnmatch.fnmatchcase(row[column], value) if column == "url" else row[column] == value)]
+        report(errors, "installer-set", f"installers.tsv:{row.line}", wrong and f"{'/'.join(key)}: {'; '.join(wrong)}")
+        digest = expected[3] == "inspect" and row["sha256"] != "-"
+        report(errors, "installer-set", f"installers.tsv:{row.line}", digest and "an unpinnable inspect download has sha256 -")
 
 
 def read_brewfiles(config, errors):
@@ -540,7 +569,7 @@ class RepositoryManifestTests(unittest.TestCase):
 
 
 class RejectionTests(unittest.TestCase):
-    """Each case breaks a copy of the real files and expects its rule to fire."""
+    """Each (rule, case, mutation) breaks a fresh copy of the real files and expects its rule to fire."""
 
     def setUp(self):
         self.temp = Path(tempfile.mkdtemp(prefix="bootstrap-manifest-"))
@@ -576,21 +605,20 @@ class RejectionTests(unittest.TestCase):
         self.fail(f"no {row_id} row in {rel}")
 
     def set_cell(self, rel, row_id, column, value, columns):
+        """Set a cell of ROW_ID's first row to VALUE, or to VALUE(old cell) when VALUE is callable."""
         old = self.row(rel, row_id)
         cells = old.split("\t")
-        cells[columns.index(column)] = value
+        index = columns.index(column)
+        cells[index] = value(cells[index]) if callable(value) else value
         self.replace(rel, old, "\t".join(cells))
 
-    def assertRule(self, rule, case):
-        errors = self.errors()
-        self.assertTrue(any(e.startswith(f"[{rule}]") for e in errors), f"{case}: {rule} not in {errors}")
-
-    def check_each(self, rule, cases):
-        for name, mutate in cases:
-            with self.subTest(name):
+    def check(self, cases):
+        for rule, name, mutate in cases:
+            with self.subTest(f"{rule}: {name}"):
                 self.setUp()
                 mutate()
-                self.assertRule(rule, name)
+                errors = self.errors()
+                self.assertTrue(any(e.startswith(f"[{rule}]") for e in errors), f"{name}: {rule} not in {errors}")
 
     def tools(self, *cell):
         return lambda: self.set_cell("tools.tsv", *cell, TOOLS_COLUMNS)
@@ -603,173 +631,165 @@ class RejectionTests(unittest.TestCase):
 
     def test_tsv_structure(self):
         fzf = "fzf\tcore\tall\tfzf\t--version\t0.58.0\tbroken\tS2-brew-bundle"
-        self.check_each("tsv-format", [
-            ("header", lambda: self.replace("tools.tsv", "id\ttier\thosts", "id\ttiers\thosts")),
-            ("trailing tab", lambda: self.replace("tools.tsv", self.row("tools.tsv", "fzf"), fzf + "\t")),
-            ("empty cell", lambda: self.replace("tools.tsv", self.row("tools.tsv", "fzf"), fzf.replace("0.58.0", ""))),
-            ("blank line", lambda: self.append("tools.tsv", "\n\n")),
-        ])
-
-    def test_unique_ids(self):
-        self.check_each("dup-id", [
-            ("tools", lambda: self.append("tools.tsv", self.row("tools.tsv", "fzf") + "\n")),
-            ("clones", lambda: self.append("git-clones.tsv", self.row("git-clones.tsv", "fzf-tab") + "\n")),
-            ("installer arch", lambda: self.append("installers.tsv", self.row("installers.tsv", "nvm") + "\n")),
+        self.check([
+            ("tsv-format", "header", lambda: self.replace("tools.tsv", "id\ttier\thosts", "id\ttiers\thosts")),
+            ("tsv-format", "trailing tab", lambda: self.replace("tools.tsv", self.row("tools.tsv", "fzf"), fzf + "\t")),
+            ("tsv-format", "empty cell",
+             lambda: self.replace("tools.tsv", self.row("tools.tsv", "fzf"), fzf.replace("0.58.0", ""))),
+            ("tsv-format", "blank line", lambda: self.append("tools.tsv", "\n\n")),
+            ("missing-file", "winget", lambda: (self.config / "winget.json").unlink()),
+            ("dup-id", "tools", lambda: self.append("tools.tsv", self.row("tools.tsv", "fzf") + "\n")),
+            ("dup-id", "clones", lambda: self.append("git-clones.tsv", self.row("git-clones.tsv", "fzf-tab") + "\n")),
+            ("dup-id", "installer arch", lambda: self.append("installers.tsv", self.row("installers.tsv", "nvm") + "\n")),
         ])
 
     def test_vocabularies(self):
-        self.check_each("vocab", [
-            ("tier", self.tools("fzf", "tier", "essential")),
-            ("host", self.tools("fzf", "hosts", "mac,ubuntu")),
-            ("duplicate host", self.tools("kitty", "hosts", "mac,mac")),
-            ("version flag", self.tools("fzf", "version_flag", "--ver")),
-            ("id", self.tools("fzf", "id", "Fzf")),
-            ("installer kind", self.installers("nvm", "kind", "pipe")),
-            ("installer arch", self.installers("nvm", "arch", "arm64")),
-            ("installer human", self.installers("nvm", "human", "maybe")),
+        self.check([
+            ("vocab", "tier", self.tools("fzf", "tier", "essential")),
+            ("vocab", "host", self.tools("fzf", "hosts", "mac,ubuntu")),
+            ("vocab", "duplicate host", self.tools("kitty", "hosts", "mac,mac")),
+            ("vocab", "version flag", self.tools("fzf", "version_flag", "--ver")),
+            ("vocab", "id", self.tools("fzf", "id", "Fzf")),
+            ("vocab", "installer kind", self.installers("nvm", "kind", "pipe")),
+            ("vocab", "installer arch", self.installers("nvm", "arch", "arm64")),
+            ("vocab", "installer human", self.installers("nvm", "human", "maybe")),
+            ("reserved-id", "locale", self.tools("fzf", "id", "locale")),
         ])
-        self.check_each("reserved-id", [("locale", self.tools("fzf", "id", "locale"))])
 
     def test_probes_versions_and_floors(self):
-        self.check_each("probe", [
-            ("unknown token", self.tools("oh-my-zsh", "probe", "file:$FOO/x")),
-            ("second token", self.tools("oh-my-zsh", "probe", "file:$HOME/$HOME/x")),
-            ("tilde", self.tools("oh-my-zsh", "probe", "file:~/.oh-my-zsh/oh-my-zsh.sh")),
-            ("dotdot", self.tools("oh-my-zsh", "probe", "file:$HOME/../x")),
-            ("relative", self.tools("oh-my-zsh", "probe", "file:.oh-my-zsh")),
-            ("kind", self.tools("oh-my-zsh", "probe", "url:https")),
-            ("command", self.tools("fzf", "probe", "fzf --bin")),
-            ("psmodule host", self.tools("psfzf", "hosts", "all")),
-            ("env", self.tools("lmod", "probe", "env:lmod-dir")),
-        ])
-        self.check_each("floor", [("floor", self.tools("fzf", "floor", "0.58.x"))])
-        self.check_each("probe-version", [
-            ("presence with flag", self.tools("oh-my-zsh", "version_flag", "--version")),
-            ("floor without flag", self.tools("fzf", "version_flag", "-")),
+        self.check([
+            ("probe", "unknown token", self.tools("oh-my-zsh", "probe", "file:$FOO/x")),
+            ("probe", "second token", self.tools("oh-my-zsh", "probe", "file:$HOME/$HOME/x")),
+            ("probe", "tilde", self.tools("oh-my-zsh", "probe", "file:~/.oh-my-zsh/oh-my-zsh.sh")),
+            ("probe", "dotdot", self.tools("oh-my-zsh", "probe", "file:$HOME/../x")),
+            ("probe", "relative", self.tools("oh-my-zsh", "probe", "file:.oh-my-zsh")),
+            ("probe", "kind", self.tools("oh-my-zsh", "probe", "url:https")),
+            ("probe", "command", self.tools("fzf", "probe", "fzf --bin")),
+            ("probe", "psmodule host", self.tools("psfzf", "hosts", "all")),
+            ("probe", "env", self.tools("lmod", "probe", "env:lmod-dir")),
+            ("floor", "floor", self.tools("fzf", "floor", "0.58.x")),
+            ("probe-version", "presence with flag", self.tools("oh-my-zsh", "version_flag", "--version")),
+            ("probe-version", "floor without flag", self.tools("fzf", "version_flag", "-")),
         ])
 
     def test_doc_ids_and_headings(self):
-        self.check_each("doc", [("unknown step", self.tools("fzf", "doc", "S3-bat-cache"))])
-        self.check_each("docs-headings", [
-            ("missing", lambda: self.replace("docs/bootstrap.md", "### S3-clones:", "### S3 clones:")),
-            ("duplicate", lambda: self.append("docs/bootstrap.md", "\n### S3-clones: again\n")),
-            ("unknown", lambda: self.append("docs/bootstrap.md", "\n### S3-bat-cache: stale\n")),
-        ])
-        self.check_each("docs-deps", [
-            ("missing id", lambda: self.replace("docs/dependencies.md", "| `fzf-tab` |", "| fzf tab |")),
+        self.check([
+            ("doc", "unknown step", self.tools("fzf", "doc", "S3-bat-cache")),
+            ("docs-headings", "missing", lambda: self.replace("docs/bootstrap.md", "### S3-clones:", "### S3 clones:")),
+            ("docs-headings", "duplicate", lambda: self.append("docs/bootstrap.md", "\n### S3-clones: again\n")),
+            ("docs-headings", "unknown", lambda: self.append("docs/bootstrap.md", "\n### S3-bat-cache: stale\n")),
+            ("docs-deps", "missing id", lambda: self.replace("docs/dependencies.md", "| `fzf-tab` |", "| fzf tab |")),
         ])
 
     def test_clones(self):
-        self.check_each("clone-id", [("unknown id", self.clones("fzf-tab", "id", "fzf-tabs"))])
-        self.check_each("clone-ref", [
-            ("branch", self.clones("fzf-tab", "ref", "master")),
-            ("short sha", self.clones("fzf-tab", "ref", "d7e0234")),
-            ("omz pinned", self.clones("oh-my-zsh", "ref", "42a4ccb1b14dbeffe81259105a5243b4f4cb618e")),
+        self.check([
+            ("clone-id", "unknown id", self.clones("fzf-tab", "id", "fzf-tabs")),
+            ("clone-ref", "branch", self.clones("fzf-tab", "ref", "master")),
+            ("clone-ref", "short sha", self.clones("fzf-tab", "ref", "d7e0234")),
+            ("clone-ref", "omz pinned", self.clones("oh-my-zsh", "ref", "42a4ccb1b14dbeffe81259105a5243b4f4cb618e")),
+            ("clone-url", "not github .git", self.clones("fzf-tab", "url", "https://gitlab.com/a/b")),
+            ("clone-hosts", "windows", self.clones("fzf-tab", "hosts", "all")),
+            ("clone-dest", "token", self.clones("fzf-tab", "dest", "$ZSH/custom/plugins/fzf-tab")),
+            ("clone-probe", "moved", self.clones("fzf-tab", "dest", "$ZSH_CUSTOM/plugins/tab")),
+            ("clone-set", "missing",
+             lambda: self.replace("git-clones.tsv", self.row("git-clones.tsv", "zsh-completions") + "\n", "")),
+            ("clone-set", "dest", self.clones("powerlevel10k", "dest", "$ZSH_CUSTOM/plugins/powerlevel10k")),
         ])
-        self.check_each("clone-url", [("not github .git", self.clones("fzf-tab", "url", "https://gitlab.com/a/b"))])
-        self.check_each("clone-hosts", [("windows", self.clones("fzf-tab", "hosts", "all"))])
-        self.check_each("clone-dest", [("token", self.clones("fzf-tab", "dest", "$ZSH/custom/plugins/fzf-tab"))])
-        self.check_each("clone-probe", [("moved", self.clones("fzf-tab", "dest", "$ZSH_CUSTOM/plugins/tab"))])
-        self.check_each("clone-set", [("missing", lambda: self.replace(
-            "git-clones.tsv", self.row("git-clones.tsv", "zsh-completions") + "\n", ""))])
 
     def test_installers(self):
-        self.check_each("sha256", [
-            ("dash without inspect", self.installers("nvm", "sha256", "-")),
-            ("uppercase", self.installers("nvm", "sha256", "48A0EEE9A60E07422DCE0EB5774754C83889570CA1EE2566C516ACBE8AF03A9E")),
-            ("short", self.installers("nvm", "sha256", "48a0eee9")),
+        upper = "48A0EEE9A60E07422DCE0EB5774754C83889570CA1EE2566C516ACBE8AF03A9E"
+        self.check([
+            ("sha256", "dash without inspect", self.installers("nvm", "sha256", "-")),
+            ("sha256", "uppercase", self.installers("nvm", "sha256", upper)),
+            ("sha256", "short", self.installers("nvm", "sha256", "48a0eee9")),
+            ("installer-pin", "branch url",
+             self.installers("nvm", "url", "https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh")),
+            ("installer-url", "http", self.installers("nvm", "url", "http://example.com/v1.0/x.sh")),
+            ("installer-dest", "script dest", self.installers("nvm", "dest", "$HOME/nvm.sh")),
+            ("installer-dest", "archive without dest", self.installers("nerd-font", "dest", "-")),
+            ("installer-dest", "bad token", self.installers("nerd-font", "dest", "$FONTS/x")),
+            ("installer-id", "unknown", self.installers("nvm", "id", "nvm-sh")),
+            ("installer-set", "missing", lambda: self.replace("installers.tsv", self.row("installers.tsv", "claude") + "\n", "")),
+            ("installer-set", "claude not inspect", lambda: (self.installers("claude", "human", "-")(),
+                                                             self.installers("claude", "sha256", "a" * 64)())),
+            ("installer-set", "claude digest", self.installers("claude", "sha256", "a" * 64)),
+            ("installer-set", "homebrew without sudo", self.installers("homebrew", "human", "-")),
+            ("installer-set", "micromamba hosts", self.installers("micromamba", "hosts", "unix")),
+            ("installer-set", "micromamba tier", self.installers("micromamba", "tier", "host")),
+            ("installer-set", "codex dest", self.installers("codex", "dest", "$HOME/bin/codex")),
+            ("installer-set", "codex glibc asset", self.installers("codex", "url", lambda url: url.replace("musl", "gnu"))),
+            ("installer-set", "kitty arch asset", self.installers("kitty", "url", lambda url: url.replace("x86_64", "arm64"))),
+            ("installer-set", "nerd-font dest", self.installers("nerd-font", "dest", "$XDG_DATA_HOME/fonts")),
+            ("installer-set", "bat-theme kind", self.installers("bat-theme", "kind", "archive")),
         ])
-        self.check_each("installer-pin", [
-            ("branch url", self.installers("nvm", "url", "https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh")),
-        ])
-        self.check_each("installer-url", [("http", self.installers("nvm", "url", "http://example.com/v1.0/x.sh"))])
-        self.check_each("installer-dest", [
-            ("script dest", self.installers("nvm", "dest", "$HOME/nvm.sh")),
-            ("archive without dest", self.installers("nerd-font", "dest", "-")),
-            ("bad token", self.installers("nerd-font", "dest", "$FONTS/x")),
-        ])
-        self.check_each("installer-id", [("unknown", self.installers("nvm", "id", "nvm-sh"))])
-        self.check_each("installer-set", [("missing", lambda: self.replace(
-            "installers.tsv", self.row("installers.tsv", "claude") + "\n", ""))])
 
     def test_forbidden_characters_and_home_literals(self):
-        self.check_each("cell-chars", [
-            ("semicolon", self.tools("fzf", "absent", "fails; badly")),
-            ("pipe", self.tools("fzf", "absent", "fails | badly")),
-            ("ampersand", self.tools("fzf", "absent", "fails & badly")),
-            ("dollar paren", self.tools("fzf", "probe", "file:$HOME/$(id)")),
-            ("backtick", self.tools("fzf", "absent", "fails `x`")),
-            ("dollar in absent", self.tools("fzf", "absent", "fails at $HOME")),
+        self.check([
+            ("cell-chars", "semicolon", self.tools("fzf", "absent", "fails; badly")),
+            ("cell-chars", "pipe", self.tools("fzf", "absent", "fails | badly")),
+            ("cell-chars", "ampersand", self.tools("fzf", "absent", "fails & badly")),
+            ("cell-chars", "dollar paren", self.tools("fzf", "probe", "file:$HOME/$(id)")),
+            ("cell-chars", "backtick", self.tools("fzf", "absent", "fails `x`")),
+            ("cell-chars", "dollar in absent", self.tools("fzf", "absent", "fails at $HOME")),
+            ("home-literal", "linux home", lambda: self.append("tools.tsv", "# see /home/alice/x\n")),
+            ("home-literal", "mac home", lambda: self.append("apt/common.txt", "# /Users/alice\n")),
+            ("home-literal", "cluster home", lambda: self.append("hpc-login-env.yml", "# /users/alice\n")),
+            ("home-literal", "windows home", lambda: self.append("brew/core.Brewfile", "# C:\\Users\\alice\n")),
+            ("pinned-header", "missing", lambda: self.replace("apt/wsl-ubuntu.txt", "# pinned", "# fixed")),
         ])
-        self.check_each("home-literal", [
-            ("linux home", lambda: self.append("tools.tsv", "# see /home/alice/x\n")),
-            ("mac home", lambda: self.append("apt/common.txt", "# /Users/alice\n")),
-            ("cluster home", lambda: self.append("hpc-login-env.yml", "# /users/alice\n")),
-            ("windows home", lambda: self.append("brew/core.Brewfile", "# C:\\Users\\alice\n")),
-        ])
-        self.check_each("pinned-header", [("missing", lambda: self.replace("apt/wsl-ubuntu.txt", "# pinned", "# fixed"))])
 
     def test_brewfiles_and_apt_lists(self):
-        self.check_each("brewfile-forbidden", [
-            ("openssh", lambda: self.append("brew/core.Brewfile", 'brew "openssh"\n')),
-            ("nvm", lambda: self.append("brew/ai.Brewfile", 'brew "nvm"\n')),
-        ])
-        self.check_each("brewfile", [
-            ("ruby", lambda: self.append("brew/cli.Brewfile", 'system "curl x | sh"\n')),
-            ("options", lambda: self.append("brew/cli.Brewfile", 'brew "jq", args: ["HEAD"]\n')),
-            ("unguarded cask", lambda: self.append("brew/desktop.Brewfile", 'cask "iterm2"\n')),
-            ("repeat", lambda: self.append("brew/contributor.Brewfile", 'brew "fzf"\n')),
-        ])
-        self.check_each("apt", [
-            ("version", lambda: self.append("apt/lab-ubuntu.txt", "zsh=5.9\n")),
-            ("trailing comment", lambda: self.append("apt/wsl-ubuntu.txt", "jq # json\n")),
-            ("overlap", lambda: self.append("apt/lab-ubuntu.txt", "tmux\n")),
-        ])
-        self.check_each("apt-set", [
-            ("common extra", lambda: self.append("apt/common.txt", "jq\n")),
-            ("host missing", lambda: self.replace("apt/lab-ubuntu.txt", "xclip\n", "")),
+        self.check([
+            ("brewfile-forbidden", "openssh", lambda: self.append("brew/core.Brewfile", 'brew "openssh"\n')),
+            ("brewfile-forbidden", "nvm", lambda: self.append("brew/ai.Brewfile", 'brew "nvm"\n')),
+            ("brewfile", "ruby", lambda: self.append("brew/cli.Brewfile", 'system "curl x | sh"\n')),
+            ("brewfile", "options", lambda: self.append("brew/cli.Brewfile", 'brew "jq", args: ["HEAD"]\n')),
+            ("brewfile", "unguarded cask", lambda: self.append("brew/desktop.Brewfile", 'cask "iterm2"\n')),
+            ("brewfile", "repeat", lambda: self.append("brew/contributor.Brewfile", 'brew "fzf"\n')),
+            ("apt", "version", lambda: self.append("apt/lab-ubuntu.txt", "zsh=5.9\n")),
+            ("apt", "trailing comment", lambda: self.append("apt/wsl-ubuntu.txt", "jq # json\n")),
+            ("apt", "overlap", lambda: self.append("apt/lab-ubuntu.txt", "tmux\n")),
+            ("apt-set", "common extra", lambda: self.append("apt/common.txt", "jq\n")),
+            ("apt-set", "host missing", lambda: self.replace("apt/lab-ubuntu.txt", "xclip\n", "")),
+            ("apt-set", "bwrap missing", lambda: self.replace("apt/wsl-ubuntu.txt", "bubblewrap\n", "")),
         ])
 
     def test_winget_and_login_env(self):
-        self.check_each("winget", [
-            ("json", lambda: self.append("winget.json", "}")),
-            ("schema", lambda: self.replace("winget.json", "schema.2.0", "schema.1.0")),
-            ("source details", lambda: self.replace("winget.json", '"SourceDetails"', '"Details"')),
-            ("package id", lambda: self.replace("winget.json", '"PackageIdentifier": "jqlang.jq"', '"Id": "jq"')),
-        ])
-        self.check_each("winget-set", [("dropped", lambda: self.replace(
-            "winget.json", '"PackageIdentifier": "jqlang.jq"', '"PackageIdentifier": "stedolan.jq"'))])
-        self.check_each("yml-set", [("missing", lambda: self.replace("hpc-login-env.yml", "  - tealdeer\n", ""))])
-        self.check_each("yml-trap", [("neovim", lambda: self.replace("hpc-login-env.yml", "  - nvim\n", "  - neovim\n"))])
-        self.check_each("yml-floor", [("floor", lambda: self.replace("hpc-login-env.yml", "fzf>=0.58.0", "fzf>=0.44"))])
-        self.check_each("yml", [
-            ("channel", lambda: self.replace("hpc-login-env.yml", "  - conda-forge\n", "  - defaults\n")),
-            ("key", lambda: self.append("hpc-login-env.yml", "prefix: /opt/login\n")),
+        jq = '"PackageIdentifier": "jqlang.jq"'
+        self.check([
+            ("winget", "json", lambda: self.append("winget.json", "}")),
+            ("winget", "schema", lambda: self.replace("winget.json", "schema.2.0", "schema.1.0")),
+            ("winget", "source details", lambda: self.replace("winget.json", '"SourceDetails"', '"Details"')),
+            ("winget", "package id", lambda: self.replace("winget.json", jq, '"Id": "jq"')),
+            ("winget-set", "dropped", lambda: self.replace("winget.json", jq, '"PackageIdentifier": "stedolan.jq"')),
+            ("yml-set", "missing", lambda: self.replace("hpc-login-env.yml", "  - tealdeer\n", "")),
+            ("yml-set", "nodejs", lambda: self.replace("hpc-login-env.yml", "  - nodejs>=22.0\n", "")),
+            ("yml-trap", "neovim", lambda: self.replace("hpc-login-env.yml", "  - nvim\n", "  - neovim\n")),
+            ("yml-floor", "floor", lambda: self.replace("hpc-login-env.yml", "fzf>=0.58.0", "fzf>=0.44")),
+            ("yml-floor", "node floor", lambda: self.replace("hpc-login-env.yml", "nodejs>=22.0", "nodejs>=18.0")),
+            ("yml", "channel", lambda: self.replace("hpc-login-env.yml", "  - conda-forge\n", "  - defaults\n")),
+            ("yml", "key", lambda: self.append("hpc-login-env.yml", "prefix: /opt/login\n")),
         ])
 
     def test_skills(self):
-        self.check_each("skill", [
-            ("body", lambda: self.append(SKILL_CODEX, "Extra line.\n")),
-            ("name", lambda: self.replace(SKILL_CLAUDE, "name: dotfiles-bootstrap", "name: bootstrap")),
-            ("codex key", lambda: self.replace(SKILL_CODEX, "metadata:", "disable-model-invocation: true\nmetadata:")),
-            ("claude flag", lambda: self.replace(SKILL_CLAUDE, "disable-model-invocation: true\n", "")),
-            ("frontmatter", lambda: self.replace(SKILL_CODEX, "---\nname", "name")),
+        self.check([
+            ("skill", "body", lambda: self.append(SKILL_CODEX, "Extra line.\n")),
+            ("skill", "name", lambda: self.replace(SKILL_CLAUDE, "name: dotfiles-bootstrap", "name: bootstrap")),
+            ("skill", "codex key", lambda: self.replace(SKILL_CODEX, "metadata:", "disable-model-invocation: true\nmetadata:")),
+            ("skill", "claude flag", lambda: self.replace(SKILL_CLAUDE, "disable-model-invocation: true\n", "")),
+            ("skill", "frontmatter", lambda: self.replace(SKILL_CODEX, "---\nname", "name")),
         ])
 
     def test_coverage_and_declarations(self):
-        self.check_each("coverage", [
-            ("alias removed", lambda: self.replace("tools.tsv", "# alias: fzf junegunn.fzf\n", "")),
-            ("manual removed", lambda: self.replace("tools.tsv", "# manual: claude hpc\n", "")),
-            ("brew entry removed", lambda: self.replace("brew/cli.Brewfile", 'brew "jq"\n', "")),
+        self.check([
+            ("coverage", "alias removed", lambda: self.replace("tools.tsv", "# alias: fzf junegunn.fzf\n", "")),
+            ("coverage", "manual removed", lambda: self.replace("tools.tsv", "# manual: claude hpc\n", "")),
+            ("coverage", "brew entry removed", lambda: self.replace("brew/cli.Brewfile", 'brew "jq"\n', "")),
+            ("coverage", "login node removed", lambda: self.replace("tools.tsv", "# alias: node nodejs\n", "")),
+            ("declaration", "malformed", lambda: self.append("tools.tsv", "# alias: fzf\n")),
+            ("declaration", "unknown id", lambda: self.append("tools.tsv", "# alias: fzz junegunn.fzf\n")),
+            ("declaration", "unknown scope", lambda: self.append("tools.tsv", "# manual: claude cluster\n")),
         ])
-        self.check_each("declaration", [
-            ("malformed", lambda: self.append("tools.tsv", "# alias: fzf\n")),
-            ("unknown id", lambda: self.append("tools.tsv", "# alias: fzz junegunn.fzf\n")),
-            ("unknown scope", lambda: self.append("tools.tsv", "# manual: claude cluster\n")),
-        ])
-
-    def test_missing_manifest(self):
-        self.check_each("missing-file", [("winget", lambda: (self.config / "winget.json").unlink())])
 
 
 if __name__ == "__main__":
