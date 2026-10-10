@@ -14,6 +14,9 @@
     Ignore patterns are read from .stowrc and from per-package
     .stow-local-ignore files, so POSIX and Windows share one source of truth.
 
+    Day-zero prerequisites come from .\setup-host.ps1 and are checked by
+    .\doctor.ps1 (docs/bootstrap.md).
+
     Run this from an elevated PowerShell. Developer Mode (Settings >
     System > For developers) also lets it create symlinks without elevation,
     but a symlink created by a non-elevated process is an untrusted reparse
