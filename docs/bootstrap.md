@@ -845,13 +845,17 @@ honoured as brew bundle honours them; every cask is macOS-only) maps to the
 `tools.tsv` row of this host whose id is the entry's name (a tap's formula by
 its last segment), or else to one that a `# alias: TOOL-ID NAME` line names
 (`neovim` is `nvim`, `python` is `python3`, the `claude-code` cask is
-`claude`). The entry is satisfied when the doctor's own probe for that row
-(`bootstrap_check_tool`, `lib/bootstrap/checks.sh`) reports `ok`: the tool is
-found and, when the row has a floor, at or above it, whoever installed it.
-One below its floor, of unknown version against a floor, or not found at all
-is not, and an entry without a row (the Nerd Font cask) keeps the plain rule:
-Homebrew's `opt/<name>` link or `Caskroom/<token>` directory. Homebrew's own
-copy satisfies an entry too, even an old one that `--no-upgrade` leaves alone.
+`claude`, the `font-caskaydia-mono-nerd-font` cask is `nerd-font`). The entry
+is satisfied when the doctor's own probe for that row (`bootstrap_check_tool`,
+`lib/bootstrap/checks.sh`) reports `ok`: the tool is found and, when the row
+has a floor, at or above it, whoever installed it; for the font, a
+CaskaydiaMono Nerd Font file in a font directory. One below its floor, of
+unknown version against a floor (`warn` in the doctor), or not found at all
+is not. An entry without a row would keep the plain rule, Homebrew's
+`opt/<name>` link or `Caskroom/<token>` directory, but every entry has one
+today, and `tests/bootstrap-manifest.sh` fails a Brewfile entry without one.
+Homebrew's own copy satisfies an entry too, even an old one that
+`--no-upgrade` leaves alone.
 On lab-ubuntu, apt's `/usr/bin/jq`, `/usr/bin/aria2c` and `/usr/bin/shellcheck`
 thus complete `cli` and `contributor` (their rows have no floor), and no
 duplicate lands in a shared Linuxbrew, where it would shadow apt's copy in
@@ -869,8 +873,10 @@ bundle's own judgment of what Homebrew has, its taps and `--no-upgrade`, and
 the conflict guard below still runs first. `brew bundle` reopens
 `/dev/stdin` by path, which works on a pipe for the user who made it; the
 owner of a shared prefix gets names on the command line instead (below). A
-Brewfile whose entries are all provided runs no brew at all. The probes run
-each mapped row's version flag, as the doctor does (never one of a
+Brewfile with no entry left, because every one is provided or none applies
+on this platform (`ai` and `desktop` hold only macOS casks), runs no brew at
+all, not even `brew bundle check`, whose API refresh would go online. The
+probes run each mapped row's version flag, as the doctor does (never one of a
 presence-only row such as `nvim`, `codex` or `pre-commit`), with
 `GH_TELEMETRY=0` and `TLDR_AUTO_UPDATE_DISABLED=1` exported, so `--check`
 stays read-only and offline.
@@ -890,7 +896,12 @@ installed while the Brewfile's own entry is not: a formula keg (`Cellar/OTHER`
 under the Homebrew prefix it found, or under `$HOMEBREW_CELLAR`) while FORMULA
 has neither a keg nor an `opt/` link, or a cask's `Caskroom/OTHER` while
 `Caskroom/TOKEN` is absent. A pair whose Brewfile entry brew bundle skips on
-this platform (the casks are `if OS.mac?`) is never judged. When it finds one,
+this platform (the casks are `if OS.mac?`) is never judged, and neither is
+one whose entry is satisfied another way (above), even by OTHER itself: a
+linked tlrc or tealdeer puts a `tldr` in the prefix's `bin` that the doctor
+accepts, so brew bundle never gets the `tldr` entry, nothing conflicts, and
+OTHER stays. What remains is OTHER installed while the doctor does not accept
+the entry's tool, as with an unlinked keg. When it finds one,
 the step is `human` and blocking (exit 3), and setup-host prints a judgment
 block whose command line uninstalls it (`--formula` or `--cask`) with the brew
 it found, by full path:
@@ -918,11 +929,13 @@ fzf-tab previews try `tldr --color always` (tlrc, tealdeer) and then
 `TLDR_AUTO_UPDATE_DISABLED=1`, so the C client answers from its local cache
 and never fetches a missing page or a stale archive while you tab-complete.
 The conflict holds back the whole step, every selected Brewfile, so keeping
-the other package instead means leaving its tier out (for tldr,
-`--tier core,ai`). `--print-manual` prints the block for every declared pair
-that applies on this platform. A conflict Homebrew adds later is not judged
-until a Brewfile line names it ([Known limitations](#known-limitations)). See
-also [X-recovery](#x-recovery-recovery-recipes).
+the other package instead means making its tool the one the doctor finds
+(`brew link tlrc`, as the prefix's owner on a shared one), which satisfies
+the entry, or leaving its tier out (for tldr, `--tier core,ai`).
+`--print-manual` prints the block for every declared pair that applies on
+this platform. A conflict Homebrew adds later is not judged until a Brewfile
+line names it ([Known limitations](#known-limitations)). See also
+[X-recovery](#x-recovery-recovery-recipes).
 
 **Python on macOS only.** The core Brewfile's `brew "python" if OS.mac?`
 names Homebrew's `python` alias for its default `python@3.x`, the only formula
@@ -995,8 +1008,10 @@ Brewfile is already satisfied, the step is `done` without the owner. A
 conflicting formula or cask there is uninstalled the same way: the judgment
 block above then prints its `brew uninstall` as such a line, with the same
 notes. `--print-manual` prints the block while you cannot write the prefix,
-with every entry of each selected Brewfile that applies on this platform, and
-nothing otherwise, since it names the owner.
+with every entry of each selected Brewfile that applies on this platform,
+less those the prefix lacks whose tools the doctor finds installed another
+way (so a pasted block puts no Homebrew `jq` in front of apt's on every
+account's PATH), and nothing otherwise, since it names the owner.
 
 ### S2-micromamba: micromamba
 
@@ -1881,8 +1896,10 @@ other package by the path setup-host printed, for example
 `/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc` (tealdeer the
 same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
 `./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
-takes its place. If brew refuses because another formula depends on it, keep
-it and leave its tier out instead
+takes its place. To keep the other package instead, link it
+(`brew link tlrc`): a `tldr` the doctor finds satisfies the entry, so the
+pair is no longer judged. If brew refuses because another formula depends on
+it, keep it and leave its tier out instead
 ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). A failure that names a
 conflict no Brewfile declares is the same fix by hand; add its
 `# conflicts:` line to the Brewfile as well. On a Linuxbrew prefix owned by
@@ -1946,9 +1963,10 @@ fail-closed behavior beyond what is stated.
   paths to test only the Linuxbrew guard.
 - **A conflicting formula is judged by its keg.** S2-brew-bundle stops when
   `Cellar/<formula>` of a declared conflict exists, linked or not (a cask, when
-  its `Caskroom/<token>` exists). Homebrew itself refuses only a linked
-  formula, so an unlinked keg stops the step although `brew bundle` would
-  succeed; uninstalling it is still the fix.
+  its `Caskroom/<token>` exists), unless the doctor finds the Brewfile entry's
+  tool. Homebrew itself refuses only a linked formula, so an unlinked keg
+  stops the step although `brew bundle` would succeed; uninstalling or
+  linking it is still the fix.
 - **Only declared conflicts are judged.** The `# conflicts:` lines record the
   `conflicts_with` data that formulae.brew.sh listed for each Brewfile entry
   when its Brewfile was pinned (the `# pinned` date at its top). A conflict

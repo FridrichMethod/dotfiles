@@ -612,6 +612,18 @@ assert_eq "$(bootstrap_brewfiles core,cli,ai | sed 's#.*/##' | tr '\n' ' ')" \
     'core.Brewfile cli.Brewfile ai.Brewfile ' 'default-tier Brewfiles'
 assert_eq "$(bootstrap_tool_aliases neovim)" nvim 'the neovim formula installs nvim'
 assert_eq "$(bootstrap_tool_aliases claude-code)" claude 'the claude-code cask installs claude'
+assert_eq "$(bootstrap_tool_aliases font-caskaydia-mono-nerd-font)" nerd-font 'the Nerd Font cask installs nerd-font'
+# Every brew and cask entry of the real Brewfiles has a tools.tsv row, by id
+# or "# alias:", so S2-brew-bundle judges each one with the doctor's probe.
+for brewfile in "$BOOTSTRAP_CONFIG"/brew/*.Brewfile; do
+    sed -nE 's/^(brew|cask) "([^"]+)".*/\2/p' "$brewfile" | while IFS= read -r entry; do
+        entry=${entry##*/}
+        if ! awk -F '\t' -v id="$entry" '$1 == id { found = 1 } END { exit !found }' \
+            "$BOOTSTRAP_CONFIG/tools.tsv" && [ -z "$(bootstrap_tool_aliases "$entry")" ]; then
+            fail "${brewfile##*/} entry $entry has no tools.tsv row or # alias: line"
+        fi
+    done
+done
 assert_eq "$(bootstrap_expand_path "$(bootstrap_field "$(bootstrap_installer_row bat-theme mac any)" 5)")" \
     "$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" 'bat theme destination'
 # The doctor writes nothing, so the rows whose version flag writes are
