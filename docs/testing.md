@@ -20,6 +20,19 @@ integration check, installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
 
+Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
+knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
+`DOTFILES_AUTO_STOW`, `DOTFILES_HOST`, `DOTFILES_DIR`, `DOTFILES_COLOR`,
+`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, the `AWESOME_SKILLS_*` controls and both
+session markers. The bootstrap playbook tells people to export
+`DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0` while provisioning, and a
+test or `pre-commit run` started from such a shell must behave as in CI; each
+case sets the knobs it exercises. `tests/test-entrypoints.sh` checks that every
+entry point carries the same list, that it covers every `DOTFILES_*` and
+`AWESOME_SKILLS_*` variable the scripts read (`DOTFILES_SYNC_PYTHON` excepted,
+since `tests/run.sh` provisions it), and that a suite passes under those
+exports.
+
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
 runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
 PowerShell behavior tests directly and fails if any assigned suite fails; it
