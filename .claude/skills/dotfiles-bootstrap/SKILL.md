@@ -27,11 +27,11 @@ from this checkout, stop and say so.
 5. Apply: `./setup-host.sh --host H --yes`.
 6. Handle each HUMAN block by kind, as `docs/bootstrap.md` ("Running it with an
    agent") says. Lines starting with `# ` are notes, not commands; every other
-   line is one self-contained command, run in order. `sudo`: only
-   after the person approves it in chat, each command line as one visible
-   top-level command, never through `sh -c`, a script or a chain. `auth`, `gui`,
-   `alloc`, `chsh`: hand them to the person and wait. `inspect`: show the
-   script's digest and contents first. `judgment`: the person decides.
+   line is one self-contained command, run in order. `sudo`: only after the
+   person approves it in chat, each command line as one visible top-level
+   command, never through `sh -c`, a script or a chain. `auth`, `gui`, `alloc`,
+   `chsh`: hand them to the person and wait. `inspect`: show the script's
+   digest and contents first. `judgment`: the person decides.
 7. Exit 3 means work remains: a blocking HUMAN block is pending, or steps are
    still to apply. Re-run step 5 after each block until H7-stow is the only one
    left.
@@ -45,6 +45,7 @@ from this checkout, stop and say so.
     its `docs/bootstrap.md <step-id>` reference.
 
 On native Windows use the twins (`.\doctor.ps1 -Host win -Tsv`,
-`.\setup-host.ps1 -Host win -Check`, then `-Yes`); `sudo` blocks and anything
-elevated belong to the person. Never run `git lfs install`, `gh auth setup-git`,
+`.\setup-host.ps1 -Host win -Check`, then `-Yes`); there `-Check` exits 0 even
+with todo steps, so read its plan lines. `sudo` blocks and anything elevated
+belong to the person. Never run `git lfs install`, `gh auth setup-git`,
 `conda init` or `micromamba shell init`, never edit rc files, and never commit.
