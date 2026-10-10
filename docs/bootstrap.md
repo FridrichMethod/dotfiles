@@ -234,7 +234,9 @@ exec zsh -l
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
-for example `[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md S2-brew-bundle)`.
+for example `[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md S2-brew-bundle)`;
+`ok` and `skip` rows end at the detail. Without `--tsv`, a summary line with
+the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
 `tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
 `submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order` and
@@ -324,6 +326,7 @@ The installer prints, and never runs, these blocks on stdout:
 
 ```text
 HUMAN-BEGIN H1-apt-core sudo
+# docs/bootstrap.md H1-apt-core
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends zsh git git-lfs ...
 HUMAN-END
@@ -1134,7 +1137,9 @@ environment that the terminal or the ssh session starts with.
 
 - **Check:** `ls ~/.claude/skills ~/.codex/skills 2>/dev/null | head; ls -l "${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last-sync"`
 - **Install:** opt-out, as above; nothing to do to keep it on. To run it once
-  now, in the foreground: `sync-skills` in a stowed shell.
+  now, in the foreground: `sync-skills` in a stowed shell, or the line the
+  setup-host block prints, which works before the stow too:
+  `AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh ~/dotfiles/scripts/awesome-skills-update.sh`.
 - **Verify:** `ls ~/.claude/skills | wc -l` is non-zero; the log is
   `${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last.log`.
 - **Human:** yes (judgment: it is on by default once stowed and runs an unpinned
