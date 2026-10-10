@@ -93,21 +93,48 @@ bootstrap_find_command() {
     return "$status"
 }
 
-# bootstrap_tool_row_valid ROW: 0 when a tools.tsv data row has the eight
-# columns and the vocabularies doctor.sh relies on. Prints the reason when not.
+# bootstrap_doc_steps FILE: the step ids that FILE (docs/bootstrap.md) has a
+# `### ID:` heading for, as one line " ID1 ID2 ... " (just " " when it has
+# none). Returns 1, printing nothing, when FILE is not a readable file.
+bootstrap_doc_steps() {
+    [ -f "$1" ] && [ -r "$1" ] || return 1
+    awk '
+        /^### [A-Za-z0-9-]+:/ {
+            id = $0
+            sub(/^### /, "", id)
+            sub(/:.*/, "", id)
+            printf " %s", id
+        }
+        END { print " " }
+    ' "$1"
+}
+
+# bootstrap_tool_row_valid ROW [STEPS]: 0 when a tools.tsv data row has
+# exactly eight non-empty tab-separated cells and the vocabularies doctor.sh
+# relies on, and, when STEPS (from bootstrap_doc_steps) is non-empty, a doc
+# step that docs/bootstrap.md has a heading for. Prints the reason when not.
 # tests/test_bootstrap_manifest.py is the full validator; this keeps the
-# doctor fail-closed on a hand-edited manifest.
+# doctor fail-closed on a hand-edited manifest. The shape is judged with
+# bootstrap_field, the splitter that selects rows by host, because `read`
+# with a tab IFS merges runs of tabs and drops leading and trailing ones.
 bootstrap_tool_row_valid() {
-    local IFS=$BOOTSTRAP_TAB id tier hosts probe flag floor absent doc
-    read -r id tier hosts probe flag floor absent doc <<EOF
-$1
-EOF
-    case ${doc:-} in
-        '' | *"$BOOTSTRAP_TAB"* | *[!A-Za-z0-9-]*)
-            printf '%s\n' "row ${id:-?} does not have eight tab-separated columns"
-            return 1
+    local row=$1 steps=${2:-} shape=ok id tier hosts probe flag floor absent doc
+    case $row in
+        '' | "$BOOTSTRAP_TAB"* | *"$BOOTSTRAP_TAB" | *"$BOOTSTRAP_TAB$BOOTSTRAP_TAB"*)
+            shape=bad
             ;;
     esac
+    if [ "$shape" = bad ] || ! bootstrap_field "$row" 8 >/dev/null ||
+        bootstrap_field "$row" 9 >/dev/null; then
+        id=${row%%"$BOOTSTRAP_TAB"*}
+        printf '%s\n' "row ${id:-?} does not have eight tab-separated columns (no empty cells, no leading or trailing tab)"
+        return 1
+    fi
+    # Exactly seven single tabs separate eight non-empty cells, so this
+    # read splits the row the same way bootstrap_field does.
+    IFS=$BOOTSTRAP_TAB read -r id tier hosts probe flag floor absent doc <<EOF
+$row
+EOF
     case $id in
         [a-z0-9]*) ;;
         *)
@@ -173,10 +200,19 @@ EOF
         printf '%s\n' "row $id has invalid floor '$floor'"
         return 1
     fi
-    [ -n "$absent" ] || {
-        printf '%s\n' "row $id has an empty absent column"
-        return 1
-    }
+    case $doc in
+        *[!A-Za-z0-9-]*)
+            printf '%s\n' "row $id has an invalid doc step '$doc'"
+            return 1
+            ;;
+    esac
+    case $steps in
+        '' | *" $doc "*) ;;
+        *)
+            printf '%s\n' "row $id cites step '$doc', which has no '### $doc:' heading in docs/bootstrap.md"
+            return 1
+            ;;
+    esac
     return 0
 }
 

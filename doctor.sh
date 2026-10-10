@@ -218,9 +218,12 @@ while IFS=' ' read -r id _ <&3; do
 done 3<<EOF
 $BOOTSTRAP_STRUCTURAL_CHECKS
 EOF
+# Every row's doc step must have a heading in docs/bootstrap.md, the file
+# each fix cites (checked only when the file is there).
+DOC_STEPS=$(bootstrap_doc_steps "$REPO_ROOT/docs/bootstrap.md") || DOC_STEPS=
 SEEN_IDS=' '
 while IFS= read -r row <&3; do
-    reason=$(bootstrap_tool_row_valid "$row") || invalid_manifest "$reason"
+    reason=$(bootstrap_tool_row_valid "$row" "$DOC_STEPS") || invalid_manifest "$reason"
     id=${row%%"$BOOTSTRAP_TAB"*}
     case $RESERVED_IDS in
         *" $id "*) invalid_manifest "id $id is reserved for a doctor check" ;;
@@ -355,6 +358,8 @@ elif [[ $QUIET == 0 ]]; then
     fi
 fi
 
+# Every row passed bootstrap_tool_row_valid (eight non-empty cells), so a
+# tab-IFS read splits it exactly.
 while IFS= read -r row <&3; do
     [[ -n "$row" ]] || continue
     IFS=$BOOTSTRAP_TAB read -r id tier _ probe flag floor absent doc <<EOF

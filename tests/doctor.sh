@@ -29,11 +29,13 @@ TEST_HOME="$TEST_TMP/home"
 EVENT_LOG="$TEST_TMP/events.log"
 OUT="$TEST_TMP/out"
 SHELL_TMP="$TEST_TMP/tmp"
-mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FAKE_BIN" \
-    "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
+mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
+    "$FAKE_BIN" "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
 cp "$REPO_ROOT/doctor.sh" "$FIXTURE/doctor.sh"
 cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/terminal.sh"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
+# The real step headings: every doc step a manifest row cites must have one.
+cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
 chmod +x "$FIXTURE/doctor.sh"
 : >"$EVENT_LOG"
 ESC=$(printf '\033')
@@ -761,6 +763,51 @@ row locale core all locale - - x H1-locale | bad_manifest reserved 'id locale is
 row git core all git --version 1.x x P0-preflight | bad_manifest floor "invalid floor '1.x'"
 # shellcheck disable=SC2016 # manifest tokens are literal
 row rc core all 'file:$PWD/.zshrc' - - x P0-preflight | bad_manifest token 'cannot be expanded'
+# Empty cells and stray tabs: a tab-IFS read would merge or drop them and
+# accept the row, while the host filter splits on every tab and drops it.
+printf 'git\tcore\t\tall\tgit\t--version\t-\tcannot clone\tP0-preflight\n' |
+    bad_manifest nine-cells 'row git does not have eight tab-separated columns'
+printf '\tgit\tcore\tall\tgit\t--version\t-\tcannot clone\tP0-preflight\n' |
+    bad_manifest leading-tab 'row ? does not have eight tab-separated columns'
+printf 'git\tcore\tall\tgit\t--version\t-\tcannot clone\tP0-preflight\t\n' |
+    bad_manifest trailing-tab 'row git does not have eight tab-separated columns'
+printf 'git\tcore\t\tgit\t--version\t-\tcannot clone\tP0-preflight\n' |
+    bad_manifest empty-cell 'row git does not have eight tab-separated columns'
+row git core all git --version - x NOT-A-STEP |
+    bad_manifest doc "row git cites step 'NOT-A-STEP', which has no '### NOT-A-STEP:' heading"
+row git core all git --version - x 'P0-preflight:' | bad_manifest doc-chars "invalid doc step 'P0-preflight:'"
+# A docs/bootstrap.md without that heading fails closed; without the file the
+# doc column is not checked (the fixes then cite a file that is not there).
+mv "$FIXTURE/docs/bootstrap.md" "$TEST_TMP/bootstrap.md.hidden"
+printf '# Bootstrap\n\n### P0-preflight: Preflight\n' >"$FIXTURE/docs/bootstrap.md"
+row git core all git --version - x S2-brew-bundle | bad_manifest doc-heading "cites step 'S2-brew-bundle'"
+rm "$FIXTURE/docs/bootstrap.md"
+run_doctor docs-absent "BOOTSTRAP_CONFIG=$TEST_TMP/bad-doc" -- --host lab-ubuntu --list
+assert_rc 0
+assert_out "$(printf 'git\tcore\tgit\t-\tNOT-A-STEP')"
+mv "$TEST_TMP/bootstrap.md.hidden" "$FIXTURE/docs/bootstrap.md"
+
+# --- the real manifest passes the doctor's own validation on every host -----
+
+# --list validates config/bootstrap/tools.tsv as every run does, then prints
+# without probing, so this catches drift between bootstrap_tool_row_valid,
+# tests/test_bootstrap_manifest.py and docs/bootstrap.md.
+REAL_CONFIG="BOOTSTRAP_CONFIG=$REPO_ROOT/config/bootstrap"
+for host in mac wsl-ubuntu lab-ubuntu sherlock marlowe; do
+    run_doctor "real-manifest-$host" "$REAL_CONFIG" -- --host "$host" --list
+    assert_rc 0
+    assert_not_in "$OUT/$CASE.err" 'invalid manifest'
+    assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\t')"
+    assert_out "$(printf 'nvm-homebrew\tai\tcheck\t-\t')"
+    assert_quiet_events "--list probed tools with the real manifest on $host"
+done
+assert_out "$(printf 'lmod\thost\tenv:LMOD_DIR\t-\tS2-modules')"
+run_doctor real-manifest-other "$REAL_CONFIG" -- --platform other --list
+assert_rc 0
+assert_not_in "$OUT/$CASE.err" 'invalid manifest'
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-brew-bundle')"
+assert_no_out "$(printf 'pwsh\t')"
+assert_quiet_events '--list probed tools with the real manifest on --platform other'
 
 # --- read-only and offline -----------------------------------------------------
 
