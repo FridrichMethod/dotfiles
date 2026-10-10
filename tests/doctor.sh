@@ -164,6 +164,7 @@ row() {
     row alt core all doctor-none,doctor-alt --version 1.0 'alt tool missing' S2-brew-bundle
     printf '# a comment between rows\n'
     row brew-only core all doctor-brew-only --version - 'brew tool missing' S2-brew-bundle
+    row local-tool core all doctor-local --version - 'local tool missing' S5-codex
     row oh-my-zsh core unix 'file:$HOME/.oh-my-zsh/oh-my-zsh.sh' - - 'zsh aborts' S3-clones
     row demo-plugin core unix 'dir:$ZSH_CUSTOM/plugins/demo/src' - - 'no demo completions' S3-clones
     row bat-theme core all 'file:$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' - - 'theme unknown' S3-bat-theme
@@ -203,6 +204,11 @@ STATE_FILE="$FIXTURE/.git/dotfiles-sync-unix"
 mkdir -p "$TEST_HOME/.oh-my-zsh/custom/plugins/demo/src" \
     "$TEST_HOME/.config/bat/themes" "$TEST_HOME/.local/bin"
 printf '# fixture oh-my-zsh\n' >"$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
+# What setup-host links into ~/.local/bin (codex, claude, kitty, micromamba).
+write_fake "$TEST_HOME/.local/bin/doctor-local" <<'SH'
+#!/bin/sh
+printf 'doctor-local 2.0\n'
+SH
 printf 'theme\n' >"$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme"
 ln -s ../fixture/common/zsh/.zshrc "$TEST_HOME/.zshrc"
 ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
@@ -486,6 +492,15 @@ SH
 run_doctor hpc-login-env -- --host sherlock --tsv
 assert_rc 0
 assert_row login-tool ok "$TEST_HOME/micromamba/envs/login/bin/doctor-login"
+# On hpc the login env stays ahead of ~/.local/bin, as the overlay puts it.
+write_fake "$TEST_HOME/.local/bin/doctor-login" <<'SH'
+#!/bin/sh
+printf 'doctor-login 9.9\n'
+SH
+run_doctor hpc-login-first "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host sherlock --tsv
+assert_row login-tool ok "1.0 at $TEST_HOME/micromamba/envs/login/bin/doctor-login"
+assert_row local-tool ok "at $TEST_HOME/.local/bin/doctor-local"
+rm "$TEST_HOME/.local/bin/doctor-login"
 run_doctor hpc-lmod LMOD_DIR=/opt/lmod -- --host marlowe --tier all --tsv
 assert_row lmod ok
 run_doctor hpc-no-lmod -- --host marlowe --tier all --tsv
@@ -647,6 +662,18 @@ assert_row path-order ok
 assert_row brew-only ok
 run_doctor path-no-local-bin "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
 assert_row path-order warn 'PATH lacks ~/.local/bin'
+# ~/.local/bin joins this process's PATH, ahead of Homebrew's bin as in the
+# stowed shells, so what setup-host linked there is found before the first
+# stow; path-order above still judges the caller's PATH.
+assert_rc 0
+assert_row local-tool ok "2.0 at $TEST_HOME/.local/bin/doctor-local"
+write_fake "$TEST_HOME/.local/bin/doctor-brew-only" <<'SH'
+#!/bin/sh
+printf 'doctor-brew-only 4.0\n'
+SH
+run_doctor local-before-brew "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
+assert_row brew-only ok "4.0 at $TEST_HOME/.local/bin/doctor-brew-only"
+rm "$TEST_HOME/.local/bin/doctor-brew-only"
 LOGIN_FIRST="PATH=$TEST_HOME/micromamba/envs/login/bin:$BASE_PATH"
 run_doctor path-login-hpc "$LOGIN_FIRST" -- --host sherlock --tsv
 assert_row path-order ok

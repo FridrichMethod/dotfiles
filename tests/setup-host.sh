@@ -1125,6 +1125,28 @@ expect_no_events manual
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail '--print-manual wrote files'
 
+# --- PATH before the first stow ----------------------------------------------
+
+# path_case PROFILE: this process's PATH after steps_extend_path, starting
+# from /usr/bin:/bin, with Homebrew, ~/.local/bin and the login env present.
+path_case() {
+    env -i HOME="$CASE_HOME" PATH=/usr/bin:/bin BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew" \
+        STEPS_PROFILE="$1" /bin/bash -c \
+        'for lib in manifest platform steps steps-common; do . "$0/$lib.sh"; done
+        steps_extend_path
+        printf "%s\n" "$PATH"' "$FIXTURE/lib/bootstrap"
+}
+new_home path
+mkdir -p "$CASE_BREW/sbin" "$CASE_HOME/.local/bin" "$CASE_HOME/micromamba/envs/login/bin"
+# The stowed shells' order: ~/.local/bin before Homebrew; on hpc the login
+# env before both.
+PATH_DEBIAN=$(path_case debian)
+[ "$PATH_DEBIAN" = "$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
+    fail "debian PATH before stow: $PATH_DEBIAN"
+PATH_HPC=$(path_case hpc)
+[ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
+    fail "hpc PATH before stow: $PATH_HPC"
+
 # --- bootstrap_fetch ---------------------------------------------------------
 
 # fetch_case NAME BIN_DIR ARGS...: run bootstrap_fetch with PATH=BIN_DIR.

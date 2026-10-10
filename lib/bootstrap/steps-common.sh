@@ -189,8 +189,8 @@ steps_path_prepend() {
 }
 
 # steps_extend_path: let this run see what the installers put on disk before
-# any rc file is stowed: ~/.local/bin, the hpc login env, then Homebrew.
-# Nothing is written to an rc file.
+# any rc file is stowed, in the stowed shells' order: on hpc the login env,
+# then ~/.local/bin, then Homebrew. Nothing is written to an rc file.
 steps_extend_path() {
     local brew dir
     if brew=$(bootstrap_brew_bin); then
@@ -198,10 +198,10 @@ steps_extend_path() {
         steps_path_prepend "${dir%/bin}/sbin"
         steps_path_prepend "$dir"
     fi
+    steps_path_prepend "$HOME/.local/bin"
     if [ "$STEPS_PROFILE" = hpc ]; then
         steps_path_prepend "$HOME/micromamba/envs/login/bin"
     fi
-    steps_path_prepend "$HOME/.local/bin"
     export PATH
 }
 

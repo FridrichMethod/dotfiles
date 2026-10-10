@@ -238,12 +238,12 @@ $ALL_ROWS
 EOF
 ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
 
-# A fresh Homebrew's bin and, on hpc, the login env's bin stay off PATH
-# until the stowed rc files add them, so prepend both (when present) to find
-# what those installers put there before stow. ~/.local/bin (micromamba,
-# codex, claude, kitty) is not prepended: a shell without it reports those
-# missing. This changes only this process's PATH; path-order judges the
-# caller's PATH.
+# A fresh Homebrew's bin, ~/.local/bin (micromamba, codex, claude, kitty)
+# and, on hpc, the login env's bin stay off PATH until the stowed rc files
+# add them, so prepend each one that exists to find what setup-host put
+# there before stow. The order is the stowed shells': ~/.local/bin before
+# Homebrew, and on hpc the login env first. This changes only this
+# process's PATH; path-order judges the caller's PATH.
 ORIG_PATH=$PATH
 prepend_path() {
     case ":$PATH:" in
@@ -253,6 +253,9 @@ prepend_path() {
 }
 if brew_bin=$(bootstrap_brew_bin); then
     prepend_path "${brew_bin%/brew}"
+fi
+if [[ -d "$HOME/.local/bin" ]]; then
+    prepend_path "$HOME/.local/bin"
 fi
 if [[ $PROFILE == hpc && -d "$HOME/micromamba/envs/login/bin" ]]; then
     prepend_path "$HOME/micromamba/envs/login/bin"
