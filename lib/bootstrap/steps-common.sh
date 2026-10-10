@@ -30,8 +30,8 @@ steps_load_tools() {
     STEPS_TOOLS_LOADED="$STEPS_HOST ${BOOTSTRAP_CONFIG-}"
 }
 
-# steps_tool_cell ID COLUMN: one tools.tsv cell of the row ID for this host.
-steps_tool_cell() {
+# steps_tool_row ID: the tools.tsv row ID for this host; 1 when it has none.
+steps_tool_row() {
     local row
     steps_load_tools
     row=$BOOTSTRAP_NL$STEPS_TOOL_ROWS$BOOTSTRAP_NL
@@ -40,8 +40,14 @@ steps_tool_cell() {
         *) return 1 ;;
     esac
     row=${row#*"$BOOTSTRAP_NL$1$BOOTSTRAP_TAB"}
-    row=${row%%"$BOOTSTRAP_NL"*}
-    bootstrap_field "$1$BOOTSTRAP_TAB$row" "$2"
+    printf '%s\n' "$1$BOOTSTRAP_TAB${row%%"$BOOTSTRAP_NL"*}"
+}
+
+# steps_tool_cell ID COLUMN: one tools.tsv cell of the row ID for this host.
+steps_tool_cell() {
+    local row
+    row=$(steps_tool_row "$1") || return 1
+    bootstrap_field "$row" "$2"
 }
 
 # steps_probe ID: evaluate the tools.tsv probe of ID (command list, file:,

@@ -305,10 +305,11 @@ AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
 `Brewfile.lock.json` into the checkout), and in every mode
-`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1`: no step
-runs gh or tldr, and the export keeps a gh that any tool it starts may run
-from writing its device id, and a tldr C client from refreshing its page
-cache over the network ([Guarantees](#guarantees)).
+`GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1`:
+S2-brew-bundle runs gh and tldr only as the doctor does, for their version,
+and the export keeps that gh, and any a tool it starts may run, from writing
+its device id, and a tldr C client from refreshing its page cache over the
+network ([Guarantees](#guarantees)).
 Before probing anything, both scripts prepend to their own PATH, when they
 exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
@@ -425,7 +426,8 @@ kind.
   (`~/.claude.json`; `~/.codex/tmp` for some codex releases); `--smoke` may
   write zsh's caches.
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
-  `nvim` and `pre-commit` rows are presence-only), finds fonts by file name
+  `nvim` and `pre-commit` rows are presence-only; S2-brew-bundle probes a
+  Brewfile's tools with the same function), finds fonts by file name
   instead of through `fc-list` (which creates fontconfig caches), and runs the
   `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Both Unix
   scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
@@ -819,17 +821,59 @@ claude-code and codex; kitty, wezterm and the CaskaydiaMono Nerd Font) and
 old formula shows up as `outdated` in the doctor; upgrade it deliberately with
 `brew upgrade <name>`. Never `brew bundle cleanup`.
 
-- **Check:** `HOMEBREW_NO_AUTO_UPDATE=1 brew bundle check --no-upgrade --file=config/bootstrap/brew/<tier>.Brewfile`
-  for each selected tier. Keep the variable: `brew bundle` otherwise may run
-  `brew update` first, which uses the network and writes the Homebrew prefix.
-  Before the stow, put brew on PATH first, as H1-homebrew says.
-- **Install:** automatic via setup-host.sh, for each selected tier:
-  `brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade` with
+- **Check:** every entry that applies here is satisfied: Homebrew has it, or
+  the doctor already finds its tool, wherever it came from (Tools that apt,
+  conda or the OS already provide, below). By hand,
+  `HOMEBREW_NO_AUTO_UPDATE=1 brew bundle check --no-upgrade --file=config/bootstrap/brew/<tier>.Brewfile`
+  for each selected tier answers for Homebrew alone. Keep the variable:
+  `brew bundle` otherwise may run `brew update` first, which uses the network
+  and writes the Homebrew prefix. Before the stow, put brew on PATH first, as
+  H1-homebrew says.
+- **Install:** automatic via setup-host.sh, for each selected tier with a
+  missing entry: `brew bundle --no-upgrade` on the Brewfile, less the entries
+  whose tools the doctor already finds, with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
 - **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`stow`, `fzf`,
   `eza`, `fd`, `gh`, ..., and on macOS `python3`) `ok` with their floors.
 - **Human:** no, unless a conflicting formula or cask is installed (judgment,
   below) or you cannot write the Homebrew prefix (sudo, below)
+
+**Tools that apt, conda or the OS already provide.** The step's goal is a
+green doctor, not a Homebrew copy of every tool. Each `brew` and `cask` entry
+that brew bundle installs on this platform (`if OS.mac?` and `if OS.linux?`
+honoured as brew bundle honours them; every cask is macOS-only) maps to the
+`tools.tsv` row of this host whose id is the entry's name (a tap's formula by
+its last segment), or else to one that a `# alias: TOOL-ID NAME` line names
+(`neovim` is `nvim`, `python` is `python3`, the `claude-code` cask is
+`claude`). The entry is satisfied when the doctor's own probe for that row
+(`bootstrap_check_tool`, `lib/bootstrap/checks.sh`) reports `ok`: the tool is
+found and, when the row has a floor, at or above it, whoever installed it.
+One below its floor, of unknown version against a floor, or not found at all
+is not, and an entry without a row (the Nerd Font cask) keeps the plain rule:
+Homebrew's `opt/<name>` link or `Caskroom/<token>` directory. Homebrew's own
+copy satisfies an entry too, even an old one that `--no-upgrade` leaves alone.
+On lab-ubuntu, apt's `/usr/bin/jq`, `/usr/bin/aria2c` and `/usr/bin/shellcheck`
+thus complete `cli` and `contributor` (their rows have no floor), and no
+duplicate lands in a shared Linuxbrew, where it would shadow apt's copy in
+every account's PATH. To have Homebrew's copy instead, remove the other one.
+
+The step is `done` once every entry that applies is satisfied; otherwise its
+plan line names only the missing entries, per Brewfile:
+`S2-brew-bundle todo Brewfile entries to bundle: cli: git-delta; contributor: shfmt stylua (offline estimate from PREFIX/opt and the doctor's probes; apply runs brew bundle check)`.
+Apply runs brew only for a Brewfile with an entry left: `brew bundle check`
+and then `brew bundle --no-upgrade` on the Brewfile itself when none of its
+entries is provided another way, as without this filter, and otherwise on
+its lines less the provided entries, every `tap` line kept (a bare name may
+come from any tap), fed through a pipe as `--file=-`. That keeps brew
+bundle's own judgment of what Homebrew has, its taps and `--no-upgrade`, and
+the conflict guard below still runs first. `brew bundle` reopens
+`/dev/stdin` by path, which works on a pipe for the user who made it; the
+owner of a shared prefix gets names on the command line instead (below). A
+Brewfile whose entries are all provided runs no brew at all. The probes run
+each mapped row's version flag, as the doctor does (never one of a
+presence-only row such as `nvim`, `codex` or `pre-commit`), with
+`GH_TELEMETRY=0` and `TLDR_AUTO_UPDATE_DISABLED=1` exported, so `--check`
+stays read-only and offline.
 
 **Conflicting formulae and casks.** Homebrew refuses to install a formula or
 cask next to one it `conflicts_with`, and `brew bundle` then fails with no more
@@ -905,12 +949,12 @@ its `bin` and Homebrew's repository (what `brew --repository` prints:
 `PREFIX/Homebrew` on Linux and for `/usr/local`, while `/opt/homebrew` is its
 own); a directory that does not exist yet counts as its parent, where brew
 would create it. When one is not writable, it runs no brew command, not even
-`brew bundle check`. The Brewfiles that the offline estimate (`opt/` links)
-finds incomplete are pending: then the step is `human`, not `todo`, and
-blocking (exit 3), and setup-host prints a `sudo` block with one line per
-pending Brewfile (one for its formulae, one for its casks) that installs, by
-name, the entries the prefix lacks, as the account owning the first
-unwritable directory (`stat`, else `ls -ld`):
+`brew bundle check`. The Brewfiles that the offline estimate (`opt/` links
+and the doctor's probes, above) finds incomplete are pending: then the step
+is `human`, not `todo`, and blocking (exit 3), and setup-host prints a `sudo`
+block with one line per pending Brewfile (one for its formulae, one for its
+casks) that installs, by name, its missing entries, as the account owning the
+first unwritable directory (`stat`, else `ls -ld`):
 
 ```text
 HUMAN-BEGIN S2-brew-bundle sudo
@@ -918,7 +962,8 @@ HUMAN-BEGIN S2-brew-bundle sudo
 # the Homebrew prefix /home/linuxbrew/.linuxbrew is shared and owned by lab; you cannot write /home/linuxbrew/.linuxbrew/Cellar, /home/linuxbrew/.linuxbrew/bin, /home/linuxbrew/.linuxbrew/Homebrew
 # the lines below run brew as lab and change the prefix for everyone on this machine
 # never chown a shared prefix: it belongs to lab and serves every account here
-# each line installs by name the entries of one Brewfile that the prefix lacks, from /tmp: brew never opens the Brewfile or your home, which lab may not be able to read
+# each line installs by name the missing entries of one Brewfile, from /tmp: brew never opens the Brewfile or your home, which lab may not be able to read
+# an entry is missing when the prefix lacks it and the doctor does not find its tool installed another way (apt, conda, the OS): no second copy in the shared prefix
 # HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed formula or cask alone, as brew bundle --no-upgrade does
 (cd /tmp && sudo -u lab -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_INSTALL_UPGRADE=1 /home/linuxbrew/.linuxbrew/bin/brew install --formula gh tldr)
 HUMAN-END
@@ -937,7 +982,9 @@ directory its user cannot read, so the line starts in `/tmp`, inside
 parentheses so the `cd` stays in a subshell. The names are the offline
 estimate's missing entries, with the OS guards applied and a tap's formula as
 `user/tap/name`, which `brew install` taps by itself (a `tap` line alone gets
-no line). brew bundle installs its missing entries with this same
+no line); an entry whose tool the doctor finds installed another way is left
+out, and a Brewfile with nothing missing gets no line. brew bundle installs
+its missing entries with this same
 `brew install`, and `HOMEBREW_NO_INSTALL_UPGRADE=1` leaves an entry that turns
 out to be installed alone, as `--no-upgrade` does. Whatever the lines install
 lands in the shared prefix for every account on the machine, which is the
@@ -1913,10 +1960,10 @@ fail-closed behavior beyond what is stated.
   that other directories (an ACL, a read-only `opt` or `var`) keep you out of
   still runs `brew bundle` as you, and it fails inside brew. With a prefix you
   cannot write it decides what is pending from the offline estimate (`opt/`
-  links) alone, never `brew bundle check`. The owner it names is that of the
-  first unwritable directory; when you own it yourself (a mode you changed),
-  the block's `sudo -u` line names you and cannot help: restore the mode
-  instead.
+  links and the doctor's probes) alone, never `brew bundle check`. The owner
+  it names is that of the first unwritable directory; when you own it
+  yourself (a mode you changed), the block's `sudo -u` line names you and
+  cannot help: restore the mode instead.
 - **Ubuntu 22.04 needs a newer Python by hand.** Its apt `python3` is 3.10,
   below setup-sync's 3.11 floor, and no Linux Brewfile bundles a python, so
   S4-setup-sync fails there until you install one and run

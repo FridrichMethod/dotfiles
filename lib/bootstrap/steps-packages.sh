@@ -8,9 +8,149 @@
 
 # --- S2-brew-bundle (macos, debian) ----------------------------------------
 
+# A Brewfile entry is satisfied when Homebrew has it (an opt/ link, a
+# Caskroom/ dir) or when the tool it installs is already there as the doctor
+# judges it (steps_brew_entry_provided), whoever installed it: apt, conda or
+# the OS. The goal is a green doctor, not a Homebrew copy of every tool; on a
+# shared prefix such a copy would change every account's PATH.
+
+# steps_brew_parse LINE: split one Brewfile line, leading blanks ignored,
+# into STEPS_BREW_WORD (tap, brew or cask), STEPS_BREW_NAME (the quoted name,
+# tap/name for a tap's formula) and STEPS_BREW_REST (the text after the
+# closing quote, where an OS guard sits). 1, all three empty, for a comment
+# or any other line.
+steps_brew_parse() {
+    local line=$1 gap
+    STEPS_BREW_WORD='' STEPS_BREW_NAME='' STEPS_BREW_REST=''
+    line=${line#"${line%%[![:space:]]*}"}
+    case $line in
+        tap[[:space:]]*\"*\"* | brew[[:space:]]*\"*\"* | cask[[:space:]]*\"*\"*) ;;
+        *) return 1 ;;
+    esac
+    gap=${line#*[[:space:]]}
+    gap=${gap%%\"*}
+    case $gap in
+        *[![:space:]]*) return 1 ;;
+    esac
+    STEPS_BREW_WORD=${line%%[[:space:]]*}
+    line=${line#*\"}
+    STEPS_BREW_NAME=${line%%\"*}
+    STEPS_BREW_REST=${line#*\"}
+}
+
+# steps_brew_guard_applies TEXT: 0 when the TEXT after an entry's name has no
+# OS guard, or the one under which brew bundle installs it on STEPS_PROFILE
+# ("if OS.mac?" on macos, "if OS.linux?" elsewhere).
+steps_brew_guard_applies() {
+    case $1 in
+        *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] ;;
+        *'if OS.linux?'*) [ "$STEPS_PROFILE" != macos ] ;;
+    esac
+}
+
+# steps_brew_tool_id NAME: the tools.tsv row of this host that the Brewfile
+# entry NAME (a tap's formula by its last segment) installs: the row whose id
+# is NAME, else the first "# alias: TOOL-ID NAME" whose TOOL-ID has a row
+# here. 1 when there is none.
+steps_brew_tool_id() {
+    local name=${1##*/} ids id
+    if steps_tool_row "$name" >/dev/null; then
+        printf '%s\n' "$name"
+        return 0
+    fi
+    ids=$(bootstrap_tool_aliases "$name")$BOOTSTRAP_NL || return 1
+    while [ -n "$ids" ]; do
+        id=${ids%%"$BOOTSTRAP_NL"*}
+        ids=${ids#*"$BOOTSTRAP_NL"}
+        if [ -n "$id" ] && steps_tool_row "$id" >/dev/null; then
+            printf '%s\n' "$id"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# steps_brew_entry_provided NAME: 0 when the doctor would report the tool of
+# the Brewfile entry NAME ok: its tools.tsv row (steps_brew_tool_id) passes
+# bootstrap_check_tool, the doctor's own probe (found, and at or above the
+# floor when the row has one; an unknown version against a floor does not
+# pass). Read-only and offline, as the doctor is: it runs only the row's
+# version flag, none for a presence-only row, under the GH_TELEMETRY=0 and
+# TLDR_AUTO_UPDATE_DISABLED=1 that setup-host.sh exports.
+steps_brew_entry_provided() {
+    local id row probe flag floor absent
+    id=$(steps_brew_tool_id "$1") || return 1
+    row=$(steps_tool_row "$id") || return 1
+    bootstrap_split "$BOOTSTRAP_TAB" "$row" _ _ _ probe flag floor absent _
+    case $(bootstrap_check_tool "$probe" "$flag" "$floor" "$absent") in
+        "ok$BOOTSTRAP_TAB"*) return 0 ;;
+    esac
+    return 1
+}
+
+# steps_brew_entry_missing PREFIX KIND NAME: 0 when PREFIX has no opt/ link
+# (brew; Homebrew links aliases there too) or Caskroom/ dir (cask) for NAME
+# and its tool is not provided otherwise (steps_brew_entry_provided).
+steps_brew_entry_missing() {
+    case $2 in
+        brew) [ ! -e "$1/opt/${3##*/}" ] || return 1 ;;
+        cask) [ ! -d "$1/Caskroom/${3##*/}" ] || return 1 ;;
+    esac
+    ! steps_brew_entry_provided "$3"
+}
+
+# steps_brewfile_filtered FILE: print the Brewfile that brew bundle gets for
+# FILE here, built from its lines: every tap line (a bare entry name may come
+# from any tap), and each brew or cask entry that applies on STEPS_PROFILE
+# and whose tool is not provided otherwise (steps_brew_entry_provided).
+# Returns 0 when it left out a provided entry and kept another, so brew
+# bundle reads the printed lines (--file=-); 2 when every entry that applies
+# here is provided, so brew has nothing to do; 1 when it left out none, or
+# cannot read FILE, so brew bundle reads FILE itself, as without the filter.
+steps_brewfile_filtered() {
+    local text lines line kept='' entries=0 dropped=0
+    text=$(cat -- "$1" 2>/dev/null) || return 1
+    lines=$text$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        steps_brew_parse "$line" || continue
+        if [ "$STEPS_BREW_WORD" != tap ]; then
+            steps_brew_guard_applies "$STEPS_BREW_REST" || continue
+            if steps_brew_entry_provided "$STEPS_BREW_NAME"; then
+                dropped=1
+                continue
+            fi
+            entries=$((entries + 1))
+        fi
+        kept="$kept${line#"${line%%[![:space:]]*}"}$BOOTSTRAP_NL"
+    done
+    printf '%s' "$kept"
+    [ "$dropped" = 1 ] || return 1
+    [ "$entries" -gt 0 ] || return 2
+}
+
+# steps_brew_bundle BREW FILE ARGS...: run `BREW bundle ARGS` for FILE less
+# its provided entries (steps_brewfile_filtered): on FILE itself when none is
+# left out, and otherwise on the kept lines through a pipe, as --file=-.
+# brew bundle reopens /dev/stdin by path, which works on a pipe for the user
+# who made it. No brew runs (status 0) when every entry is provided. Apply
+# mode only: brew refreshes its API data over the network even with
+# HOMEBREW_NO_AUTO_UPDATE.
+steps_brew_bundle() {
+    local brew=$1 file=$2 kept rc=0
+    shift 2
+    kept=$(steps_brewfile_filtered "$file") || rc=$?
+    case $rc in
+        0) printf '%s' "$kept" | "$brew" bundle "$@" --file=- ;;
+        2) return 0 ;;
+        *) "$brew" bundle "$@" --file "$file" </dev/null ;;
+    esac
+}
+
 # steps_brew_pending BREW: the selected Brewfiles that `brew bundle check`
-# does not consider satisfied, one per line. Apply mode only: brew refreshes
-# its API data over the network even with HOMEBREW_NO_AUTO_UPDATE.
+# does not consider satisfied once their provided entries are left out
+# (steps_brew_bundle), one per line. Apply mode only.
 steps_brew_pending() {
     local brew=$1 lines file
     lines=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
@@ -18,7 +158,7 @@ steps_brew_pending() {
         file=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
-        if ! "$brew" bundle check --no-upgrade --file "$file" >/dev/null 2>&1 </dev/null; then
+        if ! steps_brew_bundle "$brew" "$file" check --no-upgrade >/dev/null 2>&1; then
             printf '%s\n' "$file"
         fi
     done
@@ -27,36 +167,29 @@ steps_brew_pending() {
 # steps_brewfile_entries FILE KIND [PREFIX]: the KIND (brew or cask)
 # entries of FILE that brew bundle installs on STEPS_PROFILE (OS guards
 # honoured), space-separated as written (tap/name for a tap's formula); with
-# PREFIX, only those with no opt/ link or Caskroom/ dir under it. A
-# read-only, offline estimate for --check (Homebrew links opt/ for aliases
-# too).
+# PREFIX, only the missing ones (steps_brew_entry_missing). A read-only,
+# offline estimate for --check.
 steps_brewfile_entries() {
-    local prefix=${3:-} entries lines line kind name rest found=''
-    entries=$(sed -nE 's/^[[:space:]]*(brew|cask)[[:space:]]+"([^"]+)"[[:space:]]*(.*)$/\1 \2 \3/p' "$1") ||
-        return 1
-    lines=$entries$BOOTSTRAP_NL
+    local prefix=${3:-} text lines line name found=''
+    text=$(cat -- "$1") || return 1
+    lines=$text$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         line=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
-        bootstrap_split ' ' "$line" kind name rest
-        [ "$kind" = "$2" ] || continue
-        case $rest in
-            *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] || continue ;;
-            *'if OS.linux?'*) [ "$STEPS_PROFILE" != macos ] || continue ;;
-        esac
-        if [ -n "$prefix" ]; then
-            case $kind in
-                brew) [ ! -e "$prefix/opt/${name##*/}" ] || continue ;;
-                cask) [ ! -d "$prefix/Caskroom/${name##*/}" ] || continue ;;
-            esac
+        steps_brew_parse "$line" || continue
+        [ "$STEPS_BREW_WORD" = "$2" ] || continue
+        steps_brew_guard_applies "$STEPS_BREW_REST" || continue
+        name=$STEPS_BREW_NAME
+        if [ -n "$prefix" ] && ! steps_brew_entry_missing "$prefix" "$2" "$name"; then
+            continue
         fi
         found="$found${found:+ }$name"
     done
     printf '%s\n' "$found"
 }
 
-# steps_brewfile_missing PREFIX FILE: the brew and cask entries of FILE with
-# no opt/ link or Caskroom/ dir under PREFIX, space-separated.
+# steps_brewfile_missing PREFIX FILE: the brew and cask entries of FILE that
+# are missing (steps_brew_entry_missing), space-separated.
 steps_brewfile_missing() {
     local brews casks
     brews=$(steps_brewfile_entries "$2" brew "$1") || return 1
@@ -65,7 +198,7 @@ steps_brewfile_missing() {
 }
 
 # steps_brew_pending_offline PREFIX: the selected Brewfiles with an entry
-# missing from PREFIX, one per line, without running brew.
+# missing (steps_brewfile_missing), one per line, without running brew.
 steps_brew_pending_offline() {
     local lines file
     lines=$(bootstrap_brewfiles "$STEPS_TIERS")$BOOTSTRAP_NL || true
@@ -77,6 +210,23 @@ steps_brew_pending_offline() {
             printf '%s\n' "$file"
         fi
     done
+}
+
+# steps_brew_missing_detail PREFIX FILES: "core: fzf; cli: jq tldr", the
+# missing entries (steps_brewfile_missing) of each of FILES (Brewfile paths,
+# one per line); a Brewfile with none named stands alone.
+steps_brew_missing_detail() {
+    local lines file names detail=''
+    lines=$2$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        file=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        [ -n "$file" ] || continue
+        names=$(steps_brewfile_missing "$1" "$file" 2>/dev/null) || names=
+        file=${file##*/}
+        detail="$detail${detail:+; }${file%.Brewfile}${names:+: $names}"
+    done
+    printf '%s\n' "$detail"
 }
 
 # steps_brewfile_names FILES: "core cli" from Brewfile paths.
@@ -139,11 +289,8 @@ steps_brew_entry_applies() {
     [ "$2" = formula ] || word=cask
     entry=$(awk -v word="$word" -v name="\"$3\"" \
         '$1 == word && $2 == name { print "entry " $0; exit }' "$1") || return 1
-    case $entry in
-        '') return 1 ;;
-        *'if OS.mac?'*) [ "$STEPS_PROFILE" = macos ] ;;
-        *'if OS.linux?'*) [ "$STEPS_PROFILE" != macos ] ;;
-    esac
+    [ -n "$entry" ] || return 1
+    steps_brew_guard_applies "$entry"
 }
 
 # steps_safe_formula NAME: 0 for a formula or cask name that is a single
@@ -262,9 +409,10 @@ steps_brew_owner_line() {
 }
 
 # steps_brew_install_lines MODE FILE: the owner lines that install by name,
-# formulae and casks apart, the entries of FILE that the prefix lacks (MODE
-# manual: every entry that applies here). brew never opens FILE, which the
-# owner may not be able to read (a 0600 Brewfile, a closed home), and
+# formulae and casks apart, the missing entries of FILE
+# (steps_brew_entry_missing; MODE manual: every entry that applies here), no
+# line for a kind with none. brew never opens FILE, which the owner may not
+# be able to read (a 0600 Brewfile, a closed home), and
 # HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed one alone, as
 # --no-upgrade does. A FILE this user cannot read gets a note instead.
 steps_brew_install_lines() {
@@ -301,11 +449,11 @@ steps_brew_shared_notes() {
 
 # steps_brew_shared_block MODE FILES: the sudo block that installs, as the
 # owner of the Homebrew prefix that steps_brew_access found locked, the
-# entries of each of FILES (Brewfile paths, one per line) that the prefix
-# lacks (steps_brew_install_lines). MODE manual names every entry and adds
-# the condition under which the block applies.
+# missing entries of each of FILES (Brewfile paths, one per line;
+# steps_brew_install_lines). MODE manual names every entry and adds the
+# condition under which the block applies.
 steps_brew_shared_block() {
-    local lines file what='the entries of one Brewfile that the prefix lacks'
+    local lines file what='the missing entries of one Brewfile'
     steps_block_begin S2-brew-bundle sudo
     if [ "$1" = manual ]; then
         printf '%s\n' '# applies while you cannot write the Homebrew prefix (one shared with other accounts);' \
@@ -315,6 +463,9 @@ steps_brew_shared_block() {
     steps_brew_shared_notes
     printf '# each line installs by name %s, from /tmp: brew never opens the Brewfile or your home, which %s may not be able to read\n' \
         "$what" "${STEPS_BREW_OWNER:-the owner}"
+    if [ "$1" != manual ]; then
+        printf '%s\n' '# an entry is missing when the prefix lacks it and the doctor does not find its tool installed another way (apt, conda, the OS): no second copy in the shared prefix'
+    fi
     printf '%s\n' '# HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed formula or cask alone, as brew bundle --no-upgrade does'
     lines=$2$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
@@ -374,7 +525,7 @@ steps_brew_conflict_block() {
 }
 
 step_S2_brew_bundle_check() {
-    local files brew prefix pending note='' lines line kind name other file
+    local files brew prefix pending note lines line kind name other file
     STEPS_BREW_CONFLICTS='' STEPS_BREW_SHARED='' STEPS_BREW_LOCKED='' STEPS_BREW_OWNER=''
     files=$(bootstrap_brewfiles "$STEPS_TIERS")
     if [ -z "$files" ]; then
@@ -385,6 +536,7 @@ step_S2_brew_bundle_check() {
         STEP_DETAIL="brew is not installed; Brewfiles: $(steps_brewfile_names "$files")"
         return 1
     fi
+    steps_load_tools
     prefix=${brew%/bin/brew}
     steps_brew_access "$prefix"
     # Before any brew command: a conflicting formula is a person's call.
@@ -402,30 +554,31 @@ step_S2_brew_bundle_check() {
         STEP_DETAIL="$STEP_DETAIL; brew bundle would fail, so uninstall it first"
         return 3
     fi
+    note=" (offline estimate from $prefix/opt and the doctor's probes)"
     # A prefix this user cannot write: brew bundle would fail, so its owner
     # installs what the offline estimate finds missing, in apply mode too.
     if [ -n "$STEPS_BREW_LOCKED" ]; then
         pending=$(steps_brew_pending_offline "$prefix")
-        note=" (offline estimate from $prefix/opt)"
         if [ -z "$pending" ]; then
             STEP_DETAIL="Brewfiles satisfied: $(steps_brewfile_names "$files")$note; $prefix is shared, owned by ${STEPS_BREW_OWNER:-another account}"
             return 0
         fi
         STEPS_BREW_SHARED=$pending
-        STEP_DETAIL="you cannot write the shared Homebrew prefix $prefix (owned by ${STEPS_BREW_OWNER:-another account}), so its owner installs what is missing from: $(steps_brewfile_names "$pending")$note"
+        STEP_DETAIL="you cannot write the shared Homebrew prefix $prefix (owned by ${STEPS_BREW_OWNER:-another account}), so its owner installs the missing entries: $(steps_brew_missing_detail "$prefix" "$pending")$note"
         return 3
     fi
     if [ "$STEPS_MODE" = apply ]; then
         pending=$(steps_brew_pending "$brew")
+        note=''
     else
         pending=$(steps_brew_pending_offline "$prefix")
-        note=" (offline estimate from $prefix/opt; apply runs brew bundle check)"
+        note="${note%)}; apply runs brew bundle check)"
     fi
     if [ -z "$pending" ]; then
         STEP_DETAIL="Brewfiles satisfied: $(steps_brewfile_names "$files")$note"
         return 0
     fi
-    STEP_DETAIL="Brewfiles to bundle: $(steps_brewfile_names "$pending")$note"
+    STEP_DETAIL="Brewfile entries to bundle: $(steps_brew_missing_detail "$prefix" "$pending")$note"
     return 1
 }
 
@@ -438,7 +591,7 @@ step_S2_brew_bundle_plan() {
         steps_brew_shared_block pending "$STEPS_BREW_SHARED"
         return 0
     fi
-    printf 'brew bundle --no-upgrade --file config/bootstrap/brew/<tier>.Brewfile (%s)\n' "$STEP_DETAIL"
+    printf 'brew bundle --no-upgrade for each config/bootstrap/brew/<tier>.Brewfile, less the entries whose tools the doctor already finds (%s)\n' "$STEP_DETAIL"
 }
 
 # The shared-prefix block needs a prefix and its owner, so --print-manual
@@ -454,6 +607,13 @@ step_S2_brew_bundle_manual() {
     [ -z "$STEPS_BREW_LOCKED" ] || steps_brew_shared_block manual "$(bootstrap_brewfiles "$STEPS_TIERS")"
 }
 
+# Each pending Brewfile goes through steps_brew_bundle: brew bundle
+# --no-upgrade still decides what to install, taps what a kept entry needs and
+# upgrades nothing, after the conflict guard in the check, but never sees an
+# entry whose tool apt, conda or the OS already provides at the doctor's
+# floor. The kept lines reach it through a pipe as --file=-, which brew bundle
+# reopens as /dev/stdin; that works for this user, unlike the shared-prefix
+# owner, who therefore gets names on the command line instead.
 step_S2_brew_bundle_apply() {
     local brew lines file
     if ! brew=$(bootstrap_brew_bin); then
@@ -470,7 +630,7 @@ step_S2_brew_bundle_apply() {
         file=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
         [ -n "$file" ] || continue
-        "$brew" bundle --no-upgrade --file "$file" >&2 </dev/null || {
+        steps_brew_bundle "$brew" "$file" --no-upgrade >&2 || {
             dotfiles_log error "brew bundle failed for $file"
             return 1
         }

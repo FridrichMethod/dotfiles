@@ -76,6 +76,10 @@ How to read a cell:
 
 - `brew X` / `cask X`: an entry in the tier's Brewfile in
   [`config/bootstrap/brew/`](../config/bootstrap/brew/) (`cask` is macOS only).
+  It is the default source, not the only one: S2-brew-bundle skips an entry
+  whose tool the doctor already finds at its floor, from apt, conda or the OS
+  (for example apt's `jq`, `aria2` and `shellcheck` on Ubuntu), so no
+  duplicate Homebrew copy is installed.
 - `apt X`: a package in [`config/bootstrap/apt/`](../config/bootstrap/apt/),
   installed by the `H1-apt-core` sudo block.
 - `login env X`: a dependency in

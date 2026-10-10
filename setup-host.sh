@@ -74,7 +74,7 @@ usage_error() {
     exit 2
 }
 
-for lib in manifest platform version fetch steps steps-guard steps-common steps-human \
+for lib in manifest platform version checks fetch steps steps-guard steps-common steps-human \
     steps-packages steps-files steps-runtimes steps-archives; do
     if [[ ! -r "$REPO_ROOT/lib/bootstrap/$lib.sh" ]]; then
         dotfiles_log error "missing library: $REPO_ROOT/lib/bootstrap/$lib.sh"
@@ -87,6 +87,9 @@ done
 . "$REPO_ROOT/lib/bootstrap/platform.sh"
 # shellcheck source=lib/bootstrap/version.sh
 . "$REPO_ROOT/lib/bootstrap/version.sh"
+# S2-brew-bundle judges a Brewfile entry with the doctor's own probe.
+# shellcheck source=lib/bootstrap/checks.sh
+. "$REPO_ROOT/lib/bootstrap/checks.sh"
 # shellcheck source=lib/bootstrap/fetch.sh
 . "$REPO_ROOT/lib/bootstrap/fetch.sh"
 # shellcheck source=lib/bootstrap/steps.sh
@@ -301,13 +304,15 @@ fi
 
 # Provisioning never triggers the login updaters, git prompts or Homebrew
 # auto-update, hints and cleanup. Older brew bundle wrote Brewfile.lock.json
-# next to the Brewfile, inside this checkout. --check never runs brew. No
-# step runs gh or tldr, but a tool a step starts may: recent gh releases
-# answer any command, --version included, by writing
-# ~/.local/state/gh/device-id unless GH_TELEMETRY=0, and the tldr C client
-# (Homebrew's tldr formula), once its page cache is two weeks old, answers
-# any command but --update by downloading the tldr-pages archive into
-# ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set.
+# next to the Brewfile, inside this checkout. --check never runs brew.
+# S2-brew-bundle probes each Brewfile tool as the doctor does, running the
+# version flag of its tools.tsv row (gh --version, tldr --version), and a
+# tool a step starts may run them too: recent gh releases answer any
+# command, --version included, by writing ~/.local/state/gh/device-id unless
+# GH_TELEMETRY=0, and the tldr C client (Homebrew's tldr formula), once its
+# page cache is two weeks old, answers any command but --update by
+# downloading the tldr-pages archive into ~/.tldrc unless
+# TLDR_AUTO_UPDATE_DISABLED is set.
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
     HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1

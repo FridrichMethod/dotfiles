@@ -317,6 +317,10 @@ CONFIG="$FIXTURE/config/bootstrap"
     echo
     row gamma host mac,sherlock gamma - - 'gamma breaks' X-host-tools
     row delta desktop win psmodule:Delta - - 'delta breaks' W1-psresources
+    echo '# alias: alpha alpha-cli'
+    echo '# alias: beta shared-name'
+    echo '# alias: gamma shared-name'
+    echo '#   alias: delta indented-note'
 } >"$CONFIG/tools.tsv"
 {
     row id dest url ref hosts
@@ -351,6 +355,14 @@ assert_eq "$(bootstrap_tool_rows mac | cut -f1 | tr '\n' ' ')" 'alpha beta gamma
 assert_eq "$(bootstrap_tool_rows sherlock | cut -f1 | tr '\n' ' ')" 'alpha beta gamma ' 'tools for sherlock'
 assert_eq "$(bootstrap_tool_rows win | cut -f1 | tr '\n' ' ')" 'alpha delta ' 'tools for win'
 assert_eq "$(bootstrap_tool_rows '' | cut -f1 | tr '\n' ' ')" 'alpha beta ' 'tools in platform mode'
+# "# alias: TOOL-ID NAME" lines: every TOOL-ID installed under NAME, in file
+# order; S2-brew-bundle maps a Brewfile entry to its tools.tsv row with them.
+assert_eq "$(bootstrap_tool_aliases alpha-cli)" alpha 'alias of one tool'
+assert_eq "$(bootstrap_tool_aliases shared-name | tr '\n' ' ')" 'beta gamma ' 'aliases in file order'
+assert_eq "$(bootstrap_tool_aliases alpha)" '' 'a row id is no alias'
+assert_eq "$(bootstrap_tool_aliases indented-note)" '' 'only "# alias:" lines declare one'
+assert_status 1 'aliases without tools.tsv' env BOOTSTRAP_CONFIG="$CONFIG/missing" \
+    "$BASH" -c '. "$1" && bootstrap_tool_aliases alpha-cli' _ "$REPO_ROOT/lib/bootstrap/manifest.sh"
 assert_eq "$(bootstrap_clone_rows lab-ubuntu | cut -f1 | tr '\n' ' ')" 'alpha ' 'clones for lab-ubuntu'
 assert_eq "$(bootstrap_clone_rows marlowe | cut -f1 | tr '\n' ' ')" 'alpha beta ' 'clones for marlowe'
 assert_eq "$(bootstrap_clone_rows win)" '' 'no clones on win'
@@ -598,6 +610,8 @@ case " $(bootstrap_apt_packages lab-ubuntu | tr '\n' ' ')" in
 esac
 assert_eq "$(bootstrap_brewfiles core,cli,ai | sed 's#.*/##' | tr '\n' ' ')" \
     'core.Brewfile cli.Brewfile ai.Brewfile ' 'default-tier Brewfiles'
+assert_eq "$(bootstrap_tool_aliases neovim)" nvim 'the neovim formula installs nvim'
+assert_eq "$(bootstrap_tool_aliases claude-code)" claude 'the claude-code cask installs claude'
 assert_eq "$(bootstrap_expand_path "$(bootstrap_field "$(bootstrap_installer_row bat-theme mac any)" 5)")" \
     "$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" 'bat theme destination'
 # The doctor writes nothing, so the rows whose version flag writes are

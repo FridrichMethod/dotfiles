@@ -181,7 +181,7 @@ case_command() {
     shift
     CASE_CMD=(env -i
         HOME="$CASE_HOME"
-        PATH="$FAKE_BIN:/usr/bin:/bin"
+        PATH="$FAKE_BIN:$SYS_BIN"
         LC_ALL=C
         DOTFILES_COLOR=never
         TMPDIR="$TEST_TMP"
@@ -317,11 +317,13 @@ SH
 
 cat >"$TEST_TMP/brew-stub" <<'SH'
 #!/bin/sh
-# Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file,
-# bundle check looks for those links (as the offline --check estimate does).
-# Like Homebrew's, it skips an "if OS.mac?" entry off macOS (the case's
-# BOOTSTRAP_UNAME_S) and an "if OS.linux?" one on it, and --file=- reads the
-# Brewfile on stdin. install --formula links opt/<formula> for each name.
+# Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file
+# (opt/x for a tap's tap/x), bundle check looks for those links (as the
+# offline --check estimate does). Like Homebrew's, it skips an "if OS.mac?"
+# entry off macOS (the case's BOOTSTRAP_UNAME_S) and an "if OS.linux?" one on
+# it, and --file=- reads the Brewfile on stdin (logged as "stdin"). bundle
+# logs each tap, brew and cask line it was given. install --formula links
+# opt/<formula> for each name.
 prefix=$(cd "$(dirname "$0")/.." && pwd) file='' prev=''
 for arg do
     [ "$prev" != --file ] || file=$arg
@@ -334,25 +336,27 @@ done
 name=${file##*/}
 other_os='if OS.mac?'
 [ "${BOOTSTRAP_UNAME_S:-Linux}" != Darwin ] || other_os='if OS.linux?'
-formulas=$(grep -vF "$other_os" "$file" 2>/dev/null |
+brewfile=$(cat "$file" 2>/dev/null)
+formulas=$(printf '%s\n' "$brewfile" | grep -vF "$other_os" |
     sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p')
 case "${1:-} ${2:-}" in
     'bundle check')
         printf 'brew-check:%s\n' "$name" >>"$EVENT_LOG"
         for formula in $formulas; do
-            [ -e "$prefix/opt/$formula" ] || exit 1
+            [ -e "$prefix/opt/${formula##*/}" ] || exit 1
         done
         ;;
     'bundle --no-upgrade')
         printf 'brew:bundle %s\n' "$name" >>"$EVENT_LOG"
+        printf '%s\n' "$brewfile" | sed -nE "s/^(tap|brew|cask) /brew-line:$name &/p" >>"$EVENT_LOG"
         printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} AWESOME_SKILLS_AUTO_UPDATE=${AWESOME_SKILLS_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
         [ "${BREW_FAIL:-0}" != 1 ] || exit 1
         if [ -n "${BREW_POLLUTE:-}" ]; then
             printf '%s\n' '# appended by a brew installer' >>"$BREW_POLLUTE"
         fi
         for formula in $formulas; do
-            mkdir -p "$prefix/Cellar/$formula/1.0" "$prefix/opt" &&
-                ln -sfn "../Cellar/$formula/1.0" "$prefix/opt/$formula" || exit 1
+            mkdir -p "$prefix/Cellar/${formula##*/}/1.0" "$prefix/opt" &&
+                ln -sfn "../Cellar/${formula##*/}/1.0" "$prefix/opt/${formula##*/}" || exit 1
         done
         ;;
     'install --formula')
@@ -425,6 +429,25 @@ exit 99
 SH
 done
 chmod 755 "$FAKE_BIN"/* "$TEST_TMP/brew-stub"
+
+# The system commands every case sees, as links in SYS_BIN, less those that
+# the fixture Brewfiles' entries are probed by (their tools.tsv rows): a jq,
+# python3 or shellcheck in the test machine's /usr/bin would otherwise
+# satisfy an entry, so S2-brew-bundle would judge this machine, not the case.
+# A case that wants one puts its own fake on PATH.
+SYS_BIN="$TEST_TMP/sys-bin"
+HIDDEN_TOOLS=' fzf jq tldr python3 python shellcheck shfmt stylua kitty '
+mkdir -p "$SYS_BIN"
+for dir in /usr/bin /bin; do
+    for tool in "$dir"/*; do
+        name=${tool##*/}
+        case $HIDDEN_TOOLS in
+            *" $name "*) continue ;;
+        esac
+        [ -x "$tool" ] && [ ! -d "$tool" ] || continue
+        [ -e "$SYS_BIN/$name" ] || [ -L "$SYS_BIN/$name" ] || ln -s "$tool" "$SYS_BIN/$name"
+    done
+done
 
 # A PATH dir whose id reports root, for the refusal case.
 ROOT_BIN="$TEST_TMP/bin-root"
@@ -828,7 +851,7 @@ expect_rc check-fresh 3
 expect_text check-fresh out 'P0-preflight done host lab-ubuntu, profile debian, Linux x86_64'
 expect_text check-fresh out 'H1-apt-core done 4 apt packages installed'
 expect_text check-fresh out "H1-linuxbrew done brew at $CASE_BREW/bin/brew"
-expect_text check-fresh out "S2-brew-bundle todo Brewfiles to bundle: core cli (offline estimate from $CASE_BREW/opt"
+expect_text check-fresh out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf; cli: jq tldr (offline estimate from $CASE_BREW/opt and the doctor's probes; apply runs brew bundle check)"
 expect_text check-fresh out 'S3-clones todo to clone: oh-my-zsh (master) powerlevel10k (master) fzf-tab (master) conda-zsh-completion (main)'
 expect_text check-fresh out 'S3-dirs todo'
 expect_text check-fresh out 'S4-nvm todo'
@@ -1236,7 +1259,7 @@ expect_rc python-linux 0
 expect_text python-linux out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 run_case python-mac "${CASK_MAC[@]}" -- --host mac --check --only S2-brew-bundle
 expect_rc python-mac 3
-expect_text python-mac out "S2-brew-bundle todo Brewfiles to bundle: core (offline estimate from $CASE_BREW/opt"
+expect_text python-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: python (offline estimate from $CASE_BREW/opt"
 expect_no_events python-mac
 run_case python-mac-apply "${CASK_MAC[@]}" -- --host mac --yes --only S2-brew-bundle
 expect_rc python-mac-apply 0
@@ -1285,7 +1308,7 @@ else
     SHARED_CLI=$(owner_line 'install --formula jq tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)
     run_case brew-shared-check -- --host lab-ubuntu --check --only S2-brew-bundle
     expect_rc brew-shared-check 3
-    expect_text brew-shared-check out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW (owned by $SHARED_OWNER), so its owner installs what is missing from: core cli (offline estimate from $CASE_BREW/opt)"
+    expect_text brew-shared-check out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW (owned by $SHARED_OWNER), so its owner installs the missing entries: core: fzf; cli: jq tldr (offline estimate from $CASE_BREW/opt and the doctor's probes)"
     expect_line brew-shared-check 'HUMAN-BEGIN S2-brew-bundle sudo'
     expect_line brew-shared-check '# docs/bootstrap.md S2-brew-bundle'
     expect_line brew-shared-check "# the Homebrew prefix $CASE_BREW is shared and owned by $SHARED_OWNER; you cannot write $CASE_BREW/Cellar"
@@ -1356,7 +1379,7 @@ else
     done
     run_case brew-shared-done -- --host lab-ubuntu --yes --only S2-brew-bundle
     expect_rc brew-shared-done 0
-    expect_text brew-shared-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate from $CASE_BREW/opt); $CASE_BREW is shared, owned by $SHARED_OWNER"
+    expect_text brew-shared-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate from $CASE_BREW/opt and the doctor's probes); $CASE_BREW is shared, owned by $SHARED_OWNER"
     expect_no_text brew-shared-done out 'HUMAN-BEGIN S2-brew-bundle'
     expect_no_events brew-shared-done
     # The printed line runs brew from /tmp and never opens the Brewfile, so
@@ -1396,10 +1419,147 @@ else
     expect_line brew-shared-repo "$(owner_line 'install --formula fzf' HOMEBREW_NO_INSTALL_UPGRADE=1)"
     expect_no_events brew-shared-repo
     run_case brew-shared-repo-mac "${CASK_MAC[@]}" -- --host mac --check --only S2-brew-bundle
-    expect_text brew-shared-repo-mac out "S2-brew-bundle todo Brewfiles to bundle: core cli (offline estimate from $CASE_BREW/opt"
+    expect_text brew-shared-repo-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf python; cli: jq tldr (offline estimate from $CASE_BREW/opt"
     expect_no_text brew-shared-repo-mac out 'HUMAN-BEGIN S2-brew-bundle'
     chmod 755 "$CASE_BREW/Homebrew"
 fi
+
+# --- S2-brew-bundle: tools that apt, conda or the OS already provide ---------
+
+# An entry whose tool the doctor already finds at or above its floor (the
+# tools.tsv row named like the entry, or one a "# alias:" line names) is
+# satisfied, whatever installed it: no Homebrew copy beside an apt one. A
+# provider directory stands in for /usr/bin. In PROVIDED_SOME, jq and
+# ShellCheck have no floor and pass, fzf 0.44.1 and shfmt 3.7.0 are below
+# theirs (0.58.0, 3.13.0) and tldr is absent. A contributor Brewfile for
+# these cases adds a tap, a tap's formula and a macOS-only entry.
+CONTRIB_BREWFILE="$FIXTURE/config/bootstrap/brew/contributor.Brewfile"
+printf '%s\n' '# Fixture contributor Brewfile, for these cases only.' 'tap "fixture/tools"' \
+    'brew "shellcheck"' 'brew "fixture/tools/shfmt"' 'brew "stylua" if OS.mac?' >"$CONTRIB_BREWFILE"
+# fake_tool DIR NAME OUTPUT: an executable NAME in DIR that prints OUTPUT.
+fake_tool() {
+    mkdir -p "$1"
+    printf '#!/bin/sh\necho %s\n' "'$3'" >"$1/$2"
+    chmod 755 "$1/$2"
+}
+PROVIDED_SOME="$TEST_TMP/provided-some"
+fake_tool "$PROVIDED_SOME" jq jq-1.7.1
+fake_tool "$PROVIDED_SOME" shellcheck 'ShellCheck - shell script analysis tool, version: 0.9.0'
+fake_tool "$PROVIDED_SOME" fzf '0.44.1 (debian)'
+fake_tool "$PROVIDED_SOME" shfmt v3.7.0
+# PROVIDED_ALL meets every floor. Its tldr is a C client whose page cache is
+# stale: it refreshes ~/.tldrc on any command unless TLDR_AUTO_UPDATE_DISABLED
+# is set, which setup-host exports before it probes.
+PROVIDED_ALL="$TEST_TMP/provided-all"
+fake_tool "$PROVIDED_ALL" jq jq-1.7.1
+fake_tool "$PROVIDED_ALL" shellcheck 'ShellCheck - shell script analysis tool, version: 0.9.0'
+fake_tool "$PROVIDED_ALL" fzf '0.65.2 (brew)'
+fake_tool "$PROVIDED_ALL" shfmt v3.13.1
+fake_tool "$PROVIDED_ALL" kitty 'kitty 0.44.0 created by Kovid Goyal'
+printf '%s\n' '#!/bin/sh' \
+    '[ -n "${TLDR_AUTO_UPDATE_DISABLED:-}" ] || { mkdir -p "$HOME/.tldrc" && : >"$HOME/.tldrc/refreshed"; }' \
+    'echo "tldr v1.6.1 (v1.6.1)"' >"$PROVIDED_ALL/tldr"
+chmod 755 "$PROVIDED_ALL/tldr"
+SOME_PATH="PATH=$FAKE_BIN:$PROVIDED_SOME:$SYS_BIN"
+ALL_PATH="PATH=$FAKE_BIN:$PROVIDED_ALL:$SYS_BIN"
+
+new_home brew-provided
+snapshot >"$TEST_TMP/before"
+touch "$MARKER"
+run_case provided-check "$SOME_PATH" -- --host lab-ubuntu --check --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-check 3
+expect_text provided-check out "S2-brew-bundle todo Brewfile entries to bundle: core: fzf; cli: tldr; contributor: fixture/tools/shfmt (offline estimate from $CASE_BREW/opt and the doctor's probes; apply runs brew bundle check)"
+expect_no_events provided-check
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'a --check that probes tools created or removed files'
+[ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail 'a --check that probes tools modified files'
+# Apply bundles only the rest. Nothing in core.Brewfile is provided, so brew
+# bundle reads that file itself, as without the filter; cli and contributor
+# reach it on stdin, without jq and shellcheck, with the tap line, and never
+# with the macOS-only stylua.
+run_case provided-apply "$SOME_PATH" -- --host lab-ubuntu --yes --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-apply 0
+expect_text provided-apply out 'S2-brew-bundle done applied: brew bundle --no-upgrade for each config/bootstrap/brew/<tier>.Brewfile, less the entries whose tools the doctor already finds (Brewfile entries to bundle: core: fzf; cli: tldr; contributor: fixture/tools/shfmt)'
+expect_order 'brew:bundle core.Brewfile' 'brew-line:core.Brewfile brew "fzf"' \
+    'brew:bundle stdin' 'brew-line:stdin brew "tldr"' \
+    'brew-line:stdin tap "fixture/tools"' 'brew-line:stdin brew "fixture/tools/shfmt"'
+[ "$(grep -c '^brew-line:stdin ' "$EVENT_LOG")" = 3 ] || {
+    cat "$EVENT_LOG" >&2
+    fail 'brew bundle got more on stdin than tldr, the tap and its shfmt'
+}
+expect_no_event 'brew:bundle cli.Brewfile'
+expect_no_event 'brew:bundle contributor.Brewfile'
+for formula in fzf tldr shfmt; do
+    [ -e "$CASE_BREW/opt/$formula" ] || fail "S2-brew-bundle did not bundle $formula"
+done
+for formula in jq shellcheck stylua; do
+    [ ! -e "$CASE_BREW/opt/$formula" ] || fail "S2-brew-bundle bundled $formula, which is provided or macOS-only"
+done
+run_case provided-reapply "$SOME_PATH" -- --host lab-ubuntu --yes --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-reapply 0
+expect_text provided-reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli contributor'
+expect_no_installs provided-reapply
+
+# Every entry that applies here provided (stylua is macOS-only): done in
+# --check and in apply without running brew at all, not even brew bundle
+# check, and the stale tldr refreshed nothing.
+new_home brew-provided-all
+snapshot >"$TEST_TMP/before"
+run_case provided-all-check "$ALL_PATH" -- --host lab-ubuntu --check --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-all-check 0
+expect_text provided-all-check out "S2-brew-bundle done Brewfiles satisfied: core cli contributor (offline estimate from $CASE_BREW/opt and the doctor's probes; apply runs brew bundle check)"
+expect_no_events provided-all-check
+run_case provided-all-apply "$ALL_PATH" -- --host lab-ubuntu --yes --tier core,cli,contributor --only S2-brew-bundle
+expect_rc provided-all-apply 0
+expect_text provided-all-apply out 'S2-brew-bundle done Brewfiles satisfied: core cli contributor'
+expect_no_events provided-all-apply
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
+    diff -u "$TEST_TMP/before" "$TEST_TMP/after" >&2 || true
+    fail 'probing provided tools wrote files (a tldr page-cache refresh?)'
+}
+# On macOS the macOS-only entries count: python (no python3 here) and
+# stylua; a cask is judged the same way (kitty is provided), and one with no
+# tools.tsv row, the font, by its Caskroom/ dir alone.
+DESKTOP_BREWFILE="$FIXTURE/config/bootstrap/brew/desktop.Brewfile"
+printf '%s\n' 'cask "kitty" if OS.mac?' 'cask "font-caskaydia-mono-nerd-font" if OS.mac?' >"$DESKTOP_BREWFILE"
+run_case provided-all-mac "${CASK_MAC[@]}" "$ALL_PATH" -- \
+    --host mac --check --tier core,cli,desktop,contributor --only S2-brew-bundle
+expect_rc provided-all-mac 3
+expect_text provided-all-mac out "S2-brew-bundle todo Brewfile entries to bundle: core: python; desktop: font-caskaydia-mono-nerd-font; contributor: stylua (offline estimate"
+expect_no_events provided-all-mac
+rm -f "$DESKTOP_BREWFILE"
+
+# A shared prefix: the owner's block names only the missing entries, and a
+# Brewfile whose entries are all provided gets no line. Here core's fzf is
+# provided (0.65.2), so only cli's tldr is left.
+if [ "$(id -u)" != 0 ]; then
+    SHARED_CASES="$SHARED_CASES provided-shared"
+    PROVIDED_SHARED="$TEST_TMP/provided-shared"
+    fake_tool "$PROVIDED_SHARED" jq jq-1.7.1
+    fake_tool "$PROVIDED_SHARED" fzf '0.65.2 (brew)'
+    new_home brew-provided-shared
+    mkdir -p "$CASE_BREW/Cellar"
+    chmod 555 "$CASE_BREW/Cellar"
+    SHARED_OWNER=$(LC_ALL=C ls -ld "$CASE_BREW/Cellar" | awk '{ print $3 }')
+    run_case provided-shared "PATH=$FAKE_BIN:$PROVIDED_SHARED:$SYS_BIN" -- --host lab-ubuntu --check --only S2-brew-bundle
+    expect_rc provided-shared 3
+    expect_text provided-shared out "S2-brew-bundle human you cannot write the shared Homebrew prefix $CASE_BREW (owned by $SHARED_OWNER), so its owner installs the missing entries: cli: tldr (offline estimate from $CASE_BREW/opt and the doctor's probes)"
+    expect_line provided-shared '# an entry is missing when the prefix lacks it and the doctor does not find its tool installed another way (apt, conda, the OS): no second copy in the shared prefix'
+    expect_line provided-shared "$(owner_line 'install --formula tldr' HOMEBREW_NO_INSTALL_UPGRADE=1)"
+    [ "$(sed -n '/^HUMAN-BEGIN S2-brew-bundle/,/^HUMAN-END/p' "$TEST_TMP/provided-shared.out" |
+        grep -cv -e '^#' -e '^HUMAN-')" = 1 ] || fail 'the shared-prefix block has a line for a provided entry'
+    expect_no_text provided-shared out 'install --formula fzf'
+    expect_no_text provided-shared out 'install --formula jq'
+    expect_no_events provided-shared
+    run_case provided-shared-done "$ALL_PATH" -- --host lab-ubuntu --yes --only S2-brew-bundle
+    expect_rc provided-shared-done 0
+    expect_text provided-shared-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate from $CASE_BREW/opt and the doctor's probes); $CASE_BREW is shared, owned by $SHARED_OWNER"
+    expect_no_text provided-shared-done out 'HUMAN-BEGIN S2-brew-bundle'
+    expect_no_events provided-shared-done
+    chmod 755 "$CASE_BREW/Cellar"
+fi
+rm -f "$CONTRIB_BREWFILE"
 
 # --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
@@ -1917,6 +2077,8 @@ no_tmp_case no-tmp-list 0 -- --host lab-ubuntu --list
 no_tmp_case no-tmp-manual 0 -- --host lab-ubuntu --print-manual
 no_tmp_case no-tmp-mac 3 "${MAC_ENV[@]}" -- --host mac --check
 no_tmp_case no-tmp-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
+no_tmp_case no-tmp-provided 0 "$ALL_PATH" -- --host lab-ubuntu --check --only S2-brew-bundle
+expect_text no-tmp-provided out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 no_tmp_case no-tmp-help 0 -- --help
 no_tmp_case no-tmp-usage 2 -- --host lab-ubuntu --check --tier core,gui
 
