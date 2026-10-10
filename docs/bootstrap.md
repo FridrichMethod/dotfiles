@@ -250,8 +250,8 @@ and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
 | `--quiet` | Only rows that are neither `ok` nor `skip`, then the summary |
-| `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in |
-| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails on `plugin .* not found`, `command not found` or `no such file` in its stderr. The one mode that may write (zsh's own caches) |
+| `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in. The probes may write the tools' own state in your home (claude rewrites `~/.claude.json` and keeps backups of it; some codex releases create `~/.codex/tmp`); the doctor itself still writes nothing |
+| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails on `plugin .* not found`, `command not found` or `no such file` in its stderr. It may write zsh's own caches |
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
@@ -350,7 +350,8 @@ The Windows twins take the same ideas as PowerShell parameters:
 themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `venv-sync`, `submodule` and
-`core-symlinks`, and `-Online` reports a signed-out tool as `warn`, as on Unix.
+`core-symlinks`, and `-Online` reports a signed-out tool as `warn`, as on Unix
+(its auth probes, too, may write the tools' own state).
 `.\setup-host.ps1` exits 3 while HW-clone or HW-stow is pending; the other HW
 blocks are printed but leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
@@ -405,18 +406,21 @@ kind.
 
 ### Guarantees
 
-- `./doctor.sh` without `--smoke`, and `./setup-host.sh --check`, write nothing
-  anywhere and make no network calls (`--online` adds only the three auth probes).
+- `./doctor.sh` without `--online` or `--smoke`, and `./setup-host.sh --check`,
+  write nothing anywhere and make no network calls. `--online` adds the three
+  auth probes, which go online and may write the tools' own state
+  (`~/.claude.json`; `~/.codex/tmp` for some codex releases); `--smoke` may
+  write zsh's caches.
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
   `nvim` and `pre-commit` rows are presence-only), finds fonts by file name
   instead of through `fc-list` (which creates fontconfig caches), and runs the
   `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Both Unix
   scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
   them around each probe and restore yours): recent gh releases otherwise write
-  `~/.local/state/gh/device-id` and send telemetry on any command, even
-  `gh --version`. Not even a temporary file: the Unix scripts use no
-  here-documents or here-strings, which macOS's Bash 3.2 backs with files in
-  the system temporary directory.
+  `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
+  send telemetry for other commands). Not even a temporary file: the Unix
+  scripts use no here-documents or here-strings, which macOS's Bash 3.2 backs
+  with files in the system temporary directory.
   `tests/doctor.sh` runs the real doctor with the real manifest on the machine
   running the tests (`--platform debian` and `other`, an empty `HOME`) and
   checks that it changed nothing.

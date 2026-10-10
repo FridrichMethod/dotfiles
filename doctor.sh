@@ -84,7 +84,8 @@ usage() {
         '  --tsv               print only TSV: status, id, tier, detail, fix' \
         '  --quiet             print only rows that need attention, then the summary' \
         '  --online            also run gh auth status, claude auth status and' \
-        '                      codex login status (failures are warn)' \
+        '                      codex login status (failures are warn; the tools' \
+        '                      may write their own state)' \
         '  --smoke             also run zsh -ic true with the update hooks off and' \
         '                      report missing plugins, commands and files (may write' \
         '                      shell caches)' \
