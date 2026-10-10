@@ -1224,8 +1224,12 @@ It needs Python 3.11 or newer.
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
   Ubuntu 24.04 `./setup-sync.sh` (apt's Python 3.12; the Brewfiles bundle no
   Linux python, so on 22.04, whose apt Python is 3.10, install a newer one
-  first, for example `brew install python@3.13`, and pass its `python3.13`
-  with `--python`);
+  first and pass it with `--python`: `brew install python@3.13` gives
+  `/home/linuxbrew/.linuxbrew/bin/python3.13`; on a prefix you cannot write,
+  its owner installs it with
+  `(cd /tmp && sudo -u <owner> -H env HOMEBREW_NO_AUTO_UPDATE=1 /home/linuxbrew/.linuxbrew/bin/brew install python@3.13)`,
+  which links only the versioned `python3.13` for every account; without
+  sudo, `uv python install 3.13` and `--python "$(uv python find 3.13)"`);
   hpc `./setup-sync.sh --python "$HOME/micromamba/envs/login/bin/python3"`.
 - **Verify:** it prints `AI-sync runtime ready`; the doctor's `venv-sync` check,
   which runs the same `--runtime-check` (on `DOTFILES_SYNC_PYTHON` when that is
@@ -1913,6 +1917,12 @@ fail-closed behavior beyond what is stated.
   first unwritable directory; when you own it yourself (a mode you changed),
   the block's `sudo -u` line names you and cannot help: restore the mode
   instead.
+- **Ubuntu 22.04 needs a newer Python by hand.** Its apt `python3` is 3.10,
+  below setup-sync's 3.11 floor, and no Linux Brewfile bundles a python, so
+  S4-setup-sync fails there until you install one and run
+  `./setup-sync.sh --python` with it
+  ([S4-setup-sync](#s4-setup-sync-ai-sync-runtime)). The doctor's `python3`
+  row still points at H1-apt-core, which cannot raise the version.
 
 ## Known follow-ups
 
