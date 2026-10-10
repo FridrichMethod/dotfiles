@@ -100,14 +100,21 @@ exit "${SMOKE_RC:-0}"
 SH
 
 # gh, claude and codex answer --version locally; anything else is network.
+# Like recent real gh releases, the fake gh writes a telemetry device id on
+# every command, --version included, unless GH_TELEMETRY=0.
 for tool in gh claude codex; do
+    telemetry=:
     case $tool in
-        gh) version='gh version 2.81.0 (2025-09-01)' ;;
+        gh)
+            version='gh version 2.81.0 (2025-09-01)'
+            telemetry='[ "${GH_TELEMETRY:-}" = 0 ] || { mkdir -p "$HOME/.local/state/gh" && : >"$HOME/.local/state/gh/device-id"; }'
+            ;;
         claude) version='2.1.0 (Claude Code)' ;;
         codex) version='codex-cli 0.161.0' ;;
     esac
     write_fake "$FAKE_BIN/$tool" <<SH
 #!/bin/sh
+$telemetry
 if [ "\${1:-}" = --version ]; then
     printf '%s\n' '$version'
     exit 0
@@ -407,6 +414,7 @@ for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-aut
 done
 assert_event 'fzf --version'
 assert_no_event 'fc-list'
+[ ! -e "$TEST_HOME/.local/state/gh/device-id" ] || case_fail 'gh --version wrote its telemetry device id'
 assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'

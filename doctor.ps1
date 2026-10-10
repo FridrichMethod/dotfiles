@@ -202,7 +202,7 @@ function Get-DoctorOnlineResults {
             continue
         }
         $arguments = $probe.Arguments
-        $null | & $path @arguments *> $null
+        Use-BootstrapToolEnvironment { $null | & $path @arguments *> $null }
         if ($LASTEXITCODE -eq 0) {
             New-DoctorResult ok $probe.Id $probe.Tier "$($probe.Tool) is authenticated" HW-auth
         }

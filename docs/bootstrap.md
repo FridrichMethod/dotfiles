@@ -401,9 +401,13 @@ kind.
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
   `nvim` and `pre-commit` rows are presence-only), finds fonts by file name
   instead of through `fc-list` (which creates fontconfig caches), and runs the
-  `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Not even a
-  temporary file: the Unix scripts use no here-documents or here-strings,
-  which macOS's Bash 3.2 backs with files in the system temporary directory.
+  `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Both Unix
+  scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
+  them around each probe and restore yours): recent gh releases otherwise write
+  `~/.local/state/gh/device-id` and send telemetry on any command, even
+  `gh --version`. Not even a temporary file: the Unix scripts use no
+  here-documents or here-strings, which macOS's Bash 3.2 backs with files in
+  the system temporary directory.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
   `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
   rc file. The only write it causes inside the checkout is `.venv-sync`, through

@@ -288,10 +288,12 @@ fi
 
 # Provisioning never triggers the login updaters, git prompts or Homebrew
 # auto-update, hints and cleanup. Older brew bundle wrote Brewfile.lock.json
-# next to the Brewfile, inside this checkout. --check never runs brew.
+# next to the Brewfile, inside this checkout. --check never runs brew. The
+# H1-gh-apt-repo check runs /usr/bin/gh --version, which recent gh releases
+# answer by writing ~/.local/state/gh/device-id unless GH_TELEMETRY=0.
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-    HOMEBREW_BUNDLE_NO_LOCK=1
+    HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1
 steps_extend_path
 
 if [[ "$MODE" == check ]]; then

@@ -1000,18 +1000,26 @@ expect_no_text stow-own-link out "mv -n $CASE_HOME/.bashrc"
 # --- H1-gh-apt-repo: Ubuntu's own /usr/bin/gh is below the floor ------------
 
 new_home gh-apt
-printf '#!/bin/sh\necho "gh version 2.45.0 (2026-03-17 Ubuntu 2.45.0-1ubuntu0.3+esm3)"\n' >"$CASE_HOME/.fake-gh-apt"
-chmod 755 "$CASE_HOME/.fake-gh-apt"
+# fake_gh_apt VERSION: like recent real gh releases, it writes a telemetry
+# device id on every command, --version included, unless GH_TELEMETRY=0.
+fake_gh_apt() {
+    printf '%s\n' '#!/bin/sh' \
+        '[ "${GH_TELEMETRY:-}" = 0 ] || { mkdir -p "$HOME/.local/state/gh" && : >"$HOME/.local/state/gh/device-id"; }' \
+        "echo \"gh version $1\"" >"$CASE_HOME/.fake-gh-apt"
+    chmod 755 "$CASE_HOME/.fake-gh-apt"
+}
+fake_gh_apt '2.45.0 (2026-03-17 Ubuntu 2.45.0-1ubuntu0.3+esm3)'
 run_case gh-apt-old -- --host lab-ubuntu --check --only H1-gh-apt-repo
 expect_rc gh-apt-old 0
 expect_text gh-apt-old out "H1-gh-apt-repo human $CASE_HOME/.fake-gh-apt 2.45.0 is below 2.50.0 (Ubuntu's own gh"
 expect_line gh-apt-old 'HUMAN-BEGIN H1-gh-apt-repo sudo'
 expect_no_events gh-apt-old
-printf '#!/bin/sh\necho "gh version 2.81.0 (2025-09-01)"\n' >"$CASE_HOME/.fake-gh-apt"
+fake_gh_apt '2.81.0 (2025-09-01)'
 run_case gh-apt-new -- --host lab-ubuntu --check --only H1-gh-apt-repo
 expect_rc gh-apt-new 0
 expect_text gh-apt-new out "H1-gh-apt-repo done $CASE_HOME/.fake-gh-apt 2.81.0 >= 2.50.0"
 expect_no_text gh-apt-new out 'HUMAN-BEGIN H1-gh-apt-repo'
+[ ! -e "$CASE_HOME/.local/state/gh/device-id" ] || fail '--check let gh --version write its telemetry device id'
 
 # --- S2-brew-bundle: a conflicting formula stops it before brew runs ---------
 

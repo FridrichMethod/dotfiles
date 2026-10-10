@@ -53,8 +53,10 @@ done
 # git never refreshes the index or takes other optional locks, in this
 # process or in a git that a probed tool starts with this environment. Tools
 # whose version flag writes, brew among them, are never run (see
-# lib/bootstrap/checks.sh).
-export GIT_OPTIONAL_LOCKS=0
+# lib/bootstrap/checks.sh). Recent gh releases write ~/.local/state/gh/device-id
+# for telemetry on any command, `gh --version` included, unless GH_TELEMETRY=0;
+# GH_NO_UPDATE_NOTIFIER=1 keeps gh's release check (network, state file) off.
+export GIT_OPTIONAL_LOCKS=0 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1
 
 usage() {
     printf '%s\n' \
