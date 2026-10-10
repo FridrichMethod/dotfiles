@@ -395,7 +395,7 @@ The first line names the step and the kind. Every other line up to
 
 | Kind | Who runs it | Meaning |
 | --- | --- | --- |
-| `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root: system packages, `/home/linuxbrew`, apt sources; on Windows, services |
+| `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root: system packages, the system locale, `/home/linuxbrew`; on Windows, services |
 | `auth` | The person | Browser or device-code login, passwords, keys, Kerberos tickets |
 | `gui` | The person | A dialog, a Settings toggle or a relogin (Xcode CLT, Developer Mode, the fcitx5 session) |
 | `alloc` | The person | A Slurm allocation; heavy work on hpc runs only inside one |
