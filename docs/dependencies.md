@@ -84,3 +84,94 @@ That packaging change is a separate decision and is **not implemented** here.
 The current change only removes the unnecessary tomlkit requirement from
 standalone JSON/rules operations. No AWK/regex TOML writer or hidden dependency
 download has been introduced.
+
+## Day-zero tools
+
+`config/bootstrap/tools.tsv` is the source of truth for what `doctor.sh`
+checks; this table mirrors it for reading. Tiers `core`, `cli` and `ai` are
+required by default; `desktop`, `contributor` and `host` are reported only.
+`unix` means every host except `win`.
+
+| Tool | Tier | Hosts | What breaks when absent |
+| --- | --- | --- | --- |
+| `git` | core | all | cannot clone, update or stow the dotfiles |
+| `bash` | core | unix | doctor.sh, setup-host.sh and stow-all.sh cannot run |
+| `zsh` | core | unix | no interactive shell for the stowed .zshrc |
+| `git-lfs` | core | unix | the required lfs filter in .gitconfig fails on LFS repositories |
+| `curl` | core | unix | setup-host downloads and the awesome-skills sync fail |
+| `rsync` | core | unix | upload and the awesome-skills sync fail |
+| `tar` | core | unix | archive installs and the targz aliases fail |
+| `file` | core | unix | fzf previews cannot detect file types |
+| `col` | core | unix | fzf-tab man page previews fail |
+| `man` | core | unix | man, colored-man-pages and fzf-tab man previews fail |
+| `tmux` | core | unix | fzf --tmux popups and tmux sessions are unavailable |
+| `homebrew` | core | mac | Brewfile bundles cannot run |
+| `linuxbrew` | core | wsl-ubuntu, lab-ubuntu | Brewfile bundles cannot run and the overlay brew shellenv line fails |
+| `python3` | core | all | setup-sync and the AI config sync helpers cannot run |
+| `stow` | core | unix | stow-all.sh refuses to run |
+| `fzf` | core | all | Ctrl-R/T, Alt-C and fzf-tab fail |
+| `zoxide` | core | all | z and zi are not defined |
+| `eza` | core | all | ll, la and fzf directory previews fail |
+| `fd` | core | all | fzf Ctrl-T and Alt-C list nothing |
+| `bat` | core | all | fzf previews fall back to plain text |
+| `oh-my-zsh` | core | unix | zsh aborts where .zshrc sources oh-my-zsh.sh |
+| `powerlevel10k` | core | unix | oh-my-zsh cannot find the prompt theme |
+| `fzf-tab` | core | unix | plugin fzf-tab not found, plain tab completion |
+| `fast-syntax-highlighting` | core | unix | plugin fast-syntax-highlighting not found, no highlighting |
+| `zsh-autosuggestions` | core | unix | plugin zsh-autosuggestions not found, no suggestions |
+| `you-should-use` | core | unix | plugin you-should-use not found, no alias reminders |
+| `conda-zsh-completion` | core | unix | plugin conda-zsh-completion not found, no conda completion |
+| `zsh-completions` | core | unix | the extra completion functions on fpath are missing |
+| `bat-theme` | core | all | BAT_THEME Catppuccin Mocha is unknown to bat |
+| `micromamba` | core | sherlock, marlowe | the login env cannot be created or updated |
+| `login-env` | core | sherlock, marlowe | ssh sherlock and ssh marlowe cannot exec the login zsh |
+| `pwsh` | core | win | the PowerShell 7 profile and doctor.ps1 cannot run |
+| `ripgrep` | cli | all | rg searches fail |
+| `git-delta` | cli | all | fzf-tab git diff and show previews are empty |
+| `tldr` | cli | all | fzf-tab command and tldr previews fall back to man |
+| `chafa` | cli | unix | fzf image previews outside kitty show only file details |
+| `jq` | cli | all | JSON filtering on the command line fails |
+| `nvim` | cli | all | the vi alias fails |
+| `aria2` | cli | all | aria2c downloads with the stowed aria2.conf fail |
+| `uv` | cli | all | uv and the oh-my-zsh uv plugin are unavailable |
+| `gh` | cli | all | gh auth git-credential and GitHub CLI workflows fail |
+| `gh-apt` | cli | lab-ubuntu | the github.com credential helper in .gitconfig_local fails |
+| `xclip` | cli | lab-ubuntu | fzf Ctrl-Y cannot copy to the X clipboard |
+| `wl-clipboard` | cli | lab-ubuntu | no clipboard copy from Wayland sessions |
+| `nvm` | ai | mac, wsl-ubuntu, lab-ubuntu | no default node on PATH and no nvm function |
+| `node` | ai | all | Claude hooks and the status line fail |
+| `claude` | ai | all | Claude Code is unavailable |
+| `codex` | ai | all | Codex is unavailable |
+| `kitty` | desktop | mac, lab-ubuntu | the stowed kitty.conf has no terminal to configure |
+| `wezterm` | desktop | mac, win | the stowed .wezterm.lua has no terminal to configure |
+| `nerd-font` | desktop | mac, lab-ubuntu, win | prompt, eza and terminal icons render as boxes |
+| `windows-terminal` | desktop | win | the stowed Windows Terminal settings are unused |
+| `oh-my-posh` | desktop | win | the default PowerShell prompt replaces the tracked theme |
+| `psfzf` | desktop | win | Ctrl+R, Ctrl+T and Alt+C keep PSReadLine defaults |
+| `completionpredictor` | desktop | win | predictions come from history only |
+| `commandnotfound` | desktop | win | no winget suggestions for unknown commands |
+| `pre-commit` | contributor | all | pre-commit run --all-files cannot run |
+| `shfmt` | contributor | unix | manual shfmt runs miss the zsh dialect |
+| `shellcheck` | contributor | unix | manual shellcheck runs fail |
+| `stylua` | contributor | unix | manual Lua formatting of .wezterm.lua fails |
+| `miniconda` | host | mac, wsl-ubuntu, sherlock, marlowe | the overlay conda and mamba hooks fall back to a dead PATH entry |
+| `miniconda-apps` | host | lab-ubuntu | the overlay conda and mamba hooks fall back to a dead PATH entry |
+| `miniconda-win` | host | win | the lazy conda stub in profile.ps1 is not defined |
+| `juliaup` | host | wsl-ubuntu | the juliaup PATH entry in the wsl profile is dead |
+| `texlive-2024` | host | wsl-ubuntu | the TeX Live 2024 PATH, MANPATH and INFOPATH entries are dead |
+| `texlive-2025` | host | lab-ubuntu | the TeX Live 2025 PATH, MANPATH and INFOPATH entries are dead |
+| `gromacs` | host | wsl-ubuntu | gmx and its completion are not set up |
+| `gromacs-apps` | host | lab-ubuntu | gmx and its completion are not set up |
+| `cuda` | host | wsl-ubuntu, lab-ubuntu | nvcc and the CUDA PATH entry are absent |
+| `matlab` | host | mac | MATLAB is not exported |
+| `schrodinger` | host | mac | SCHRODINGER is not exported |
+| `fcitx5` | host | lab-ubuntu | no input method, and the stowed fcitx5 profile is unused |
+| `wslu` | host | wsl-ubuntu | BROWSER=wslview cannot open links |
+| `notify-send` | host | wsl-ubuntu, lab-ubuntu | the alert alias fails |
+| `kinit` | host | mac, wsl-ubuntu, lab-ubuntu | GSSAPI ssh to sherlock and marlowe cannot use Kerberos tickets |
+| `gcm` | host | lab-ubuntu | the credential helper in .gitconfig_local fails |
+| `gcm-windows` | host | wsl-ubuntu | the Windows credential helper in .gitconfig_local fails |
+| `gpg` | host | lab-ubuntu | the GCM gpg credential store and the gpg-agent plugin fail |
+| `pass` | host | lab-ubuntu | the GCM gpg credential store cannot save secrets |
+| `tailscale` | host | mac, wsl-ubuntu, lab-ubuntu | the oh-my-zsh tailscale plugin does nothing |
+| `lmod` | host | sherlock, marlowe | ml and module are undefined, so overlay module loads are skipped |
