@@ -519,6 +519,12 @@ case " $(bootstrap_apt_packages lab-ubuntu | tr '\n' ' ')" in
     *' zsh '*' fontconfig xclip '*) ;;
     *) fail 'lab-ubuntu apt list is not common.txt then lab-ubuntu.txt' ;;
 esac
+for host in wsl-ubuntu lab-ubuntu; do
+    case " $(bootstrap_apt_packages "$host" | tr '\n' ' ')" in
+        *' bubblewrap '*) ;;
+        *) fail "$host apt list has no bubblewrap for the codex sandbox" ;;
+    esac
+done
 assert_eq "$(bootstrap_brewfiles core,cli,ai | sed 's#.*/##' | tr '\n' ' ')" \
     'core.Brewfile cli.Brewfile ai.Brewfile ' 'default-tier Brewfiles'
 assert_eq "$(bootstrap_expand_path "$(bootstrap_field "$(bootstrap_installer_row bat-theme mac any)" 5)")" \

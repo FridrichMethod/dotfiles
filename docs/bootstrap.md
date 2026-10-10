@@ -87,7 +87,9 @@ TODO(T5)
 
 ### S5-codex: Codex CLI
 
-TODO(T5)
+TODO(T5). Keep: the pinned binary bundles no bwrap; its Linux sandbox uses the
+apt `bubblewrap` on PATH, and Ubuntu 24.04 also needs the `bwrap-userns-restrict`
+AppArmor profile loaded (a sudo HUMAN block).
 
 ### S6-nerd-font: Nerd Font
 

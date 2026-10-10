@@ -18,10 +18,14 @@ nvm	script	https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh	48a0e
 # mamba-org/micromamba-releases 2.9.0-0: a bare static executable, chmod 755; digests match upstream .sha256 files.
 micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64	366cd9cd8be14df1ab8ed50352a82111082a36686b2d389fdb79a92c3fafb3e3	$HOME/.local/bin/micromamba	sherlock,marlowe	x86_64	core	-
 micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-aarch64	9f93b974adcb4d166996af969b6cd371287d1a3e52733704727884d9b74cb7a7	$HOME/.local/bin/micromamba	sherlock,marlowe	aarch64	core	-
-# openai/codex rust-v0.162.1: a .tar.gz holding one executable named
-# codex-x86_64-unknown-linux-musl (or codex-aarch64-unknown-linux-musl); install it as dest.
-codex	archive	https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-unknown-linux-musl.tar.gz	86f268d81b898f3e144c5ecff2ad2fda2c5802e042d6195b72538fe0fa125057	$HOME/.local/bin/codex	wsl-ubuntu,lab-ubuntu	x86_64	ai	-
-codex	archive	https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-aarch64-unknown-linux-musl.tar.gz	bf3ca2719f1143b1440fbd85c149379e696c782c50ad7991f8bfcec60b2600c1	$HOME/.local/bin/codex	wsl-ubuntu,lab-ubuntu	aarch64	ai	-
+# openai/codex tag rust-v0.161.0 (peeled 979011409de0a60b52f179721948e65531d26144), the stable
+# release this lab-ubuntu host has run since 2026-10-06 (its x86_64 binary is byte-identical).
+# A .tar.gz holding one executable named codex-x86_64-unknown-linux-musl (or
+# codex-aarch64-unknown-linux-musl); install it as dest. Unlike upstream's codex-package
+# layout it bundles no bwrap, rg or codex-code-mode-host: the sandbox uses the apt
+# bubblewrap on PATH, rg comes from cli.Brewfile, and the opt-in Code Mode stays off.
+codex	archive	https://github.com/openai/codex/releases/download/rust-v0.161.0/codex-x86_64-unknown-linux-musl.tar.gz	b1efb95097660d7f2e5a3887618a23f2ea1b0d548078bf92b0f7a5d229a0cef2	$HOME/.local/bin/codex	wsl-ubuntu,lab-ubuntu	x86_64	ai	-
+codex	archive	https://github.com/openai/codex/releases/download/rust-v0.161.0/codex-aarch64-unknown-linux-musl.tar.gz	5c90bf4be3c97fc62fcafb28ec2335ee318e6ecb332e1e8ee3d2c63814a5a26a	$HOME/.local/bin/codex	wsl-ubuntu,lab-ubuntu	aarch64	ai	-
 # Anthropic's native installer is not version-pinnable: download, show digest and size, read, then run.
 claude	script	https://claude.ai/install.sh	-	-	wsl-ubuntu,lab-ubuntu	any	ai	inspect
 # ryanoasis/nerd-fonts v3.5.1 CascadiaMono.tar.xz: flat archive of 36 CaskaydiaMonoNerdFont{,Mono,Propo}-*.ttf
