@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fixture Homebrew install.sh. setup-host.sh only downloads it into a HUMAN
+# block; running it trips the test.
+printf 'TRIPWIRE homebrew-install %s\n' "$*" >>"$EVENT_LOG"
+exit 99

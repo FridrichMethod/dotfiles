@@ -1,0 +1,2 @@
+# Fixture lab-ubuntu additions for tests/setup-host.sh.
+xclip

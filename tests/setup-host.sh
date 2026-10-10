@@ -1,0 +1,1199 @@
+#!/bin/bash
+
+# Fixture tests for setup-host.sh and lib/bootstrap/{fetch,steps*}.sh. Every
+# package manager, download and clone remote is a local stub; sudo, chsh,
+# stow, apt-get, git lfs and the fixture's ./stow-all.sh are tripwires; each
+# case runs under `env -i` with its own fixture home, never the real one.
+# The [y/N] prompt cases run on a pseudo terminal from python3's pty module
+# and are skipped, with a note on stderr, where that is unavailable.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+FIXTURES="$REPO_ROOT/tests/fixtures/bootstrap"
+REAL_GIT=$(command -v git)
+TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-setup-host.XXXXXX")"
+TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
+trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
+
+FIXTURE="$TEST_TMP/repo"
+FAKE_BIN="$TEST_TMP/bin"
+REMOTES="$TEST_TMP/remotes"
+ARTIFACTS="$TEST_TMP/artifacts"
+EVENT_LOG="$TEST_TMP/events.log"
+CURL_ARGS_LOG="$TEST_TMP/curl-args.log"
+URL_MAP="$TEST_TMP/url-map.tsv"
+URL_MAP_BAD="$TEST_TMP/url-map-bad.tsv"
+GITCONFIG="$TEST_TMP/gitconfig"
+OS_DEBIAN="$TEST_TMP/os-release-ubuntu"
+OS_ROCKY="$TEST_TMP/os-release-rocky"
+PROC_NATIVE="$TEST_TMP/proc-version-native"
+PROC_WSL="$TEST_TMP/proc-version-wsl"
+DPKG_ALL="$TEST_TMP/dpkg-all"
+DPKG_PARTIAL="$TEST_TMP/dpkg-partial"
+MARKER="$TEST_TMP/marker"
+TAB=$(printf '\t')
+mkdir -p "$FAKE_BIN" "$REMOTES" "$ARTIFACTS" "$TEST_TMP/homes" "$TEST_TMP/work"
+: >"$EVENT_LOG"
+: >"$CURL_ARGS_LOG"
+
+# Test setup uses the real git with a private config; setup-host's git goes
+# through the logging wrapper below, with https://github.com/ rewritten to
+# local bare repositories.
+cat >"$GITCONFIG" <<EOF
+[user]
+	name = Fixture
+	email = fixture@example.invalid
+[init]
+	defaultBranch = master
+[advice]
+	detachedHead = false
+[url "file://$REMOTES/"]
+	insteadOf = https://github.com/
+EOF
+export GIT_CONFIG_GLOBAL="$GITCONFIG" GIT_CONFIG_NOSYSTEM=1
+
+fail() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+show() {
+    local file
+    for file in "$TEST_TMP/$1.out" "$TEST_TMP/$1.err" "$EVENT_LOG"; do
+        printf -- '--- %s\n' "$file" >&2
+        cat "$file" >&2 || true
+    done
+}
+
+# expect_rc NAME CODE: the last run_case exited CODE.
+expect_rc() {
+    if [ "$CASE_RC" != "$2" ]; then
+        show "$1"
+        fail "$1: exit $CASE_RC, expected $2"
+    fi
+}
+
+# expect_text NAME STREAM TEXT / expect_no_text: fixed-string checks.
+expect_text() {
+    if ! grep -Fq -- "$3" "$TEST_TMP/$1.$2"; then
+        show "$1"
+        fail "$1: $2 lacks [$3]"
+    fi
+}
+
+expect_no_text() {
+    if grep -Fq -- "$3" "$TEST_TMP/$1.$2"; then
+        show "$1"
+        fail "$1: $2 unexpectedly has [$3]"
+    fi
+}
+
+# expect_line NAME TEXT: stdout has TEXT as a whole line.
+expect_line() {
+    if ! grep -Fxq -- "$2" "$TEST_TMP/$1.out"; then
+        show "$1"
+        fail "$1: stdout lacks the line [$2]"
+    fi
+}
+
+expect_event() {
+    grep -Fq -- "$1" "$EVENT_LOG" || {
+        cat "$EVENT_LOG" >&2
+        fail "missing event [$1]"
+    }
+}
+
+expect_no_event() {
+    if grep -Fq -- "$1" "$EVENT_LOG"; then
+        cat "$EVENT_LOG" >&2
+        fail "unexpected event [$1]"
+    fi
+}
+
+expect_no_events() {
+    if [ -s "$EVENT_LOG" ]; then
+        cat "$EVENT_LOG" >&2
+        fail "$1: expected no install, network or tripwire events"
+    fi
+}
+
+# expect_no_installs NAME: apply mode may run `brew bundle check`, nothing else.
+expect_no_installs() {
+    if grep -v '^brew-check:' "$EVENT_LOG" | grep -q .; then
+        cat "$EVENT_LOG" >&2
+        fail "$1: expected no install, network or tripwire events"
+    fi
+}
+
+# expect_order TEXT...: the first event matching each TEXT appears in order.
+expect_order() {
+    local previous=0 line text
+    for text in "$@"; do
+        line=$(grep -nF -- "$text" "$EVENT_LOG" | sed -n '1s/:.*//p')
+        [ -n "$line" ] || {
+            cat "$EVENT_LOG" >&2
+            fail "missing ordered event [$text]"
+        }
+        [ "$line" -gt "$previous" ] || {
+            cat "$EVENT_LOG" >&2
+            fail "event [$text] (line $line) is out of phase order"
+        }
+        previous=$line
+    done
+}
+
+# new_home NAME: a fresh fixture home and Homebrew prefix; sets CASE_HOME
+# and CASE_BREW.
+new_home() {
+    CASE_HOME="$TEST_TMP/homes/$1"
+    CASE_BREW="$TEST_TMP/brew/$1"
+    rm -rf "$CASE_HOME" "$CASE_BREW"
+    mkdir -p "$CASE_HOME" "$CASE_BREW/bin"
+    cp "$TEST_TMP/brew-stub" "$CASE_BREW/bin/brew"
+}
+
+# snapshot: every path under the fixture home, Homebrew prefix and checkout.
+snapshot() {
+    find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -print | LC_ALL=C sort
+}
+
+# case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
+# setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
+# WSL); a VAR=VALUE overrides a default of the same name.
+case_command() {
+    local extra=()
+    while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
+        extra+=("$1")
+        shift
+    done
+    shift
+    CASE_CMD=(env -i
+        HOME="$CASE_HOME"
+        PATH="$FAKE_BIN:/usr/bin:/bin"
+        LC_ALL=C
+        DOTFILES_COLOR=never
+        TMPDIR="$TEST_TMP"
+        EVENT_LOG="$EVENT_LOG"
+        CURL_ARGS_LOG="$CURL_ARGS_LOG"
+        URL_MAP="$URL_MAP"
+        REAL_GIT="$REAL_GIT"
+        GIT_CONFIG_GLOBAL="$GITCONFIG"
+        GIT_CONFIG_NOSYSTEM=1
+        BOOTSTRAP_UNAME_S=Linux
+        BOOTSTRAP_UNAME_M=x86_64
+        BOOTSTRAP_OS_RELEASE="$OS_DEBIAN"
+        BOOTSTRAP_PROC_VERSION="$PROC_NATIVE"
+        BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew"
+        FAKE_DPKG_INSTALLED="$DPKG_ALL"
+        ${extra[@]+"${extra[@]}"}
+        bash "$FIXTURE/setup-host.sh" "$@")
+}
+
+# run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
+run_case() {
+    local name=$1
+    shift
+    case_command "$@"
+    : >"$EVENT_LOG"
+    set +e
+    "${CASE_CMD[@]}" </dev/null >"$TEST_TMP/$name.out" 2>"$TEST_TMP/$name.err"
+    CASE_RC=$?
+    set -e
+}
+
+# run_tty_case NAME ANSWER [VAR=VALUE...] -- ARGS...: run case_command on a
+# pseudo terminal that answers ANSWER to every [y/N] prompt. stdout and
+# stderr share the terminal, so both land in NAME.out.
+run_tty_case() {
+    local name=$1 answer=$2
+    shift 2
+    case_command "$@"
+    : >"$EVENT_LOG"
+    : >"$TEST_TMP/$name.err"
+    set +e
+    python3 -I "$TEST_TMP/pty-run.py" "$TEST_TMP/$name.out" "$answer" "${CASE_CMD[@]}" </dev/null
+    CASE_RC=$?
+    set -e
+}
+
+# --- stubs -------------------------------------------------------------------
+
+cat >"$FAKE_BIN/git" <<'SH'
+#!/bin/sh
+# Logs network and write subcommands, then runs the real git.
+sub='' skip=0
+for arg do
+    if [ "$skip" = 1 ]; then
+        skip=0
+        continue
+    fi
+    case $arg in
+        -C | -c) skip=1 ;;
+        -*) ;;
+        *)
+            sub=$arg
+            break
+            ;;
+    esac
+done
+case $sub in
+    lfs)
+        printf 'TRIPWIRE git %s\n' "$*" >>"$EVENT_LOG"
+        exit 99
+        ;;
+    clone | fetch | init | checkout | pull | push | remote | submodule | reset | clean | commit)
+        printf 'git:%s\n' "$*" >>"$EVENT_LOG"
+        ;;
+esac
+exec "$REAL_GIT" "$@"
+SH
+
+cat >"$FAKE_BIN/curl" <<'SH'
+#!/bin/sh
+# Serves fixture artifacts by URL from $URL_MAP.
+out='' url='' prev=''
+for arg do
+    [ "$prev" != -o ] || out=$arg
+    case $arg in
+        https://* | http://*) url=$arg ;;
+    esac
+    prev=$arg
+done
+printf 'curl:%s\n' "$url" >>"$EVENT_LOG"
+printf '%s\n' "$*" >>"$CURL_ARGS_LOG"
+src=$(awk -F '\t' -v u="$url" '$1 == u { print $2; exit }' "$URL_MAP")
+if [ -z "$src" ] || [ ! -f "$src" ] || [ -z "$out" ]; then
+    echo "curl: (22) no fixture for $url" >&2
+    exit 22
+fi
+cp "$src" "$out"
+SH
+
+cat >"$FAKE_BIN/wget" <<'SH'
+#!/bin/sh
+out='' url='' prev=''
+for arg do
+    [ "$prev" != -O ] || out=$arg
+    case $arg in
+        https://* | http://*) url=$arg ;;
+    esac
+    prev=$arg
+done
+printf 'wget:%s\n' "$url" >>"$EVENT_LOG"
+src=$(awk -F '\t' -v u="$url" '$1 == u { print $2; exit }' "$URL_MAP")
+[ -n "$src" ] && [ -f "$src" ] && [ -n "$out" ] || exit 8
+cp "$src" "$out"
+SH
+
+cat >"$FAKE_BIN/dpkg-query" <<'SH'
+#!/bin/sh
+# Reports the packages listed in $FAKE_DPKG_INSTALLED as installed.
+rc=0
+for arg do
+    case $arg in
+        -*) continue ;;
+    esac
+    if grep -qx -- "$arg" "${FAKE_DPKG_INSTALLED:-/dev/null}" 2>/dev/null; then
+        printf '%s ii \n' "$arg"
+    else
+        printf 'dpkg-query: no packages found matching %s\n' "$arg" >&2
+        rc=1
+    fi
+done
+exit "$rc"
+SH
+
+cat >"$TEST_TMP/brew-stub" <<'SH'
+#!/bin/sh
+# Fake Homebrew: bundle links opt/<formula> for each `brew "x"` of the file,
+# bundle check looks for those links (as the offline --check estimate does).
+prefix=$(cd "$(dirname "$0")/.." && pwd) file='' prev=''
+for arg do
+    [ "$prev" != --file ] || file=$arg
+    prev=$arg
+done
+name=${file##*/}
+formulas=$(sed -nE 's/^[[:space:]]*brew[[:space:]]+"([^"]+)".*/\1/p' "$file" 2>/dev/null)
+case "${1:-} ${2:-}" in
+    'bundle check')
+        printf 'brew-check:%s\n' "$name" >>"$EVENT_LOG"
+        for formula in $formulas; do
+            [ -e "$prefix/opt/$formula" ] || exit 1
+        done
+        ;;
+    'bundle --no-upgrade')
+        printf 'brew:bundle %s\n' "$name" >>"$EVENT_LOG"
+        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} AWESOME_SKILLS_AUTO_UPDATE=${AWESOME_SKILLS_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-}" >>"$EVENT_LOG"
+        [ "${BREW_FAIL:-0}" != 1 ] || exit 1
+        if [ -n "${BREW_POLLUTE:-}" ]; then
+            printf '%s\n' '# appended by a brew installer' >>"$BREW_POLLUTE"
+        fi
+        for formula in $formulas; do
+            mkdir -p "$prefix/Cellar/$formula/1.0" "$prefix/opt" &&
+                ln -sfn "../Cellar/$formula/1.0" "$prefix/opt/$formula" || exit 1
+        done
+        ;;
+    '--version '*) echo 'Homebrew 4.6.0' ;;
+    *)
+        printf 'TRIPWIRE brew %s\n' "$*" >>"$EVENT_LOG"
+        exit 99
+        ;;
+esac
+SH
+
+cat >"$FAKE_BIN/bat" <<'SH'
+#!/bin/sh
+case "$*" in
+    'cache --build')
+        printf 'bat:cache --build\n' >>"$EVENT_LOG"
+        mkdir -p "$HOME/.fake-bat" && : >"$HOME/.fake-bat/cache"
+        ;;
+    --list-themes*)
+        echo 'Monokai Extended'
+        if [ -f "$HOME/.fake-bat/cache" ]; then echo 'Catppuccin Mocha'; fi
+        ;;
+    --version) echo 'bat 0.25.0' ;;
+esac
+exit 0
+SH
+
+cat >"$FAKE_BIN/fc-cache" <<'SH'
+#!/bin/sh
+printf 'fc-cache:%s\n' "$*" >>"$EVENT_LOG"
+SH
+
+cat >"$FAKE_BIN/uname" <<'SH'
+#!/bin/sh
+case ${1:-} in
+    -m) echo "${BOOTSTRAP_UNAME_M:-x86_64}" ;;
+    *) echo "${BOOTSTRAP_UNAME_S:-Linux}" ;;
+esac
+SH
+
+cat >"$FAKE_BIN/getent" <<'SH'
+#!/bin/sh
+printf '%s:x:1000:1000::%s:/bin/bash\n' "${2:-user}" "$HOME"
+SH
+
+cat >"$FAKE_BIN/locale" <<'SH'
+#!/bin/sh
+printf '%s\n' C C.utf8 en_US.utf8 POSIX
+SH
+
+cat >"$FAKE_BIN/xcode-select" <<'SH'
+#!/bin/sh
+[ "${FAKE_XCODE:-0}" = 1 ] || exit 2
+echo /Library/Developer/CommandLineTools
+SH
+
+for tripwire in sudo chsh stow apt-get apt conda; do
+    cat >"$FAKE_BIN/$tripwire" <<SH
+#!/bin/sh
+printf 'TRIPWIRE $tripwire %s\n' "\$*" >>"\$EVENT_LOG"
+exit 99
+SH
+done
+chmod 755 "$FAKE_BIN"/* "$TEST_TMP/brew-stub"
+
+# A PATH dir whose id reports root, for the refusal case.
+ROOT_BIN="$TEST_TMP/bin-root"
+mkdir -p "$ROOT_BIN"
+cat >"$ROOT_BIN/id" <<'SH'
+#!/bin/sh
+case "$*" in
+    -u) echo 0 ;;
+    -un) echo root ;;
+    *) echo 'uid=0(root) gid=0(root) groups=0(root)' ;;
+esac
+SH
+chmod 755 "$ROOT_BIN/id"
+
+# Runs a command on a pseudo terminal, answers every [y/N] prompt, saves the
+# output and exits with the command's status (97 when the helper breaks).
+cat >"$TEST_TMP/pty-run.py" <<'PY'
+import os
+import pty
+import select
+import sys
+import time
+
+
+def main():
+    out_path, answer, argv = sys.argv[1], sys.argv[2].encode() + b"\n", sys.argv[3:]
+    pid, fd = pty.fork()
+    if pid == 0:
+        try:
+            os.execvp(argv[0], argv)
+        finally:
+            os._exit(127)
+    output, answered, deadline = b"", 0, time.monotonic() + 120
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([fd], [], [], 1.0)
+        if not ready:
+            continue
+        try:
+            data = os.read(fd, 65536)
+        except OSError:  # Linux: EIO once the child has exited
+            break
+        if not data:
+            break
+        output += data
+        while output.count(b"[y/N] ") > answered:
+            os.write(fd, answer)
+            answered += 1
+    else:
+        os.kill(pid, 9)
+    _, status = os.waitpid(pid, 0)
+    with open(out_path, "wb") as handle:
+        handle.write(output.replace(b"\r\n", b"\n"))
+    return os.WEXITSTATUS(status) if os.WIFEXITED(status) else 98
+
+
+try:
+    sys.exit(main())
+except Exception as error:  # report the helper's own failure distinctly
+    print(f"pty-run: {error!r}", file=sys.stderr)
+    sys.exit(97)
+PY
+HAVE_PTY=0
+if command -v python3 >/dev/null 2>&1 && python3 -I -c 'import pty, select' >/dev/null 2>&1; then
+    HAVE_PTY=1
+fi
+
+# --- clone remotes -----------------------------------------------------------
+
+# make_remote OWNER/REPO FILE...: a bare repository with one commit; prints
+# the commit.
+make_remote() {
+    local name=$1 work="$TEST_TMP/work/$1" file
+    shift
+    mkdir -p "$work"
+    "$REAL_GIT" init -q "$work"
+    for file in "$@"; do
+        mkdir -p "$(dirname "$work/$file")"
+        printf '# %s\n' "$file" >"$work/$file"
+    done
+    "$REAL_GIT" -C "$work" add -A
+    "$REAL_GIT" -C "$work" commit -q -m initial
+    "$REAL_GIT" clone -q --bare "$work" "$REMOTES/$name.git"
+    "$REAL_GIT" -C "$REMOTES/$name.git" config uploadpack.allowAnySHA1InWant true
+    "$REAL_GIT" -C "$work" rev-parse HEAD
+}
+
+make_remote ohmyzsh/ohmyzsh oh-my-zsh.sh custom/example.zsh \
+    custom/plugins/example/example.plugin.zsh custom/themes/example.zsh-theme >/dev/null
+P10K_PIN=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
+FZF_TAB_PIN=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+
+# --- artifacts and manifests -------------------------------------------------
+
+# sha FILE: its sha256 (sha256sum, or shasum on macOS).
+if command -v sha256sum >/dev/null 2>&1; then
+    SHA_TOOL=sha256sum
+else
+    SHA_TOOL=shasum
+fi
+sha() {
+    if [ "$SHA_TOOL" = sha256sum ]; then
+        sha256sum <"$1" | sed 's/ .*//'
+    else
+        shasum -a 256 <"$1" | sed 's/ .*//'
+    fi
+}
+
+printf '<plist><!-- fixture Catppuccin Mocha --></plist>\n' >"$ARTIFACTS/theme"
+printf '#!/bin/sh\necho bad micromamba\n' >"$ARTIFACTS/micromamba-bad"
+
+mkdir -p "$TEST_TMP/build/codex/bin" "$TEST_TMP/build/codex/codex-path" "$TEST_TMP/build/codex/codex-resources"
+# Checks must not run codex (it writes ~/.codex/tmp); only apply's verify may.
+printf '#!/bin/sh\nprintf "codex-run:%%s\\n" "$*" >>"$EVENT_LOG"\necho "codex-cli 0.161.0"\n' \
+    >"$TEST_TMP/build/codex/bin/codex"
+printf '#!/bin/sh\nexit 0\n' >"$TEST_TMP/build/codex/bin/codex-code-mode-host"
+printf '#!/bin/sh\nexit 0\n' >"$TEST_TMP/build/codex/codex-path/rg"
+printf '#!/bin/sh\nexit 0\n' >"$TEST_TMP/build/codex/codex-resources/bwrap"
+chmod 755 "$TEST_TMP/build/codex/bin/codex" "$TEST_TMP/build/codex/bin/codex-code-mode-host" \
+    "$TEST_TMP/build/codex/codex-path/rg" "$TEST_TMP/build/codex/codex-resources/bwrap"
+cat >"$TEST_TMP/build/codex/codex-package.json" <<'EOF'
+{
+  "layoutVersion": 1,
+  "version": "0.161.0",
+  "target": "x86_64-unknown-linux-musl",
+  "variant": "codex",
+  "entrypoint": "bin/codex"
+}
+EOF
+tar -C "$TEST_TMP/build/codex" -czf "$ARTIFACTS/codex.tar.gz" .
+
+mkdir -p "$TEST_TMP/build/font"
+for face in CaskaydiaMonoNerdFont-Regular CaskaydiaMonoNerdFontMono-Regular; do
+    printf 'fixture font\n' >"$TEST_TMP/build/font/$face.ttf"
+done
+printf 'license\n' >"$TEST_TMP/build/font/LICENSE"
+printf 'readme\n' >"$TEST_TMP/build/font/README.md"
+tar -C "$TEST_TMP/build/font" -cJf "$ARTIFACTS/font.tar.xz" .
+
+mkdir -p "$TEST_TMP/build/kitty/bin" "$TEST_TMP/build/kitty/lib" "$TEST_TMP/build/kitty/share"
+printf '#!/bin/sh\necho "kitty 0.49.2"\n' >"$TEST_TMP/build/kitty/bin/kitty"
+printf '#!/bin/sh\nexit 0\n' >"$TEST_TMP/build/kitty/bin/kitten"
+chmod 755 "$TEST_TMP/build/kitty/bin/kitty" "$TEST_TMP/build/kitty/bin/kitten"
+printf 'lib\n' >"$TEST_TMP/build/kitty/lib/kitty.so"
+tar -C "$TEST_TMP/build/kitty" -cJf "$ARTIFACTS/kitty.txz" .
+
+URL_HOMEBREW=https://raw.githubusercontent.com/Homebrew/install/0123456789abcdef0123456789abcdef01234567/install.sh
+URL_NVM=https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh
+URL_MICROMAMBA=https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64
+URL_CODEX=https://github.com/openai/codex/releases/download/rust-v0.161.0/codex-package-x86_64-unknown-linux-musl.tar.gz
+URL_CLAUDE=https://claude.ai/install.sh
+URL_FONT=https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/CascadiaMono.tar.xz
+URL_KITTY=https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-x86_64.txz
+URL_THEME='https://raw.githubusercontent.com/catppuccin/bat/0123456789abcdef0123456789abcdef01234567/themes/Catppuccin%20Mocha.tmTheme'
+
+{
+    printf '%s\t%s\n' "$URL_HOMEBREW" "$FIXTURES/artifacts/homebrew-install"
+    printf '%s\t%s\n' "$URL_NVM" "$FIXTURES/artifacts/nvm-install"
+    printf '%s\t%s\n' "$URL_MICROMAMBA" "$FIXTURES/artifacts/micromamba"
+    printf '%s\t%s\n' "$URL_CODEX" "$ARTIFACTS/codex.tar.gz"
+    printf '%s\t%s\n' "$URL_CLAUDE" "$FIXTURES/artifacts/claude-install"
+    printf '%s\t%s\n' "$URL_FONT" "$ARTIFACTS/font.tar.xz"
+    printf '%s\t%s\n' "$URL_KITTY" "$ARTIFACTS/kitty.txz"
+    printf '%s\t%s\n' "$URL_THEME" "$ARTIFACTS/theme"
+} >"$URL_MAP"
+awk -F '\t' -v OFS='\t' -v url="$URL_MICROMAMBA" -v bad="$ARTIFACTS/micromamba-bad" \
+    '$1 == url { $2 = bad } { print }' "$URL_MAP" >"$URL_MAP_BAD"
+
+SHA_HOMEBREW=$(sha "$FIXTURES/artifacts/homebrew-install")
+SHA_MICROMAMBA=$(sha "$FIXTURES/artifacts/micromamba")
+SHA_MICROMAMBA_BAD=$(sha "$ARTIFACTS/micromamba-bad")
+SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
+
+mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/common/zsh"
+cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
+cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/terminal.sh"
+cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
+cp -R "$FIXTURES/config/." "$FIXTURE/config/bootstrap/"
+# The real tools.tsv, with the lab gh probe moved into the fixture home.
+# shellcheck disable=SC2016 # a literal manifest token
+sed 's#file:/usr/bin/gh#file:$HOME/.fake-gh-apt#' "$REPO_ROOT/config/bootstrap/tools.tsv" \
+    >"$FIXTURE/config/bootstrap/tools.tsv"
+write_clones() {
+    {
+        printf 'id\tdest\turl\tref\thosts\n'
+        # shellcheck disable=SC2016 # literal manifest tokens
+        printf '%s\t%s\t%s\t%s\t%s\n' \
+            oh-my-zsh '$HOME/.oh-my-zsh' https://github.com/ohmyzsh/ohmyzsh.git master unix \
+            powerlevel10k '$ZSH_CUSTOM/themes/powerlevel10k' https://github.com/romkatv/powerlevel10k.git "$P10K_PIN" unix \
+            fzf-tab '$ZSH_CUSTOM/plugins/fzf-tab' https://github.com/Aloxaf/fzf-tab.git "$FZF_TAB_PIN" unix
+    } >"$FIXTURE/config/bootstrap/git-clones.tsv"
+}
+write_clones
+{
+    printf 'id\tkind\turl\tsha256\tdest\thosts\tarch\ttier\thuman\n'
+    # shellcheck disable=SC2016 # literal manifest tokens
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        homebrew script "$URL_HOMEBREW" "$SHA_HOMEBREW" - mac,wsl-ubuntu,lab-ubuntu any core sudo \
+        nvm script "$URL_NVM" "$(sha "$FIXTURES/artifacts/nvm-install")" - mac,wsl-ubuntu,lab-ubuntu any ai - \
+        micromamba binary "$URL_MICROMAMBA" "$SHA_MICROMAMBA" '$HOME/.local/bin/micromamba' sherlock,marlowe x86_64 core - \
+        codex archive "$URL_CODEX" "$(sha "$ARTIFACTS/codex.tar.gz")" '$HOME/.codex/packages/standalone' wsl-ubuntu,lab-ubuntu x86_64 ai - \
+        claude script "$URL_CLAUDE" - - wsl-ubuntu,lab-ubuntu any ai inspect \
+        nerd-font archive "$URL_FONT" "$(sha "$ARTIFACTS/font.tar.xz")" '$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont' lab-ubuntu any desktop - \
+        kitty archive "$URL_KITTY" "$(sha "$ARTIFACTS/kitty.txz")" '$HOME/.local/kitty.app' lab-ubuntu x86_64 desktop - \
+        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core -
+} >"$FIXTURE/config/bootstrap/installers.tsv"
+
+printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
+printf '%s\n' '/.venv-sync/' >"$FIXTURE/.gitignore"
+cat >"$FIXTURE/stow-all.sh" <<'SH'
+#!/bin/sh
+printf 'TRIPWIRE stow-all.sh %s\n' "$*" >>"$EVENT_LOG"
+exit 99
+SH
+cat >"$FIXTURE/setup-sync.sh" <<'SH'
+#!/bin/sh
+root=$(cd "$(dirname "$0")" && pwd)
+printf 'setup-sync:%s\n' "$*" >>"$EVENT_LOG"
+mkdir -p "$root/.venv-sync/bin"
+: >"$root/.venv-sync/pyvenv.cfg"
+printf '#!/bin/sh\nexit 0\n' >"$root/.venv-sync/bin/python"
+chmod 755 "$root/.venv-sync/bin/python"
+SH
+chmod 755 "$FIXTURE/setup-host.sh" "$FIXTURE/stow-all.sh" "$FIXTURE/setup-sync.sh"
+"$REAL_GIT" -C "$FIXTURE" init -q
+"$REAL_GIT" -C "$FIXTURE" add -A
+"$REAL_GIT" -C "$FIXTURE" commit -q -m fixture
+
+printf 'ID=ubuntu\nID_LIKE=debian\nVERSION_ID="24.04"\n' >"$OS_DEBIAN"
+printf 'ID="rocky"\nID_LIKE="rhel centos fedora"\n' >"$OS_ROCKY"
+printf 'Linux version 6.8.0-45-generic (buildd@lcy02-amd64-075) #45-Ubuntu SMP\n' >"$PROC_NATIVE"
+printf 'Linux version 5.15.167.4-microsoft-standard-WSL2 (root@runner) #1 SMP\n' >"$PROC_WSL"
+printf '%s\n' zsh git curl xclip >"$DPKG_ALL"
+printf '%s\n' curl xclip >"$DPKG_PARTIAL"
+HOMEBREW_SCRATCH_REL=.cache/dotfiles-bootstrap/homebrew/install.sh
+CLAUDE_SCRATCH_REL=.cache/dotfiles-bootstrap/claude/install.sh
+
+# --- refusals ----------------------------------------------------------------
+
+new_home refusals
+run_case win -- --host win
+expect_rc win 2
+expect_text win err 'setup-host.ps1'
+expect_no_events win
+
+run_case no-host -- --check
+expect_rc no-host 2
+expect_text no-host err 'no host: pass --host'
+
+run_case unknown-host -- --host fedora --check
+expect_rc unknown-host 2
+expect_text unknown-host err 'unknown host: fedora'
+
+run_case unknown-step -- --host lab-ubuntu --check --only S9-nothing
+expect_rc unknown-step 2
+expect_text unknown-step err "unknown step for lab-ubuntu: 'S9-nothing'"
+
+run_case bad-tier -- --host lab-ubuntu --check --tier core,gui
+expect_rc bad-tier 2
+
+run_case mode-clash -- --host lab-ubuntu --check --list
+expect_rc mode-clash 2
+
+run_case no-tty -- --host lab-ubuntu
+expect_rc no-tty 2
+expect_text no-tty err 'refusing to apply without a terminal'
+expect_no_events no-tty
+
+run_case wrong-platform -- --host mac --check
+expect_rc wrong-platform 2
+expect_text wrong-platform err 'is macOS, but this kernel is Linux'
+
+run_case wrong-distro BOOTSTRAP_OS_RELEASE="$OS_ROCKY" -- --host lab-ubuntu --check
+expect_rc wrong-distro 2
+
+# DOTFILES_HOST stands in for --host.
+run_case env-host DOTFILES_HOST=win -- --check
+expect_rc env-host 2
+expect_text env-host err 'setup-host.ps1'
+
+# Never as root: it would install into /root or leave root-owned files.
+run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
+expect_rc root 2
+expect_text root err 'run ./setup-host.sh as your user, not root'
+expect_no_text root out 'P0-preflight'
+expect_no_events root
+
+# A cluster host needs Lmod; wsl-ubuntu needs WSL, lab-ubuntu needs its absence.
+run_case hpc-no-lmod BOOTSTRAP_OS_RELEASE="$OS_ROCKY" -- --host sherlock --check
+expect_rc hpc-no-lmod 2
+expect_text hpc-no-lmod err 'host sherlock is a cluster with Lmod, but LMOD_DIR is unset here (detected other)'
+run_case marlowe-no-lmod -- --host marlowe --yes
+expect_rc marlowe-no-lmod 2
+expect_text marlowe-no-lmod err 'LMOD_DIR is unset here (detected debian)'
+expect_no_events marlowe-no-lmod
+run_case wsl-native -- --host wsl-ubuntu --yes
+expect_rc wsl-native 2
+expect_text wsl-native err 'host wsl-ubuntu runs under WSL, but this is not WSL'
+expect_no_events wsl-native
+run_case lab-in-wsl BOOTSTRAP_PROC_VERSION="$PROC_WSL" -- --host lab-ubuntu --check
+expect_rc lab-in-wsl 2
+expect_text lab-in-wsl err 'host lab-ubuntu is a native workstation, but this is WSL; use --host wsl-ubuntu'
+run_case wsl-kernel BOOTSTRAP_PROC_VERSION="$PROC_WSL" -- --host wsl-ubuntu --check
+expect_rc wsl-kernel 3
+expect_no_text wsl-kernel err 'refusing'
+run_case wsl-distro WSL_DISTRO_NAME=Ubuntu -- --host wsl-ubuntu --check
+expect_rc wsl-distro 3
+expect_no_text wsl-distro err 'refusing'
+
+# --- debian --check: zsh and git missing ------------------------------------
+
+new_home debian-missing
+snapshot >"$TEST_TMP/before"
+touch "$MARKER"
+run_case check-missing FAKE_DPKG_INSTALLED="$DPKG_PARTIAL" \
+    BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host lab-ubuntu --check
+expect_rc check-missing 3
+expect_line check-missing 'HUMAN-BEGIN H1-apt-core sudo'
+expect_line check-missing 'sudo apt-get update'
+expect_line check-missing 'sudo apt-get install -y --no-install-recommends zsh git'
+expect_line check-missing 'H1-apt-core human missing apt packages: zsh git'
+expect_text check-missing out 'H1-linuxbrew human blocked by H1-apt-core'
+expect_text check-missing out 'S3-clones todo blocked by H1-apt-core'
+expect_text check-missing out 'H7-stow human waiting: oh-my-zsh must be cloned before ./stow-all.sh'
+expect_no_text check-missing out 'HUMAN-BEGIN H1-linuxbrew'
+expect_no_text check-missing out 'HUMAN-BEGIN H7-stow'
+# chsh -s /usr/bin/zsh fails before the apt block installed zsh.
+expect_text check-missing out 'H7-chsh human blocked by H1-apt-core'
+expect_no_text check-missing out 'HUMAN-BEGIN H7-chsh'
+expect_line check-missing 'HUMAN-BEGIN H7-auth auth'
+expect_text check-missing err 'HUMAN steps pending: H1-apt-core H1-linuxbrew'
+expect_text check-missing err 'steps to apply: S2-brew-bundle S3-clones'
+expect_text check-missing err 'after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu without --check'
+expect_no_events check-missing
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
+    diff -u "$TEST_TMP/before" "$TEST_TMP/after" >&2 || true
+    fail '--check created or removed files'
+}
+[ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
+
+# --- debian --check: apt done, Homebrew present, nothing else ----------------
+
+new_home debian
+snapshot >"$TEST_TMP/before"
+touch "$MARKER"
+run_case check-fresh -- --host lab-ubuntu --check --tier all
+expect_rc check-fresh 3
+expect_text check-fresh out 'P0-preflight done host lab-ubuntu, profile debian, Linux x86_64'
+expect_text check-fresh out 'H1-apt-core done 4 apt packages installed'
+expect_text check-fresh out "H1-linuxbrew done brew at $CASE_BREW/bin/brew"
+expect_text check-fresh out "S2-brew-bundle todo Brewfiles to bundle: core cli (offline estimate from $CASE_BREW/opt"
+expect_text check-fresh out 'S3-clones todo to clone or re-pin: oh-my-zsh (clone) powerlevel10k (clone) fzf-tab (clone)'
+expect_text check-fresh out 'S3-dirs todo'
+expect_text check-fresh out 'S4-nvm todo'
+expect_text check-fresh out 'S5-codex todo codex is not installed; pinned 0.161.0'
+expect_text check-fresh out 'S6-kitty todo'
+expect_text check-fresh out 'S5-claude human'
+expect_line check-fresh 'HUMAN-BEGIN S5-claude inspect'
+expect_text check-fresh out "downloads $URL_CLAUDE (unpinned)"
+expect_line check-fresh "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
+expect_text check-fresh out 'H1-locale done'
+expect_line check-fresh 'HUMAN-BEGIN H1-gh-apt-repo sudo'
+expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
+expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
+expect_line check-fresh 'HUMAN-BEGIN H7-sync-skills judgment'
+expect_text check-fresh out 'unpinned curl of awesome-skills main'
+expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
+expect_no_events check-fresh
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
+    diff -u "$TEST_TMP/before" "$TEST_TMP/after" >&2 || true
+    fail '--check created or removed files'
+}
+[ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
+
+# --- debian apply: every step, in phase order --------------------------------
+
+run_case apply -- --host lab-ubuntu --yes --tier all
+expect_rc apply 3
+expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
+    'git:clone -q --depth=1 --branch master' "git:-C $CASE_HOME/.oh-my-zsh/custom/themes/" \
+    "curl:$URL_THEME" 'bat:cache --build' \
+    "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
+    'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
+expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1'
+expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm"
+expect_no_event TRIPWIRE
+expect_text apply out 'S3-clones done applied:'
+expect_text apply out 'S5-codex done applied:'
+expect_event 'codex-run:--version'
+expect_line apply 'HUMAN-BEGIN S5-claude inspect'
+expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes"
+expect_line apply "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
+expect_line apply 'HUMAN-BEGIN H7-stow judgment'
+expect_line apply "cd $FIXTURE"
+expect_line apply './stow-all.sh lab-ubuntu'
+expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
+
+[ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
+[ -f "$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh" ] || fail 'oh-my-zsh not cloned'
+[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh" config oh-my-zsh.branch)" = master ] || fail 'oh-my-zsh clone config'
+[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" rev-parse HEAD)" = "$P10K_PIN" ] ||
+    fail 'powerlevel10k not at its pin'
+[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab" rev-parse HEAD)" = "$FZF_TAB_PIN" ] ||
+    fail 'fzf-tab not at its pin'
+cmp -s "$ARTIFACTS/theme" "$CASE_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" || fail 'bat theme'
+[ -d "$CASE_HOME/.vim/undo" ] && [ -d "$CASE_HOME/.vim/tmp" ] || fail 'vim dirs'
+[ -x "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node" ] && [ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'nvm node'
+[ -f "$FIXTURE/.venv-sync/pyvenv.cfg" ] || fail 'setup-sync did not run'
+CODEX_RELEASE="$CASE_HOME/.codex/packages/standalone/releases/0.161.0-x86_64-unknown-linux-musl"
+[ "$(readlink "$CODEX_RELEASE/codex")" = bin/codex ] || fail 'codex release link'
+[ "$(readlink "$CASE_HOME/.codex/packages/standalone/current")" = "$CODEX_RELEASE" ] || fail 'codex current link'
+[ "$(readlink "$CASE_HOME/.local/bin/codex")" = "$CASE_HOME/.codex/packages/standalone/current/bin/codex" ] ||
+    fail 'codex ~/.local/bin link'
+[ -z "$(find "$CASE_HOME/.codex/packages/standalone" -maxdepth 1 -name '.extract.*')" ] || fail 'codex temp dir left'
+[ -f "$CASE_HOME/.local/share/fonts/CaskaydiaMonoNerdFont/CaskaydiaMonoNerdFont-Regular.ttf" ] || fail 'font'
+[ "$(readlink "$CASE_HOME/.local/bin/kitty")" = "$CASE_HOME/.local/kitty.app/bin/kitty" ] || fail 'kitty link'
+[ "$(readlink "$CASE_HOME/.local/bin/kitten")" = "$CASE_HOME/.local/kitty.app/bin/kitten" ] || fail 'kitten link'
+[ -z "$("$REAL_GIT" -C "$FIXTURE" status --porcelain)" ] || fail 'apply dirtied the checkout'
+
+# A second apply installs nothing; once ~/.zshrc is stowed nothing blocks.
+printf '#!/bin/sh\necho "2.0.0 (Claude Code)"\n' >"$CASE_HOME/.local/bin/claude"
+chmod 755 "$CASE_HOME/.local/bin/claude"
+run_case reapply -- --host lab-ubuntu --yes --tier all
+expect_rc reapply 3
+expect_no_installs reapply
+expect_event 'brew-check:core.Brewfile'
+expect_text reapply out 'S5-claude done claude at'
+expect_text reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli'
+expect_line reapply 'HUMAN-BEGIN H7-stow judgment'
+ln -s "$FIXTURE/common/zsh/.zshrc" "$CASE_HOME/.zshrc"
+run_case stowed -- --host lab-ubuntu --yes --tier all
+expect_rc stowed 0
+expect_no_installs stowed
+expect_text stowed out "H7-stow done $CASE_HOME/.zshrc links into $FIXTURE/common"
+expect_no_text stowed out 'HUMAN-BEGIN H7-stow'
+expect_line stowed 'HUMAN-BEGIN H7-auth auth'
+expect_text stowed out 'nothing blocking remains for lab-ubuntu'
+run_case check-done -- --host lab-ubuntu --check --tier all
+expect_rc check-done 0
+expect_no_events check-done
+expect_text check-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate"
+
+# Exit 0 means done: an auto step still to apply makes a --check exit 3.
+rm -rf "$CASE_HOME/.vim"
+run_case check-todo -- --host lab-ubuntu --check --tier all
+expect_rc check-todo 3
+expect_text check-todo out 'S3-dirs todo'
+expect_text check-todo err 'steps to apply: S3-dirs; rerun ./setup-host.sh --host lab-ubuntu --tier all without --check'
+expect_no_text check-todo out 'nothing blocking remains'
+expect_no_text check-todo err 'HUMAN steps pending'
+expect_no_events check-todo
+mkdir -p "$CASE_HOME/.vim/undo" "$CASE_HOME/.vim/tmp"
+
+# --- clones: re-pin a clean drifted clone, refuse a dirty one ----------------
+
+FZF_TAB_WORK="$TEST_TMP/work/Aloxaf/fzf-tab"
+printf '# v2\n' >>"$FZF_TAB_WORK/fzf-tab.plugin.zsh"
+"$REAL_GIT" -C "$FZF_TAB_WORK" commit -q -am v2
+"$REAL_GIT" -C "$FZF_TAB_WORK" push -q "$REMOTES/Aloxaf/fzf-tab.git" master
+FZF_TAB_PIN=$("$REAL_GIT" -C "$FZF_TAB_WORK" rev-parse HEAD)
+write_clones
+"$REAL_GIT" -C "$FIXTURE" commit -q -am 're-pin fzf-tab'
+P10K_DIR="$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+printf '# local edit\n' >>"$P10K_DIR/powerlevel10k.zsh-theme"
+run_case repin -- --host lab-ubuntu --yes --only S3-clones
+expect_rc repin 1
+expect_event "git:-C $CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab fetch -q --depth=1 origin $FZF_TAB_PIN"
+[ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/plugins/fzf-tab" rev-parse HEAD)" = "$FZF_TAB_PIN" ] ||
+    fail 'fzf-tab was not re-pinned'
+[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_PIN" ] || fail 'dirty powerlevel10k moved'
+expect_text repin err "$P10K_DIR has local changes"
+expect_text repin out 'S3-clones failed'
+expect_no_event "git:-C $P10K_DIR"
+"$REAL_GIT" -C "$P10K_DIR" checkout -q -- powerlevel10k.zsh-theme
+
+# A --check never hands out ./stow-all.sh while an auto prerequisite is todo.
+new_home cloned-only
+run_case cloned-only -- --host lab-ubuntu --yes --only S3-clones
+expect_rc cloned-only 0
+run_case check-cloned -- --host lab-ubuntu --check
+expect_rc check-cloned 3
+expect_text check-cloned out 'S3-clones done 3 clones at their pins'
+expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
+expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
+expect_no_events check-cloned
+
+# --- oh-my-zsh recovery: stow ran before the clone ---------------------------
+
+new_home recovery
+mkdir -p "$CASE_HOME/.oh-my-zsh/custom"
+printf '# stowed\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
+run_case recovery -- --host lab-ubuntu --yes --only S3-clones
+expect_rc recovery 3
+expect_line recovery 'HUMAN-BEGIN X-recovery judgment'
+expect_line recovery "git -C $CASE_HOME/.oh-my-zsh checkout -b master origin/master"
+expect_text recovery out 'S3-clones human'
+expect_no_events recovery
+[ ! -e "$CASE_HOME/.oh-my-zsh/custom/themes" ] || fail 'recovery case cloned plugins'
+
+# --- rc-pollution guard ------------------------------------------------------
+
+new_home pollution
+run_case pollution BREW_POLLUTE="$FIXTURE/common/zsh/.zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution 1
+expect_text pollution err 'S2-brew-bundle failed: changed files in'
+expect_text pollution err 'common/zsh/.zshrc'
+"$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
+
+# The guard compares content: a file that was already modified keeps its
+# status line, and a file added inside an untracked dir would hide behind
+# `?? dir/` in the default status.
+printf '# a local edit\n' >>"$FIXTURE/common/zsh/.zshrc"
+new_home pollution-dirty
+run_case pollution-dirty BREW_POLLUTE="$FIXTURE/common/zsh/.zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution-dirty 1
+expect_text pollution-dirty err "uncommitted changes in $FIXTURE: common/zsh/.zshrc;"
+expect_text pollution-dirty err "S2-brew-bundle failed: changed files in $FIXTURE: common/zsh/.zshrc"
+"$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
+
+mkdir -p "$FIXTURE/common/extra"
+printf '# untracked\n' >"$FIXTURE/common/extra/a.zsh"
+new_home pollution-new
+run_case pollution-new BREW_POLLUTE="$FIXTURE/common/extra/b.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution-new 1
+expect_text pollution-new err "S2-brew-bundle failed: changed files in $FIXTURE: common/extra/b.zsh"
+new_home pollution-untracked
+run_case pollution-untracked BREW_POLLUTE="$FIXTURE/common/extra/a.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution-untracked 1
+expect_text pollution-untracked err "S2-brew-bundle failed: changed files in $FIXTURE: common/extra/a.zsh"
+rm -rf "$FIXTURE/common/extra"
+[ -z "$("$REAL_GIT" -C "$FIXTURE" status --porcelain)" ] || fail 'the pollution cases left the fixture checkout dirty'
+
+# --- --only, --skip and --keep-going -----------------------------------------
+
+new_home only
+run_case only -- --host lab-ubuntu --yes --only S3-dirs
+expect_rc only 0
+expect_no_events only
+[ -d "$CASE_HOME/.vim/undo" ] || fail '--only S3-dirs did not run it'
+expect_text only out 'S3-clones skip not selected by --only'
+expect_text only out 'H7-stow skip not selected by --only'
+
+new_home skip
+run_case skip -- --host lab-ubuntu --yes --only S3-dirs --skip S3-dirs
+expect_rc skip 0
+expect_text skip out 'S3-dirs skip skipped by --skip'
+[ ! -e "$CASE_HOME/.vim" ] || fail '--skip S3-dirs ran it'
+
+# A prerequisite left undone by --skip or a declined prompt holds H7-stow:
+# ./stow-all.sh is never handed out before stow and .venv-sync exist.
+new_home skipped
+mkdir -p "$CASE_HOME/.oh-my-zsh"
+: >"$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh"
+run_case skipped -- --host lab-ubuntu --yes --only S2-brew-bundle --only H7-stow --skip S2-brew-bundle
+expect_rc skipped 3
+expect_text skipped out 'S2-brew-bundle skip skipped by --skip'
+expect_text skipped out 'H7-stow human blocked by S2-brew-bundle (skipped)'
+expect_no_text skipped out 'HUMAN-BEGIN H7-stow'
+expect_no_events skipped
+
+if [ "$HAVE_PTY" = 1 ]; then
+    run_tty_case declined n -- --host lab-ubuntu --only S2-brew-bundle --only H7-stow
+    expect_rc declined 3
+    expect_text declined out 'Apply S2-brew-bundle? [y/N]'
+    expect_text declined out 'S2-brew-bundle skip declined: brew bundle'
+    expect_text declined out 'H7-stow human blocked by S2-brew-bundle (declined)'
+    expect_no_text declined out 'HUMAN-BEGIN H7-stow'
+    expect_text declined out 'steps not applied: S2-brew-bundle; after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu'
+    expect_no_text declined out 'nothing blocking remains'
+    expect_no_installs declined
+    [ ! -e "$CASE_BREW/opt" ] || fail 'a declined S2-brew-bundle ran brew bundle'
+
+    new_home declined-dirs
+    run_tty_case declined-dirs n -- --host lab-ubuntu --only S3-dirs
+    expect_rc declined-dirs 3
+    expect_text declined-dirs out 'S3-dirs skip declined: mkdir -p ~/.vim/undo ~/.vim/tmp'
+    expect_no_text declined-dirs out 'nothing blocking remains'
+    [ ! -e "$CASE_HOME/.vim" ] || fail 'a declined S3-dirs ran'
+
+    run_tty_case accepted-dirs y -- --host lab-ubuntu --only S3-dirs
+    expect_rc accepted-dirs 0
+    expect_text accepted-dirs out 'S3-dirs done applied:'
+    [ -d "$CASE_HOME/.vim/undo" ] || fail 'an accepted S3-dirs did not run'
+else
+    printf '%s\n' 'setup-host: SKIP the prompt cases (python3 with pty is not available)' >&2
+fi
+
+new_home stop
+run_case stop BREW_FAIL=1 -- --host lab-ubuntu --yes --only S2-brew-bundle --only S3-dirs
+expect_rc stop 1
+expect_text stop err 'stopped after S2-brew-bundle failed'
+[ ! -e "$CASE_HOME/.vim" ] || fail 'a later step ran after a failure without --keep-going'
+
+new_home keep-going
+run_case keep-going BREW_FAIL=1 -- --host lab-ubuntu --yes --keep-going --only S2-brew-bundle --only S3-dirs
+expect_rc keep-going 1
+[ -d "$CASE_HOME/.vim/undo" ] || fail '--keep-going did not continue'
+expect_text keep-going err 'failed steps: S2-brew-bundle'
+
+# --- hpc: the login env only inside an allocation ----------------------------
+
+new_home sherlock
+HPC_ENV=(LMOD_DIR=/opt/lmod BOOTSTRAP_OS_RELEASE="$OS_ROCKY")
+rm -rf "$FIXTURE/.venv-sync"
+run_case hpc-login "${HPC_ENV[@]}" -- --host sherlock --yes
+expect_rc hpc-login 3
+expect_event "curl:$URL_MICROMAMBA"
+expect_no_event 'micromamba:create'
+expect_no_event 'setup-sync:'
+expect_line hpc-login 'HUMAN-BEGIN H2-alloc alloc'
+expect_line hpc-login 'sh_dev -t 1:00:00'
+expect_text hpc-login out 'S2-login-env todo blocked by H2-alloc'
+expect_text hpc-login out 'S4-setup-sync todo blocked by S2-login-env'
+expect_line hpc-login 'HUMAN-BEGIN S2-modules judgment'
+[ -x "$CASE_HOME/.local/bin/micromamba" ] || fail 'micromamba not installed'
+[ "$(sha "$CASE_HOME/.local/bin/micromamba")" = "$SHA_MICROMAMBA" ] || fail 'micromamba digest'
+
+run_case hpc-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- --host sherlock --yes
+expect_rc hpc-alloc 3
+expect_event "micromamba:create -y -r $CASE_HOME/micromamba -n login -f $FIXTURE/config/bootstrap/hpc-login-env.yml"
+expect_event "setup-sync:--python $CASE_HOME/micromamba/envs/login/bin/python3"
+expect_line hpc-alloc 'HUMAN-BEGIN H7-stow judgment'
+expect_no_text hpc-alloc out 'HUMAN-BEGIN H2-alloc'
+expect_no_event TRIPWIRE
+
+new_home sherlock-scratch
+run_case hpc-scratch "${HPC_ENV[@]}" SLURM_JOB_ID=1 SCRATCH="$TEST_TMP/homes" -- \
+    --host sherlock --yes --only S2-micromamba --only S2-login-env
+expect_rc hpc-scratch 1
+expect_text hpc-scratch err 'refusing to build the login env under $SCRATCH'
+expect_no_event 'micromamba:create'
+
+# --- digest mismatch ---------------------------------------------------------
+
+new_home mismatch
+run_case mismatch "${HPC_ENV[@]}" URL_MAP="$URL_MAP_BAD" -- --host sherlock --yes --only S2-micromamba
+expect_rc mismatch 1
+expect_text mismatch err "expected $SHA_MICROMAMBA, actual $SHA_MICROMAMBA_BAD"
+[ ! -e "$CASE_HOME/.local/bin/micromamba" ] || fail 'mismatched micromamba was installed'
+[ ! -e "$CASE_HOME/.local/bin/micromamba.part" ] || fail 'mismatched download left a .part file'
+
+# --- macOS: Homebrew is a HUMAN sudo block with a verified installer ---------
+
+MAC_ENV=(BOOTSTRAP_UNAME_S=Darwin BOOTSTRAP_UNAME_M=aarch64 FAKE_XCODE=1
+    BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew")
+new_home mac
+snapshot >"$TEST_TMP/before"
+run_case mac-check "${MAC_ENV[@]}" -- --host mac --check
+expect_rc mac-check 3
+expect_line mac-check 'HUMAN-BEGIN H1-homebrew sudo'
+expect_text mac-check out "downloads $URL_HOMEBREW"
+expect_text mac-check out "verifies sha256 $SHA_HOMEBREW first"
+expect_line mac-check "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+expect_line mac-check "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -"
+expect_text mac-check out 'S2-brew-bundle todo blocked by H1-homebrew'
+expect_no_events mac-check
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'mac --check wrote files'
+
+run_case mac-brew "${MAC_ENV[@]}" -- --host mac --yes --only H1-homebrew
+expect_rc mac-brew 3
+expect_event "curl:$URL_HOMEBREW"
+expect_no_event TRIPWIRE
+expect_line mac-brew "# sha256 $SHA_HOMEBREW verified"
+expect_line mac-brew 'sudo -v'
+expect_line mac-brew "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+[ "$(sha "$CASE_HOME/$HOMEBREW_SCRATCH_REL")" = "$SHA_HOMEBREW" ] || fail 'homebrew installer not staged'
+# The block re-checks the digest right before the sudo-backed run.
+grep -n -e '^printf .* | shasum -a 256 -c -$' -e '^sudo -v$' -e '^NONINTERACTIVE=1 /bin/bash ' \
+    "$TEST_TMP/mac-brew.out" | cut -d: -f2- >"$TEST_TMP/mac-brew.order"
+printf '%s\n' "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -" \
+    'sudo -v' "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL" | cmp -s - "$TEST_TMP/mac-brew.order" ||
+    fail 'Homebrew block: digest re-check, sudo -v, then the run'
+VERIFY_LINE=$(sed -n '/| shasum -a 256 -c -$/p' "$TEST_TMP/mac-brew.out")
+bash -c "$VERIFY_LINE" >/dev/null || fail 'the digest re-check rejects the staged installer'
+printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
+if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
+    fail 'the digest re-check accepts a tampered installer'
+fi
+rm -f "$CASE_HOME/$HOMEBREW_SCRATCH_REL"
+
+run_case mac-clt "${MAC_ENV[@]}" FAKE_XCODE=0 -- --host mac --check
+expect_rc mac-clt 3
+expect_line mac-clt 'HUMAN-BEGIN H1-xcode-clt gui'
+expect_text mac-clt out 'H1-homebrew human blocked by H1-xcode-clt'
+expect_no_text mac-clt out 'HUMAN-BEGIN H1-homebrew'
+
+new_home linuxbrew
+run_case linuxbrew BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host lab-ubuntu --yes --only H1-linuxbrew
+expect_rc linuxbrew 3
+expect_event "curl:$URL_HOMEBREW"
+expect_no_event TRIPWIRE
+expect_line linuxbrew 'HUMAN-BEGIN H1-linuxbrew sudo'
+expect_line linuxbrew "# sha256 $SHA_HOMEBREW verified"
+expect_line linuxbrew "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+if command -v sha256sum >/dev/null 2>&1; then
+    VERIFY_LINE=$(sed -n '/| sha256sum -c -$/p' "$TEST_TMP/linuxbrew.out")
+    bash -c "$VERIFY_LINE" >/dev/null || fail 'the sha256sum re-check rejects the staged installer'
+    printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
+    if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
+        fail 'the sha256sum re-check accepts a tampered installer'
+    fi
+fi
+
+# --- --list and --print-manual -----------------------------------------------
+
+new_home manual
+run_case list -- --host lab-ubuntu --list
+expect_rc list 0
+expect_line list "id${TAB}kind${TAB}tier${TAB}blocking"
+expect_line list "H1-apt-core${TAB}sudo${TAB}-${TAB}yes"
+expect_line list "S6-kitty${TAB}auto${TAB}desktop${TAB}-"
+expect_no_text list out 'S2-micromamba'
+
+snapshot >"$TEST_TMP/before"
+run_case manual -- --host lab-ubuntu --print-manual
+expect_rc manual 0
+expect_line manual 'sudo apt-get install -y --no-install-recommends zsh git curl xclip'
+expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
+expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+expect_line manual 'HUMAN-BEGIN X-recovery judgment'
+expect_line manual 'HUMAN-BEGIN H7-stow judgment'
+expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
+[ "$(grep -c '^HUMAN-BEGIN ' "$TEST_TMP/manual.out")" = "$(grep -c '^HUMAN-END$' "$TEST_TMP/manual.out")" ] ||
+    fail 'unbalanced HUMAN blocks'
+expect_no_events manual
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail '--print-manual wrote files'
+
+# --- bootstrap_fetch ---------------------------------------------------------
+
+# fetch_case NAME BIN_DIR ARGS...: run bootstrap_fetch with PATH=BIN_DIR.
+fetch_case() {
+    local name=$1 bin=$2
+    shift 2
+    : >"$EVENT_LOG"
+    set +e
+    env -i HOME="$TEST_TMP" PATH="$bin" LC_ALL=C EVENT_LOG="$EVENT_LOG" URL_MAP="$URL_MAP" \
+        CURL_ARGS_LOG="$CURL_ARGS_LOG" /bin/bash -c \
+        '. "$1"; shift; bootstrap_fetch "$@"' fetch "$FIXTURE/lib/bootstrap/fetch.sh" "$@" \
+        >"$TEST_TMP/$name.out" 2>"$TEST_TMP/$name.err"
+    CASE_RC=$?
+    set -e
+}
+
+# link_tools DIR TOOL...: a PATH dir holding only these tools.
+link_tools() {
+    local dir=$1 tool
+    shift
+    mkdir -p "$dir"
+    for tool in "$@"; do
+        if [ -x "$FAKE_BIN/$tool" ]; then
+            ln -s "$FAKE_BIN/$tool" "$dir/$tool"
+        else
+            ln -s "$(command -v "$tool")" "$dir/$tool"
+        fi
+    done
+}
+
+FETCH_DIR="$TEST_TMP/fetch"
+CURL_ONLY="$TEST_TMP/bin-curl"
+WGET_ONLY="$TEST_TMP/bin-wget"
+# The curl run checks the shasum fallback; the wget run uses either tool.
+link_tools "$CURL_ONLY" curl shasum awk cp mkdir rm mv dirname
+link_tools "$WGET_ONLY" wget "$SHA_TOOL" awk cp mkdir rm mv dirname
+
+: >"$CURL_ARGS_LOG"
+fetch_case fetch-ok "$CURL_ONLY" "$URL_MICROMAMBA" "$FETCH_DIR/ok/micromamba" "$SHA_MICROMAMBA"
+expect_rc fetch-ok 0
+cmp -s "$FIXTURES/artifacts/micromamba" "$FETCH_DIR/ok/micromamba" || fail 'fetch with shasum'
+[ ! -e "$FETCH_DIR/ok/micromamba.part" ] || fail 'fetch left a .part file'
+grep -Fq -- "-fsSL --proto =https --tlsv1.2 --retry 3 -o $FETCH_DIR/ok/micromamba.part $URL_MICROMAMBA" \
+    "$CURL_ARGS_LOG" || fail "curl flags: $(cat "$CURL_ARGS_LOG")"
+
+fetch_case fetch-wget "$WGET_ONLY" "$URL_MICROMAMBA" "$FETCH_DIR/wget/micromamba" "$SHA_MICROMAMBA"
+expect_rc fetch-wget 0
+expect_event "wget:$URL_MICROMAMBA"
+cmp -s "$FIXTURES/artifacts/micromamba" "$FETCH_DIR/wget/micromamba" || fail 'fetch with wget'
+
+mkdir -p "$FETCH_DIR/keep"
+printf 'previous\n' >"$FETCH_DIR/keep/micromamba"
+fetch_case fetch-bad "$CURL_ONLY" "$URL_MICROMAMBA" "$FETCH_DIR/keep/micromamba" "$SHA_MICROMAMBA_BAD"
+expect_rc fetch-bad 1
+expect_text fetch-bad err "expected $SHA_MICROMAMBA_BAD, actual $SHA_MICROMAMBA"
+[ ! -e "$FETCH_DIR/keep/micromamba.part" ] || fail 'mismatch left a .part file'
+[ "$(cat "$FETCH_DIR/keep/micromamba")" = previous ] || fail 'mismatch replaced DEST'
+
+fetch_case fetch-unpinned "$CURL_ONLY" "$URL_CLAUDE" "$FETCH_DIR/claude" -
+expect_rc fetch-unpinned 2
+expect_text fetch-unpinned err 'without --inspect'
+expect_no_events fetch-unpinned
+
+fetch_case fetch-inspect "$CURL_ONLY" --inspect "$URL_CLAUDE" "$FETCH_DIR/claude" -
+expect_rc fetch-inspect 0
+cmp -s "$FIXTURES/artifacts/claude-install" "$FETCH_DIR/claude" || fail 'fetch --inspect'
+
+fetch_case fetch-http "$CURL_ONLY" http://example.invalid/x "$FETCH_DIR/http" "$SHA_MICROMAMBA"
+expect_rc fetch-http 2
+expect_no_events fetch-http
+
+echo "setup-host=PASS"
