@@ -1,0 +1,155 @@
+# Day-zero tool manifest read by doctor.sh, doctor.ps1 and setup-host.*.
+# pinned 2026-10-09
+# Tab-separated. Lines starting with # are comments; the first other line is
+# the header. "-" means n/a; no cell is empty. Grammar and vocabularies are
+# enforced by tests/test_bootstrap_manifest.py.
+#   tier          core, cli, ai, desktop, contributor, host
+#   hosts         all, unix (every host but win), or a comma list of
+#                 mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win
+#   probe         command[,fallback] | file:PATH | dir:PATH | font:FAMILY |
+#                 env:VAR | psmodule:Name. PATH is absolute or starts with one
+#                 token: $HOME $ZSH_CUSTOM $NVM_DIR $XDG_CONFIG_HOME
+#                 $XDG_DATA_HOME $BAT_CONFIG_DIR.
+#   version_flag  --version, -V, -v, version, or - (presence only)
+#   floor         X.Y or X.Y.Z, compared with the first X.Y[.Z] the tool prints
+#   doc           a step id; docs/bootstrap.md has one "### <id>:" heading each
+# Floors: fzf 0.58.0 (--style full, --input-label in fzf.zsh and fzf-tab.zsh),
+# eza 0.18.20, fd 8.3.0 (--strip-cwd-prefix), python3 3.11 (setup-sync.sh),
+# node 22.0 (18 and 20 are end of life), stow 2.3.1 (.stowrc parsing),
+# shfmt 3.13.0 (first zsh dialect), gh 2.50.0, pwsh 7.0 (#Requires -Version 7.0).
+id	tier	hosts	probe	version_flag	floor	absent	doc
+git	core	all	git	--version	-	cannot clone, update or stow the dotfiles	P0-preflight
+bash	core	unix	bash	--version	-	doctor.sh, setup-host.sh and stow-all.sh cannot run	P0-preflight
+zsh	core	unix	zsh	--version	-	no interactive shell for the stowed .zshrc	H1-apt-core
+git-lfs	core	unix	git-lfs	--version	-	the required lfs filter in .gitconfig fails on LFS repositories	H1-apt-core
+curl	core	unix	curl	--version	-	setup-host downloads and the awesome-skills sync fail	H1-apt-core
+rsync	core	unix	rsync	--version	-	upload and the awesome-skills sync fail	H1-apt-core
+tar	core	unix	tar	--version	-	archive installs and the targz aliases fail	H1-apt-core
+file	core	unix	file	--version	-	fzf previews cannot detect file types	H1-apt-core
+col	core	unix	col	-	-	fzf-tab man page previews fail	H1-apt-core
+man	core	unix	man	-	-	man, colored-man-pages and fzf-tab man previews fail	H1-apt-core
+tmux	core	unix	tmux	-V	-	fzf --tmux popups and tmux sessions are unavailable	H1-apt-core
+homebrew	core	mac	brew	--version	-	Brewfile bundles cannot run	H1-homebrew
+linuxbrew	core	wsl-ubuntu,lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/brew	-	-	Brewfile bundles cannot run and the overlay brew shellenv line fails	H1-linuxbrew
+python3	core	all	python3,python	--version	3.11	setup-sync and the AI config sync helpers cannot run	S2-brew-bundle
+stow	core	unix	stow	--version	2.3.1	stow-all.sh refuses to run	S2-brew-bundle
+fzf	core	all	fzf	--version	0.58.0	Ctrl-R/T, Alt-C and fzf-tab fail	S2-brew-bundle
+zoxide	core	all	zoxide	--version	-	z and zi are not defined	S2-brew-bundle
+eza	core	all	eza	--version	0.18.20	ll, la and fzf directory previews fail	S2-brew-bundle
+fd	core	all	fd	--version	8.3.0	fzf Ctrl-T and Alt-C list nothing	S2-brew-bundle
+bat	core	all	bat	--version	-	fzf previews fall back to plain text	S2-brew-bundle
+oh-my-zsh	core	unix	file:$HOME/.oh-my-zsh/oh-my-zsh.sh	-	-	zsh aborts where .zshrc sources oh-my-zsh.sh	S3-clones
+powerlevel10k	core	unix	file:$ZSH_CUSTOM/themes/powerlevel10k/powerlevel10k.zsh-theme	-	-	oh-my-zsh cannot find the prompt theme	S3-clones
+fzf-tab	core	unix	file:$ZSH_CUSTOM/plugins/fzf-tab/fzf-tab.plugin.zsh	-	-	plugin fzf-tab not found, plain tab completion	S3-clones
+fast-syntax-highlighting	core	unix	file:$ZSH_CUSTOM/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh	-	-	plugin fast-syntax-highlighting not found, no highlighting	S3-clones
+zsh-autosuggestions	core	unix	file:$ZSH_CUSTOM/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh	-	-	plugin zsh-autosuggestions not found, no suggestions	S3-clones
+you-should-use	core	unix	file:$ZSH_CUSTOM/plugins/you-should-use/you-should-use.plugin.zsh	-	-	plugin you-should-use not found, no alias reminders	S3-clones
+conda-zsh-completion	core	unix	file:$ZSH_CUSTOM/plugins/conda-zsh-completion/conda-zsh-completion.plugin.zsh	-	-	plugin conda-zsh-completion not found, no conda completion	S3-clones
+zsh-completions	core	unix	dir:$ZSH_CUSTOM/plugins/zsh-completions/src	-	-	the extra completion functions on fpath are missing	S3-clones
+bat-theme	core	all	file:$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	-	-	BAT_THEME Catppuccin Mocha is unknown to bat	S3-bat-theme
+micromamba	core	sherlock,marlowe	micromamba	--version	-	the login env cannot be created or updated	S2-micromamba
+login-env	core	sherlock,marlowe	file:$HOME/micromamba/envs/login/bin/zsh	-	-	ssh sherlock and ssh marlowe cannot exec the login zsh	S2-login-env
+pwsh	core	win	pwsh	--version	7.0	the PowerShell 7 profile and doctor.ps1 cannot run	W1-winget
+ripgrep	cli	all	rg	--version	-	rg searches fail	S2-brew-bundle
+git-delta	cli	all	delta	--version	-	fzf-tab git diff and show previews are empty	S2-brew-bundle
+tldr	cli	all	tldr	--version	-	fzf-tab command and tldr previews fall back to man	S2-brew-bundle
+chafa	cli	unix	chafa	--version	-	fzf image previews outside kitty show only file details	S2-brew-bundle
+jq	cli	all	jq	--version	-	JSON filtering on the command line fails	S2-brew-bundle
+nvim	cli	all	nvim	--version	-	the vi alias fails	S2-brew-bundle
+aria2	cli	all	aria2c	--version	-	aria2c downloads with the stowed aria2.conf fail	S2-brew-bundle
+uv	cli	all	uv	--version	-	uv and the oh-my-zsh uv plugin are unavailable	S2-brew-bundle
+gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows fail	S2-brew-bundle
+gh-apt	cli	lab-ubuntu	file:/usr/bin/gh	-	-	the github.com credential helper in .gitconfig_local fails	H1-gh-apt-repo
+xclip	cli	lab-ubuntu	xclip	-	-	fzf Ctrl-Y cannot copy to the X clipboard	H1-apt-core
+wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	H1-apt-core
+nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
+node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
+claude	ai	all	claude	--version	-	Claude Code is unavailable	S5-claude
+codex	ai	all	codex	--version	-	Codex is unavailable	S5-codex
+kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the stowed kitty.conf has no terminal to configure	S6-kitty
+wezterm	desktop	mac,win	wezterm	-	-	the stowed .wezterm.lua has no terminal to configure	S2-brew-bundle
+nerd-font	desktop	mac,lab-ubuntu,win	font:CaskaydiaMono Nerd Font	-	-	prompt, eza and terminal icons render as boxes	S6-nerd-font
+windows-terminal	desktop	win	wt	-	-	the stowed Windows Terminal settings are unused	W1-winget
+oh-my-posh	desktop	win	oh-my-posh	version	-	the default PowerShell prompt replaces the tracked theme	W1-winget
+psfzf	desktop	win	psmodule:PSFzf	-	-	Ctrl+R, Ctrl+T and Alt+C keep PSReadLine defaults	W1-psresources
+completionpredictor	desktop	win	psmodule:CompletionPredictor	-	-	predictions come from history only	W1-psresources
+commandnotfound	desktop	win	psmodule:Microsoft.WinGet.CommandNotFound	-	-	no winget suggestions for unknown commands	W1-psresources
+pre-commit	contributor	all	pre-commit	--version	-	pre-commit run --all-files cannot run	X-contributor
+shfmt	contributor	unix	shfmt	--version	3.13.0	manual shfmt runs miss the zsh dialect	X-contributor
+shellcheck	contributor	unix	shellcheck	--version	-	manual shellcheck runs fail	X-contributor
+stylua	contributor	unix	stylua	--version	-	manual Lua formatting of .wezterm.lua fails	X-contributor
+miniconda	host	mac,wsl-ubuntu,sherlock,marlowe	file:$HOME/miniconda3/bin/conda	-	-	the overlay conda and mamba hooks fall back to a dead PATH entry	X-host-tools
+miniconda-apps	host	lab-ubuntu	file:/apps/miniconda3/bin/conda	-	-	the overlay conda and mamba hooks fall back to a dead PATH entry	X-host-tools
+miniconda-win	host	win	file:$HOME/miniconda3/Scripts/conda.exe	-	-	the lazy conda stub in profile.ps1 is not defined	X-host-tools
+juliaup	host	wsl-ubuntu	file:$HOME/.juliaup/bin/juliaup	-	-	the juliaup PATH entry in the wsl profile is dead	X-host-tools
+texlive-2024	host	wsl-ubuntu	dir:/usr/local/texlive/2024/bin/x86_64-linux	-	-	the TeX Live 2024 PATH, MANPATH and INFOPATH entries are dead	X-host-tools
+texlive-2025	host	lab-ubuntu	dir:/usr/local/texlive/2025/bin/x86_64-linux	-	-	the TeX Live 2025 PATH, MANPATH and INFOPATH entries are dead	X-host-tools
+gromacs	host	wsl-ubuntu	file:/usr/local/gromacs/bin/gmx	-	-	gmx and its completion are not set up	X-host-tools
+gromacs-apps	host	lab-ubuntu	file:/apps/gromacs-2026.0/bin/gmx	-	-	gmx and its completion are not set up	X-host-tools
+cuda	host	wsl-ubuntu,lab-ubuntu	dir:/usr/local/cuda/bin	-	-	nvcc and the CUDA PATH entry are absent	X-host-tools
+matlab	host	mac	dir:/Applications/MATLAB_R2025b.app/bin	-	-	MATLAB is not exported	X-host-tools
+schrodinger	host	mac	dir:/opt/schrodinger/suites2025-2	-	-	SCHRODINGER is not exported	X-host-tools
+fcitx5	host	lab-ubuntu	fcitx5	-	-	no input method, and the stowed fcitx5 profile is unused	H1-fcitx5
+wslu	host	wsl-ubuntu	wslview	-	-	BROWSER=wslview cannot open links	H1-apt-core
+notify-send	host	wsl-ubuntu,lab-ubuntu	notify-send	-	-	the alert alias fails	H1-apt-core
+kinit	host	mac,wsl-ubuntu,lab-ubuntu	kinit	-	-	GSSAPI ssh to sherlock and marlowe cannot use Kerberos tickets	H7-auth
+gcm	host	lab-ubuntu	file:/usr/local/bin/git-credential-manager	-	-	the credential helper in .gitconfig_local fails	H7-auth
+gcm-windows	host	wsl-ubuntu	file:/mnt/c/Program Files/Git/mingw64/bin/git-credential-manager.exe	-	-	the Windows credential helper in .gitconfig_local fails	H7-auth
+gpg	host	lab-ubuntu	gpg	--version	-	the GCM gpg credential store and the gpg-agent plugin fail	H7-auth
+pass	host	lab-ubuntu	pass	-	-	the GCM gpg credential store cannot save secrets	H7-auth
+tailscale	host	mac,wsl-ubuntu,lab-ubuntu	tailscale	-	-	the oh-my-zsh tailscale plugin does nothing	X-host-tools
+lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so overlay module loads are skipped	S2-modules
+# Coverage declarations, read by tests/test_bootstrap_manifest.py. Every core,
+# cli and ai row must be installed by a manifest on each host it covers:
+#   alias: TOOL-ID NAME       TOOL-ID is installed under NAME (a Brewfile
+#                             entry, apt package, hpc-login-env.yml dependency
+#                             or env name, winget PackageIdentifier, or a
+#                             git-clones/installers id).
+#   manual: TOOL-ID SCOPES    no manifest installs it there (OS baseline, Lmod
+#                             module, or a person); SCOPES is a comma list of
+#                             hosts or profiles (macos, debian, hpc, windows).
+# alias: git Git.Git
+# manual: git macos
+# manual: bash macos,debian,hpc
+# manual: zsh macos
+# manual: curl macos
+# manual: rsync macos
+# manual: tar macos,hpc
+# manual: file macos
+# alias: col bsdextrautils
+# manual: col macos,hpc
+# alias: man man-db
+# manual: man macos,hpc
+# alias: linuxbrew homebrew
+# alias: python3 python@3.14
+# alias: python3 python
+# alias: python3 Python.Python.3.12
+# alias: fzf junegunn.fzf
+# alias: zoxide ajeetdsouza.zoxide
+# alias: eza eza-community.eza
+# alias: fd fd-find
+# alias: fd sharkdp.fd
+# alias: bat sharkdp.bat
+# alias: login-env login
+# alias: pwsh Microsoft.PowerShell
+# alias: ripgrep BurntSushi.ripgrep.MSVC
+# alias: git-delta dandavison.delta
+# alias: tldr tlrc
+# alias: tldr tealdeer
+# alias: tldr tldr-pages.tlrc
+# alias: jq jqlang.jq
+# alias: nvim neovim
+# alias: nvim Neovim.Neovim
+# alias: aria2 aria2.aria2
+# alias: uv astral-sh.uv
+# alias: gh GitHub.cli
+# manual: gh-apt lab-ubuntu
+# alias: node nvm
+# alias: node OpenJS.NodeJS.LTS
+# manual: node hpc
+# alias: claude claude-code
+# alias: claude Anthropic.ClaudeCode
+# manual: claude hpc
+# alias: codex OpenAI.Codex
+# manual: codex hpc
+# alias: shfmt go-shfmt

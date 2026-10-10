@@ -1,0 +1,35 @@
+# Pinned downloads for setup-host (fetched with curl --proto =https, then
+# checked against sha256 before use). Nothing here is piped into a shell.
+# pinned 2026-10-09
+# Tab-separated; columns: id kind url sha256 dest hosts arch tier human.
+#   kind   script (downloaded to a scratch dir, then run), binary, archive, file
+#   sha256 64 lowercase hex; "-" only for human=inspect rows
+#   dest   "-" for scripts, otherwise a tokenized path (see tools.tsv)
+#   arch   any, x86_64 or aarch64; (id, arch) is unique
+#   human  "-", sudo (a person runs it), inspect (a person reads it first)
+# Every digest below was computed from a fresh download on 2026-10-09 and,
+# for GitHub release assets, matches the digest GitHub publishes for it.
+id	kind	url	sha256	dest	hosts	arch	tier	human
+# Homebrew/install main head 2026-10-07 (commit 8ab1549dfa1189fd4d818a2116592d8f0ee06d8c); 35651 bytes.
+# Also installs Linuxbrew under /home/linuxbrew/.linuxbrew on wsl-ubuntu and lab-ubuntu.
+homebrew	script	https://raw.githubusercontent.com/Homebrew/install/8ab1549dfa1189fd4d818a2116592d8f0ee06d8c/install.sh	5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148	-	mac,wsl-ubuntu,lab-ubuntu	any	core	sudo
+# nvm-sh/nvm tag v0.40.8 (peeled a885b885fef16fac4bc544188fb25e9e37ae83e8); the script clones that same tag. 17883 bytes.
+nvm	script	https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh	48a0eee9a60e07422dce0eb5774754c83889570ca1ee2566c516acbe8af03a9e	-	mac,wsl-ubuntu,lab-ubuntu	any	ai	-
+# mamba-org/micromamba-releases 2.9.0-0: a bare static executable, chmod 755; digests match upstream .sha256 files.
+micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64	366cd9cd8be14df1ab8ed50352a82111082a36686b2d389fdb79a92c3fafb3e3	$HOME/.local/bin/micromamba	sherlock,marlowe	x86_64	core	-
+micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-aarch64	9f93b974adcb4d166996af969b6cd371287d1a3e52733704727884d9b74cb7a7	$HOME/.local/bin/micromamba	sherlock,marlowe	aarch64	core	-
+# openai/codex rust-v0.162.1: a .tar.gz holding one executable named
+# codex-x86_64-unknown-linux-musl (or codex-aarch64-unknown-linux-musl); install it as dest.
+codex	archive	https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-unknown-linux-musl.tar.gz	86f268d81b898f3e144c5ecff2ad2fda2c5802e042d6195b72538fe0fa125057	$HOME/.local/bin/codex	wsl-ubuntu,lab-ubuntu	x86_64	ai	-
+codex	archive	https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-aarch64-unknown-linux-musl.tar.gz	bf3ca2719f1143b1440fbd85c149379e696c782c50ad7991f8bfcec60b2600c1	$HOME/.local/bin/codex	wsl-ubuntu,lab-ubuntu	aarch64	ai	-
+# Anthropic's native installer is not version-pinnable: download, show digest and size, read, then run.
+claude	script	https://claude.ai/install.sh	-	-	wsl-ubuntu,lab-ubuntu	any	ai	inspect
+# ryanoasis/nerd-fonts v3.5.1 CascadiaMono.tar.xz: flat archive of 36 CaskaydiaMonoNerdFont{,Mono,Propo}-*.ttf
+# files plus LICENSE and README.md; extract into dest, then fc-cache -f.
+nerd-font	archive	https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/CascadiaMono.tar.xz	e4fe0248bbe2558e907d26b55ed287403972f946239a4ea3f7a8afd3365ad6ba	$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont	lab-ubuntu	any	desktop	-
+# kovidgoyal/kitty v0.49.2: .txz whose top level is bin/ lib/ share/; extract into dest
+# (tar -C dest -xJof), then link dest/bin/kitty and dest/bin/kitten into $HOME/.local/bin.
+kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-x86_64.txz	d573618b911e9c461bd421b96c13c74c7f1cb2f1ac9c327818d4ff84366cf5c6	$HOME/.local/kitty.app	lab-ubuntu	x86_64	desktop	-
+kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-arm64.txz	0c81a995614426cccf0fecaf7d104d47cd63bbccf173d14976e9f92e3d60fce6	$HOME/.local/kitty.app	lab-ubuntu	aarch64	desktop	-
+# catppuccin/bat main head 2025-06-29 (commit 6810349b28055dce54076712fc05fc68da4b8ec0); run bat cache --build after.
+bat-theme	file	https://raw.githubusercontent.com/catppuccin/bat/6810349b28055dce54076712fc05fc68da4b8ec0/themes/Catppuccin%20Mocha.tmTheme	395566f08ceb301b936b91c077690ef94f7aeb651b121553f201c99c2bd4aa77	$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	all	any	core	-

@@ -1,0 +1,25 @@
+# Debian/Ubuntu prerequisites for every debian-profile host, printed into the
+# H1-apt-core sudo block. One package per line.
+# pinned 2026-10-09 (names checked against Ubuntu 24.04 noble).
+# bsdextrautils provides col; man-db provides man.
+zsh
+git
+git-lfs
+curl
+rsync
+tar
+file
+procps
+build-essential
+gnupg
+python3
+python3-venv
+python3-pip
+tmux
+bsdextrautils
+man-db
+locales
+ca-certificates
+unzip
+xz-utils
+fontconfig

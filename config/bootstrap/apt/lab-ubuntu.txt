@@ -1,0 +1,12 @@
+# lab-ubuntu additions to apt/common.txt (H1-apt-core). The fcitx5 set matches
+# lab-ubuntu/fcitx5/.config/fcitx5/profile (pinyin, mozc); H1-fcitx5 then runs
+# im-config -n fcitx5 and asks for a relogin.
+# pinned 2026-10-09
+xclip
+wl-clipboard
+fcitx5
+fcitx5-chinese-addons
+fcitx5-mozc
+fcitx5-frontend-all
+fcitx5-config-qt
+im-config
