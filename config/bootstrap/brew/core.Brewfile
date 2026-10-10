@@ -12,6 +12,10 @@ brew "python"
 brew "fzf"
 brew "zoxide"
 brew "eza"
+# Homebrew will not install fd while the fdclone formula is installed
+# (conflicts_with: both install `fd`), so S2-brew-bundle reads this line and
+# stops first with an uninstall block.
+# conflicts: fd fdclone
 brew "fd"
 brew "bat"
 # Debian and Ubuntu get these from apt (apt/common.txt). A Linuxbrew tmux

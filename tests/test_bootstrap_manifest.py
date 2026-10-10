@@ -109,9 +109,10 @@ APT_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]+$")
 WINGET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_+-]*(\.[A-Za-z0-9][A-Za-z0-9_+-]*)+$")
 BREW_RE = re.compile(r'^(brew|cask) "([a-z0-9][a-z0-9@+._/-]*)"(?: if OS\.(mac|linux)\?)?$')
 TAP_RE = re.compile(r'^tap "[a-z0-9_-]+/[a-z0-9_-]+"$')
-# "# conflicts: FORMULA OTHER...": S2-brew-bundle stops before brew bundle
-# while an OTHER keg exists and FORMULA is not installed.
-CONFLICTS_RE = re.compile(r"^# conflicts: ([a-z0-9][a-z0-9@+._-]*)((?: [a-z0-9][a-z0-9@+._-]*)+)$")
+# "# conflicts: FORMULA OTHER..." and "# conflicts: cask TOKEN OTHER...":
+# S2-brew-bundle stops before brew bundle while an OTHER keg (or Caskroom
+# directory) exists and FORMULA (TOKEN) is not installed.
+CONFLICTS_RE = re.compile(r"^# conflicts: (cask )?([a-z0-9][a-z0-9@+._-]*)((?: [a-z0-9][a-z0-9@+._-]*)+)$")
 CONFLICTS_NEAR_RE = re.compile(r"^#\s*conflicts?\s*:", re.I)
 DEP_RE = re.compile(r"^([a-z0-9][a-z0-9._-]*)((?:[<>=!~]=?[0-9][0-9a-z.*]*,?)*)$")
 ALIAS_RE = re.compile(r"^# alias: ([a-z0-9][a-z0-9-]*) ([A-Za-z0-9@+._-]+)$")
@@ -340,18 +341,20 @@ def check_installers(rows, tools, errors):
 
 def read_brewfiles(config, errors):
     """Return [(name, os_guard)] across all tier Brewfiles; check their conflicts lines."""
-    entries, seen, formulae, declared = [], {}, {}, []
+    entries, seen, declared = [], {}, []
+    bundled = {"brew": {}, "cask": {}}
     for tier in BREW_TIERS:
         rel = f"brew/{tier}.Brewfile"
-        formulae[rel] = set()
+        bundled["brew"][rel], bundled["cask"][rel] = set(), set()
         for number, line in enumerate((read_text(config / rel, rel, errors) or "").splitlines(), 1):
             where, match = f"{rel}:{number}", BREW_RE.match(line)
             if CONFLICTS_NEAR_RE.match(line):
                 conflict = CONFLICTS_RE.match(line)
-                report(errors, "brewfile-conflicts", where,
-                       not conflict and "write '# conflicts: FORMULA OTHER...' (formula names, one space apart)")
+                report(errors, "brewfile-conflicts", where, not conflict and
+                       "write '# conflicts: FORMULA OTHER...' or '# conflicts: cask TOKEN OTHER...' (names one space apart)")
                 if conflict:
-                    declared.append((where, rel, conflict.group(1), conflict.group(2).split()))
+                    kind = "cask" if conflict.group(1) else "brew"
+                    declared.append((where, rel, kind, conflict.group(2), conflict.group(3).split()))
                 continue
             if line == "" or line.startswith("#") or TAP_RE.match(line):
                 continue
@@ -366,12 +369,11 @@ def read_brewfiles(config, errors):
             report(errors, "brewfile", where, name in seen and f"{name} repeats {seen.get(name)}")
             seen[name] = where
             entries.append((name, guard))
-            if kind == "brew":
-                formulae[rel].add(name)
-    for where, rel, formula, others in declared:
-        report(errors, "brewfile-conflicts", where, formula not in formulae[rel] and f"{formula} is not a brew entry of {rel}")
+            bundled[kind][rel].add(name)
+    for where, rel, kind, name, others in declared:
+        report(errors, "brewfile-conflicts", where, name not in bundled[kind][rel] and f"{name} is not a {kind} entry of {rel}")
         for other in others:
-            repeated = other == formula or others.count(other) > 1
+            repeated = other == name or others.count(other) > 1
             report(errors, "brewfile-conflicts", where, repeated and f"{other} is named twice")
             report(errors, "brewfile-conflicts", where, other in seen and f"{other} is bundled too ({seen.get(other)})")
     return entries
@@ -795,6 +797,18 @@ class RejectionTests(unittest.TestCase):
              lambda: self.append("brew/core.Brewfile", "# conflicts: tlrc tealdeer\n")),
             ("brewfile-conflicts", "bundled", lambda: self.append("brew/cli.Brewfile", "# conflicts: jq ripgrep\n")),
             ("brewfile-conflicts", "twice", lambda: self.append("brew/cli.Brewfile", "# conflicts: jq yq yq\n")),
+            ("brewfile-conflicts", "cask without others",
+             lambda: self.append("brew/desktop.Brewfile", "# conflicts: cask kitty\n")),
+            ("brewfile-conflicts", "formula line for a cask",
+             lambda: self.append("brew/ai.Brewfile", "# conflicts: codex codex@nightly\n")),
+            ("brewfile-conflicts", "cask line for a formula",
+             lambda: self.append("brew/core.Brewfile", "# conflicts: cask fzf fzf@nightly\n")),
+            ("brewfile-conflicts", "cask of another Brewfile",
+             lambda: self.append("brew/ai.Brewfile", "# conflicts: cask kitty kitty@nightly\n")),
+            ("brewfile-conflicts", "cask bundled",
+             lambda: self.append("brew/desktop.Brewfile", "# conflicts: cask kitty wezterm\n")),
+            ("brewfile-conflicts", "cask named twice",
+             lambda: self.append("brew/desktop.Brewfile", "# conflicts: cask wezterm wezterm\n")),
             ("apt", "version", lambda: self.append("apt/lab-ubuntu.txt", "zsh=5.9\n")),
             ("apt", "trailing comment", lambda: self.append("apt/wsl-ubuntu.txt", "jq # json\n")),
             ("apt", "overlap", lambda: self.append("apt/lab-ubuntu.txt", "tmux\n")),

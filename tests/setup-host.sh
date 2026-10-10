@@ -1101,6 +1101,48 @@ expect_rc brew-conflict-installed 0
 expect_text brew-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_no_text brew-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
 
+# --- S2-brew-bundle: a conflicting cask, judged only where it installs -------
+
+# A desktop Brewfile like the real one, for these cases only: a macOS-only
+# cask whose "# conflicts: cask TOKEN OTHER" line names its @nightly twin.
+# On mac a Caskroom/kitty@nightly directory stops the step before brew runs;
+# on Linux brew bundle skips the cask, so the pair never applies.
+DESKTOP_BREWFILE="$FIXTURE/config/bootstrap/brew/desktop.Brewfile"
+printf '%s\n' '# conflicts: cask kitty kitty@nightly' 'cask "kitty" if OS.mac?' >"$DESKTOP_BREWFILE"
+CASK_MAC=(BOOTSTRAP_UNAME_S=Darwin BOOTSTRAP_UNAME_M=aarch64 FAKE_XCODE=1)
+new_home cask-conflict
+mkdir -p "$CASE_BREW/Caskroom/kitty@nightly/0.44.0"
+run_case cask-conflict-check "${CASK_MAC[@]}" -- --host mac --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-check 3
+expect_text cask-conflict-check out 'S2-brew-bundle human the installed kitty@nightly cask conflicts with kitty (desktop.Brewfile); brew bundle would fail'
+expect_line cask-conflict-check 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line cask-conflict-check '# Homebrew does not install kitty (desktop.Brewfile) while the kitty@nightly cask is installed (conflicts_with), so brew bundle would fail'
+expect_line cask-conflict-check "$CASE_BREW/bin/brew uninstall --cask kitty@nightly"
+expect_no_text cask-conflict-check out 'uninstall --formula'
+expect_no_events cask-conflict-check
+run_case cask-conflict-apply "${CASK_MAC[@]}" -- --host mac --yes --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-apply 3
+expect_line cask-conflict-apply "$CASE_BREW/bin/brew uninstall --cask kitty@nightly"
+expect_no_events cask-conflict-apply
+run_case cask-conflict-manual "${CASK_MAC[@]}" -- --host mac --print-manual --tier desktop
+expect_rc cask-conflict-manual 0
+expect_line cask-conflict-manual "$CASE_BREW/bin/brew uninstall --cask kitty@nightly"
+# The pair is not judged on Linux, in --check or --print-manual.
+run_case cask-conflict-linux -- --host lab-ubuntu --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-linux 0
+expect_text cask-conflict-linux out 'S2-brew-bundle done Brewfiles satisfied: desktop'
+expect_no_text cask-conflict-linux out 'kitty@nightly'
+run_case cask-conflict-linux-manual -- --host lab-ubuntu --print-manual --tier desktop
+expect_rc cask-conflict-linux-manual 0
+expect_no_text cask-conflict-linux-manual out 'kitty@nightly'
+# Once kitty itself is installed, its @nightly twin is no conflict.
+mkdir -p "$CASE_BREW/Caskroom/kitty/0.44.0"
+run_case cask-conflict-installed "${CASK_MAC[@]}" -- --host mac --check --tier desktop --only S2-brew-bundle
+expect_rc cask-conflict-installed 0
+expect_text cask-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: desktop'
+expect_no_text cask-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
+rm -f "$DESKTOP_BREWFILE"
+
 # --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
 new_home nvm-moved

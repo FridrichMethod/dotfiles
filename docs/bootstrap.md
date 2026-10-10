@@ -294,7 +294,7 @@ at HW-clone).
 | `--only STEP`, `--skip STEP` | Run only, or skip, that step id from this file; both repeat |
 | `--keep-going` | Continue past a failed step instead of stopping there; the run still exits 1 |
 | `--list` | The steps for this host as TSV: `id`, `kind` (`auto` or a HUMAN kind), `tier`, `blocking` |
-| `--print-manual` | Every HUMAN block for this host, pending or not, then exit 0; that includes the judgment blocks an automatic step prints only in one situation, each with a note saying when: X-recovery (`~/.oh-my-zsh` without `oh-my-zsh.sh`), S2-brew-bundle (a conflicting formula is installed) and S4-nvm (an `nvm.sh` that is not the pinned checkout) |
+| `--print-manual` | Every HUMAN block for this host, pending or not, then exit 0; that includes the judgment blocks an automatic step prints only in one situation, each with a note saying when: X-recovery (`~/.oh-my-zsh` without `oh-my-zsh.sh`), S2-brew-bundle (a conflicting formula or cask is installed) and S4-nvm (an `nvm.sh` that is not the pinned checkout) |
 
 Every step runs check, plan, apply, verify; a satisfied step is skipped, so a
 second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
@@ -335,7 +335,7 @@ Homebrew, apt packages, Linuxbrew, the Slurm allocation, the Claude Code
 installer, stow) holds back the steps that need it and makes the run exit 3,
 and so does an automatic step that needs a person's decision first: it shows
 as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
-conflicting Homebrew formula in S2-brew-bundle, an `nvm.sh` S4-nvm will not
+conflicting Homebrew formula or cask in S2-brew-bundle, an `nvm.sh` S4-nvm will not
 source). A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
 dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
 `--tier` or `--only` leaves out does not. Non-blocking blocks (locale, the gh
@@ -816,33 +816,44 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
 - **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`python3`, `stow`,
   `fzf`, `eza`, `fd`, `gh`, ...) `ok` with their floors.
-- **Human:** no, unless a conflicting formula is installed (judgment, below)
+- **Human:** no, unless a conflicting formula or cask is installed (judgment, below)
 
-**Conflicting formulae.** Homebrew refuses to install a formula next to one it
-`conflicts_with`, and `brew bundle` then fails with no more than "brew bundle
-failed". A Brewfile names each such pair in a `# conflicts: FORMULA OTHER...`
-line (validated by `tests/bootstrap-manifest.sh`); today that is `cli`'s
-`# conflicts: tlrc tldr tealdeer`, since all three install a `tldr` command.
-Before it runs brew at all, in `--check` and apply alike, S2-brew-bundle looks
-for a keg of each OTHER (`Cellar/OTHER` under the Homebrew prefix it found, or
-under `$HOMEBREW_CELLAR`) while FORMULA has neither a keg nor an `opt/` link.
-When it finds one, the step is `human` and blocking (exit 3), and setup-host
-prints a judgment block whose command line uninstalls it with the brew it found,
-by full path:
+**Conflicting formulae and casks.** Homebrew refuses to install a formula or
+cask next to one it `conflicts_with`, and `brew bundle` then fails with no more
+than "brew bundle failed". A Brewfile names the conflicts the bootstrap knows
+of, taken from each entry's `conflicts_with` on formulae.brew.sh when it was
+pinned, in `# conflicts: FORMULA OTHER...` lines and, for casks,
+`# conflicts: cask TOKEN OTHER...` lines (validated by
+`tests/bootstrap-manifest.sh`). Today they are `core`'s `fd fdclone` (both
+install `fd`), `cli`'s `tlrc tldr tealdeer` (all three install `tldr`), and the
+macOS casks `claude-code` (`ai`, against `claude-code@latest`), `kitty` and
+`wezterm` (`desktop`, each against its `@nightly` cask). Before it runs brew at
+all, in `--check` and apply alike, S2-brew-bundle looks for each OTHER that is
+installed while the Brewfile's own entry is not: a formula keg (`Cellar/OTHER`
+under the Homebrew prefix it found, or under `$HOMEBREW_CELLAR`) while FORMULA
+has neither a keg nor an `opt/` link, or a cask's `Caskroom/OTHER` while
+`Caskroom/TOKEN` is absent. A pair whose Brewfile entry brew bundle skips on
+this platform (the casks are `if OS.mac?`) is never judged. When it finds one,
+the step is `human` and blocking (exit 3), and setup-host prints a judgment
+block whose command line uninstalls it (`--formula` or `--cask`) with the brew
+it found, by full path:
 
 ```text
 HUMAN-BEGIN S2-brew-bundle judgment
 # docs/bootstrap.md S2-brew-bundle
 # Homebrew does not install tlrc (cli.Brewfile) while the tldr formula is installed (conflicts_with), so brew bundle would fail
-# uninstall each conflicting formula below; the next ./setup-host.sh run then bundles the Brewfile one
+# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one
 /home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr
 HUMAN-END
 ```
 
-The `tldr` command comes back from tlrc on the next run. The conflict holds
-back the whole step, every selected Brewfile, so keeping the old formula
-instead means leaving the `cli` tier out (`--tier core,ai`). `--print-manual`
-prints the block for every declared pair. See also
+The `tldr` command comes back from tlrc on the next run (a cask such as
+`wezterm@nightly` likewise gives way to `wezterm`). The conflict holds back
+the whole step, every selected Brewfile, so keeping the other package instead
+means leaving its tier out (for tldr, `--tier core,ai`). `--print-manual`
+prints the block for every declared pair that applies on this platform. A
+conflict Homebrew adds later is not judged until a Brewfile line names it
+([Known limitations](#known-limitations)). See also
 [X-recovery](#x-recovery-recovery-recipes).
 
 ### S2-micromamba: micromamba
@@ -1694,18 +1705,23 @@ if you want to keep them (`mv DEST DEST.local`), then
 `./setup-host.sh --host H --only S3-clones`. A dirty `~/dotfiles` checkout after
 an installer is [X-rc-protection](#x-rc-protection-rc-file-protection).
 
-**Conflicting Homebrew formula.** S2-brew-bundle is `human` with "the installed
-tldr formula conflicts with tlrc (cli.Brewfile)", or `brew bundle` failed with
-"Cannot install tlrc because conflicting formulae are installed". Check with
-`ls "$(brew --prefix)/Cellar"`, then uninstall the old formula by the path
-setup-host printed, for example
+**Conflicting Homebrew formula or cask.** S2-brew-bundle is `human` with "the
+installed tldr formula conflicts with tlrc (cli.Brewfile)" (or, on macOS, for
+example "the installed wezterm@nightly cask conflicts with wezterm
+(desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tlrc
+because conflicting formulae are installed" or a cask conflict. Check with
+`ls "$(brew --prefix)/Cellar" "$(brew --prefix)/Caskroom"`, then uninstall the
+other package by the path setup-host printed, for example
 `/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr` (tealdeer the
-same way), and run `./setup-host.sh --host H --only S2-brew-bundle`; tlrc then
-provides `tldr`. If brew refuses because another formula depends on it, keep it
-and leave the `cli` tier out instead
-([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). On a Linuxbrew prefix
-owned by another account (a shared lab install), only that account can
-uninstall or bundle; ask its owner.
+same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
+`./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
+takes its place. If brew refuses because another formula depends on it, keep
+it and leave its tier out instead
+([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). A failure that names a
+conflict no Brewfile declares is the same fix by hand; add its
+`# conflicts:` line to the Brewfile as well. On a Linuxbrew prefix owned by
+another account (a shared lab install), only that account can uninstall or
+bundle; ask its owner.
 
 **Digest mismatch.** setup-host deletes the `.part` file and fails the step with
 the expected and actual sha256. Never edit the digest just to make it pass.
@@ -1761,9 +1777,15 @@ fail-closed behavior beyond what is stated.
   `tests/host-overlays.sh` points the conda and mamba prefixes at missing
   paths to test only the Linuxbrew guard.
 - **A conflicting formula is judged by its keg.** S2-brew-bundle stops when
-  `Cellar/<formula>` of a declared conflict exists, linked or not. Homebrew
-  itself refuses only a linked one, so an unlinked keg stops the step although
-  `brew bundle` would succeed; uninstalling it is still the fix.
+  `Cellar/<formula>` of a declared conflict exists, linked or not (a cask, when
+  its `Caskroom/<token>` exists). Homebrew itself refuses only a linked
+  formula, so an unlinked keg stops the step although `brew bundle` would
+  succeed; uninstalling it is still the fix.
+- **Only declared conflicts are judged.** The `# conflicts:` lines record the
+  `conflicts_with` data that formulae.brew.sh listed for each Brewfile entry
+  when the Brewfiles were pinned (2026-10-09). A conflict Homebrew adds later
+  fails `brew bundle` with "brew bundle failed for <file>" until a Brewfile
+  line names it ([X-recovery](#x-recovery-recovery-recipes)).
 - **A Linuxbrew prefix owned by another account.** H1-linuxbrew is `done` once
   `brew` runs, whoever owns `/home/linuxbrew/.linuxbrew`. On a shared lab
   install owned by another user, `brew bundle` (and `brew uninstall`) as you
