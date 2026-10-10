@@ -591,10 +591,10 @@ class RejectionTests(unittest.TestCase):
         path = self.path(rel)
         text = path.read_text(encoding="utf-8")
         self.assertIn(old, text, f"fixture text missing from {rel}")
-        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+        path.write_text(text.replace(old, new, 1), encoding="utf-8", newline="")
 
     def append(self, rel, text):
-        with self.path(rel).open("a", encoding="utf-8") as handle:
+        with self.path(rel).open("a", encoding="utf-8", newline="") as handle:
             handle.write(text)
 
     def row(self, rel, row_id):

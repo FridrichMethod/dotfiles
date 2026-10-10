@@ -47,6 +47,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Sherlock integration tests failed.' }
 & $syncPython -I -B (Join-Path $repoRoot 'lib/sherlock_kit_integration.py') --check
 if ($LASTEXITCODE -ne 0) { throw 'Sherlock pin/projection check failed.' }
 
+Write-Output '==> test_bootstrap_manifest.py'
+& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }
+
 Write-Output '==> claude-customizations.cjs'
 & node --test (Join-Path $PSScriptRoot 'claude-customizations.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed.' }
@@ -67,6 +71,10 @@ if ($LASTEXITCODE -ne 0) { throw 'PowerShell profile tests failed.' }
 Write-Output '==> windows-installer-controls.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'windows-installer-controls.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Windows installer confirmation and failure-control tests failed.' }
+
+Write-Output '==> bootstrap.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'bootstrap.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Windows bootstrap doctor and installer tests failed.' }
 
 if ($IsWindows) {
     Write-Output '==> windows-installer.ps1'

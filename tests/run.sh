@@ -73,6 +73,10 @@ tests=(
     powershell-profile.sh
     awesome-skills-update.sh
     windows-installer.sh
+    bootstrap-manifest.sh
+    doctor.sh
+    setup-host.sh
+    bootstrap-windows.sh
 )
 
 for test_name in "${tests[@]}"; do
