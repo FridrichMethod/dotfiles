@@ -9,7 +9,9 @@ metadata:
 # Dotfiles bootstrap
 
 1. Read `docs/bootstrap.md` first. It is the playbook and the contract for
-   every step, flag, exit code and HUMAN block below.
+   every step, flag, exit code and HUMAN block below. If `./doctor.sh` or
+   `./setup-host.sh` is missing from this checkout, stop and say so: the
+   bootstrap scripts are not installed yet.
 2. Diagnose without changing anything: `./doctor.sh --host <host>`
    (`.\doctor.ps1 -Host win` on Windows).
 3. Preview the plan, which writes nothing: `./setup-host.sh --host <host> --check`.
