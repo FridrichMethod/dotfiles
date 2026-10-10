@@ -289,7 +289,7 @@ at HW-clone).
 | `--only STEP`, `--skip STEP` | Run only, or skip, that step id from this file; both repeat |
 | `--keep-going` | Continue past a failed step instead of stopping there; the run still exits 1 |
 | `--list` | The steps for this host as TSV: `id`, `kind` (`auto` or a HUMAN kind), `tier`, `blocking` |
-| `--print-manual` | Every HUMAN block for this host, pending or not (with the X-recovery block, which applies only when `~/.oh-my-zsh` exists without `oh-my-zsh.sh`), then exit 0 |
+| `--print-manual` | Every HUMAN block for this host, pending or not, then exit 0; that includes the judgment blocks an automatic step prints only in one situation, each with a note saying when: X-recovery (`~/.oh-my-zsh` without `oh-my-zsh.sh`), S2-brew-bundle (a conflicting formula is installed) and S4-nvm (an `nvm.sh` that is not the pinned checkout) |
 
 Every step runs check, plan, apply, verify; a satisfied step is skipped, so a
 second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
@@ -326,8 +326,11 @@ because wget follows a redirect to plain http.
 
 `--list` shows which HUMAN steps block. A pending blocking step (Xcode CLT,
 Homebrew, apt packages, Linuxbrew, the Slurm allocation, the Claude Code
-installer, stow) holds back the steps that need it and makes the run exit 3.
-A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
+installer, stow) holds back the steps that need it and makes the run exit 3,
+and so does an automatic step that needs a person's decision first: it shows
+as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
+conflicting Homebrew formula in S2-brew-bundle, an `nvm.sh` S4-nvm will not
+source). A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
 dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
 `--tier` or `--only` leaves out does not. Non-blocking blocks (locale, the gh
 apt repository, fcitx5, site modules, `chsh`, sign-in, skill sync, the final
@@ -1020,16 +1023,55 @@ so the alias must exist.
   `<commit>` is the commit in the row's URL. The installer would otherwise
   clone its release tag, which can move; with the commit it fetches exactly
   that commit, and `PROFILE=/dev/null` keeps it out of every rc file.
-  setup-host then requires `git -C ~/.nvm rev-parse HEAD` to be that commit
-  (and removes a checkout it just made that is not) before it runs
-  `nvm install --lts` and `nvm alias default 'lts/*'`. By hand:
-  `c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' ~/dotfiles/config/bootstrap/installers.tsv)`,
-  `f=$(fetch_pinned nvm) && NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f"`,
-  check that `git -C ~/.nvm rev-parse HEAD` prints `$c`, then
-  `. ~/.nvm/nvm.sh && nvm install --lts && nvm alias default 'lts/*'`.
+  setup-host sources `nvm.sh` (to run `nvm install --lts` and
+  `nvm alias default 'lts/*'`) only when `$NVM_DIR` is a git checkout at that
+  commit with no change to a tracked file; it removes a checkout it just made
+  that is not. By hand, as one block that sources nothing unless that holds
+  (paste `fetch_pinned` from [Pinned artifacts by hand](#pinned-artifacts-by-hand)
+  first):
+
+  ```sh
+  (
+      set -eu
+      d=${NVM_DIR:-$HOME/.nvm}
+      c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' \
+          "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
+      case $c in
+          '' | *[!0-9a-f]*) echo "installers.tsv names no nvm commit: [$c]" >&2 && exit 1 ;;
+      esac
+      test "${#c}" -eq 40
+      if [ ! -s "$d/nvm.sh" ]; then
+          f=$(fetch_pinned nvm)
+          mkdir -p "$d"
+          NVM_DIR=$d NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f"
+      fi
+      head=$(git -C "$d" rev-parse HEAD)
+      changed=$(git -C "$d" status --porcelain --untracked-files=no)
+      if [ "$head" != "$c" ] || [ -n "$changed" ]; then
+          echo "$d is at $head (or has local changes), not the pinned nvm commit $c; not sourced" >&2
+          exit 1
+      fi
+  ) && . "${NVM_DIR:-$HOME/.nvm}/nvm.sh" && nvm install --lts && nvm alias default 'lts/*'
+  ```
+
 - **Verify:** in a new shell, `command -v node` is under `~/.nvm/versions` and
   `node --version` meets the floor.
-- **Human:** no
+- **Human:** no, unless an existing nvm is not the pinned checkout (judgment,
+  below)
+
+**An nvm that is already there.** S4-nvm is `done` whenever `$NVM_DIR` has a
+node at the floor and a `default` alias, whatever installed nvm: those are
+files, and nothing needs `nvm.sh`. Only when node or the alias is missing does
+setup-host have to source `nvm.sh`, and then an `nvm.sh` that is not the pinned,
+unmodified checkout (an older install, a checkout at another commit, a
+directory that is not a git checkout, local edits) makes the step `human` and
+blocking, with a judgment block instead of a source: `git -C ~/.nvm fetch` and
+`git -C ~/.nvm checkout --detach` to the pinned commit (its `versions/` and
+`alias/` stay), `git -C ~/.nvm status --short` and `checkout -- .` for local
+edits, or `mv -n ~/.nvm ~/.nvm.pre-dotfiles` for a directory that is not a git
+checkout, after which the next run installs the pinned nvm there. Each block
+names the alternative of moving the directory aside in a note.
+`--print-manual` prints the commit case.
 
 Never install nvm with Homebrew; the doctor's `nvm-homebrew` check warns about
 it and [X-recovery](#x-recovery-recovery-recipes) moves you off it. Install Node

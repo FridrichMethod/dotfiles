@@ -1063,7 +1063,7 @@ expect_rc brew-conflict-installed 0
 expect_text brew-conflict-installed out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_no_text brew-conflict-installed out 'HUMAN-BEGIN S2-brew-bundle'
 
-# --- nvm: a checkout off the pinned commit is never sourced ------------------
+# --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
 new_home nvm-moved
 run_case nvm-moved FAKE_NVM_REF=master -- --host lab-ubuntu --yes --only S4-nvm
@@ -1072,6 +1072,91 @@ expect_text nvm-moved err "not the pinned nvm commit $NVM_PIN"
 expect_event "curl:$URL_NVM"
 expect_no_event 'nvm:'
 [ ! -e "$CASE_HOME/.nvm" ] || fail 'an nvm checkout off its pin was left in place'
+
+# nvm_checkout HOME REF: HOME/.nvm as the fixture installer lays it out at REF
+# (empty: the pinned commit), with an nvm.sh that records being sourced.
+nvm_checkout() {
+    mkdir -p "$1/.nvm"
+    EVENT_LOG="$TEST_TMP/nvm-setup.log" NVM_DIR="$1/.nvm" NVM_INSTALL_VERSION="$NVM_PIN" FAKE_NVM_REF="$2" \
+        sh "$FIXTURES/artifacts/nvm-install" >/dev/null
+    printf '%s\n' 'printf "nvm-sourced\n" >>"$EVENT_LOG"' | cat - "$1/.nvm/nvm.sh" >"$1/.nvm/nvm.sh.new"
+    mv "$1/.nvm/nvm.sh.new" "$1/.nvm/nvm.sh"
+}
+
+# The pinned checkout without node: sourced, and node installed.
+new_home nvm-pinned
+nvm_checkout "$CASE_HOME" ''
+run_case nvm-pinned -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-pinned 0
+expect_no_event "curl:$URL_NVM"
+expect_order 'nvm-sourced' 'nvm:install --lts' 'nvm:alias default lts/*'
+[ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'the pinned nvm checkout got no default alias'
+
+# A checkout off the pin with no default node: a judgment block, never sourced.
+new_home nvm-foreign
+nvm_checkout "$CASE_HOME" master
+NVM_MOVED=$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)
+[ "$NVM_MOVED" != "$NVM_PIN" ] || fail 'the moved nvm fixture is at the pin'
+run_case nvm-foreign-check -- --host lab-ubuntu --check --only S4-nvm
+expect_rc nvm-foreign-check 3
+expect_text nvm-foreign-check out "S4-nvm human nvm has no node >= 22.0; $CASE_HOME/.nvm is at $NVM_MOVED, not the pinned nvm commit $NVM_PIN, so its nvm.sh is not sourced"
+expect_line nvm-foreign-check 'HUMAN-BEGIN S4-nvm judgment'
+expect_line nvm-foreign-check "git -C $CASE_HOME/.nvm fetch --depth=1 https://github.com/nvm-sh/nvm.git $NVM_PIN"
+expect_line nvm-foreign-check "git -C $CASE_HOME/.nvm -c advice.detachedHead=false checkout --detach $NVM_PIN"
+expect_text nvm-foreign-check err 'HUMAN steps pending: S4-nvm'
+expect_no_events nvm-foreign-check
+run_case nvm-foreign -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-foreign 3
+expect_line nvm-foreign 'HUMAN-BEGIN S4-nvm judgment'
+expect_no_event 'nvm-sourced'
+expect_no_event 'nvm:'
+expect_no_event "curl:$URL_NVM"
+[ ! -e "$CASE_HOME/.nvm/alias/default" ] || fail 'an nvm checkout off its pin got a default alias'
+# The block's command lines, each run on its own, bring it to the pin; the
+# next apply sources it.
+sed -n '/^HUMAN-BEGIN S4-nvm /,/^HUMAN-END$/p' "$TEST_TMP/nvm-foreign.out" |
+    grep -v -e '^HUMAN-' -e '^#' >"$TEST_TMP/nvm-block.lines"
+[ "$(grep -c . "$TEST_TMP/nvm-block.lines")" = 2 ] || fail "nvm block: $(cat "$TEST_TMP/nvm-block.lines")"
+while IFS= read -r line; do
+    bash -c "$line" >/dev/null 2>&1 </dev/null || fail "the nvm block line failed: $line"
+done <"$TEST_TMP/nvm-block.lines"
+[ "$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)" = "$NVM_PIN" ] || fail 'the nvm block did not reach the pin'
+run_case nvm-foreign-fixed -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-foreign-fixed 0
+expect_order 'nvm-sourced' 'nvm:install --lts'
+
+# With node at the floor and a default alias, any checkout is done, unsourced.
+new_home nvm-done
+nvm_checkout "$CASE_HOME" master
+mkdir -p "$CASE_HOME/.nvm/versions/node/v24.11.1/bin" "$CASE_HOME/.nvm/alias"
+printf '#!/bin/sh\necho v24.11.1\n' >"$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
+chmod 755 "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
+printf 'lts/*\n' >"$CASE_HOME/.nvm/alias/default"
+run_case nvm-done -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-done 0
+expect_text nvm-done out "S4-nvm done nvm in $CASE_HOME/.nvm with node 24.11.1 and a default alias"
+expect_no_event 'nvm-sourced'
+expect_no_event 'nvm:'
+
+# An nvm.sh outside a git checkout cannot be checked: moved aside, not sourced.
+new_home nvm-plain
+mkdir -p "$CASE_HOME/.nvm"
+printf '%s\n' 'printf "nvm-sourced\n" >>"$EVENT_LOG"' >"$CASE_HOME/.nvm/nvm.sh"
+run_case nvm-plain -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-plain 3
+expect_text nvm-plain out "$CASE_HOME/.nvm is not a git checkout, so its nvm.sh cannot be checked against the pinned commit and is not sourced"
+expect_line nvm-plain "mv -n $CASE_HOME/.nvm $CASE_HOME/.nvm.pre-dotfiles"
+expect_no_event 'nvm-sourced'
+
+# The pinned commit with a changed tracked file is not the pinned nvm.sh.
+new_home nvm-dirty
+nvm_checkout "$CASE_HOME" ''
+printf '# a local edit\n' >>"$CASE_HOME/.nvm/README.md"
+run_case nvm-dirty -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-dirty 3
+expect_text nvm-dirty out "$CASE_HOME/.nvm has local changes at the pinned commit, so its nvm.sh is not sourced"
+expect_line nvm-dirty "git -C $CASE_HOME/.nvm checkout -- ."
+expect_no_event 'nvm-sourced'
 
 # --- oh-my-zsh recovery: stow ran before the clone ---------------------------
 
@@ -1328,6 +1413,7 @@ expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
 expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
 expect_line manual 'HUMAN-BEGIN S2-brew-bundle judgment'
+expect_line manual 'HUMAN-BEGIN S4-nvm judgment'
 expect_line manual "$CASE_BREW/bin/brew uninstall --formula tldr"
 expect_line manual "$CASE_BREW/bin/brew uninstall --formula tealdeer"
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
@@ -1454,7 +1540,7 @@ for host in wsl-ubuntu sherlock marlowe; do
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
     check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts \
-    brew-conflict-check brew-conflict-cellar; do
+    brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
