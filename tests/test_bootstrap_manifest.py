@@ -101,6 +101,12 @@ class Row(dict):
         self.line = line
 
 
+def report(errors, rule, where, problem):
+    """Record PROBLEM (a message, or a falsy value for none) under RULE."""
+    if problem:
+        errors.append(f"[{rule}] {where}: {problem}")
+
+
 def expand_hosts(hosts):
     if hosts == "all":
         return list(KNOWN_HOSTS)
@@ -109,19 +115,13 @@ def expand_hosts(hosts):
     return hosts.split(",")
 
 
-def host_matches(hosts, host):
-    return host in expand_hosts(hosts)
-
-
 def hosts_error(hosts):
     if hosts in ("all", "unix"):
         return None
     parts = hosts.split(",")
     if any(part not in KNOWN_HOSTS for part in parts):
         return f"unknown host in {hosts!r}"
-    if len(set(parts)) != len(parts):
-        return f"duplicate host in {hosts!r}"
-    return None
+    return f"duplicate host in {hosts!r}" if len(set(parts)) != len(parts) else None
 
 
 def path_error(path):
@@ -139,17 +139,13 @@ def path_error(path):
         return f"only one leading token is allowed in {path!r}"
     if "~" in path:
         return f"~ is not allowed in {path!r}"
-    if ".." in rest.split("/"):
-        return f".. is not allowed in {path!r}"
-    return None
+    return f".. is not allowed in {path!r}" if ".." in rest.split("/") else None
 
 
 def probe_error(probe, hosts):
     kind, sep, value = probe.partition(":")
     if not sep:
-        if all(COMMAND_RE.match(part) for part in probe.split(",")):
-            return None
-        return f"bad command probe {probe!r}"
+        return None if all(COMMAND_RE.match(p) for p in probe.split(",")) else f"bad command probe {probe!r}"
     if kind in ("file", "dir"):
         return path_error(value)
     if kind == "font":
@@ -179,47 +175,38 @@ def read_tsv(path, rel, columns, errors):
     if text is None:
         return [], []
     rows, comments, header = [], [], False
-    for number, line in enumerate(text.split("\n"), 1):
+    lines = text.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    for number, line in enumerate(lines, 1):
         where = f"{rel}:{number}"
-        if line == "" and number == text.count("\n") + 1:
-            break
         if line.startswith("#"):
             comments.append((number, line))
             continue
-        if not line.strip():
-            errors.append(f"[tsv-format] {where}: blank line")
-            continue
         cells = line.split("\t")
-        if not header:
+        if not line.strip():
+            report(errors, "tsv-format", where, "blank line")
+        elif not header:
             header = True
-            if tuple(cells) != columns:
-                errors.append(f"[tsv-format] {where}: header must be {' '.join(columns)}")
-            continue
-        if len(cells) != len(columns):
-            errors.append(f"[tsv-format] {where}: {len(cells)} cells, expected {len(columns)}"
-                          " (trailing tab or missing cell)")
-            continue
-        if any(cell == "" or cell != cell.strip() for cell in cells):
-            errors.append(f"[tsv-format] {where}: empty or padded cell (use - for n/a)")
-            continue
-        for column, cell in zip(columns, cells):
-            bad = [c for c in (ABSENT_FORBIDDEN if column == "absent" else CELL_FORBIDDEN) if c in cell]
-            if bad:
-                errors.append(f"[cell-chars] {where}: {column} contains {' '.join(bad)}")
-        rows.append(Row(number, zip(columns, cells)))
-    if not header:
-        errors.append(f"[tsv-format] {rel}: no header row")
+            report(errors, "tsv-format", where, tuple(cells) != columns and f"header must be {' '.join(columns)}")
+        elif len(cells) != len(columns):
+            report(errors, "tsv-format", where, f"{len(cells)} cells, expected {len(columns)} (trailing tab?)")
+        elif any(cell == "" or cell != cell.strip() for cell in cells):
+            report(errors, "tsv-format", where, "empty or padded cell (use - for n/a)")
+        else:
+            for column, cell in zip(columns, cells):
+                bad = [c for c in (ABSENT_FORBIDDEN if column == "absent" else CELL_FORBIDDEN) if c in cell]
+                report(errors, "cell-chars", where, bad and f"{column} contains {' '.join(bad)}")
+            rows.append(Row(number, zip(columns, cells)))
+    report(errors, "tsv-format", rel, not header and "no header row")
     return rows, comments
 
 
-def check_unique(rows, key, rel, errors, rule="dup-id"):
+def check_unique(rows, key, rel, errors):
     seen = {}
     for row in rows:
-        value = key(row)
-        if value in seen:
-            errors.append(f"[{rule}] {rel}:{row.line}: {value} repeats line {seen[value]}")
-        else:
-            seen[value] = row.line
+        first = seen.setdefault(key(row), row.line)
+        report(errors, "dup-id", f"{rel}:{row.line}", first != row.line and f"{key(row)} repeats line {first}")
 
 
 def parse_declarations(comments, tool_ids, errors):
@@ -229,117 +216,82 @@ def parse_declarations(comments, tool_ids, errors):
             continue
         where = f"tools.tsv:{number}"
         alias, man = ALIAS_RE.match(line), MANUAL_RE.match(line)
-        match = alias or man
-        if not match:
-            errors.append(f"[declaration] {where}: expected '# alias: ID NAME' or '# manual: ID SCOPES'")
-            continue
-        if match.group(1) not in tool_ids:
-            errors.append(f"[declaration] {where}: unknown tool id {match.group(1)!r}")
-            continue
-        if alias:
+        if not (alias or man):
+            report(errors, "declaration", where, "expected '# alias: ID NAME' or '# manual: ID SCOPES'")
+        elif (alias or man).group(1) not in tool_ids:
+            report(errors, "declaration", where, f"unknown tool id {(alias or man).group(1)!r}")
+        elif alias:
             aliases.setdefault(alias.group(1), set()).add(alias.group(2))
-            continue
-        scopes = man.group(2).split(",")
-        unknown = [s for s in scopes if s not in KNOWN_HOSTS and s not in PROFILES]
-        if unknown:
-            errors.append(f"[declaration] {where}: unknown scope {', '.join(unknown)}")
-        manual.setdefault(man.group(1), set()).update(scopes)
+        else:
+            scopes = man.group(2).split(",")
+            unknown = [s for s in scopes if s not in KNOWN_HOSTS and s not in PROFILES]
+            report(errors, "declaration", where, unknown and f"unknown scope {', '.join(unknown)}")
+            manual.setdefault(man.group(1), set()).update(scopes)
     return aliases, manual
 
 
 def check_tools(rows, errors):
     check_unique(rows, lambda r: r["id"], "tools.tsv", errors)
     for row in rows:
-        where = f"tools.tsv:{row.line}"
-        if not ID_RE.match(row["id"]):
-            errors.append(f"[vocab] {where}: bad id {row['id']!r}")
-        if row["id"] in RESERVED_IDS:
-            errors.append(f"[reserved-id] {where}: {row['id']} is a structural doctor check")
-        if row["tier"] not in TIERS:
-            errors.append(f"[vocab] {where}: unknown tier {row['tier']!r}")
-        problem = hosts_error(row["hosts"])
-        if problem:
-            errors.append(f"[vocab] {where}: {problem}")
-        problem = probe_error(row["probe"], row["hosts"])
-        if problem:
-            errors.append(f"[probe] {where}: {problem}")
-        if row["version_flag"] not in VERSION_FLAGS:
-            errors.append(f"[vocab] {where}: unknown version_flag {row['version_flag']!r}")
-        if row["floor"] != "-" and not FLOOR_RE.match(row["floor"]):
-            errors.append(f"[floor] {where}: floor must be X.Y or X.Y.Z, not {row['floor']!r}")
-        presence = ":" in row["probe"]
-        if presence and (row["version_flag"] != "-" or row["floor"] != "-"):
-            errors.append(f"[probe-version] {where}: {row['probe'].split(':')[0]} probes are presence-only")
-        if row["floor"] != "-" and row["version_flag"] == "-":
-            errors.append(f"[probe-version] {where}: a floor needs a version_flag")
-        if row["doc"] not in STEP_IDS:
-            errors.append(f"[doc] {where}: unknown step id {row['doc']!r}")
+        where, flag, floor = f"tools.tsv:{row.line}", row["version_flag"], row["floor"]
+        report(errors, "vocab", where, not ID_RE.match(row["id"]) and f"bad id {row['id']!r}")
+        report(errors, "reserved-id", where, row["id"] in RESERVED_IDS and f"{row['id']} is a structural check")
+        report(errors, "vocab", where, row["tier"] not in TIERS and f"unknown tier {row['tier']!r}")
+        report(errors, "vocab", where, hosts_error(row["hosts"]))
+        report(errors, "probe", where, probe_error(row["probe"], row["hosts"]))
+        report(errors, "vocab", where, flag not in VERSION_FLAGS and f"unknown version_flag {flag!r}")
+        report(errors, "floor", where, floor != "-" and not FLOOR_RE.match(floor) and f"floor {floor!r} is not X.Y[.Z]")
+        presence = ":" in row["probe"] and (flag != "-" or floor != "-")
+        report(errors, "probe-version", where, presence and "file, dir, font, env and psmodule probes are presence-only")
+        report(errors, "probe-version", where, floor != "-" and flag == "-" and "a floor needs a version_flag")
+        report(errors, "doc", where, row["doc"] not in STEP_IDS and f"unknown step id {row['doc']!r}")
 
 
 def check_clones(rows, tools, errors):
     check_unique(rows, lambda r: r["id"], "git-clones.tsv", errors)
     for row in rows:
-        where = f"git-clones.tsv:{row.line}"
-        if row["id"] not in tools:
-            errors.append(f"[clone-id] {where}: {row['id']} is not a tools.tsv id")
-        problem = path_error(row["dest"])
-        if problem:
-            errors.append(f"[clone-dest] {where}: {problem}")
-        if not GITHUB_RE.match(row["url"]):
-            errors.append(f"[clone-url] {where}: url must be https://github.com/OWNER/REPO.git")
+        where, ref = f"git-clones.tsv:{row.line}", row["ref"]
+        report(errors, "clone-id", where, row["id"] not in tools and f"{row['id']} is not a tools.tsv id")
+        report(errors, "clone-dest", where, path_error(row["dest"]))
+        report(errors, "clone-url", where, not GITHUB_RE.match(row["url"]) and "url must be https://github.com/O/R.git")
         if row["id"] == "oh-my-zsh":
-            if row["ref"] != "master":
-                errors.append(f"[clone-ref] {where}: oh-my-zsh must track master (self-updating)")
-        elif not COMMIT_RE.match(row["ref"]):
-            errors.append(f"[clone-ref] {where}: ref must be a 40-hex commit")
+            report(errors, "clone-ref", where, ref != "master" and "oh-my-zsh must track master (self-updating)")
+        else:
+            report(errors, "clone-ref", where, not COMMIT_RE.match(ref) and "ref must be a 40-hex commit")
         problem = hosts_error(row["hosts"])
-        if problem:
-            errors.append(f"[vocab] {where}: {problem}")
-        elif host_matches(row["hosts"], "win"):
-            errors.append(f"[clone-hosts] {where}: clones are Unix-only (use unix or a list)")
+        report(errors, "vocab", where, problem)
+        windows = not problem and "win" in expand_hosts(row["hosts"])
+        report(errors, "clone-hosts", where, windows and "clones are Unix-only (use unix or a list)")
         tool = tools.get(row["id"])
-        if tool and ":" in tool["probe"]:
-            target = tool["probe"].partition(":")[2]
-            if not target.startswith(row["dest"] + "/"):
-                errors.append(f"[clone-probe] {where}: tools.tsv probe {target!r} is not inside {row['dest']}")
+        target = tool["probe"].partition(":")[2] if tool and ":" in tool["probe"] else None
+        outside = target is not None and not target.startswith(row["dest"] + "/")
+        report(errors, "clone-probe", where, outside and f"tools.tsv probe {target!r} is not inside {row['dest']}")
     missing = sorted(set(REQUIRED_CLONES) - {row["id"] for row in rows})
-    if missing:
-        errors.append(f"[clone-set] git-clones.tsv: missing {', '.join(missing)}")
+    report(errors, "clone-set", "git-clones.tsv", missing and f"missing {', '.join(missing)}")
 
 
 def check_installers(rows, tools, errors):
     check_unique(rows, lambda r: (r["id"], r["arch"]), "installers.tsv", errors)
     for row in rows:
-        where = f"installers.tsv:{row.line}"
-        if row["id"] not in tools:
-            errors.append(f"[installer-id] {where}: {row['id']} is not a tools.tsv id")
+        where, url, sha, dest = f"installers.tsv:{row.line}", row["url"], row["sha256"], row["dest"]
+        report(errors, "installer-id", where, row["id"] not in tools and f"{row['id']} is not a tools.tsv id")
         for column, vocabulary in (("kind", KINDS), ("arch", ARCHES), ("tier", TIERS), ("human", HUMANS)):
-            if row[column] not in vocabulary:
-                errors.append(f"[vocab] {where}: unknown {column} {row[column]!r}")
-        problem = hosts_error(row["hosts"])
-        if problem:
-            errors.append(f"[vocab] {where}: {problem}")
-        if not row["url"].startswith("https://") or " " in row["url"]:
-            errors.append(f"[installer-url] {where}: url must be https:// without spaces")
+            report(errors, "vocab", where, row[column] not in vocabulary and f"unknown {column} {row[column]!r}")
+        report(errors, "vocab", where, hosts_error(row["hosts"]))
+        bad_url = not url.startswith("https://") or " " in url
+        report(errors, "installer-url", where, bad_url and "url must be https:// without spaces")
         if row["human"] == "inspect":
-            if row["sha256"] != "-" and not SHA256_RE.match(row["sha256"]):
-                errors.append(f"[sha256] {where}: sha256 must be - or 64 lowercase hex")
+            report(errors, "sha256", where, sha != "-" and not SHA256_RE.match(sha) and "must be - or 64 lowercase hex")
         else:
-            if not SHA256_RE.match(row["sha256"]):
-                errors.append(f"[sha256] {where}: sha256 must be 64 lowercase hex (- only for inspect)")
-            if not PINNED_URL_RE.search(row["url"]):
-                errors.append(f"[installer-pin] {where}: url must name a commit or version")
+            report(errors, "sha256", where, not SHA256_RE.match(sha) and "must be 64 lowercase hex (- only for inspect)")
+            report(errors, "installer-pin", where, not PINNED_URL_RE.search(url) and "url must name a commit or version")
         if row["kind"] == "script":
-            if row["dest"] != "-":
-                errors.append(f"[installer-dest] {where}: scripts have dest -")
+            report(errors, "installer-dest", where, dest != "-" and "scripts have dest -")
         else:
-            problem = "dest - is only for scripts" if row["dest"] == "-" else path_error(row["dest"])
-            if problem:
-                errors.append(f"[installer-dest] {where}: {problem}")
+            report(errors, "installer-dest", where, "dest - is only for scripts" if dest == "-" else path_error(dest))
     present = {(row["id"], row["arch"]) for row in rows}
     missing = [f"{i}/{a}" for i, a in REQUIRED_INSTALLERS if (i, a) not in present]
-    if missing:
-        errors.append(f"[installer-set] installers.tsv: missing {', '.join(missing)}")
+    report(errors, "installer-set", "installers.tsv", missing and f"missing {', '.join(missing)}")
 
 
 def read_brewfiles(config, errors):
@@ -347,25 +299,19 @@ def read_brewfiles(config, errors):
     entries, seen = [], {}
     for tier in BREW_TIERS:
         rel = f"brew/{tier}.Brewfile"
-        text = read_text(config / rel, rel, errors)
-        if text is None:
-            continue
-        for number, line in enumerate(text.splitlines(), 1):
-            where = f"{rel}:{number}"
+        for number, line in enumerate((read_text(config / rel, rel, errors) or "").splitlines(), 1):
+            where, match = f"{rel}:{number}", BREW_RE.match(line)
             if line == "" or line.startswith("#") or TAP_RE.match(line):
                 continue
-            match = BREW_RE.match(line)
             if not match:
-                errors.append(f"[brewfile] {where}: not brew \"x\", cask \"x\" if OS.mac?, tap or comment")
+                report(errors, "brewfile", where, 'not brew "x", cask "x" if OS.mac?, tap or a comment')
                 continue
             kind, name, guard = match.groups()
-            if kind == "cask" and guard != "mac":
-                errors.append(f"[brewfile] {where}: casks need the if OS.mac? guard")
             base = name.rsplit("/", 1)[-1]
-            if base in ("nvm", "openssh") or base.startswith("openssh@"):
-                errors.append(f"[brewfile-forbidden] {where}: {base} must never be bundled")
-            if name in seen:
-                errors.append(f"[brewfile] {where}: {name} repeats {seen[name]}")
+            report(errors, "brewfile", where, kind == "cask" and guard != "mac" and "casks need if OS.mac?")
+            forbidden = base in ("nvm", "openssh") or base.startswith("openssh@")
+            report(errors, "brewfile-forbidden", where, forbidden and f"{base} must never be bundled")
+            report(errors, "brewfile", where, name in seen and f"{name} repeats {seen.get(name)}")
             seen[name] = where
             entries.append((name, guard))
     return entries
@@ -374,218 +320,175 @@ def read_brewfiles(config, errors):
 def read_apt(config, errors):
     lists = {}
     for name in ("common",) + tuple(APT_HOST_REQUIRED):
-        rel = f"apt/{name}.txt"
-        text = read_text(config / rel, rel, errors)
-        packages = []
-        for number, line in enumerate((text or "").splitlines(), 1):
+        rel, packages = f"apt/{name}.txt", []
+        for number, line in enumerate((read_text(config / rel, rel, errors) or "").splitlines(), 1):
             if line == "" or line.startswith("#"):
                 continue
             if not APT_RE.match(line):
-                errors.append(f"[apt] {rel}:{number}: {line!r} is not a bare package name")
+                report(errors, "apt", f"{rel}:{number}", f"{line!r} is not a bare package name")
             elif line in packages:
-                errors.append(f"[apt] {rel}:{number}: {line} repeats")
+                report(errors, "apt", f"{rel}:{number}", f"{line} repeats")
             else:
                 packages.append(line)
         lists[name] = packages
-    if set(lists["common"]) != set(APT_COMMON):
-        extra = sorted(set(lists["common"]) - set(APT_COMMON))
-        missing = sorted(set(APT_COMMON) - set(lists["common"]))
-        errors.append(f"[apt-set] apt/common.txt: missing {missing}, unexpected {extra}")
+    extra, missing = sorted(set(lists["common"]) - set(APT_COMMON)), sorted(set(APT_COMMON) - set(lists["common"]))
+    report(errors, "apt-set", "apt/common.txt", (extra or missing) and f"missing {missing}, unexpected {extra}")
     for host, required in APT_HOST_REQUIRED.items():
         missing = sorted(set(required) - set(lists[host]))
-        if missing:
-            errors.append(f"[apt-set] apt/{host}.txt: missing {', '.join(missing)}")
+        report(errors, "apt-set", f"apt/{host}.txt", missing and f"missing {', '.join(missing)}")
         overlap = sorted(set(lists[host]) & set(lists["common"]))
-        if overlap:
-            errors.append(f"[apt] apt/{host}.txt: already in common.txt: {', '.join(overlap)}")
+        report(errors, "apt", f"apt/{host}.txt", overlap and f"already in common.txt: {', '.join(overlap)}")
     return lists
 
 
 def read_login_env(config, errors):
     """Parse the restricted YAML of hpc-login-env.yml into (name, channels, deps)."""
     rel = "hpc-login-env.yml"
-    text = read_text(config / rel, rel, errors) or ""
-    name, channels, deps, section = None, [], [], None
-    for number, raw in enumerate(text.splitlines(), 1):
-        where = f"{rel}:{number}"
-        line = raw.rstrip()
+    name, lists, section = None, {"channels": [], "dependencies": []}, None
+    for number, raw in enumerate((read_text(config / rel, rel, errors) or "").splitlines(), 1):
+        where, line = f"{rel}:{number}", raw.rstrip()
         if not line or line.lstrip().startswith("#"):
             continue
-        if not raw[0].isspace():
-            key, sep, value = line.partition(":")
-            value = value.strip()
-            section = None
-            if not sep or key not in ("name", "channels", "dependencies"):
-                errors.append(f"[yml] {where}: only name, channels and dependencies are allowed")
-            elif key == "name":
-                name = value
-            elif value.startswith("[") and value.endswith("]"):
-                items = [v.strip() for v in value[1:-1].split(",") if v.strip()]
-                (channels if key == "channels" else deps).extend((number, i) for i in items)
-            elif value:
-                errors.append(f"[yml] {where}: {key} must be a list")
+        if raw[0].isspace():
+            item = line.strip()
+            if section is None or not item.startswith("- "):
+                report(errors, "yml", where, "expected a '- item' under channels or dependencies")
             else:
-                section = key
+                lists[section].append((number, item[2:].strip()))
             continue
-        item = line.strip()
-        if section is None or not item.startswith("- "):
-            errors.append(f"[yml] {where}: expected a '- item' under channels or dependencies")
-            continue
-        (channels if section == "channels" else deps).append((number, item[2:].strip()))
-    return name, [c for _, c in channels], deps
+        key, sep, value = line.partition(":")
+        value, section = value.strip(), None
+        if not sep or key not in ("name", "channels", "dependencies"):
+            report(errors, "yml", where, "only name, channels and dependencies are allowed")
+        elif key == "name":
+            name = value
+        elif value.startswith("[") and value.endswith("]"):
+            lists[key].extend((number, v.strip()) for v in value[1:-1].split(",") if v.strip())
+        elif value:
+            report(errors, "yml", where, f"{key} must be a list")
+        else:
+            section = key
+    return name, [c for _, c in lists["channels"]], lists["dependencies"]
 
 
 def check_login_env(config, tools, aliases, errors):
+    rel = "hpc-login-env.yml"
     name, channels, deps = read_login_env(config, errors)
-    if name != "login":
-        errors.append("[yml] hpc-login-env.yml: name must be login")
-    if channels != ["conda-forge"]:
-        errors.append("[yml] hpc-login-env.yml: channels must be exactly [conda-forge]")
+    report(errors, "yml", rel, name != "login" and "name must be login")
+    report(errors, "yml", rel, channels != ["conda-forge"] and "channels must be exactly [conda-forge]")
     names = {}
     for number, dep in deps:
-        where = f"hpc-login-env.yml:{number}"
-        match = DEP_RE.match(dep)
+        where, match = f"{rel}:{number}", DEP_RE.match(dep)
         if not match:
-            errors.append(f"[yml] {where}: bad dependency {dep!r}")
+            report(errors, "yml", where, f"bad dependency {dep!r}")
             continue
         package, spec = match.groups()
-        if package in names:
-            errors.append(f"[yml] {where}: {package} repeats")
+        report(errors, "yml", where, package in names and f"{package} repeats")
         names[package] = spec
-        if package in LOGIN_TRAPS:
-            errors.append(f"[yml-trap] {where}: use {LOGIN_TRAPS[package]} instead of {package}")
-        tool = next((t for t in tools.values() if package == t["id"] or package in aliases.get(t["id"], ())), None)
-        if tool and tool["floor"] != "-" and spec != f">={tool['floor']}":
-            errors.append(f"[yml-floor] {where}: {package} must be pinned >={tool['floor']} like tools.tsv")
+        report(errors, "yml-trap", where, package in LOGIN_TRAPS and f"use {LOGIN_TRAPS.get(package)} for {package}")
+        tool = next((t for t in tools.values() if package in {t["id"]} | aliases.get(t["id"], set())), None)
+        floor = tool["floor"] if tool else "-"
+        report(errors, "yml-floor", where, floor != "-" and spec != f">={floor}" and f"{package} needs >={floor}")
     missing = sorted(set(LOGIN_REQUIRED) - set(names))
-    if missing:
-        errors.append(f"[yml-set] hpc-login-env.yml: missing {', '.join(missing)}")
+    report(errors, "yml-set", rel, missing and f"missing {', '.join(missing)}")
     return set(names) | ({name} if name else set())
 
 
 def read_winget(config, errors):
-    rel = "winget.json"
+    rel, ids = "winget.json", []
     text = read_text(config / rel, rel, errors)
-    if text is None:
-        return set()
     try:
-        data = json.loads(text)
+        data = json.loads(text) if text is not None else {}
     except json.JSONDecodeError as error:
-        errors.append(f"[winget] {rel}: invalid JSON ({error.msg})")
+        report(errors, "winget", rel, f"invalid JSON ({error.msg})")
         return set()
-    if not isinstance(data, dict) or data.get("$schema") != WINGET_SCHEMA:
-        errors.append(f"[winget] {rel}: $schema must be {WINGET_SCHEMA}")
+    if text is None or not isinstance(data, dict) or data.get("$schema") != WINGET_SCHEMA:
+        report(errors, "winget", rel, text is not None and f"$schema must be {WINGET_SCHEMA}")
         return set()
-    if not isinstance(data.get("CreationDate"), str):
-        errors.append(f"[winget] {rel}: CreationDate is required")
-    sources = data.get("Sources")
-    if not isinstance(sources, list) or not sources:
-        errors.append(f"[winget] {rel}: Sources must be a non-empty list")
-        return set()
-    ids = []
-    for index, source in enumerate(sources):
-        details = source.get("SourceDetails") if isinstance(source, dict) else None
-        keys = ("Name", "Identifier", "Argument", "Type")
-        if not isinstance(details, dict) or not all(isinstance(details.get(k), str) for k in keys):
-            errors.append(f"[winget] {rel}: Sources[{index}].SourceDetails needs {', '.join(keys)}")
-        packages = source.get("Packages") if isinstance(source, dict) else None
-        if not isinstance(packages, list) or not packages:
-            errors.append(f"[winget] {rel}: Sources[{index}].Packages must be a non-empty list")
-            continue
+    report(errors, "winget", rel, not isinstance(data.get("CreationDate"), str) and "CreationDate is required")
+    sources = data.get("Sources") if isinstance(data.get("Sources"), list) else []
+    report(errors, "winget", rel, not sources and "Sources must be a non-empty list")
+    keys = ("Name", "Identifier", "Argument", "Type")
+    for index, source in enumerate(s if isinstance(s, dict) else {} for s in sources):
+        details = source.get("SourceDetails") if isinstance(source.get("SourceDetails"), dict) else {}
+        bad = not all(isinstance(details.get(k), str) for k in keys)
+        report(errors, "winget", rel, bad and f"Sources[{index}].SourceDetails needs {', '.join(keys)}")
+        packages = source.get("Packages") if isinstance(source.get("Packages"), list) else []
+        report(errors, "winget", rel, not packages and f"Sources[{index}].Packages must be a non-empty list")
         for package in packages:
             identifier = package.get("PackageIdentifier") if isinstance(package, dict) else None
             if not isinstance(identifier, str) or not WINGET_ID_RE.match(identifier):
-                errors.append(f"[winget] {rel}: bad PackageIdentifier {identifier!r}")
+                report(errors, "winget", rel, f"bad PackageIdentifier {identifier!r}")
             elif identifier in ids:
-                errors.append(f"[winget] {rel}: {identifier} repeats")
+                report(errors, "winget", rel, f"{identifier} repeats")
             else:
                 ids.append(identifier)
-    if not any(isinstance(s, dict) and isinstance(s.get("SourceDetails"), dict)
-               and s["SourceDetails"].get("Name") == "winget" for s in sources):
-        errors.append(f"[winget] {rel}: no source named winget")
+    named = any(isinstance(s, dict) and isinstance(s.get("SourceDetails"), dict)
+                and s["SourceDetails"].get("Name") == "winget" for s in sources)
+    report(errors, "winget", rel, sources and not named and "no source named winget")
     missing = sorted(set(WINGET_REQUIRED) - set(ids))
-    if missing:
-        errors.append(f"[winget-set] {rel}: missing {', '.join(missing)}")
+    report(errors, "winget-set", rel, missing and f"missing {', '.join(missing)}")
     return set(ids)
+
+
+def host_sources(host, brew, apt, login, winget, clones, installers):
+    profile = HOST_PROFILE[host]
+    names = {r["id"] for r in clones + installers if not hosts_error(r["hosts"]) and host in expand_hosts(r["hosts"])}
+    if profile == "macos":
+        names |= {name for name, guard in brew if guard != "linux"}
+    elif profile == "debian":
+        names |= {name for name, guard in brew if guard != "mac"}
+        names |= set(apt.get("common", ())) | set(apt.get(host, ()))
+    return names | (login if profile == "hpc" else set()) | (winget if profile == "windows" else set())
 
 
 def check_coverage(tools, aliases, manual, sources, errors):
     for row in tools.values():
         if row["tier"] not in COVERED_TIERS or hosts_error(row["hosts"]):
             continue
-        names = {row["id"]} | aliases.get(row["id"], set())
+        names, scopes = {row["id"]} | aliases.get(row["id"], set()), manual.get(row["id"], set())
         for host in expand_hosts(row["hosts"]):
-            scopes = manual.get(row["id"], set())
-            if names & sources[host] or host in scopes or HOST_PROFILE[host] in scopes:
-                continue
-            errors.append(f"[coverage] tools.tsv:{row.line}: no manifest installs {row['id']} on {host};"
-                          " add it to one, or declare '# alias:' or '# manual:'")
-
-
-def host_sources(host, brew, apt, login, winget, clones, installers):
-    profile = HOST_PROFILE[host]
-    names = {r["id"] for r in clones + installers if not hosts_error(r["hosts"]) and host_matches(r["hosts"], host)}
-    if profile == "macos":
-        names |= {name for name, guard in brew if guard != "linux"}
-    elif profile == "debian":
-        names |= {name for name, guard in brew if guard != "mac"}
-        names |= set(apt.get("common", ())) | set(apt.get(host, ()))
-    elif profile == "hpc":
-        names |= login
-    else:
-        names |= winget
-    return names
+            covered = names & sources[host] or host in scopes or HOST_PROFILE[host] in scopes
+            report(errors, "coverage", f"tools.tsv:{row.line}", not covered and
+                   f"no manifest installs {row['id']} on {host}; add it, or declare '# alias:' or '# manual:'")
 
 
 def check_file_text(config, errors):
     for path in sorted(p for p in config.rglob("*") if p.is_file()):
         rel = path.relative_to(config).as_posix()
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            errors.append(f"[tsv-format] {rel}: not UTF-8")
-            continue
+        text = read_text(path, rel, errors) or ""
         for number, line in enumerate(text.splitlines(), 1):
-            if HOME_RE.search(line):
-                errors.append(f"[home-literal] {rel}:{number}: machine-specific home path")
-        if path.suffix != ".json" and not PINNED_RE.search(text):
-            errors.append(f"[pinned-header] {rel}: needs a '# pinned YYYY-MM-DD' comment")
+            report(errors, "home-literal", f"{rel}:{number}", HOME_RE.search(line) and "machine-specific home path")
+        missing = path.suffix != ".json" and not PINNED_RE.search(text)
+        report(errors, "pinned-header", rel, missing and "needs a '# pinned YYYY-MM-DD' comment")
 
 
 def check_docs(repo, tools, errors):
     text = read_text(repo / "docs/bootstrap.md", "docs/bootstrap.md", errors) or ""
     found = [m.group(1) for m in map(HEADING_RE.match, text.splitlines()) if m]
     for step in STEP_IDS:
-        if found.count(step) != 1:
-            errors.append(f"[docs-headings] docs/bootstrap.md: {found.count(step)} '### {step}:' headings, expected 1")
+        count = found.count(step)
+        report(errors, "docs-headings", "docs/bootstrap.md", count != 1 and f"{count} '### {step}:' headings, expected 1")
     for step in sorted(set(found) - set(STEP_IDS)):
-        errors.append(f"[docs-headings] docs/bootstrap.md: '### {step}:' is not a contract step id")
+        report(errors, "docs-headings", "docs/bootstrap.md", f"'### {step}:' is not a contract step id")
     text = read_text(repo / "docs/dependencies.md", "docs/dependencies.md", errors) or ""
-    cells = set()
-    for line in text.splitlines():
-        if line.startswith("|"):
-            cells.update(cell.strip().strip("`") for cell in line.strip("|").split("|"))
+    cells = {cell.strip().strip("`") for line in text.splitlines() if line.startswith("|")
+             for cell in line.strip("|").split("|")}
     for row in tools.values():
-        if row["id"] not in cells:
-            errors.append(f"[docs-deps] docs/dependencies.md: no table cell for tools id {row['id']}")
+        report(errors, "docs-deps", "docs/dependencies.md", row["id"] not in cells and f"no table cell for {row['id']}")
 
 
 def split_skill(path, rel, errors):
     text = read_text(path, rel, errors)
-    if text is None:
+    if text is None or not text.startswith("---\n") or "\n---\n" not in text[3:]:
+        report(errors, "skill", rel, text is not None and "missing --- frontmatter")
         return None, None
-    if not text.startswith("---\n") or "\n---\n" not in text[3:]:
-        errors.append(f"[skill] {rel}: missing --- frontmatter")
-        return None, None
-    end = text.index("\n---\n", 3)
-    keys = {}
+    end, keys = text.index("\n---\n", 3), {}
     for line in text[4:end].splitlines():
         if not line.strip() or line[0].isspace() or line.lstrip().startswith("#"):
             continue
         key, sep, value = line.partition(":")
-        if not sep:
-            errors.append(f"[skill] {rel}: bad frontmatter line {line!r}")
-            continue
+        report(errors, "skill", rel, not sep and f"bad frontmatter line {line!r}")
         keys[key.strip()] = value.strip()
     return keys, text[end + 5:]
 
@@ -594,21 +497,18 @@ def check_skills(repo, errors):
     claude, claude_body = split_skill(repo / SKILL_CLAUDE, SKILL_CLAUDE.as_posix(), errors)
     codex, codex_body = split_skill(repo / SKILL_CODEX, SKILL_CODEX.as_posix(), errors)
     for rel, keys, allowed in ((SKILL_CLAUDE, claude, CLAUDE_KEYS), (SKILL_CODEX, codex, CODEX_KEYS)):
+        where, name, extra = rel.as_posix(), (keys or {}).get("name", ""), sorted(set(keys or {}) - allowed)
         if keys is None:
             continue
-        if keys.get("name") != rel.parent.name or not SKILL_NAME_RE.match(keys.get("name", "")):
-            errors.append(f"[skill] {rel.as_posix()}: name must equal the directory name {rel.parent.name}")
-        if not 0 < len(keys.get("description", "")) <= 1024:
-            errors.append(f"[skill] {rel.as_posix()}: description must be 1-1024 characters")
-        if len(keys.get("compatibility", "")) > 500:
-            errors.append(f"[skill] {rel.as_posix()}: compatibility is over 500 characters")
-        extra = sorted(set(keys) - allowed)
-        if extra:
-            errors.append(f"[skill] {rel.as_posix()}: frontmatter keys not allowed: {', '.join(extra)}")
-    if claude is not None and claude.get("disable-model-invocation") != "true":
-        errors.append(f"[skill] {SKILL_CLAUDE.as_posix()}: needs disable-model-invocation: true")
-    if claude_body is not None and codex_body is not None and claude_body != codex_body:
-        errors.append("[skill] SKILL.md bodies differ between .claude/skills and .agents/skills")
+        bad_name = name != rel.parent.name or not SKILL_NAME_RE.match(name)
+        report(errors, "skill", where, bad_name and f"name must equal the directory name {rel.parent.name}")
+        report(errors, "skill", where, not 0 < len(keys.get("description", "")) <= 1024 and "description is 1-1024 chars")
+        report(errors, "skill", where, len(keys.get("compatibility", "")) > 500 and "compatibility is over 500 chars")
+        report(errors, "skill", where, extra and f"frontmatter keys not allowed: {', '.join(extra)}")
+    flagged = claude is None or claude.get("disable-model-invocation") == "true"
+    report(errors, "skill", SKILL_CLAUDE.as_posix(), not flagged and "needs disable-model-invocation: true")
+    differ = claude_body is not None and codex_body is not None and claude_body != codex_body
+    report(errors, "skill", "SKILL.md", differ and "bodies differ between .claude/skills and .agents/skills")
 
 
 def validate(config_dir, repo_root):
@@ -624,12 +524,9 @@ def validate(config_dir, repo_root):
     aliases, manual = parse_declarations(comments, tools, errors)
     check_clones(clone_rows, tools, errors)
     check_installers(installer_rows, tools, errors)
-    brew = read_brewfiles(config, errors)
-    apt = read_apt(config, errors)
-    login = check_login_env(config, tools, aliases, errors)
-    winget = read_winget(config, errors)
-    sources = {host: host_sources(host, brew, apt, login, winget, clone_rows, installer_rows)
-               for host in KNOWN_HOSTS}
+    brew, apt = read_brewfiles(config, errors), read_apt(config, errors)
+    login, winget = check_login_env(config, tools, aliases, errors), read_winget(config, errors)
+    sources = {host: host_sources(host, brew, apt, login, winget, clone_rows, installer_rows) for host in KNOWN_HOSTS}
     check_coverage(tools, aliases, manual, sources, errors)
     check_file_text(config, errors)
     check_docs(repo, tools, errors)
@@ -695,14 +592,14 @@ class RejectionTests(unittest.TestCase):
                 mutate()
                 self.assertRule(rule, name)
 
-    def tools(self, row_id, column, value):
-        return lambda: self.set_cell("tools.tsv", row_id, column, value, TOOLS_COLUMNS)
+    def tools(self, *cell):
+        return lambda: self.set_cell("tools.tsv", *cell, TOOLS_COLUMNS)
 
-    def clones(self, row_id, column, value):
-        return lambda: self.set_cell("git-clones.tsv", row_id, column, value, CLONES_COLUMNS)
+    def clones(self, *cell):
+        return lambda: self.set_cell("git-clones.tsv", *cell, CLONES_COLUMNS)
 
-    def installers(self, row_id, column, value):
-        return lambda: self.set_cell("installers.tsv", row_id, column, value, INSTALLERS_COLUMNS)
+    def installers(self, *cell):
+        return lambda: self.set_cell("installers.tsv", *cell, INSTALLERS_COLUMNS)
 
     def test_tsv_structure(self):
         fzf = "fzf\tcore\tall\tfzf\t--version\t0.58.0\tbroken\tS2-brew-bundle"
