@@ -480,7 +480,7 @@ bootstrap_check_stow_links() {
         esac
     done
     if [ -n "$broken" ]; then
-        bootstrap_check_result missing "${broken#, }; run ./stow-all.sh HOST"
+        bootstrap_check_result missing "${broken#, }; stow with the line the H7-stow block of ./setup-host.sh prints"
     elif [ -n "$elsewhere" ]; then
         bootstrap_check_result warn "${elsewhere#, } (not $root/common)"
     else

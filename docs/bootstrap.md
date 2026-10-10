@@ -41,7 +41,9 @@ with the smoke test. Pick the host overlay yourself (`mac`, `wsl-ubuntu`,
 > directory; after that, oh-my-zsh can no longer be cloned into `~/.oh-my-zsh`
 > and zsh aborts where `.zshrc` sources `oh-my-zsh.sh`. `./setup-host.sh` clones
 > it in [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones), before you
-> stow. If stow ran first, use the first recipe in
+> stow, and `./stow-all.sh` refuses to stow the zsh package until
+> `~/.oh-my-zsh/oh-my-zsh.sh` exists (`DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1`
+> overrides that). If stow ran first, use the first recipe in
 > [X-recovery](#x-recovery-recovery-recipes).
 
 GNU Stow is not on your PATH before the first stow: it comes from Homebrew on
@@ -1098,7 +1100,10 @@ S4-setup-sync. `./stow-all.sh H` runs the Claude and Codex sync helpers (writing
 `~/.codex/rules/portable.rules`), links `common/` and then the overlay into
 `$HOME`, tightens `~/.ssh` modes and records the host for the doctor and the
 login updater. Stow refuses to replace regular files, and Ubuntu's `/etc/skel`
-creates `~/.bashrc` and `~/.profile`.
+creates `~/.bashrc` and `~/.profile` (RHEL-family homes, such as Sherlock's,
+also `~/.bash_profile`). `./stow-all.sh` runs a Stow dry run of every package
+before the sync helpers write anything and stops on a conflict, and it refuses
+to stow the zsh package before oh-my-zsh is cloned.
 
 Before the first stow, `stow` is not on your PATH: it comes from Homebrew,
 Linuxbrew or the login env, which only the stowed rc files put on PATH, and

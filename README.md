@@ -28,7 +28,8 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 ```bash
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && git submodule update --init --recursive
-./setup-host.sh --host mac  # new machine only: pinned day-zero tools (docs/bootstrap.md)
+# new machine: ./setup-host.sh --host mac instead of the next two lines; rerun it after
+# each HUMAN block, then run the H7-stow line it prints (docs/bootstrap.md Quick start)
 ./setup-sync.sh           # once per clone; Python 3.11+ and venv required
 ./stow-all.sh mac          # or: wsl-ubuntu, lab-ubuntu, sherlock, marlowe; no host = common only
 ```
@@ -92,11 +93,18 @@ and install what the configs assume before step 2 (`<host>` is `mac`,
 ./setup-host.sh --host <host>           # pinned installs without sudo; prints HUMAN blocks for the rest
 ```
 
-oh-my-zsh must be installed before the first `./stow-all.sh`: Stow creates a real
-`~/.oh-my-zsh/custom/`, after which oh-my-zsh can no longer be cloned there.
-`setup-host.sh` clones it, never runs sudo, `chsh` or stow itself, and prints
-those steps as HUMAN blocks for you, including the first `./stow-all.sh` with
-the one-shot `PATH=` prefix it needs before Stow is on your PATH. On native
+`setup-host.sh` exits 3 while work remains: run the HUMAN blocks it prints and
+rerun it until H7-stow is the only blocking step. Then run the line its H7-stow
+block prints, the one-shot `PATH=` prefix Stow needs before it is on your PATH
+plus the clone's `stow-all.sh <host>`, instead of step 2 (setup-host already
+ran `./setup-sync.sh`), and rerun setup-host once more. oh-my-zsh must be
+cloned before the first stow: Stow would create a real `~/.oh-my-zsh/custom/`,
+after which oh-my-zsh can no longer be cloned there, so `./stow-all.sh` refuses
+until `~/.oh-my-zsh/oh-my-zsh.sh` exists (`DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1`
+overrides that). It also stops, before writing anything, when Stow would have
+to replace a regular file such as the `~/.bashrc` a fresh Ubuntu home gets
+from `/etc/skel`.
+`setup-host.sh` clones oh-my-zsh and never runs sudo, `chsh` or stow itself. On native
 Windows the twins are `.\doctor.ps1` and `.\setup-host.ps1`. Other Linux
 distributions have no overlay: install the tools yourself and stow `common/`
 only with `./stow-all.sh` (no host). [docs/bootstrap.md](docs/bootstrap.md) is
@@ -110,7 +118,7 @@ git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/
 cd ~/dotfiles
 ```
 
-**2.** Provision the small configuration parser, then stow your host (`common/` first, then the overlay):
+**2.** On a machine that already has the day-zero tools, provision the small configuration parser, then stow your host (`common/` first, then the overlay); a new machine did this in step 0:
 
 ```bash
 ./setup-sync.sh                  # requires Python 3.11+ with venv/pip support
@@ -372,6 +380,7 @@ The installer stores the selected host and last successfully applied commit in l
 | `DOTFILES_AUTO_STOW` | `1` | `0` keeps pull enabled but skips automatic stow |
 | `DOTFILES_DIR` | `~/dotfiles` | repository path |
 | `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only |
+| `DOTFILES_STOW_WITHOUT_OH_MY_ZSH` | `0` | `1` lets `./stow-all.sh` stow the zsh package before `~/.oh-my-zsh/oh-my-zsh.sh` exists |
 | `DOTFILES_COLOR` | `auto` | `always` forces ANSI color; `never` disables it |
 | `NO_COLOR` | unset | any nonempty value disables color, including `0` |
 
@@ -587,11 +596,10 @@ Third-party skills are also not stored in this repository. [`scripts/awesome-ski
 After cloning on a new machine:
 
 ```bash
-./setup-host.sh --host <host>   # day-zero tools first, see docs/bootstrap.md
-./setup-sync.sh
-./stow-all.sh <host>
-sync-skills
-# Then authenticate Claude Code and Codex on this host.
+./setup-host.sh --host <host>   # day-zero tools and .venv-sync; rerun after each HUMAN block (docs/bootstrap.md)
+# then run the line its H7-stow block prints: the PATH= prefix for stow, then ~/dotfiles/stow-all.sh <host>
+# H7-sync-skills: the skill sync starts in the first new shell after the stow unless AWESOME_SKILLS_AUTO_UPDATE=0
+# then authenticate GitHub, Claude Code and Codex on this host (H7-auth)
 ```
 
 ## Pinned Sherlock toolkit

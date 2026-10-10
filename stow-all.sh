@@ -10,6 +10,10 @@ set -euo pipefail
 # The common Claude package links local Node helpers and syncs its defaults;
 # Node.js 22+ must be on PATH when Claude runs the hooks and status line.
 # Day-zero prerequisites come from ./setup-host.sh and are checked by ./doctor.sh.
+# It refuses to stow the zsh package before oh-my-zsh is cloned, since Stow
+# would create a real ~/.oh-my-zsh/custom that blocks the clone
+# (DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1 stows anyway), and stops before the AI
+# sync helpers write anything when a Stow dry run finds a conflicting file.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
 # Sherlock toolkit installation is a separate explicit ./setup-sherlock-kit.sh step.
 # First-party Sherlock adapters use ./setup-sherlock-adapters.sh; hooks stay opt-in.
@@ -63,6 +67,35 @@ fi
 if ! command -v stow >/dev/null 2>&1; then
     dotfiles_log error 'required GNU Stow is missing; install stow before applying dotfiles.'
     exit 1
+fi
+
+# A package that links into ~/.oh-my-zsh (common/zsh) needs the oh-my-zsh
+# clone first: with --no-folding, Stow would create a real ~/.oh-my-zsh/custom,
+# after which oh-my-zsh can no longer be cloned there and zsh aborts.
+NEEDS_OMZ=0
+for omz_dir in "$COMMON_DIR"/*/.oh-my-zsh ${HOST:+"$HOST_DIR"/*/.oh-my-zsh}; do
+    if [[ -d "$omz_dir" ]]; then
+        NEEDS_OMZ=1
+    fi
+done
+if [[ "$NEEDS_OMZ" == 1 && ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" && "${DOTFILES_STOW_WITHOUT_OH_MY_ZSH:-0}" != 1 ]]; then
+    if [[ -e "$HOME/.oh-my-zsh" || -L "$HOME/.oh-my-zsh" ]]; then
+        dotfiles_log error "$HOME/.oh-my-zsh exists without oh-my-zsh.sh, as after a stow before the oh-my-zsh clone; turn it into the clone first (docs/bootstrap.md X-recovery)."
+    else
+        dotfiles_log error "oh-my-zsh is not cloned yet, and stowing now would create a real $HOME/.oh-my-zsh/custom that blocks the clone."
+        dotfiles_log error "Clone it first: ./setup-host.sh --host ${HOST:-HOST} (S3-clones), or clone_pinned oh-my-zsh on another Linux (docs/bootstrap.md X-other-linux)."
+    fi
+    dotfiles_log error 'Nothing was changed. To stow without oh-my-zsh anyway, rerun with DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1.'
+    exit 1
+fi
+
+COMMON_PKGS=''
+if compgen -G "${COMMON_DIR}"'/*/' >/dev/null; then
+    COMMON_PKGS=$(basename -a "${COMMON_DIR}"/*/)
+fi
+HOST_PKGS=''
+if [[ -n "$HOST" ]] && compgen -G "${HOST_DIR}"'/*/' >/dev/null; then
+    HOST_PKGS=$(basename -a "${HOST_DIR}"/*/)
 fi
 
 cd "$REPO_ROOT" # ensures ./.stowrc is picked up
@@ -133,6 +166,26 @@ if [[ "$SYNC_CLAUDE" == 1 ]]; then
     "$CLAUDE_SYNC" --quiet --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
 
+# Stow never replaces a regular file (a fresh home's ~/.bashrc and ~/.profile
+# from /etc/skel, for one). A dry run of both stows finds every conflict
+# before the sync helpers write ~/.claude and ~/.codex. Its simulation notice
+# is shown only with the conflicts.
+stow_dry_run() {
+    local output
+    # shellcheck disable=SC2086 # package names are single words
+    if ! output=$(stow -n --restow --no-folding -d "$1" $2 2>&1); then
+        printf '%s\n' "$output" >&2
+        dotfiles_log error "Stow would conflict with the files listed above, so nothing was changed. Move each one aside (for example mv ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt, then rerun (docs/bootstrap.md H7-stow)."
+        exit 1
+    fi
+}
+if [[ -n "$COMMON_PKGS" ]]; then
+    stow_dry_run "$COMMON_DIR" "$COMMON_PKGS"
+fi
+if [[ -n "$HOST_PKGS" ]]; then
+    stow_dry_run "$HOST_DIR" "$HOST_PKGS"
+fi
+
 if [[ "$SYNC_CODEX" == 1 ]]; then
     dotfiles_log step 'Synchronizing portable Codex settings'
     "$CODEX_SYNC" --quiet "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
@@ -155,20 +208,18 @@ if git config --local --get-regexp '^filter\.codex-portable\.' >/dev/null 2>&1; 
 fi
 
 dotfiles_log step 'Stowing common packages:'
-if compgen -G "${COMMON_DIR}"'/*/' >/dev/null; then
-    common_pkgs=$(basename -a "${COMMON_DIR}"/*/)
-    dotfiles_log info "Packages: ${common_pkgs//$'\n'/ }"
+if [[ -n "$COMMON_PKGS" ]]; then
+    dotfiles_log info "Packages: ${COMMON_PKGS//$'\n'/ }"
     # shellcheck disable=SC2086
-    stow --restow --no-folding -d "$COMMON_DIR" $common_pkgs
+    stow --restow --no-folding -d "$COMMON_DIR" $COMMON_PKGS
 fi
 
 if [[ -n "$HOST" ]]; then
     dotfiles_log step 'Stowing host-specific packages:'
-    if compgen -G "${HOST_DIR}"'/*/' >/dev/null; then
-        host_pkgs=$(basename -a "${HOST_DIR}"/*/)
-        dotfiles_log info "Packages: ${host_pkgs//$'\n'/ }"
+    if [[ -n "$HOST_PKGS" ]]; then
+        dotfiles_log info "Packages: ${HOST_PKGS//$'\n'/ }"
         # shellcheck disable=SC2086
-        stow --restow --no-folding -d "$HOST_DIR" $host_pkgs
+        stow --restow --no-folding -d "$HOST_DIR" $HOST_PKGS
     fi
 fi
 
