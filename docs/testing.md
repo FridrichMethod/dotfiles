@@ -71,6 +71,11 @@ Windows job runs that suite and the validator from `tests/run.ps1`. None of
 them downloads anything or touches the runner's home. Fresh-machine runs are
 the [acceptance checklist](bootstrap.md#acceptance-checklist), not CI.
 
+`tests/host-overlays.sh` sources the `wsl-ubuntu` and `lab-ubuntu` zsh and bash
+overlays in a clean environment with a missing, a non-executable and a fake
+Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
+`brew shellenv` line applies only once brew can run.
+
 Run either entrypoint from any working directory. To check prerequisites only:
 
 ```sh

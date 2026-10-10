@@ -77,6 +77,7 @@ tests=(
     doctor.sh
     setup-host.sh
     bootstrap-windows.sh
+    host-overlays.sh
 )
 
 for test_name in "${tests[@]}"; do

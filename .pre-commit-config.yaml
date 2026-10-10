@@ -162,3 +162,9 @@ repos:
         language: script
         pass_filenames: false
         files: ^(doctor\.ps1|setup-host\.ps1|lib/bootstrap\.ps1|lib/terminal\.ps1|config/bootstrap/.*|tests/bootstrap(-windows\.sh|\.ps1))$
+      - id: host-overlays
+        name: silent Linuxbrew guard in the Ubuntu overlays
+        entry: tests/host-overlays.sh
+        language: script
+        pass_filenames: false
+        files: ^((wsl|lab)-ubuntu/(zsh/\.config/zsh/\.zshrc|bash/\.config/bash/\.bashrc)|tests/host-overlays\.sh)$
