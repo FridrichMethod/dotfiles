@@ -34,8 +34,11 @@ STEP_IDS = (
     "H7-doctor", "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync",
     "HW-clone", "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl",
     "HW-auth", "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
+# Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
+# checks, doctor.ps1's core-symlinks, and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
-                "omz-order", "nvm-homebrew")
+                "omz-order", "nvm-homebrew", "core-symlinks", "gh-auth", "claude-auth", "codex-auth",
+                "zsh-smoke")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
@@ -49,12 +52,18 @@ BREW_HOSTS, DEBIAN_HOSTS = "mac,wsl-ubuntu,lab-ubuntu", "wsl-ubuntu,lab-ubuntu"
 GH, RAW = "https://github.com/", "https://raw.githubusercontent.com/"
 REQUIRED_INSTALLERS = {
     ("homebrew", "any"): ("script", BREW_HOSTS, "core", "sudo", "-", RAW + "Homebrew/install/*/install.sh"),
-    ("nvm", "any"): ("script", BREW_HOSTS, "ai", "-", "-", RAW + "nvm-sh/nvm/v*/install.sh"),
+    # S4-nvm hands the commit in this url to the installer and checks it.
+    ("nvm", "any"): ("script", BREW_HOSTS, "ai", "-", "-", RAW + "nvm-sh/nvm/" + "[0-9a-f]" * 40 + "/install.sh"),
     ("claude", "any"): ("script", DEBIAN_HOSTS, "ai", "inspect", "-", "https://claude.ai/install.sh"),
     ("nerd-font", "any"): ("archive", "lab-ubuntu", "desktop", "-", "$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont",
                            GH + "ryanoasis/nerd-fonts/releases/download/v*/CascadiaMono.tar.xz"),
     ("bat-theme", "any"): ("file", "all", "core", "-", "$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme",
-                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme")}
+                           RAW + "catppuccin/bat/*/themes/Catppuccin%20Mocha.tmTheme"),
+    ("gh-apt", "any"): ("file", "lab-ubuntu", "cli", "sudo", "/etc/apt/keyrings/githubcli-archive-keyring.gpg",
+                        "https://cli.github.com/packages/githubcli-archive-keyring.gpg")}
+# Rows whose url names no version, because the vendor publishes one fixed url:
+# the sha256 alone pins them, and a changed file fails closed.
+UNVERSIONED_INSTALLERS = {("gh-apt", "any")}
 for _arch, _mamba, _kitty in (("x86_64", "64", "x86_64"), ("aarch64", "aarch64", "arm64")):
     REQUIRED_INSTALLERS[("micromamba", _arch)] = ("binary", "sherlock,marlowe", "core", "-", "$HOME/.local/bin/micromamba",
                                                   f"{GH}mamba-org/micromamba-releases/releases/download/*/micromamba-linux-{_mamba}")
@@ -252,14 +261,15 @@ def check_tools(rows, errors):
     for row in rows:
         where, flag, floor = f"tools.tsv:{row.line}", row["version_flag"], row["floor"]
         report(errors, "vocab", where, not ID_RE.match(row["id"]) and f"bad id {row['id']!r}")
-        report(errors, "reserved-id", where, row["id"] in RESERVED_IDS and f"{row['id']} is a structural check")
+        report(errors, "reserved-id", where, row["id"] in RESERVED_IDS and f"{row['id']} is a doctor check id")
         report(errors, "vocab", where, row["tier"] not in TIERS and f"unknown tier {row['tier']!r}")
         report(errors, "vocab", where, hosts_error(row["hosts"]))
         report(errors, "probe", where, probe_error(row["probe"], row["hosts"]))
         report(errors, "vocab", where, flag not in VERSION_FLAGS and f"unknown version_flag {flag!r}")
         report(errors, "floor", where, floor != "-" and not FLOOR_RE.match(floor) and f"floor {floor!r} is not X.Y[.Z]")
-        presence = ":" in row["probe"] and (flag != "-" or floor != "-")
-        report(errors, "probe-version", where, presence and "file, dir, font, env and psmodule probes are presence-only")
+        # A file probe may name an executable (gh-apt's /usr/bin/gh), so it may have a version.
+        presence = ":" in row["probe"] and not row["probe"].startswith("file:") and (flag != "-" or floor != "-")
+        report(errors, "probe-version", where, presence and "dir, font, env and psmodule probes are presence-only")
         report(errors, "probe-version", where, floor != "-" and flag == "-" and "a floor needs a version_flag")
         report(errors, "doc", where, row["doc"] not in STEP_IDS and f"unknown step id {row['doc']!r}")
 
@@ -303,7 +313,9 @@ def check_installers(rows, tools, errors):
             report(errors, "sha256", where, sha != "-" and not SHA256_RE.match(sha) and "must be - or 64 lowercase hex")
         else:
             report(errors, "sha256", where, not SHA256_RE.match(sha) and "must be 64 lowercase hex (- only for inspect)")
-            report(errors, "installer-pin", where, not PINNED_URL_RE.search(url) and "url must name a commit or version")
+            unversioned = (row["id"], row["arch"]) in UNVERSIONED_INSTALLERS
+            report(errors, "installer-pin", where, not unversioned and not PINNED_URL_RE.search(url)
+                   and "url must name a commit or version")
         if row["kind"] == "script":
             report(errors, "installer-dest", where, dest != "-" and "scripts have dest -")
         else:
@@ -591,10 +603,10 @@ class RejectionTests(unittest.TestCase):
         path = self.path(rel)
         text = path.read_text(encoding="utf-8")
         self.assertIn(old, text, f"fixture text missing from {rel}")
-        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+        path.write_text(text.replace(old, new, 1), encoding="utf-8", newline="")
 
     def append(self, rel, text):
-        with self.path(rel).open("a", encoding="utf-8") as handle:
+        with self.path(rel).open("a", encoding="utf-8", newline="") as handle:
             handle.write(text)
 
     def row(self, rel, row_id):
@@ -653,6 +665,9 @@ class RejectionTests(unittest.TestCase):
             ("vocab", "installer arch", self.installers("nvm", "arch", "arm64")),
             ("vocab", "installer human", self.installers("nvm", "human", "maybe")),
             ("reserved-id", "locale", self.tools("fzf", "id", "locale")),
+            ("reserved-id", "online row", self.tools("fzf", "id", "gh-auth")),
+            ("reserved-id", "smoke row", self.tools("fzf", "id", "zsh-smoke")),
+            ("reserved-id", "windows check", self.tools("pwsh", "id", "core-symlinks")),
         ])
 
     def test_probes_versions_and_floors(self):
@@ -667,7 +682,9 @@ class RejectionTests(unittest.TestCase):
             ("probe", "psmodule host", self.tools("psfzf", "hosts", "all")),
             ("probe", "env", self.tools("lmod", "probe", "env:lmod-dir")),
             ("floor", "floor", self.tools("fzf", "floor", "0.58.x")),
-            ("probe-version", "presence with flag", self.tools("oh-my-zsh", "version_flag", "--version")),
+            ("probe-version", "presence with flag", self.tools("zsh-completions", "version_flag", "--version")),
+            ("probe-version", "font with floor", lambda: (self.tools("nerd-font", "version_flag", "--version")(),
+                                                         self.tools("nerd-font", "floor", "3.0")())),
             ("probe-version", "floor without flag", self.tools("fzf", "version_flag", "-")),
         ])
 
@@ -709,6 +726,8 @@ class RejectionTests(unittest.TestCase):
             ("installer-dest", "bad token", self.installers("nerd-font", "dest", "$FONTS/x")),
             ("installer-id", "unknown", self.installers("nvm", "id", "nvm-sh")),
             ("installer-set", "missing", lambda: self.replace("installers.tsv", self.row("installers.tsv", "claude") + "\n", "")),
+            ("installer-set", "nvm tag url",
+             self.installers("nvm", "url", "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh")),
             ("installer-set", "claude not inspect", lambda: (self.installers("claude", "human", "-")(),
                                                              self.installers("claude", "sha256", "a" * 64)())),
             ("installer-set", "claude digest", self.installers("claude", "sha256", "a" * 64)),
@@ -722,6 +741,8 @@ class RejectionTests(unittest.TestCase):
             ("installer-set", "kitty arch asset", self.installers("kitty", "url", lambda url: url.replace("x86_64", "arm64"))),
             ("installer-set", "nerd-font dest", self.installers("nerd-font", "dest", "$XDG_DATA_HOME/fonts")),
             ("installer-set", "bat-theme kind", self.installers("bat-theme", "kind", "archive")),
+            ("installer-set", "gh-apt keyring human", self.installers("gh-apt", "human", "-")),
+            ("installer-pin", "unversioned url", self.installers("kitty", "url", "https://example.com/kitty.txz")),
         ])
 
     def test_forbidden_characters_and_home_literals(self):
@@ -784,7 +805,7 @@ class RejectionTests(unittest.TestCase):
     def test_coverage_and_declarations(self):
         self.check([
             ("coverage", "alias removed", lambda: self.replace("tools.tsv", "# alias: fzf junegunn.fzf\n", "")),
-            ("coverage", "manual removed", lambda: self.replace("tools.tsv", "# manual: claude hpc\n", "")),
+            ("coverage", "manual removed", lambda: self.replace("tools.tsv", "# manual: col macos,hpc\n", "")),
             ("coverage", "brew entry removed", lambda: self.replace("brew/cli.Brewfile", 'brew "jq"\n', "")),
             ("coverage", "login node removed", lambda: self.replace("tools.tsv", "# alias: node nodejs\n", "")),
             ("declaration", "malformed", lambda: self.append("tools.tsv", "# alias: fzf\n")),

@@ -5,15 +5,18 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 ## Scope and layout
 
 - Shared defaults live in `common/`.
-- Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, `fedora/`, `ubuntu/`, and `win/`.
+- Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, and `win/`. Other Linux distributions have no overlay; they stow `common/` only.
 - Packages mirror `$HOME` paths (for example `.config/...`, `.ssh/...`).
 - Non-package code is split by who calls it. The repo root holds only the entry
   points a person types on a fresh clone (`stow-all.sh`, `stow-all.ps1`,
-  `setup-sync.sh`, `setup-sync.ps1`); `scripts/` holds hooks the environment
-  invokes on its own (login profiles, the Windows scheduled task); `lib/` holds
-  code that is only sourced or imported, never executed directly. Put a new
-  file where its caller says it belongs, and keep `.stowrc` at the root because
-  GNU Stow reads it from the working directory.
+  `setup-sync.sh`, `setup-sync.ps1`, `doctor.sh`, `doctor.ps1`, `setup-host.sh`,
+  `setup-host.ps1`, `setup-sherlock-kit.sh`, `setup-sherlock-kit.ps1`,
+  `setup-sherlock-adapters.sh`, `setup-sherlock-adapters.ps1`); `scripts/` holds
+  hooks the environment invokes on its own (login profiles, the Windows
+  scheduled task); `lib/` holds code that is only sourced or imported, never
+  executed directly; `config/` holds the data those entry points read. Put a
+  new file where its caller says it belongs, and keep `.stowrc` at the root
+  because GNU Stow reads it from the working directory.
 
 ## Required conventions
 
@@ -24,6 +27,8 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 ## Working commands
 
 - Provision AI-sync parser once per clone: `./setup-sync.sh` (Windows: `./setup-sync.ps1`), with Python 3.11+.
+- Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
+- Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
 - Stow configs: `./stow-all.sh [host-dir]`
 - Initialize submodule: `git submodule update --init --recursive`
 - Run checks: `pre-commit run --all-files`
@@ -47,6 +52,17 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - Bash: `shfmt -i 4 -ci -ln bash`
   - POSIX: `shfmt -i 4 -ci -ln posix`
   - Zsh: `shfmt -i 4 -ci -ln zsh` (needs shfmt 3.13+, the first release with a zsh dialect)
+
+## Bootstrap and doctor
+
+- Profiles, stow and the auto-update hooks never install a tool; only `setup-host.sh` and `setup-host.ps1` do, and only when a person runs them.
+- `setup-host` never runs `sudo`, `chsh`, `stow`, `stow-all`, `conda init`, `micromamba shell init` or `git lfs install`, and never edits an rc file; it prints those as HUMAN blocks. Every block line is a `# ` note or a self-contained command. A `sudo` block is run by the person or, after explicit approval, each line as one visible top-level agent command, never wrapped in `sh -c` or a script; a printed digest gate (`printf ... | sha256sum -c --status - && <command>`) is one such line. Its only write inside the checkout is `.venv-sync`, through `./setup-sync.sh`.
+- `./doctor.sh` without `--smoke` and `setup-host --check` never write and never touch the network; the doctor goes online only with `--online`, and `--smoke` starts a zsh that may write its own caches.
+- `config/bootstrap/` is the single pinned source: commit SHAs for clones, sha256 for downloads. `docs/bootstrap.md`, `docs/dependencies.md` and both skills are parity-tested by `tests/bootstrap-manifest.sh`; change pins there, not in docs.
+- Every download setup-host makes itself is verified against its pin before use (only `inspect` rows, read by a person first, have none), a HUMAN block runs a downloaded script only behind a digest gate, and installers run with their no-rc flags (`PROFILE=/dev/null`, `NONINTERACTIVE=1`). Package managers (Homebrew, apt, conda-forge, winget, PSGallery and oh-my-posh's font installer) install their own current versions; the docs' Guarantees name them.
+- First-party project skills live only in `.claude/skills/` and `.agents/skills/`, with identical bodies.
+- Provisioning shells export `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0`.
+- HPC environments are built only inside a Slurm allocation, never under `$SCRATCH`.
 
 ## Git and SSH conventions
 
@@ -90,7 +106,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 
 - Keep status formatting in `lib/terminal.sh` / `lib/terminal.ps1`, with TTY-aware `DOTFILES_COLOR=auto|always|never`; nonempty `NO_COLOR` and `TERM=dumb` disable color. Preserve plain redirected logs by default, PowerShell stream capture, and caller shell/preferences. Under `auto`, treat a descriptor that Powerlevel10k's instant prompt captured as a terminal: it replays the capture file verbatim, and the check is `__p9k_instant_prompt_active` plus a numeric, still-a-terminal `__p9k_fd_1`/`__p9k_fd_2` (a non-numeric operand makes dash's `-t` print to stderr, which sourcing must never do). Every other hidden terminal stays plain. Do not add terminal formatting dependencies.
 
-- `stow-all.sh` is the canonical setup command.
+- `stow-all.sh` is the canonical setup command. Before any sync helper writes, it refuses to stow a package that links into `~/.oh-my-zsh` until `~/.oh-my-zsh/oh-my-zsh.sh` exists (`DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1` overrides) and stops when a Stow dry run (`stow -n`) finds a conflict. Native Windows stows no zsh package and adopts conflicting files, so `stow-all.ps1` has neither check.
 - Keep order stable: stow `common/` packages first, then optional host packages.
 - Preserve Stow flags unless intentionally migrating behavior:
   - `--restow --no-folding`

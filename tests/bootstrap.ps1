@@ -495,9 +495,18 @@ try {
             'S4-setup-sync' = 'W1-setup-sync'; 'H7-stow' = 'HW-stow'; 'H7-auth' = 'HW-auth'; 'X-contributor' = 'X-contributor'
         }
         foreach ($step in $refs.Keys) { Assert-Equal (Get-BootstrapDocRef $step) $refs[$step] "windows $step" }
+        Assert-Equal (Get-BootstrapDocRef P0-preflight) 'HW-clone' 'windows git'
         Assert-Equal (Get-BootstrapDocRef S2-brew-bundle hpc) 'S2-login-env' 'hpc brew'
+        Assert-Equal (Get-BootstrapDocRef H1-apt-core hpc) 'S2-login-env' 'hpc apt'
+        Assert-Equal (Get-BootstrapDocRef H1-locale hpc) 'P0-preflight' 'hpc locale'
         Assert-Equal (Get-BootstrapDocRef S5-claude hpc) 'S2-modules' 'hpc claude'
+        Assert-Equal (Get-BootstrapDocRef H1-apt-core macos) 'S2-brew-bundle' 'macos apt'
+        foreach ($step in @('H1-apt-core', 'H1-locale', 'S2-brew-bundle', 'S4-nvm', 'S5-claude', 'S5-codex')) {
+            Assert-Equal (Get-BootstrapDocRef $step other) 'X-other-linux' "other $step"
+        }
+        Assert-Equal (Get-BootstrapDocRef S3-clones other) 'S3-clones' 'other clones'
         Assert-Equal (Get-BootstrapDocRef S4-nvm debian) 'S4-nvm' 'debian nvm'
+        Assert-Equal (Get-BootstrapDocRef H1-apt-core debian) 'H1-apt-core' 'debian apt'
         foreach ($case in @(@('0.58.0', '0.58', 0), @('v3.14.1', '3.13', 0), @('2.3.1', '2.4', 1), @('10.5.0', '8.3', 0),
                 @('0.44.1', '0.58.0', 1), @('7.0', '7.0', 0), @('x', '1.0', 2), @('1.2.3.4', '1.0', 2), @('', '1.0', 2))) {
             Assert-Equal (Compare-BootstrapVersion $case[0] $case[1]) $case[2] "compare $($case[0]) $($case[1])"
@@ -545,6 +554,7 @@ try {
             [IO.File]::WriteAllText((Join-Path $local 'Microsoft/Windows/Fonts/caskaydiamononerdfontmono-bold.ttf'), '')
             Assert-True (Test-BootstrapTool -Probe 'font:CaskaydiaMono Nerd Font').Found 'per-user font, any case'
             Assert-True (Test-BootstrapTool -Probe "file:$($bin.Replace('\', '/'))/fzf.ps1").Found 'file'
+            Assert-Equal (Test-BootstrapTool -Probe "file:$($bin.Replace('\', '/'))/fzf.ps1" -VersionFlag '--version').Version '0.60.0' 'file probe version'
             Assert-True (Test-BootstrapTool -Probe "dir:$($modules.Replace('\', '/'))").Found 'dir'
             foreach ($bad in @('url:x', 'a b', 'C:\tools\x.exe', 'file:~/x')) {
                 Assert-Throws { Test-BootstrapTool -Probe $bad } "Accepted probe $bad." -InvalidData
@@ -844,9 +854,16 @@ try {
         [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
         Add-Content -LiteralPath $tools -Value "bad`tcore`twin`turl:x`t-`t-`tbroken`tW1-winget"
         Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{}) 2 'unknown probe kind'
+        foreach ($case in @(@('core-symlinks', 'is reserved for a doctor check'), @('git', 'repeats id'))) {
+            [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
+            Add-Content -LiteralPath $tools -Value "$($case[0])`tcore`twin`tgit`t-`t-`tbroken`tHW-clone"
+            $run = Invoke-Fixture $fixture doctor.ps1 @{}
+            Assert-Exit $run 2 "tools.tsv id $($case[0])"
+            Assert-True ($run.Stdout.Contains($case[1])) "id $($case[0]) message: $($run.Stdout)"
+        }
     }
 
-    Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 only for blocking HUMAN steps' {
+    Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 while work remains' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
         $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' }
@@ -867,7 +884,8 @@ try {
         Assert-Equal @(Get-InstallEvents $fixture).Count 0 '-Check installed something'
         Assert-True (-not @(Get-FixtureEvents $fixture | Where-Object { $_ -match 'PSResource|Invoke-WebRequest' }).Count) '-Check queried the network or PSResourceGet'
         # A ~/.gitconfig symlink into this checkout marks HW-stow done; with
-        # HW-clone done too, nothing blocks, and todo steps alone exit 0.
+        # HW-clone done too nothing blocks, but todo steps still exit 3, as in
+        # setup-host.sh --check.
         $gitconfig = Join-Path $fixture.Repo 'common/git/.gitconfig'
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $gitconfig)); [IO.File]::WriteAllText($gitconfig, '')
         try { [void](New-Item -ItemType SymbolicLink -Path (Join-Path $fixture.Home '.gitconfig') -Target $gitconfig) } catch { }
@@ -875,7 +893,7 @@ try {
         Assert-True ($default.Lines -contains 'W1-psresources skip no selected tier needs PowerShell modules') 'desktop modules under default tiers'
         Assert-True ($default.Lines -contains 'W1-font skip no selected tier needs the Nerd Font') 'font under default tiers'
         if (Test-Path -LiteralPath (Join-Path $fixture.Home '.gitconfig')) {
-            Assert-Exit $default 0 'check with only non-blocking HUMAN steps and todo steps'
+            Assert-Exit $default 3 'check with only non-blocking HUMAN steps and todo steps'
             Assert-True ($default.Lines -contains 'HW-stow done already done') 'stowed .gitconfig'
             Assert-True (@($default.Lines -like 'W1-winget todo missing: python3, fzf, *').Count -eq 1) "winget todo: $($default.Stdout)"
         }
@@ -922,7 +940,7 @@ try {
         Assert-Equal (($blocks | ForEach-Object Kind) -join ',') 'gui,judgment,judgment,judgment,sudo,judgment,auth' 'HUMAN kinds'
         Assert-Equal @($run.Lines | Where-Object { $_ -notmatch '^HUMAN-' }).Count (@($blocks | ForEach-Object { $_.Lines.Count }) | Measure-Object -Sum).Sum 'text outside blocks'
         $text = $run.Stdout
-        foreach ($expected in @('.\stow-all.ps1 win', '.\scripts\dotfiles-auto-stow.ps1 -Register',
+        foreach ($expected in @("stow-all.ps1' win", "dotfiles-auto-stow.ps1' -Register",
                 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser', 'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser',
                 'wsl --install -d Ubuntu', 'named exactly Ubuntu', 'Developer Mode', 'core.symlinks true',
                 'Set-Service -Name ssh-agent -StartupType Automatic', 'gh auth login --git-protocol ssh', 'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519')) {
@@ -933,7 +951,7 @@ try {
         Assert-True (-not $wsl.Contains('not stowed')) 'HW-wsl claims win\wsl is not stowed'
         $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
         Assert-True (-not @($commands | Where-Object { $_ -match 'setup-git' }).Count) 'a HUMAN block runs gh auth setup-git'
-        foreach ($line in @($commands | Where-Object { $_ -match '^(git -C|Set-Location) ' })) {
+        foreach ($line in @($commands | Where-Object { $_ -match '^git -C ' })) {
             $errors = $null
             $parsed = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$errors)
             Assert-True (-not $errors) "HUMAN line does not parse: $line"
@@ -941,6 +959,35 @@ try {
             $argument = $command.CommandElements[2]
             Assert-True ($argument -is [Management.Automation.Language.StringConstantExpressionAst] -and
                 $argument.StringConstantType -eq 'SingleQuoted' -and $argument.Value -ceq $fixture.Repo) "path not single-quoted in: $line"
+        }
+        # The stow and task lines call the checkout's scripts by full path, so
+        # they run from any directory, the elevated shell's included.
+        $scripts = @((Join-Path $fixture.Repo 'stow-all.ps1'), (Join-Path (Join-Path $fixture.Repo 'scripts') 'dotfiles-auto-stow.ps1'))
+        $invocations = @($commands | Where-Object { $_.StartsWith('& ') })
+        Assert-Equal $invocations.Count 2 'full-path script lines'
+        foreach ($line in $invocations) {
+            $errors = $null
+            $parsed = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$errors)
+            Assert-True (-not $errors) "HUMAN line does not parse: $line"
+            $script = $parsed.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true).CommandElements[0]
+            Assert-True ($script -is [Management.Automation.Language.StringConstantExpressionAst] -and
+                $script.StringConstantType -eq 'SingleQuoted' -and $script.Value -cin $scripts) "script path not single-quoted in: $line"
+        }
+        # Every line is a '# ' note or a command that needs nothing another
+        # line set up: no directory change, no variable assigned elsewhere.
+        foreach ($block in $blocks) {
+            $assigned = @{}
+            for ($i = 0; $i -lt $block.Lines.Count; $i++) {
+                $line = $block.Lines[$i]
+                if ($line.StartsWith('#')) { Assert-True ($line.StartsWith('# ')) "$($block.Id) note without a space: $line"; continue }
+                Assert-True ($line -notmatch '^(Set-Location|Push-Location|Pop-Location|cd|chdir|sl)(\s|$)') "$($block.Id) changes directory: $line"
+                if ($line -match '^\$(\w+)\s*=') { $assigned[$Matches[1]] = $i }
+            }
+            foreach ($name in $assigned.Keys) {
+                for ($i = 0; $i -lt $block.Lines.Count; $i++) {
+                    Assert-True ($i -eq $assigned[$name] -or $block.Lines[$i] -notmatch ('\$' + [regex]::Escape($name) + '\b')) "$($block.Id) line $i uses `$$name from another line"
+                }
+            }
         }
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
     }
@@ -992,6 +1039,9 @@ try {
             Skip-Assertion 'cannot create a symlink here; the exit 0 apply after HW-stow is not checked.'
             return
         }
+        # FAKE_PSRESOURCE_INSTALLED has PSResourceGet report CompletionPredictor
+        # without its module directory; give it one, so no step is left todo.
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Modules 'CompletionPredictor'))
         $final = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment
         Assert-Exit $final 0 'apply with only non-blocking HUMAN steps'
         $finalBlocks = Get-HumanBlocks $final.Lines

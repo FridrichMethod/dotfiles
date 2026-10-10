@@ -58,6 +58,10 @@ cat >"$FAKE_BIN/stow" <<'SH'
     done
     printf '\n'
 } >>"$EVENT_LOG"
+if [ "${1:-}" = -n ]; then
+    [ "${STOW_DRY_RC:-0}" = 0 ] || echo "WARNING! stowing would cause conflicts" >&2
+    exit "${STOW_DRY_RC:-0}"
+fi
 exit "${STOW_RC:-0}"
 SH
 
@@ -219,6 +223,7 @@ printf '%s\n' \
     >"$TEST_TMP/expected-checks"
 cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
 assert_events \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "sync:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
     "sync:claude-settings-sync:[$FIXTURE/common/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
@@ -260,6 +265,8 @@ env \
     bash "$FIXTURE/stow-all.sh" host-a \
     >"$TEST_TMP/host.stdout" 2>"$TEST_TMP/host.stderr"
 assert_events \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5]" \
     "sync:codex-config-sync:[$FIXTURE/host-a/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "sync:codex-rules-sync:[$FIXTURE/host-a/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
     "sync:claude-settings-sync:[$FIXTURE/host-a/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
@@ -334,9 +341,51 @@ if env \
     exit 1
 fi
 assert_events \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
 
 cmp "$STATE" "$TEST_TMP/expected-state"
+
+# A file Stow would refuse to replace stops the run before any helper writes.
+if run_fixture dry-conflict STOW_DRY_RC=1; then
+    echo "ERROR: installer ignored a Stow dry-run conflict" >&2
+    exit 1
+fi
+assert_events "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+grep -Fq 'WARNING! stowing would cause conflicts' "$TEST_TMP/dry-conflict.stderr"
+grep -Fq 'Stow would conflict with the files listed above, so nothing was changed' "$TEST_TMP/dry-conflict.stderr"
+grep -Fq 'never stow --adopt' "$TEST_TMP/dry-conflict.stderr"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
+# The zsh package links into ~/.oh-my-zsh: without the oh-my-zsh clone, Stow
+# would create a real ~/.oh-my-zsh/custom that blocks it, so nothing runs.
+cp "$STATE" "$TEST_TMP/state.saved"
+mkdir -p "$FIXTURE/common/zsh/.oh-my-zsh/custom"
+printf '%s\n' '# fixture custom' >"$FIXTURE/common/zsh/.oh-my-zsh/custom/example.zsh"
+if run_fixture omz-missing; then
+    echo "ERROR: installer stowed the zsh package before oh-my-zsh was cloned" >&2
+    exit 1
+fi
+assert_events
+[[ ! -s "$CHECK_LOG" ]]
+grep -Fq 'oh-my-zsh is not cloned yet' "$TEST_TMP/omz-missing.stderr"
+grep -Fq 'DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1' "$TEST_TMP/omz-missing.stderr"
+cmp "$STATE" "$TEST_TMP/expected-state"
+mkdir -p "$TEST_HOME/.oh-my-zsh/custom"
+if run_fixture omz-recovery; then
+    echo "ERROR: installer stowed into an ~/.oh-my-zsh without oh-my-zsh.sh" >&2
+    exit 1
+fi
+assert_events
+grep -Fq 'X-recovery' "$TEST_TMP/omz-recovery.stderr"
+run_fixture omz-override DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][zsh]" "$EVENT_LOG"
+printf '%s\n' '# fixture oh-my-zsh' >"$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
+run_fixture omz-cloned
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][zsh]" "$EVENT_LOG"
+rm -rf "$FIXTURE/common/zsh" "$TEST_HOME/.oh-my-zsh"
+cp "$TEST_TMP/state.saved" "$STATE"
+
 if run_fixture stow-failure STOW_RC=24; then
     echo "ERROR: installer ignored Stow failure" >&2
     exit 1
@@ -358,6 +407,7 @@ mv "$FIXTURE/common/codex" "$TEST_TMP/saved-codex"
 mv "$FIXTURE/common/claude" "$TEST_TMP/saved-claude"
 run_fixture absent-packages
 assert_events \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha]" \
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
     "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha]"
 mv "$TEST_TMP/saved-codex" "$FIXTURE/common/codex"

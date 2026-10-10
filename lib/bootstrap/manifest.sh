@@ -214,10 +214,21 @@ bootstrap_brewfiles() {
 }
 
 # bootstrap_doc_ref STEP PROFILE: the step a profile's reader should follow.
+# tools.tsv names the debian/macOS step; a profile that installs the tool
+# another way points at that way: the login env on hpc (where locales are the
+# site's), the Brewfiles on macOS (no apt), X-other-linux for a machine without
+# an overlay, and the W1-* and HW-* steps on Windows.
 bootstrap_doc_ref() {
     case $2:$1 in
-        hpc:S2-brew-bundle) printf '%s\n' S2-login-env ;;
+        hpc:S2-brew-bundle | hpc:H1-apt-core) printf '%s\n' S2-login-env ;;
+        hpc:H1-locale) printf '%s\n' P0-preflight ;;
         hpc:S4-nvm | hpc:S5-claude | hpc:S5-codex) printf '%s\n' S2-modules ;;
+        macos:H1-apt-core) printf '%s\n' S2-brew-bundle ;;
+        other:H1-apt-core | other:H1-locale | other:H1-homebrew | other:H1-linuxbrew | \
+            other:S2-brew-bundle | other:S4-nvm | other:S5-claude | other:S5-codex)
+            printf '%s\n' X-other-linux
+            ;;
+        windows:P0-preflight) printf '%s\n' HW-clone ;;
         windows:S2-brew-bundle | windows:S4-nvm | windows:S5-claude | windows:S5-codex)
             printf '%s\n' W1-winget
             ;;

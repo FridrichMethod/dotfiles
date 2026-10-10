@@ -112,4 +112,18 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 cmp "$TARGET/.codex/config.toml" "$TEST_TMP/codex-before"
 cmp "$TARGET/.claude/settings.json" "$TEST_TMP/claude-before"
 
+# A regular file where a package links (a fresh home's ~/.bashrc, say) fails
+# the real Stow dry run before any AI sync helper writes the home.
+rm "$TARGET/.fixture-host" "$TARGET/.codex/config.toml"
+printf '%s\n' 'a file of the home' >"$TARGET/.fixture-host"
+if env HOME="$TARGET" bash "$FIXTURE/stow-all.sh" test-host >"$TEST_TMP/conflict.log" 2>&1; then
+    echo 'ERROR: a conflicting home file passed the Stow dry run' >&2
+    exit 1
+fi
+grep -Fq 'Stow would conflict with the files listed above, so nothing was changed' "$TEST_TMP/conflict.log"
+grep -Fq '.fixture-host' "$TEST_TMP/conflict.log"
+[[ ! -e "$TARGET/.codex/config.toml" ]]
+[[ ! -L "$TARGET/.fixture-host" ]] && grep -Fxq 'a file of the home' "$TARGET/.fixture-host"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
 echo 'unix-installer=PASS'

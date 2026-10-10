@@ -127,16 +127,18 @@ printf '%s\n' C C.utf8
 awk 'BEGIN { for (i = 0; i < 8000; i++) print "xx_XX" i ".utf8" }'
 SH
 
+# fc-list would create fontconfig caches; the font check scans file names.
 write_fake "$FAKE_BIN/fc-list" <<'SH'
 #!/bin/sh
 printf 'fc-list %s\n' "$*" >>"$EVENT_LOG"
-[ -z "${FC_FAMILIES:-}" ] || printf '%s\n' "$FC_FAMILIES"
-awk 'BEGIN { for (i = 0; i < 8000; i++) print "Filler Sans " i }'
 SH
 
+# A sync interpreter: it passes lib/config_sync.py --runtime-check unless
+# SYNC_RUNTIME_RC says otherwise (a venv without tomlkit), and logs the call.
 write_fake "$FAKE_BIN/sync-python" <<'SH'
 #!/bin/sh
-exit 0
+printf 'sync-python %s\n' "$*" >>"$EVENT_LOG"
+exit "${SYNC_RUNTIME_RC:-0}"
 SH
 
 # A fresh Homebrew prefix that is not on PATH yet.
@@ -164,12 +166,14 @@ row() {
     row alt core all doctor-none,doctor-alt --version 1.0 'alt tool missing' S2-brew-bundle
     printf '# a comment between rows\n'
     row brew-only core all doctor-brew-only --version - 'brew tool missing' S2-brew-bundle
+    row local-tool core all doctor-local --version - 'local tool missing' S5-codex
     row oh-my-zsh core unix 'file:$HOME/.oh-my-zsh/oh-my-zsh.sh' - - 'zsh aborts' S3-clones
     row demo-plugin core unix 'dir:$ZSH_CUSTOM/plugins/demo/src' - - 'no demo completions' S3-clones
     row bat-theme core all 'file:$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' - - 'theme unknown' S3-bat-theme
     row login-tool core sherlock,marlowe doctor-login --version - 'login env tool missing' S2-login-env
     row lmod host sherlock,marlowe env:LMOD_DIR - - 'module is undefined' S2-modules
     row gh cli all gh --version 2.50.0 'gh fails' S2-brew-bundle
+    row gh-apt cli lab-ubuntu 'file:$HOME/.fake-gh-apt' --version 2.50.0 'credential helper fails' H1-gh-apt-repo
     row claude ai all claude --version - 'Claude Code is unavailable' S5-claude
     row codex ai all codex --version - 'Codex is unavailable' S5-codex
     row desk-tool desktop all doctor-absent-desktop - - 'no terminal' S6-kitty
@@ -203,7 +207,17 @@ STATE_FILE="$FIXTURE/.git/dotfiles-sync-unix"
 mkdir -p "$TEST_HOME/.oh-my-zsh/custom/plugins/demo/src" \
     "$TEST_HOME/.config/bat/themes" "$TEST_HOME/.local/bin"
 printf '# fixture oh-my-zsh\n' >"$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
+# What setup-host links into ~/.local/bin (codex, claude, kitty, micromamba).
+write_fake "$TEST_HOME/.local/bin/doctor-local" <<'SH'
+#!/bin/sh
+printf 'doctor-local 2.0\n'
+SH
 printf 'theme\n' >"$TEST_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme"
+# An executable that a file: probe names, with a version floor (gh-apt).
+write_fake "$TEST_HOME/.fake-gh-apt" <<'SH'
+#!/bin/sh
+printf 'gh version %s\n' "${GH_APT_VERSION:-2.81.0}"
+SH
 ln -s ../fixture/common/zsh/.zshrc "$TEST_HOME/.zshrc"
 ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
 ln -s "$FIXTURE/common/git/.gitconfig" "$TEST_HOME/.gitconfig"
@@ -219,6 +233,7 @@ BASE_ENV=(
     BOOTSTRAP_UNAME_S=Linux
     BOOTSTRAP_BREW_CANDIDATES="$BREW_BIN/brew"
     BOOTSTRAP_NVM_KEG_CANDIDATES="$TEST_TMP/kegs/nvm"
+    BOOTSTRAP_SYSTEM_FONT_DIRS="$TEST_TMP/system-fonts"
     GIT_CONFIG_GLOBAL=/dev/null
     GIT_CONFIG_NOSYSTEM=1
 )
@@ -382,7 +397,8 @@ for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-aut
     assert_no_row "$id"
 done
 assert_event 'fzf --version'
-assert_event 'fc-list : family'
+assert_no_event 'fc-list'
+assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'
 
@@ -445,9 +461,21 @@ assert_row brew-only missing
 
 # --- probe kinds -----------------------------------------------------------
 
-run_doctor font-present 'FC_FAMILIES=CaskaydiaMono Nerd Font,CaskaydiaMono NF' -- \
-    --host lab-ubuntu --tier all --tsv
-assert_row nerd-font ok 'font CaskaydiaMono Nerd Font (fc-list)'
+# Fonts are found by file name (any case, up to four levels deep) in the
+# user's, the system's and Homebrew's font directories; fc-list never runs.
+mkdir -p "$TEST_TMP/system-fonts/truetype/caskaydia"
+printf 'ttf\n' >"$TEST_TMP/system-fonts/truetype/caskaydia/caskaydiamononerdfontmono-bold.ttf"
+run_doctor font-system -- --host lab-ubuntu --tier all --tsv
+assert_row nerd-font ok "$TEST_TMP/system-fonts/truetype/caskaydia/caskaydiamononerdfontmono-bold.ttf"
+assert_no_event 'fc-list'
+rm -rf "$TEST_TMP/system-fonts"
+mkdir -p "$TEST_TMP/xdg-data/fonts/CaskaydiaMonoNerdFont"
+printf 'ttf\n' >"$TEST_TMP/xdg-data/fonts/CaskaydiaMonoNerdFont/CaskaydiaMonoNerdFont-Regular.ttf"
+run_doctor font-user "XDG_DATA_HOME=$TEST_TMP/xdg-data" -- --host lab-ubuntu --tier all --tsv
+assert_row nerd-font ok 'CaskaydiaMonoNerdFont/CaskaydiaMonoNerdFont-Regular.ttf'
+rm -rf "$TEST_TMP/xdg-data"
+run_doctor font-absent -- --host lab-ubuntu --tier all --tsv
+assert_row nerd-font missing 'no font file named like CaskaydiaMonoNerdFont'
 
 mkdir -p "$TEST_HOME/Library/Fonts"
 printf 'ttf\n' >"$TEST_HOME/Library/Fonts/CaskaydiaMonoNerdFont-Regular.ttf"
@@ -459,6 +487,14 @@ assert_no_event 'fc-list'
 rm -rf "$TEST_HOME/Library"
 run_doctor font-mac-missing BOOTSTRAP_UNAME_S=Darwin BOOTSTRAP_CLT_SHIMS= -- --host mac --tier all --tsv
 assert_row nerd-font missing
+
+# A file: probe of an executable reports its version against the floor, so
+# Ubuntu's own older /usr/bin/gh is outdated rather than ok.
+run_doctor file-version -- --host lab-ubuntu --tsv
+assert_row gh-apt ok "2.81.0 >= 2.50.0 at $TEST_HOME/.fake-gh-apt"
+run_doctor file-version-old GH_APT_VERSION=2.45.0 -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row gh-apt outdated "2.45.0 < 2.50.0 at $TEST_HOME/.fake-gh-apt" 'docs/bootstrap.md H1-gh-apt-repo'
 
 run_doctor zsh-custom "ZSH_CUSTOM=$TEST_TMP/custom" -- --host lab-ubuntu --tsv
 assert_rc 1
@@ -486,6 +522,15 @@ SH
 run_doctor hpc-login-env -- --host sherlock --tsv
 assert_rc 0
 assert_row login-tool ok "$TEST_HOME/micromamba/envs/login/bin/doctor-login"
+# On hpc the login env stays ahead of ~/.local/bin, as the overlay puts it.
+write_fake "$TEST_HOME/.local/bin/doctor-login" <<'SH'
+#!/bin/sh
+printf 'doctor-login 9.9\n'
+SH
+run_doctor hpc-login-first "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host sherlock --tsv
+assert_row login-tool ok "1.0 at $TEST_HOME/micromamba/envs/login/bin/doctor-login"
+assert_row local-tool ok "at $TEST_HOME/.local/bin/doctor-local"
+rm "$TEST_HOME/.local/bin/doctor-login"
 run_doctor hpc-lmod LMOD_DIR=/opt/lmod -- --host marlowe --tier all --tsv
 assert_row lmod ok
 run_doctor hpc-no-lmod -- --host marlowe --tier all --tsv
@@ -522,6 +567,20 @@ assert_quiet_events '--list probed tools'
 run_doctor list-hpc -- --host sherlock --list
 assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-login-env')"
 assert_out "$(printf 'claude\tai\tclaude\t-\tS2-modules')"
+# Each profile's fix is a step that applies there: no apt on macOS or hpc,
+# no sudo locale-gen on hpc, and X-other-linux without an overlay.
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tS2-login-env')"
+assert_out "$(printf 'locale\tcore\tcheck\t-\tP0-preflight')"
+run_doctor list-mac -- --host mac --list
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tS2-brew-bundle')"
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-brew-bundle')"
+run_doctor list-other -- --platform other --list
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tX-other-linux')"
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tX-other-linux')"
+assert_out "$(printf 'claude\tai\tclaude\t-\tX-other-linux')"
+assert_out "$(printf 'locale\tcore\tcheck\t-\tX-other-linux')"
+run_doctor list-debian -- --platform debian --list
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tH1-apt-core')"
 
 run_doctor quiet -- --host lab-ubuntu --quiet
 assert_rc 0
@@ -604,7 +663,17 @@ assert_row venv-sync ok
 mv "$TEST_TMP/venv.hidden" "$FIXTURE/.venv-sync"
 run_doctor venv-env-bad "DOTFILES_SYNC_PYTHON=$TEST_TMP/no-python" -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row venv-sync missing
+assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$TEST_TMP/no-python' fails lib/config_sync.py --runtime-check"
+# An executable that fails the runtime check (an interrupted setup-sync.sh
+# leaves a venv without tomlkit) is missing, as doctor.ps1 and setup-host's
+# S4-setup-sync judge it.
+run_doctor venv-env-broken "DOTFILES_SYNC_PYTHON=$FAKE_BIN/sync-python" SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$FAKE_BIN/sync-python' fails lib/config_sync.py --runtime-check" \
+    'docs/bootstrap.md S4-setup-sync'
+run_doctor venv-broken SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
 
 mv "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc" "$TEST_TMP/pymolrc.hidden"
 run_doctor submodule-missing -- --host lab-ubuntu --tsv
@@ -633,25 +702,55 @@ assert_row stow-links warn "~/.profile -> $TEST_TMP/other/common/sh/.profile"
 rm "$TEST_HOME/.profile"
 ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
 
-run_doctor path-brew-first "PATH=$TEST_HOME/.linuxbrew/bin:$BASE_PATH" -- --host lab-ubuntu --tsv
+# Homebrew and conda ahead of ~/.local/bin are the overlays' order: only an
+# executable that shadows one in ~/.local/bin is reported.
+run_doctor path-brew-first "PATH=$BREW_BIN:$TEST_TMP/miniforge3/condabin:$BASE_PATH" -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row path-order warn "$TEST_HOME/.linuxbrew/bin precedes ~/.local/bin"
-run_doctor path-conda-first "PATH=$TEST_TMP/miniforge3/condabin:$BASE_PATH" -- --host lab-ubuntu --tsv
-assert_row path-order warn
-run_doctor path-prefix-first "HOMEBREW_PREFIX=$TEST_TMP/brew" "PATH=$BREW_BIN:$BASE_PATH" -- \
-    --host lab-ubuntu --tsv
-assert_row path-order warn
+assert_row path-order ok 'no command setup-host puts in ~/.local/bin is shadowed'
+# kitty as S6-kitty links it, and a second kitty from conda ahead of it; a
+# command setup-host does not manage (doctor-local) is not judged.
+write_fake "$TEST_HOME/.local/bin/kitty" <<'SH'
+#!/bin/sh
+printf 'kitty 0.49.2\n'
+SH
+mkdir -p "$TEST_TMP/miniforge3/bin"
+cp "$TEST_HOME/.local/bin/kitty" "$TEST_HOME/.local/bin/doctor-local" "$TEST_TMP/miniforge3/bin/"
+run_doctor path-shadow "PATH=$TEST_TMP/miniforge3/bin:$BASE_PATH" -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row path-order warn "1 command(s) in ~/.local/bin are shadowed by an earlier PATH entry: $TEST_TMP/miniforge3/bin/kitty;" \
+    'docs/bootstrap.md H7-stow'
+rm "$TEST_TMP/miniforge3/bin/doctor-local"
+# The same file under another name for its directory is no shadow.
+ln -s "$TEST_HOME/.local/bin" "$TEST_TMP/local-alias"
+run_doctor path-same-file "PATH=$TEST_TMP/local-alias:$BASE_PATH" -- --host lab-ubuntu --tsv
+assert_row path-order ok
+rm "$TEST_TMP/local-alias"
 # The doctor's own Homebrew prepend never counts against the caller's PATH.
 run_doctor path-own-prepend "HOMEBREW_PREFIX=$TEST_TMP/brew" -- --host lab-ubuntu --tsv
 assert_row path-order ok
 assert_row brew-only ok
 run_doctor path-no-local-bin "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
 assert_row path-order warn 'PATH lacks ~/.local/bin'
+# ~/.local/bin joins this process's PATH, ahead of Homebrew's bin as in the
+# stowed shells, so what setup-host linked there is found before the first
+# stow; path-order above still judges the caller's PATH.
+assert_rc 0
+assert_row local-tool ok "2.0 at $TEST_HOME/.local/bin/doctor-local"
+write_fake "$TEST_HOME/.local/bin/doctor-brew-only" <<'SH'
+#!/bin/sh
+printf 'doctor-brew-only 4.0\n'
+SH
+run_doctor local-before-brew "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
+assert_row brew-only ok "4.0 at $TEST_HOME/.local/bin/doctor-brew-only"
+rm "$TEST_HOME/.local/bin/doctor-brew-only"
+# On hpc the login env comes first on purpose, even over ~/.local/bin.
+cp "$TEST_TMP/miniforge3/bin/kitty" "$TEST_HOME/micromamba/envs/login/bin/kitty"
 LOGIN_FIRST="PATH=$TEST_HOME/micromamba/envs/login/bin:$BASE_PATH"
 run_doctor path-login-hpc "$LOGIN_FIRST" -- --host sherlock --tsv
 assert_row path-order ok
 run_doctor path-login-debian "$LOGIN_FIRST" -- --host lab-ubuntu --tsv
-assert_row path-order warn
+assert_row path-order warn "$TEST_HOME/micromamba/envs/login/bin/kitty"
+rm "$TEST_HOME/micromamba/envs/login/bin/kitty" "$TEST_HOME/.local/bin/kitty"
 
 restore_common() {
     "$REAL_GIT" -C "$FIXTURE" checkout -q -- common
@@ -760,6 +859,9 @@ row git core all,fedora git --version - x P0-preflight |
     row git cli all git --version - x P0-preflight
 } | bad_manifest duplicate 'duplicate id git'
 row locale core all locale - - x H1-locale | bad_manifest reserved 'id locale is reserved for a doctor check'
+row core-symlinks core all git - - x P0-preflight |
+    bad_manifest reserved-windows 'id core-symlinks is reserved for a doctor check'
+row zsh-smoke core all zsh - - x P0-preflight | bad_manifest reserved-smoke 'id zsh-smoke is reserved for a doctor check'
 row git core all git --version 1.x x P0-preflight | bad_manifest floor "invalid floor '1.x'"
 # shellcheck disable=SC2016 # manifest tokens are literal
 row rc core all 'file:$PWD/.zshrc' - - x P0-preflight | bad_manifest token 'cannot be expanded'
@@ -805,7 +907,7 @@ assert_out "$(printf 'lmod\thost\tenv:LMOD_DIR\t-\tS2-modules')"
 run_doctor real-manifest-other "$REAL_CONFIG" -- --platform other --list
 assert_rc 0
 assert_not_in "$OUT/$CASE.err" 'invalid manifest'
-assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-brew-bundle')"
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tX-other-linux')"
 assert_no_out "$(printf 'pwsh\t')"
 assert_quiet_events '--list probed tools with the real manifest on --platform other'
 

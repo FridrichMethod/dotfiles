@@ -485,6 +485,11 @@ make_remote ohmyzsh/ohmyzsh oh-my-zsh.sh custom/example.zsh \
     custom/plugins/example/example.plugin.zsh custom/themes/example.zsh-theme >/dev/null
 P10K_PIN=$(make_remote romkatv/powerlevel10k powerlevel10k.zsh-theme)
 FZF_TAB_PIN=$(make_remote Aloxaf/fzf-tab fzf-tab.plugin.zsh)
+# nvm: the pinned commit, then a later one, as when a release tag moves.
+NVM_PIN=$(make_remote nvm-sh/nvm README.md)
+printf '# moved\n' >>"$TEST_TMP/work/nvm-sh/nvm/README.md"
+"$REAL_GIT" -C "$TEST_TMP/work/nvm-sh/nvm" commit -q -am moved
+"$REAL_GIT" -C "$TEST_TMP/work/nvm-sh/nvm" push -q "$REMOTES/nvm-sh/nvm.git" master
 
 # --- artifacts and manifests -------------------------------------------------
 
@@ -503,6 +508,7 @@ sha() {
 }
 
 printf '<plist><!-- fixture Catppuccin Mocha --></plist>\n' >"$ARTIFACTS/theme"
+printf 'fixture GitHub CLI keyring\n' >"$ARTIFACTS/gh-keyring"
 printf '#!/bin/sh\necho bad micromamba\n' >"$ARTIFACTS/micromamba-bad"
 
 mkdir -p "$TEST_TMP/build/codex/bin" "$TEST_TMP/build/codex/codex-path" "$TEST_TMP/build/codex/codex-resources"
@@ -541,13 +547,14 @@ printf 'lib\n' >"$TEST_TMP/build/kitty/lib/kitty.so"
 tar -C "$TEST_TMP/build/kitty" -cJf "$ARTIFACTS/kitty.txz" .
 
 URL_HOMEBREW=https://raw.githubusercontent.com/Homebrew/install/0123456789abcdef0123456789abcdef01234567/install.sh
-URL_NVM=https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh
+URL_NVM=https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_PIN/install.sh
 URL_MICROMAMBA=https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64
 URL_CODEX=https://github.com/openai/codex/releases/download/rust-v0.161.0/codex-package-x86_64-unknown-linux-musl.tar.gz
 URL_CLAUDE=https://claude.ai/install.sh
 URL_FONT=https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/CascadiaMono.tar.xz
 URL_KITTY=https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-x86_64.txz
 URL_THEME='https://raw.githubusercontent.com/catppuccin/bat/0123456789abcdef0123456789abcdef01234567/themes/Catppuccin%20Mocha.tmTheme'
+URL_GH_KEY=https://cli.github.com/packages/githubcli-archive-keyring.gpg
 
 {
     printf '%s\t%s\n' "$URL_HOMEBREW" "$FIXTURES/artifacts/homebrew-install"
@@ -558,6 +565,7 @@ URL_THEME='https://raw.githubusercontent.com/catppuccin/bat/0123456789abcdef0123
     printf '%s\t%s\n' "$URL_FONT" "$ARTIFACTS/font.tar.xz"
     printf '%s\t%s\n' "$URL_KITTY" "$ARTIFACTS/kitty.txz"
     printf '%s\t%s\n' "$URL_THEME" "$ARTIFACTS/theme"
+    printf '%s\t%s\n' "$URL_GH_KEY" "$ARTIFACTS/gh-keyring"
 } >"$URL_MAP"
 awk -F '\t' -v OFS='\t' -v url="$URL_MICROMAMBA" -v bad="$ARTIFACTS/micromamba-bad" \
     '$1 == url { $2 = bad } { print }' "$URL_MAP" >"$URL_MAP_BAD"
@@ -566,6 +574,7 @@ SHA_HOMEBREW=$(sha "$FIXTURES/artifacts/homebrew-install")
 SHA_MICROMAMBA=$(sha "$FIXTURES/artifacts/micromamba")
 SHA_MICROMAMBA_BAD=$(sha "$ARTIFACTS/micromamba-bad")
 SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
+SHA_GH_KEY=$(sha "$ARTIFACTS/gh-keyring")
 
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/common/zsh"
 cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
@@ -598,10 +607,17 @@ write_clones
         claude script "$URL_CLAUDE" - - wsl-ubuntu,lab-ubuntu any ai inspect \
         nerd-font archive "$URL_FONT" "$(sha "$ARTIFACTS/font.tar.xz")" '$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont' lab-ubuntu any desktop - \
         kitty archive "$URL_KITTY" "$(sha "$ARTIFACTS/kitty.txz")" '$HOME/.local/kitty.app' lab-ubuntu x86_64 desktop - \
-        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core -
+        bat-theme file "$URL_THEME" "$(sha "$ARTIFACTS/theme")" '$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme' all any core - \
+        gh-apt file "$URL_GH_KEY" "$SHA_GH_KEY" /etc/apt/keyrings/githubcli-archive-keyring.gpg lab-ubuntu any cli sudo
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
+mkdir -p "$FIXTURE/common/bash" "$FIXTURE/common/claude/.claude"
+printf '%s\n' '# fixture bashrc' >"$FIXTURE/common/bash/.bashrc"
+printf '%s\n' '{}' >"$FIXTURE/common/claude/.claude/settings.json"
+cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
+mkdir -p "$FIXTURE/scripts"
+cp "$REPO_ROOT/scripts/awesome-skills-update.sh" "$FIXTURE/scripts/awesome-skills-update.sh"
 printf '%s\n' '/.venv-sync/' >"$FIXTURE/.gitignore"
 cat >"$FIXTURE/stow-all.sh" <<'SH'
 #!/bin/sh
@@ -629,6 +645,7 @@ printf 'Linux version 5.15.167.4-microsoft-standard-WSL2 (root@runner) #1 SMP\n'
 printf '%s\n' zsh git curl xclip >"$DPKG_ALL"
 printf '%s\n' curl xclip >"$DPKG_PARTIAL"
 HOMEBREW_SCRATCH_REL=.cache/dotfiles-bootstrap/homebrew/install.sh
+GH_KEY_SCRATCH_REL=.cache/dotfiles-bootstrap/gh-apt/githubcli-archive-keyring.gpg
 CLAUDE_SCRATCH_REL=.cache/dotfiles-bootstrap/claude/install.sh
 
 # --- refusals ----------------------------------------------------------------
@@ -754,13 +771,18 @@ expect_text check-fresh out 'S6-kitty todo'
 expect_text check-fresh out 'S5-claude human'
 expect_line check-fresh 'HUMAN-BEGIN S5-claude inspect'
 expect_text check-fresh out "downloads $URL_CLAUDE (unpinned)"
-expect_line check-fresh "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
+expect_text check-fresh out 'that runs it only while that sha256 holds'
+expect_no_text check-fresh out "&& bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_text check-fresh out 'H1-locale done'
 expect_line check-fresh 'HUMAN-BEGIN H1-gh-apt-repo sudo'
+expect_text check-fresh out "downloads $URL_GH_KEY"
 expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-sync-skills judgment'
 expect_text check-fresh out 'unpinned curl of awesome-skills main'
+expect_text check-fresh out '# on by default once stowed: every new interactive shell runs it unless AWESOME_SKILLS_AUTO_UPDATE=0'
+SKILLS_LINE="AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh $FIXTURE/scripts/awesome-skills-update.sh"
+expect_line check-fresh "$SKILLS_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
 expect_no_events check-fresh
 snapshot >"$TEST_TMP/after"
@@ -769,6 +791,14 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
     fail '--check created or removed files'
 }
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
+
+# The skill-sync line runs the sync even in a provisioning shell, which
+# exports AWESOME_SKILLS_AUTO_UPDATE=0 (curl is the stub; it logs the URL).
+: >"$EVENT_LOG"
+env -i HOME="$TEST_TMP/skills-home" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
+    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$URL_MAP" AWESOME_SKILLS_AUTO_UPDATE=0 \
+    sh -c "$SKILLS_LINE" >/dev/null 2>&1 || true
+expect_event 'curl:https://raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh'
 
 # --- debian apply: every step, in phase order --------------------------------
 
@@ -780,20 +810,40 @@ expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
     "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
 expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1'
-expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm"
+expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
 expect_no_event TRIPWIRE
 expect_text apply out 'S3-clones done applied:'
 expect_text apply out 'S5-codex done applied:'
 expect_event 'codex-run:--version'
 expect_line apply 'HUMAN-BEGIN S5-claude inspect'
-expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes"
-expect_line apply "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
+expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes; delete the file for a fresh copy"
+expect_line apply "printf '%s  %s\\n' $SHA_CLAUDE $CASE_HOME/$CLAUDE_SCRATCH_REL | sha256sum -c --status - && bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_line apply 'HUMAN-BEGIN H7-stow judgment'
-expect_line apply "cd $FIXTURE"
-expect_line apply './stow-all.sh lab-ubuntu'
+# One self-contained line: stow is on PATH only after the first stow.
+expect_line apply "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
 expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 
 [ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
+# The GitHub CLI keyring is pinned: staged after its digest check, and the
+# sudo block installs it as an apt trust anchor only behind a digest gate.
+expect_event "curl:$URL_GH_KEY"
+[ "$(sha "$CASE_HOME/$GH_KEY_SCRATCH_REL")" = "$SHA_GH_KEY" ] || fail 'gh keyring not staged'
+expect_line apply "# sha256 $SHA_GH_KEY verified"
+GH_KEY_GATE="printf '%s  %s\\n' $SHA_GH_KEY $CASE_HOME/$GH_KEY_SCRATCH_REL | sha256sum -c --status - && sudo install -D -m 0644 $CASE_HOME/$GH_KEY_SCRATCH_REL /etc/apt/keyrings/githubcli-archive-keyring.gpg"
+expect_line apply "$GH_KEY_GATE"
+expect_no_text apply out 'gpg --show-keys'
+if command -v sha256sum >/dev/null 2>&1; then
+    # sudo is a tripwire stub here: it records that the gate let it run.
+    : >"$EVENT_LOG"
+    PATH="$FAKE_BIN:$PATH" EVENT_LOG="$EVENT_LOG" bash -c "$GH_KEY_GATE" >/dev/null 2>&1 || true
+    grep -q 'TRIPWIRE sudo install -D -m 0644' "$EVENT_LOG" || fail 'the keyring gate did not reach sudo install'
+    cp "$CASE_HOME/$GH_KEY_SCRATCH_REL" "$TEST_TMP/gh-keyring.saved"
+    printf 'tampered\n' >>"$CASE_HOME/$GH_KEY_SCRATCH_REL"
+    : >"$EVENT_LOG"
+    PATH="$FAKE_BIN:$PATH" EVENT_LOG="$EVENT_LOG" bash -c "$GH_KEY_GATE" >/dev/null 2>&1 || true
+    [ ! -s "$EVENT_LOG" ] || fail 'the keyring gate installed a tampered keyring'
+    mv "$TEST_TMP/gh-keyring.saved" "$CASE_HOME/$GH_KEY_SCRATCH_REL"
+fi
 [ -f "$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh" ] || fail 'oh-my-zsh not cloned'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh" config oh-my-zsh.branch)" = master ] || fail 'oh-my-zsh clone config'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.oh-my-zsh/custom/themes/powerlevel10k" rev-parse HEAD)" = "$P10K_PIN" ] ||
@@ -803,6 +853,7 @@ expect_text apply err 'HUMAN steps pending: S5-claude H7-stow'
 cmp -s "$ARTIFACTS/theme" "$CASE_HOME/.config/bat/themes/Catppuccin Mocha.tmTheme" || fail 'bat theme'
 [ -d "$CASE_HOME/.vim/undo" ] && [ -d "$CASE_HOME/.vim/tmp" ] || fail 'vim dirs'
 [ -x "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node" ] && [ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'nvm node'
+[ "$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)" = "$NVM_PIN" ] || fail 'nvm not at its pinned commit'
 [ -f "$FIXTURE/.venv-sync/pyvenv.cfg" ] || fail 'setup-sync did not run'
 CODEX_RELEASE="$CASE_HOME/.codex/packages/standalone/releases/0.161.0-x86_64-unknown-linux-musl"
 [ "$(readlink "$CODEX_RELEASE/codex")" = bin/codex ] || fail 'codex release link'
@@ -814,6 +865,36 @@ CODEX_RELEASE="$CASE_HOME/.codex/packages/standalone/releases/0.161.0-x86_64-unk
 [ "$(readlink "$CASE_HOME/.local/bin/kitty")" = "$CASE_HOME/.local/kitty.app/bin/kitty" ] || fail 'kitty link'
 [ "$(readlink "$CASE_HOME/.local/bin/kitten")" = "$CASE_HOME/.local/kitty.app/bin/kitten" ] || fail 'kitten link'
 [ -z "$("$REAL_GIT" -C "$FIXTURE" status --porcelain)" ] || fail 'apply dirtied the checkout'
+
+# The inspect download is kept: a later apply never replaces the copy a
+# person read, and its run line runs that copy only while it has the digest
+# the block shows.
+CLAUDE_SCRATCH="$CASE_HOME/$CLAUDE_SCRATCH_REL"
+GATE_LOG="$TEST_TMP/gate.log"
+printf '%s\n' '# reviewed version A' 'printf "reviewed-run\n" >>"$GATE_LOG"' >"$CLAUDE_SCRATCH"
+SHA_REVIEWED=$(sha "$CLAUDE_SCRATCH")
+run_case claude-keep -- --host lab-ubuntu --yes --only S5-claude
+expect_rc claude-keep 3
+expect_no_event "curl:$URL_CLAUDE"
+[ "$(sha "$CLAUDE_SCRATCH")" = "$SHA_REVIEWED" ] || fail 'a later apply replaced the reviewed claude installer'
+expect_text claude-keep out "# sha256 $SHA_REVIEWED, "
+GATE_LINE="printf '%s  %s\\n' $SHA_REVIEWED $CLAUDE_SCRATCH | sha256sum -c --status - && bash $CLAUDE_SCRATCH"
+expect_line claude-keep "$GATE_LINE"
+run_case claude-keep-check -- --host lab-ubuntu --check --only S5-claude
+expect_line claude-keep-check "$GATE_LINE"
+expect_no_events claude-keep-check
+if command -v sha256sum >/dev/null 2>&1; then
+    : >"$GATE_LOG"
+    GATE_LOG="$GATE_LOG" bash -c "$GATE_LINE" || fail 'the claude gate rejects the reviewed copy'
+    grep -qx reviewed-run "$GATE_LOG" || fail 'the claude gate did not run the reviewed copy'
+    printf '%s\n' 'printf "tampered-run\n" >>"$GATE_LOG"' >>"$CLAUDE_SCRATCH"
+    : >"$GATE_LOG"
+    if GATE_LOG="$GATE_LOG" bash -c "$GATE_LINE" 2>/dev/null; then
+        fail 'the claude gate ran a changed installer'
+    fi
+    [ ! -s "$GATE_LOG" ] || fail 'the claude gate ran a changed installer'
+fi
+cp "$FIXTURES/artifacts/claude-install" "$CLAUDE_SCRATCH"
 
 # A second apply installs nothing; once ~/.zshrc is stowed nothing blocks.
 printf '#!/bin/sh\necho "2.0.0 (Claude Code)"\n' >"$CASE_HOME/.local/bin/claude"
@@ -881,6 +962,57 @@ expect_text check-cloned out 'S3-clones done 3 clones at their pins'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
+
+# --- H7-stow: home files Stow would refuse are moved aside first -------------
+
+new_home stow-conflicts
+mkdir -p "$CASE_HOME/.oh-my-zsh" "$CASE_HOME/.claude"
+: >"$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh"
+printf '# from /etc/skel\n' >"$CASE_HOME/.bashrc"
+ln -s "$TEST_TMP/elsewhere/.zshrc" "$CASE_HOME/.zshrc"
+# A regular file by design: .stowrc ignores the tracked settings.json.
+printf '{}\n' >"$CASE_HOME/.claude/settings.json"
+run_case stow-conflicts -- --host lab-ubuntu --check --only H7-stow
+expect_rc stow-conflicts 3
+expect_text stow-conflicts out 'H7-stow human '
+expect_text stow-conflicts out '2 home file(s) to move aside first: .bashrc .zshrc'
+expect_text stow-conflicts out 'stow --adopt would overwrite the tracked copies'
+expect_line stow-conflicts "mv -n $CASE_HOME/.bashrc $CASE_HOME/.bashrc.pre-dotfiles"
+expect_line stow-conflicts "mv -n $CASE_HOME/.zshrc $CASE_HOME/.zshrc.pre-dotfiles"
+expect_no_text stow-conflicts out 'settings.json.pre-dotfiles'
+expect_no_events stow-conflicts
+# A link into this checkout is Stow's own: nothing to move.
+rm "$CASE_HOME/.bashrc"
+ln -s "$FIXTURE/common/bash/.bashrc" "$CASE_HOME/.bashrc"
+run_case stow-own-link -- --host lab-ubuntu --check --only H7-stow
+expect_text stow-own-link out '1 home file(s) to move aside first: .zshrc'
+expect_no_text stow-own-link out "mv -n $CASE_HOME/.bashrc"
+
+# --- H1-gh-apt-repo: Ubuntu's own /usr/bin/gh is below the floor ------------
+
+new_home gh-apt
+printf '#!/bin/sh\necho "gh version 2.45.0 (2026-03-17 Ubuntu 2.45.0-1ubuntu0.3+esm3)"\n' >"$CASE_HOME/.fake-gh-apt"
+chmod 755 "$CASE_HOME/.fake-gh-apt"
+run_case gh-apt-old -- --host lab-ubuntu --check --only H1-gh-apt-repo
+expect_rc gh-apt-old 0
+expect_text gh-apt-old out "H1-gh-apt-repo human $CASE_HOME/.fake-gh-apt 2.45.0 is below 2.50.0 (Ubuntu's own gh"
+expect_line gh-apt-old 'HUMAN-BEGIN H1-gh-apt-repo sudo'
+expect_no_events gh-apt-old
+printf '#!/bin/sh\necho "gh version 2.81.0 (2025-09-01)"\n' >"$CASE_HOME/.fake-gh-apt"
+run_case gh-apt-new -- --host lab-ubuntu --check --only H1-gh-apt-repo
+expect_rc gh-apt-new 0
+expect_text gh-apt-new out "H1-gh-apt-repo done $CASE_HOME/.fake-gh-apt 2.81.0 >= 2.50.0"
+expect_no_text gh-apt-new out 'HUMAN-BEGIN H1-gh-apt-repo'
+
+# --- nvm: a checkout off the pinned commit is never sourced ------------------
+
+new_home nvm-moved
+run_case nvm-moved FAKE_NVM_REF=master -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-moved 1
+expect_text nvm-moved err "not the pinned nvm commit $NVM_PIN"
+expect_event "curl:$URL_NVM"
+expect_no_event 'nvm:'
+[ ! -e "$CASE_HOME/.nvm" ] || fail 'an nvm checkout off its pin was left in place'
 
 # --- oh-my-zsh recovery: stow ran before the clone ---------------------------
 
@@ -1010,6 +1142,11 @@ expect_line hpc-login 'sh_dev -t 1:00:00'
 expect_text hpc-login out 'S2-login-env todo blocked by H2-alloc'
 expect_text hpc-login out 'S4-setup-sync todo blocked by S2-login-env'
 expect_line hpc-login 'HUMAN-BEGIN S2-modules judgment'
+# No site module provides claude or codex here, so H7-auth does not name them.
+expect_line hpc-login 'HUMAN-BEGIN H7-auth auth'
+expect_line hpc-login 'kinit'
+expect_no_text hpc-login out 'codex login'
+expect_no_text hpc-login out '# Claude Code signs in'
 [ -x "$CASE_HOME/.local/bin/micromamba" ] || fail 'micromamba not installed'
 [ "$(sha "$CASE_HOME/.local/bin/micromamba")" = "$SHA_MICROMAMBA" ] || fail 'micromamba digest'
 
@@ -1018,6 +1155,7 @@ expect_rc hpc-alloc 3
 expect_event "micromamba:create -y -r $CASE_HOME/micromamba -n login -f $FIXTURE/config/bootstrap/hpc-login-env.yml"
 expect_event "setup-sync:--python $CASE_HOME/micromamba/envs/login/bin/python3"
 expect_line hpc-alloc 'HUMAN-BEGIN H7-stow judgment'
+expect_line hpc-alloc "PATH=\"\$HOME/micromamba/envs/login/bin:\$PATH\" $FIXTURE/stow-all.sh sherlock"
 expect_no_text hpc-alloc out 'HUMAN-BEGIN H2-alloc'
 expect_no_event TRIPWIRE
 
@@ -1048,8 +1186,9 @@ expect_rc mac-check 3
 expect_line mac-check 'HUMAN-BEGIN H1-homebrew sudo'
 expect_text mac-check out "downloads $URL_HOMEBREW"
 expect_text mac-check out "verifies sha256 $SHA_HOMEBREW first"
-expect_line mac-check "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
-expect_line mac-check "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -"
+MAC_GATE="printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+expect_line mac-check "$MAC_GATE"
+expect_no_text mac-check out 'stop unless'
 expect_text mac-check out 'S2-brew-bundle todo blocked by H1-homebrew'
 expect_no_events mac-check
 snapshot >"$TEST_TMP/after"
@@ -1060,21 +1199,34 @@ expect_rc mac-brew 3
 expect_event "curl:$URL_HOMEBREW"
 expect_no_event TRIPWIRE
 expect_line mac-brew "# sha256 $SHA_HOMEBREW verified"
-expect_line mac-brew 'sudo -v'
-expect_line mac-brew "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 [ "$(sha "$CASE_HOME/$HOMEBREW_SCRATCH_REL")" = "$SHA_HOMEBREW" ] || fail 'homebrew installer not staged'
-# The block re-checks the digest right before the sudo-backed run.
-grep -n -e '^printf .* | shasum -a 256 -c -$' -e '^sudo -v$' -e '^NONINTERACTIVE=1 /bin/bash ' \
+# sudo -v, then one line that runs the installer only while its digest holds
+# (a FAILED check must not fall through to the run), then sudo -k.
+grep -n -e '| shasum -a 256 -c --status - && ' -e '^sudo -[vk]$' -e '/bin/bash ' \
     "$TEST_TMP/mac-brew.out" | cut -d: -f2- >"$TEST_TMP/mac-brew.order"
-printf '%s\n' "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -" \
-    'sudo -v' "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL" | cmp -s - "$TEST_TMP/mac-brew.order" ||
-    fail 'Homebrew block: digest re-check, sudo -v, then the run'
-VERIFY_LINE=$(sed -n '/| shasum -a 256 -c -$/p' "$TEST_TMP/mac-brew.out")
-bash -c "$VERIFY_LINE" >/dev/null || fail 'the digest re-check rejects the staged installer'
+printf '%s\n' 'sudo -v' "$MAC_GATE" 'sudo -k' | cmp -s - "$TEST_TMP/mac-brew.order" ||
+    fail "Homebrew block: sudo -v, the digest-gated run, then sudo -k: $(cat "$TEST_TMP/mac-brew.order")"
+# gate_runs NAME LINE: run a gated block line; the fixture installer it
+# guards records a TRIPWIRE event and exits 99 when it runs.
+gate_runs() {
+    : >"$EVENT_LOG"
+    set +e
+    EVENT_LOG="$EVENT_LOG" bash -c "$2" >/dev/null 2>&1
+    GATE_RC=$?
+    set -e
+    if [ "$GATE_RC" != 99 ] || ! grep -q 'TRIPWIRE homebrew-install' "$EVENT_LOG"; then
+        fail "$1: the digest gate did not run the staged installer (exit $GATE_RC)"
+    fi
+}
+gate_refuses() {
+    : >"$EVENT_LOG"
+    if EVENT_LOG="$EVENT_LOG" bash -c "$2" >/dev/null 2>&1 || [ -s "$EVENT_LOG" ]; then
+        fail "$1: the digest gate ran a tampered installer"
+    fi
+}
+gate_runs mac-gate "$MAC_GATE"
 printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
-if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
-    fail 'the digest re-check accepts a tampered installer'
-fi
+gate_refuses mac-gate-tampered "$MAC_GATE"
 rm -f "$CASE_HOME/$HOMEBREW_SCRATCH_REL"
 
 run_case mac-clt "${MAC_ENV[@]}" FAKE_XCODE=0 -- --host mac --check
@@ -1090,14 +1242,13 @@ expect_event "curl:$URL_HOMEBREW"
 expect_no_event TRIPWIRE
 expect_line linuxbrew 'HUMAN-BEGIN H1-linuxbrew sudo'
 expect_line linuxbrew "# sha256 $SHA_HOMEBREW verified"
-expect_line linuxbrew "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+LINUX_GATE="printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+expect_line linuxbrew "$LINUX_GATE"
+expect_line linuxbrew 'sudo -k'
 if command -v sha256sum >/dev/null 2>&1; then
-    VERIFY_LINE=$(sed -n '/| sha256sum -c -$/p' "$TEST_TMP/linuxbrew.out")
-    bash -c "$VERIFY_LINE" >/dev/null || fail 'the sha256sum re-check rejects the staged installer'
+    gate_runs linuxbrew-gate "$LINUX_GATE"
     printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
-    if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
-        fail 'the sha256sum re-check accepts a tampered installer'
-    fi
+    gate_refuses linuxbrew-gate-tampered "$LINUX_GATE"
 fi
 
 # --- --list and --print-manual -----------------------------------------------
@@ -1115,15 +1266,136 @@ run_case manual -- --host lab-ubuntu --print-manual
 expect_rc manual 0
 expect_line manual 'sudo apt-get install -y --no-install-recommends zsh git curl xclip'
 expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
-expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
+expect_line manual "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
 [ "$(grep -c '^HUMAN-BEGIN ' "$TEST_TMP/manual.out")" = "$(grep -c '^HUMAN-END$' "$TEST_TMP/manual.out")" ] ||
     fail 'unbalanced HUMAN blocks'
 expect_no_events manual
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail '--print-manual wrote files'
+
+# --- PATH before the first stow ----------------------------------------------
+
+# path_case PROFILE: this process's PATH after steps_extend_path, starting
+# from /usr/bin:/bin, with Homebrew, ~/.local/bin and the login env present.
+path_case() {
+    env -i HOME="$CASE_HOME" PATH=/usr/bin:/bin BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew" \
+        STEPS_PROFILE="$1" /bin/bash -c \
+        'for lib in manifest platform steps steps-common; do . "$0/$lib.sh"; done
+        steps_extend_path
+        printf "%s\n" "$PATH"' "$FIXTURE/lib/bootstrap"
+}
+new_home path
+mkdir -p "$CASE_BREW/sbin" "$CASE_HOME/.local/bin" "$CASE_HOME/micromamba/envs/login/bin"
+# The stowed shells' order: ~/.local/bin before Homebrew; on hpc the login
+# env before both.
+PATH_DEBIAN=$(path_case debian)
+[ "$PATH_DEBIAN" = "$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
+    fail "debian PATH before stow: $PATH_DEBIAN"
+PATH_HPC=$(path_case hpc)
+[ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
+    fail "hpc PATH before stow: $PATH_HPC"
+
+# The H7-stow prefix without a Homebrew yet: each profile's default prefix,
+# and a found brew outside the plain path characters stays quoted.
+stow_line() {
+    awk -v tail=" $FIXTURE/stow-all.sh $2" 'substr($0, length($0) - length(tail) + 1) == tail' "$TEST_TMP/$1.out"
+}
+run_case stow-arm "${MAC_ENV[@]}" -- --host mac --print-manual
+[ "$(stow_line stow-arm mac)" = "PATH=\"/opt/homebrew/bin:\$PATH\" $FIXTURE/stow-all.sh mac" ] ||
+    fail "Apple Silicon stow line: $(stow_line stow-arm mac)"
+run_case stow-intel "${MAC_ENV[@]}" BOOTSTRAP_UNAME_M=x86_64 -- --host mac --print-manual
+[ "$(stow_line stow-intel mac)" = "PATH=\"/usr/local/bin:\$PATH\" $FIXTURE/stow-all.sh mac" ] ||
+    fail "Intel macOS stow line: $(stow_line stow-intel mac)"
+run_case stow-linux BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host wsl-ubuntu --print-manual
+[ "$(stow_line stow-linux wsl-ubuntu)" = "PATH=\"/home/linuxbrew/.linuxbrew/bin:\$PATH\" $FIXTURE/stow-all.sh wsl-ubuntu" ] ||
+    fail "Linuxbrew stow line: $(stow_line stow-linux wsl-ubuntu)"
+mkdir -p "$TEST_TMP/odd brew/bin"
+cp "$TEST_TMP/brew-stub" "$TEST_TMP/odd brew/bin/brew"
+run_case stow-odd BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/odd brew/bin/brew" -- --host lab-ubuntu --print-manual
+[ "$(stow_line stow-odd lab-ubuntu)" = "PATH=$(printf '%q' "$TEST_TMP/odd brew/bin"):\"\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu" ] ||
+    fail "quoted stow prefix: $(stow_line stow-odd lab-ubuntu)"
+
+# --- HUMAN block lines stand alone -------------------------------------------
+
+# block_violations FILE: print every HUMAN block line of FILE that is neither
+# a '# ' note nor a self-contained command. A command may not change shell
+# state (cd, export, ...), may not use a $NAME that another line of the
+# block assigns, and never runs gh auth setup-git. An agent runs each line
+# as its own command, with no shell state kept in between.
+block_violations() {
+    awk '
+        function finish(i, j, k, count, names, pattern) {
+            for (j = 1; j <= n; j++) {
+                if (!(j in assigned)) continue
+                count = split(assigned[j], names, " ")
+                for (k = 1; k <= count; k++) {
+                    pattern = "[$][{]?" names[k] "([^A-Za-z0-9_]|$)"
+                    for (i = 1; i <= n; i++)
+                        if (i != j && lines[i] !~ /^#/ && lines[i] ~ pattern)
+                            print id ": uses $" names[k] " from another line: " lines[i]
+                }
+            }
+        }
+        /^HUMAN-BEGIN / { inside = 1; id = $2; n = 0; split("", lines); split("", assigned); next }
+        /^HUMAN-END$/ { finish(); inside = 0; next }
+        !inside { next }
+        {
+            lines[++n] = $0
+            if ($0 ~ /^#/) {
+                if ($0 !~ /^# /) print id ": a note needs \"# \": " $0
+                next
+            }
+            if ($0 ~ /^[[:space:]]*$/) print id ": empty line"
+            if ($0 ~ /^(cd|pushd|popd|export|unset|set|source|alias|read|declare|typeset|local)([[:space:]]|$)/ || $0 ~ /^[.][[:space:]]/)
+                print id ": changes shell state: " $0
+            if ($0 ~ /setup-git/) print id ": runs gh auth setup-git: " $0
+            rest = $0
+            while (match(rest, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
+                assigned[n] = assigned[n] " " substr(rest, 1, RLENGTH - 1)
+                rest = substr(rest, RLENGTH + 1)
+                sub(/^[^[:space:]]*[[:space:]]*/, "", rest)
+            }
+        }
+        END { if (inside) print id ": no HUMAN-END" }
+    ' "$1"
+}
+
+# The scan finds the carried state it is meant to catch.
+cat >"$TEST_TMP/carried.out" <<'EOF'
+HUMAN-BEGIN H1-example sudo
+#no space
+download=$(mktemp)
+curl -o "$download" https://example.invalid/key
+cd /tmp
+gh auth setup-git
+NONINTERACTIVE=1 /bin/bash /tmp/install.sh
+HUMAN-END
+EOF
+VIOLATIONS=$(block_violations "$TEST_TMP/carried.out")
+for text in 'a note needs' 'uses $download from another line' 'changes shell state: cd /tmp' 'runs gh auth setup-git'; do
+    case $VIOLATIONS in
+        *"$text"*) ;;
+        *) fail "the block scan misses [$text]: $VIOLATIONS" ;;
+    esac
+done
+[ "$(printf '%s\n' "$VIOLATIONS" | grep -c .)" = 4 ] || fail "the block scan flags a self-contained line: $VIOLATIONS"
+
+# Every block of every host, as --print-manual lists them and as the
+# apply and check runs above printed them.
+run_case manual-mac "${MAC_ENV[@]}" -- --host mac --print-manual
+for host in wsl-ubuntu sherlock marlowe; do
+    run_case "manual-$host" -- --host "$host" --print-manual
+done
+for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
+    check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts; do
+    grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
+    VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
+    [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
+done
 
 # --- bootstrap_fetch ---------------------------------------------------------
 
@@ -1191,6 +1463,14 @@ expect_no_events fetch-unpinned
 fetch_case fetch-inspect "$CURL_ONLY" --inspect "$URL_CLAUDE" "$FETCH_DIR/claude" -
 expect_rc fetch-inspect 0
 cmp -s "$FIXTURES/artifacts/claude-install" "$FETCH_DIR/claude" || fail 'fetch --inspect'
+
+# wget follows a redirect to http, and nothing pins an inspect download, so
+# --inspect needs curl; it writes nothing without it.
+fetch_case fetch-inspect-wget "$WGET_ONLY" --inspect "$URL_CLAUDE" "$FETCH_DIR/inspect-wget/claude" -
+expect_rc fetch-inspect-wget 1
+expect_text fetch-inspect-wget err 'an unpinned download needs curl'
+expect_no_events fetch-inspect-wget
+[ ! -e "$FETCH_DIR/inspect-wget" ] || fail 'fetch --inspect without curl wrote files'
 
 fetch_case fetch-http "$CURL_ONLY" http://example.invalid/x "$FETCH_DIR/http" "$SHA_MICROMAMBA"
 expect_rc fetch-http 2

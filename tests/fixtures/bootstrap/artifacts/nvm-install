@@ -1,8 +1,15 @@
 #!/bin/sh
-# Fixture nvm install.sh: records how setup-host ran it and lays out an nvm.sh
-# whose nvm function records its calls and fakes node and the default alias.
-printf 'nvm-install:PROFILE=%s NVM_DIR=%s\n' "${PROFILE-unset}" "${NVM_DIR-unset}" >>"$EVENT_LOG"
+# Fixture nvm install.sh: records how setup-host ran it, checks out the
+# commit NVM_INSTALL_VERSION names (FAKE_NVM_REF stands in for a tag that
+# moved), and lays out an nvm.sh whose nvm function records its calls and
+# fakes node and the default alias.
+printf 'nvm-install:PROFILE=%s NVM_DIR=%s NVM_INSTALL_VERSION=%s\n' \
+    "${PROFILE-unset}" "${NVM_DIR-unset}" "${NVM_INSTALL_VERSION-unset}" >>"$EVENT_LOG"
 [ -d "${NVM_DIR:?}" ] || exit 3
+git init -q "$NVM_DIR" &&
+    git -C "$NVM_DIR" remote add origin https://github.com/nvm-sh/nvm.git &&
+    git -C "$NVM_DIR" fetch -q --depth=1 origin "${FAKE_NVM_REF:-${NVM_INSTALL_VERSION:?}}" &&
+    git -C "$NVM_DIR" checkout -q -f FETCH_HEAD || exit 2
 cat >"$NVM_DIR/nvm.sh" <<'NVM'
 nvm() {
     printf 'nvm:%s\n' "$*" >>"$EVENT_LOG"

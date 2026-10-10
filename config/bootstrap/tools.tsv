@@ -10,7 +10,9 @@
 #                 env:VAR | psmodule:Name. PATH is absolute or starts with one
 #                 token: $HOME $ZSH_CUSTOM $NVM_DIR $XDG_CONFIG_HOME
 #                 $XDG_DATA_HOME $BAT_CONFIG_DIR.
-#   version_flag  --version, -V, -v, version, or - (presence only)
+#   version_flag  --version, -V, -v, version, or - (presence only); dir, font,
+#                 env and psmodule probes are presence only, a file probe of an
+#                 executable may name a flag
 #   floor         X.Y or X.Y.Z, compared with the first X.Y[.Z] the tool prints
 #   doc           a step id; docs/bootstrap.md has one "### <id>:" heading each
 # Floors: fzf 0.58.0 (--style full, --input-label in fzf.zsh and fzf-tab.zsh),
@@ -33,7 +35,9 @@ tmux	core	unix	tmux	-V	-	fzf --tmux popups and tmux sessions are unavailable	H1-
 # doctor and setup-host first prepend the directory of bootstrap_brew_bin
 # (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to
 # their own PATH; the brew probe and every Brewfile tool probe rely on that.
-homebrew	core	mac	brew	--version	-	Brewfile bundles cannot run	H1-homebrew
+# The brew probe is presence-only: `brew --version` can rewrite
+# $HOMEBREW_REPOSITORY/.git/describe-cache, and the doctor writes nothing.
+homebrew	core	mac	brew	-	-	Brewfile bundles cannot run	H1-homebrew
 linuxbrew	core	wsl-ubuntu,lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/brew	-	-	Brewfile bundles cannot run and the overlay brew shellenv line fails	H1-linuxbrew
 python3	core	all	python3,python	--version	3.11	setup-sync and the AI config sync helpers cannot run	S2-brew-bundle
 stow	core	unix	stow	--version	2.3.1	stow-all.sh refuses to run	S2-brew-bundle
@@ -59,17 +63,22 @@ git-delta	cli	all	delta	--version	-	fzf-tab git diff and show previews are empty
 tldr	cli	all	tldr	--version	-	fzf-tab command and tldr previews fall back to man	S2-brew-bundle
 chafa	cli	unix	chafa	--version	-	fzf image previews outside kitty show only file details	S2-brew-bundle
 jq	cli	all	jq	--version	-	JSON filtering on the command line fails	S2-brew-bundle
-nvim	cli	all	nvim	--version	-	the vi alias fails	S2-brew-bundle
+# Presence-only: `nvim --version` creates ~/.local/state/nvim/nvim.log.
+nvim	cli	all	nvim	-	-	the vi alias fails	S2-brew-bundle
 aria2	cli	all	aria2c	--version	-	aria2c downloads with the stowed aria2.conf fail	S2-brew-bundle
 uv	cli	all	uv	--version	-	uv and the oh-my-zsh uv plugin are unavailable	S2-brew-bundle
 gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows fail	S2-brew-bundle
-gh-apt	cli	lab-ubuntu	file:/usr/bin/gh	-	-	the github.com credential helper in .gitconfig_local fails	H1-gh-apt-repo
+# /usr/bin/gh is versioned: Ubuntu's own gh package (2.45) installs the same path below the floor.
+gh-apt	cli	lab-ubuntu	file:/usr/bin/gh	--version	2.50.0	the github.com credential helper in .gitconfig_local fails	H1-gh-apt-repo
 xclip	cli	lab-ubuntu	xclip	-	-	fzf Ctrl-Y cannot copy to the X clipboard	H1-apt-core
 wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	H1-apt-core
 nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
 node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
-claude	ai	all	claude	--version	-	Claude Code is unavailable	S5-claude
-codex	ai	all	codex	--version	-	Codex is unavailable	S5-codex
+# Claude Code and Codex are not checked on sherlock and marlowe: there they come from optional site
+# modules (S2-modules), so the hpc completion gate cannot depend on them.
+claude	ai	mac,wsl-ubuntu,lab-ubuntu,win	claude	--version	-	Claude Code is unavailable	S5-claude
+# Presence-only: `codex --version` writes $CODEX_HOME/tmp/arg0 once ~/.codex exists.
+codex	ai	mac,wsl-ubuntu,lab-ubuntu,win	codex	-	-	Codex is unavailable	S5-codex
 kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the stowed kitty.conf has no terminal to configure	S6-kitty
 wezterm	desktop	mac,win	wezterm	-	-	the stowed .wezterm.lua has no terminal to configure	S2-brew-bundle
 nerd-font	desktop	mac,lab-ubuntu,win	font:CaskaydiaMono Nerd Font	-	-	prompt, eza and terminal icons render as boxes	S6-nerd-font
@@ -78,7 +87,8 @@ oh-my-posh	desktop	win	oh-my-posh	version	-	the default PowerShell prompt replac
 psfzf	desktop	win	psmodule:PSFzf	-	-	Ctrl+R, Ctrl+T and Alt+C keep PSReadLine defaults	W1-psresources
 completionpredictor	desktop	win	psmodule:CompletionPredictor	-	-	predictions come from history only	W1-psresources
 commandnotfound	desktop	win	psmodule:Microsoft.WinGet.CommandNotFound	-	-	no winget suggestions for unknown commands	W1-psresources
-pre-commit	contributor	all	pre-commit	--version	-	pre-commit run --all-files cannot run	X-contributor
+# Presence-only: `pre-commit --version` imports Python modules, writing __pycache__.
+pre-commit	contributor	all	pre-commit	-	-	pre-commit run --all-files cannot run	X-contributor
 shfmt	contributor	unix	shfmt	--version	3.13.0	manual shfmt runs miss the zsh dialect	X-contributor
 shellcheck	contributor	unix	shellcheck	--version	-	manual shellcheck runs fail	X-contributor
 stylua	contributor	unix	stylua	--version	-	manual Lua formatting of .wezterm.lua fails	X-contributor
@@ -152,7 +162,5 @@ lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so over
 # alias: node nodejs
 # alias: claude claude-code
 # alias: claude Anthropic.ClaudeCode
-# manual: claude hpc
 # alias: codex OpenAI.Codex
-# manual: codex hpc
 # alias: shfmt go-shfmt

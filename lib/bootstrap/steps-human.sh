@@ -38,10 +38,11 @@ steps_brew_check() {
 
 # steps_homebrew_block STEP: the pinned Homebrew installer, run by a person.
 # Apply mode downloaded and verified it first; --check and --print-manual
-# only name the URL and digest. The block re-checks the digest itself right
-# before the sudo-backed run, since the file may have changed since then.
+# only name the URL and digest. The run line re-checks the digest itself and
+# runs the installer only when it still matches, since the file may have
+# changed since the download; sudo -k then drops the cached credential.
 steps_homebrew_block() {
-    local path quoted verify=sha256sum
+    local path
     steps_block_begin "$1" sudo
     if ! steps_installer_fields homebrew; then
         printf '# no installers.tsv homebrew row for %s\n' "$STEPS_HOST"
@@ -49,18 +50,16 @@ steps_homebrew_block() {
         return 0
     fi
     path=$(steps_scratch_file homebrew "$STEPS_URL")
-    quoted=$(steps_quote "$path")
-    [ "$STEPS_PROFILE" != macos ] || verify='shasum -a 256'
     if [ "$STEPS_MODE" = apply ] && steps_has_digest "$path" "$STEPS_SHA"; then
         printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
     else
         printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
         printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
     fi
-    printf '%s\n' '# re-check the pinned sha256 right before the sudo-backed run; stop unless it prints OK' \
-        "printf '%s  %s\\n' $STEPS_SHA $quoted | $verify -c -" \
-        "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v'
-    printf 'NONINTERACTIVE=1 /bin/bash %s\n' "$quoted"
+    printf '%s\n' "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v' \
+        '# the installer runs only while its sha256 is still the pinned one'
+    steps_digest_gate "$STEPS_SHA" "$path" "NONINTERACTIVE=1 /bin/bash $(steps_quote "$path")"
+    printf '%s\n' '# drop the cached sudo credential again' 'sudo -k'
     steps_block_end
 }
 
@@ -149,24 +148,60 @@ step_H1_locale_plan() {
 
 # --- H1-gh-apt-repo (lab-ubuntu, sudo, reminder) ---------------------------
 
+# Done only when /usr/bin/gh meets the gh-apt floor in tools.tsv: Ubuntu's
+# own, older gh package installs the same path. Its version flag is read
+# from the row, as the doctor does.
 step_H1_gh_apt_repo_check() {
-    if steps_probe gh-apt; then
+    local flag floor version
+    if ! steps_probe gh-apt; then
+        STEP_DETAIL='the GitHub CLI apt package (named by .gitconfig_local) is not installed'
+        return 1
+    fi
+    flag=$(steps_tool_cell gh-apt 5) || flag=-
+    floor=$(steps_tool_cell gh-apt 6) || floor=-
+    if [ "$flag" = - ] || [ "$floor" = - ]; then
         STEP_DETAIL="$STEPS_PROBE_FOUND is installed"
         return 0
     fi
-    STEP_DETAIL='the GitHub CLI apt package (named by .gitconfig_local) is not installed'
+    version=$(bootstrap_tool_version "$STEPS_PROBE_FOUND" "$flag")
+    if [ -n "$version" ] && bootstrap_version_ge "$version" "$floor"; then
+        STEP_DETAIL="$STEPS_PROBE_FOUND $version >= $floor"
+        return 0
+    fi
+    STEP_DETAIL="$STEPS_PROBE_FOUND ${version:-of unknown version} is below $floor (Ubuntu's own gh, not the cli.github.com package)"
     return 1
 }
 
+# The pinned keyring (installers.tsv gh-apt) to its scratch file.
+step_H1_gh_apt_repo_apply() { steps_fetch_installer gh-apt; }
+
+# The keyring and source list are staged as you under a fixed scratch path,
+# so every line of the block stands alone (no shell variable carries over).
+# The keyring becomes an apt trust anchor only through a digest gate on the
+# pinned sha256.
 step_H1_gh_apt_repo_plan() {
-    local keyring=/etc/apt/keyrings/githubcli-archive-keyring.gpg
+    local key list
     steps_block_begin H1-gh-apt-repo sudo
+    if ! steps_installer_fields gh-apt; then
+        printf '# no installers.tsv gh-apt row for %s\n' "$STEPS_HOST"
+        steps_block_end
+        return 0
+    fi
+    key=$(steps_scratch_file gh-apt "$STEPS_URL")
+    list=$(steps_quote "$(steps_scratch_base)/gh-apt/github-cli.list")
+    printf '%s\n' '# the cli.github.com apt repository; .gitconfig_local runs /usr/bin/gh auth git-credential'
+    if [ "$STEPS_MODE" = apply ] && steps_has_digest "$key" "$STEPS_SHA"; then
+        printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
+    else
+        printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
+        printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
+    fi
     printf '%s\n' \
-        '# the cli.github.com apt repository; .gitconfig_local runs /usr/bin/gh auth git-credential' \
-        'keyring_download=$(mktemp)' \
-        "curl -fsSL --proto '=https' --tlsv1.2 -o \"\$keyring_download\" https://cli.github.com/packages/githubcli-archive-keyring.gpg" \
-        "sudo install -D -m 0644 \"\$keyring_download\" $keyring" \
-        "echo \"deb [arch=\$(dpkg --print-architecture) signed-by=$keyring] https://cli.github.com/packages stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null" \
+        "printf 'deb [arch=%s signed-by=$STEPS_DEST] https://cli.github.com/packages stable main\\n' \"\$(dpkg --print-architecture)\" >$list" \
+        '# the keyring is installed only while its sha256 is still the pinned one; stop if this line fails'
+    steps_digest_gate "$STEPS_SHA" "$key" "sudo install -D -m 0644 $(steps_quote "$key") $(steps_quote "$STEPS_DEST")"
+    printf '%s\n' \
+        "sudo install -D -m 0644 $list /etc/apt/sources.list.d/github-cli.list" \
         'sudo apt-get update' \
         'sudo apt-get install -y gh'
     steps_block_end
@@ -216,16 +251,17 @@ step_H2_alloc_plan() {
                 'srun --time=1:00:00 --pty bash -l'
             ;;
     esac
-    printf '%s\n' '# then, inside the allocation:'
-    printf 'cd %s\n' "$(steps_quote "$STEPS_ROOT")"
-    printf './setup-host.sh --host %s\n' "$STEPS_HOST"
+    printf '%s\n' '# then, inside the allocation (export CONDA_PKGS_DIRS first, as docs/bootstrap.md S2-login-env says):'
+    printf '%s --host %s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST"
     steps_block_end
 }
 
 # --- S2-modules (hpc, judgment, reminder) ----------------------------------
 
+# tools.tsv does not check claude and codex on a cluster (they are optional
+# site modules), so this reminder looks them up on PATH itself.
 step_S2_modules_check() {
-    if steps_probe claude && steps_probe codex; then
+    if command -v claude >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
         STEP_DETAIL='claude and codex are on PATH'
         return 0
     fi
@@ -268,8 +304,12 @@ step_S5_claude_check() {
 
 step_S5_claude_apply() { steps_fetch_installer claude; }
 
+# The download is kept: setup-host fetches it only while the file is absent,
+# so the copy a person read is not replaced by a later run. The run line
+# binds that copy to the digest printed here (read-only, so --check shows it
+# too once a run has downloaded it).
 step_S5_claude_plan() {
-    local path digest size
+    local path quoted digest size
     steps_block_begin S5-claude inspect
     if ! steps_installer_fields claude; then
         printf '# no installers.tsv claude row for %s\n' "$STEPS_HOST"
@@ -277,16 +317,18 @@ step_S5_claude_plan() {
         return 0
     fi
     path=$(steps_scratch_file claude "$STEPS_URL")
-    if [ "$STEPS_MODE" = apply ] && [ -f "$path" ] && digest=$(bootstrap_sha256 "$path"); then
+    quoted=$(steps_quote "$path")
+    if [ "$STEPS_MODE" != manual ] && [ -f "$path" ] && digest=$(bootstrap_sha256 "$path"); then
         size=$(wc -c <"$path" | tr -d ' ')
-        printf '# downloaded %s (unpinned vendor script)\n' "$STEPS_URL"
-        printf '# sha256 %s, %s bytes\n' "$digest" "$size"
+        printf '# downloaded %s (unpinned vendor script) to %s\n' "$STEPS_URL" "$quoted"
+        printf '# sha256 %s, %s bytes; delete the file for a fresh copy\n' "$digest" "$size"
+        printf '%s\n' '# read it first; the line below runs it only while its sha256 is still the one above'
+        steps_digest_gate "$digest" "$path" "bash $quoted"
     else
         printf '# ./setup-host.sh --host %s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$STEPS_URL"
-        printf '%s\n' '# to the path below and prints its sha256 and size'
+        printf '# to %s once, then prints its sha256, its size and a line\n' "$quoted"
+        printf '%s\n' '# that runs it only while that sha256 holds; read the file before you run it'
     fi
-    printf '# read %s first, then run:\n' "$(steps_quote "$path")"
-    printf 'bash %s\n' "$(steps_quote "$path")"
     printf '%s\n' '# ./doctor.sh then checks the installed claude against tools.tsv'
     steps_block_end
 }
@@ -311,20 +353,107 @@ steps_stowed() {
     return 1
 }
 
+# steps_stow_conflicts: the home paths (relative to $HOME, one per line) that
+# the first ./stow-all.sh would have to replace: a regular file, or a link
+# that does not lead into this checkout, where a common/ or host package
+# tracks a file that .stowrc does not ignore. Stow refuses them, and
+# stow --adopt would overwrite the tracked copies instead, so the H7-stow
+# block moves each aside first. Read-only: git ls-files and the home.
+steps_stow_conflicts() {
+    local files ignores pattern path rel target resolved
+    files=$(git -c core.quotePath=false --no-optional-locks -C "$STEPS_ROOT" ls-files -- common "$STEPS_HOST" \
+        2>/dev/null </dev/null) || return 0
+    ignores=$(sed -n 's/^--ignore=//p' "$STEPS_ROOT/.stowrc" 2>/dev/null) || ignores=
+    pattern=$(printf '%s\n' "$ignores" | awk 'NF { printf "%s(%s)$", sep, $0; sep = "|" }')
+    while IFS= read -r path; do
+        case $path in
+            \"* | */*/.stow-local-ignore) continue ;;
+            */*/*) ;;
+            *) continue ;;
+        esac
+        rel=${path#*/}
+        rel=${rel#*/}
+        if [ -n "$pattern" ] && steps_text_has -E "$pattern" "$rel"; then
+            continue
+        fi
+        target=$HOME/$rel
+        if [ -L "$target" ]; then
+            resolved=$(steps_resolve "$target") || resolved=
+            case $resolved in
+                "$STEPS_ROOT"/*) continue ;;
+            esac
+        elif [ ! -e "$target" ] || [ -d "$target" ]; then
+            continue
+        fi
+        printf '%s\n' "$rel"
+    done <<EOF
+$files
+EOF
+}
+
 step_H7_stow_check() {
+    local count
+    STEPS_STOW_CONFLICTS=
     steps_stowed && return 0
     if ! steps_probe oh-my-zsh; then
         STEP_DETAIL='oh-my-zsh must be cloned before ./stow-all.sh (S3-clones), or stow creates ~/.oh-my-zsh/custom first'
         return 4
     fi
+    STEPS_STOW_CONFLICTS=$(steps_stow_conflicts)
+    if [ -n "$STEPS_STOW_CONFLICTS" ]; then
+        count=$(printf '%s\n' "$STEPS_STOW_CONFLICTS" | grep -c .)
+        STEP_DETAIL="$STEP_DETAIL; $count home file(s) to move aside first: $(printf '%s\n' "$STEPS_STOW_CONFLICTS" | tr '\n' ' ')"
+        STEP_DETAIL=${STEP_DETAIL% }
+    fi
     return 1
 }
 
+# steps_stow_path_prefix: the one-shot PATH prefix for the first
+# ./stow-all.sh. GNU Stow comes from the login env on hpc, else from
+# Homebrew (the one this run found, or the profile's default prefix on
+# Apple Silicon, Intel macOS or Linux), and only the stowed rc files put
+# those on PATH.
+steps_stow_path_prefix() {
+    local brew dir
+    if [ "$STEPS_PROFILE" = hpc ]; then
+        # shellcheck disable=SC2016 # expanded by the shell the block is pasted into
+        printf '%s\n' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'
+        return 0
+    fi
+    if brew=$(bootstrap_brew_bin); then
+        dir=${brew%/brew}
+    elif [ "$STEPS_PROFILE" != macos ]; then
+        dir=/home/linuxbrew/.linuxbrew/bin
+    elif [ "$STEPS_ARCH" = x86_64 ]; then
+        dir=/usr/local/bin
+    else
+        dir=/opt/homebrew/bin
+    fi
+    case $dir in
+        *[!A-Za-z0-9_./-]*) printf 'PATH=%s:"$PATH"\n' "$(steps_quote "$dir")" ;;
+        *) printf 'PATH="%s:$PATH"\n' "$dir" ;;
+    esac
+}
+
 step_H7_stow_plan() {
+    local rel
     steps_block_begin H7-stow judgment
-    printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command'
-    printf 'cd %s\n' "$(steps_quote "$STEPS_ROOT")"
-    printf './stow-all.sh %s\n' "$STEPS_HOST"
+    if [ -n "${STEPS_STOW_CONFLICTS:-}" ]; then
+        printf '%s\n' '# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;' \
+            '# merge what you still need into the overlay later'
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            printf 'mv -n %s %s\n' "$(steps_quote "$HOME/$rel")" "$(steps_quote "$HOME/$rel.pre-dotfiles")"
+        done <<EOF
+$STEPS_STOW_CONFLICTS
+EOF
+    elif [ "$STEPS_MODE" = manual ]; then
+        printf '%s\n' '# Stow never replaces a regular file (a fresh ~/.bashrc or ~/.profile from /etc/skel);' \
+            '# ./setup-host.sh lists each one in this block with a mv line that moves it aside first'
+    fi
+    printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command' \
+        "# stow reaches PATH only through this stow, so the prefix names where this host's stow lives"
+    printf '%s %s %s\n' "$(steps_stow_path_prefix)" "$(steps_quote "$STEPS_ROOT/stow-all.sh")" "$STEPS_HOST"
     steps_block_end
 }
 
@@ -376,17 +505,30 @@ step_H7_auth_check() {
     return 1
 }
 
+# On a cluster the AI CLIs exist only when a site module provides them
+# (S2-modules), so their sign-in lines are printed only for those on PATH;
+# --print-manual names them with that condition.
 step_H7_auth_plan() {
+    local claude=1 codex=1
+    if [ "$STEPS_PROFILE" = hpc ] && [ "$STEPS_MODE" != manual ]; then
+        command -v claude >/dev/null 2>&1 || claude=0
+        command -v codex >/dev/null 2>&1 || codex=0
+    fi
     steps_block_begin H7-auth auth
     if [ "$STEPS_MODE" = manual ] || [ ! -f "$HOME/.ssh/id_ed25519" ]; then
         printf '%s\n' 'ssh-keygen -t ed25519'
     fi
     printf '%s\n' 'gh auth login --git-protocol ssh' \
-        '# do not run gh auth setup-git: it writes the stowed ~/.gitconfig; .gitconfig_local sets the helper' \
-        '# Claude Code signs in on its first interactive run' \
-        'claude' \
-        '# add --device-auth on a host without a browser' \
-        'codex login'
+        '# do not run gh auth setup-git: it writes the stowed ~/.gitconfig; .gitconfig_local sets the helper'
+    if [ "$STEPS_PROFILE" = hpc ] && [ "$STEPS_MODE" = manual ]; then
+        printf '%s\n' '# claude and codex only where a site module provides them (S2-modules)'
+    fi
+    if [ "$claude" = 1 ]; then
+        printf '%s\n' '# Claude Code signs in on its first interactive run' 'claude'
+    fi
+    if [ "$codex" = 1 ]; then
+        printf '%s\n' '# add --device-auth on a host without a browser' 'codex login'
+    fi
     if [ "$STEPS_PROFILE" = hpc ]; then
         printf '%s\n' 'kinit'
     fi
@@ -404,12 +546,18 @@ step_H7_sync_skills_check() {
     return 1
 }
 
+# The hook is on by default once stowed, and the provisioning shells export
+# AWESOME_SKILLS_AUTO_UPDATE=0, which even AWESOME_SKILLS_FORCE=1 obeys: the
+# run line sets it back to 1 for itself.
 step_H7_sync_skills_plan() {
     steps_block_begin H7-sync-skills judgment
     printf '%s\n' \
-        '# opt-in: an unpinned curl of awesome-skills main (raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh)' \
-        '# that installs into ~/.claude/skills and ~/.codex/skills; after stow the sync-skills alias runs the same'
-    printf 'AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh %s\n' "$(steps_quote "$STEPS_ROOT/scripts/awesome-skills-update.sh")"
+        "# on by default once stowed: every new interactive shell runs it unless AWESOME_SKILLS_AUTO_UPDATE=0 is in that shell's environment" \
+        '# it is an unpinned curl of awesome-skills main (raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh)' \
+        '# that installs into ~/.claude/skills and ~/.codex/skills; to keep it off, export AWESOME_SKILLS_AUTO_UPDATE=0' \
+        '# in the environment your terminals and ssh sessions start with. To run it once now, in the foreground:'
+    printf 'AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh %s\n' \
+        "$(steps_quote "$STEPS_ROOT/scripts/awesome-skills-update.sh")"
     steps_block_end
 }
 
@@ -421,9 +569,10 @@ step_H7_doctor_check() {
 }
 
 step_H7_doctor_plan() {
+    local doctor
+    doctor=$(steps_quote "$STEPS_ROOT/doctor.sh")
     steps_block_begin H7-doctor judgment
-    printf 'cd %s\n' "$(steps_quote "$STEPS_ROOT")"
-    printf './doctor.sh --host %s\n' "$STEPS_HOST"
-    printf './doctor.sh --host %s --smoke\n' "$STEPS_HOST"
+    printf '%s --host %s\n' "$doctor" "$STEPS_HOST"
+    printf '%s --host %s --smoke\n' "$doctor" "$STEPS_HOST"
     steps_block_end
 }

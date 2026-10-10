@@ -54,6 +54,28 @@ and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
 (activated env or brew first) is kept, a conda-style activate and deactivate
 keeps an entry already on PATH, and nothing assigns PATH after oh-my-zsh.
 
+The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
+unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs
+the standard-library validator `tests/test_bootstrap_manifest.py`, which checks
+`config/bootstrap/`, the step headings of `docs/bootstrap.md`, the tool table
+of `docs/dependencies.md` and the two identical project skills.
+`tests/doctor.sh` and `tests/setup-host.sh` run the entry points under `env -i`
+against fixture checkouts, homes and Homebrew prefixes with stubbed tools and
+local clone remotes. Network commands outside `--online` fail the doctor
+suite; `sudo`, `chsh`, `stow`, `apt-get`, `conda` and `git lfs` are tripwires in
+the installer suite; find snapshots prove that the doctor and
+`setup-host.sh --check` write nothing.
+`tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
+against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
+Windows job runs that suite and the validator from `tests/run.ps1`. None of
+them downloads anything or touches the runner's home. Fresh-machine runs are
+the [acceptance checklist](bootstrap.md#acceptance-checklist), not CI.
+
+`tests/host-overlays.sh` sources the `wsl-ubuntu` and `lab-ubuntu` zsh and bash
+overlays in a clean environment with a missing, a non-executable and a fake
+Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
+`brew shellenv` line applies only once brew can run.
+
 Run either entrypoint from any working directory. To check prerequisites only:
 
 ```sh

@@ -220,8 +220,13 @@ function Get-BootstrapDocRef {
     # bootstrap_doc_ref: the docs/bootstrap.md step a profile's reader follows.
     param([Parameter(Mandatory)][string]$Step, [string]$ProfileName = 'windows')
     switch -CaseSensitive ("${ProfileName}:$Step") {
-        'hpc:S2-brew-bundle' { return 'S2-login-env' }
+        { $_ -cin @('hpc:S2-brew-bundle', 'hpc:H1-apt-core') } { return 'S2-login-env' }
+        'hpc:H1-locale' { return 'P0-preflight' }
         { $_ -cin @('hpc:S4-nvm', 'hpc:S5-claude', 'hpc:S5-codex') } { return 'S2-modules' }
+        'macos:H1-apt-core' { return 'S2-brew-bundle' }
+        { $_ -cin @('other:H1-apt-core', 'other:H1-locale', 'other:H1-homebrew', 'other:H1-linuxbrew',
+                'other:S2-brew-bundle', 'other:S4-nvm', 'other:S5-claude', 'other:S5-codex') } { return 'X-other-linux' }
+        'windows:P0-preflight' { return 'HW-clone' }
         { $_ -cin @('windows:S2-brew-bundle', 'windows:S4-nvm', 'windows:S5-claude', 'windows:S5-codex') } {
             return 'W1-winget'
         }
@@ -293,8 +298,12 @@ function Test-BootstrapTool {
     $version = ''
     switch -CaseSensitive ($parsed.Kind) {
         'file' {
+            # An executable file (doctor.sh's file: probes) may name a version flag.
             $candidate = Expand-BootstrapPath $parsed.Value
-            if ([IO.File]::Exists($candidate)) { $path = $candidate }
+            if ([IO.File]::Exists($candidate)) {
+                $path = $candidate
+                if ($VersionFlag -cne '-') { $version = Get-BootstrapToolVersion -Path $candidate -Flag $VersionFlag }
+            }
         }
         'dir' {
             $candidate = Expand-BootstrapPath $parsed.Value

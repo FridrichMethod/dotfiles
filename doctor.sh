@@ -12,8 +12,9 @@ set -euo pipefail
 # --online (auth status probes) or --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
 # for this home; it is never guessed. The win host is checked by doctor.ps1.
-# Exit: 0 every required tier ok, 1 a required row missing or outdated or a
-# structural error, 2 usage error, invalid manifest, unknown host or win.
+# Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
+# row or a structural check); 2 usage error, invalid manifest, unknown host
+# or win.
 # docs/bootstrap.md explains each step id the report cites.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,10 +46,9 @@ done
 . "$REPO_ROOT/lib/bootstrap/checks.sh"
 
 # git never refreshes the index or takes other optional locks, in this
-# process or in a git that a probed tool starts with this environment. It
-# does not reach the git behind `brew --version`: bin/brew restarts itself
-# under `env -i` with an allowlist, and may refresh Homebrew's own
-# .git/describe-cache (see lib/bootstrap/checks.sh).
+# process or in a git that a probed tool starts with this environment. Tools
+# whose version flag writes, brew among them, are never run (see
+# lib/bootstrap/checks.sh).
 export GIT_OPTIONAL_LOCKS=0
 
 usage() {
@@ -81,8 +81,9 @@ Options:
   -h, --help          show this help
 
 Statuses: ok outdated missing warn skip human. Fixes cite docs/bootstrap.md.
-Exit: 0 every required tier ok; 1 a required row missing or outdated, or a
-structural error; 2 usage error, invalid manifest, unknown host or win.
+Exit: 0 no required-tier row is missing, outdated or human (warn and skip
+never fail); 1 a required-tier row or structural check is missing, outdated
+or human; 2 usage error, invalid manifest, unknown host or win.
 EOF
 }
 
@@ -213,9 +214,10 @@ header=$(awk '/^#/ { next } /^[ \t\r]*$/ { next } { print; exit }' "$TOOLS_TSV")
 [[ "$header" == "$TOOLS_HEADER" ]] || invalid_manifest 'the header is not: id tier hosts probe version_flag floor absent doc'
 ALL_ROWS=$(bootstrap_rows "$TOOLS_TSV") || invalid_manifest 'unreadable'
 [[ -n "$ALL_ROWS" ]] || invalid_manifest 'no data rows'
-# Ids that tools.tsv must not use: the --online and --smoke rows and the
-# structural checks.
-RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke '
+# Ids that tools.tsv must not use: the --online and --smoke rows, doctor.ps1's
+# core-symlinks and the structural checks (tests/test_bootstrap_manifest.py
+# RESERVED_IDS is the same list).
+RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke core-symlinks '
 while IFS=' ' read -r id _ <&3; do
     [[ -z "$id" ]] || RESERVED_IDS="$RESERVED_IDS$id "
 done 3<<EOF
@@ -240,12 +242,12 @@ $ALL_ROWS
 EOF
 ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
 
-# A fresh Homebrew's bin and, on hpc, the login env's bin stay off PATH
-# until the stowed rc files add them, so prepend both (when present) to find
-# what those installers put there before stow. ~/.local/bin (micromamba,
-# codex, claude, kitty) is not prepended: a shell without it reports those
-# missing. This changes only this process's PATH; path-order judges the
-# caller's PATH.
+# A fresh Homebrew's bin, ~/.local/bin (micromamba, codex, claude, kitty)
+# and, on hpc, the login env's bin stay off PATH until the stowed rc files
+# add them, so prepend each one that exists to find what setup-host put
+# there before stow. The order is the stowed shells': ~/.local/bin before
+# Homebrew, and on hpc the login env first. This changes only this
+# process's PATH; path-order judges the caller's PATH.
 ORIG_PATH=$PATH
 prepend_path() {
     case ":$PATH:" in
@@ -255,6 +257,9 @@ prepend_path() {
 }
 if brew_bin=$(bootstrap_brew_bin); then
     prepend_path "${brew_bin%/brew}"
+fi
+if [[ -d "$HOME/.local/bin" ]]; then
+    prepend_path "$HOME/.local/bin"
 fi
 if [[ $PROFILE == hpc && -d "$HOME/micromamba/envs/login/bin" ]]; then
     prepend_path "$HOME/micromamba/envs/login/bin"

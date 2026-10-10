@@ -141,7 +141,7 @@ prints) appear at the start of the When absent cell.
 | `aria2` | all | brew `aria2` | brew `aria2` | login env `aria2` | winget `aria2.aria2` | aria2c downloads with the stowed aria2.conf fail |
 | `uv` | all | brew `uv` | brew `uv` | login env `uv` | winget `astral-sh.uv` | uv and the oh-my-zsh uv plugin are unavailable |
 | `gh` | all | brew `gh` | brew `gh` | login env `gh` | winget `GitHub.cli` | >= 2.50.0. gh auth git-credential and GitHub CLI workflows fail |
-| `gh-apt` | lab-ubuntu | - | lab-ubuntu: manual (cli.github.com apt repository, sudo) | - | - | the github.com credential helper in .gitconfig_local fails |
+| `gh-apt` | lab-ubuntu | - | lab-ubuntu: `/usr/bin/gh` from the cli.github.com apt repository (sudo block; keyring pinned as `gh-apt`) | - | - | >= 2.50.0. the github.com credential helper in .gitconfig_local fails |
 | `xclip` | lab-ubuntu | - | lab-ubuntu: apt `xclip` | - | - | fzf Ctrl-Y cannot copy to the X clipboard |
 | `wl-clipboard` | lab-ubuntu | - | lab-ubuntu: apt `wl-clipboard` | - | - | no clipboard copy from Wayland sessions |
 
@@ -151,8 +151,8 @@ prints) appear at the start of the When absent cell.
 | --- | --- | --- | --- | --- | --- | --- |
 | `nvm` | mac, wsl-ubuntu, lab-ubuntu | pinned `nvm` | pinned `nvm` | - | - | no default node on PATH and no nvm function |
 | `node` | all | nvm `lts/*` | nvm `lts/*` | marlowe: login env `nodejs`; sherlock: Lmod `nodejs/24.13.0` | winget `OpenJS.NodeJS.LTS` | >= 22.0. Claude hooks and the status line fail |
-| `claude` | all | cask `claude-code` | pinned `claude` (inspect) | manual (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
-| `codex` | all | cask `codex` | pinned `codex` (codex-package) | manual (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
+| `claude` | mac, wsl-ubuntu, lab-ubuntu, win | cask `claude-code` | pinned `claude` (inspect) | not checked: optional site module (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
+| `codex` | mac, wsl-ubuntu, lab-ubuntu, win | cask `codex` | pinned `codex` (codex-package) | not checked: optional site module (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
 
 ### Desktop tier
 

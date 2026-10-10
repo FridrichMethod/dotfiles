@@ -138,3 +138,33 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(dotfiles-update\.(sh|ps1)|dotfiles-auto-stow\.ps1|stow-all\.(sh|ps1)|lib/terminal\.(sh|ps1)|win/powershell/Documents/PowerShell/profile\.ps1|tests/update-hooks\.(sh|ps1))$
+      - id: bootstrap-manifest
+        name: bootstrap manifests, playbook and skill parity
+        entry: tests/bootstrap-manifest.sh
+        language: script
+        pass_filenames: false
+        files: ^(config/bootstrap/.*|lib/bootstrap/.*\.sh|lib/bootstrap\.ps1|tests/(bootstrap-manifest\.sh|test_bootstrap_manifest\.py)|docs/(bootstrap|dependencies)\.md|\.claude/skills/dotfiles-bootstrap/SKILL\.md|\.agents/skills/dotfiles-bootstrap/SKILL\.md|(doctor|setup-host)\.(sh|ps1)|README\.md|AGENTS\.md)$
+      - id: doctor
+        name: read-only day-zero doctor
+        entry: tests/doctor.sh
+        language: script
+        pass_filenames: false
+        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|docs/bootstrap\.md|tests/doctor\.sh)$
+      - id: setup-host
+        name: day-zero installer steps and HUMAN blocks
+        entry: tests/setup-host.sh
+        language: script
+        pass_filenames: false
+        files: ^(setup-host\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$
+      - id: bootstrap-windows
+        name: Windows doctor and installer twins
+        entry: tests/bootstrap-windows.sh
+        language: script
+        pass_filenames: false
+        files: ^(doctor\.ps1|setup-host\.ps1|lib/bootstrap\.ps1|lib/terminal\.ps1|config/bootstrap/.*|tests/bootstrap(-windows\.sh|\.ps1))$
+      - id: host-overlays
+        name: silent Linuxbrew guard in the Ubuntu overlays
+        entry: tests/host-overlays.sh
+        language: script
+        pass_filenames: false
+        files: ^((wsl|lab)-ubuntu/(zsh/\.config/zsh/\.zshrc|bash/\.config/bash/\.bashrc)|tests/host-overlays\.sh)$

@@ -436,7 +436,7 @@ $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 # the portable merge source wholesale.
 $codexPortable = Join-Path $commonRoot 'codex\.codex\config.toml'
 $codexRulesPortable = Join-Path $commonRoot 'codex\.codex\rules\portable.rules'
-# The common Claude package also links its local hooks/status line; Node.js 18+
+# The common Claude package also links its local hooks/status line; Node.js 22+
 # must be on PATH when Claude runs those helpers.
 $claudePortable = Join-Path $commonRoot 'claude\.claude\settings.json'
 if ($HostDir) {
