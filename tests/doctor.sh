@@ -702,14 +702,29 @@ assert_row stow-links warn "~/.profile -> $TEST_TMP/other/common/sh/.profile"
 rm "$TEST_HOME/.profile"
 ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
 
-run_doctor path-brew-first "PATH=$TEST_HOME/.linuxbrew/bin:$BASE_PATH" -- --host lab-ubuntu --tsv
+# Homebrew and conda ahead of ~/.local/bin are the overlays' order: only an
+# executable that shadows one in ~/.local/bin is reported.
+run_doctor path-brew-first "PATH=$BREW_BIN:$TEST_TMP/miniforge3/condabin:$BASE_PATH" -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row path-order warn "$TEST_HOME/.linuxbrew/bin precedes ~/.local/bin"
-run_doctor path-conda-first "PATH=$TEST_TMP/miniforge3/condabin:$BASE_PATH" -- --host lab-ubuntu --tsv
-assert_row path-order warn
-run_doctor path-prefix-first "HOMEBREW_PREFIX=$TEST_TMP/brew" "PATH=$BREW_BIN:$BASE_PATH" -- \
-    --host lab-ubuntu --tsv
-assert_row path-order warn
+assert_row path-order ok 'no command setup-host puts in ~/.local/bin is shadowed'
+# kitty as S6-kitty links it, and a second kitty from conda ahead of it; a
+# command setup-host does not manage (doctor-local) is not judged.
+write_fake "$TEST_HOME/.local/bin/kitty" <<'SH'
+#!/bin/sh
+printf 'kitty 0.49.2\n'
+SH
+mkdir -p "$TEST_TMP/miniforge3/bin"
+cp "$TEST_HOME/.local/bin/kitty" "$TEST_HOME/.local/bin/doctor-local" "$TEST_TMP/miniforge3/bin/"
+run_doctor path-shadow "PATH=$TEST_TMP/miniforge3/bin:$BASE_PATH" -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row path-order warn "1 command(s) in ~/.local/bin are shadowed by an earlier PATH entry: $TEST_TMP/miniforge3/bin/kitty;" \
+    'docs/bootstrap.md H7-stow'
+rm "$TEST_TMP/miniforge3/bin/doctor-local"
+# The same file under another name for its directory is no shadow.
+ln -s "$TEST_HOME/.local/bin" "$TEST_TMP/local-alias"
+run_doctor path-same-file "PATH=$TEST_TMP/local-alias:$BASE_PATH" -- --host lab-ubuntu --tsv
+assert_row path-order ok
+rm "$TEST_TMP/local-alias"
 # The doctor's own Homebrew prepend never counts against the caller's PATH.
 run_doctor path-own-prepend "HOMEBREW_PREFIX=$TEST_TMP/brew" -- --host lab-ubuntu --tsv
 assert_row path-order ok
@@ -728,11 +743,14 @@ SH
 run_doctor local-before-brew "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
 assert_row brew-only ok "4.0 at $TEST_HOME/.local/bin/doctor-brew-only"
 rm "$TEST_HOME/.local/bin/doctor-brew-only"
+# On hpc the login env comes first on purpose, even over ~/.local/bin.
+cp "$TEST_TMP/miniforge3/bin/kitty" "$TEST_HOME/micromamba/envs/login/bin/kitty"
 LOGIN_FIRST="PATH=$TEST_HOME/micromamba/envs/login/bin:$BASE_PATH"
 run_doctor path-login-hpc "$LOGIN_FIRST" -- --host sherlock --tsv
 assert_row path-order ok
 run_doctor path-login-debian "$LOGIN_FIRST" -- --host lab-ubuntu --tsv
-assert_row path-order warn
+assert_row path-order warn "$TEST_HOME/micromamba/envs/login/bin/kitty"
+rm "$TEST_HOME/micromamba/envs/login/bin/kitty" "$TEST_HOME/.local/bin/kitty"
 
 restore_common() {
     "$REAL_GIT" -C "$FIXTURE" checkout -q -- common

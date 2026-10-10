@@ -488,60 +488,55 @@ bootstrap_check_stow_links() {
     fi
 }
 
-# bootstrap_manager_bin DIR PROFILE: 0 when DIR is a Homebrew/Linuxbrew or
-# conda/mamba bin directory. The hpc login env is exempt: the sherlock and
-# marlowe overlays put it first on purpose.
-bootstrap_manager_bin() {
-    local dir=${1%/} home=${HOME%/}
-    if [ "$2" = hpc ] && [ "$dir" = "$home/micromamba/envs/login/bin" ]; then
-        return 1
-    fi
-    case $dir in
-        /opt/homebrew/bin | /opt/homebrew/sbin | \
-            /home/linuxbrew/.linuxbrew/bin | /home/linuxbrew/.linuxbrew/sbin | \
-            "$home/.linuxbrew/bin" | "$home/.linuxbrew/sbin")
-            return 0
-            ;;
-        */condabin | */miniconda*/bin | */anaconda*/bin | */miniforge*/bin | \
-            */mambaforge*/bin | */micromamba/bin | */envs/*/bin)
-            return 0
-            ;;
-    esac
-    case ${HOMEBREW_PREFIX:-} in
-        '' | /usr | /usr/local) ;;
-        *)
-            case $dir in
-                "${HOMEBREW_PREFIX%/}/bin" | "${HOMEBREW_PREFIX%/}/sbin") return 0 ;;
-            esac
-            ;;
-    esac
-    if [ -n "${CONDA_PREFIX:-}" ] && [ "$dir" = "${CONDA_PREFIX%/}/bin" ]; then
-        return 0
-    fi
-    return 1
-}
+# The commands setup-host puts in ~/.local/bin (S5-claude, S5-codex,
+# S2-micromamba, S6-kitty).
+BOOTSTRAP_LOCAL_BIN_TOOLS='claude codex micromamba kitty kitten'
 
-# bootstrap_check_path_order PATH_VALUE PROFILE: ~/.local/bin (claude, codex,
-# micromamba, kitty) comes before every Homebrew and conda bin directory.
-# PATH_VALUE is the caller's PATH before doctor.sh prepended anything.
+# bootstrap_check_path_order PATH_VALUE PROFILE: no command setup-host puts
+# in ~/.local/bin is shadowed by another executable of the same name in a
+# PATH entry before ~/.local/bin. The workstation overlays put Homebrew and
+# conda ahead of it on purpose (they run after ~/.profile), as the sherlock
+# and marlowe overlays do the login env, so only a real shadow, two installs
+# of one tool, is reported; the login env is exempt on hpc. PATH_VALUE is the
+# caller's PATH before doctor.sh prepended anything.
 bootstrap_check_path_order() {
-    local rest=$1:, entry local_bin=${HOME%/}/.local/bin first_bad=''
-    while [ "$rest" != , ]; do
+    local local_bin=${HOME%/}/.local/bin login=${HOME%/}/micromamba/envs/login/bin
+    local rest=$1: entry earlier='' found=0 file name shadows='' count=0 IFS=' '
+    while [ -n "$rest" ]; do
         entry=${rest%%:*}
         rest=${rest#*:}
         if [ "${entry%/}" = "$local_bin" ]; then
-            if [ -n "$first_bad" ]; then
-                bootstrap_check_result warn "$first_bad precedes ~/.local/bin on PATH, so its commands shadow ~/.local/bin"
-            else
-                bootstrap_check_result ok "PATH lists ~/.local/bin before the Homebrew and conda bin directories"
-            fi
-            return 0
+            found=1
+            break
         fi
-        if [ -z "$first_bad" ] && [ -n "$entry" ] && bootstrap_manager_bin "$entry" "$2"; then
-            first_bad=$entry
+        if [ -n "$entry" ] && { [ "$2" != hpc ] || [ "${entry%/}" != "$login" ]; }; then
+            earlier="$earlier$entry
+"
         fi
     done
-    bootstrap_check_result warn "PATH lacks ~/.local/bin; the stowed ~/.profile prepends it"
+    if [ "$found" = 0 ]; then
+        bootstrap_check_result warn "PATH lacks ~/.local/bin; the stowed ~/.profile prepends it"
+        return 0
+    fi
+    for name in $BOOTSTRAP_LOCAL_BIN_TOOLS; do
+        file=$local_bin/$name
+        [ -f "$file" ] && [ -x "$file" ] || continue
+        while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            if [ -f "$entry/$name" ] && [ -x "$entry/$name" ] && ! [ "$entry/$name" -ef "$file" ]; then
+                count=$((count + 1))
+                [ "$count" -gt 3 ] || shadows="$shadows, $entry/$name"
+                break
+            fi
+        done <<EOF
+$earlier
+EOF
+    done
+    if [ "$count" -gt 0 ]; then
+        bootstrap_check_result warn "$count command(s) in ~/.local/bin are shadowed by an earlier PATH entry: ${shadows#, }; two installs of one tool, remove the one you do not use"
+    else
+        bootstrap_check_result ok "no command setup-host puts in ~/.local/bin is shadowed by an earlier PATH entry"
+    fi
 }
 
 # bootstrap_check_rc_pollution ROOT: traces of installers that edit rc files:

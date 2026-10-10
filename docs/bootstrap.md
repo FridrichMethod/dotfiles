@@ -294,10 +294,16 @@ Before probing anything, both scripts prepend to their own PATH, when they
 exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
 `~/.local/bin` (micromamba, codex, claude, kitty), then on hpc
-`~/micromamba/envs/login/bin`. That is the stowed shells' order: on hpc the
-login env comes first, elsewhere `~/.local/bin`. A pre-stow run thus sees what
-earlier steps installed; neither script writes this to an rc file, and the
-doctor's `path-order` check still judges the PATH you started it with.
+`~/micromamba/envs/login/bin`, so the login env comes first on hpc, as in the
+stowed shells, and elsewhere what setup-host linked into `~/.local/bin` wins.
+(The stowed workstation shells run `brew shellenv` and the conda hook after
+`~/.profile`, so there Homebrew and conda come before `~/.local/bin`.) A
+pre-stow run thus sees what earlier steps installed; neither script writes
+this to an rc file. The doctor's `path-order` check judges the PATH you
+started it with: it warns when a command setup-host puts in `~/.local/bin`
+(`claude`, `codex`, `micromamba`, `kitty`, `kitten`) is shadowed by another
+executable of the same name earlier on PATH (two installs of one tool), the
+login env on hpc excepted, or when `~/.local/bin` is missing.
 Downloads use `curl -fsSL --proto '=https' --tlsv1.2 --retry 3` into a `.part`
 file that must match the pinned sha256 before it is used; a mismatch deletes
 it and fails the step. Without curl, pinned downloads fall back to `wget`,
@@ -1147,7 +1153,10 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
   `./stow-all.sh` runs the dry run above itself and stops, before it writes
   anything, when one is left.
 - **Verify:** `ls -l ~/.zshrc ~/.profile ~/.gitconfig` shows links into
-  `~/dotfiles/common/`; the doctor's `stow-links` and `path-order` checks are `ok`.
+  `~/dotfiles/common/`; in a new shell the doctor's `stow-links` and
+  `path-order` checks are `ok` (path-order warns only when a command in
+  `~/.local/bin` is shadowed by a second install earlier on PATH: remove the
+  one you do not use).
 - **Human:** yes (judgment: it rewrites your home's dotfiles and AI settings;
   the person runs it, or approves it as one visible top-level agent command)
 
