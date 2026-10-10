@@ -977,8 +977,14 @@ printf '# v2\n' >>"$FZF_TAB_WORK/fzf-tab.plugin.zsh"
 [ "$("$REAL_GIT" -C "$FZF_TAB_WORK" rev-parse HEAD)" != "$FZF_TAB_HEAD" ] || fail 'the fzf-tab remote did not move'
 printf '# local edit\n' >>"$P10K_DIR/powerlevel10k.zsh-theme"
 "$REAL_GIT" -C "$CONDA_DIR" checkout -q --detach
-clones_before=$(cd "$CASE_HOME/.oh-my-zsh" && find . -path '*/.git' -prune -o -type f -print | LC_ALL=C sort |
-    while IFS= read -r file; do cksum "$file"; done)
+# omz_sums [SKIP]: cksum of each file under ~/.oh-my-zsh, the clones in it
+# included, outside every .git and outside ~/.oh-my-zsh/SKIP.
+omz_sums() {
+    local skip=${1:+./$1}
+    (cd "$CASE_HOME/.oh-my-zsh" && find . \( -path '*/.git' -o -path "${skip:-*/.git}" \) -prune -o -type f -print |
+        LC_ALL=C sort | while IFS= read -r file; do cksum "$file"; done)
+}
+clones_before=$(omz_sums)
 run_case existing-clones -- --host lab-ubuntu --check --only S3-clones
 expect_rc existing-clones 0
 expect_text existing-clones out "S3-clones done 4 clones present, left as they are: oh-my-zsh master@"
@@ -995,9 +1001,41 @@ clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'the clean fzf-tab clone 
 [ -n "$("$REAL_GIT" -C "$P10K_DIR" status --porcelain)" ] || fail 'the local powerlevel10k edit is gone'
 [ "$("$REAL_GIT" -C "$CONDA_DIR" rev-parse HEAD)" = "$CONDA_HEAD" ] || fail 'the detached clone moved'
 "$REAL_GIT" -C "$CONDA_DIR" symbolic-ref -q HEAD >/dev/null && fail 'the detached clone was checked out on a branch'
-clones_after=$(cd "$CASE_HOME/.oh-my-zsh" && find . -path '*/.git' -prune -o -type f -print | LC_ALL=C sort |
-    while IFS= read -r file; do cksum "$file"; done)
-[ "$clones_before" = "$clones_after" ] || fail 'S3-clones changed a file in an existing clone'
+[ "$clones_before" = "$(omz_sums)" ] || fail 'S3-clones changed a file in an existing clone'
+
+# With every clone present S3-clones is done and its apply never runs, so the
+# apply above proves little: with one missing, it does run. Move
+# conda-zsh-completion aside and detach oh-my-zsh in its place: the clone of
+# the missing one is the only git command apply may run, and the detached
+# oh-my-zsh, the dirty powerlevel10k and the behind fzf-tab keep their
+# commits, their branches and every byte.
+OMZ_DIR="$CASE_HOME/.oh-my-zsh"
+CONDA_REL=custom/plugins/conda-zsh-completion
+mv "$CONDA_DIR" "$TEST_TMP/conda.detached"
+"$REAL_GIT" -C "$OMZ_DIR" checkout -q --detach
+OMZ_HEAD=$("$REAL_GIT" -C "$OMZ_DIR" rev-parse HEAD)
+run_case missing-clone -- --host lab-ubuntu --check --only S3-clones
+expect_rc missing-clone 3
+expect_text missing-clone out "S3-clones todo to clone: conda-zsh-completion (main); present, left as they are: oh-my-zsh detached@$(printf '%.7s' "$OMZ_HEAD"), powerlevel10k master@$(printf '%.7s' "$P10K_HEAD"), fzf-tab master@$(printf '%.7s' "$FZF_TAB_HEAD")"
+expect_no_events missing-clone
+clones_before=$(omz_sums "$CONDA_REL")
+run_case missing-clone-apply -- --host lab-ubuntu --yes --only S3-clones
+expect_rc missing-clone-apply 0
+expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CONDA_DIR"
+[ "$(grep -c . "$EVENT_LOG")" = 1 ] || {
+    cat "$EVENT_LOG" >&2
+    fail 'missing-clone-apply: S3-clones ran more than the clone of the missing checkout'
+}
+clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'the missing clone was not made'
+[ "$("$REAL_GIT" -C "$OMZ_DIR" rev-parse HEAD)" = "$OMZ_HEAD" ] || fail 'the detached oh-my-zsh clone moved'
+"$REAL_GIT" -C "$OMZ_DIR" symbolic-ref -q HEAD >/dev/null && fail 'the detached oh-my-zsh clone was checked out on a branch'
+clone_at "$FZF_TAB_DIR" master "$FZF_TAB_HEAD" || fail 'the behind fzf-tab clone moved'
+[ "$("$REAL_GIT" -C "$P10K_DIR" rev-parse HEAD)" = "$P10K_HEAD" ] || fail 'the dirty powerlevel10k clone moved'
+[ -n "$("$REAL_GIT" -C "$P10K_DIR" status --porcelain)" ] || fail 'the local powerlevel10k edit is gone'
+[ "$clones_before" = "$(omz_sums "$CONDA_REL")" ] || fail 'S3-clones changed a file in an existing clone'
+rm -rf "$CONDA_DIR"
+mv "$TEST_TMP/conda.detached" "$CONDA_DIR"
+"$REAL_GIT" -C "$OMZ_DIR" checkout -q master
 "$REAL_GIT" -C "$P10K_DIR" checkout -q -- powerlevel10k.zsh-theme
 "$REAL_GIT" -C "$CONDA_DIR" checkout -q main
 
@@ -1017,6 +1055,10 @@ expect_text foreign-clone-apply err "$FZF_TAB_DIR exists and is not a git checko
 expect_text foreign-clone-apply out 'S3-clones failed'
 expect_event "git:clone -q --depth=1 --branch main https://github.com/conda-incubator/conda-zsh-completion.git $CONDA_DIR"
 expect_no_event "$FZF_TAB_DIR"
+[ "$(grep -c '^git:' "$EVENT_LOG")" = 1 ] || {
+    cat "$EVENT_LOG" >&2
+    fail 'foreign-clone-apply: S3-clones ran a git command on an existing clone'
+}
 clone_at "$CONDA_DIR" main "$CONDA_HEAD" || fail 'the missing clone next to a foreign one was not made'
 [ "$(cat "$FZF_TAB_DIR/fzf-tab.plugin.zsh")" = '# copied by hand' ] || fail 'the foreign fzf-tab dir changed'
 [ ! -e "$FZF_TAB_DIR/.git" ] || fail 'S3-clones turned the foreign dir into a checkout'
