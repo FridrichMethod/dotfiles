@@ -2,7 +2,7 @@
 
 # `~/.dotfiles`
 
-**Cross-platform shell, terminal, and tool configs — one repo, eight hosts, zero conditionals.**
+**Cross-platform shell, terminal, and tool configs — one repo, six hosts, zero conditionals.**
 
 Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Boring on purpose.
 
@@ -19,7 +19,7 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-FAB040?style=flat-square&logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
 
-<sub>macOS · WSL · Ubuntu · Fedora · Stanford Sherlock HPC · Marlowe · Windows</sub>
+<sub>macOS · WSL · Ubuntu · Stanford Sherlock HPC · Marlowe · Windows</sub>
 
 </div>
 
@@ -28,8 +28,9 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 ```bash
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && git submodule update --init --recursive
+./setup-host.sh --host mac  # new machine only: pinned day-zero tools (docs/bootstrap.md)
 ./setup-sync.sh           # once per clone; Python 3.11+ and venv required
-./stow-all.sh mac          # or: wsl-ubuntu, lab-ubuntu, sherlock, marlowe, fedora, ubuntu
+./stow-all.sh mac          # or: wsl-ubuntu, lab-ubuntu, sherlock, marlowe; no host = common only
 ```
 
 ```powershell
@@ -81,6 +82,27 @@ cd ~/dotfiles && git submodule update --init --recursive
 
 ## Quick Start
 
+**0.** Prepare a new machine. On a fresh host, after the clone in step 1, check
+and install what the configs assume before step 2 (`<host>` is `mac`,
+`wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`):
+
+```bash
+./doctor.sh --host <host>               # read-only, offline: what is missing or outdated
+./setup-host.sh --host <host> --check   # the plan; writes nothing
+./setup-host.sh --host <host>           # pinned installs without sudo; prints HUMAN blocks for the rest
+```
+
+oh-my-zsh must be installed before the first `./stow-all.sh`: Stow creates a real
+`~/.oh-my-zsh/custom/`, after which oh-my-zsh can no longer be cloned there.
+`setup-host.sh` clones it, never runs sudo, `chsh` or stow itself, and prints
+those steps as HUMAN blocks for you, including the first `./stow-all.sh` with
+the one-shot `PATH=` prefix it needs before Stow is on your PATH. On native
+Windows the twins are `.\doctor.ps1` and `.\setup-host.ps1`. Other Linux
+distributions have no overlay: install the tools yourself and stow `common/`
+only with `./stow-all.sh` (no host). [docs/bootstrap.md](docs/bootstrap.md) is
+the full playbook: per-platform quick starts, every step and the recovery
+recipes.
+
 **1.** Clone with submodules:
 
 ```bash
@@ -111,6 +133,16 @@ exec $SHELL -l
 ```
 
 > `.stowrc` sets `--target=~` so every package links into `$HOME`. Stow runs with `--restow --no-folding`, so re-running the installer is safe and idempotent.
+
+### Bootstrapping with Claude Code or Codex
+
+The repository ships one project skill for both agents: `/dotfiles-bootstrap` in Claude Code ([`.claude/skills/`](.claude/skills/dotfiles-bootstrap/SKILL.md), run only when you invoke it) and `$dotfiles-bootstrap` in Codex ([`.agents/skills/`](.agents/skills/dotfiles-bootstrap/SKILL.md)). Started inside the clone, the agent asks which host this is, shows you the doctor report and the `--check` plan, runs `./setup-host.sh --host <host> --yes`, and works through the HUMAN blocks with you:
+
+- A `sudo` block runs only after you approve it in chat, each line as one visible top-level command, never wrapped in `sh -c` or a script; sign-in, GUI, Slurm and `chsh` blocks are yours to run.
+- `./stow-all.sh` writes `~/.claude`, `~/.codex` and `~/.ssh`, so the agent runs it only as its own visible command that you approve, exactly as the H7-stow block prints it.
+- The agent never runs `git lfs install`, `gh auth setup-git`, `conda init` or `micromamba shell init`, never edits rc files and never commits.
+
+For an agent started outside the clone, paste the [prompt in docs/bootstrap.md](docs/bootstrap.md#prompt-for-an-agent-started-outside-the-clone).
 
 ### On Windows
 
@@ -171,12 +203,13 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 
 | | |
 |---|---|
-| **Layout** | `common/` + 8 host overlays |
+| **Layout** | `common/` + 6 host overlays |
 | **Shells** | Zsh, Bash, POSIX sh, tcsh, xonsh, PowerShell 7 |
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
 | **Submodule** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) — auto-updated daily by GitHub Actions |
+| **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (pinned, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
 | **CI** | `shellcheck` · `shfmt` · `stylua` · YAML/JSON/TOML hygiene |
@@ -233,14 +266,19 @@ dotfiles/
 ├── lab-ubuntu/                   lab Ubuntu (Fcitx5 IME + claude helper)
 ├── sherlock/                     Stanford Sherlock HPC
 ├── marlowe/                      Marlowe HPC
-├── fedora/                       Fedora overrides
-├── ubuntu/                       Ubuntu desktop overrides
 ├── win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 │
 ├── .github/workflows/            ci.yml + daily submodule sync
 ├── .gitattributes                LF everywhere (Windows clones set autocrlf)
 ├── .pre-commit-config.yaml       shellcheck · shfmt · stylua · hygiene
 ├── .stowrc                       Stow defaults (--target=~, ignores)
+├── config/bootstrap/             pinned day-zero manifests (tools, Brewfiles, apt, clones, installers)
+├── docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
+├── lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
+├── doctor.sh                     read-only day-zero check (POSIX)
+├── doctor.ps1                    read-only day-zero check (Windows)
+├── setup-host.sh                 day-zero installer that stops before stow (POSIX)
+├── setup-host.ps1                day-zero installer (Windows)
 ├── stow-all.sh                   one-command installer (POSIX)
 ├── stow-all.ps1                  one-command installer (Windows)
 ├── scripts/                      hooks the shell or a task runs, not you
@@ -276,10 +314,10 @@ dotfiles/
 | [`lab-ubuntu/`](lab-ubuntu/) | Ubuntu (lab) | `bash`, `claude`, `fcitx5`, `git`, `sh`, `ssh`, `zsh` | 11 |
 | [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `terminfo`, `zsh` | 5 |
 | [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `git`, `sh`, `zsh` | 5 |
-| [`fedora/`](fedora/) | Fedora | `bash`, `zsh` (placeholders) | — |
-| [`ubuntu/`](ubuntu/) | Ubuntu desktop | `bash`, `zsh` (placeholders) | — |
 | [`win/`](win/) | Windows | `git`, `oh-my-posh`, `powershell`, `ssh`, `terminal`, `wsl` | 9 |
-| [`common/`](common/) | _shared baseline_ | 16 packages | 50 |
+| [`common/`](common/) | _shared baseline_ | 16 packages | 55 |
+
+Other Linux distributions have no overlay: stow `common/` alone with `./stow-all.sh` (no host) and install the tools by hand; `./doctor.sh --platform other` checks them (see [docs/bootstrap.md](docs/bootstrap.md#x-other-linux-other-linux-distributions)).
 
 ## How Stow Layering Works
 
@@ -321,7 +359,7 @@ Fetches the remote, fast-forwards if behind, updates submodules, and automatical
 First run the installer once on each Unix checkout to remember its host (Linux, macOS, WSL, and cluster overlays use the same flow):
 
 ```bash
-./stow-all.sh mac           # or wsl-ubuntu, lab-ubuntu, sherlock, marlowe, fedora, ubuntu
+./stow-all.sh mac           # or wsl-ubuntu, lab-ubuntu, sherlock, marlowe
 ./stow-all.sh               # explicitly remember common-only setup instead
 ```
 
@@ -406,7 +444,7 @@ Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/a
 | Fedora / RHEL | `sudo dnf install -y curl tar rsync` |
 | Arch | `sudo pacman -S --needed curl tar rsync` |
 | macOS (Homebrew) | `brew install rsync` (curl/tar/bash are built-in) |
-| Stanford Sherlock | `module load system rsync` |
+| Stanford Sherlock | verify on host: `module load system rsync` may not exist (`ml spider rsync`); the `login` env from `./setup-host.sh` includes rsync |
 | Conda envs | `conda install -c conda-forge rsync curl tar` |
 
 **Env knobs**
@@ -455,7 +493,7 @@ pre-commit run --all-files
 | **shfmt** | shell files and extensionless sync helpers (4-space indent, indented `case`, POSIX/Bash/Zsh-aware) |
 | **stylua** | `*.lua`, `*.luau` |
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
-| **behavior** | structured config merges, safe writes, installers, updates, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
+| **behavior** | structured config merges, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
 CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
 `windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
@@ -510,7 +548,7 @@ Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permi
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
-Claude's local helpers require Node.js 18 or newer on `PATH` (Git is optional for the status line):
+Claude's local helpers require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line):
 
 - **Status line:** shows the active model, reported effort, project and Git branch (or detached commit), context usage, and estimated session cost. For example: `Opus | xhigh | dotfiles (main) | ctx 38% | ~$1.23`. Missing usage/cost data shows `?`; cost is Claude's estimate, not an invoice. It performs only bounded Git ref reads, without scanning the worktree or contacting the network. See the [status-line reference](https://code.claude.com/docs/en/statusline).
 - **Notifications:** `permission_prompt` and `idle_prompt` events emit [Claude's `terminalSequence`](https://code.claude.com/docs/en/hooks#emit-terminal-notifications), using OSC 99 for Kitty, OSC 777 for Ghostty/Warp/rxvt, or OSC 9 for iTerm2/WezTerm/Windows Terminal. The terminal handles desktop delivery, including remote sessions when terminal identification is available. Enable notifications for the terminal in OS settings; unsupported terminals and non-interactive sessions may ignore them. The notice contains only the project name and a fixed status, never prompt or command contents. The plugin's existing Stop notification remains separate.
@@ -548,6 +586,7 @@ Third-party skills are also not stored in this repository. [`scripts/awesome-ski
 After cloning on a new machine:
 
 ```bash
+./setup-host.sh --host <host>   # day-zero tools first, see docs/bootstrap.md
 ./setup-sync.sh
 ./stow-all.sh <host>
 sync-skills

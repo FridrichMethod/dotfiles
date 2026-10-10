@@ -8,7 +8,8 @@ set -euo pipefail
 # Successful setup remembers this home/platform/host for automatic login stow.
 # DOTFILES_AUTO_STOW=0 disables automatic stow in the login updater.
 # The common Claude package links local Node helpers and syncs its defaults;
-# Node.js 18+ must be on PATH when Claude runs the hooks and status line.
+# Node.js 22+ must be on PATH when Claude runs the hooks and status line.
+# Day-zero prerequisites come from ./setup-host.sh and are checked by ./doctor.sh.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
 # Sherlock toolkit installation is a separate explicit ./setup-sherlock-kit.sh step.
 # First-party Sherlock adapters use ./setup-sherlock-adapters.sh; hooks stay opt-in.
