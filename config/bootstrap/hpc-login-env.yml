@@ -8,6 +8,8 @@
 #   fd-find provides fd; go-shfmt provides shfmt; git-delta provides delta.
 #   tealdeer provides tldr (brew and winget use tlrc).
 #   stow has no linux-aarch64 build; both hosts are x86_64.
+#   nodejs provides node (>= 22 for the Claude hooks); on sherlock the
+#   overlay's later `ml nodejs/24.13.0` puts the Lmod node first on PATH.
 # Floors mirror tools.tsv.
 name: login
 channels:
@@ -39,3 +41,4 @@ dependencies:
   - go-shfmt>=3.13.0
   - shellcheck
   - pre-commit
+  - nodejs>=22.0
