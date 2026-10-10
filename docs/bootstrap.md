@@ -240,9 +240,14 @@ the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
 `tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
 `submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order` and
-`nvm-homebrew`. The step it cites is profile-specific: on `hpc`, Brewfile rows
-point at S2-login-env and nvm/Claude/Codex rows at S2-modules; on `windows`,
-they point at the `W1-*` and `HW-*` steps.
+`nvm-homebrew`. The step it cites is the one that installs the tool on that
+profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
+Brewfile rows point at S2-login-env, nvm/Claude/Codex rows at S2-modules and
+the locale check at P0-preflight; on `macos` the apt rows (git-lfs, tmux and
+the macOS baseline tools) point at S2-brew-bundle; under `--platform other`
+every apt, Homebrew, Brewfile, nvm, Claude, Codex and locale reference points
+at X-other-linux; on `windows` they point at the `W1-*` and `HW-*` steps (git
+at HW-clone).
 
 | Exit | Meaning |
 | --- | --- |
@@ -575,6 +580,10 @@ have a minimum), the overlay the person chose, and a complete checkout.
   outside `~/dotfiles` also needs `DOTFILES_DIR` exported; setup-host prints no
   block for this step)
 
+On `sherlock` and `marlowe` the doctor's `locale` check points here: the
+cluster provides its locales, so a missing `en_US.UTF-8` is the site's to fix
+(there is no `sudo locale-gen`); record it with the OS release.
+
 ## Phase 1: host prerequisites
 
 These need root or a GUI, so the installer only prints them.
@@ -730,7 +739,10 @@ Applies to `lab-ubuntu`. The fcitx5 packages arrive with H1-apt-core;
 
 ### S2-brew-bundle: Brewfile bundles
 
-Applies to `mac`, `wsl-ubuntu` and `lab-ubuntu`. One Brewfile per tier in
+Applies to `mac`, `wsl-ubuntu` and `lab-ubuntu`. On macOS the doctor's rows
+that Ubuntu gets from apt point here too: git-lfs and tmux come from the core
+Brewfile, and the rest (zsh, curl, rsync, tar, file, col, man) are macOS
+baseline. One Brewfile per tier in
 [`brew/`](../config/bootstrap/brew/): `core` (stow, python, fzf, zoxide, eza,
 fd, bat; on macOS also git-lfs and tmux), `cli` (ripgrep, git-delta, tlrc,
 chafa, jq, neovim, aria2, uv, gh), `ai` and `desktop` (macOS casks only:
@@ -1412,11 +1424,14 @@ Debian machine that is neither WSL nor the lab desktop can use
 overlay, so its four platform-neutral steps are done by hand; the Other Linux
 quick start runs them as one sequence.
 
-- **Check:** `./doctor.sh --platform other`
+- **Check:** `./doctor.sh --platform other` (its apt, Homebrew, nvm, Claude,
+  Codex and locale references all point here)
 - **Install:** with the distribution's package manager, the equivalents of
   [`apt/common.txt`](../config/bootstrap/apt/common.txt) and the Brewfile tools,
   meeting every floor in [`tools.tsv`](../config/bootstrap/tools.tsv) (distro
-  fzf, eza and gh are often older); or install Homebrew on Linux yourself and run
+  fzf, eza and gh are often older), and the `en_US.UTF-8` locale (`locale-gen`
+  or `localedef`, as the distribution does it); or install Homebrew on Linux
+  yourself and run
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1 brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade`
   (then stow needs that brew's directory as its H7-stow prefix). Then, with
   `clone_pinned` and `fetch_pinned` from
@@ -1424,6 +1439,13 @@ quick start runs them as one sequence.
   every `git-clones.tsv` row, oh-my-zsh first (S3-clones); the by-hand recipe of
   S3-bat-theme; `mkdir -p ~/.vim/undo ~/.vim/tmp` (S3-dirs); `./setup-sync.sh`
   (S4-setup-sync). Finally `./stow-all.sh` with no host.
+- **Install, `ai` tier:** the default tiers also check `node` (at the floor in
+  `tools.tsv`), `claude` and `codex`. Node: the by-hand recipe of
+  [S4-nvm](#s4-nvm-nvm-and-nodejs), or the distribution's Node.js if it meets
+  the floor. Claude Code: `f=$(fetch_pinned claude)`, read it, then `bash "$f"`
+  ([S5-claude](#s5-claude-claude-code)). Codex: the by-hand recipe of
+  [S5-codex](#s5-codex-codex-cli). Until then, `./doctor.sh --platform other --tier core,cli`
+  checks the rest.
 - **Verify:** `./doctor.sh --platform other --smoke` exits 0.
 - **Human:** yes (sudo: distribution packages)
 

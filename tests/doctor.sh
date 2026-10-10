@@ -567,6 +567,20 @@ assert_quiet_events '--list probed tools'
 run_doctor list-hpc -- --host sherlock --list
 assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-login-env')"
 assert_out "$(printf 'claude\tai\tclaude\t-\tS2-modules')"
+# Each profile's fix is a step that applies there: no apt on macOS or hpc,
+# no sudo locale-gen on hpc, and X-other-linux without an overlay.
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tS2-login-env')"
+assert_out "$(printf 'locale\tcore\tcheck\t-\tP0-preflight')"
+run_doctor list-mac -- --host mac --list
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tS2-brew-bundle')"
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-brew-bundle')"
+run_doctor list-other -- --platform other --list
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tX-other-linux')"
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tX-other-linux')"
+assert_out "$(printf 'claude\tai\tclaude\t-\tX-other-linux')"
+assert_out "$(printf 'locale\tcore\tcheck\t-\tX-other-linux')"
+run_doctor list-debian -- --platform debian --list
+assert_out "$(printf 'zsh\tcore\tzsh\t-\tH1-apt-core')"
 
 run_doctor quiet -- --host lab-ubuntu --quiet
 assert_rc 0
@@ -872,7 +886,7 @@ assert_out "$(printf 'lmod\thost\tenv:LMOD_DIR\t-\tS2-modules')"
 run_doctor real-manifest-other "$REAL_CONFIG" -- --platform other --list
 assert_rc 0
 assert_not_in "$OUT/$CASE.err" 'invalid manifest'
-assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-brew-bundle')"
+assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tX-other-linux')"
 assert_no_out "$(printf 'pwsh\t')"
 assert_quiet_events '--list probed tools with the real manifest on --platform other'
 

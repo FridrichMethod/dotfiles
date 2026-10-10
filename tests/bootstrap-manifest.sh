@@ -403,11 +403,23 @@ doc_case S6-nerd-font windows W1-font
 doc_case S4-setup-sync windows W1-setup-sync
 doc_case H7-stow windows HW-stow
 doc_case H7-auth windows HW-auth
-doc_case P0-preflight windows P0-preflight
+doc_case P0-preflight windows HW-clone
+# No apt outside debian, and no sudo locale-gen on a cluster.
+doc_case H1-apt-core hpc S2-login-env
+doc_case H1-locale hpc P0-preflight
+doc_case H1-apt-core macos S2-brew-bundle
+for step in H1-apt-core H1-locale H1-homebrew H1-linuxbrew S2-brew-bundle S4-nvm S5-claude S5-codex; do
+    doc_case "$step" other X-other-linux
+done
+for step in S3-clones S3-bat-theme S4-setup-sync H7-stow P0-preflight; do
+    doc_case "$step" other "$step"
+done
 for step in S2-brew-bundle S4-nvm S5-claude S3-bat-theme H7-stow; do
     doc_case "$step" debian "$step"
     doc_case "$step" macos "$step"
 done
+doc_case H1-apt-core debian H1-apt-core
+doc_case H1-locale debian H1-locale
 
 # Bash `local` is dynamically scoped: a TSV loop's `local IFS=$tab` reaches
 # every library function it calls, so none of them may split by the caller's IFS.

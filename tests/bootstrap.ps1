@@ -495,9 +495,18 @@ try {
             'S4-setup-sync' = 'W1-setup-sync'; 'H7-stow' = 'HW-stow'; 'H7-auth' = 'HW-auth'; 'X-contributor' = 'X-contributor'
         }
         foreach ($step in $refs.Keys) { Assert-Equal (Get-BootstrapDocRef $step) $refs[$step] "windows $step" }
+        Assert-Equal (Get-BootstrapDocRef P0-preflight) 'HW-clone' 'windows git'
         Assert-Equal (Get-BootstrapDocRef S2-brew-bundle hpc) 'S2-login-env' 'hpc brew'
+        Assert-Equal (Get-BootstrapDocRef H1-apt-core hpc) 'S2-login-env' 'hpc apt'
+        Assert-Equal (Get-BootstrapDocRef H1-locale hpc) 'P0-preflight' 'hpc locale'
         Assert-Equal (Get-BootstrapDocRef S5-claude hpc) 'S2-modules' 'hpc claude'
+        Assert-Equal (Get-BootstrapDocRef H1-apt-core macos) 'S2-brew-bundle' 'macos apt'
+        foreach ($step in @('H1-apt-core', 'H1-locale', 'S2-brew-bundle', 'S4-nvm', 'S5-claude', 'S5-codex')) {
+            Assert-Equal (Get-BootstrapDocRef $step other) 'X-other-linux' "other $step"
+        }
+        Assert-Equal (Get-BootstrapDocRef S3-clones other) 'S3-clones' 'other clones'
         Assert-Equal (Get-BootstrapDocRef S4-nvm debian) 'S4-nvm' 'debian nvm'
+        Assert-Equal (Get-BootstrapDocRef H1-apt-core debian) 'H1-apt-core' 'debian apt'
         foreach ($case in @(@('0.58.0', '0.58', 0), @('v3.14.1', '3.13', 0), @('2.3.1', '2.4', 1), @('10.5.0', '8.3', 0),
                 @('0.44.1', '0.58.0', 1), @('7.0', '7.0', 0), @('x', '1.0', 2), @('1.2.3.4', '1.0', 2), @('', '1.0', 2))) {
             Assert-Equal (Compare-BootstrapVersion $case[0] $case[1]) $case[2] "compare $($case[0]) $($case[1])"
