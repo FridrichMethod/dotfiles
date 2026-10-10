@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fixture Claude Code install.sh. setup-host.sh only downloads it for a person
+# to read; running it trips the test.
+printf 'TRIPWIRE claude-install %s\n' "$*" >>"$EVENT_LOG"
+exit 99

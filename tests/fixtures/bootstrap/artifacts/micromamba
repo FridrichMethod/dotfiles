@@ -1,0 +1,29 @@
+#!/bin/sh
+# Fixture micromamba binary: records `create` and lays out the env's zsh and
+# python3, so the login-env probe and setup-sync --python see them.
+case ${1:-} in
+    --version)
+        echo 2.9.0
+        ;;
+    create)
+        printf 'micromamba:%s\n' "$*" >>"$EVENT_LOG"
+        root='' name=''
+        while [ "$#" -gt 0 ]; do
+            case $1 in
+                -r) root=$2 && shift ;;
+                -n) name=$2 && shift ;;
+                -f) shift ;;
+            esac
+            shift
+        done
+        mkdir -p "$root/envs/$name/bin" || exit 1
+        for tool in zsh python3; do
+            printf '#!/bin/sh\nexit 0\n' >"$root/envs/$name/bin/$tool"
+            chmod 755 "$root/envs/$name/bin/$tool"
+        done
+        ;;
+    *)
+        printf 'TRIPWIRE micromamba %s\n' "$*" >>"$EVENT_LOG"
+        exit 99
+        ;;
+esac

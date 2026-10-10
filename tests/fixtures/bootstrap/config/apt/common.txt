@@ -1,0 +1,4 @@
+# Fixture apt list for tests/setup-host.sh (H1-apt-core).
+zsh
+git
+curl

@@ -1,0 +1,7 @@
+# Fixture login env for tests/setup-host.sh; the fake micromamba never reads it.
+name: login
+channels:
+  - conda-forge
+dependencies:
+  - zsh
+  - python>=3.11
