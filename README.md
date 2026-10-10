@@ -138,7 +138,8 @@ exec $SHELL -l
 
 The repository ships one project skill for both agents: `/dotfiles-bootstrap` in Claude Code ([`.claude/skills/`](.claude/skills/dotfiles-bootstrap/SKILL.md), run only when you invoke it) and `$dotfiles-bootstrap` in Codex ([`.agents/skills/`](.agents/skills/dotfiles-bootstrap/SKILL.md)). Started inside the clone, the agent asks which host this is, shows you the doctor report and the `--check` plan, runs `./setup-host.sh --host <host> --yes`, and works through the HUMAN blocks with you:
 
-- A `sudo` block runs only after you approve it in chat, each line as one visible top-level command, never wrapped in `sh -c` or a script; sign-in, GUI, Slurm and `chsh` blocks are yours to run.
+- A `sudo` block runs only after you approve it in chat, each line as one visible top-level command, never wrapped in `sh -c` or a script (a printed `printf ... | sha256sum -c --status - && ...` digest gate runs as one line, so an installer runs only while it has the verified digest); sign-in, GUI, Slurm and `chsh` blocks are yours to run.
+- An `inspect` block (Claude Code's unpinned installer): the agent shows the script's digest, size and contents and waits; its digest-gated run line runs only after you approve it, or you run it yourself.
 - `./stow-all.sh` writes `~/.claude`, `~/.codex` and `~/.ssh`, so the agent runs it only as its own visible command that you approve, exactly as the H7-stow block prints it.
 - The agent never runs `git lfs install`, `gh auth setup-git`, `conda init` or `micromamba shell init`, never edits rc files and never commits.
 

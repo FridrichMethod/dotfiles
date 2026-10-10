@@ -28,9 +28,13 @@ from this checkout, stop and say so.
    agent") says. Lines starting with `# ` are notes, not commands; every other
    line is one self-contained command, run in order. `sudo`: only after the
    person approves it in chat, each command line as one visible top-level
-   command, never through `sh -c`, a script or a chain. `auth`, `gui`, `alloc`,
-   `chsh`: hand them to the person and wait. `inspect`: show the script's
-   digest and contents first. `judgment`: the person decides.
+   command, never through `sh -c`, a script or a chain (a printed
+   `printf ... | sha256sum -c --status - && ...` digest gate is one command:
+   run it as printed). `auth`, `gui`, `alloc`, `chsh`: hand them to the person
+   and wait. `inspect`: show the script's digest, size and contents, then
+   wait; run the block's digest-gated `bash <path>` line only after the person
+   approves it in chat, as one visible top-level command, or leave it to them.
+   `judgment`: the person decides.
 7. Exit 3 means work remains: a blocking HUMAN block is pending, or steps are
    still to apply. Re-run step 5 after each block until H7-stow is the only one
    left.

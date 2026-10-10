@@ -754,7 +754,8 @@ expect_text check-fresh out 'S6-kitty todo'
 expect_text check-fresh out 'S5-claude human'
 expect_line check-fresh 'HUMAN-BEGIN S5-claude inspect'
 expect_text check-fresh out "downloads $URL_CLAUDE (unpinned)"
-expect_line check-fresh "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
+expect_text check-fresh out 'that runs it only while that sha256 holds'
+expect_no_text check-fresh out "&& bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_text check-fresh out 'H1-locale done'
 expect_line check-fresh 'HUMAN-BEGIN H1-gh-apt-repo sudo'
 expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
@@ -786,8 +787,8 @@ expect_text apply out 'S3-clones done applied:'
 expect_text apply out 'S5-codex done applied:'
 expect_event 'codex-run:--version'
 expect_line apply 'HUMAN-BEGIN S5-claude inspect'
-expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes"
-expect_line apply "bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
+expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes; delete the file for a fresh copy"
+expect_line apply "printf '%s  %s\\n' $SHA_CLAUDE $CASE_HOME/$CLAUDE_SCRATCH_REL | sha256sum -c --status - && bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_line apply 'HUMAN-BEGIN H7-stow judgment'
 # One self-contained line: stow is on PATH only after the first stow.
 expect_line apply "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
@@ -814,6 +815,36 @@ CODEX_RELEASE="$CASE_HOME/.codex/packages/standalone/releases/0.161.0-x86_64-unk
 [ "$(readlink "$CASE_HOME/.local/bin/kitty")" = "$CASE_HOME/.local/kitty.app/bin/kitty" ] || fail 'kitty link'
 [ "$(readlink "$CASE_HOME/.local/bin/kitten")" = "$CASE_HOME/.local/kitty.app/bin/kitten" ] || fail 'kitten link'
 [ -z "$("$REAL_GIT" -C "$FIXTURE" status --porcelain)" ] || fail 'apply dirtied the checkout'
+
+# The inspect download is kept: a later apply never replaces the copy a
+# person read, and its run line runs that copy only while it has the digest
+# the block shows.
+CLAUDE_SCRATCH="$CASE_HOME/$CLAUDE_SCRATCH_REL"
+GATE_LOG="$TEST_TMP/gate.log"
+printf '%s\n' '# reviewed version A' 'printf "reviewed-run\n" >>"$GATE_LOG"' >"$CLAUDE_SCRATCH"
+SHA_REVIEWED=$(sha "$CLAUDE_SCRATCH")
+run_case claude-keep -- --host lab-ubuntu --yes --only S5-claude
+expect_rc claude-keep 3
+expect_no_event "curl:$URL_CLAUDE"
+[ "$(sha "$CLAUDE_SCRATCH")" = "$SHA_REVIEWED" ] || fail 'a later apply replaced the reviewed claude installer'
+expect_text claude-keep out "# sha256 $SHA_REVIEWED, "
+GATE_LINE="printf '%s  %s\\n' $SHA_REVIEWED $CLAUDE_SCRATCH | sha256sum -c --status - && bash $CLAUDE_SCRATCH"
+expect_line claude-keep "$GATE_LINE"
+run_case claude-keep-check -- --host lab-ubuntu --check --only S5-claude
+expect_line claude-keep-check "$GATE_LINE"
+expect_no_events claude-keep-check
+if command -v sha256sum >/dev/null 2>&1; then
+    : >"$GATE_LOG"
+    GATE_LOG="$GATE_LOG" bash -c "$GATE_LINE" || fail 'the claude gate rejects the reviewed copy'
+    grep -qx reviewed-run "$GATE_LOG" || fail 'the claude gate did not run the reviewed copy'
+    printf '%s\n' 'printf "tampered-run\n" >>"$GATE_LOG"' >>"$CLAUDE_SCRATCH"
+    : >"$GATE_LOG"
+    if GATE_LOG="$GATE_LOG" bash -c "$GATE_LINE" 2>/dev/null; then
+        fail 'the claude gate ran a changed installer'
+    fi
+    [ ! -s "$GATE_LOG" ] || fail 'the claude gate ran a changed installer'
+fi
+cp "$FIXTURES/artifacts/claude-install" "$CLAUDE_SCRATCH"
 
 # A second apply installs nothing; once ~/.zshrc is stowed nothing blocks.
 printf '#!/bin/sh\necho "2.0.0 (Claude Code)"\n' >"$CASE_HOME/.local/bin/claude"
@@ -1049,8 +1080,9 @@ expect_rc mac-check 3
 expect_line mac-check 'HUMAN-BEGIN H1-homebrew sudo'
 expect_text mac-check out "downloads $URL_HOMEBREW"
 expect_text mac-check out "verifies sha256 $SHA_HOMEBREW first"
-expect_line mac-check "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
-expect_line mac-check "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -"
+MAC_GATE="printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+expect_line mac-check "$MAC_GATE"
+expect_no_text mac-check out 'stop unless'
 expect_text mac-check out 'S2-brew-bundle todo blocked by H1-homebrew'
 expect_no_events mac-check
 snapshot >"$TEST_TMP/after"
@@ -1061,21 +1093,34 @@ expect_rc mac-brew 3
 expect_event "curl:$URL_HOMEBREW"
 expect_no_event TRIPWIRE
 expect_line mac-brew "# sha256 $SHA_HOMEBREW verified"
-expect_line mac-brew 'sudo -v'
-expect_line mac-brew "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 [ "$(sha "$CASE_HOME/$HOMEBREW_SCRATCH_REL")" = "$SHA_HOMEBREW" ] || fail 'homebrew installer not staged'
-# The block re-checks the digest right before the sudo-backed run.
-grep -n -e '^printf .* | shasum -a 256 -c -$' -e '^sudo -v$' -e '^NONINTERACTIVE=1 /bin/bash ' \
+# sudo -v, then one line that runs the installer only while its digest holds
+# (a FAILED check must not fall through to the run), then sudo -k.
+grep -n -e '| shasum -a 256 -c --status - && ' -e '^sudo -[vk]$' -e '/bin/bash ' \
     "$TEST_TMP/mac-brew.out" | cut -d: -f2- >"$TEST_TMP/mac-brew.order"
-printf '%s\n' "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -" \
-    'sudo -v' "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL" | cmp -s - "$TEST_TMP/mac-brew.order" ||
-    fail 'Homebrew block: digest re-check, sudo -v, then the run'
-VERIFY_LINE=$(sed -n '/| shasum -a 256 -c -$/p' "$TEST_TMP/mac-brew.out")
-bash -c "$VERIFY_LINE" >/dev/null || fail 'the digest re-check rejects the staged installer'
+printf '%s\n' 'sudo -v' "$MAC_GATE" 'sudo -k' | cmp -s - "$TEST_TMP/mac-brew.order" ||
+    fail "Homebrew block: sudo -v, the digest-gated run, then sudo -k: $(cat "$TEST_TMP/mac-brew.order")"
+# gate_runs NAME LINE: run a gated block line; the fixture installer it
+# guards records a TRIPWIRE event and exits 99 when it runs.
+gate_runs() {
+    : >"$EVENT_LOG"
+    set +e
+    EVENT_LOG="$EVENT_LOG" bash -c "$2" >/dev/null 2>&1
+    GATE_RC=$?
+    set -e
+    if [ "$GATE_RC" != 99 ] || ! grep -q 'TRIPWIRE homebrew-install' "$EVENT_LOG"; then
+        fail "$1: the digest gate did not run the staged installer (exit $GATE_RC)"
+    fi
+}
+gate_refuses() {
+    : >"$EVENT_LOG"
+    if EVENT_LOG="$EVENT_LOG" bash -c "$2" >/dev/null 2>&1 || [ -s "$EVENT_LOG" ]; then
+        fail "$1: the digest gate ran a tampered installer"
+    fi
+}
+gate_runs mac-gate "$MAC_GATE"
 printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
-if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
-    fail 'the digest re-check accepts a tampered installer'
-fi
+gate_refuses mac-gate-tampered "$MAC_GATE"
 rm -f "$CASE_HOME/$HOMEBREW_SCRATCH_REL"
 
 run_case mac-clt "${MAC_ENV[@]}" FAKE_XCODE=0 -- --host mac --check
@@ -1091,14 +1136,13 @@ expect_event "curl:$URL_HOMEBREW"
 expect_no_event TRIPWIRE
 expect_line linuxbrew 'HUMAN-BEGIN H1-linuxbrew sudo'
 expect_line linuxbrew "# sha256 $SHA_HOMEBREW verified"
-expect_line linuxbrew "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+LINUX_GATE="printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+expect_line linuxbrew "$LINUX_GATE"
+expect_line linuxbrew 'sudo -k'
 if command -v sha256sum >/dev/null 2>&1; then
-    VERIFY_LINE=$(sed -n '/| sha256sum -c -$/p' "$TEST_TMP/linuxbrew.out")
-    bash -c "$VERIFY_LINE" >/dev/null || fail 'the sha256sum re-check rejects the staged installer'
+    gate_runs linuxbrew-gate "$LINUX_GATE"
     printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
-    if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
-        fail 'the sha256sum re-check accepts a tampered installer'
-    fi
+    gate_refuses linuxbrew-gate-tampered "$LINUX_GATE"
 fi
 
 # --- --list and --print-manual -----------------------------------------------
@@ -1116,7 +1160,7 @@ run_case manual -- --host lab-ubuntu --print-manual
 expect_rc manual 0
 expect_line manual 'sudo apt-get install -y --no-install-recommends zsh git curl xclip'
 expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
-expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c --status - && NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
 expect_line manual "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"

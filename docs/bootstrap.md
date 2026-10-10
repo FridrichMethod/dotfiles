@@ -341,8 +341,14 @@ The first line names the step and the kind. Every other line up to
   working directory or other shell state from another line, so each line can
   run as its own top-level command; scripts in the checkout are named by their
   full path. Run them in order, top to bottom: a later line can need a file or
-  a cached credential that an earlier one left (the Homebrew block re-checks the
-  installer's digest, then runs `sudo -v`, then the installer).
+  a cached credential that an earlier one left (the Homebrew block runs
+  `sudo -v`, then the installer, then `sudo -k`).
+- A line of the form
+  `printf '%s  %s\n' <sha256> <path> | sha256sum -c --status - && <command>`
+  (`shasum -a 256 -c --status -` on macOS) is a digest gate: `<command>` runs
+  only while the file still has that sha256, so the file that was verified or
+  read is the file that runs. It is the one place where a block chains two
+  commands; run it as printed, as one command.
 
 | Kind | Who runs it | Meaning |
 | --- | --- | --- |
@@ -370,7 +376,10 @@ kind.
   rc file. The only write it causes inside the checkout is `.venv-sync`, through
   `./setup-sync.sh`.
 - No `curl | sh`: every script is downloaded to a scratch directory first, and
-  only `inspect` rows (today just Claude Code's installer) have no digest.
+  only `inspect` rows (today just Claude Code's installer) have no digest. A
+  HUMAN block runs a downloaded script only behind a digest gate: the pinned
+  sha256, or for an `inspect` download the digest of the copy the person read,
+  which later runs keep instead of downloading it again.
 - Everything a person must do ends up in a HUMAN block; exit 3 means work
   remains: a blocking block is pending, or automatic steps are still to apply.
 
@@ -467,13 +476,18 @@ short and send the agent here. The rules they follow:
 - **`sudo` blocks** run only after the person approves the block in chat. Each
   command line is then run as one visible top-level shell command, exactly as
   printed: never wrapped in `sh -c`, never inside a script, never chained to
-  another command. If sudo would ask for a password and the agent's shell has no
-  terminal, the person runs the block in their own terminal instead. On native
-  Windows a `sudo` block needs an elevated shell, so it is always the person's.
+  another command. The one exception is a digest gate the block prints as a
+  single line (`printf ... | sha256sum -c --status - && <command>`): run it as
+  printed, as one command. If sudo would ask for a password and the agent's
+  shell has no terminal, the person runs the block in their own terminal
+  instead. On native Windows a `sudo` block needs an elevated shell, so it is
+  always the person's.
 - **`auth`, `gui`, `alloc` and `chsh` blocks** are handed to the person, who
   says when they are done. **`inspect`** blocks: the agent shows the script's
-  digest, size and contents and waits. **`judgment`** blocks: the agent explains
-  the choice and lets the person make it.
+  digest, size and contents, then waits. It runs the block's digest-gated
+  `bash <path>` line only after the person approves it in chat, as one visible
+  top-level command, or leaves it to the person. **`judgment`** blocks: the
+  agent explains the choice and lets the person make it.
 - **Stow.** `./stow-all.sh H` writes under `~/.claude` and `~/.codex` (and
   links `~/.ssh`). `~/.claude` is a protected path whose writes Claude Code's
   auto mode cannot pre-approve, so the agent runs it only as its own visible
@@ -514,9 +528,12 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    (lines starting with "# " are notes for me; every other line is one
    self-contained command, run in order):
    sudo: show it and wait for my approval, then run each command line as its own
-   visible top-level command (never sh -c, never a script, never chained);
+   visible top-level command (never sh -c, never a script, never chained, except
+   that a printed "printf ... | sha256sum -c --status - && ..." digest gate runs
+   as printed, as one command);
    auth, gui, alloc, chsh: hand them to me and wait;
-   inspect: show me the script's digest and contents and wait;
+   inspect: show me the script's digest, size and contents and wait; run its
+   digest-gated line only after I approve it, or leave it to me;
    judgment: explain the choice and let me decide.
 7. Exit 3 means work remains (a blocking HUMAN step, or steps still to apply).
    Re-run setup-host after each block until H7-stow is the only one left. Ask
@@ -585,12 +602,12 @@ that shell only.
   checks only look for the file)
 - **Install:** `setup-host.sh` downloads and checks the script, then prints a
   sudo block with its path. Run its three command lines in order, in one
-  terminal: the first re-checks the pinned sha256
-  (`printf '%s  %s\n' <sha256> <path> | shasum -a 256 -c -`) and must print
-  `OK`, so stop if it does not; then `sudo -v`; then
-  `NONINTERACTIVE=1 /bin/bash <path>` (non-interactive mode only works with sudo
-  credentials already cached). By hand: `f=$(fetch_pinned homebrew)`, then
-  `sudo -v`, then `NONINTERACTIVE=1 /bin/bash "$f"` in the same terminal.
+  terminal: `sudo -v` (non-interactive mode only works with sudo credentials
+  already cached); then the digest gate
+  `printf '%s  %s\n' <sha256> <path> | shasum -a 256 -c --status - && NONINTERACTIVE=1 /bin/bash <path>`,
+  which runs the installer only while it still has the pinned sha256; then
+  `sudo -k`. By hand: `f=$(fetch_pinned homebrew)`, then `sudo -v`, then
+  `NONINTERACTIVE=1 /bin/bash "$f"` and `sudo -k` in the same terminal.
 - **Verify:** `/opt/homebrew/bin/brew --version` (or `/usr/local/bin/brew`)
 - **Human:** yes (sudo: the installer creates the Homebrew prefix and needs an
   administrator account)
@@ -645,9 +662,9 @@ files guard their `brew shellenv` line, so shells stay quiet before it exists.
 
 - **Check:** `test -x /home/linuxbrew/.linuxbrew/bin/brew && echo ok`
 - **Install:** the printed sudo block, the same three lines as on macOS with
-  `sha256sum -c -` for the digest re-check: stop unless it prints `OK`. By hand:
+  `sha256sum -c --status -` in the digest gate. By hand:
   `f=$(fetch_pinned homebrew)`, `sudo -v`, then `NONINTERACTIVE=1 /bin/bash "$f"`
-  in the same terminal.
+  and `sudo -k` in the same terminal.
 - **Verify:** `/home/linuxbrew/.linuxbrew/bin/brew --version`; doctor row
   `linuxbrew` is `ok`.
 - **Human:** yes (sudo: creates `/home/linuxbrew` and gives it to you)
@@ -944,11 +961,15 @@ Applies to `wsl-ubuntu` and `lab-ubuntu` through the `claude` row of
 pinned by version or digest, so it is an `inspect` step.
 
 - **Check:** `claude --version`
-- **Install:** setup-host.sh downloads `https://claude.ai/install.sh` to a
-  scratch directory and prints a `HUMAN-BEGIN S5-claude inspect` block with its
-  sha256, size and path. Read it: it should fetch Claude Code from Anthropic
-  into your home directory and must not call sudo or edit rc files. Then run
-  `bash <path>`. By hand: `f=$(fetch_pinned claude)`, `less "$f"`, `bash "$f"`.
+- **Install:** setup-host.sh downloads `https://claude.ai/install.sh` once to a
+  scratch directory (later runs keep that copy; delete it for a fresh one) and
+  prints a `HUMAN-BEGIN S5-claude inspect` block with its sha256, size and
+  path. Read it: it should fetch Claude Code from Anthropic into your home
+  directory and must not call sudo or edit rc files. Then run the block's
+  digest gate,
+  `printf '%s  %s\n' <sha256> <path> | sha256sum -c --status - && bash <path>`,
+  which runs the copy only while it still has the digest the block showed. By
+  hand: `f=$(fetch_pinned claude)`, `less "$f"`, `bash "$f"`.
 - **Verify:** `claude --version` prints a version and `command -v claude` is
   `~/.local/bin/claude`; `git -C ~/dotfiles status --porcelain` is empty.
 - **Human:** yes (inspect: an unpinned vendor script is read before it runs)

@@ -38,10 +38,11 @@ steps_brew_check() {
 
 # steps_homebrew_block STEP: the pinned Homebrew installer, run by a person.
 # Apply mode downloaded and verified it first; --check and --print-manual
-# only name the URL and digest. The block re-checks the digest itself right
-# before the sudo-backed run, since the file may have changed since then.
+# only name the URL and digest. The run line re-checks the digest itself and
+# runs the installer only when it still matches, since the file may have
+# changed since the download; sudo -k then drops the cached credential.
 steps_homebrew_block() {
-    local path quoted verify=sha256sum
+    local path
     steps_block_begin "$1" sudo
     if ! steps_installer_fields homebrew; then
         printf '# no installers.tsv homebrew row for %s\n' "$STEPS_HOST"
@@ -49,18 +50,16 @@ steps_homebrew_block() {
         return 0
     fi
     path=$(steps_scratch_file homebrew "$STEPS_URL")
-    quoted=$(steps_quote "$path")
-    [ "$STEPS_PROFILE" != macos ] || verify='shasum -a 256'
     if [ "$STEPS_MODE" = apply ] && steps_has_digest "$path" "$STEPS_SHA"; then
         printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
     else
         printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
         printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
     fi
-    printf '%s\n' '# re-check the pinned sha256 right before the sudo-backed run; stop unless it prints OK' \
-        "printf '%s  %s\\n' $STEPS_SHA $quoted | $verify -c -" \
-        "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v'
-    printf 'NONINTERACTIVE=1 /bin/bash %s\n' "$quoted"
+    printf '%s\n' "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v' \
+        '# the installer runs only while its sha256 is still the pinned one'
+    steps_digest_gate "$STEPS_SHA" "$path" "NONINTERACTIVE=1 /bin/bash $(steps_quote "$path")"
+    printf '%s\n' '# drop the cached sudo credential again' 'sudo -k'
     steps_block_end
 }
 
@@ -274,8 +273,12 @@ step_S5_claude_check() {
 
 step_S5_claude_apply() { steps_fetch_installer claude; }
 
+# The download is kept: setup-host fetches it only while the file is absent,
+# so the copy a person read is not replaced by a later run. The run line
+# binds that copy to the digest printed here (read-only, so --check shows it
+# too once a run has downloaded it).
 step_S5_claude_plan() {
-    local path digest size
+    local path quoted digest size
     steps_block_begin S5-claude inspect
     if ! steps_installer_fields claude; then
         printf '# no installers.tsv claude row for %s\n' "$STEPS_HOST"
@@ -283,16 +286,18 @@ step_S5_claude_plan() {
         return 0
     fi
     path=$(steps_scratch_file claude "$STEPS_URL")
-    if [ "$STEPS_MODE" = apply ] && [ -f "$path" ] && digest=$(bootstrap_sha256 "$path"); then
+    quoted=$(steps_quote "$path")
+    if [ "$STEPS_MODE" != manual ] && [ -f "$path" ] && digest=$(bootstrap_sha256 "$path"); then
         size=$(wc -c <"$path" | tr -d ' ')
-        printf '# downloaded %s (unpinned vendor script)\n' "$STEPS_URL"
-        printf '# sha256 %s, %s bytes\n' "$digest" "$size"
+        printf '# downloaded %s (unpinned vendor script) to %s\n' "$STEPS_URL" "$quoted"
+        printf '# sha256 %s, %s bytes; delete the file for a fresh copy\n' "$digest" "$size"
+        printf '%s\n' '# read it first; the line below runs it only while its sha256 is still the one above'
+        steps_digest_gate "$digest" "$path" "bash $quoted"
     else
         printf '# ./setup-host.sh --host %s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$STEPS_URL"
-        printf '%s\n' '# to the path below and prints its sha256 and size'
+        printf '# to %s once, then prints its sha256, its size and a line\n' "$quoted"
+        printf '%s\n' '# that runs it only while that sha256 holds; read the file before you run it'
     fi
-    printf '# read %s first, then run:\n' "$(steps_quote "$path")"
-    printf 'bash %s\n' "$(steps_quote "$path")"
     printf '%s\n' '# ./doctor.sh then checks the installed claude against tools.tsv'
     steps_block_end
 }

@@ -139,16 +139,28 @@ steps_has_digest() {
 }
 
 # steps_fetch_pinned URL DEST SHA256: bootstrap_fetch unless DEST already
-# holds the pinned digest. SHA256 "-" downloads for inspection.
+# holds the pinned digest. SHA256 "-" downloads for inspection, once: a copy
+# already at DEST is the one a person may have read, so a later run keeps it
+# instead of replacing it with whatever the vendor serves now.
 steps_fetch_pinned() {
     if steps_has_digest "$2" "$3"; then
         return 0
     fi
     if [ "$3" = - ]; then
+        [ ! -f "$2" ] || return 0
         bootstrap_fetch --inspect "$1" "$2" -
     else
         bootstrap_fetch "$1" "$2" "$3"
     fi
+}
+
+# steps_digest_gate SHA256 FILE COMMAND: one HUMAN-block line that runs
+# COMMAND only while FILE still has SHA256 (sha256sum, or shasum on macOS),
+# so the file that was verified or read is the file that runs.
+steps_digest_gate() {
+    local verify='sha256sum -c --status -'
+    [ "$STEPS_PROFILE" != macos ] || verify='shasum -a 256 -c --status -'
+    printf '%s %s %s | %s && %s\n' "printf '%s  %s\\n'" "$1" "$(steps_quote "$2")" "$verify" "$3"
 }
 
 # steps_fetch_installer ID: download the script of installers.tsv row ID to
