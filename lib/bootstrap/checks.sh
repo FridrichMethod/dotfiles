@@ -10,11 +10,15 @@
 #   skip      not checkable here (a PowerShell module on unix, macOS locale)
 #   human     a person must repair it (installer edits, stow before oh-my-zsh)
 # Checks only read. git runs with --no-optional-locks, so it never refreshes
-# the index; fc-list reads fontconfig's caches (fontconfig itself rewrites
-# only a stale one, as any program that loads fonts does). Only
-# bootstrap_check_auth (doctor.sh --online) may reach the network, and only
-# bootstrap_check_smoke (doctor.sh --smoke) starts a shell, which may write
-# shell caches. Test overrides: BOOTSTRAP_NVM_KEG_CANDIDATES and
+# the index. Two probed programs can write their own caches, outside this
+# checkout and the rc files: fc-list reads fontconfig's caches (fontconfig
+# itself rewrites only a stale one, as any program that loads fonts does),
+# and `brew --version` (the mac homebrew row) refreshes
+# $HOMEBREW_REPOSITORY/.git/describe-cache when it is cold, through a git
+# that bin/brew starts under `env -i`, so GIT_OPTIONAL_LOCKS never reaches
+# it. Only bootstrap_check_auth (doctor.sh --online) may reach the network,
+# and only bootstrap_check_smoke (doctor.sh --smoke) starts a shell, which
+# may write shell caches. Test overrides: BOOTSTRAP_NVM_KEG_CANDIDATES and
 # BOOTSTRAP_CLT_SHIMS (colon-separated paths).
 
 # Structural checks run after the tools.tsv rows: id, tier, generic doc step

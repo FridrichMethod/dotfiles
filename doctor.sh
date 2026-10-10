@@ -45,7 +45,10 @@ done
 . "$REPO_ROOT/lib/bootstrap/checks.sh"
 
 # git never refreshes the index or takes other optional locks, in this
-# process or in any git a probed tool runs (brew --version runs git describe).
+# process or in a git that a probed tool starts with this environment. It
+# does not reach the git behind `brew --version`: bin/brew restarts itself
+# under `env -i` with an allowlist, and may refresh Homebrew's own
+# .git/describe-cache (see lib/bootstrap/checks.sh).
 export GIT_OPTIONAL_LOCKS=0
 
 usage() {
@@ -237,9 +240,12 @@ $ALL_ROWS
 EOF
 ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
 
-# Probe what the installers just put in place: a fresh Homebrew and the hpc
-# login env stay off PATH until the stowed rc files add them. This changes
-# only this process's PATH; path-order judges the caller's PATH.
+# A fresh Homebrew's bin and, on hpc, the login env's bin stay off PATH
+# until the stowed rc files add them, so prepend both (when present) to find
+# what those installers put there before stow. ~/.local/bin (micromamba,
+# codex, claude, kitty) is not prepended: a shell without it reports those
+# missing. This changes only this process's PATH; path-order judges the
+# caller's PATH.
 ORIG_PATH=$PATH
 prepend_path() {
     case ":$PATH:" in
