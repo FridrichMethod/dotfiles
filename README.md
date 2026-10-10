@@ -386,7 +386,7 @@ The installer stores the selected host and last successfully applied commit in l
 | `DOTFILES_AUTO_UPDATE` | `1` | `0` disables the entire login update hook |
 | `DOTFILES_AUTO_STOW` | `1` | `0` keeps pull enabled but skips automatic stow |
 | `DOTFILES_DIR` | `~/dotfiles` | repository path |
-| `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only |
+| `DOTFILES_HOST` | remembered host; `win` on Windows | explicit host override; empty means common only (`./doctor.sh` then checks the detected platform without an overlay, `./setup-host.sh` asks for `--host`) |
 | `DOTFILES_STOW_WITHOUT_OH_MY_ZSH` | `0` | `1` lets `./stow-all.sh` stow the zsh package before `~/.oh-my-zsh/oh-my-zsh.sh` exists |
 | `DOTFILES_COLOR` | `auto` | `always` forces ANSI color; `never` disables it |
 | `NO_COLOR` | unset | any nonempty value disables color, including `0` |

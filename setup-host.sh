@@ -39,7 +39,8 @@ usage() {
         'blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.' \
         '' \
         '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
-        '                    to DOTFILES_HOST or the host ./stow-all.sh recorded.' \
+        '                    to DOTFILES_HOST or the host ./stow-all.sh recorded; a set' \
+        '                    but empty DOTFILES_HOST (common only) needs --host.' \
         '                    The win host uses setup-host.ps1.' \
         '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
         '                    (default core,cli,ai)' \
@@ -204,6 +205,11 @@ if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
     exit 2
 fi
 
+# A set but empty DOTFILES_HOST means common only (as the login updater reads
+# it), and there is no --platform here: every step needs an overlay.
+if [[ -z "$HOST" ]] && bootstrap_host_env_empty; then
+    usage_error 'DOTFILES_HOST is set but empty, which means common only (no host overlay); setup-host needs one: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe), or follow X-other-linux in docs/bootstrap.md'
+fi
 if [[ -z "$HOST" ]]; then
     HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
         usage_error 'no host: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)'

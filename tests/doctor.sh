@@ -390,6 +390,33 @@ run_doctor env-host DOTFILES_HOST=lab-ubuntu -- --tsv
 assert_rc 0
 assert_row host-tool warn
 
+# A set but empty DOTFILES_HOST means common only, as the login updater reads
+# it: the detected platform without an overlay, even with a recorded host
+# (sherlock would fail on login-tool); --host and --platform still win.
+OS_UBUNTU="$TEST_TMP/os-release-ubuntu"
+printf 'ID=ubuntu\nID_LIKE=debian\n' >"$OS_UBUNTU"
+printf '%s\n' "$TEST_HOME" Linux sherlock test-head >"$STATE_FILE"
+run_doctor env-empty DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_tsv_shape
+assert_err 'DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform debian'
+assert_row fzf ok '' -
+assert_no_row login-tool
+assert_no_row host-tool
+run_doctor env-empty-log DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" --
+assert_rc 0
+assert_out 'Checking platform debian without a host overlay'
+assert_out '(platform debian, required tiers: core,cli,ai)'
+run_doctor env-empty-host DOTFILES_HOST= -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'set but empty'
+run_doctor env-empty-platform DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --platform other --tsv
+assert_rc 0
+assert_not_in "$OUT/$CASE.err" 'set but empty'
+assert_row zsh ok
+rm -f "$STATE_FILE"
+
 # --- baseline: every required row ok ---------------------------------------
 
 run_doctor baseline-tsv -- --host lab-ubuntu --tsv

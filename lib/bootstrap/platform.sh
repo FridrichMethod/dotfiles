@@ -160,12 +160,22 @@ bootstrap_brew_bin() {
     return 1
 }
 
+# bootstrap_host_env_empty: 0 when DOTFILES_HOST is set but empty, which the
+# login updater (scripts/dotfiles-update.sh) reads as common only: no overlay.
+bootstrap_host_env_empty() {
+    [ "${DOTFILES_HOST+set}" = set ] && [ -z "$DOTFILES_HOST" ]
+}
+
 # bootstrap_resolve_host ROOT: DOTFILES_HOST when set (it must be a known
 # host), else the host that ./stow-all.sh recorded for this home and kernel in
 # $(git rev-parse --git-path dotfiles-sync-unix): lines HOME, uname -s, HOST,
-# APPLIED_HEAD. Returns 1 when unknown; never guesses an overlay.
+# APPLIED_HEAD. Returns 1 when unknown, and when DOTFILES_HOST is set but empty
+# (common only, so the recorded host does not apply); never guesses an overlay.
 bootstrap_resolve_host() {
     local root=$1 state home_line os_line host_line
+    if bootstrap_host_env_empty; then
+        return 1
+    fi
     if [ -n "${DOTFILES_HOST:-}" ]; then
         bootstrap_profile_for_host "$DOTFILES_HOST" >/dev/null || return 1
         printf '%s\n' "$DOTFILES_HOST"

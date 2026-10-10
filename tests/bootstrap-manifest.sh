@@ -519,6 +519,9 @@ printf '%s\n' "$TEST_HOME" "$(uname -s)" sherlock abc123 >"$STATE"
 assert_eq "$(resolve "$REPO")" sherlock 'recorded host'
 assert_eq "$(resolve "$REPO" DOTFILES_HOST=marlowe)" marlowe 'DOTFILES_HOST wins'
 assert_status 1 'invalid DOTFILES_HOST' resolve "$REPO" DOTFILES_HOST=fedora
+# Set but empty means common only, as for the login updater: the recorded
+# host does not apply.
+assert_status 1 'empty DOTFILES_HOST' resolve "$REPO" DOTFILES_HOST=
 assert_status 1 'other HOME' resolve "$REPO" HOME="$TEST_TMP/elsewhere"
 assert_status 1 'other kernel' resolve "$REPO" BOOTSTRAP_UNAME_S=Plan9
 printf '%s\n' "$TEST_HOME" Plan9 mac '' >"$STATE"

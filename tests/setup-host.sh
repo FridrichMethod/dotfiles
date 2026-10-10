@@ -700,6 +700,24 @@ run_case env-host DOTFILES_HOST=win -- --check
 expect_rc env-host 2
 expect_text env-host err 'setup-host.ps1'
 
+# A set but empty DOTFILES_HOST means common only, as the login updater reads
+# it, and setup-host has no --platform: it asks for --host instead of using
+# the host ./stow-all.sh recorded.
+printf '%s\n' "$CASE_HOME" Linux lab-ubuntu recorded-head >"$FIXTURE/.git/dotfiles-sync-unix"
+run_case env-host-recorded -- --check --only S3-dirs
+expect_rc env-host-recorded 3
+expect_text env-host-recorded out 'P0-preflight done host lab-ubuntu'
+run_case env-host-empty DOTFILES_HOST= -- --check --only S3-dirs
+expect_rc env-host-empty 2
+expect_text env-host-empty err 'DOTFILES_HOST is set but empty, which means common only (no host overlay)'
+expect_text env-host-empty err 'pass --host HOST'
+expect_no_text env-host-empty out 'P0-preflight'
+expect_no_events env-host-empty
+run_case env-host-empty-explicit DOTFILES_HOST= -- --host lab-ubuntu --check --only S3-dirs
+expect_rc env-host-empty-explicit 3
+expect_text env-host-empty-explicit out 'P0-preflight done host lab-ubuntu'
+rm -f "$FIXTURE/.git/dotfiles-sync-unix"
+
 # Never as root: it would install into /root or leave root-owned files.
 run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
 expect_rc root 2
