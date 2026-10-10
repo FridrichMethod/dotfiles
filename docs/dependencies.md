@@ -154,6 +154,14 @@ prints) appear at the start of the When absent cell.
 | `claude` | mac, wsl-ubuntu, lab-ubuntu, win | cask `claude-code` | pinned `claude` (inspect) | not checked: optional site module (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
 | `codex` | mac, wsl-ubuntu, lab-ubuntu, win | cask `codex` | pinned `codex` (codex-package) | not checked: optional site module (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
 
+Opt-in, outside every tier: the pinned Sherlock toolkit (`shk`), which the
+global agent instructions name for work on or connections to Sherlock. Neither
+`./setup-host.sh` nor the doctor touches it; on a host where agents work with
+Sherlock, run `./setup-sherlock-kit.sh` (Windows:
+`./setup-sherlock-kit.ps1 -Python python`) explicitly, then `./stow-all.sh`,
+which links the `shk` launcher. See the README's Pinned Sherlock toolkit
+section and [sherlock-kit.md](sherlock-kit.md).
+
 ### Desktop tier
 
 | Tool | Hosts | macOS | Ubuntu/WSL | Sherlock/Marlowe | Windows | When absent |
