@@ -4,6 +4,8 @@
 # package manager, download and clone remote is a local stub; sudo, chsh,
 # stow, apt-get, git lfs and the fixture's ./stow-all.sh are tripwires; each
 # case runs under `env -i` with its own fixture home, never the real one.
+# The [y/N] prompt cases run on a pseudo terminal from python3's pty module
+# and are skipped, with a note on stderr, where that is unavailable.
 
 set -euo pipefail
 
@@ -25,6 +27,8 @@ URL_MAP_BAD="$TEST_TMP/url-map-bad.tsv"
 GITCONFIG="$TEST_TMP/gitconfig"
 OS_DEBIAN="$TEST_TMP/os-release-ubuntu"
 OS_ROCKY="$TEST_TMP/os-release-rocky"
+PROC_NATIVE="$TEST_TMP/proc-version-native"
+PROC_WSL="$TEST_TMP/proc-version-wsl"
 DPKG_ALL="$TEST_TMP/dpkg-all"
 DPKG_PARTIAL="$TEST_TMP/dpkg-partial"
 MARKER="$TEST_TMP/marker"
@@ -154,38 +158,61 @@ snapshot() {
     find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -print | LC_ALL=C sort
 }
 
-# run_case NAME [VAR=VALUE...] -- ARGS...: run the fixture setup-host.sh
-# under a clean environment (debian lab-ubuntu defaults) with stdin closed.
-run_case() {
-    local name=$1 extra=()
-    shift
+# case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
+# setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
+# WSL); a VAR=VALUE overrides a default of the same name.
+case_command() {
+    local extra=()
     while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
         extra+=("$1")
         shift
     done
     shift
+    CASE_CMD=(env -i
+        HOME="$CASE_HOME"
+        PATH="$FAKE_BIN:/usr/bin:/bin"
+        LC_ALL=C
+        DOTFILES_COLOR=never
+        TMPDIR="$TEST_TMP"
+        EVENT_LOG="$EVENT_LOG"
+        CURL_ARGS_LOG="$CURL_ARGS_LOG"
+        URL_MAP="$URL_MAP"
+        REAL_GIT="$REAL_GIT"
+        GIT_CONFIG_GLOBAL="$GITCONFIG"
+        GIT_CONFIG_NOSYSTEM=1
+        BOOTSTRAP_UNAME_S=Linux
+        BOOTSTRAP_UNAME_M=x86_64
+        BOOTSTRAP_OS_RELEASE="$OS_DEBIAN"
+        BOOTSTRAP_PROC_VERSION="$PROC_NATIVE"
+        BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew"
+        FAKE_DPKG_INSTALLED="$DPKG_ALL"
+        ${extra[@]+"${extra[@]}"}
+        bash "$FIXTURE/setup-host.sh" "$@")
+}
+
+# run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
+run_case() {
+    local name=$1
+    shift
+    case_command "$@"
     : >"$EVENT_LOG"
     set +e
-    env -i \
-        HOME="$CASE_HOME" \
-        PATH="$FAKE_BIN:/usr/bin:/bin" \
-        LC_ALL=C \
-        DOTFILES_COLOR=never \
-        TMPDIR="$TEST_TMP" \
-        EVENT_LOG="$EVENT_LOG" \
-        CURL_ARGS_LOG="$CURL_ARGS_LOG" \
-        URL_MAP="$URL_MAP" \
-        REAL_GIT="$REAL_GIT" \
-        GIT_CONFIG_GLOBAL="$GITCONFIG" \
-        GIT_CONFIG_NOSYSTEM=1 \
-        BOOTSTRAP_UNAME_S=Linux \
-        BOOTSTRAP_UNAME_M=x86_64 \
-        BOOTSTRAP_OS_RELEASE="$OS_DEBIAN" \
-        BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew" \
-        FAKE_DPKG_INSTALLED="$DPKG_ALL" \
-        ${extra[@]+"${extra[@]}"} \
-        bash "$FIXTURE/setup-host.sh" "$@" \
-        </dev/null >"$TEST_TMP/$name.out" 2>"$TEST_TMP/$name.err"
+    "${CASE_CMD[@]}" </dev/null >"$TEST_TMP/$name.out" 2>"$TEST_TMP/$name.err"
+    CASE_RC=$?
+    set -e
+}
+
+# run_tty_case NAME ANSWER [VAR=VALUE...] -- ARGS...: run case_command on a
+# pseudo terminal that answers ANSWER to every [y/N] prompt. stdout and
+# stderr share the terminal, so both land in NAME.out.
+run_tty_case() {
+    local name=$1 answer=$2
+    shift 2
+    case_command "$@"
+    : >"$EVENT_LOG"
+    : >"$TEST_TMP/$name.err"
+    set +e
+    python3 -I "$TEST_TMP/pty-run.py" "$TEST_TMP/$name.out" "$answer" "${CASE_CMD[@]}" </dev/null
     CASE_RC=$?
     set -e
 }
@@ -369,6 +396,71 @@ SH
 done
 chmod 755 "$FAKE_BIN"/* "$TEST_TMP/brew-stub"
 
+# A PATH dir whose id reports root, for the refusal case.
+ROOT_BIN="$TEST_TMP/bin-root"
+mkdir -p "$ROOT_BIN"
+cat >"$ROOT_BIN/id" <<'SH'
+#!/bin/sh
+case "$*" in
+    -u) echo 0 ;;
+    -un) echo root ;;
+    *) echo 'uid=0(root) gid=0(root) groups=0(root)' ;;
+esac
+SH
+chmod 755 "$ROOT_BIN/id"
+
+# Runs a command on a pseudo terminal, answers every [y/N] prompt, saves the
+# output and exits with the command's status (97 when the helper breaks).
+cat >"$TEST_TMP/pty-run.py" <<'PY'
+import os
+import pty
+import select
+import sys
+import time
+
+
+def main():
+    out_path, answer, argv = sys.argv[1], sys.argv[2].encode() + b"\n", sys.argv[3:]
+    pid, fd = pty.fork()
+    if pid == 0:
+        try:
+            os.execvp(argv[0], argv)
+        finally:
+            os._exit(127)
+    output, answered, deadline = b"", 0, time.monotonic() + 120
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([fd], [], [], 1.0)
+        if not ready:
+            continue
+        try:
+            data = os.read(fd, 65536)
+        except OSError:  # Linux: EIO once the child has exited
+            break
+        if not data:
+            break
+        output += data
+        while output.count(b"[y/N] ") > answered:
+            os.write(fd, answer)
+            answered += 1
+    else:
+        os.kill(pid, 9)
+    _, status = os.waitpid(pid, 0)
+    with open(out_path, "wb") as handle:
+        handle.write(output.replace(b"\r\n", b"\n"))
+    return os.WEXITSTATUS(status) if os.WIFEXITED(status) else 98
+
+
+try:
+    sys.exit(main())
+except Exception as error:  # report the helper's own failure distinctly
+    print(f"pty-run: {error!r}", file=sys.stderr)
+    sys.exit(97)
+PY
+HAVE_PTY=0
+if command -v python3 >/dev/null 2>&1 && python3 -I -c 'import pty, select' >/dev/null 2>&1; then
+    HAVE_PTY=1
+fi
+
 # --- clone remotes -----------------------------------------------------------
 
 # make_remote OWNER/REPO FILE...: a bare repository with one commit; prints
@@ -532,6 +624,8 @@ chmod 755 "$FIXTURE/setup-host.sh" "$FIXTURE/stow-all.sh" "$FIXTURE/setup-sync.s
 
 printf 'ID=ubuntu\nID_LIKE=debian\nVERSION_ID="24.04"\n' >"$OS_DEBIAN"
 printf 'ID="rocky"\nID_LIKE="rhel centos fedora"\n' >"$OS_ROCKY"
+printf 'Linux version 6.8.0-45-generic (buildd@lcy02-amd64-075) #45-Ubuntu SMP\n' >"$PROC_NATIVE"
+printf 'Linux version 5.15.167.4-microsoft-standard-WSL2 (root@runner) #1 SMP\n' >"$PROC_WSL"
 printf '%s\n' zsh git curl xclip >"$DPKG_ALL"
 printf '%s\n' curl xclip >"$DPKG_PARTIAL"
 HOMEBREW_SCRATCH_REL=.cache/dotfiles-bootstrap/homebrew/install.sh
@@ -580,6 +674,35 @@ run_case env-host DOTFILES_HOST=win -- --check
 expect_rc env-host 2
 expect_text env-host err 'setup-host.ps1'
 
+# Never as root: it would install into /root or leave root-owned files.
+run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
+expect_rc root 2
+expect_text root err 'run ./setup-host.sh as your user, not root'
+expect_no_text root out 'P0-preflight'
+expect_no_events root
+
+# A cluster host needs Lmod; wsl-ubuntu needs WSL, lab-ubuntu needs its absence.
+run_case hpc-no-lmod BOOTSTRAP_OS_RELEASE="$OS_ROCKY" -- --host sherlock --check
+expect_rc hpc-no-lmod 2
+expect_text hpc-no-lmod err 'host sherlock is a cluster with Lmod, but LMOD_DIR is unset here (detected other)'
+run_case marlowe-no-lmod -- --host marlowe --yes
+expect_rc marlowe-no-lmod 2
+expect_text marlowe-no-lmod err 'LMOD_DIR is unset here (detected debian)'
+expect_no_events marlowe-no-lmod
+run_case wsl-native -- --host wsl-ubuntu --yes
+expect_rc wsl-native 2
+expect_text wsl-native err 'host wsl-ubuntu runs under WSL, but this is not WSL'
+expect_no_events wsl-native
+run_case lab-in-wsl BOOTSTRAP_PROC_VERSION="$PROC_WSL" -- --host lab-ubuntu --check
+expect_rc lab-in-wsl 2
+expect_text lab-in-wsl err 'host lab-ubuntu is a native workstation, but this is WSL; use --host wsl-ubuntu'
+run_case wsl-kernel BOOTSTRAP_PROC_VERSION="$PROC_WSL" -- --host wsl-ubuntu --check
+expect_rc wsl-kernel 3
+expect_no_text wsl-kernel err 'refusing'
+run_case wsl-distro WSL_DISTRO_NAME=Ubuntu -- --host wsl-ubuntu --check
+expect_rc wsl-distro 3
+expect_no_text wsl-distro err 'refusing'
+
 # --- debian --check: zsh and git missing ------------------------------------
 
 new_home debian-missing
@@ -597,7 +720,13 @@ expect_text check-missing out 'S3-clones todo blocked by H1-apt-core'
 expect_text check-missing out 'H7-stow human waiting: oh-my-zsh must be cloned before ./stow-all.sh'
 expect_no_text check-missing out 'HUMAN-BEGIN H1-linuxbrew'
 expect_no_text check-missing out 'HUMAN-BEGIN H7-stow'
+# chsh -s /usr/bin/zsh fails before the apt block installed zsh.
+expect_text check-missing out 'H7-chsh human blocked by H1-apt-core'
+expect_no_text check-missing out 'HUMAN-BEGIN H7-chsh'
 expect_line check-missing 'HUMAN-BEGIN H7-auth auth'
+expect_text check-missing err 'HUMAN steps pending: H1-apt-core H1-linuxbrew'
+expect_text check-missing err 'steps to apply: S2-brew-bundle S3-clones'
+expect_text check-missing err 'after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu without --check'
 expect_no_events check-missing
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
@@ -709,6 +838,17 @@ expect_rc check-done 0
 expect_no_events check-done
 expect_text check-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate"
 
+# Exit 0 means done: an auto step still to apply makes a --check exit 3.
+rm -rf "$CASE_HOME/.vim"
+run_case check-todo -- --host lab-ubuntu --check --tier all
+expect_rc check-todo 3
+expect_text check-todo out 'S3-dirs todo'
+expect_text check-todo err 'steps to apply: S3-dirs; rerun ./setup-host.sh --host lab-ubuntu --tier all without --check'
+expect_no_text check-todo out 'nothing blocking remains'
+expect_no_text check-todo err 'HUMAN steps pending'
+expect_no_events check-todo
+mkdir -p "$CASE_HOME/.vim/undo" "$CASE_HOME/.vim/tmp"
+
 # --- clones: re-pin a clean drifted clone, refuse a dirty one ----------------
 
 FZF_TAB_WORK="$TEST_TMP/work/Aloxaf/fzf-tab"
@@ -764,6 +904,30 @@ expect_text pollution err 'S2-brew-bundle failed: changed files in'
 expect_text pollution err 'common/zsh/.zshrc'
 "$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
 
+# The guard compares content: a file that was already modified keeps its
+# status line, and a file added inside an untracked dir would hide behind
+# `?? dir/` in the default status.
+printf '# a local edit\n' >>"$FIXTURE/common/zsh/.zshrc"
+new_home pollution-dirty
+run_case pollution-dirty BREW_POLLUTE="$FIXTURE/common/zsh/.zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution-dirty 1
+expect_text pollution-dirty err "uncommitted changes in $FIXTURE: common/zsh/.zshrc;"
+expect_text pollution-dirty err "S2-brew-bundle failed: changed files in $FIXTURE: common/zsh/.zshrc"
+"$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
+
+mkdir -p "$FIXTURE/common/extra"
+printf '# untracked\n' >"$FIXTURE/common/extra/a.zsh"
+new_home pollution-new
+run_case pollution-new BREW_POLLUTE="$FIXTURE/common/extra/b.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution-new 1
+expect_text pollution-new err "S2-brew-bundle failed: changed files in $FIXTURE: common/extra/b.zsh"
+new_home pollution-untracked
+run_case pollution-untracked BREW_POLLUTE="$FIXTURE/common/extra/a.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
+expect_rc pollution-untracked 1
+expect_text pollution-untracked err "S2-brew-bundle failed: changed files in $FIXTURE: common/extra/a.zsh"
+rm -rf "$FIXTURE/common/extra"
+[ -z "$("$REAL_GIT" -C "$FIXTURE" status --porcelain)" ] || fail 'the pollution cases left the fixture checkout dirty'
+
 # --- --only, --skip and --keep-going -----------------------------------------
 
 new_home only
@@ -779,6 +943,45 @@ run_case skip -- --host lab-ubuntu --yes --only S3-dirs --skip S3-dirs
 expect_rc skip 0
 expect_text skip out 'S3-dirs skip skipped by --skip'
 [ ! -e "$CASE_HOME/.vim" ] || fail '--skip S3-dirs ran it'
+
+# A prerequisite left undone by --skip or a declined prompt holds H7-stow:
+# ./stow-all.sh is never handed out before stow and .venv-sync exist.
+new_home skipped
+mkdir -p "$CASE_HOME/.oh-my-zsh"
+: >"$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh"
+run_case skipped -- --host lab-ubuntu --yes --only S2-brew-bundle --only H7-stow --skip S2-brew-bundle
+expect_rc skipped 3
+expect_text skipped out 'S2-brew-bundle skip skipped by --skip'
+expect_text skipped out 'H7-stow human blocked by S2-brew-bundle (skipped)'
+expect_no_text skipped out 'HUMAN-BEGIN H7-stow'
+expect_no_events skipped
+
+if [ "$HAVE_PTY" = 1 ]; then
+    run_tty_case declined n -- --host lab-ubuntu --only S2-brew-bundle --only H7-stow
+    expect_rc declined 3
+    expect_text declined out 'Apply S2-brew-bundle? [y/N]'
+    expect_text declined out 'S2-brew-bundle skip declined: brew bundle'
+    expect_text declined out 'H7-stow human blocked by S2-brew-bundle (declined)'
+    expect_no_text declined out 'HUMAN-BEGIN H7-stow'
+    expect_text declined out 'steps not applied: S2-brew-bundle; after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu'
+    expect_no_text declined out 'nothing blocking remains'
+    expect_no_installs declined
+    [ ! -e "$CASE_BREW/opt" ] || fail 'a declined S2-brew-bundle ran brew bundle'
+
+    new_home declined-dirs
+    run_tty_case declined-dirs n -- --host lab-ubuntu --only S3-dirs
+    expect_rc declined-dirs 3
+    expect_text declined-dirs out 'S3-dirs skip declined: mkdir -p ~/.vim/undo ~/.vim/tmp'
+    expect_no_text declined-dirs out 'nothing blocking remains'
+    [ ! -e "$CASE_HOME/.vim" ] || fail 'a declined S3-dirs ran'
+
+    run_tty_case accepted-dirs y -- --host lab-ubuntu --only S3-dirs
+    expect_rc accepted-dirs 0
+    expect_text accepted-dirs out 'S3-dirs done applied:'
+    [ -d "$CASE_HOME/.vim/undo" ] || fail 'an accepted S3-dirs did not run'
+else
+    printf '%s\n' 'setup-host: SKIP the prompt cases (python3 with pty is not available)' >&2
+fi
 
 new_home stop
 run_case stop BREW_FAIL=1 -- --host lab-ubuntu --yes --only S2-brew-bundle --only S3-dirs
@@ -846,6 +1049,7 @@ expect_line mac-check 'HUMAN-BEGIN H1-homebrew sudo'
 expect_text mac-check out "downloads $URL_HOMEBREW"
 expect_text mac-check out "verifies sha256 $SHA_HOMEBREW first"
 expect_line mac-check "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
+expect_line mac-check "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -"
 expect_text mac-check out 'S2-brew-bundle todo blocked by H1-homebrew'
 expect_no_events mac-check
 snapshot >"$TEST_TMP/after"
@@ -859,12 +1063,42 @@ expect_line mac-brew "# sha256 $SHA_HOMEBREW verified"
 expect_line mac-brew 'sudo -v'
 expect_line mac-brew "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL"
 [ "$(sha "$CASE_HOME/$HOMEBREW_SCRATCH_REL")" = "$SHA_HOMEBREW" ] || fail 'homebrew installer not staged'
+# The block re-checks the digest right before the sudo-backed run.
+grep -n -e '^printf .* | shasum -a 256 -c -$' -e '^sudo -v$' -e '^NONINTERACTIVE=1 /bin/bash ' \
+    "$TEST_TMP/mac-brew.out" | cut -d: -f2- >"$TEST_TMP/mac-brew.order"
+printf '%s\n' "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | shasum -a 256 -c -" \
+    'sudo -v' "NONINTERACTIVE=1 /bin/bash $CASE_HOME/$HOMEBREW_SCRATCH_REL" | cmp -s - "$TEST_TMP/mac-brew.order" ||
+    fail 'Homebrew block: digest re-check, sudo -v, then the run'
+VERIFY_LINE=$(sed -n '/| shasum -a 256 -c -$/p' "$TEST_TMP/mac-brew.out")
+bash -c "$VERIFY_LINE" >/dev/null || fail 'the digest re-check rejects the staged installer'
+printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
+if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
+    fail 'the digest re-check accepts a tampered installer'
+fi
+rm -f "$CASE_HOME/$HOMEBREW_SCRATCH_REL"
 
 run_case mac-clt "${MAC_ENV[@]}" FAKE_XCODE=0 -- --host mac --check
 expect_rc mac-clt 3
 expect_line mac-clt 'HUMAN-BEGIN H1-xcode-clt gui'
 expect_text mac-clt out 'H1-homebrew human blocked by H1-xcode-clt'
 expect_no_text mac-clt out 'HUMAN-BEGIN H1-homebrew'
+
+new_home linuxbrew
+run_case linuxbrew BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host lab-ubuntu --yes --only H1-linuxbrew
+expect_rc linuxbrew 3
+expect_event "curl:$URL_HOMEBREW"
+expect_no_event TRIPWIRE
+expect_line linuxbrew 'HUMAN-BEGIN H1-linuxbrew sudo'
+expect_line linuxbrew "# sha256 $SHA_HOMEBREW verified"
+expect_line linuxbrew "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
+if command -v sha256sum >/dev/null 2>&1; then
+    VERIFY_LINE=$(sed -n '/| sha256sum -c -$/p' "$TEST_TMP/linuxbrew.out")
+    bash -c "$VERIFY_LINE" >/dev/null || fail 'the sha256sum re-check rejects the staged installer'
+    printf '# tampered\n' >>"$CASE_HOME/$HOMEBREW_SCRATCH_REL"
+    if bash -c "$VERIFY_LINE" >/dev/null 2>&1; then
+        fail 'the sha256sum re-check accepts a tampered installer'
+    fi
+fi
 
 # --- --list and --print-manual -----------------------------------------------
 
@@ -881,6 +1115,7 @@ run_case manual -- --host lab-ubuntu --print-manual
 expect_rc manual 0
 expect_line manual 'sudo apt-get install -y --no-install-recommends zsh git curl xclip'
 expect_line manual 'HUMAN-BEGIN H1-linuxbrew sudo'
+expect_line manual "printf '%s  %s\\n' $SHA_HOMEBREW $CASE_HOME/$HOMEBREW_SCRATCH_REL | sha256sum -c -"
 expect_line manual 'HUMAN-BEGIN X-recovery judgment'
 expect_line manual 'HUMAN-BEGIN H7-stow judgment'
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'

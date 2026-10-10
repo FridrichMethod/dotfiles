@@ -1,2 +1,3 @@
-# Fixture cli Brewfile; the fake brew in tests/setup-host.sh never reads it.
+# Fixture cli Brewfile. On bundle, the fake brew in tests/setup-host.sh links
+# opt/<formula> for each brew "x" line; bundle check looks for those links.
 brew "jq"
