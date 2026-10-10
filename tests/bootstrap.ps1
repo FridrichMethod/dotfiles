@@ -290,13 +290,22 @@ function Get-ImportEvent($Fixture) {
         '--accept-package-agreements --accept-source-agreements --disable-interactivity'
 }
 function Get-Snapshot {
-    # Every file and directory with its size and modification time.
+    # Every file with its size and modification time, and every directory by
+    # name only. NTFS enumeration returns a directory's times from its parent's
+    # index, which it updates lazily, so a directory's time can change after
+    # its files were written without anything writing it again. A new, removed
+    # or rewritten file still changes the snapshot. Refresh() reads each
+    # file's own record instead of the cached one.
     param([string[]]$Paths)
     $entries = foreach ($path in $Paths) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         Get-ChildItem -LiteralPath $path -Recurse -Force | ForEach-Object {
-            $length = if ($_.PSIsContainer) { 'dir' } else { $_.Length }
-            "$($_.FullName)|$length|$($_.LastWriteTimeUtc.Ticks)"
+            if ($_.PSIsContainer) {
+                "$($_.FullName)|dir"
+            } else {
+                $_.Refresh()
+                "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)"
+            }
         }
     }
     return (@($entries) | Sort-Object) -join "`n"

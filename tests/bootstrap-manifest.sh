@@ -470,6 +470,14 @@ assert_status 0 'text_has: an early match in a long text under pipefail' bootstr
 assert_status 1 'text_has: no match' bootstrap_text_has -F absent "$big"
 assert_status 0 'text_has: per-line anchors' bootstrap_text_has -Ei '^EN_us\.utf-?8$' "$(printf 'C\nen_US.utf8\n')"
 assert_status 2 'text_has: a grep error' bootstrap_text_has -E '(' text
+# GitHub's runners ignore SIGPIPE: a reader that stops early then makes the
+# writer print "write error: Broken pipe" instead of dying quietly.
+# The text is built in the child: 20000 lines exceed one argument's limit.
+sigpipe_err=$(bash -c 'trap "" PIPE; . "$1"
+big=$(awk "BEGIN { print \"needle\"; for (i = 0; i < 20000; i++) print \"hay hay hay hay\" }")
+bootstrap_text_has -F needle "$big"' _ "$REPO_ROOT/lib/bootstrap/manifest.sh" 2>&1 >/dev/null) ||
+    fail 'text_has: early match with SIGPIPE ignored failed'
+[ -z "$sigpipe_err" ] || fail "text_has: early match with SIGPIPE ignored wrote: $sigpipe_err"
 
 # Bash `local` is dynamically scoped: a TSV loop's `local IFS=$tab` reaches
 # every library function it calls, so none of them may split by the caller's IFS.

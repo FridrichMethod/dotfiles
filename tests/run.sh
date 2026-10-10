@@ -9,6 +9,11 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
     AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
 
+# GitHub's runners start jobs with SIGPIPE ignored, so a writer into a pipe
+# whose reader stopped early prints "write error: Broken pipe" there instead
+# of dying quietly. Ignore it here too, so local runs see what CI sees.
+trap '' PIPE
+
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 require_ci=0

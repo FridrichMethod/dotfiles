@@ -84,13 +84,15 @@ bootstrap_split() {
 }
 
 # bootstrap_text_has OPTIONS PATTERN TEXT: grep OPTIONS (-F, -Ei, ...) for
-# PATTERN in the lines of TEXT and return grep's status. pipefail is off in
-# the subshell only, so grep -q stopping at its first match of a long TEXT
-# never fails the pipe through the writer's SIGPIPE.
+# PATTERN in the lines of TEXT and return grep's status. grep reads all of
+# TEXT (no -q, output discarded): a reader that stops at its first match
+# leaves printf writing into a closed pipe, which prints "write error:
+# Broken pipe" wherever SIGPIPE is ignored, as on GitHub's runners. pipefail
+# stays off in the subshell as a second guard.
 bootstrap_text_has() {
     (
         set +o pipefail
-        printf '%s\n' "$3" | grep -q "$1" -- "$2"
+        printf '%s\n' "$3" | grep "$1" -- "$2" >/dev/null
     )
 }
 
