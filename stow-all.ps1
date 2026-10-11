@@ -453,6 +453,11 @@ if ($HostDir) {
     $claudeHost = Join-Path $RepoRoot "$HostDir\claude\.claude\settings.json"
     if (Test-Path -LiteralPath $claudeHost) { $claudePortable = $claudeHost }
 }
+# Deliberate POSIX-only exception: stow-all.sh also runs a fourth helper,
+# codex-instructions-sync, which generates ~/.codex/AGENTS.override.md only on
+# hosts whose sherlock-kit package links the toolkit rules (lab-ubuntu,
+# wsl-ubuntu, sherlock). No Windows host carries those rules, so this plan
+# keeps three helpers; add a step here before giving a Windows host the rules.
 $syncPlan = @(
     @{ Label = 'Codex settings'; Helper = Join-Path $commonRoot 'codex\.local\bin\codex-config-sync'
         Portable = $codexPortable; Live = Join-Path $Target '.codex\config.toml' },
