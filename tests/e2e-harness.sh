@@ -526,8 +526,10 @@ fi
 e2e_extract_helpers "$REPO_ROOT/docs/bootstrap.md" "$UNIT/helpers.sh" || fail 'extract_helpers refused docs/bootstrap.md'
 expect_eq 'helpers define both' "$(grep -cE '^(fetch_pinned|clone_listed)\(\) \{$' "$UNIT/helpers.sh")" 2
 expect_eq 'helpers hold nothing else in column 0' "$(grep -cvE '^(#|[ \t]|\}$|fetch_pinned\(\) \{$|clone_listed\(\) \{$|$)' "$UNIT/helpers.sh")" 0
+# LINE reaches awk through the environment: macOS awk (the One True AWK)
+# refuses a newline in a -v assignment, and the third case plants three lines.
 plant_fence() { # DOC OUT LINE: LINE just before the fence's closing ```
-    awk -v line="$3" '/^#+ Downloads and clones by hand/ { s = 1 } s && !i && /^```sh/ { i = 1 } i && !p && /^```$/ { print line; p = 1 } { print }' "$1" >"$2"
+    E2E_PLANT=$3 awk '/^#+ Downloads and clones by hand/ { s = 1 } s && !i && /^```sh/ { i = 1 } i && !p && /^```$/ { print ENVIRON["E2E_PLANT"]; p = 1 } { print }' "$1" >"$2"
 }
 plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" 'fetch_pinned claude'
 if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
