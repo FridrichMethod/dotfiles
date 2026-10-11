@@ -265,6 +265,22 @@ case $bad in
     *) fail "wrappers audit named the wrong lines: $bad" ;;
 esac
 
+# The login shell's stderr filter drops only what a missing terminal causes
+# (the stty line, fzf's zle option restore) and keeps everything else.
+printf '%s\n' "stty: 'standard input': Inappropriate ioctl for device" \
+    "(eval):1: can't change option: zle" \
+    "(eval):1: can't change option: zle" >"$UNIT/login-noise.err"
+expect_eq 'login noise filter drops the terminal-only lines' "$(e2e_login_noise "$UNIT/login-noise.err")" ''
+printf '%s\n' "stty: stdin isn't a terminal" \
+    "(eval):1: can't change option: zle" \
+    "[oh-my-zsh] plugin 'fzf-tab' not found" \
+    "(eval):7: can't change option: monitor" \
+    'zsh: command not found: eza' >"$UNIT/login-real.err"
+expect_eq 'login noise filter keeps real complaints' "$(e2e_login_noise "$UNIT/login-real.err")" \
+    "[oh-my-zsh] plugin 'fzf-tab' not found
+(eval):7: can't change option: monitor
+zsh: command not found: eza"
+
 # The sudo.log audit needs GNU date -d (Linux); the timestamps are sudo's
 # with Defaults log_year, and only the entry outside a window is reported.
 if date -d @0 +%s >/dev/null 2>&1; then

@@ -276,8 +276,11 @@ step in `summary.tsv`:
    a change during a `human:*` step is recorded as a note.
 6. **A login shell starts clean.** Under `env -i` with the system PATH,
    `bash -lc 'exec <zsh> -il -c exit'` (the login env's zsh on hpc) exits 0
-   with empty stdout and, apart from `stty:` lines, empty stderr; any
-   `[oh-my-zsh]`, `[dotfiles]`, `[awesome-skills]`, `not found`,
+   with empty stdout and empty stderr, apart from the two lines only the
+   missing terminal causes: the `.zshrc`'s `stty -ixon` complaint and fzf's
+   `--zsh` integration restoring its saved options
+   (`(eval):1: can't change option: zle`), both silent in a real terminal;
+   any `[oh-my-zsh]`, `[dotfiles]`, `[awesome-skills]`, `not found`,
    `permission denied` or `[error]` line is reported verbatim.
 
 Each host also runs its negative cases as separate steps (`negative:<token>`):

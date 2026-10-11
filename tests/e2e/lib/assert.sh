@@ -199,15 +199,25 @@ e2e_login_run() {
     e2e_run "$1" "$2" "$E2E_TIMEOUT_CHECK" "$HOME" "${E2E_LOGIN_ENV[@]}" bash -lc "$cmd"
 }
 
+# e2e_login_noise ERR: the stderr of the login shell minus what only the
+# missing terminal causes: the .zshrc's `stty -ixon` ("stty: ... ioctl" /
+# "stty: stdin isn't a terminal"), and fzf's `--zsh` integration restoring
+# the options it saved with `eval 'options=(... zle on ...)'`, which prints
+# "(eval):1: can't change option: zle" since zle cannot be turned on without
+# a terminal. Both are silent in a real terminal; anything else stays.
+e2e_login_noise() {
+    grep -Ev "^stty: |^\(eval\):1: can't change option: zle\$" "$1" 2>/dev/null || true
+}
+
 # e2e_login_shell_check OUT ERR: the login shell must exit 0 and print
-# nothing: stdout empty, stderr empty once "stty: ..." lines are dropped (a
-# shell without a terminal). E2E_LOGIN_DETAIL gets what it printed, with the
+# nothing: stdout empty, stderr empty once the no-terminal lines of
+# e2e_login_noise are dropped. E2E_LOGIN_DETAIL gets what it printed, with the
 # known complaints (oh-my-zsh, the dotfiles hooks, not found, permission
 # denied, [error]) quoted first.
 e2e_login_shell_check() {
     local out=$1 err=$2 rc=0 noise findings
     e2e_login_run "$out" "$err" exit || rc=$?
-    noise=$(grep -Ev '^stty: ' "$err" 2>/dev/null) || true
+    noise=$(e2e_login_noise "$err")
     findings=$(grep -E '^\[(oh-my-zsh|dotfiles|awesome-skills)\]|not found|[Pp]ermission denied|\[error\]' \
         "$out" "$err" 2>/dev/null) || true
     E2E_LOGIN_DETAIL="exit $rc"
