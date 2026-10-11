@@ -2029,15 +2029,16 @@ Deferred on purpose; each is a separate change.
   of `ci.yml` run the fixture suites, so the PowerShell twins run natively
   only against shims. The opt-in end-to-end suite
   ([docs/testing.md](testing.md#end-to-end-bootstrap-opt-in)) has run the
-  bootstrap for real in Linux containers only (the
-  [acceptance checklist](#acceptance-checklist) below): the `mac` and `win`
-  rows of its `bootstrap-e2e` workflow have not run yet (the first run needs a
-  pushed `e2e-ci/**` branch), `tests/e2e/run.ps1` has never executed, and no
-  real-machine row exists yet.
+  bootstrap for real in Linux containers and on GitHub's `macos-15` and
+  `windows-2025` runners (the [acceptance checklist](#acceptance-checklist)
+  below). Those runners are not fresh machines, and no real-machine row
+  exists yet: a fresh macOS VM, a fresh WSL distribution, Sherlock, Marlowe
+  and Windows 11 remain.
 
 ## Acceptance checklist
 
-No real machine has run it yet; the container rows below approximate one.
+No real machine has run it yet; the container and CI-runner rows below
+approximate one.
 Each run starts from a fresh machine, follows the quick start for its
 platform, and passes when all of these hold:
 
@@ -2061,10 +2062,12 @@ platform, and passes when all of these hold:
 | Container `fedora:44` (glibc 2.43), other Linux | 2026-10-11 | pass | Same run, 57 s. [X-other-linux](#x-other-linux-other-linux-distributions) by hand with the helpers taken from this file, then a common-only stow; setup-host has no host here, so criteria 2 and 3 cover the doctor only |
 | Container `rockylinux:9` (9.8, glibc 2.34) with EPEL Lmod 9.4.2, host `sherlock` | 2026-10-11 | pass | Same run, 32 s, 3 applies. No sudo; `SLURM_JOB_ID` and the site's `SCRATCH` faked; the login env really built by micromamba; no site modules, Slurm, NFS or quota. Approximates the cluster's OS, not Sherlock itself |
 | Container `ubuntu:24.04` with Ubuntu's Lmod 8.6.19, host `marlowe` | 2026-10-11 | pass | Same run, 29 s, 3 applies. No sudo; `SLURM_JOB_ID` faked, `CONDA_PKGS_DIRS` set to the overlay's `/scratch/m000191` path as the person would. Approximates Marlowe, not the cluster itself |
+| GitHub runner `macos-15` (macOS 15, arm64, Bash 3.2), host `mac` | 2026-10-11 | pass | `bootstrap-e2e` run 38112146167 at `274aaf7`, 2 applies, a 107 s job. Not fresh: Homebrew, the Command Line Tools and many formulae preinstalled, and the runner's own dotfiles moved aside by the H7-stow `mv -n` lines; the home snapshots leave out the runner's agent, tool cache, `Library` and media folders; no `timeout`, so only the job limit bounds a hang |
+| GitHub runner `windows-2025` (Server 2025 24H2, pwsh 7.6.6), host `win` | 2026-10-11 | pass | Same run, 2 applies (`winget import` 225 s), a 5 min job. Windows Server, not Windows 11; already elevated, so every step ran under that token, not only HW-stow; Windows Terminal preinstalled; the per-user CRL cache is noted, not checked |
 
 The container rows come from the opt-in suite of
 [docs/testing.md](testing.md#end-to-end-bootstrap-opt-in), which plays the
 person through the HUMAN blocks under a fixed policy and checks the five
-criteria above plus a silent login shell. Its `mac` and `win` rows run on
-GitHub runners, which are not fresh machines, and are recorded here once they
-have run.
+criteria above plus a silent login shell. The runner rows come from its
+`bootstrap-e2e` workflow, whose same run also passed the five container hosts
+on GitHub's `ubuntu-24.04` runner.
