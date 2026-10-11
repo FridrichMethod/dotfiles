@@ -140,8 +140,9 @@ environment checks, documented in `windows-installer.md` and
 `tests/e2e/` runs the day-zero bootstrap for real, from a fresh home, on every
 host overlay, the way a person following the [quick start](bootstrap.md#quick-start)
 would, and checks the acceptance criteria below. It is opt-in: `./tests/run.sh`
-never runs it (only the fast unit test `tests/e2e-harness.sh`, which drives the
-harness against stubs), and neither does pre-commit. A run installs packages,
+never runs it (only the fast unit tests `tests/e2e-harness.sh` and, wherever
+pwsh exists, `tests/e2e-harness.ps1`, which drive the harness and its Windows
+twin against stubs), and neither does pre-commit. A run installs packages,
 clones plugins and builds a login env, so it needs the network and takes from
 ten minutes to an hour per host; [tests/e2e/README.md](../tests/e2e/README.md)
 is the short how-to.
@@ -413,8 +414,10 @@ containers on `ubuntu-24.04` with `fail-fast: false` and 90 minutes each,
 `mac` natively on `macos-15` (`E2E_NATIVE=1 ./tests/e2e/run.sh mac`) and `win`
 on `windows-2025` (`./tests/e2e/run.ps1`), the only places those two run;
 `tests/run.ps1` parses `tests/e2e/run.ps1` and `tests/e2e/lib/*.ps1` on every
-run, so the native Windows job of `ci.yml` catches a syntax error there before
-this workflow does, but nothing exercises their behavior outside it. Each
+run and then runs `tests/e2e-harness.ps1`, which drives them against stubs
+(also from `tests/run.sh` through `tests/e2e-harness-windows.sh`), so the three
+`ci.yml` jobs catch a syntax error or a policy regression there before this
+workflow does; winget and the real bootstrap run only here. Each
 job uploads `tests/e2e/out/**` as the artifact `bootstrap-e2e-<host>`, pass or
 fail; one run per ref at a time, without cancelling one in progress. The
 `cache` input mounts a scratch directory under the runner's temp, which no
