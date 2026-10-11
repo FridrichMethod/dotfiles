@@ -555,8 +555,8 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 # Stow's dry run of another stow directory refuses such a dangling link as
 # "not owned by stow" and aborts the whole install, so the installer removes
 # exactly that retired link after the read-only preflight and before the dry
-# runs. Its text is resolved lexically from the link's physical directory, as
-# Stow wrote it. Anything else at that path is left for Stow to report.
+# runs. Its text is resolved from the link's physical directory, as Stow
+# wrote it. Anything else at that path is left for Stow to report.
 RETIRED="$TEST_HOME/.local/bin/shk"
 RETIRED_TEXT=../../../fixture/common/codex/.local/bin/shk
 RETIRED_LOG="[dotfiles] [info] Removed retired link $RETIRED (its source common/codex/.local/bin/shk was deleted)"
@@ -590,15 +590,17 @@ for spelling in \
     [[ ! -e "$RETIRED" && ! -L "$RETIRED" ]]
     grep -Fxq "$RETIRED_LOG" "$TEST_TMP/retired-spelling.stdout"
 done
-# A home reached through a symlink: Stow wrote the text from the physical
-# directory, which is where it is resolved.
-ln -s home "$TEST_TMP/home-alias"
+# A home reached through a symlink at another depth: Stow wrote the text
+# from the physical directory, so its .. steps climb from there, not from
+# the alias.
+mkdir -p "$TEST_TMP/deep/er"
+ln -s ../../home "$TEST_TMP/deep/er/home-alias"
 ln -s "$RETIRED_TEXT" "$RETIRED"
-run_fixture retired-alias HOME="$TEST_TMP/home-alias"
+run_fixture retired-alias HOME="$TEST_TMP/deep/er/home-alias"
 [[ ! -e "$RETIRED" && ! -L "$RETIRED" ]]
-grep -Fxq "[dotfiles] [info] Removed retired link $TEST_TMP/home-alias/.local/bin/shk (its source common/codex/.local/bin/shk was deleted)" \
+grep -Fxq "[dotfiles] [info] Removed retired link $TEST_TMP/deep/er/home-alias/.local/bin/shk (its source common/codex/.local/bin/shk was deleted)" \
     "$TEST_TMP/retired-alias.stdout"
-rm "$TEST_TMP/home-alias"
+rm -r "$TEST_TMP/deep"
 # A live link to the same path, a dangling link into another checkout, and
 # a regular file are not retired links.
 printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/codex/.local/bin/shk"
