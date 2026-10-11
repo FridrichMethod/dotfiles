@@ -1991,6 +1991,15 @@ fail-closed behavior beyond what is stated.
   `./setup-sync.sh --python` with it
   ([S4-setup-sync](#s4-setup-sync-ai-sync-runtime)). The doctor's `python3`
   row still points at H1-apt-core, which cannot raise the version.
+- **Windows Terminal re-serializes its stowed settings.** Terminal saves
+  `settings.json` back through the [HW-stow](#hw-stow-elevated-stow) link
+  whenever the file it loads is not in its own form, which leaves the clone
+  dirty. The tracked file is committed in the form that the Terminal on
+  GitHub's `windows-2025` runner wrote on 2026-10-11 (its order of `actions`
+  and `keybindings`, and a stub for each built-in profile, which
+  `tests/windows-installer.sh` requires); another Terminal release may order
+  the arrays differently, so commit what it writes if `git status` shows the
+  file after Terminal starts.
 
 ## Known follow-ups
 
