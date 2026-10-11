@@ -57,9 +57,9 @@ e2e_one_line() {
 }
 
 # e2e_find_timeout: timeout (coreutils) or gtimeout (Homebrew coreutils on
-# macOS), else none: the runs then have no limit. The macos-15 runner ships
-# neither, so the mac row relies on the job's timeout-minutes; env.txt
-# records which it was.
+# macOS), else tests/e2e/timeout.pl, which keeps their contract with perl
+# (the macos-15 runner ships neither, but always perl), else none: the runs
+# then have no limit. env.txt records which it was.
 e2e_find_timeout() {
     local name
     E2E_TIMEOUT_BIN=''
@@ -69,6 +69,9 @@ e2e_find_timeout() {
             return 0
         fi
     done
+    if command -v perl >/dev/null 2>&1 && [ -x "$E2E_DIR/timeout.pl" ]; then
+        E2E_TIMEOUT_BIN=$E2E_DIR/timeout.pl
+    fi
 }
 
 # e2e_sha256 FILE: the file's sha256 (sha256sum, or shasum on macOS).
