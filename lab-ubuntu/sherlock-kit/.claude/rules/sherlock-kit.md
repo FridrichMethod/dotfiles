@@ -1,0 +1,1 @@
+../../../../common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/rules/workstation.md
