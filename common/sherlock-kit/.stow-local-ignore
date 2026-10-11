@@ -1,0 +1,4 @@
+# The submodule checkout; the links in this package point into it.
+# Path-anchored: a bare ^sherlock-kit$ would also ignore .claude/skills/sherlock-kit.
+^/sherlock-kit$
+^/sherlock-kit/

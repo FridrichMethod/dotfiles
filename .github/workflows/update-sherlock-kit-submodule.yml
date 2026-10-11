@@ -1,0 +1,46 @@
+name: update sherlock-kit submodule
+
+on:
+  schedule:
+    # Run daily at 04:30 UTC, 30 min after the PyMOLScripts bump, so the two
+    # bot pushes to main never race
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-submodule:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
+          fetch-depth: 0
+
+      # Staged, so the guard checks the gitlink this run would commit.
+      - name: Update sherlock-kit submodule to latest
+        run: |
+          git submodule update --remote --merge common/sherlock-kit/sherlock-kit
+          git add common/sherlock-kit/sherlock-kit
+
+      # A bump that renames a contract file would leave the stowed rules,
+      # skills or shk dangling on every host; fail before committing it.
+      - name: Refuse a bump that breaks the delivered links
+        run: |
+          bash tests/sherlock-kit-delivery.sh --real
+          test -x common/sherlock-kit/sherlock-kit/bin/shk
+
+      - name: Check for changes and push
+        run: |
+          if git diff --cached --quiet common/sherlock-kit/sherlock-kit; then
+            echo "Submodule already up to date, nothing to commit."
+            exit 0
+          fi
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deps): update sherlock-kit submodule to latest"
+          git push

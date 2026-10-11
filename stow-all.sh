@@ -21,6 +21,8 @@ set -euo pipefail
 # initialized, only that step is skipped with a warning, and the revision is
 # not recorded as applied, so the login updater retries it.
 # All selected AI inputs are checked before any live configuration is changed.
+# A dangling home link that Stow made for a since-deleted package file (today
+# only the 0.3 ~/.local/bin/shk) is removed before the Stow dry runs.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -209,6 +211,29 @@ fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
     "$CLAUDE_SYNC" --quiet --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
+
+# A link Stow made for a package file this checkout has since deleted stays
+# dangling in the home, and the dry run of another stow directory that claims
+# its path aborts on it ("existing target is not owned by stow"). Only a
+# dangling link whose text names exactly the retired source in this checkout
+# is removed; a live link, a foreign link or a file is left for the dry run to
+# report. Stow wrote the text between physical paths, so cd -P resolves its
+# directory from the link's physical directory; the retired source's own
+# directory must still exist. This runs after the read-only preflight.
+remove_retired_link() {
+    local link=$HOME/$1 text dir
+    [[ -L "$link" && ! -e "$link" ]] || return 0
+    text=$(readlink "$link")
+    # A foreign text may name a directory that does not exist: not retired.
+    dir=$(cd -P -- "${link%/*}" && cd -P -- "$(dirname -- "$text")" 2>/dev/null && pwd -P) || return 0
+    [[ "$dir/${text##*/}" == "$REPO_PHYSICAL/$2" ]] || return 0
+    rm -f -- "$link"
+    dotfiles_log info "Removed retired link $link (its source $2 was deleted)"
+}
+REPO_PHYSICAL=$(pwd -P)
+# The 0.3 sherlock-kit launcher; the host sherlock-kit packages link shk now.
+# Its directory still holds the codex sync helpers this script runs.
+remove_retired_link .local/bin/shk common/codex/.local/bin/shk
 
 # Stow never replaces a regular file (a fresh home's ~/.bashrc and ~/.profile
 # from /etc/skel, for one). A dry run of both stows finds every conflict
