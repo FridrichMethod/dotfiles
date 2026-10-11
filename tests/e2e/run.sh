@@ -300,15 +300,17 @@ image_scratch() {
 }
 
 # cache_args INDEX: set CACHE_ARGS to the -v arguments of a --cache run: the
-# apt, dnf and Homebrew caches for every image, and the conda package cache
-# at the CONDA_PKGS_DIRS that E2E_ALLOC_ENV names on an hpc host, with its
-# $SCRATCH and $USER expanded to the image's values. Never the home's
+# apt, dnf (dnf4's /var/cache/dnf on Rocky, dnf5's /var/cache/libdnf5 on
+# Fedora 44) and Homebrew caches for every image, and the conda package
+# cache at the CONDA_PKGS_DIRS that E2E_ALLOC_ENV names on an hpc host, with
+# its $SCRATCH and $USER expanded to the image's values. Never the home's
 # ~/.cache/dotfiles-bootstrap or ~/.nvm: the bootstrap's own downloads are
 # part of the test.
 CACHE_ARGS=()
 cache_args() {
     local i=$1 scratch conda='' kv pattern
-    CACHE_ARGS=(-v "$cache/apt:/var/cache/apt/archives" -v "$cache/dnf:/var/cache/dnf")
+    CACHE_ARGS=(-v "$cache/apt:/var/cache/apt/archives" -v "$cache/dnf:/var/cache/dnf"
+        -v "$cache/libdnf5:/var/cache/libdnf5")
     [ -z "${h_home[i]}" ] || CACHE_ARGS+=(-v "$cache/homebrew:${h_home[i]}/.cache/Homebrew")
     for kv in ${h_alloc[i]}; do
         case $kv in
