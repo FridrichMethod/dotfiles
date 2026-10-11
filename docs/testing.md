@@ -223,7 +223,11 @@ the clone itself, then follows the Other Linux quick start to a host-less
   of `/usr/bin`, and the login-shell, doctor-final and doctor-smoke steps
   still reach the wrappers (`/etc/paths.d` would not do: its entries land
   after `/etc/paths`). `inside.sh`'s own copy in `$E2E_OUT/bin` is reached
-  only outside login shells.
+  only outside login shells. With two copies on PATH, each wrapper skips
+  every file that is itself an e2e wrapper when it looks for the real tool,
+  so a call is logged once and never bounces between the copies (the first
+  CI run hung 90 minutes on the doctor's `stow --version` that way, before
+  Homebrew's stow existed).
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.

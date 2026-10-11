@@ -449,6 +449,43 @@ expect_eq 'login text filter drops a clear' "$(e2e_login_text "$UNIT/login-clear
 printf '\033[H\033[2J\033[1;31mgitstatus failed\033[0m\n' >"$UNIT/login-text.out"
 expect_eq 'login text filter keeps text' "$(e2e_login_text "$UNIT/login-text.out")" 'gitstatus failed'
 
+# The real wrappers with two copies on PATH, as on the macOS runner
+# (/usr/local/bin and $E2E_OUT/bin): the first logs the call once and runs
+# the real tool, skipping the other copy, and with no real tool both give up
+# with 127 instead of exec'ing each other. PATH holds only the copies, the
+# fake real tool and the few utilities the wrapper uses, so a stow or sudo
+# of the test machine is never reached.
+WRAP="$UNIT/wrap"
+mkdir -p "$WRAP/a" "$WRAP/b" "$WRAP/real" "$WRAP/util" "$WRAP/out"
+for tool in stow sudo; do
+    cp "$REPO_ROOT/tests/e2e/wrappers/$tool" "$WRAP/a/$tool"
+    cp "$REPO_ROOT/tests/e2e/wrappers/$tool" "$WRAP/b/$tool"
+    chmod 755 "$WRAP/a/$tool" "$WRAP/b/$tool"
+done
+for util in grep tr date mkdir ps dirname cat; do
+    found=$(command -v "$util") || fail "the wrapper test needs $util"
+    ln -s "$found" "$WRAP/util/$util"
+done
+printf '#!/bin/sh\necho "real stow $*"\n' >"$WRAP/real/stow"
+chmod 755 "$WRAP/real/stow"
+# timeout is named by its full path: the PATH prefix below also governs the
+# lookup of the command it precedes.
+WRAP_LIMIT=$(command -v timeout 2>/dev/null) || WRAP_LIMIT=
+wrap_run() {
+    local status=0
+    if [ -n "$WRAP_LIMIT" ]; then
+        E2E_OUT="$WRAP/out" E2E_PHASE=check:unit PATH="$1" "$WRAP_LIMIT" 20 "$WRAP/a/$2" --version >"$WRAP/run.out" 2>&1 || status=$?
+    else
+        E2E_OUT="$WRAP/out" E2E_PHASE=check:unit PATH="$1" "$WRAP/a/$2" --version >"$WRAP/run.out" 2>&1 || status=$?
+    fi
+    printf '%s\n' "$status"
+}
+expect_eq 'two wrapper copies reach the real tool' "$(wrap_run "$WRAP/a:$WRAP/b:$WRAP/real:$WRAP/util" stow)" 0
+expect_eq 'the real tool ran once' "$(cat "$WRAP/run.out")" 'real stow --version'
+expect_eq 'one log line for one call' "$(grep -c . "$WRAP/out/log/wrappers.log")" 1
+expect_eq 'two wrapper copies and no real tool give up' "$(wrap_run "$WRAP/a:$WRAP/b:$WRAP/util" sudo)" 127
+expect_eq 'the give-up message' "$(cat "$WRAP/run.out")" 'e2e wrapper: real sudo not found'
+
 # The sudo.log audit needs GNU date -d (Linux); the timestamps are sudo's
 # with Defaults log_year, and only the entry outside a window is reported.
 if date -d @0 +%s >/dev/null 2>&1; then
