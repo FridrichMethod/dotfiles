@@ -16,8 +16,10 @@ function ConvertFrom-E2EBlocks {
     # The HUMAN blocks of an apply run's output lines, in order, as objects
     # with Id, Kind and Lines (those between HUMAN-BEGIN and HUMAN-END), each
     # also saved to Directory\<n>.block with an index file, the layout of
-    # inside.sh.
-    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Output, [Parameter(Mandatory)][string]$Directory)
+    # inside.sh. Output keeps blank lines (winget's progress leaves them),
+    # which a mandatory string parameter refuses without AllowEmptyString.
+    param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Output,
+        [Parameter(Mandatory)][string]$Directory)
     [void][IO.Directory]::CreateDirectory($Directory)
     $blocks = [Collections.Generic.List[object]]::new()
     $current = $null
@@ -100,7 +102,8 @@ function Get-E2EStowLine {
     # "& '<clone>\stow-all.ps1' win", naming the clone's own installer by its
     # full path (setup-host.ps1 prints it single-quoted, quotes doubled). Line
     # is '' with the reason in Error when the block holds anything else.
-    param([Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Lines, [Parameter(Mandatory)][string]$Clone)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines,
+        [Parameter(Mandatory)][string]$Clone)
     $commands = @($Lines | Where-Object { $_ -ne '' -and -not $_.StartsWith('# ') })
     if ($commands.Count -ne 1) {
         return @{ Line = ''; Error = "the HW-stow block has $($commands.Count) command lines, not 1" }
