@@ -1,0 +1,180 @@
+name: bootstrap-e2e
+
+# Opt-in end-to-end runs of the day-zero bootstrap (docs/testing.md, "End-to-end
+# bootstrap"): each Linux host in a fresh container, mac and win natively on
+# the runner. Never part of ci.yml: a run installs real packages and takes up
+# to 90 minutes per host.
+on:
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: "Hosts to run, comma-separated (lab-ubuntu, wsl-ubuntu, other, sherlock, marlowe, mac, win), or all"
+        type: string
+        default: all
+      cache:
+        description: "Mount package caches (tests/e2e/run.sh --cache); leave off for acceptance runs"
+        type: boolean
+        default: false
+  schedule:
+    # Sundays at 06:00 UTC
+    - cron: "0 6 * * 0"
+  push:
+    branches: ["e2e-ci/**"]
+
+permissions:
+  contents: read
+
+# One run per ref at a time; a later run waits instead of cancelling one that
+# is in the middle of installing.
+concurrency:
+  group: bootstrap-e2e-${{ github.ref }}
+
+jobs:
+  plan:
+    name: Select hosts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      linux: ${{ steps.select.outputs.linux }}
+      mac: ${{ steps.select.outputs.mac }}
+      win: ${{ steps.select.outputs.win }}
+    steps:
+      # A job-level if cannot see the matrix context, so a dispatch's comma
+      # list becomes the Linux matrix here, and the mac and win jobs read one
+      # flag each. Schedule and push carry no inputs and run everything. An
+      # unknown host fails the run instead of being dropped silently.
+      - id: select
+        env:
+          HOSTS: ${{ inputs.hosts }}
+        run: |
+          hosts=${HOSTS:-all}
+          [ "$hosts" != all ] || hosts=lab-ubuntu,wsl-ubuntu,other,sherlock,marlowe,mac,win
+          linux='' seen='' mac=false win=false
+          for host in $(printf '%s' "$hosts" | tr ',' ' '); do
+            case $host in
+              lab-ubuntu | wsl-ubuntu | other | sherlock | marlowe)
+                case " $seen " in
+                  *" $host "*) ;;
+                  *)
+                    seen="$seen $host"
+                    linux="$linux${linux:+,}\"$host\""
+                    ;;
+                esac
+                ;;
+              mac) mac=true ;;
+              win) win=true ;;
+              *)
+                echo "::error::unknown host '$host'; use lab-ubuntu, wsl-ubuntu, other, sherlock, marlowe, mac, win or all"
+                exit 2
+                ;;
+            esac
+          done
+          {
+            echo "linux=[$linux]"
+            echo "mac=$mac"
+            echo "win=$win"
+          } >>"$GITHUB_OUTPUT"
+          echo "linux=[$linux] mac=$mac win=$win"
+
+  linux:
+    name: ${{ matrix.host }} in a fresh container
+    needs: plan
+    if: needs.plan.outputs.linux != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.plan.outputs.linux) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      # The cache directory lives under the runner's temp, apart from
+      # tests/e2e/out, and no later run sees it; acceptance runs leave the
+      # input off so every run installs what a fresh machine would.
+      - name: Run the bootstrap in a fresh container
+        env:
+          MATRIX_HOST: ${{ matrix.host }}
+          CACHE_INPUT: ${{ inputs.cache }}
+        run: |
+          set -- "$MATRIX_HOST"
+          if [ "$CACHE_INPUT" = true ]; then
+            mkdir -p "$RUNNER_TEMP/bootstrap-e2e-cache"
+            set -- --cache "$RUNNER_TEMP/bootstrap-e2e-cache" "$@"
+          fi
+          ./tests/e2e/run.sh "$@"
+      # Hidden files included: a dot-prefixed entry under out/tmp/ is exactly
+      # the evidence of a write the no-write checks caught.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bootstrap-e2e-${{ matrix.host }}
+          path: tests/e2e/out/**
+          include-hidden-files: true
+
+  macos:
+    name: mac on the runner
+    needs: plan
+    if: needs.plan.outputs.mac == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      # A login shell on macOS runs path_helper from /etc/profile and
+      # /etc/zprofile, which rebuilds PATH from /etc/paths (/usr/local/bin
+      # first, then /usr/bin, /bin, /usr/sbin, /sbin) and appends what PATH
+      # held before, so a wrapper directory under the checkout would sit
+      # behind the real /usr/bin/sudo and /usr/bin/chsh in the login-shell,
+      # doctor-final and doctor-smoke steps, and the wrappers audit would pass
+      # without seeing them. /usr/local/bin is the one directory path_helper
+      # keeps ahead of /usr/bin; none of the three names lives there on the
+      # arm64 image (Homebrew is /opt/homebrew), and this runs before any
+      # harness phase opens, so no wrapper logs the install. An image that
+      # already has one of the three is not the runner this row expects.
+      - name: Install the sudo, chsh and stow wrappers in /usr/local/bin
+        run: |
+          for tool in sudo chsh stow; do
+            if [ -e "/usr/local/bin/$tool" ] || [ -L "/usr/local/bin/$tool" ]; then
+              echo "::error::/usr/local/bin/$tool exists already; the mac row expects the stock macos-15 image, where nothing is installed there"
+              exit 1
+            fi
+          done
+          sudo -n mkdir -p /usr/local/bin
+          sudo -n install -m 755 tests/e2e/wrappers/sudo tests/e2e/wrappers/chsh tests/e2e/wrappers/stow /usr/local/bin/
+          ls -l /usr/local/bin/sudo /usr/local/bin/chsh /usr/local/bin/stow
+      - name: Run the bootstrap natively as the runner user
+        run: E2E_NATIVE=1 ./tests/e2e/run.sh mac
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bootstrap-e2e-mac
+          path: tests/e2e/out/**
+          include-hidden-files: true
+
+  windows:
+    name: win on the runner
+    needs: plan
+    if: needs.plan.outputs.win == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Run the bootstrap natively as the runner user
+        run: ./tests/e2e/run.ps1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bootstrap-e2e-win
+          path: tests/e2e/out/**
+          include-hidden-files: true

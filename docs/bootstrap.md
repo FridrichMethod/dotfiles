@@ -206,7 +206,7 @@ and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-
 into your shell first:
 
 ```sh
-# with your package manager: git zsh curl rsync tar file tmux man, python3 >= 3.11, GNU Stow >= 2.3.1,
+# with your package manager: git zsh curl rsync tar file tmux man ssh, python3 >= 3.11, GNU Stow >= 2.3.1,
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
@@ -254,7 +254,7 @@ and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
 | `--quiet` | Only rows that are neither `ok` nor `skip`, then the summary |
 | `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in. The probes may write the tools' own state in your home (claude rewrites `~/.claude.json` and keeps backups of it; some codex releases create `~/.codex/tmp`); the doctor itself still writes nothing |
-| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails on `plugin .* not found`, `command not found` or `no such file` in its stderr. It may write zsh's own caches |
+| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails when its stdout or stderr has a line starting `[oh-my-zsh]` (oh-my-zsh echoes `plugin 'x' not found`, `theme 'x' not found` and `zoxide not found` on stdout), or matching `plugin .* not found`, `plugin: .* not found`, `plugin: Cannot find`, `command not found`, `no such file` or `Permission denied` (all case-insensitive); `stty:` noise passes. It may write zsh's own caches |
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
@@ -724,7 +724,10 @@ Applies to `wsl-ubuntu` and `lab-ubuntu`: the packages in
 `wslview`, libnotify-bin for `notify-send`) or
 [`apt/lab-ubuntu.txt`](../config/bootstrap/apt/lab-ubuntu.txt) (xclip,
 wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
-git-lfs, tmux, man, locales, build tools) and Python: `python3` and
+git-lfs, tmux, man, locales, build tools, and `openssh-client` for the
+`ssh`, `ssh-agent` and `ssh-keygen` that the stowed `~/.ssh` config, the
+overlays' ssh-agent plugin and [H7-auth](#h7-auth-authentication) need; a
+minimal Ubuntu has none of them) and Python: `python3` and
 `python3-venv` meet the 3.11 floor of setup-sync (Ubuntu 24.04 ships 3.12), so
 no Linuxbrew python is bundled ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
 The interactive tools come from
@@ -2013,16 +2016,21 @@ Deferred on purpose; each is a separate change.
 - **Doctor quota note on hpc.** The doctor does not mention the home quota
   (`sh_quota` on Sherlock) that a login env and package cache count against;
   [S2-login-env](#s2-login-env-hpc-login-environment) documents it instead.
-- **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows CI
-  jobs have not run this bootstrap yet, and the PowerShell twins have run only
-  under PowerShell 7 on Linux. The fresh-machine
-  [acceptance checklist](#acceptance-checklist) below is pending; docker, VM
-  and CI end-to-end runs are being built separately.
+- **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows jobs
+  of `ci.yml` run the fixture suites, so the PowerShell twins run natively
+  only against shims. The opt-in end-to-end suite
+  ([docs/testing.md](testing.md#end-to-end-bootstrap-opt-in)) has run the
+  bootstrap for real in Linux containers only (the
+  [acceptance checklist](#acceptance-checklist) below): the `mac` and `win`
+  rows of its `bootstrap-e2e` workflow have not run yet (the first run needs a
+  pushed `e2e-ci/**` branch), `tests/e2e/run.ps1` has never executed, and no
+  real-machine row exists yet.
 
 ## Acceptance checklist
 
-Not yet run. Each run starts from a fresh machine, follows the quick start for
-its platform, and passes when all of these hold:
+No real machine has run it yet; the container rows below approximate one.
+Each run starts from a fresh machine, follows the quick start for its
+platform, and passes when all of these hold:
 
 - `./doctor.sh --host H` (Windows `.\doctor.ps1 -Host win`) exits 0 for the
   default tiers, and `--smoke` exits 0 on Unix.
@@ -2037,4 +2045,17 @@ its platform, and passes when all of these hold:
 | Fresh macOS VM (Apple Silicon), host `mac` | | not yet run | |
 | Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | | not yet run | |
 | Sherlock inside `sh_dev`, host `sherlock` | | not yet run | |
+| Marlowe inside an interactive Slurm job, host `marlowe` | | not yet run | |
 | Native Windows 11, elevated stow, host `win` | | not yet run | |
+| Container `ubuntu:24.04` (24.04.5, glibc 2.39), host `lab-ubuntu` | 2026-10-11 | pass | `tests/e2e/run.sh` at `447f447`, cache off, 324 s, 4 applies. Passwordless sudo, no desktop session (H1-fcitx5 left to the person), a minimized Docker image (no man pages) |
+| Same image with `WSL_DISTRO_NAME=Ubuntu`, host `wsl-ubuntu` | 2026-10-11 | pass | Same run, 218 s, 4 applies. Exercises the WSL logic only: no WSL kernel, `/mnt/c`, interop or `wslview` |
+| Container `fedora:44` (glibc 2.43), other Linux | 2026-10-11 | pass | Same run, 57 s. [X-other-linux](#x-other-linux-other-linux-distributions) by hand with the helpers taken from this file, then a common-only stow; setup-host has no host here, so criteria 2 and 3 cover the doctor only |
+| Container `rockylinux:9` (9.8, glibc 2.34) with EPEL Lmod 9.4.2, host `sherlock` | 2026-10-11 | pass | Same run, 32 s, 3 applies. No sudo; `SLURM_JOB_ID` and the site's `SCRATCH` faked; the login env really built by micromamba; no site modules, Slurm, NFS or quota. Approximates the cluster's OS, not Sherlock itself |
+| Container `ubuntu:24.04` with Ubuntu's Lmod 8.6.19, host `marlowe` | 2026-10-11 | pass | Same run, 29 s, 3 applies. No sudo; `SLURM_JOB_ID` faked, `CONDA_PKGS_DIRS` set to the overlay's `/scratch/m000191` path as the person would. Approximates Marlowe, not the cluster itself |
+
+The container rows come from the opt-in suite of
+[docs/testing.md](testing.md#end-to-end-bootstrap-opt-in), which plays the
+person through the HUMAN blocks under a fixed policy and checks the five
+criteria above plus a silent login shell. Its `mac` and `win` rows run on
+GitHub runners, which are not fresh machines, and are recorded here once they
+have run.

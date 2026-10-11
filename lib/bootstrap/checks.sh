@@ -671,11 +671,21 @@ bootstrap_check_auth() {
     fi
 }
 
+# Lines of a starting zsh that mean something is missing, as grep -Ei sees
+# them. oh-my-zsh echoes its own complaints on stdout ("[oh-my-zsh] plugin
+# 'x' not found", "theme 'x' not found", the zoxide plugin's "zoxide not
+# found"), and plugins word theirs variously on stderr ("zsh tmux plugin:
+# tmux not found", "fzf plugin: Cannot find fzf installation directory.");
+# zsh itself prints "command not found" and "no such file", and a home that
+# cannot be written "Permission denied". "stty: ..." from a tty-less start
+# matches none of these.
+BOOTSTRAP_SMOKE_FINDINGS='^\[oh-my-zsh\]|plugin:? .* not found|plugin: cannot find|command not found|no such file|permission denied'
+
 # bootstrap_check_smoke PATH_VALUE: start an interactive zsh as a new terminal
 # would (PATH_VALUE, update hooks off, stdin from /dev/null) and scan its
-# stderr for missing plugins, commands and files.
+# stdout and stderr together for BOOTSTRAP_SMOKE_FINDINGS.
 bootstrap_check_smoke() {
-    local path_value=${1:-$PATH} zsh_bin timeout_bin err rc esc findings count
+    local path_value=${1:-$PATH} zsh_bin timeout_bin output rc esc findings count
     zsh_bin=$(bootstrap_find_command zsh) || {
         bootstrap_check_result missing "zsh not found, smoke test not run"
         return 0
@@ -685,16 +695,16 @@ bootstrap_check_smoke() {
     if [ -n "$timeout_bin" ]; then
         set -- "$timeout_bin" 60 "$@"
     fi
-    if err=$(PATH=$path_value DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 "$@" </dev/null 2>&1 >/dev/null); then
+    if output=$(PATH=$path_value DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 "$@" </dev/null 2>&1); then
         rc=0
     else
         rc=$?
     fi
     esc=$(printf '\033')
-    err=$(printf '%s\n' "$err" | sed "s/${esc}\\[[0-9;?]*[A-Za-z]//g" | tr -d '\r')
-    findings=$(printf '%s\n' "$err" | grep -Ei 'plugin .* not found|command not found|no such file' | sed -n 1,3p) || findings=
+    output=$(printf '%s\n' "$output" | sed "s/${esc}\\[[0-9;?]*[A-Za-z]//g" | tr -d '\r')
+    findings=$(printf '%s\n' "$output" | grep -Ei "$BOOTSTRAP_SMOKE_FINDINGS" | sed -n 1,3p) || findings=
     if [ -n "$findings" ]; then
-        count=$(printf '%s\n' "$err" | grep -Eci 'plugin .* not found|command not found|no such file') || count=0
+        count=$(printf '%s\n' "$output" | grep -Eci "$BOOTSTRAP_SMOKE_FINDINGS") || count=0
         findings=$(printf '%s\n' "$findings" | tr '\n' ';')
         bootstrap_check_result missing "zsh -ic true printed $count finding(s): ${findings%;}"
     elif [ "$rc" = 124 ] && [ -n "$timeout_bin" ]; then

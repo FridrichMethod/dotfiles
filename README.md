@@ -287,7 +287,7 @@ dotfiles/
 ├── marlowe/                      Marlowe HPC
 ├── win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 │
-├── .github/workflows/            ci.yml + daily submodule sync
+├── .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + daily submodule sync
 ├── .gitattributes                LF everywhere (Windows clones set autocrlf)
 ├── .pre-commit-config.yaml       shellcheck · shfmt · stylua · hygiene
 ├── .stowrc                       Stow defaults (--target=~, ignores)
@@ -519,9 +519,14 @@ CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
 `windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
 `pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI`. Each platform's
 assigned suites are mandatory, including native Windows installer fixtures;
-missing dependencies fail CI instead of silently skipping tests. See
-[testing commands and limitations](docs/testing.md) and the
-[behavior matrix](tests/COVERAGE.md).
+missing dependencies fail CI instead of silently skipping tests. A second,
+opt-in workflow, `bootstrap-e2e.yml`, runs the day-zero bootstrap for real on
+every host (fresh containers for the Linux hosts, the macOS and Windows
+runners natively) on demand, weekly and on `e2e-ci/**` branches; it is never
+part of `ci.yml` or pre-commit. See
+[testing commands and limitations](docs/testing.md), the
+[end-to-end bootstrap suite](docs/testing.md#end-to-end-bootstrap-opt-in) and
+the [behavior matrix](tests/COVERAGE.md).
 
 Sherlock integration fixtures use physical temporary-root paths, including on
 macOS where `/var` is a system symlink. Target and ancestor symlink rejection

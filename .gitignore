@@ -62,3 +62,6 @@ coverage.xml
 
 # Cursor (local-only AI assistant config)
 .cursor/
+
+# End-to-end bootstrap runs (tests/e2e/run.sh)
+/tests/e2e/out/

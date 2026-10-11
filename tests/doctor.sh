@@ -95,6 +95,7 @@ fi
 printf 'zsh %s DOTFILES_AUTO_UPDATE=%s AWESOME_SKILLS_AUTO_UPDATE=%s PATH=%s\n' \
     "$*" "${DOTFILES_AUTO_UPDATE-unset}" "${AWESOME_SKILLS_AUTO_UPDATE-unset}" \
     "$PATH" >>"$EVENT_LOG"
+[ -z "${SMOKE_STDOUT:-}" ] || printf '%s\n' "$SMOKE_STDOUT"
 [ -z "${SMOKE_STDERR:-}" ] || printf '%s\n' "$SMOKE_STDERR" >&2
 exit "${SMOKE_RC:-0}"
 SH
@@ -745,6 +746,46 @@ assert_err '[dotfiles] [error] core zsh-smoke: zsh -ic true printed 1 finding(s)
 run_doctor smoke-exit SMOKE_RC=3 -- --host lab-ubuntu --smoke --tsv
 assert_rc 1
 assert_row zsh-smoke missing 'zsh -ic true exited 3'
+# oh-my-zsh echoes its own "[oh-my-zsh] plugin 'x' not found", "theme 'x'
+# not found" and the zoxide plugin's "zoxide not found" on stdout, so the
+# smoke test reads both streams.
+run_doctor smoke-stdout-plugin "SMOKE_STDOUT=[oh-my-zsh] plugin 'fzf-tab' not found" -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 1
+assert_row zsh-smoke missing "[oh-my-zsh] plugin 'fzf-tab' not found" 'docs/bootstrap.md H7-doctor'
+run_doctor smoke-stdout-theme "SMOKE_STDOUT=[oh-my-zsh] theme 'powerlevel10k/powerlevel10k' not found" -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 1
+assert_row zsh-smoke missing "theme 'powerlevel10k/powerlevel10k' not found"
+run_doctor smoke-stdout-zoxide "SMOKE_STDOUT=[oh-my-zsh] zoxide not found" -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 1
+assert_row zsh-smoke missing '[oh-my-zsh] zoxide not found'
+# Plugins that report a missing tool themselves spell it without a space
+# after "plugin", or as "Cannot find"; a read-only home fails with
+# "Permission denied".
+run_doctor smoke-tmux "SMOKE_STDERR=zsh tmux plugin: tmux not found. Please install tmux before using this plugin." -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 1
+assert_row zsh-smoke missing 'zsh tmux plugin: tmux not found'
+run_doctor smoke-fzf "SMOKE_STDERR=[oh-my-zsh] fzf plugin: Cannot find fzf installation directory." -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 1
+assert_row zsh-smoke missing 'fzf plugin: Cannot find fzf installation directory.'
+run_doctor smoke-permission "SMOKE_STDERR=mkdir: cannot create directory '/x': Permission denied" -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 1
+assert_row zsh-smoke missing "cannot create directory '/x': Permission denied"
+# A tty-less zsh complains about stty; that line is noise, not a finding.
+run_doctor smoke-stty "SMOKE_STDERR=stty: 'standard input': Inappropriate ioctl for device" -- \
+    --host lab-ubuntu --smoke --tsv
+assert_rc 0
+assert_row zsh-smoke ok 'zsh -ic true started without errors'
+# Findings on both streams are counted together.
+run_doctor smoke-both "SMOKE_STDOUT=[oh-my-zsh] plugin 'fzf-tab' not found" \
+    "SMOKE_STDERR=zsh:1: command not found: eza" -- --host lab-ubuntu --smoke --tier cli
+assert_rc 1
+assert_err '[dotfiles] [error] core zsh-smoke: zsh -ic true printed 2 finding(s): '
 
 # --- structural checks: negative, then back to ok ----------------------------
 

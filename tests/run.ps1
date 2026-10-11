@@ -86,6 +86,28 @@ Write-Output '==> bootstrap.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'bootstrap.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Windows bootstrap doctor and installer tests failed.' }
 
+Write-Output '==> e2e/run.ps1 parse gate'
+# The native Windows end-to-end driver runs only in the opt-in bootstrap-e2e
+# workflow (90 minutes, against the runner's real home), so a syntax error in
+# it would otherwise surface there first. Parsing every file here, with the
+# parser each other PowerShell suite uses, is the fast signal; its behaviour
+# is exercised by that run alone.
+$e2eRun = Join-Path $PSScriptRoot 'e2e/run.ps1'
+if (-not (Test-Path -LiteralPath $e2eRun -PathType Leaf)) { throw "Windows e2e driver is missing: $e2eRun" }
+$e2eLibs = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'e2e/lib') -Filter '*.ps1' -File |
+        Sort-Object -Property Name | ForEach-Object { $_.FullName })
+if ($e2eLibs.Count -eq 0) { throw 'No tests/e2e/lib/*.ps1 found to parse.' }
+$e2eParseIssues = [Collections.Generic.List[string]]::new()
+foreach ($e2eFile in (@($e2eRun) + $e2eLibs)) {
+    $e2eErrors = $null
+    [void][Management.Automation.Language.Parser]::ParseFile($e2eFile, [ref]$null, [ref]$e2eErrors)
+    foreach ($issue in @($e2eErrors)) {
+        $e2eParseIssues.Add("$($e2eFile):$($issue.Extent.StartLineNumber):$($issue.Message)")
+    }
+    Write-Output "parsed $e2eFile"
+}
+if ($e2eParseIssues.Count -gt 0) { throw "Windows e2e driver parse errors:`n$($e2eParseIssues -join "`n")" }
+
 if ($IsWindows) {
     Write-Output '==> windows-installer.ps1'
     & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'windows-installer.ps1')
