@@ -9,9 +9,9 @@ backend is deliberately small; no general application framework is involved.
 | --- | --- |
 | Unix installation | Bash, Git, GNU Stow (and its Perl runtime), ordinary POSIX utilities |
 | Native Windows installation | PowerShell 7+, Git for Windows / Git Bash, elevated symlink creation |
-| All three AI sync helpers | Python 3.11+; no package installation during login or stow |
+| All four AI sync helpers | Python 3.11+; no package installation during login or stow |
 | Codex TOML merge | Exact `tomlkit` pin in `requirements-sync.txt` |
-| Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
+| Claude JSON / Codex rules / Codex instructions alone | Python standard library only, via an explicitly selected interpreter |
 | Default parser setup | Python's `venv` and pip support; downloads the pinned wheel unless pre-provisioned offline |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Optional skill downloads | Bash, curl, tar, rsync |
