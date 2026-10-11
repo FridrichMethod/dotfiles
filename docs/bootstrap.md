@@ -2016,16 +2016,21 @@ Deferred on purpose; each is a separate change.
 - **Doctor quota note on hpc.** The doctor does not mention the home quota
   (`sh_quota` on Sherlock) that a login env and package cache count against;
   [S2-login-env](#s2-login-env-hpc-login-environment) documents it instead.
-- **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows CI
-  jobs have not run this bootstrap yet, and the PowerShell twins have run only
-  under PowerShell 7 on Linux. The fresh-machine
-  [acceptance checklist](#acceptance-checklist) below is pending; docker, VM
-  and CI end-to-end runs are being built separately.
+- **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows jobs
+  of `ci.yml` run the fixture suites, so the PowerShell twins run natively
+  only against shims. The opt-in end-to-end suite
+  ([docs/testing.md](testing.md#end-to-end-bootstrap-opt-in)) has run the
+  bootstrap for real in Linux containers only (the
+  [acceptance checklist](#acceptance-checklist) below): the `mac` and `win`
+  rows of its `bootstrap-e2e` workflow have not run yet (the first run needs a
+  pushed `e2e-ci/**` branch), `tests/e2e/run.ps1` has never executed, and no
+  real-machine row exists yet.
 
 ## Acceptance checklist
 
-Not yet run. Each run starts from a fresh machine, follows the quick start for
-its platform, and passes when all of these hold:
+No real machine has run it yet; the container rows below approximate one.
+Each run starts from a fresh machine, follows the quick start for its
+platform, and passes when all of these hold:
 
 - `./doctor.sh --host H` (Windows `.\doctor.ps1 -Host win`) exits 0 for the
   default tiers, and `--smoke` exits 0 on Unix.
@@ -2040,4 +2045,17 @@ its platform, and passes when all of these hold:
 | Fresh macOS VM (Apple Silicon), host `mac` | | not yet run | |
 | Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | | not yet run | |
 | Sherlock inside `sh_dev`, host `sherlock` | | not yet run | |
+| Marlowe inside an interactive Slurm job, host `marlowe` | | not yet run | |
 | Native Windows 11, elevated stow, host `win` | | not yet run | |
+| Container `ubuntu:24.04` (24.04.5, glibc 2.39), host `lab-ubuntu` | 2026-10-11 | pass | `tests/e2e/run.sh` at `447f447`, cache off, 324 s, 4 applies. Passwordless sudo, no desktop session (H1-fcitx5 left to the person), a minimized Docker image (no man pages) |
+| Same image with `WSL_DISTRO_NAME=Ubuntu`, host `wsl-ubuntu` | 2026-10-11 | pass | Same run, 218 s, 4 applies. Exercises the WSL logic only: no WSL kernel, `/mnt/c`, interop or `wslview` |
+| Container `fedora:44` (glibc 2.43), other Linux | 2026-10-11 | pass | Same run, 57 s. [X-other-linux](#x-other-linux-other-linux-distributions) by hand with the helpers taken from this file, then a common-only stow; setup-host has no host here, so criteria 2 and 3 cover the doctor only |
+| Container `rockylinux:9` (9.8, glibc 2.34) with EPEL Lmod 9.4.2, host `sherlock` | 2026-10-11 | pass | Same run, 32 s, 3 applies. No sudo; `SLURM_JOB_ID` and the site's `SCRATCH` faked; the login env really built by micromamba; no site modules, Slurm, NFS or quota. Approximates the cluster's OS, not Sherlock itself |
+| Container `ubuntu:24.04` with Ubuntu's Lmod 8.6.19, host `marlowe` | 2026-10-11 | pass | Same run, 29 s, 3 applies. No sudo; `SLURM_JOB_ID` faked, `CONDA_PKGS_DIRS` set to the overlay's `/scratch/m000191` path as the person would. Approximates Marlowe, not the cluster itself |
+
+The container rows come from the opt-in suite of
+[docs/testing.md](testing.md#end-to-end-bootstrap-opt-in), which plays the
+person through the HUMAN blocks under a fixed policy and checks the five
+criteria above plus a silent login shell. Its `mac` and `win` rows run on
+GitHub runners, which are not fresh machines, and are recorded here once they
+have run.
