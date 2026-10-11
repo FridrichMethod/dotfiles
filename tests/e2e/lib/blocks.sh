@@ -150,35 +150,35 @@ e2e_block_lines() {
 }
 
 # e2e_alloc_exports TEXT: E2E_ALLOC_ENV expanded and checked: "KEY=value"
-# words only, nothing left unexpanded. Returns 1 with E2E_BLOCK_ERROR set.
+# words only, nothing left unexpanded. Returns 1 with E2E_BLOCK_ERROR set and
+# printed, since a caller that captures the output with $(...) would not see
+# the variable.
 e2e_alloc_exports() {
     local expanded word
     E2E_BLOCK_ERROR=''
     expanded=$(e2e_expand "$1")
     if [ -z "$expanded" ]; then
         E2E_BLOCK_ERROR='E2E_ALLOC_ENV is empty, so nothing stands in for the allocation'
+    else
+        case $expanded in
+            *'$'*) E2E_BLOCK_ERROR="E2E_ALLOC_ENV still holds an unexpanded name (is SCRATCH set?): $expanded" ;;
+        esac
+    fi
+    if [ -z "$E2E_BLOCK_ERROR" ]; then
+        for word in $expanded; do
+            case $word in
+                [A-Za-z_]*=*) ;;
+                *) E2E_BLOCK_ERROR="E2E_ALLOC_ENV word is not KEY=value: $word" ;;
+            esac
+            case ${word%%=*} in
+                *[!A-Za-z0-9_]*) E2E_BLOCK_ERROR="E2E_ALLOC_ENV word is not KEY=value: $word" ;;
+            esac
+            [ -z "$E2E_BLOCK_ERROR" ] || break
+        done
+    fi
+    if [ -n "$E2E_BLOCK_ERROR" ]; then
+        printf '%s\n' "$E2E_BLOCK_ERROR"
         return 1
     fi
-    case $expanded in
-        *'$'*)
-            E2E_BLOCK_ERROR="E2E_ALLOC_ENV still holds an unexpanded name (is SCRATCH set?): $expanded"
-            return 1
-            ;;
-    esac
-    for word in $expanded; do
-        case $word in
-            [A-Za-z_]*=*) ;;
-            *)
-                E2E_BLOCK_ERROR="E2E_ALLOC_ENV word is not KEY=value: $word"
-                return 1
-                ;;
-        esac
-        case ${word%%=*} in
-            *[!A-Za-z0-9_]*)
-                E2E_BLOCK_ERROR="E2E_ALLOC_ENV word is not KEY=value: $word"
-                return 1
-                ;;
-        esac
-    done
     printf '%s\n' "$expanded"
 }

@@ -229,6 +229,9 @@ expect_eq 'alloc unset error' "${E2E_BLOCK_ERROR%%:*}" 'E2E_ALLOC_ENV still hold
 if e2e_alloc_exports 'SLURM_JOB_ID=1 bogus' >/dev/null; then
     fail 'alloc exports accepted a word without ='
 fi
+# A caller capturing the output sees the reason too (the variable is lost in
+# its subshell).
+expect_eq 'alloc error printed' "$(e2e_alloc_exports 'SLURM_JOB_ID=1 bogus')" 'E2E_ALLOC_ENV word is not KEY=value: bogus'
 if e2e_alloc_exports '' >/dev/null; then
     fail 'alloc exports accepted an empty E2E_ALLOC_ENV'
 fi
@@ -280,6 +283,12 @@ expect_eq 'login noise filter keeps real complaints' "$(e2e_login_noise "$UNIT/l
     "[oh-my-zsh] plugin 'fzf-tab' not found
 (eval):7: can't change option: monitor
 zsh: command not found: eza"
+# The stdout filter drops terminal control (Fedora's /etc/zlogout `clear`)
+# and keeps text, even text wrapped in colour.
+printf '\033[H\033[2J\033[3J\r' >"$UNIT/login-clear.out"
+expect_eq 'login text filter drops a clear' "$(e2e_login_text "$UNIT/login-clear.out")" ''
+printf '\033[H\033[2J\033[1;31mgitstatus failed\033[0m\n' >"$UNIT/login-text.out"
+expect_eq 'login text filter keeps text' "$(e2e_login_text "$UNIT/login-text.out")" 'gitstatus failed'
 
 # The sudo.log audit needs GNU date -d (Linux); the timestamps are sudo's
 # with Defaults log_year, and only the entry outside a window is reported.

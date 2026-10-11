@@ -209,22 +209,34 @@ e2e_login_noise() {
     grep -Ev "^stty: |^\(eval\):1: can't change option: zle\$" "$1" 2>/dev/null || true
 }
 
+# e2e_login_text OUT: the stdout of the login shell minus terminal control
+# sequences (CSI escapes and carriage returns): Fedora's stock /etc/zlogout
+# runs `clear` when a login shell exits, which is screen control, not a
+# message. Any text that remains is one.
+e2e_login_text() {
+    local esc
+    esc=$(printf '\033')
+    sed "s/${esc}\\[[0-9;?]*[A-Za-z]//g" "$1" 2>/dev/null | tr -d '\r' | grep . || true
+}
+
 # e2e_login_shell_check OUT ERR: the login shell must exit 0 and print
-# nothing: stdout empty, stderr empty once the no-terminal lines of
-# e2e_login_noise are dropped. E2E_LOGIN_DETAIL gets what it printed, with the
-# known complaints (oh-my-zsh, the dotfiles hooks, not found, permission
-# denied, [error]) quoted first.
+# nothing: stdout empty once e2e_login_text has dropped terminal control,
+# stderr empty once the no-terminal lines of e2e_login_noise are dropped.
+# E2E_LOGIN_DETAIL gets what it printed, with the known complaints
+# (oh-my-zsh, the dotfiles hooks, not found, permission denied, [error])
+# quoted first.
 e2e_login_shell_check() {
-    local out=$1 err=$2 rc=0 noise findings
+    local out=$1 err=$2 rc=0 text noise findings
     e2e_login_run "$out" "$err" exit || rc=$?
+    text=$(e2e_login_text "$out")
     noise=$(e2e_login_noise "$err")
     findings=$(grep -E '^\[(oh-my-zsh|dotfiles|awesome-skills)\]|not found|[Pp]ermission denied|\[error\]' \
         "$out" "$err" 2>/dev/null) || true
     E2E_LOGIN_DETAIL="exit $rc"
     [ -z "$findings" ] || E2E_LOGIN_DETAIL="$E2E_LOGIN_DETAIL; findings: $(e2e_one_line "$findings" 300)"
-    [ ! -s "$out" ] || E2E_LOGIN_DETAIL="$E2E_LOGIN_DETAIL; stdout: $(e2e_one_line "$(cat "$out")" 200)"
+    [ -z "$text" ] || E2E_LOGIN_DETAIL="$E2E_LOGIN_DETAIL; stdout: $(e2e_one_line "$text" 200)"
     [ -z "$noise" ] || E2E_LOGIN_DETAIL="$E2E_LOGIN_DETAIL; stderr: $(e2e_one_line "$noise" 200)"
-    [ "$rc" = 0 ] && [ ! -s "$out" ] && [ -z "$noise" ]
+    [ "$rc" = 0 ] && [ -z "$text" ] && [ -z "$noise" ]
 }
 
 # e2e_login_shell_of: the user's login shell from the account database

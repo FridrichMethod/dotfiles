@@ -276,8 +276,10 @@ step in `summary.tsv`:
    a change during a `human:*` step is recorded as a note.
 6. **A login shell starts clean.** Under `env -i` with the system PATH,
    `bash -lc 'exec <zsh> -il -c exit'` (the login env's zsh on hpc) exits 0
-   with empty stdout and empty stderr, apart from the two lines only the
-   missing terminal causes: the `.zshrc`'s `stty -ixon` complaint and fzf's
+   with empty stdout and empty stderr, apart from what is not a message: on
+   stdout, terminal control sequences (Fedora's stock `/etc/zlogout` runs
+   `clear` when a login shell exits); on stderr, the two lines only the
+   missing terminal causes, the `.zshrc`'s `stty -ixon` complaint and fzf's
    `--zsh` integration restoring its saved options
    (`(eval):1: can't change option: zle`), both silent in a real terminal;
    any `[oh-my-zsh]`, `[dotfiles]`, `[awesome-skills]`, `not found`,
@@ -285,8 +287,9 @@ step in `summary.tsv`:
 
 Each host also runs its negative cases as separate steps (`negative:<token>`):
 the platform refusals (`--host wsl-ubuntu --check` in the lab container and
-the reverse, `env -u LMOD_DIR` on a cluster, `sudo -n ./setup-host.sh` as
-root, each exit 2), `alloc-first` (the first hpc apply exits 3 and prints the
+the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster (Lmod's profile.d
+exports `BASH_ENV`, which every bash script sources on start and which
+re-exports `LMOD_DIR`), `sudo -n ./setup-host.sh` as root, each exit 2), `alloc-first` (the first hpc apply exits 3 and prints the
 `H2-alloc` block) and `common-only` (after the host-less stow, `./doctor.sh`
 exits 0 and warns common-only, and `./setup-host.sh` without `--host` exits 2).
 

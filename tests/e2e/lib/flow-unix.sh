@@ -69,9 +69,11 @@ e2e_handle_alloc() {
         e2e_fail_row "$1" "the alloc block came back after E2E_ALLOC_ENV was exported: $(e2e_block_text "$2")"
         return 1
     fi
+    # On failure the function prints its reason (E2E_BLOCK_ERROR is lost in
+    # the subshell).
     if ! exports=$(e2e_alloc_exports "${E2E_ALLOC_ENV:-}"); then
         E2E_BROKEN=$1
-        e2e_fail_row "$1" "$E2E_BLOCK_ERROR"
+        e2e_fail_row "$1" "$exports"
         return 1
     fi
     for word in $exports; do

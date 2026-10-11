@@ -139,7 +139,10 @@ e2e_negatives() {
         case $token in
             wsl-refused) e2e_negative_refusal 2 WSL ./setup-host.sh --host wsl-ubuntu --check ;;
             lab-refused-in-wsl) e2e_negative_refusal 2 WSL ./setup-host.sh --host lab-ubuntu --check ;;
-            hpc-no-lmod) e2e_negative_refusal 2 LMOD_DIR env -u LMOD_DIR ./setup-host.sh --host "$host" --check ;;
+            # Lmod's profile.d also exports BASH_ENV=.../init/bash, which every
+            # bash script sources on start, re-exporting LMOD_DIR; a machine
+            # without Lmod has neither.
+            hpc-no-lmod) e2e_negative_refusal 2 LMOD_DIR env -u LMOD_DIR -u BASH_ENV ./setup-host.sh --host "$host" --check ;;
             # setup-host checks for root before it resolves the host, so a
             # stand-in host serves the other-Linux flow too.
             root-refused) e2e_negative_refusal 2 'not root' sudo -n ./setup-host.sh --host "$host" --check ;;
