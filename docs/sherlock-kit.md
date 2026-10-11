@@ -32,8 +32,12 @@ only the submodule and its ignore file.
   replaces only a file it generated; on a host without rules it removes its
   own file and leaves any other in place. It is POSIX-only (no Windows host
   has rules) and not a Stow target, so `.stowrc` has no entry for it.
-- **Skills** are personal skills in both clients, outside the awesome-skills
-  directories (`~/.codex/skills` belongs to that sync).
+- **Skills** are personal skills in both clients. The Claude link sits in
+  `~/.claude/skills/`, which awesome-skills also writes into: its installer's
+  default `rsync -a` only adds and updates, so the link survives (an
+  `install.sh --delete` run removes it until the next stow), and AGENTS.md
+  exempts it from awesome-skills' ownership. The Codex link uses
+  `~/.agents/skills/`, outside awesome-skills' `~/.codex/skills/`.
 - **`shk`**: `bin/shk` is stdlib-only and needs Python 3.11+ as `python3`. An
   activated project env that pip-installed sherlock-kit puts its own `shk`
   first on PATH and wins. On Sherlock the profile exports `SHK_EXECUTOR=local`.
@@ -50,12 +54,21 @@ restows the remembered host, which regenerates the Codex override.
 A manual bump from a clean checkout:
 
 ```sh
+git pull --ff-only
 git submodule update --remote --merge common/sherlock-kit/sherlock-kit
 bash tests/sherlock-kit-delivery.sh --real
-./stow-all.sh <host>
 git add common/sherlock-kit/sherlock-kit
 git commit -m "chore(deps): update sherlock-kit submodule to latest"
+git push
+./stow-all.sh <host>
 ```
+
+Push right away: once the daily bump lands on `origin/main`, an unpushed
+local bump has diverged from it, and the login updater's `git pull --ff-only`
+fails on every login, so the host gets no update until you reconcile the two
+(`git pull --rebase`, then push). Stow after the
+commit, because `stow-all.sh` records a revision as applied only from a clean
+tree.
 
 ## Projects
 
