@@ -78,13 +78,53 @@ and `DIR/.agents/skills/` for machines without these dotfiles; on a dotfiles
 host the personal skill shadows that copy in Claude, and `--rules` is skipped
 while `~/.claude/rules/sherlock-kit.md` exists.
 
+## Codex skill discovery
+
+A valid `~/.agents/skills/sherlock-kit` link does not guarantee that the model
+sees the skill. Codex 0.162.1 scans skills first, then fits the catalog into
+a separate context budget. A large awesome-skills installation can hit the
+scan traversal limit and truncate that catalog; the model may receive only
+early alphabetic entries without descriptions. Increasing
+`project_doc_max_bytes` does not change the skill budget.
+
+For one project, install a project copy and start a new Codex session there:
+
+```sh
+shk install-skill --project DIR --client codex
+shk install-skill --project DIR --client codex --check
+```
+
+In Codex 0.162.1, project skills precede personal skills in the rendered
+catalog. This made Sherlock visible even with a large personal catalog,
+though descriptions were still omitted. `--check` verifies the copy's
+bytes; it does not check Codex's rendered catalog. Use
+`codex debug prompt-input --help` and its offline preview to inspect what
+this installed Codex version sends to the model.
+
+For reliable discovery across projects, keep a small enabled collection.
+Codex supports `[[skills.config]]` entries with `enabled = false`; in
+0.162.1 the `path` must identify the exact absolute `SKILL.md` file, not its
+directory. Put host-specific paths in local configuration, not this
+repository. Disabling entries reduces catalog pressure but still scans the
+large library. Removing or moving skills without adjusting
+`scripts/awesome-skills-update.sh` is temporary: the updater installs them
+again. Choosing an allowlist for that updater is a separate policy decision.
+
+`skills.max_context_tokens` also exists, but 0.162.1 caps the explicit value
+at 10,000 tokens. Raising it did not make Sherlock visible with the tested
+large catalog. Moving the same personal skill to another personal skills
+directory does not give it project priority. An isolated `CODEX_HOME` can
+avoid the large legacy catalog, but still discovers `~/.agents/skills` and
+has separate configuration and authentication; use a temporary environment
+for experiments and do not copy credentials into evidence files.
+
 ## Verify
 
 ```sh
 readlink -f ~/.claude/rules/sherlock-kit.md     # .../workstation.md, or cluster.md on Sherlock
 ls -L ~/.claude/skills/sherlock-kit/SKILL.md ~/.agents/skills/sherlock-kit/SKILL.md
 head -n 1 ~/.codex/AGENTS.override.md           # the codex-instructions-sync marker
-wc -c <~/.codex/AGENTS.override.md              # well under 32 KiB
+wc -c <~/.codex/AGENTS.override.md              # doctor advises review above 28 KiB
 shk --version
 ./doctor.sh --host <host>                       # submodule and codex-override rows ok
 bash tests/sherlock-kit-delivery.sh             # fixtures; --ci fails without stow, --real checks the submodule
@@ -101,7 +141,10 @@ bash tests/sherlock-kit-delivery.sh             # fixtures; --ci fails without s
   (rerun `./stow-all.sh <host>`); `human` means `~/.codex/AGENTS.override.md`
   is a symlink or a file the helper did not write, which Codex reads instead
   of `AGENTS.md` and the rules (move it aside, then restow). It warns above
-  28 KiB, because Codex truncates global instructions at 32 KiB.
+  a local 28 KiB advisory threshold to flag context usage. This is not a
+  Codex truncation limit: with Codex 0.162.1, `project_doc_max_bytes` limits
+  project documents separately from the global override. After regenerating
+  the override, start a new Codex session to load it; doctor checks disk state.
 - Retired 0.3 launchers: on POSIX, `./stow-all.sh` removes the old dangling
   `~/.local/bin/shk` itself. Windows hosts that ran the old `stow-all.ps1`
   keep a dangling `~\.local\bin\shk`, and hosts that also ran the retired 0.3

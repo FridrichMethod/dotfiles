@@ -996,8 +996,8 @@ assert_row codex-override missing 'codex-instructions-sync --check failed (exit 
 assert_row codex-override missing 'codex-instructions-sync: Permission denied'
 chmod +x "$FIXTURE/common/codex/.local/bin/codex-instructions-sync"
 
-# Codex truncates its global instructions at 32 KiB: a current override
-# over 28 KiB is a warning.
+# A current override over the local 28 KiB advisory threshold is a warning;
+# it does not establish that Codex truncated the global instructions.
 awk 'BEGIN { for (i = 0; i < 600; i++) print "- fixture rule line " i " padded to fifty bytes ...." }' \
     >"$TEST_TMP/big-rules.md"
 ln -sfn "$TEST_TMP/big-rules.md" "$WSL_RULES"
@@ -1005,7 +1005,7 @@ sync_override
 run_doctor codex-oversized -- --host wsl-ubuntu --tsv
 assert_rc 0
 assert_row codex-override warn 'is current but' 'docs/bootstrap.md H7-stow'
-assert_row codex-override warn 'over 28 KiB; Codex truncates global instructions at 32 KiB'
+assert_row codex-override warn 'over the local 28 KiB advisory threshold; review context usage'
 ln -sfn ../../../../common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/rules/workstation.md "$WSL_RULES"
 rm "$TEST_TMP/big-rules.md"
 sync_override

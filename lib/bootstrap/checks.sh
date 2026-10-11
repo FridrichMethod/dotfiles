@@ -496,8 +496,8 @@ bootstrap_check_submodule() {
     fi
 }
 
-# Codex truncates its global instructions at 32 KiB (project_doc_max_bytes);
-# a generated override larger than this leaves too little headroom.
+# Local advisory threshold for global instruction size, not a Codex truncation limit.
+# project_doc_max_bytes limits project documents separately in Codex 0.162.1.
 BOOTSTRAP_CODEX_OVERRIDE_MAX=28672
 
 # bootstrap_check_codex_override ROOT HOST: on a host whose sherlock-kit
@@ -535,7 +535,7 @@ bootstrap_codex_override_checked() {
             bytes=$(wc -c 2>/dev/null <"$live") || bytes=
             bytes=${bytes//[!0-9]/}
             if [ "${bytes:-0}" -gt "$BOOTSTRAP_CODEX_OVERRIDE_MAX" ]; then
-                bootstrap_check_result warn "generated ~/.codex/AGENTS.override.md is current but $bytes bytes, over 28 KiB; Codex truncates global instructions at 32 KiB, so shorten common/codex/.codex/AGENTS.md or the $host sherlock-kit rules"
+                bootstrap_check_result warn "generated ~/.codex/AGENTS.override.md is current but $bytes bytes, over the local 28 KiB advisory threshold; review context usage in common/codex/.codex/AGENTS.md or the $host sherlock-kit rules"
             else
                 bootstrap_check_result ok "generated ~/.codex/AGENTS.override.md is current: common/codex/.codex/AGENTS.md plus the $host sherlock-kit rules (${bytes:-?} bytes)"
             fi
