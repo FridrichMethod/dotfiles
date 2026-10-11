@@ -119,7 +119,10 @@ e2e_guard_after() {
 # e2e_prune_args: the find arguments that leave out what a snapshot must not
 # count: the clone's .git (git status refreshes its index), E2E_OUT and
 # E2E_SRC when they are under HOME, and E2E_SNAPSHOT_PRUNE (the mac runner's
-# $HOME/work and $HOME/Library).
+# $HOME/work and $HOME/Library, its Actions agent under $HOME/runners, whose
+# _diag logs are appended throughout the job, and $HOME/hostedtoolcache).
+# env.txt records the expanded list, so a reader of the artifact sees what
+# the no-write checks did not watch.
 e2e_prune_args() {
     local path
     E2E_PRUNE=('(' -path "$E2E_CLONE/.git" -o -path "$E2E_OUT" -o -path "$E2E_SRC")
@@ -282,10 +285,13 @@ e2e_audit_no_sudo() {
 }
 
 # e2e_audit_sudo_log TIMELINE SUDOLOG: every sudo.log entry ("Oct 10
-# 03:14:15 2026 : user : TTY=... ; COMMAND=...", Defaults log_year; a long
-# entry continues on indented lines) must be stamped inside a human:* or
-# negative:* window of the timeline. Prints the entries outside every
-# window. Returns 0 (all inside), 1 (one outside, or an entry that does not
+# 03:14:15 2026 : user : TTY=... ; COMMAND=...", Defaults log_year) must be
+# stamped inside a human:* or negative:* window of the timeline. A long
+# entry continues on indented lines, which are skipped; any other line that
+# is not a timestamped entry fails the audit, so a sudo.log in a shape the
+# audit does not understand (no log_year, log_format json) cannot pass
+# vacuously. Prints the entries outside every window and the lines it could
+# not parse. Returns 0 (all inside), 1 (one outside, or a line that does not
 # parse) or 2 without GNU date -d (macOS, where no sudo.log exists).
 e2e_audit_sudo_log() {
     local windows='' t kind phase begin='' line stamp epoch inside bad='' rest window b e
@@ -304,7 +310,13 @@ e2e_audit_sudo_log() {
         esac
     done <"$1"
     while IFS= read -r line || [ -n "$line" ]; do
-        e2e_has '^[A-Z][a-z]{2} +[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} [0-9]{4} : ' "$line" || continue
+        case $line in
+            '' | ' '* | "$E2E_TAB"*) continue ;; # a long entry's indented continuation
+        esac
+        if ! e2e_has '^[A-Z][a-z]{2} +[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} [0-9]{4} : ' "$line"; then
+            bad="$bad${bad:+$E2E_NL}unparsed entry: $line"
+            continue
+        fi
         stamp=$(printf '%s\n' "$line" | awk '{ print $1, $2, $3, $4 }')
         if ! epoch=$(date -d "$stamp" +%s 2>/dev/null); then
             bad="$bad${bad:+$E2E_NL}unparsed timestamp: $line"

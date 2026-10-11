@@ -126,6 +126,28 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: true
+      # A login shell on macOS runs path_helper from /etc/profile and
+      # /etc/zprofile, which rebuilds PATH from /etc/paths (/usr/local/bin
+      # first, then /usr/bin, /bin, /usr/sbin, /sbin) and appends what PATH
+      # held before, so a wrapper directory under the checkout would sit
+      # behind the real /usr/bin/sudo and /usr/bin/chsh in the login-shell,
+      # doctor-final and doctor-smoke steps, and the wrappers audit would pass
+      # without seeing them. /usr/local/bin is the one directory path_helper
+      # keeps ahead of /usr/bin; none of the three names lives there on the
+      # arm64 image (Homebrew is /opt/homebrew), and this runs before any
+      # harness phase opens, so no wrapper logs the install. An image that
+      # already has one of the three is not the runner this row expects.
+      - name: Install the sudo, chsh and stow wrappers in /usr/local/bin
+        run: |
+          for tool in sudo chsh stow; do
+            if [ -e "/usr/local/bin/$tool" ] || [ -L "/usr/local/bin/$tool" ]; then
+              echo "::error::/usr/local/bin/$tool exists already; the mac row expects the stock macos-15 image, where nothing is installed there"
+              exit 1
+            fi
+          done
+          sudo -n mkdir -p /usr/local/bin
+          sudo -n install -m 755 tests/e2e/wrappers/sudo tests/e2e/wrappers/chsh tests/e2e/wrappers/stow /usr/local/bin/
+          ls -l /usr/local/bin/sudo /usr/local/bin/chsh /usr/local/bin/stow
       - name: Run the bootstrap natively as the runner user
         run: E2E_NATIVE=1 ./tests/e2e/run.sh mac
       - uses: actions/upload-artifact@v7

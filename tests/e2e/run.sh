@@ -12,12 +12,15 @@
 #   run.sh [-j N] [--cache DIR] [--keep] [--out DIR] [--no-build] <host>... | all
 #
 # Exit 0 when every host passed, 1 when one failed, 2 for a usage error or a
-# refusal (dirty checkout, no docker, mac off a Mac, win). Knobs:
-# E2E_ALLOW_DIRTY=1 runs from a checkout with uncommitted changes, E2E_KEEP=1
-# is --keep, E2E_CACHE_DIR is --cache. Bash 3.2 compatible (the macOS
-# runner's /bin/bash): no mapfile, associative arrays or `wait -n`; BSD
-# userland safe. SIGPIPE may be ignored on CI runners: every pipeline below
-# ends in a reader that consumes all its input (tee, sed).
+# refusal (root, dirty checkout, linked worktree or submodule checkout, no
+# docker, a --no-build image whose user has another uid, mac off a Mac, win).
+# Knobs: E2E_ALLOW_DIRTY=1 runs from a checkout with uncommitted changes (the
+# clone is still HEAD: only tests/e2e/ changes, which the harness reads from
+# this working tree, are exercised uncommitted), E2E_KEEP=1 is --keep,
+# E2E_CACHE_DIR is --cache. Bash 3.2 compatible (the macOS runner's
+# /bin/bash): no mapfile, associative arrays or `wait -n`; BSD userland safe.
+# SIGPIPE may be ignored on CI runners: every pipeline below ends in a reader
+# that consumes all its input (tee, sed).
 
 set -euo pipefail
 
@@ -39,10 +42,11 @@ usage() {
     printf 'Usage: %s [-j N] [--cache DIR] [--keep] [--out DIR] [--no-build] <host>... | all\n' "${0##*/}"
     printf '  hosts: %s (all), mac (natively, on a Mac with E2E_NATIVE=1); win: tests/e2e/run.ps1\n' "$HOSTS_ALL"
     printf '  -j N        run up to N containers at once (1 or 2; default 1)\n'
-    printf '  --cache DIR mount package caches from DIR (apt, dnf, homebrew, conda-pkgs)\n'
+    printf '  --cache DIR mount package caches from DIR (apt, dnf, libdnf5, homebrew, conda-pkgs)\n'
     printf '  --keep      keep each container after its run (docker rm it yourself)\n'
     printf '  --out DIR   put the <host>-<UTC time> run dirs in DIR (default tests/e2e/out)\n'
-    printf '  --no-build  reuse an existing image instead of building it\n'
+    printf '  --no-build  reuse an existing image instead of building it (its user must have your uid)\n'
+    printf '  run it as a regular user from a plain clone: a linked worktree or submodule checkout is refused\n'
 }
 
 die() {
@@ -147,13 +151,21 @@ for host in "${selected[@]}"; do
     [ "$host" != win ] || die 2 'win is driven by tests/e2e/run.ps1 (PowerShell 7); use tests/e2e/run.ps1'
 done
 
+# --- the driver's user -----------------------------------------------------
+
+# The images create their user with this uid (useradd refuses 0) so that it
+# owns the mounted /e2e/out, and mac bootstraps the home of the user running
+# it; a root run would fail late, in the image build or inside the container.
+[ "$(id -u)" != 0 ] ||
+    die 2 'run as a regular user, not root: the container user is created with your uid so it owns the mounted /e2e/out (useradd refuses uid 0), and mac bootstraps the home of the user running it'
+
 # --- source checkout -------------------------------------------------------
 
 if [ "${E2E_ALLOW_DIRTY:-}" != 1 ]; then
     dirty=$(git -C "$SRC" status --porcelain) || die 2 "git status failed in $SRC"
     if [ -n "$dirty" ]; then
         printf '%s\n' "$dirty" | sed -n '1,10p' >&2
-        die 2 "the source checkout $SRC has uncommitted changes (above); commit them, or set E2E_ALLOW_DIRTY=1 to test them anyway"
+        die 2 "the source checkout $SRC has uncommitted changes (above); commit them, or set E2E_ALLOW_DIRTY=1 to run anyway (the container clones HEAD, so uncommitted changes outside tests/e2e/ are not tested; the harness itself runs from this working tree)"
     fi
 fi
 E2E_REV=$(git -C "$SRC" rev-parse HEAD) || die 2 "git rev-parse HEAD failed in $SRC"
@@ -223,7 +235,9 @@ fi
 mkdir -p "$out_root" || die 2 "cannot create $out_root"
 out_root=$(cd -- "$out_root" && pwd -P)
 if [ -n "$cache" ]; then
-    mkdir -p "$cache/apt" "$cache/dnf" "$cache/homebrew" "$cache/conda-pkgs" ||
+    # Every directory cache_args mounts, made here as the user: docker would
+    # create a missing bind source itself, owned by root.
+    mkdir -p "$cache/apt" "$cache/dnf" "$cache/libdnf5" "$cache/homebrew" "$cache/conda-pkgs" ||
         die 2 "cannot create the cache dir $cache"
     cache=$(cd -- "$cache" && pwd -P)
 fi
@@ -241,19 +255,37 @@ done
 
 # --- images ----------------------------------------------------------------
 
+# image_user_uid INDEX: the uid the existing image of host INDEX gives its
+# user (`id -u <user>` in a throwaway container), or nothing when the image
+# cannot say; an image built for another uid cannot write the mounted
+# /e2e/out, and inside.sh would only report "cannot create /e2e/out".
+image_user_uid() {
+    local i=$1 args=(run --rm --entrypoint id)
+    [ -z "${h_platform[i]}" ] || args+=(--platform "${h_platform[i]}")
+    docker "${args[@]}" "${h_image[i]}" -u "${h_user[i]}" 2>/dev/null </dev/null
+}
+
 # build_image INDEX: docker build the image of host INDEX, its output
 # streamed and copied to log/docker-build.log of every selected host that
-# uses the same image. --no-build keeps an image that already exists.
+# uses the same image. --no-build keeps an image that already exists, when
+# its user has this driver's uid.
 build_image() {
-    local i=$1 image=${h_image[$1]} logs=() j kv args=() seconds
+    local i=$1 image=${h_image[$1]} logs=() j kv args=() seconds image_uid
     j=0
     while [ "$j" -lt "$count" ]; do
         [ "${h_image[j]}" != "$image" ] || logs+=("${h_out[j]}/log/docker-build.log")
         j=$((j + 1))
     done
     if [ "$build" = 0 ] && docker image inspect "$image" >/dev/null 2>&1; then
-        log "using the existing image $image (--no-build)"
-        printf 'using the existing image %s (--no-build)\n' "$image" | tee "${logs[@]}" >/dev/null
+        image_uid=$(image_user_uid "$i") || image_uid=''
+        case $image_uid in
+            '' | *[!0-9]*) image_uid='' ;;
+        esac
+        [ "$image_uid" = "$(id -u)" ] ||
+            die 2 "the existing image $image gives ${h_user[i]} uid ${image_uid:-unknown}, not your $(id -u), so it could not write the mounted /e2e/out; drop --no-build to rebuild it for this user"
+        log "using the existing image $image (--no-build; ${h_user[i]} has uid $image_uid there, as here)"
+        printf 'using the existing image %s (--no-build; %s has uid %s there)\n' "$image" "${h_user[i]}" "$image_uid" |
+            tee "${logs[@]}" >/dev/null
         return 0
     fi
     [ "$build" = 1 ] || log "no image $image yet; building it despite --no-build"

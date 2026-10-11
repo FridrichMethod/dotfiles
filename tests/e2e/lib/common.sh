@@ -57,7 +57,9 @@ e2e_one_line() {
 }
 
 # e2e_find_timeout: timeout (coreutils) or gtimeout (Homebrew coreutils on
-# macOS), else none: the runs then have no limit.
+# macOS), else none: the runs then have no limit. The macos-15 runner ships
+# neither, so the mac row relies on the job's timeout-minutes; env.txt
+# records which it was.
 e2e_find_timeout() {
     local name
     E2E_TIMEOUT_BIN=''
@@ -238,7 +240,9 @@ e2e_problem_lines() {
 
 # --- env.txt -----------------------------------------------------------------
 
-# e2e_write_env MODE: what the run saw, for whoever reads the artifact.
+# e2e_write_env MODE: what the run saw, for whoever reads the artifact: the
+# machine, the tools, the timeout binary (none on the mac runner) and the
+# paths the HOME snapshots left out.
 e2e_write_env() {
     local file=$E2E_OUT/env.txt tool
     {
@@ -263,5 +267,6 @@ e2e_write_env() {
         done
         printf 'LMOD_DIR=%s\nSCRATCH=%s\n' "${LMOD_DIR-}" "${SCRATCH-}"
         printf 'timeout=%s\n' "${E2E_TIMEOUT_BIN:-none}"
+        printf 'E2E_SNAPSHOT_PRUNE=%s\n' "$(e2e_expand "${E2E_SNAPSHOT_PRUNE:-}")"
     } >"$file"
 }

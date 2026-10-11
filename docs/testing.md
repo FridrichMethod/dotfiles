@@ -155,18 +155,30 @@ is the short how-to.
 ```
 
 `run.sh [-j N] [--cache DIR] [--keep] [--out DIR] [--no-build] <host>... | all`
-needs Docker and a clean source checkout (`E2E_ALLOW_DIRTY=1` overrides). It
+needs Docker and a clean source checkout (`E2E_ALLOW_DIRTY=1` overrides; the
+container still clones `HEAD`, so only uncommitted `tests/e2e/` changes, which
+the harness reads from the working tree, are exercised) that is a plain
+clone: a linked `git worktree` or submodule checkout is refused with exit 2
+(`run from a plain clone`), because the container mounts only the checkout
+and such a checkout's `.git` is a file pointing outside it. Run it as a
+regular user, never root: the image user is created with your uid so it owns
+the mounted `/e2e/out` (and `useradd` refuses uid 0), and `--no-build` reuses
+an existing image only after `id -u <user>` in a throwaway container shows
+that user has your uid, since images are shared by everyone on the daemon. It
 builds the host's image from `tests/e2e/docker/`, mounts the checkout read-only
 at `/e2e/src`, runs `tests/e2e/inside.sh` in a fresh container as the host's
 user under `bash -l`, and prints a final table `host result seconds out-dir`.
-`-j` is capped at 2 (default 1). `--cache DIR` mounts package caches (apt, dnf,
-Homebrew, conda packages) from `DIR`, so a repeated run downloads less; it is
-off by default and stays off for acceptance runs, which must install exactly
-what a fresh machine installs. Outputs land under
+`-j` is capped at 2 (default 1). `--cache DIR` mounts package caches (apt,
+dnf4's `/var/cache/dnf` on Rocky, dnf5's `/var/cache/libdnf5` on Fedora 44,
+Homebrew, conda packages) from `DIR`, created as you before the run, so a
+repeated run downloads less; it is off by default and stays off for
+acceptance runs, which must install exactly what a fresh machine installs.
+Outputs land under
 `tests/e2e/out/<host>-<UTC timestamp>/` (git-ignored): `summary.tsv` (one
 tab-separated row per step, `<n> <step> <pass|fail|skip|note> <seconds>
 <detail>`), `steps/NN-<step>.log`, `env.txt` (kernel, `/etc/os-release`,
-glibc, tool versions), `log/wrappers.log`, `log/sudo.log`, `log/timeline` and
+glibc, tool versions, the timeout binary and the expanded
+`E2E_SNAPSHOT_PRUNE`), `log/wrappers.log`, `log/sudo.log`, `log/timeline` and
 `snapshots/`. `--keep` leaves the container for `docker exec`. `mac` runs only
 natively on Darwin with `E2E_NATIVE=1`, and `win` only through
 `tests/e2e/run.ps1`; both happen in CI, below.
@@ -201,7 +213,17 @@ the clone itself, then follows the Other Linux quick start to a host-less
   sudo exists there, as on the real clusters. The Ubuntu and Fedora images
   grant passwordless sudo and make it log to `log/sudo.log` through sudoers. A
   Homebrew or conda prefix prepended to PATH can shadow the wrappers; the sudo
-  log and the behavioral signals below still cover those calls.
+  log and the behavioral signals below still cover those calls. On the `mac`
+  runner the workflow installs the same three wrappers in `/usr/local/bin`
+  with one `sudo install` before the run, refusing a runner that already has
+  one of the three names there (nothing is installed there on the arm64 image;
+  Homebrew is `/opt/homebrew`): `/etc/profile` and `/etc/zprofile` run
+  `path_helper`, which rebuilds PATH from `/etc/paths` and appends the old
+  entries afterwards, so `/usr/local/bin` is the one directory it keeps ahead
+  of `/usr/bin`, and the login-shell, doctor-final and doctor-smoke steps
+  still reach the wrappers (`/etc/paths.d` would not do: its entries land
+  after `/etc/paths`). `inside.sh`'s own copy in `$E2E_OUT/bin` is reached
+  only outside login shells.
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.
@@ -211,25 +233,55 @@ the clone itself, then follows the Other Linux quick start to a host-less
 - `other` approximates "another Linux" as Fedora alone.
 - `sherlock` and `marlowe` have Lmod but no site modulefiles and no Slurm:
   `SLURM_JOB_ID=424242` and `CONDA_PKGS_DIRS` are exported once the `H2-alloc`
-  block has been printed, `SCRATCH` and the group paths point at writable
-  directories in the image, the `S2-modules` block (`ml nodejs/24.13.0`, the
+  block has been printed; `SCRATCH` points at a writable directory in the
+  image once it is set: on `sherlock` the fake site profile exports it (with
+  the group paths) from the first login shell, on `marlowe` nothing sets it
+  before the stow, as on the real cluster, and the overlay then exports
+  `/scratch/m000191`, which the image creates writable, so `E2E_ALLOC_ENV`
+  names that path literally; the `S2-modules` block (`ml nodejs/24.13.0`, the
   AI CLI modules) is skipped, and there is no Kerberos. The login env is built
   for real, from conda-forge, inside the container.
 - `mac` runs on a GitHub runner that already has the Xcode Command Line Tools,
   Homebrew and many formulae, so `H1-xcode-clt` and `H1-homebrew` are found
   done and never exercised, and S2-brew-bundle installs less than on a blank
-  Mac. sudo is passwordless there and keeps no log, so only the wrappers and
-  the behavioral signals are audited, and the home snapshots prune
-  `$HOME/work` and `$HOME/Library`.
-- `win` runs elevated on the runner, so `HW-stow` can run; a winget that
+  Mac. sudo is passwordless there and keeps no log, so only the wrappers
+  (installed in `/usr/local/bin` by the workflow, above) and the behavioral
+  signals are audited, and the home snapshots prune
+  `$HOME/work`, `$HOME/Library`, the runner's own agent directory
+  `$HOME/runners` (its `_diag` logs are appended throughout the job, so a
+  snapshot that watched it would fail every no-write step) and the
+  preinstalled `$HOME/hostedtoolcache`; `env.txt` records the expanded list,
+  so a reader of the artifact sees what the no-write checks did not watch.
+  The runner ships no `timeout` or `gtimeout`, so the per-command limits of
+  `tests/e2e/lib/common.sh` (45 minutes per block line, 60 per apply, 15 per
+  read-only run) are inert there, `env.txt` records `timeout=none`, and the
+  job's 90-minute `timeout-minutes` is the backstop: a hang shows up as the
+  job's cancel, with the step named by `log/timeline` and the partial
+  `steps/NN-<step>.{out,err}` rather than by a `summary.tsv` row.
+- `win` runs every step, not only `HW-stow`, under the runner's elevated
+  token, where the Native Windows quick start has the person elevate only for
+  `.\stow-all.ps1 win`: `winget import` leaves each installer's scope to that
+  token (`winget.json` pins none), `oh-my-posh font install` puts fonts where
+  an elevated oh-my-posh puts them, and the non-elevated untrusted-link
+  warn-or-repair path of `stow-all.ps1` is never exercised. A winget that
   needs `Repair-WinGetPackageManager` first is recorded as a deviation.
+  `run.ps1` asserts criteria 1 to 4 and 6 (the doctor, the no-write `-Tsv` and
+  `-Check` runs, a second `-Yes` that applies nothing, a clean clone after
+  every step, a silent load of the stowed profile); criterion 5's four audits
+  have no Windows counterpart, since there are no wrappers and no sudo log
+  there, and `HW-stow` is judged by its own evidence instead (below). `pwsh`
+  is absent from the development machines, so the Windows driver's first
+  execution is the CI job.
 
 ### HUMAN-block policy
 
 The harness plays the agent of [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 with the person's approvals scripted, keyed on the block's step id and kind.
 `# ` lines are notes; every other line runs as its own command (`bash -c` from
-`$HOME`, stdin closed, a 45-minute timeout) under `E2E_PHASE=human:<id>`.
+`$HOME`, stdin closed, a 45-minute timeout where coreutils `timeout` or
+`gtimeout` exists, which is the Linux images; the `mac` runner has neither,
+`env.txt` records `timeout=none` and only the job's 90-minute
+`timeout-minutes` bounds the run) under `E2E_PHASE=human:<id>`.
 
 | Block | Action |
 | --- | --- |
@@ -244,6 +296,23 @@ A blocking block the harness refuses is a finding, not something to work
 around: a fresh machine should never print it. The loop reruns setup-host after
 each block, at most eight times; exit 0 ends it, exit 3 without a runnable
 block fails as "no progress", and exit 1 or 2 fails naming the step.
+
+On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -Host win
+-Yes` (again at most eight runs, exit 3 without a runnable block failing as
+"no progress"), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the
+same `<id>:<kind>`:
+
+| Block | Action |
+| --- | --- |
+| `HW-stow` (`judgment`) | only its single `& '<clone>\stow-all.ps1' win` line, run by a child `pwsh -NoProfile -NonInteractive` from `$HOME` under the runner's elevated token; a block with any other command line, or naming a path other than the clone's `stow-all.ps1`, fails the run. The step passes only when `stow-all.ps1` recorded its applied state and printed no `WARNING:` line |
+| `HW-clone` (`gui`) | **fail**: it blocks the flow (setup-host has not accepted the clone), and only the person can turn on Developer Mode |
+| `HW-execution-policy`, `HW-auto-stow-task`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, grants a task standing elevation, installs WSL, starts a service nor signs in |
+| any other id or kind | **fail**, with the block's text in the detail |
+
+The Windows login-shell step then loads the stowed profile in a child `pwsh`
+started without `-NoProfile`, which must exit 0 and print nothing, and
+`E2E_SNAPSHOT_PRUNE` is `;`-separated there, since Windows paths hold drive
+letters and colons.
 
 ### Acceptance criteria
 
@@ -265,9 +334,14 @@ step in `summary.tsv`:
    empty after every step; a dirty tree fails that step.
 5. **Nothing privileged or stateful ran outside a HUMAN block**, by four
    signals: (a) every `log/wrappers.log` line's phase starts with `human:` or
-   `negative:` (the `negative:root-refused` sudo is legitimate); (b) where
-   sudo logs (`E2E_SUDO=yes`), every `log/sudo.log` timestamp falls inside a
-   `human:*` or `negative:*` window of `log/timeline`; (c) the stow state file
+   `negative:`, except a bare `stow --version` or `stow -V`, the doctor's
+   `tools.tsv` probe, which is logged on every doctor run but is not a
+   finding (the `negative:root-refused` sudo is legitimate); (b) where sudo
+   logs (`E2E_SUDO=yes`, the Linux images: macOS keeps no sudo.log), every
+   `log/sudo.log` timestamp falls inside a `human:*` or `negative:*` window of
+   `log/timeline`, and every non-indented line of that log is such a
+   timestamped entry, so a log in a shape the audit cannot parse fails it
+   instead of passing unread; (c) the stow state file
    (`git rev-parse --git-path dotfiles-sync-unix`) and the `~/.zshrc` link
    exist only after `human:H7-stow`; (d) the login shell from `getent passwd`
    (`dscl` on macOS) is the same at the start and the end, and the sha256 of
@@ -305,7 +379,10 @@ to unset. Every `*.sh` under `tests/` and `tests/e2e/` must run under Bash 3.2
 `declare -n`, `|&` or `&>>`. What runs natively on that runner (`inside.sh`,
 `tests/e2e/lib/*.sh`, the wrappers) also uses no here-documents or process
 substitution and only BSD-safe utilities: no `find -printf`, `stat -c`,
-`date -d`, `readlink -f`, `sed -i` without a suffix or `grep -P`. GitHub's
+`readlink -f`, `sed -i` without a suffix or `grep -P`; GNU `date -d` appears
+only in the sudo.log audit (`e2e_audit_sudo_log` in `tests/e2e/lib/assert.sh`),
+behind a probe that turns the audit into a skip row where it is missing
+(macOS, which keeps no sudo.log anyway). GitHub's
 runners ignore SIGPIPE, as `tests/run.sh` does with `trap '' PIPE`, so under
 `set -o pipefail` no pipe may end in an early-exiting reader (`grep -q`,
 `head`, a single `read`) while its writer keeps writing: use
@@ -347,7 +424,9 @@ find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # m
 ./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
-export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
+echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the stow
+export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
+# Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet
 ./setup-host.sh --host sherlock                             # builds the login env; exit 3 at H7-stow
 exit                                                        # back to the login node
 # H7-stow block: its mv -n lines, then PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock
