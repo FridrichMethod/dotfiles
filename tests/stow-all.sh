@@ -23,6 +23,13 @@ TEST_HOME="$TEST_TMP/home"
 EVENT_LOG="$TEST_TMP/events.log"
 CHECK_LOG="$TEST_TMP/checks.log"
 export CHECK_LOG
+# The real codex-instructions-sync needs only a stdlib Python 3.11+; the other
+# helpers are fakes that record their calls.
+SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
+if [[ ! -x "$SYNC_PYTHON" ]]; then
+    echo 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.' >&2
+    exit 1
+fi
 export DOTFILES_COLOR=auto
 mkdir -p "$FIXTURE/.git" "$FAKE_BIN" "$TEST_HOME"
 mkdir "$FIXTURE/lib"
@@ -40,6 +47,14 @@ actual = os.stat(sys.argv[1]).st_mode & 0o777
 expected = int(sys.argv[2], 8)
 assert actual == expected, f"{sys.argv[1]}: mode {actual:o}, expected {expected:o}"
 PY
+}
+
+# A bare "! grep" never fails under set -e; this one does.
+refute_grep() {
+    if grep -Fq -- "$1" "$2"; then
+        echo "ERROR: unexpected '$1' in $2" >&2
+        exit 1
+    fi
 }
 
 assert_events() {
@@ -119,11 +134,18 @@ mkdir -p \
     "$FIXTURE/host-a/claude/.claude" \
     "$FIXTURE/host-a/codex/.codex/rules" \
     "$FIXTURE/host-a/fcitx5/.local/bin" \
-    "$FIXTURE/host-a/fcitx5/.config/fcitx5"
+    "$FIXTURE/host-a/fcitx5/.config/fcitx5" \
+    "$FIXTURE/host-a/sherlock-kit/.claude/rules" \
+    "$FIXTURE/rules-fixture"
 
 printf '%s\n' 'common-claude' >"$FIXTURE/common/claude/.claude/settings.json"
 printf '%s\n' 'common-codex' >"$FIXTURE/common/codex/.codex/config.toml"
 printf '%s\n' 'common-rules' >"$FIXTURE/common/codex/.codex/rules/portable.rules"
+printf '%s\n' 'common-agents' >"$FIXTURE/common/codex/.codex/AGENTS.md"
+printf '%s\n' 'fixture-rules' >"$FIXTURE/rules-fixture/workstation.md"
+# A host with rules links them from its sherlock-kit package, as from the submodule.
+SHERLOCK_RULES="$FIXTURE/host-a/sherlock-kit/.claude/rules/sherlock-kit.md"
+ln -s ../../../../rules-fixture/workstation.md "$SHERLOCK_RULES"
 printf '%s\n' 'host-claude' >"$FIXTURE/host-a/claude/.claude/settings.json"
 printf '%s\n' 'host-codex' >"$FIXTURE/host-a/codex/.codex/config.toml"
 printf '%s\n' 'host-rules' >"$FIXTURE/host-a/codex/.codex/rules/portable.rules"
@@ -136,15 +158,25 @@ if [ "$name" != fcitx5-profile-sync ]; then
     [ "${1:-}" = --quiet ] || { echo 'Installer must request quiet backend output.' >&2; exit 21; }
     shift
 fi
+mode=sync
 if [ "${1:-}" = --check ]; then
-    printf 'check:%s:[%s][%s]\n' "$name" "$2" "$3" >>"$CHECK_LOG"
+    mode=check
+    shift
+fi
+extra=
+if [ "${1:-}" = --append ]; then
+    extra="[--append][$2]"
+    shift 2
+fi
+if [ "$mode" = check ]; then
+    printf 'check:%s:%s[%s][%s]\n' "$name" "$extra" "$1" "$2" >>"$CHECK_LOG"
     [ "${FAIL_CHECK:-}" != "$name" ] || exit 22
     exit 0
 fi
-printf 'sync:%s:[%s][%s]\n' "$name" "$1" "$2" >>"$EVENT_LOG"
+printf 'sync:%s:%s[%s][%s]\n' "$name" "$extra" "$1" "$2" >>"$EVENT_LOG"
 [ "${FAIL_SYNC:-}" != "$name" ] || exit 23
 SH
-for helper in codex-config-sync codex-rules-sync; do
+for helper in codex-config-sync codex-rules-sync codex-instructions-sync; do
     cp "$TEST_TMP/sync-helper" "$FIXTURE/common/codex/.local/bin/$helper"
 done
 cp "$TEST_TMP/sync-helper" \
@@ -154,6 +186,7 @@ cp "$TEST_TMP/sync-helper" \
 chmod +x \
     "$FIXTURE/common/codex/.local/bin/codex-config-sync" \
     "$FIXTURE/common/codex/.local/bin/codex-rules-sync" \
+    "$FIXTURE/common/codex/.local/bin/codex-instructions-sync" \
     "$FIXTURE/common/claude/.local/bin/claude-settings-sync" \
     "$FIXTURE/host-a/fcitx5/.local/bin/fcitx5-profile-sync"
 
@@ -226,6 +259,7 @@ run_fixture common-only
 printf '%s\n' \
     "check:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "check:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
+    "check:codex-instructions-sync:[$FIXTURE/common/codex/.codex/AGENTS.md][$TEST_HOME/.codex/AGENTS.override.md]" \
     "check:claude-settings-sync:[$FIXTURE/common/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
     >"$TEST_TMP/expected-checks"
 cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
@@ -233,10 +267,12 @@ assert_events \
     "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "sync:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
+    "sync:codex-instructions-sync:[$FIXTURE/common/codex/.codex/AGENTS.md][$TEST_HOME/.codex/AGENTS.override.md]" \
     "sync:claude-settings-sync:[$FIXTURE/common/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
     "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
 grep -Fq "Stowing from $FIXTURE" "$TEST_TMP/common-only.stdout"
+grep -Fq 'Synchronizing host Codex instructions' "$TEST_TMP/common-only.stdout"
 grep -Fq 'Stowing common packages:' "$TEST_TMP/common-only.stdout"
 grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/common-only.stdout"
 ! grep -q "$(printf '\033')" "$TEST_TMP/common-only.stdout" "$TEST_TMP/common-only.stderr"
@@ -250,7 +286,7 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 
 # Even the final helper's invalid input or missing parser is caught before the
 # first helper writes anything; the previous applied state is untouched.
-for helper in codex-config-sync codex-rules-sync claude-settings-sync; do
+for helper in codex-config-sync codex-rules-sync codex-instructions-sync claude-settings-sync; do
     if run_fixture preflight-failure "FAIL_CHECK=$helper"; then
         echo "ERROR: installer ignored configuration preflight failure: $helper" >&2
         exit 1
@@ -262,7 +298,10 @@ done
 
 # Host baselines override common sources, fcitx5 is host-only, the obsolete Git
 # filter is removed when present, and common packages are stowed first.
+# The host's sherlock-kit rules link selects the Codex instructions overlay:
+# preflight and apply both pass it with --append.
 : >"$EVENT_LOG"
+: >"$CHECK_LOG"
 env \
     HOME="$TEST_HOME" \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
@@ -271,21 +310,59 @@ env \
     LC_ALL=C \
     bash "$FIXTURE/stow-all.sh" host-a \
     >"$TEST_TMP/host.stdout" 2>"$TEST_TMP/host.stderr"
-assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5]" \
-    "sync:codex-config-sync:[$FIXTURE/host-a/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
-    "sync:codex-rules-sync:[$FIXTURE/host-a/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
-    "sync:claude-settings-sync:[$FIXTURE/host-a/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
-    "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]" \
-    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    'git:[config][--local][--remove-section][filter.codex-portable]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5]"
+printf '%s\n' \
+    "check:codex-config-sync:[$FIXTURE/host-a/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
+    "check:codex-rules-sync:[$FIXTURE/host-a/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
+    "check:codex-instructions-sync:[--append][$SHERLOCK_RULES][$FIXTURE/common/codex/.codex/AGENTS.md][$TEST_HOME/.codex/AGENTS.override.md]" \
+    "check:claude-settings-sync:[$FIXTURE/host-a/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
+    >"$TEST_TMP/expected-checks"
+cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
+HOST_BEFORE=(
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
+    "sync:codex-config-sync:[$FIXTURE/host-a/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
+    "sync:codex-rules-sync:[$FIXTURE/host-a/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]"
+)
+HOST_INSTRUCTIONS="sync:codex-instructions-sync:[--append][$SHERLOCK_RULES][$FIXTURE/common/codex/.codex/AGENTS.md][$TEST_HOME/.codex/AGENTS.override.md]"
+HOST_REST=(
+    "sync:claude-settings-sync:[$FIXTURE/host-a/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]"
+    "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]"
+    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]'
+    'git:[config][--local][--remove-section][filter.codex-portable]'
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
+)
+assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
 grep -Fq 'Stowing host-specific packages:' "$TEST_TMP/host.stdout"
+grep -Fq 'Synchronizing host Codex instructions' "$TEST_TMP/host.stdout"
+refute_grep 'sherlock-kit submodule not initialized' "$TEST_TMP/host.stderr"
 
 printf '%s\n' "$TEST_HOME" "$(uname -s)" 'host-a' 'test-head' >"$TEST_TMP/expected-state"
 cmp "$STATE" "$TEST_TMP/expected-state"
+
+# A rules link that dangles (the sherlock-kit submodule is not initialized,
+# as after a plain local merge) skips only the Codex instructions sync, in
+# preflight and apply alike, with a warning; everything else still runs.
+mv "$FIXTURE/rules-fixture/workstation.md" "$TEST_TMP/workstation.md.saved"
+: >"$EVENT_LOG"
+: >"$CHECK_LOG"
+env \
+    HOME="$TEST_HOME" \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    EVENT_LOG="$EVENT_LOG" \
+    FILTER_PRESENT=1 \
+    LC_ALL=C \
+    bash "$FIXTURE/stow-all.sh" host-a \
+    >"$TEST_TMP/dangling.stdout" 2>"$TEST_TMP/dangling.stderr"
+grep -Fxq '[dotfiles] [warn] sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)' \
+    "$TEST_TMP/dangling.stderr"
+grep -Fq 'check:codex-rules-sync:' "$CHECK_LOG"
+refute_grep 'codex-instructions-sync' "$CHECK_LOG"
+assert_events "${HOST_BEFORE[@]}" "${HOST_REST[@]}"
+refute_grep 'Synchronizing host Codex instructions' "$TEST_TMP/dangling.stdout"
+grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/dangling.stdout"
+cmp "$STATE" "$TEST_TMP/expected-state"
+mv "$TEST_TMP/workstation.md.saved" "$FIXTURE/rules-fixture/workstation.md"
 
 # Git can report a clean checkout with core.filemode=false even when a helper
 # loses its executable bit. Every required helper must fail before any sync or
@@ -293,6 +370,7 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 for helper in \
     "$FIXTURE/common/codex/.local/bin/codex-config-sync" \
     "$FIXTURE/common/codex/.local/bin/codex-rules-sync" \
+    "$FIXTURE/common/codex/.local/bin/codex-instructions-sync" \
     "$FIXTURE/common/claude/.local/bin/claude-settings-sync"; do
     chmod -x "$helper"
     if run_fixture nonexecutable-helper; then
@@ -307,6 +385,7 @@ done
 for source in \
     "$FIXTURE/common/codex/.codex/config.toml" \
     "$FIXTURE/common/codex/.codex/rules/portable.rules" \
+    "$FIXTURE/common/codex/.codex/AGENTS.md" \
     "$FIXTURE/common/claude/.claude/settings.json"; do
     mv "$source" "$source.saved"
     if run_fixture missing-source; then
@@ -446,5 +525,82 @@ assert_mode "$TEST_TMP/ssh-sources/nested/example.conf" 600
 grep -Fq '[dotfiles] [ok] Stow completed' "$TEST_TMP/ssh-permissions.stdout"
 printf '%s\n' "$TEST_HOME" "$(uname -s)" '' 'test-head' >"$TEST_TMP/expected-state"
 cmp "$STATE" "$TEST_TMP/expected-state"
+
+# The real codex-instructions-sync behind the installer: a host with rules
+# generates ~/.codex/AGENTS.override.md, a common-only stow removes a stale
+# generated one, a foreign override is kept (with a warning without rules,
+# fail-closed with them), and a dry-run conflict or a dangling rules link
+# leaves the override as it was.
+cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$FIXTURE/lib/"
+cp "$REPO_ROOT/common/codex/.local/bin/codex-instructions-sync" "$FIXTURE/common/codex/.local/bin/"
+OVERRIDE="$TEST_HOME/.codex/AGENTS.override.md"
+MARKER="<!-- Generated by dotfiles codex-instructions-sync. Edit common/codex/.codex/AGENTS.md or the host's sherlock-kit rules, then rerun stow-all.sh. -->"
+printf '%s\n' "$MARKER" 'common-agents' '' 'fixture-rules' >"$TEST_TMP/expected-override"
+
+run_real() {
+    case_name=$1
+    host=$2
+    shift 2
+    : >"$EVENT_LOG"
+    : >"$CHECK_LOG"
+    env \
+        HOME="$TEST_HOME" \
+        PATH="$FAKE_BIN:/usr/bin:/bin" \
+        EVENT_LOG="$EVENT_LOG" \
+        DOTFILES_SYNC_PYTHON="$SYNC_PYTHON" \
+        LC_ALL=C \
+        "$@" \
+        bash "$FIXTURE/stow-all.sh" ${host:+"$host"} \
+        >"$TEST_TMP/$case_name.stdout" \
+        2>"$TEST_TMP/$case_name.stderr"
+}
+
+run_real real-host host-a
+cmp "$OVERRIDE" "$TEST_TMP/expected-override"
+[[ -f "$OVERRIDE" && ! -L "$OVERRIDE" ]]
+assert_mode "$OVERRIDE" 644
+grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/real-host.stdout"
+[[ ! -s "$TEST_TMP/real-host.stderr" ]]
+run_real real-host-again host-a
+cmp "$OVERRIDE" "$TEST_TMP/expected-override"
+
+printf '%s\n' "$MARKER" 'an older generation' >"$OVERRIDE"
+run_real real-common ''
+[[ ! -e "$OVERRIDE" && ! -L "$OVERRIDE" ]]
+grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/real-common.stdout"
+
+printf '%s\n' 'my own override' >"$OVERRIDE"
+run_real real-foreign ''
+grep -Fq "warning: left foreign $OVERRIDE unchanged" "$TEST_TMP/real-foreign.stderr"
+grep -Fxq 'my own override' "$OVERRIDE"
+grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/real-foreign.stdout"
+cp "$STATE" "$TEST_TMP/real-state"
+if run_real real-foreign-rules host-a; then
+    echo 'ERROR: installer overwrote or accepted a foreign Codex override on a host with rules' >&2
+    exit 1
+fi
+grep -Fq 'not generated by codex-instructions-sync' "$TEST_TMP/real-foreign-rules.stderr"
+assert_events
+grep -Fxq 'my own override' "$OVERRIDE"
+cmp "$STATE" "$TEST_TMP/real-state"
+rm "$OVERRIDE"
+
+if run_real real-conflict host-a STOW_DRY_RC=1; then
+    echo 'ERROR: installer ignored a Stow dry-run conflict' >&2
+    exit 1
+fi
+[[ ! -e "$OVERRIDE" ]]
+cmp "$STATE" "$TEST_TMP/real-state"
+
+run_real real-before-dangling host-a
+cmp "$OVERRIDE" "$TEST_TMP/expected-override"
+mv "$FIXTURE/rules-fixture/workstation.md" "$TEST_TMP/workstation.md.saved"
+run_real real-dangling host-a
+grep -Fxq '[dotfiles] [warn] sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)' \
+    "$TEST_TMP/real-dangling.stderr"
+cmp "$OVERRIDE" "$TEST_TMP/expected-override"
+grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/real-dangling.stdout"
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]" "$EVENT_LOG"
+mv "$TEST_TMP/workstation.md.saved" "$FIXTURE/rules-fixture/workstation.md"
 
 echo "stow-all=PASS"

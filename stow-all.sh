@@ -15,8 +15,10 @@ set -euo pipefail
 # (DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1 stows anyway), and stops before the AI
 # sync helpers write anything when a Stow dry run finds a conflicting file.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
-# Sherlock toolkit installation is a separate explicit ./setup-sherlock-kit.sh step.
-# First-party Sherlock adapters use ./setup-sherlock-adapters.sh; hooks stay opt-in.
+# A host whose sherlock-kit package links the toolkit rules from the submodule
+# also gets ~/.codex/AGENTS.override.md (portable AGENTS.md plus those rules);
+# other hosts have a stale generated one removed. While the submodule is not
+# initialized, only that step is skipped with a warning.
 # All selected AI inputs are checked before any live configuration is changed.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
@@ -130,13 +132,35 @@ CLAUDE_PORTABLE="$COMMON_DIR/claude/.claude/settings.json"
 if [[ -n "$HOST" && -f "$HOST_DIR/claude/.claude/settings.json" ]]; then
     CLAUDE_PORTABLE="$HOST_DIR/claude/.claude/settings.json"
 fi
+# Codex reads one global instructions file, so the host's sherlock-kit rules
+# reach it only through a generated override. -L also selects a dangling link,
+# which is reported below instead of being mistaken for a host without rules.
+CODEX_INSTRUCTIONS_SYNC="$COMMON_DIR/codex/.local/bin/codex-instructions-sync"
+CODEX_INSTRUCTIONS_PORTABLE="$COMMON_DIR/codex/.codex/AGENTS.md"
+CODEX_INSTRUCTIONS_LIVE="$HOME/.codex/AGENTS.override.md"
+SHERLOCK_RULES=''
+if [[ -n "$HOST" ]]; then
+    host_rules="$HOST_DIR/sherlock-kit/.claude/rules/sherlock-kit.md"
+    if [[ -L "$host_rules" || -e "$host_rules" ]]; then
+        SHERLOCK_RULES=$host_rules
+    fi
+fi
 
 # Validate every selected package before any helper changes the live home.
 SYNC_CODEX=0
+SYNC_CODEX_INSTRUCTIONS=0
 if [[ -d "$COMMON_DIR/codex" || (-n "$HOST" && -d "$HOST_DIR/codex") ]]; then
     require_sync "$CODEX_SYNC" "$CODEX_PORTABLE"
     require_sync "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE"
+    require_sync "$CODEX_INSTRUCTIONS_SYNC" "$CODEX_INSTRUCTIONS_PORTABLE"
     SYNC_CODEX=1
+    # A local merge or fresh clone leaves the submodule empty and the rules
+    # link dangling; the login updater must not fail every stow over that.
+    if [[ -n "$SHERLOCK_RULES" && ! -e "$SHERLOCK_RULES" ]]; then
+        dotfiles_log warn 'sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)'
+    else
+        SYNC_CODEX_INSTRUCTIONS=1
+    fi
 fi
 SYNC_CLAUDE=0
 if [[ -d "$COMMON_DIR/claude" || (-n "$HOST" && -d "$HOST_DIR/claude") ]]; then
@@ -151,6 +175,19 @@ if [[ -n "$HOST" && -d "$HOST_DIR/fcitx5" ]]; then
     SYNC_FCITX5=1
 fi
 
+# Hosts without the rules link run the helper without --append: it removes a
+# stale generated override and only warns about a file it did not generate.
+# $1 is --check for the preflight and absent for the apply step.
+sync_codex_instructions() {
+    if [[ -n "$SHERLOCK_RULES" ]]; then
+        "$CODEX_INSTRUCTIONS_SYNC" --quiet ${1:+"$1"} --append "$SHERLOCK_RULES" \
+            "$CODEX_INSTRUCTIONS_PORTABLE" "$CODEX_INSTRUCTIONS_LIVE"
+    else
+        "$CODEX_INSTRUCTIONS_SYNC" --quiet ${1:+"$1"} \
+            "$CODEX_INSTRUCTIONS_PORTABLE" "$CODEX_INSTRUCTIONS_LIVE"
+    fi
+}
+
 # Validate runtime dependencies and both documents for every selected AI
 # helper. A malformed later baseline must not partially apply earlier ones.
 # This is a read-only preflight, not a transaction across independent files.
@@ -161,6 +198,9 @@ if [[ "$SYNC_CODEX" == 1 ]]; then
     "$CODEX_SYNC" --quiet --check "$CODEX_PORTABLE" "$HOME/.codex/config.toml"
     "$CODEX_RULES_SYNC" --quiet --check "$CODEX_RULES_PORTABLE" \
         "$HOME/.codex/rules/portable.rules"
+fi
+if [[ "$SYNC_CODEX_INSTRUCTIONS" == 1 ]]; then
+    sync_codex_instructions --check
 fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
     "$CLAUDE_SYNC" --quiet --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
@@ -192,6 +232,10 @@ if [[ "$SYNC_CODEX" == 1 ]]; then
     dotfiles_log step 'Synchronizing portable Codex rules'
     "$CODEX_RULES_SYNC" --quiet "$CODEX_RULES_PORTABLE" \
         "$HOME/.codex/rules/portable.rules"
+fi
+if [[ "$SYNC_CODEX_INSTRUCTIONS" == 1 ]]; then
+    dotfiles_log step 'Synchronizing host Codex instructions'
+    sync_codex_instructions
 fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
     dotfiles_log step 'Synchronizing portable Claude settings'
