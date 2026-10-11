@@ -95,7 +95,7 @@ repos:
         entry: tests/stow-all.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.sh|lib/terminal\.sh|\.stowrc|tests/stow-all\.sh)$
+        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
       - id: unix-installer-integration
         name: real Git and Stow integration
         entry: tests/unix-installer.sh
