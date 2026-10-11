@@ -1,0 +1,42 @@
+#!/bin/bash
+# e2e denying sudo: records the call, then refuses it like a sudo that
+# needs a password nobody can type.
+#
+# The end-to-end bootstrap suite installs this file as /usr/local/bin/sudo
+# in the hpc images (rocky-lmod, ubuntu-lmod), which have no sudo package:
+# a cluster user has no root, so a bootstrap step that reaches for sudo there
+# is a finding. Like the exec wrappers it appends one line to
+# $E2E_OUT/log/wrappers.log first:
+#   <epoch>\t<phase>\t<tool>\t<ppid>\t<parent cmdline>\t<argv joined by space>
+# with tool "sudo" and phase $E2E_PHASE or "-", then prints sudo's own
+# password message to stderr and exits 1. Logging never fails the call: a
+# write error is ignored. Bash 3.2 and BSD userland, no here-documents or
+# process substitution.
+#
+# sudo, chsh and stow are the exec variants of this file; keep the four in
+# step.
+
+tool=sudo
+
+# e2e_log ARGS...: append the log line (dir created as needed, errors ignored).
+e2e_log() {
+    local dir file phase parent args
+    dir=${E2E_OUT:-/e2e/out}/log
+    file=$dir/wrappers.log
+    phase=${E2E_PHASE:--}
+    if [ -r "/proc/$PPID/cmdline" ]; then
+        parent=$(tr '\0\n\t' '   ' <"/proc/$PPID/cmdline" 2>/dev/null)
+    else
+        parent=$(ps -o command= -p "$PPID" 2>/dev/null | tr '\n\t' '  ')
+    fi
+    parent=${parent% }
+    args=$(printf '%s' "$*" | tr '\n\t' '  ')
+    {
+        mkdir -p "$dir" &&
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$phase" "$tool" "$PPID" "$parent" "$args" >>"$file"
+    } 2>/dev/null || true
+}
+
+e2e_log "$@"
+printf 'sudo: a password is required\n' >&2
+exit 1

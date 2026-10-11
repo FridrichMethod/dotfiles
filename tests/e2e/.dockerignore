@@ -1,0 +1,6 @@
+# The images copy only wrappers/ and docker/site/ out of this build context
+# (tests/e2e/); everything else, above all out/ with the run results (logs,
+# snapshots), stays out of what docker build sends to the daemon.
+*
+!wrappers
+!docker/site
