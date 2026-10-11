@@ -69,10 +69,11 @@ function Get-E2EPendingIds {
 
 function Get-E2EFailureDetail {
     # What an exit 1 or 2 run said: its [error] lines, else the last line of
-    # stderr, else of stdout.
+    # stderr, else of stdout. (Variable names ignore case: a local $errors
+    # would be the $Errors parameter.)
     param([AllowEmptyCollection()][string[]]$Output = @(), [AllowEmptyCollection()][string[]]$Errors = @())
-    $errors = @(@($Output) + @($Errors) | Where-Object { $_ -match '\[error\]' })
-    if ($errors.Count) { return ConvertTo-E2EOneLine ($errors -join "`n") 400 }
+    $flagged = @(@($Output) + @($Errors) | Where-Object { $_ -match '\[error\]' })
+    if ($flagged.Count) { return ConvertTo-E2EOneLine ($flagged -join "`n") 400 }
     foreach ($lines in @($Errors, $Output)) {
         $kept = @($lines | Where-Object { "$_".Trim() -ne '' })
         if ($kept.Count) { return ConvertTo-E2EOneLine $kept[-1] 400 }

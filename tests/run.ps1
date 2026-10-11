@@ -90,8 +90,8 @@ Write-Output '==> e2e/run.ps1 parse gate'
 # The native Windows end-to-end driver runs only in the opt-in bootstrap-e2e
 # workflow (90 minutes, against the runner's real home), so a syntax error in
 # it would otherwise surface there first. Parsing every file here, with the
-# parser each other PowerShell suite uses, is the fast signal; its behaviour
-# is exercised by that run alone.
+# parser each other PowerShell suite uses, is the fast signal; e2e-harness.ps1
+# below then drives its behaviour against stubs.
 $e2eRun = Join-Path $PSScriptRoot 'e2e/run.ps1'
 if (-not (Test-Path -LiteralPath $e2eRun -PathType Leaf)) { throw "Windows e2e driver is missing: $e2eRun" }
 $e2eLibs = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'e2e/lib') -Filter '*.ps1' -File |
@@ -107,6 +107,10 @@ foreach ($e2eFile in (@($e2eRun) + $e2eLibs)) {
     Write-Output "parsed $e2eFile"
 }
 if ($e2eParseIssues.Count -gt 0) { throw "Windows e2e driver parse errors:`n$($e2eParseIssues -join "`n")" }
+
+Write-Output '==> e2e-harness.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'e2e-harness.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Windows e2e driver unit tests failed.' }
 
 if ($IsWindows) {
     Write-Output '==> windows-installer.ps1'

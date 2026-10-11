@@ -62,6 +62,32 @@ if grep -Fq 'so symlinks need no elevation' "$REPO_ROOT/README.md"; then
 fi
 grep -Fq 'untrusted mount point' "$REPO_ROOT/README.md"
 
+# Windows Terminal rewrites the stowed settings.json through its link when it
+# loads a file that is not in its own form: it adds a stub for each built-in
+# profile missing from profiles.list (the e2e win row saw it on its first
+# CI run). Keep both stubs, and the strict JSON, ASCII and never-disabled
+# PowerShell 7 source that AGENTS.md asks of this file.
+python3 - "$REPO_ROOT/win/terminal/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+raw = open(path, 'rb').read()
+try:
+    raw.decode('ascii')
+except UnicodeDecodeError as error:
+    sys.exit(f'ERROR: {path} is not ASCII: {error}')
+settings = json.loads(raw)
+builtin = {'{61c54bbd-c2c6-5271-96e7-009a87ff44bf}': 'Windows PowerShell',
+           '{0caa0dad-35be-5f56-a8ff-afceeeaa6101}': 'Command Prompt'}
+listed = {profile.get('guid') for profile in settings['profiles']['list']}
+missing = [name for guid, name in builtin.items() if guid not in listed]
+if missing:
+    sys.exit(f'ERROR: {path} lacks the built-in Windows Terminal profile stubs: {", ".join(missing)}')
+if 'Windows.Terminal.PowershellCore' in settings.get('disabledProfileSources', []):
+    sys.exit(f'ERROR: {path} disables Windows.Terminal.PowershellCore')
+PY
+
 # AGENTS.md is the single repository guide; CLAUDE.md only imports it.
 if ! grep -Fq 'untrusted mount point' "$REPO_ROOT/AGENTS.md"; then
     echo "ERROR: AGENTS.md is missing the untrusted-symlink rule" >&2

@@ -140,8 +140,9 @@ environment checks, documented in `windows-installer.md` and
 `tests/e2e/` runs the day-zero bootstrap for real, from a fresh home, on every
 host overlay, the way a person following the [quick start](bootstrap.md#quick-start)
 would, and checks the acceptance criteria below. It is opt-in: `./tests/run.sh`
-never runs it (only the fast unit test `tests/e2e-harness.sh`, which drives the
-harness against stubs), and neither does pre-commit. A run installs packages,
+never runs it (only the fast unit tests `tests/e2e-harness.sh` and, wherever
+pwsh exists, `tests/e2e-harness.ps1`, which drive the harness and its Windows
+twin against stubs), and neither does pre-commit. A run installs packages,
 clones plugins and builds a login env, so it needs the network and takes from
 ten minutes to an hour per host; [tests/e2e/README.md](../tests/e2e/README.md)
 is the short how-to.
@@ -252,16 +253,21 @@ the clone itself, then follows the Other Linux quick start to a host-less
   (installed in `/usr/local/bin` by the workflow, above) and the behavioral
   signals are audited, and the home snapshots prune
   `$HOME/work`, `$HOME/Library`, the runner's own agent directory
-  `$HOME/runners` (its `_diag` logs are appended throughout the job, so a
-  snapshot that watched it would fail every no-write step) and the
-  preinstalled `$HOME/hostedtoolcache`; `env.txt` records the expanded list,
+  `$HOME/runners` or `$HOME/actions-runner` (hosted `macos-15` runners come
+  in both layouts; its `_diag` logs are appended throughout the job, so a
+  snapshot that watched it would fail every no-write step), the
+  preinstalled `$HOME/hostedtoolcache` and the media folders `$HOME/Movies`,
+  `$HOME/Music` and `$HOME/Pictures`, whose libraries Apple's media daemons
+  update on their own (a run saw the TV app's library written during the
+  second apply); `env.txt` records the expanded list,
   so a reader of the artifact sees what the no-write checks did not watch.
   The runner ships no `timeout` or `gtimeout`, so the per-command limits of
   `tests/e2e/lib/common.sh` (45 minutes per block line, 60 per apply, 15 per
-  read-only run) are inert there, `env.txt` records `timeout=none`, and the
-  job's 90-minute `timeout-minutes` is the backstop: a hang shows up as the
-  job's cancel, with the step named by `log/timeline` and the partial
-  `steps/NN-<step>.{out,err}` rather than by a `summary.tsv` row.
+  read-only run) go through `tests/e2e/timeout.pl`, which keeps GNU
+  `timeout`'s contract with the runner's perl (a process group of its own,
+  TERM then KILL, exit 124); `env.txt` records which one ran. A hang thus
+  fails its step with a `summary.tsv` row instead of running into the job's
+  90-minute `timeout-minutes`, as the first CI run's did.
 - `win` runs every step, not only `HW-stow`, under the runner's elevated
   token, where the Native Windows quick start has the person elevate only for
   `.\stow-all.ps1 win`: `winget import` leaves each installer's scope to that
@@ -287,10 +293,9 @@ the clone itself, then follows the Other Linux quick start to a host-less
 The harness plays the agent of [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 with the person's approvals scripted, keyed on the block's step id and kind.
 `# ` lines are notes; every other line runs as its own command (`bash -c` from
-`$HOME`, stdin closed, a 45-minute timeout where coreutils `timeout` or
-`gtimeout` exists, which is the Linux images; the `mac` runner has neither,
-`env.txt` records `timeout=none` and only the job's 90-minute
-`timeout-minutes` bounds the run) under `E2E_PHASE=human:<id>`.
+`$HOME`, stdin closed, a 45-minute timeout through coreutils `timeout` or
+`gtimeout`, or on the `mac` runner, which has neither, through
+`tests/e2e/timeout.pl`) under `E2E_PHASE=human:<id>`.
 
 | Block | Action |
 | --- | --- |
@@ -409,8 +414,10 @@ containers on `ubuntu-24.04` with `fail-fast: false` and 90 minutes each,
 `mac` natively on `macos-15` (`E2E_NATIVE=1 ./tests/e2e/run.sh mac`) and `win`
 on `windows-2025` (`./tests/e2e/run.ps1`), the only places those two run;
 `tests/run.ps1` parses `tests/e2e/run.ps1` and `tests/e2e/lib/*.ps1` on every
-run, so the native Windows job of `ci.yml` catches a syntax error there before
-this workflow does, but nothing exercises their behavior outside it. Each
+run and then runs `tests/e2e-harness.ps1`, which drives them against stubs
+(also from `tests/run.sh` through `tests/e2e-harness-windows.sh`), so the three
+`ci.yml` jobs catch a syntax error or a policy regression there before this
+workflow does; winget and the real bootstrap run only here. Each
 job uploads `tests/e2e/out/**` as the artifact `bootstrap-e2e-<host>`, pass or
 fail; one run per ref at a time, without cancelling one in progress. The
 `cache` input mounts a scratch directory under the runner's temp, which no
