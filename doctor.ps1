@@ -96,7 +96,7 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # checks, core-symlinks, the -Online and --smoke rows); tools.tsv never uses
 # them (tests/test_bootstrap_manifest.py RESERVED_IDS).
 $ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
-    'nvm-homebrew', 'core-symlinks', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke')
+    'nvm-homebrew', 'core-symlinks', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'codex-override')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.

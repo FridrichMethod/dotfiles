@@ -38,7 +38,7 @@ STEP_IDS = (
 # checks, doctor.ps1's core-symlinks, and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
                 "omz-order", "nvm-homebrew", "core-symlinks", "gh-auth", "claude-auth", "codex-auth",
-                "zsh-smoke")
+                "zsh-smoke", "codex-override")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
