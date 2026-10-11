@@ -21,6 +21,8 @@ set -euo pipefail
 # initialized, only that step is skipped with a warning, and the revision is
 # not recorded as applied, so the login updater retries it.
 # All selected AI inputs are checked before any live configuration is changed.
+# A dangling home link that Stow made for a since-deleted package file (today
+# only the 0.3 ~/.local/bin/shk) is removed before the Stow dry runs.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -209,6 +211,50 @@ fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
     "$CLAUDE_SYNC" --quiet --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
+
+# lexical_path DIR TEXT: the path a link TEXT in DIR names, with . and ..
+# resolved lexically, as Stow computed the TEXT.
+lexical_path() {
+    local rest result='' part
+    case $2 in
+        /*) rest=$2 ;;
+        *) rest=$1/$2 ;;
+    esac
+    while [[ -n "$rest" ]]; do
+        part=${rest%%/*}
+        if [[ "$part" == "$rest" ]]; then
+            rest=''
+        else
+            rest=${rest#*/}
+        fi
+        case $part in
+            '' | .) ;;
+            ..) result=${result%/*} ;;
+            *) result=$result/$part ;;
+        esac
+    done
+    printf '%s\n' "${result:-/}"
+}
+
+# A link Stow made for a package file this checkout has since deleted stays
+# dangling in the home, and the dry run of another stow directory that claims
+# its path aborts on it ("existing target is not owned by stow"). Stow wrote
+# the text between physical paths, so it is resolved from the link's physical
+# directory. Only a dangling link naming exactly the retired source in this
+# checkout is removed; a live link, a foreign link or a file is left for the
+# dry run to report. This runs after the read-only preflight.
+remove_retired_link() {
+    local link=$HOME/$1 dir text
+    [[ -L "$link" && ! -e "$link" ]] || return 0
+    dir=$(CDPATH='' cd -P -- "${link%/*}" 2>/dev/null && pwd -P) || return 0
+    text=$(readlink "$link") || return 0
+    [[ "$(lexical_path "$dir" "$text")" == "$REPO_PHYSICAL/$2" ]] || return 0
+    rm -f -- "$link"
+    dotfiles_log info "Removed retired link $link (its source $2 was deleted)"
+}
+REPO_PHYSICAL=$(pwd -P)
+# The 0.3 sherlock-kit launcher; the host sherlock-kit packages link shk now.
+remove_retired_link .local/bin/shk common/codex/.local/bin/shk
 
 # Stow never replaces a regular file (a fresh home's ~/.bashrc and ~/.profile
 # from /etc/skel, for one). A dry run of both stows finds every conflict

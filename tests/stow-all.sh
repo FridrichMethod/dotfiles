@@ -81,6 +81,14 @@ cat >"$FAKE_BIN/stow" <<'SH'
     printf '\n'
 } >>"$EVENT_LOG"
 if [ "${1:-}" = -n ]; then
+    # PROBE_PATH records whether a home path still exists at dry-run time.
+    if [ -n "${PROBE_PATH:-}" ]; then
+        if [ -e "$PROBE_PATH" ] || [ -L "$PROBE_PATH" ]; then
+            echo 'probe:present' >>"$EVENT_LOG"
+        else
+            echo 'probe:absent' >>"$EVENT_LOG"
+        fi
+    fi
     [ "${STOW_DRY_RC:-0}" = 0 ] || echo "WARNING! stowing would cause conflicts" >&2
     exit "${STOW_DRY_RC:-0}"
 fi
@@ -540,6 +548,77 @@ assert_mode "$TEST_TMP/ssh-sources/nested/example.conf" 600
 
 grep -Fq '[dotfiles] [ok] Stow completed' "$TEST_TMP/ssh-permissions.stdout"
 printf '%s\n' "$TEST_HOME" "$(uname -s)" '' 'test-head' >"$TEST_TMP/expected-state"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
+# A home stowed with the 0.3 sherlock-kit launcher keeps ~/.local/bin/shk ->
+# ../../<checkout>/common/codex/.local/bin/shk after that file was deleted.
+# Stow's dry run of another stow directory refuses such a dangling link as
+# "not owned by stow" and aborts the whole install, so the installer removes
+# exactly that retired link after the read-only preflight and before the dry
+# runs. Its text is resolved lexically from the link's physical directory, as
+# Stow wrote it. Anything else at that path is left for Stow to report.
+RETIRED="$TEST_HOME/.local/bin/shk"
+RETIRED_TEXT=../../../fixture/common/codex/.local/bin/shk
+RETIRED_LOG="[dotfiles] [info] Removed retired link $RETIRED (its source common/codex/.local/bin/shk was deleted)"
+# assert_link PATH TEXT: PATH is still the symlink TEXT.
+assert_link() {
+    if [[ ! -L "$1" || "$(readlink "$1")" != "$2" ]]; then
+        echo "ERROR: $1 is no longer the link to $2" >&2
+        exit 1
+    fi
+}
+mkdir -p "$TEST_HOME/.local/bin"
+ln -s "$RETIRED_TEXT" "$RETIRED"
+if run_fixture retired-preflight FAIL_CHECK=claude-settings-sync; then
+    echo 'ERROR: installer ignored a configuration preflight failure' >&2
+    exit 1
+fi
+assert_link "$RETIRED" "$RETIRED_TEXT"
+refute_grep 'Removed retired link' "$TEST_TMP/retired-preflight.stdout"
+run_fixture retired PROBE_PATH="$RETIRED"
+[[ ! -e "$RETIRED" && ! -L "$RETIRED" ]]
+grep -Fxq "$RETIRED_LOG" "$TEST_TMP/retired.stdout"
+grep -Fxq 'probe:absent' "$EVENT_LOG"
+refute_grep 'probe:present' "$EVENT_LOG"
+grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/retired.stdout"
+cmp "$STATE" "$TEST_TMP/expected-state"
+for spelling in \
+    ../bin/../../../fixture/./common/codex//.local/bin/shk \
+    "$FIXTURE/common/codex/.local/bin/shk"; do
+    ln -s "$spelling" "$RETIRED"
+    run_fixture retired-spelling
+    [[ ! -e "$RETIRED" && ! -L "$RETIRED" ]]
+    grep -Fxq "$RETIRED_LOG" "$TEST_TMP/retired-spelling.stdout"
+done
+# A home reached through a symlink: Stow wrote the text from the physical
+# directory, which is where it is resolved.
+ln -s home "$TEST_TMP/home-alias"
+ln -s "$RETIRED_TEXT" "$RETIRED"
+run_fixture retired-alias HOME="$TEST_TMP/home-alias"
+[[ ! -e "$RETIRED" && ! -L "$RETIRED" ]]
+grep -Fxq "[dotfiles] [info] Removed retired link $TEST_TMP/home-alias/.local/bin/shk (its source common/codex/.local/bin/shk was deleted)" \
+    "$TEST_TMP/retired-alias.stdout"
+rm "$TEST_TMP/home-alias"
+# A live link to the same path, a dangling link into another checkout, and
+# a regular file are not retired links.
+printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/codex/.local/bin/shk"
+ln -s "$RETIRED_TEXT" "$RETIRED"
+run_fixture retired-live PROBE_PATH="$RETIRED"
+assert_link "$RETIRED" "$RETIRED_TEXT"
+grep -Fxq 'probe:present' "$EVENT_LOG"
+refute_grep 'Removed retired link' "$TEST_TMP/retired-live.stdout"
+rm "$RETIRED" "$FIXTURE/common/codex/.local/bin/shk"
+ln -s ../../../other-checkout/common/codex/.local/bin/shk "$RETIRED"
+run_fixture retired-foreign
+assert_link "$RETIRED" ../../../other-checkout/common/codex/.local/bin/shk
+refute_grep 'Removed retired link' "$TEST_TMP/retired-foreign.stdout"
+rm "$RETIRED"
+printf '%s\n' 'my own shk' >"$RETIRED"
+run_fixture retired-file
+[[ -f "$RETIRED" && ! -L "$RETIRED" ]]
+grep -Fxq 'my own shk' "$RETIRED"
+refute_grep 'Removed retired link' "$TEST_TMP/retired-file.stdout"
+rm -r "$TEST_HOME/.local"
 cmp "$STATE" "$TEST_TMP/expected-state"
 
 # The real codex-instructions-sync behind the installer: a host with rules
