@@ -241,10 +241,12 @@ expect_eq 'failure detail' "$(e2e_failure_detail "$UNIT/failed.out" "$UNIT/faile
 printf '%s\n' '[dotfiles] [error] unknown host: nope' >"$UNIT/usage.err"
 expect_eq 'failure detail fallback' "$(e2e_failure_detail "$UNIT/empty" "$UNIT/usage.err")" '[dotfiles] [error] unknown host: nope'
 
-# The wrappers.log audit: human and negative phases pass; a check phase or
-# no phase fails; on a host without sudo any sudo line fails.
+# The wrappers.log audit: human and negative phases pass, as does the
+# doctor's bare `stow --version` probe in a check phase; any other check
+# phase or no phase fails; on a host without sudo any sudo line fails.
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000000 human:H1-apt-core sudo 42 'bash -c sudo apt-get update' 'apt-get update' \
     1700000010 negative:root-refused sudo 43 'bash' '-n ./setup-host.sh --host lab-ubuntu --check' \
+    1700000015 check:doctor-initial stow 47 'doctor.sh' '--version' \
     1700000020 human:H7-stow stow 44 'stow-all.sh' '-n --restow -d common zsh' >"$UNIT/wrappers.log"
 bad=$(e2e_audit_wrappers "$UNIT/wrappers.log") || fail "wrappers audit failed a clean log: $bad"
 if bad=$(e2e_audit_no_sudo "$UNIT/wrappers.log"); then

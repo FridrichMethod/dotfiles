@@ -237,10 +237,13 @@ e2e_login_shell_of() {
 # e2e_audit_wrappers LOG: the wrappers.log lines ("<epoch>\t<phase>\t<tool>
 # \t<ppid>\t<parent>\t<argv>") whose phase is neither human:* nor
 # negative:*: a sudo, chsh or stow that ran where only the harness's own
-# read-only steps should have. 0 when there are none.
+# read-only steps should have. A bare `stow --version` or `stow -V` is not
+# one: the doctor's tools.tsv probe runs it on every doctor run, and the
+# wrapper logs the probe like any call. 0 when there are none.
 e2e_audit_wrappers() {
     local bad
-    bad=$(awk -F '\t' '$2 !~ /^(human|negative):/' "$1" 2>/dev/null)
+    bad=$(awk -F '\t' '$2 !~ /^(human|negative):/ && !($3 == "stow" && ($6 == "--version" || $6 == "-V"))' \
+        "$1" 2>/dev/null)
     printf '%s\n' "$bad"
     [ -z "$bad" ]
 }
