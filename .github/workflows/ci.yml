@@ -14,7 +14,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Full depth, every branch and tag, for the gitleaks history scan.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -40,6 +43,8 @@ jobs:
           key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run pre-commit
         run: pre-commit run --show-diff-on-failure --color=always --all-files
+      - name: Scan the full Git history for secrets
+        run: pre-commit run --color=always --hook-stage manual gitleaks-history
 
   macos:
     name: macOS system Bash behavior

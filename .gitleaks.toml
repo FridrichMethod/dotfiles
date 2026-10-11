@@ -1,0 +1,36 @@
+# Gitleaks rules for the pre-commit hook: the upstream defaults plus the
+# secrets this repository's own tools handle, which those defaults miss.
+title = "dotfiles"
+
+[extend]
+useDefault = true
+
+# The defaults cover only sk-ant-api03 and sk-ant-admin01 keys. This also
+# catches the Claude Code OAuth tokens `claude setup-token` prints
+# (sk-ant-oat01-..., read by claude-as) and any other sk-ant-<kind><nn> family.
+[[rules]]
+id = "anthropic-token"
+description = "Anthropic API key, OAuth token or session key"
+regex = '''\b(sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_\-]{32,})'''
+keywords = ["sk-ant-"]
+
+# claude-as reads its tokens from ~/.secrets; no file under a .secrets
+# directory belongs in this public repository, whatever it contains.
+[[rules]]
+id = "secrets-directory"
+description = "File under a .secrets directory"
+path = '''(^|/)\.secrets/'''
+
+# Exact values the defaults flag that are not secrets: the public GitHub CLI
+# apt signing-key fingerprints quoted in the bootstrap pins and docs, and the
+# fake bearer tokens of the PowerShell history-filter test (the second only
+# in older commits, so a full-history scan stays clean too).
+[[allowlists]]
+description = "Public key fingerprints and test fixtures"
+regexTarget = "match"
+regexes = [
+    '''2C6106201985B60E6C7AC87323F3D4EA75716059''',
+    '''7F38BBB59D064DBCB3D84D725612B36462313325''',
+    '''Bearer abc123def456ghi''',
+    '''Bearer abcdefghijkl''',
+]
