@@ -109,6 +109,17 @@ overlays in a clean environment with a missing, a non-executable and a fake
 Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
 `brew shellenv` line applies only once brew can run.
 
+`tests/sherlock-kit-delivery.sh` checks the sherlock-kit submodule delivery.
+By default it builds a fixture submodule tree (CI checks out no submodules),
+compares each link's exact relative `readlink` text, stows every host package
+into a temporary home, and covers the generated Codex override and the
+warn-and-skip path of an uninitialized submodule; without GNU Stow it prints
+`SKIP:`, and `--ci` fails instead. `--real` checks the real checkout, for the
+update Action and acceptance runs. `tests/doctor.sh` runs the real
+`codex-instructions-sync` for its `codex-override` cases, so like
+`tests/stow-all.sh` it needs the AI-sync runtime (`DOTFILES_SYNC_PYTHON` or
+`.venv-sync`).
+
 Run either entrypoint from any working directory. To check prerequisites only:
 
 ```sh

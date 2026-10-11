@@ -10,8 +10,7 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 - Non-package code is split by who calls it. The repo root holds only the entry
   points a person types on a fresh clone (`stow-all.sh`, `stow-all.ps1`,
   `setup-sync.sh`, `setup-sync.ps1`, `doctor.sh`, `doctor.ps1`, `setup-host.sh`,
-  `setup-host.ps1`, `setup-sherlock-kit.sh`, `setup-sherlock-kit.ps1`,
-  `setup-sherlock-adapters.sh`, `setup-sherlock-adapters.ps1`); `scripts/` holds
+  `setup-host.ps1`); `scripts/` holds
   hooks the environment invokes on its own (login profiles, the Windows
   scheduled task); `lib/` holds code that is only sourced or imported, never
   executed directly; `config/` holds the data those entry points read. Put a
@@ -30,7 +29,7 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 - Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
 - Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
 - Stow configs: `./stow-all.sh [host-dir]`
-- Initialize submodule: `git submodule update --init --recursive`
+- Initialize submodules: `git submodule update --init --recursive`
 - Run checks: `pre-commit run --all-files`
 
 ## Verification
@@ -85,6 +84,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - `common/codex/.codex/AGENTS.md`
   - `common/codex/.codex/config.toml`
   - `common/codex/.codex/rules/portable.rules`
+  - `<host>/sherlock-kit` (lab-ubuntu, wsl-ubuntu, sherlock): submodule links; `codex-instructions-sync` adds `~/.codex/AGENTS.override.md` (not in `.stowrc`)
 - Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
 - The repository root `CLAUDE.md` is only an `@AGENTS.md` import stub for Claude Code; `AGENTS.md` is the single repository guide for every agent. Add or change repository policy in `AGENTS.md`, never in the stub.
 - Keep the portable `pluginConfigs` Project instructions set to `claude-md-and-agents-md` under both `agents-md@builtin` and `cc-plugin-agents-md@builtin`. Do not restore the default or remove the `CLAUDE.md` stub: native ancestor loading covers subdirectory launches, while the stub covers older clients without native `AGENTS.md` support. Clients before 2.1.285 recognize only the legacy plugin ID.
@@ -94,16 +94,16 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Ordinary `rm`, `rm -rf`, `git clean`, and `npx` are deliberately in none of the three arrays, so auto mode routes them to the classifier ("everything else goes to the classifier"). Three built-in backstops make that safe and are not configurable: `rm`/`rmdir` targeting a critical path (filesystem root, a direct child of the root, `$HOME`, the working directory and its parents, a `"$DIR"/*` glob, a Windows drive root) always goes to the classifier and can be approved by no allow rule and no hook `"allow"`, including when hidden inside `$(...)` or `<(...)`; Claude Code runs `git status` itself before work-discarding commands such as `rm -rf` and `git reset --hard` and shows the classifier whether staged, modified or untracked work exists; and a classifier denial lands in `/permissions` under **Recently denied** for retry with `r`, with auto mode pausing after 3 consecutive or 20 total blocks. Tune the classifier through the prose `autoMode.allow` and `autoMode.soft_deny` arrays rather than by moving commands back into `ask`, and always keep the literal `"$defaults"` entry — omitting it discards the entire built-in list for that section.
 - `autoMode.classifyAllShell` is `true`, which suspends every Bash allow rule while auto mode is active. Do not try to fix a classifier false positive by adding a `permissions.allow` rule; it will be ignored in auto mode. Protected-path writes (anything under `.claude`, `.git`, and the rest of that list) are stricter still: allow rules "do not pre-approve protected-path writes", because the safety check runs before allow rules are evaluated. In practice this means Claude cannot loosen these arrays or run `claude-settings-sync` against `~/.claude/settings.json` on its own — a human applies those two steps.
 - Security note: an automated review flagged the broad `allow` patterns above (network transfer via `curl`/`wget`/`ssh`/`scp`/`rsync`, code loaders via `source`/`.`/`tee`, package installers, and remote-mutating `git push`/`gh api`/`gh pr merge`) as a permission-bypass risk, recommending they stay in `ask` or be replaced with narrow, argument-anchored rules (for example, `curl` limited to specific hosts, `pip install` limited to `-r requirements.txt` in-tree). This is a knowingly accepted tradeoff, not an oversight: the risk was walked through category by category before the change, and `sudo` stays in `ask` while `sudo rm`, `sudo pip` and the irrecoverable `rm` spellings sit in `deny`, specifically because their damage is unbounded or irrecoverable in a way the allowed commands are not. Revisit toward the narrower, argument-anchored form if this host's threat model changes.
-- Do not vendor third-party Markdown payloads copied into `~/.claude/rules/`; plugin checkouts may be used as an audit source, but Claude does not load plugin-bundled rules automatically. Keep reviewed cross-host instructions in the global `CLAUDE.md`.
+- Do not vendor third-party Markdown payloads copied into `~/.claude/rules/`; plugin checkouts may be used as an audit source, but Claude does not load plugin-bundled rules automatically. Keep reviewed cross-host instructions in the global `CLAUDE.md`. Exception: the first-party `~/.claude/rules/sherlock-kit.md`.
 - Never track credentials, OAuth state, sessions, histories, project trust, caches, downloaded plugins, generated memories, runtime marketplace paths, or machine-specific absolute paths.
 - Preserve the portable/live split for Codex: `.stowrc` excludes `common/codex/.codex/config.toml` from Stow, and `stow-all.sh` runs `common/codex/.local/bin/codex-config-sync` to merge it into the mutable regular file at `~/.codex/config.toml`.
 - Preserve the portable/live split for Claude: `.stowrc` excludes `common/claude/.claude/settings.json` from Stow, and `stow-all.sh` runs `common/claude/.local/bin/claude-settings-sync` to deep-merge it into the mutable regular file at `~/.claude/settings.json`. Portable keys win; live-only keys (for example the machine-specific `permissions.additionalDirectories`, plus any runtime state Claude Code writes) are preserved.
 - Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; `codex-rules-sync` materializes it without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
-- Keep all three AI sync helpers fail-closed. Update their sources, README documentation, and focused tests together when shared config, permission, or rule behavior changes. Keep machine-specific absolute paths (for example `permissions.additionalDirectories`) out of the portable `settings.json`.
+- Keep all four AI sync helpers fail-closed. Update their sources, README documentation, and focused tests together when shared config, permission, or rule behavior changes. Keep machine-specific absolute paths (for example `permissions.additionalDirectories`) out of the portable `settings.json`.
 - Keep structured merges in `lib/config_sync.py`; only TOML sync and the full runtime check require pinned `tomlkit`, while JSON/rules use the Python standard library. Do not reintroduce AWK/regex TOML parsing or a second JSON engine. Normal sync never rewrites the portable source; baseline cleanup is an explicit migration. Never broaden existing regular-file Unix permissions.
 - Installers must run every selected AI helper with read-only `--check` before any apply; `--quiet` suppresses successful helper chatter, never errors. Provision `.venv-sync` or an explicitly selected interpreter in advance; profiles and automatic updates must never install dependencies.
 - Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
-- Keep third-party skill payloads out of dotfiles; `scripts/awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
+- Keep third-party skill payloads out of dotfiles; `scripts/awesome-skills-update.sh` owns `~/.claude/skills/` and `~/.codex/skills/` on each host; `sherlock-kit` skill links are exempt.
 
 ## Stow and update scripts
 
@@ -119,11 +119,12 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep `scripts/dotfiles-update.sh` POSIX `sh` and session-safe via `_DOTFILES_CHECKED`. `scripts/dotfiles-update.ps1` is its PowerShell counterpart, invoked from the tail of `win/powershell/Documents/PowerShell/profile.ps1`; keep the two in contract parity (`DOTFILES_DIR`, `DOTFILES_AUTO_UPDATE`, `_DOTFILES_CHECKED`, fast-forward only, automatic stow after successful updates with remembered host, clean-tree protection, locking and failed-stow retries) and keep `tests/update-hooks.sh` passing. The PowerShell profile calls its counterpart only in an interactive console (`$IsInteractive`: console stdin and stdout, PSReadLine loaded). The script itself also skips redirected stdout, since every `pwsh -Command ...` call loads the profile, and must not set `$ErrorActionPreference` to `Stop`, which would let a failed `git fetch` abort the whole profile on PowerShell 7.4+.
 - Automatic stow is enabled by default; `DOTFILES_AUTO_STOW=0` keeps pull-only behavior and `DOTFILES_AUTO_UPDATE=0` disables the entire hook. Unix must remember the explicitly installed host or use `DOTFILES_HOST`, never guess a Linux/cluster overlay. Store host/applied-revision state only in local Git metadata, bound to the home/platform. Windows automatic stow must run elevated through `scripts/dotfiles-auto-stow.ps1` or its explicitly registered current-user task; do not launch login-time UAC prompts. Failed or partial installs must not advance applied state. Keep executable update-hook tests for both shells.
 - When setup behavior changes, update both script comments and `README.md`.
+- Submodule links are relative; ignore submodules by anchored `.stow-local-ignore` patterns (`^/sherlock-kit$`); never name a local dev checkout.
 
 ## Windows
 
 - `stow-all.ps1` is the canonical setup command on native Windows; `stow-all.sh` rejects the `win` host and points at it. GNU Stow needs Perl and POSIX symlink semantics, so it is not used there.
-- Keep the two installers semantically aligned: `--target=~`, `--no-folding`, restow idempotency, the same ignore sources (`.stowrc` `--ignore=` lines plus per-package `.stow-local-ignore`), and the same portable/live sync steps. `stow-all.ps1` parses `.stowrc` rather than restating its patterns and invokes the same `claude-settings-sync`, `codex-config-sync`, and `codex-rules-sync` helpers through Git Bash (fail-closed when Git Bash or the helpers' own dependencies are missing); never fork the ignore list or reimplement the helpers.
+- Keep the two installers semantically aligned: `--target=~`, `--no-folding`, restow idempotency, the same ignore sources (`.stowrc` `--ignore=` lines plus per-package `.stow-local-ignore`), and the same portable/live sync steps. `stow-all.ps1` parses `.stowrc` rather than restating its patterns and invokes the same `claude-settings-sync`, `codex-config-sync`, and `codex-rules-sync` helpers through Git Bash (fail-closed when Git Bash or the helpers' own dependencies are missing); never fork the ignore list or reimplement the helpers. Exception: `codex-instructions-sync` is POSIX-only.
 - `stow-all.ps1` stows an explicit allowlist of `common/` packages, not every package. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell packages must stay out of a Windows `$HOME`. Extend `$CommonPackages` only for tools that run natively on Windows.
 - `win/` packages mirror `$HOME` paths like every other package, including `Documents\PowerShell\` and `AppData\Local\Packages\`. No installer special-casing is needed because both live under `$HOME`.
 - Windows Terminal `settings.json` is a plain Stow symlink: Terminal resolves symlinks before its atomic save (`til::io::write_utf8_string_to_file_atomic`), so UI saves write through the link. This has been true since v1.10.2383.0. Never use a hard link, which the same atomic rename would sever. Hot reload does not fire through a symlink, so edits need a Terminal restart.
@@ -144,5 +145,5 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - `shfmt`
   - `stylua`
   - basic hygiene hooks
-- Keep PyMOL submodule automation isolated in `update-pymolscripts-submodule.yml`.
+- One bump workflow each (`update-pymolscripts-submodule.yml`, `update-sherlock-kit-submodule.yml`).
 - If CI behavior affects contributors, update `README.md` in the same change.

@@ -263,8 +263,15 @@ for example `[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md S2-
 the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
 `tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
-`submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order` and
-`nvm-homebrew`. The step it cites is the one that installs the tool on that
+`submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order`,
+`nvm-homebrew` and `codex-override`. `submodule` reads `.gitmodules` and
+requires each submodule's sentinel files (the targets of the stowed links;
+the `.git` of one it has none for). `codex-override` runs only on a host whose
+`sherlock-kit` package links the toolkit rules (otherwise `skip`) and judges
+`~/.codex/AGENTS.override.md` with `codex-instructions-sync --check`, which
+writes nothing: stale is `outdated`, absent or a dangling rules link
+`missing`, a file the helper did not generate `human`, and a current one over
+28 KiB `warn` (Codex truncates global instructions at 32 KiB). The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
 locale check at P0-preflight (`claude` and `codex` are not checked there); on `macos` the apt rows (git-lfs, tmux and
@@ -658,8 +665,11 @@ have a minimum), the overlay the person chose, and a complete checkout.
   hooks default to `DOTFILES_DIR=$HOME/dotfiles`); for an existing clone without
   submodules, `git -C ~/dotfiles submodule update --init --recursive`.
 - **Verify:** no submodule line starts with `-`, and
-  `ls -L ~/dotfiles/common/pymol/.pymolrc` resolves; the doctor's `submodule`
-  check is `ok`. setup-host's P0-preflight line records the OS, architecture,
+  `ls -L ~/dotfiles/common/pymol/.pymolrc` resolves, as does
+  `ls -L ~/dotfiles/<host>/sherlock-kit/.claude/skills/sherlock-kit/SKILL.md` on a
+  host with a `sherlock-kit` package (`lab-ubuntu`, `wsl-ubuntu`, `sherlock`;
+  after H7-stow, `ls -L ~/.claude/skills/sherlock-kit/SKILL.md`); the doctor's
+  `submodule` check is `ok`. setup-host's P0-preflight line records the OS, architecture,
   glibc and detected platform, and warns about a missing submodule, a
   `DOTFILES_DIR` that names another checkout, or uncommitted changes in the
   checkout ([X-rc-protection](#x-rc-protection-rc-file-protection)).
@@ -1108,20 +1118,19 @@ reviewed change. Marlowe's overlay loads no modules.
 
 **Agent CLIs** are manual rows. Look for site modules with
 `ml spider claude-code codex pi-coding-agent` and verify on the host what is
-actually there; the Sherlock toolkit's site module is `pi-coding-agent`. If you
+actually there. If you
 install Claude Code yourself into an NFS home instead, set `DISABLE_UPDATES=1`
 in the environment it starts from, so sessions on several nodes do not race its
 updater over the shared home. Do not leave agents running unattended on login
 nodes.
 
-**Sherlock toolkit (opt-in).** `shk`, the pinned Sherlock toolkit that the
-global agent instructions name, is neither a site module nor part of a tier:
-setup-host does not install it and the doctor does not check it. On a host
-where agents work on or connect to Sherlock, install it explicitly with
-`./setup-sherlock-kit.sh`, then `./stow-all.sh <host>`, which links the `shk`
-launcher (Windows: `./setup-sherlock-kit.ps1 -Python python`, which writes the
-native `~/.local/bin/shk.cmd`, then `./stow-all.ps1 win`);
-[sherlock-kit.md](sherlock-kit.md) is its contract.
+**Sherlock toolkit.** `shk` is neither a site module nor a `tools.tsv` row,
+and setup-host installs nothing for it: it arrives with the
+`common/sherlock-kit/sherlock-kit` submodule. On `lab-ubuntu`, `wsl-ubuntu`
+and `sherlock`, H7-stow links its rules, skill and stdlib-only `shk` (Python
+3.11+ as `python3`) and generates the Codex override; a project env's
+pip-installed `shk` wins while that env is active.
+[sherlock-kit.md](sherlock-kit.md) describes the delivery and its updates.
 
 **OS and glibc.** Record `cat /etc/os-release` and `ldd --version` on each
 cluster; vendor binaries and conda-forge builds each need a minimum glibc.
@@ -1435,7 +1444,11 @@ them there, unpack the same tarball into your home on that host by hand.
 Applies to every Unix host (Windows: HW-stow), after S3-clones and
 S4-setup-sync. `./stow-all.sh H` runs the Claude and Codex sync helpers (writing
 `~/.claude/settings.json`, `~/.codex/config.toml` and
-`~/.codex/rules/portable.rules`), links `common/` and then the overlay into
+`~/.codex/rules/portable.rules`, and on a host with a `sherlock-kit` package
+`~/.codex/AGENTS.override.md`: the common `AGENTS.md` plus that host's rules;
+while the submodule is not initialized it warns
+`sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`
+and skips only that file), links `common/` and then the overlay into
 `$HOME`, tightens `~/.ssh` modes and records the host for the doctor and the
 login updater. Stow refuses to replace regular files, and Ubuntu's `/etc/skel`
 creates `~/.bashrc` and `~/.profile` (RHEL-family homes, such as Sherlock's,
@@ -1475,8 +1488,9 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
   `./stow-all.sh` runs the dry run above itself and stops, before it writes
   anything, when one is left.
 - **Verify:** `ls -l ~/.zshrc ~/.profile ~/.gitconfig` shows links into
-  `~/dotfiles/common/`; in a new shell the doctor's `stow-links` and
-  `path-order` checks are `ok` (path-order warns only when a command in
+  `~/dotfiles/common/`; in a new shell the doctor's `stow-links`,
+  `path-order` and (on a host with a `sherlock-kit` package) `codex-override`
+  checks are `ok` (path-order warns only when a command in
   `~/.local/bin` is shadowed by a second install earlier on PATH: remove the
   one you do not use).
 - **Human:** yes (judgment: it rewrites your home's dotfiles and AI settings;
@@ -1683,10 +1697,6 @@ by processes that enforce RedirectionGuard, such as current Windows OpenSSH
   `.\doctor.ps1 -Host win` passes.
 - **Human:** yes (judgment: it rewrites your Windows home's dotfiles and AI
   settings, from an elevated shell, which is always the person's)
-
-Limitation: nothing adds `~\.local\bin` to the Windows PATH, so `shk.cmd` (from
-`.\setup-sherlock-kit.ps1`) is not found by name. Call it by its full path, or
-add that directory to your user PATH yourself.
 
 ### HW-auto-stow-task: Automatic stow task
 

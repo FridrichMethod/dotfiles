@@ -190,6 +190,7 @@ function Set-FixtureHealthy {
         (Join-Path $Fixture.LocalAppData $FontFile) = 'font'
         (Join-Path $Fixture.AppData $ThemeFile) = 'theme'
         (Join-Path $Fixture.Repo 'common/pymol/PyMOLScripts/.git') = 'gitdir: ../../../.git/modules/PyMOLScripts'
+        (Join-Path $Fixture.Repo 'common/sherlock-kit/sherlock-kit/.git') = 'gitdir: ../../../.git/modules/common/sherlock-kit/sherlock-kit'
         (Join-Path $Fixture.Home 'miniconda3/Scripts/conda.exe') = ''
     }
     foreach ($path in $files.Keys) {

@@ -9,9 +9,9 @@ backend is deliberately small; no general application framework is involved.
 | --- | --- |
 | Unix installation | Bash, Git, GNU Stow (and its Perl runtime), ordinary POSIX utilities |
 | Native Windows installation | PowerShell 7+, Git for Windows / Git Bash, elevated symlink creation |
-| All three AI sync helpers | Python 3.11+; no package installation during login or stow |
+| All four AI sync helpers | Python 3.11+; no package installation during login or stow |
 | Codex TOML merge | Exact `tomlkit` pin in `requirements-sync.txt` |
-| Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
+| Claude JSON / Codex rules / Codex instructions alone | Python standard library only, via an explicitly selected interpreter |
 | Default parser setup | Python's `venv` and pip support; downloads the pinned wheel unless pre-provisioned offline |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Optional skill downloads | Bash, curl, tar, rsync |
@@ -159,14 +159,14 @@ prints) appear at the start of the When absent cell.
 | `claude` | mac, wsl-ubuntu, lab-ubuntu, win | cask `claude-code` | pinned `claude` (inspect) | not checked: optional site module (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
 | `codex` | mac, wsl-ubuntu, lab-ubuntu, win | cask `codex` | pinned `codex` (codex-package) | not checked: optional site module (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
 
-Opt-in, outside every tier: the pinned Sherlock toolkit (`shk`), which the
-global agent instructions name for work on or connections to Sherlock. Neither
-`./setup-host.sh` nor the doctor touches it; on a host where agents work with
-Sherlock, run `./setup-sherlock-kit.sh` explicitly, then
-`./stow-all.sh <host>`, which links the `shk` launcher. On Windows run
-`./setup-sherlock-kit.ps1 -Python python`, which also writes the native
-`~/.local/bin/shk.cmd`, then the normal `./stow-all.ps1 win`. See the README's
-Pinned Sherlock toolkit section and [sherlock-kit.md](sherlock-kit.md).
+Outside every tier: the Sherlock toolkit (`shk`) comes with the
+`common/sherlock-kit/sherlock-kit` submodule, not from a package manager.
+`./setup-host.sh` installs nothing for it; on `lab-ubuntu`, `wsl-ubuntu` and
+`sherlock`, `./stow-all.sh <host>` links its rules, skill and stdlib-only
+`bin/shk`, which needs only Python 3.11+ as `python3`, and the doctor's
+`submodule` row checks those files. Projects that pin a release install it
+into their own environment with pip, and that env's `shk` wins while it is
+active. No Windows host gets it. See [sherlock-kit.md](sherlock-kit.md).
 
 ### Desktop tier
 
