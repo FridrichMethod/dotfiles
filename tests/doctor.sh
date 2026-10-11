@@ -21,6 +21,13 @@ REAL_GIT=$(command -v git) || {
     echo 'ERROR: git is required for the doctor fixture repo.' >&2
     exit 1
 }
+# The real codex-instructions-sync that the codex-override row runs needs
+# only a standard-library Python 3.11+; the runtime check stays a fake.
+SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
+if [[ ! -x "$SYNC_PYTHON" ]]; then
+    echo 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.' >&2
+    exit 1
+fi
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-doctor.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 cleanup() {
@@ -39,7 +46,8 @@ SHELL_TMP="$TEST_TMP/tmp"
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
     "$FAKE_BIN" "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
 cp "$REPO_ROOT/doctor.sh" "$FIXTURE/doctor.sh"
-cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/terminal.sh"
+cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/config_sync.py" \
+    "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 # The real step headings: every doc step a manifest row cites must have one.
 cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
@@ -168,10 +176,14 @@ SH
 
 # A sync interpreter: it passes lib/config_sync.py --runtime-check unless
 # SYNC_RUNTIME_RC says otherwise (a venv without tomlkit), and logs the call.
-write_fake "$FAKE_BIN/sync-python" <<'SH'
+# Any other call (codex-instructions-sync --check) runs in the real Python.
+write_fake "$FAKE_BIN/sync-python" <<SH
 #!/bin/sh
-printf 'sync-python %s\n' "$*" >>"$EVENT_LOG"
-exit "${SYNC_RUNTIME_RC:-0}"
+printf 'sync-python %s\n' "\$*" >>"\$EVENT_LOG"
+case " \$* " in
+    *" --runtime-check "*) exit "\${SYNC_RUNTIME_RC:-0}" ;;
+esac
+exec "$SYNC_PYTHON" "\$@"
 SH
 
 # A fresh Homebrew prefix that is not on PATH yet.
@@ -222,18 +234,42 @@ row() {
 
 # --- fixture checkout and home -------------------------------------------
 
+# Both submodules of .gitmodules are plain trees here (CI checks out none),
+# each holding the sentinel files the doctor's submodule check requires.
+SK_TREE="$FIXTURE/common/sherlock-kit/sherlock-kit"
+SK_DATA="$SK_TREE/src/sherlock_kit/data"
 mkdir -p "$FIXTURE/common/zsh" "$FIXTURE/common/sh" "$FIXTURE/common/git" \
     "$FIXTURE/common/bash" "$FIXTURE/common/pymol/PyMOLScripts/configs" \
-    "$FIXTURE/.venv-sync/bin"
+    "$SK_DATA/rules" "$SK_DATA/skills/sherlock-kit" "$SK_TREE/bin" \
+    "$FIXTURE/common/codex/.codex" "$FIXTURE/common/codex/.local/bin" "$FIXTURE/.venv-sync/bin"
 for file in zsh/.zshrc sh/.profile git/.gitconfig bash/.bashrc; do
     printf '# fixture %s\n' "$file" >"$FIXTURE/common/$file"
 done
 printf '# fixture pymolrc\n' >"$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc"
+printf '## Sherlock from this workstation\n\nFixture workstation rules.\n' >"$SK_DATA/rules/workstation.md"
+printf '## Sherlock: agent running on Sherlock\n\nFixture cluster rules.\n' >"$SK_DATA/rules/cluster.md"
+printf -- '---\nname: sherlock-kit\ndescription: fixture\n---\n' >"$SK_DATA/skills/sherlock-kit/SKILL.md"
+printf '#!/bin/sh\n' >"$SK_TREE/bin/shk"
+chmod +x "$SK_TREE/bin/shk"
+GITMODULES_BOTH='[submodule "common/pymol/PyMOLScripts"]
+	path = common/pymol/PyMOLScripts
+	url = https://github.com/FridrichMethod/PyMOLScripts.git
+	branch = main
+[submodule "common/sherlock-kit/sherlock-kit"]
+	path = common/sherlock-kit/sherlock-kit
+	url = https://github.com/FridrichMethod/sherlock-kit.git
+	branch = main'
+printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
+# The portable Codex instructions and the real helper that stow-all.sh runs
+# to generate ~/.codex/AGENTS.override.md on hosts with sherlock-kit rules.
+printf '# Global Working Preferences\n\nFixture portable Codex instructions.\n' \
+    >"$FIXTURE/common/codex/.codex/AGENTS.md"
+cp "$REPO_ROOT/common/codex/.local/bin/codex-instructions-sync" "$FIXTURE/common/codex/.local/bin/"
 cp "$FAKE_BIN/sync-python" "$FIXTURE/.venv-sync/bin/python"
 printf '.venv-sync/\n' >"$FIXTURE/.gitignore"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 "$REAL_GIT" -C "$FIXTURE" init -q
-"$REAL_GIT" -C "$FIXTURE" add .gitignore common
+"$REAL_GIT" -C "$FIXTURE" add .gitignore .gitmodules common
 "$REAL_GIT" -C "$FIXTURE" -c user.name=fixture -c user.email=fixture@example.invalid \
     commit -q -m fixture
 STATE_FILE="$FIXTURE/.git/dotfiles-sync-unix"
@@ -493,6 +529,8 @@ assert_row desk-tool warn 'not found; no terminal' 'docs/bootstrap.md S6-kitty'
 assert_row nerd-font warn
 assert_row host-tool warn
 assert_row psfzf skip '' -
+assert_row submodule ok 'common/pymol/PyMOLScripts, common/sherlock-kit/sherlock-kit' -
+assert_row codex-override skip 'lab-ubuntu has no sherlock-kit rules' -
 for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-auth zsh-smoke; do
     assert_no_row "$id"
 done
@@ -511,7 +549,7 @@ assert_out "[dotfiles] [ok] core fzf: 0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
 assert_out '[dotfiles] [info] desktop psfzf: PowerShell module PSFzf; doctor.ps1 checks it'
 assert_err '[dotfiles] [warn] desktop desk-tool: not found; no terminal (docs/bootstrap.md S6-kitty)'
 assert_out '[dotfiles] [info] summary: '
-assert_out ' 0 outdated, 0 missing, 3 warn, 1 skip, 0 human (lab-ubuntu, required tiers: core,cli,ai)'
+assert_out ' 0 outdated, 0 missing, 3 warn, 2 skip, 0 human (lab-ubuntu, required tiers: core,cli,ai)'
 assert_no_event NETWORK
 
 # --- versions, missing tools and tiers -------------------------------------
@@ -649,6 +687,7 @@ mv "$TEST_TMP/claude.hidden" "$FAKE_BIN/claude"
 run_doctor platform-debian -- --platform debian --tsv
 assert_rc 0
 assert_row fzf ok
+assert_row codex-override skip 'no host overlay' -
 for id in host-tool nerd-font login-tool lmod mac-clt mac-alt win-only; do
     assert_no_row "$id"
 done
@@ -664,6 +703,7 @@ assert_out "$(printf 'fzf\tcore\tfzf\t0.58.0\tS2-brew-bundle')"
 assert_out "$(printf 'host-tool\thost\tdoctor-absent-host\t-\tX-host-tools')"
 assert_out "$(printf 'locale\tcore\tcheck\t-\tH1-locale')"
 assert_out "$(printf 'nvm-homebrew\tai\tcheck\t-\tS4-nvm')"
+assert_out "$(printf 'codex-override\tai\tcheck\t-\tH7-stow')"
 assert_no_out login-tool
 assert_quiet_events '--list probed tools'
 run_doctor list-hpc -- --host sherlock --list
@@ -820,8 +860,162 @@ assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sy
 mv "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc" "$TEST_TMP/pymolrc.hidden"
 run_doctor submodule-missing -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row submodule missing '' 'docs/bootstrap.md P0-preflight'
+assert_row submodule missing \
+    'no common/pymol/PyMOLScripts/configs/.pymolrc; the stowed links dangle (git submodule update --init --recursive)' \
+    'docs/bootstrap.md P0-preflight'
 mv "$TEST_TMP/pymolrc.hidden" "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc"
+
+# Each sherlock-kit sentinel (both rules files, the skill and bin/shk) is
+# required on its own; the PyMOL one stays out of the detail.
+for sentinel in src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md \
+    src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk; do
+    mv "$SK_TREE/$sentinel" "$TEST_TMP/sentinel.hidden"
+    run_doctor "submodule-sherlock-kit-${sentinel##*/}" -- --host lab-ubuntu --tsv
+    assert_rc 1
+    assert_row submodule missing \
+        "no common/sherlock-kit/sherlock-kit/$sentinel; the stowed links dangle (git submodule update --init --recursive)" \
+        'docs/bootstrap.md P0-preflight'
+    case $(tsv_field submodule 4) in
+        *pymolrc* | *', '*) case_fail 'submodule detail names more than the hidden sentinel' ;;
+    esac
+    mv "$TEST_TMP/sentinel.hidden" "$SK_TREE/$sentinel"
+done
+# An uninitialized sherlock-kit lists every sentinel it lacks.
+mv "$SK_TREE" "$TEST_TMP/sherlock-kit.hidden"
+mkdir "$SK_TREE"
+run_doctor submodule-sherlock-kit-empty -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row submodule missing \
+    'no common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/rules/workstation.md, common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/rules/cluster.md, common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/skills/sherlock-kit/SKILL.md, common/sherlock-kit/sherlock-kit/bin/shk;'
+# The check follows .gitmodules: without the sherlock-kit entry its absent
+# tree is no alarm, a submodule it has no sentinels for needs its .git, and
+# a checkout without .gitmodules has nothing to check.
+printf '%s\n' '[submodule "common/pymol/PyMOLScripts"]' '	path = common/pymol/PyMOLScripts' \
+    '[submodule "common/demo/Demo"]' '    path   =   common/demo/Demo  ' >"$FIXTURE/.gitmodules"
+mkdir -p "$FIXTURE/common/demo/Demo"
+run_doctor submodule-unknown -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row submodule missing 'no common/demo/Demo/.git; the stowed links dangle'
+: >"$FIXTURE/common/demo/Demo/.git"
+run_doctor submodule-unknown-ok -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule ok 'common/pymol/PyMOLScripts, common/demo/Demo'
+rm -rf "$FIXTURE/common/demo"
+rm "$FIXTURE/.gitmodules"
+run_doctor submodule-no-gitmodules -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule ok 'no .gitmodules'
+printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
+rmdir "$SK_TREE"
+mv "$TEST_TMP/sherlock-kit.hidden" "$SK_TREE"
+run_doctor submodule-restored -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule ok
+
+# codex-override: on a host whose sherlock-kit package links the toolkit
+# rules (wsl-ubuntu here), ~/.codex/AGENTS.override.md must be what
+# stow-all.sh generates from the portable AGENTS.md and those rules. The row
+# runs the real codex-instructions-sync --check, which never writes.
+WSL_RULES="$FIXTURE/wsl-ubuntu/sherlock-kit/.claude/rules/sherlock-kit.md"
+OVERRIDE="$TEST_HOME/.codex/AGENTS.override.md"
+mkdir -p "${WSL_RULES%/*}" "$TEST_HOME/.codex"
+ln -s ../../../../common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/rules/workstation.md "$WSL_RULES"
+# sync_override: generate the override as stow-all.sh wsl-ubuntu does.
+sync_override() {
+    env -i HOME="$TEST_HOME" PATH="$BASE_PATH" DOTFILES_SYNC_PYTHON="$SYNC_PYTHON" \
+        "$FIXTURE/common/codex/.local/bin/codex-instructions-sync" --quiet --append "$WSL_RULES" \
+        "$FIXTURE/common/codex/.codex/AGENTS.md" "$OVERRIDE"
+}
+
+run_doctor codex-absent -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override missing \
+    'no ~/.codex/AGENTS.override.md, so Codex misses the wsl-ubuntu sherlock-kit rules; rerun ./stow-all.sh wsl-ubuntu' \
+    'docs/bootstrap.md H7-stow'
+assert_event "codex-instructions-sync --check --append $WSL_RULES"
+
+sync_override
+run_doctor codex-current -- --host wsl-ubuntu --tsv
+assert_rc 0
+assert_tsv_shape
+assert_row codex-override ok '~/.codex/AGENTS.override.md is current' -
+run_doctor codex-current-log -- --host wsl-ubuntu
+assert_rc 0
+assert_out '[dotfiles] [ok] ai codex-override: generated ~/.codex/AGENTS.override.md is current'
+
+printf 'a hand edit\n' >>"$OVERRIDE"
+run_doctor codex-stale -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override outdated \
+    '~/.codex/AGENTS.override.md is stale; rerun ./stow-all.sh wsl-ubuntu' 'docs/bootstrap.md H7-stow'
+run_doctor codex-stale-unselected -- --host wsl-ubuntu --tier core,cli --tsv
+assert_rc 0
+assert_row codex-override warn 'is stale'
+
+# A file the helper did not generate (a hand-written override, a symlink, a
+# directory) suppresses ~/.codex/AGENTS.md and the rules; stow-all.sh
+# refuses to replace it, so a person decides.
+printf '# my own Codex instructions\n' >"$OVERRIDE"
+run_doctor codex-foreign -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override human \
+    '~/.codex/AGENTS.override.md was not generated by codex-instructions-sync' 'docs/bootstrap.md H7-stow'
+assert_row codex-override human 'Codex reads it instead of ~/.codex/AGENTS.md and the wsl-ubuntu sherlock-kit rules'
+grep -Fxq '# my own Codex instructions' "$OVERRIDE" || case_fail 'the doctor changed a foreign override'
+rm "$OVERRIDE"
+ln -s "$FIXTURE/common/codex/.codex/AGENTS.md" "$OVERRIDE"
+run_doctor codex-symlink -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override human 'was not generated by codex-instructions-sync'
+rm "$OVERRIDE"
+mkdir "$OVERRIDE"
+run_doctor codex-directory -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override human 'was not generated by codex-instructions-sync'
+rmdir "$OVERRIDE"
+
+# An uninitialized submodule leaves the rules link dangling.
+sync_override
+mv "$SK_DATA/rules/workstation.md" "$TEST_TMP/workstation.hidden"
+run_doctor codex-dangling -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override missing \
+    'the wsl-ubuntu sherlock-kit rules link dangles, so ~/.codex/AGENTS.override.md cannot be checked (git submodule update --init --recursive)' \
+    'docs/bootstrap.md H7-stow'
+assert_row submodule missing 'src/sherlock_kit/data/rules/workstation.md'
+mv "$TEST_TMP/workstation.hidden" "$SK_DATA/rules/workstation.md"
+
+# Any other failure of the helper is reported as such, not as a foreign file.
+run_doctor codex-no-runtime "DOTFILES_SYNC_PYTHON=$TEST_TMP/no-python" -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override missing 'codex-instructions-sync --check failed (exit 1): config-sync: Python runtime unavailable'
+chmod -x "$FIXTURE/common/codex/.local/bin/codex-instructions-sync"
+run_doctor codex-no-helper -- --host wsl-ubuntu --tsv
+assert_rc 1
+assert_row codex-override missing "no executable $FIXTURE/common/codex/.local/bin/codex-instructions-sync"
+chmod +x "$FIXTURE/common/codex/.local/bin/codex-instructions-sync"
+
+# Codex truncates its global instructions at 32 KiB: a current override
+# over 28 KiB is a warning.
+awk 'BEGIN { for (i = 0; i < 600; i++) print "- fixture rule line " i " padded to fifty bytes ...." }' \
+    >"$TEST_TMP/big-rules.md"
+ln -sfn "$TEST_TMP/big-rules.md" "$WSL_RULES"
+sync_override
+run_doctor codex-oversized -- --host wsl-ubuntu --tsv
+assert_rc 0
+assert_row codex-override warn 'is current but' 'docs/bootstrap.md H7-stow'
+assert_row codex-override warn 'over 28 KiB; Codex truncates global instructions at 32 KiB'
+ln -sfn ../../../../common/sherlock-kit/sherlock-kit/src/sherlock_kit/data/rules/workstation.md "$WSL_RULES"
+rm "$TEST_TMP/big-rules.md"
+sync_override
+run_doctor codex-restored -- --host wsl-ubuntu --tsv
+assert_rc 0
+assert_row codex-override ok
+# A host without the rules link skips the row whatever ~/.codex holds. The
+# link and the current override stay for the read-only cases below.
+run_doctor codex-other-host -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row codex-override skip 'lab-ubuntu has no sherlock-kit rules; Codex reads ~/.codex/AGENTS.md' -
 
 rm "$TEST_HOME/.profile"
 run_doctor stow-absent -- --host lab-ubuntu --tsv
@@ -1127,15 +1321,22 @@ run_doctor ro-online -- --host lab-ubuntu --online --quiet
 assert_rc 0
 run_doctor ro-list -- --host lab-ubuntu --list
 assert_rc 0
+run_doctor ro-codex -- --host wsl-ubuntu --tsv
+assert_rc 0
+assert_row codex-override ok
 CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$MARKER" -print)
 [ -z "$CHANGED" ] || fail "doctor wrote into the fixture or home: $CHANGED"
 
 chmod -R a-w "$TEST_HOME" "$FIXTURE"
 run_doctor read-only -- --host lab-ubuntu
-chmod -R u+w "$TEST_HOME" "$FIXTURE"
 assert_rc 0
 ! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
 assert_no_event NETWORK
+run_doctor read-only-codex -- --host wsl-ubuntu --tsv
+assert_rc 0
+assert_row codex-override ok
+! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
+chmod -R u+w "$TEST_HOME" "$FIXTURE"
 
 # --- no temporary files ----------------------------------------------------
 
@@ -1168,6 +1369,9 @@ no_tmp_case no-tmp-platform TMPDIR="$NO_TMP" -- --platform other --tsv
 assert_rc 0
 no_tmp_case no-tmp-mac TMPDIR="$NO_TMP" BOOTSTRAP_UNAME_S=Darwin -- --host mac --tsv
 assert_rc 0
+no_tmp_case no-tmp-codex TMPDIR="$NO_TMP" -- --host wsl-ubuntu --tsv
+assert_rc 0
+assert_row codex-override ok
 no_tmp_case no-tmp-help TMPDIR="$NO_TMP" -- --help
 assert_rc 0
 no_tmp_case no-tmp-usage TMPDIR="$NO_TMP" -- --tier gui
