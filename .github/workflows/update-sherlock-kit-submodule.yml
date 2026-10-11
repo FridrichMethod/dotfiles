@@ -21,9 +21,11 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      # Staged, so the guard checks the gitlink this run would commit.
       - name: Update sherlock-kit submodule to latest
         run: |
           git submodule update --remote --merge common/sherlock-kit/sherlock-kit
+          git add common/sherlock-kit/sherlock-kit
 
       # A bump that renames a contract file would leave the stowed rules,
       # skills or shk dangling on every host; fail before committing it.
@@ -34,12 +36,11 @@ jobs:
 
       - name: Check for changes and push
         run: |
-          if git diff --quiet common/sherlock-kit/sherlock-kit; then
+          if git diff --cached --quiet common/sherlock-kit/sherlock-kit; then
             echo "Submodule already up to date, nothing to commit."
             exit 0
           fi
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add common/sherlock-kit/sherlock-kit
           git commit -m "chore(deps): update sherlock-kit submodule to latest"
           git push
