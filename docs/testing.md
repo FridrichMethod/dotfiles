@@ -398,7 +398,10 @@ Sunday at 06:00 UTC, and on a push to an `e2e-ci/**` branch; it is not part of
 `if` cannot see the `matrix` context; the five Linux hosts then run in
 containers on `ubuntu-24.04` with `fail-fast: false` and 90 minutes each,
 `mac` natively on `macos-15` (`E2E_NATIVE=1 ./tests/e2e/run.sh mac`) and `win`
-on `windows-2025` (`./tests/e2e/run.ps1`), the only places those two run. Each
+on `windows-2025` (`./tests/e2e/run.ps1`), the only places those two run;
+`tests/run.ps1` parses `tests/e2e/run.ps1` and `tests/e2e/lib/*.ps1` on every
+run, so the native Windows job of `ci.yml` catches a syntax error there before
+this workflow does, but nothing exercises their behavior outside it. Each
 job uploads `tests/e2e/out/**` as the artifact `bootstrap-e2e-<host>`, pass or
 fail; one run per ref at a time, without cancelling one in progress. The
 `cache` input mounts a scratch directory under the runner's temp, which no
