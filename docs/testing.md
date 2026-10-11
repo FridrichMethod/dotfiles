@@ -269,9 +269,14 @@ the clone itself, then follows the Other Linux quick start to a host-less
   `-Check` runs, a second `-Yes` that applies nothing, a clean clone after
   every step, a silent load of the stowed profile); criterion 5's four audits
   have no Windows counterpart, since there are no wrappers and no sudo log
-  there, and `HW-stow` is judged by its own evidence instead (below). `pwsh`
-  is absent from the development machines, so the Windows driver's first
-  execution is the CI job.
+  there, and `HW-stow` is judged by its own evidence instead (below). The
+  home snapshots note, rather than fail, a change under
+  `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows' per-user CRL and
+  OCSP cache, which every process of the runner account writes, the Actions
+  agent's own HTTPS traffic included (the first CI run saw an entry appear
+  during `-Check`, whose probes are all local); `snapshots\<step>.diff` keeps
+  it as `noted ...`. `pwsh` is absent from the development machines, so the
+  Windows driver ran first in CI.
 
 ### HUMAN-block policy
 
