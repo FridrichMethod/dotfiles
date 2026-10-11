@@ -928,6 +928,12 @@ if grep -E "^[0-9]+${TAB}[^${TAB}]+${TAB}fail${TAB}" "$CLEAN_OUT/summary.tsv" >/
     cat "$CLEAN_OUT/summary.tsv" >&2
     fail 'clean: summary.tsv has a fail row'
 fi
+# Every step of the dry run went through the limit e2e_find_timeout picks on
+# this PATH: coreutils timeout on Linux, tests/e2e/timeout.pl on the macOS
+# runner (basenames: inside.sh resolves its own directory physically).
+expected_timeout=$(PATH="$TEST_BIN:$PATH" e2e_find_timeout && printf '%s\n' "${E2E_TIMEOUT_BIN:-none}")
+expect_eq 'clean env.txt names the timeout' "$(sed -n 's/^timeout=//p' "$CLEAN_OUT/env.txt" | sed 's|.*/||')" \
+    "${expected_timeout##*/}"
 expect_step clean clone pass "at $CLEAN_HOME/dotfiles"
 expect_step clean doctor-initial pass 'exit 1; '
 expect_step clean doctor-initial pass 'no writes'
