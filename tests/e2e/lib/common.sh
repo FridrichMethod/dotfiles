@@ -238,7 +238,9 @@ e2e_problem_lines() {
 
 # --- env.txt -----------------------------------------------------------------
 
-# e2e_write_env MODE: what the run saw, for whoever reads the artifact.
+# e2e_write_env MODE: what the run saw, for whoever reads the artifact: the
+# machine, the tools, the timeout binary (none on the mac runner) and the
+# paths the HOME snapshots left out.
 e2e_write_env() {
     local file=$E2E_OUT/env.txt tool
     {
@@ -263,5 +265,6 @@ e2e_write_env() {
         done
         printf 'LMOD_DIR=%s\nSCRATCH=%s\n' "${LMOD_DIR-}" "${SCRATCH-}"
         printf 'timeout=%s\n' "${E2E_TIMEOUT_BIN:-none}"
+        printf 'E2E_SNAPSHOT_PRUNE=%s\n' "$(e2e_expand "${E2E_SNAPSHOT_PRUNE:-}")"
     } >"$file"
 }

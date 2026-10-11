@@ -46,7 +46,9 @@ the network and takes from ten minutes to an hour per host.
 
 - `summary.tsv`: one tab-separated row per step, `<n> <step> <pass|fail|skip|note> <seconds> <detail>`
 - `steps/NN-<step>.log`: stdout and stderr of each step
-- `env.txt`: kernel, `/etc/os-release`, glibc, `id`, PATH, tool versions, `LMOD_DIR`, `SCRATCH`
+- `env.txt`: kernel, `/etc/os-release`, glibc, `id`, PATH, tool versions, `LMOD_DIR`, `SCRATCH`,
+  the timeout binary (`none` on the mac runner) and the paths the HOME snapshots left out
+  (`E2E_SNAPSHOT_PRUNE`, expanded)
 - `log/wrappers.log`: every `sudo`, `chsh` and `stow` call, with the harness phase it ran in
 - `log/sudo.log`: sudo's own log (Ubuntu and Fedora images)
 - `log/timeline`: `<epoch> <begin|end> <phase>` around every command the harness runs

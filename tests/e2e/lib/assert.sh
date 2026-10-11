@@ -119,7 +119,10 @@ e2e_guard_after() {
 # e2e_prune_args: the find arguments that leave out what a snapshot must not
 # count: the clone's .git (git status refreshes its index), E2E_OUT and
 # E2E_SRC when they are under HOME, and E2E_SNAPSHOT_PRUNE (the mac runner's
-# $HOME/work and $HOME/Library).
+# $HOME/work and $HOME/Library, its Actions agent under $HOME/runners, whose
+# _diag logs are appended throughout the job, and $HOME/hostedtoolcache).
+# env.txt records the expanded list, so a reader of the artifact sees what
+# the no-write checks did not watch.
 e2e_prune_args() {
     local path
     E2E_PRUNE=('(' -path "$E2E_CLONE/.git" -o -path "$E2E_OUT" -o -path "$E2E_SRC")

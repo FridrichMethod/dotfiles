@@ -166,7 +166,8 @@ what a fresh machine installs. Outputs land under
 `tests/e2e/out/<host>-<UTC timestamp>/` (git-ignored): `summary.tsv` (one
 tab-separated row per step, `<n> <step> <pass|fail|skip|note> <seconds>
 <detail>`), `steps/NN-<step>.log`, `env.txt` (kernel, `/etc/os-release`,
-glibc, tool versions), `log/wrappers.log`, `log/sudo.log`, `log/timeline` and
+glibc, tool versions, the timeout binary and the expanded
+`E2E_SNAPSHOT_PRUNE`), `log/wrappers.log`, `log/sudo.log`, `log/timeline` and
 `snapshots/`. `--keep` leaves the container for `docker exec`. `mac` runs only
 natively on Darwin with `E2E_NATIVE=1`, and `win` only through
 `tests/e2e/run.ps1`; both happen in CI, below.
@@ -220,7 +221,11 @@ the clone itself, then follows the Other Linux quick start to a host-less
   done and never exercised, and S2-brew-bundle installs less than on a blank
   Mac. sudo is passwordless there and keeps no log, so only the wrappers and
   the behavioral signals are audited, and the home snapshots prune
-  `$HOME/work` and `$HOME/Library`.
+  `$HOME/work`, `$HOME/Library`, the runner's own agent directory
+  `$HOME/runners` (its `_diag` logs are appended throughout the job, so a
+  snapshot that watched it would fail every no-write step) and the
+  preinstalled `$HOME/hostedtoolcache`; `env.txt` records the expanded list,
+  so a reader of the artifact sees what the no-write checks did not watch.
 - `win` runs elevated on the runner, so `HW-stow` can run; a winget that
   needs `Repair-WinGetPackageManager` first is recorded as a deviation.
 
