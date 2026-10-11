@@ -202,7 +202,17 @@ the clone itself, then follows the Other Linux quick start to a host-less
   sudo exists there, as on the real clusters. The Ubuntu and Fedora images
   grant passwordless sudo and make it log to `log/sudo.log` through sudoers. A
   Homebrew or conda prefix prepended to PATH can shadow the wrappers; the sudo
-  log and the behavioral signals below still cover those calls.
+  log and the behavioral signals below still cover those calls. On the `mac`
+  runner the workflow installs the same three wrappers in `/usr/local/bin`
+  with one `sudo install` before the run, refusing a runner that already has
+  one of the three names there (nothing is installed there on the arm64 image;
+  Homebrew is `/opt/homebrew`): `/etc/profile` and `/etc/zprofile` run
+  `path_helper`, which rebuilds PATH from `/etc/paths` and appends the old
+  entries afterwards, so `/usr/local/bin` is the one directory it keeps ahead
+  of `/usr/bin`, and the login-shell, doctor-final and doctor-smoke steps
+  still reach the wrappers (`/etc/paths.d` would not do: its entries land
+  after `/etc/paths`). `inside.sh`'s own copy in `$E2E_OUT/bin` is reached
+  only outside login shells.
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.
@@ -219,8 +229,9 @@ the clone itself, then follows the Other Linux quick start to a host-less
 - `mac` runs on a GitHub runner that already has the Xcode Command Line Tools,
   Homebrew and many formulae, so `H1-xcode-clt` and `H1-homebrew` are found
   done and never exercised, and S2-brew-bundle installs less than on a blank
-  Mac. sudo is passwordless there and keeps no log, so only the wrappers and
-  the behavioral signals are audited, and the home snapshots prune
+  Mac. sudo is passwordless there and keeps no log, so only the wrappers
+  (installed in `/usr/local/bin` by the workflow, above) and the behavioral
+  signals are audited, and the home snapshots prune
   `$HOME/work`, `$HOME/Library`, the runner's own agent directory
   `$HOME/runners` (its `_diag` logs are appended throughout the job, so a
   snapshot that watched it would fail every no-write step) and the

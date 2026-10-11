@@ -77,5 +77,10 @@ Which HUMAN blocks the harness runs, skips or fails on is decided in
 `lib/blocks.sh`, keyed on the block's step id and kind, and documented in
 [docs/testing.md](../../docs/testing.md#human-block-policy). Each host is
 described by `hosts/<host>.env`, its image by `docker/`, and the logging
-`sudo`, `chsh` and `stow` wrappers by `wrappers/`. The harness never writes
-inside the clone it tests, and its variables all start with `E2E_`.
+`sudo`, `chsh` and `stow` wrappers by `wrappers/`: the images install them in
+`/usr/local/bin`, and on the mac runner the workflow installs them there too,
+before any phase opens, because macOS's `path_helper` puts `/usr/local/bin`
+ahead of `/usr/bin` in every login shell and demotes any other directory
+(`inside.sh`'s own `$E2E_OUT/bin` copy is reached only outside login shells).
+The harness never writes inside the clone it tests, and its variables all
+start with `E2E_`.
