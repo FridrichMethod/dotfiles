@@ -155,14 +155,25 @@ is the short how-to.
 ```
 
 `run.sh [-j N] [--cache DIR] [--keep] [--out DIR] [--no-build] <host>... | all`
-needs Docker and a clean source checkout (`E2E_ALLOW_DIRTY=1` overrides). It
+needs Docker and a clean source checkout (`E2E_ALLOW_DIRTY=1` overrides; the
+container still clones `HEAD`, so only uncommitted `tests/e2e/` changes, which
+the harness reads from the working tree, are exercised) that is a plain
+clone: a linked `git worktree` or submodule checkout is refused with exit 2
+(`run from a plain clone`), because the container mounts only the checkout
+and such a checkout's `.git` is a file pointing outside it. Run it as a
+regular user, never root: the image user is created with your uid so it owns
+the mounted `/e2e/out` (and `useradd` refuses uid 0), and `--no-build` reuses
+an existing image only after `id -u <user>` in a throwaway container shows
+that user has your uid, since images are shared by everyone on the daemon. It
 builds the host's image from `tests/e2e/docker/`, mounts the checkout read-only
 at `/e2e/src`, runs `tests/e2e/inside.sh` in a fresh container as the host's
 user under `bash -l`, and prints a final table `host result seconds out-dir`.
-`-j` is capped at 2 (default 1). `--cache DIR` mounts package caches (apt, dnf,
-Homebrew, conda packages) from `DIR`, so a repeated run downloads less; it is
-off by default and stays off for acceptance runs, which must install exactly
-what a fresh machine installs. Outputs land under
+`-j` is capped at 2 (default 1). `--cache DIR` mounts package caches (apt,
+dnf4's `/var/cache/dnf` on Rocky, dnf5's `/var/cache/libdnf5` on Fedora 44,
+Homebrew, conda packages) from `DIR`, created as you before the run, so a
+repeated run downloads less; it is off by default and stays off for
+acceptance runs, which must install exactly what a fresh machine installs.
+Outputs land under
 `tests/e2e/out/<host>-<UTC timestamp>/` (git-ignored): `summary.tsv` (one
 tab-separated row per step, `<n> <step> <pass|fail|skip|note> <seconds>
 <detail>`), `steps/NN-<step>.log`, `env.txt` (kernel, `/etc/os-release`,

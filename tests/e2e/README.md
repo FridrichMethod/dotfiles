@@ -20,7 +20,14 @@ E2E_NATIVE=1 ./tests/e2e/run.sh mac           # macOS only, natively on the mach
 ```
 
 `run.sh [-j N] [--cache DIR] [--keep] [--out DIR] [--no-build] <host>... | all`
-needs Docker and a clean source checkout (`E2E_ALLOW_DIRTY=1` overrides). It
+needs Docker and a clean source checkout (`E2E_ALLOW_DIRTY=1` overrides; the
+container still clones `HEAD`, so only uncommitted `tests/e2e/` changes, which
+the harness reads from the working tree, are exercised) that is a plain
+clone: a linked `git worktree` or submodule checkout is refused with exit 2
+(`run from a plain clone`), because the container mounts only the checkout
+and such a checkout's `.git` is a file pointing outside it. Run it as a
+regular user, never root: the image user is created with your uid so it owns
+the mounted `/e2e/out`. It
 builds the image that `hosts/<host>.env` names from `docker/`, mounts the
 checkout read-only at `/e2e/src` and the output directory at `/e2e/out`, and
 runs `inside.sh` in a fresh container as the host's user under `bash -l`. It
@@ -56,9 +63,11 @@ the network and takes from ten minutes to an hour per host.
 
 ## Cache
 
-`--cache DIR` (or `E2E_CACHE_DIR`) mounts `DIR/apt`, `DIR/dnf`,
-`DIR/homebrew` and, on the cluster hosts, `DIR/conda-pkgs` into the container,
-so a repeated run downloads less. Off by default, and off for acceptance
+`--cache DIR` (or `E2E_CACHE_DIR`) mounts `DIR/apt`, `DIR/dnf` (dnf4's
+`/var/cache/dnf` on Rocky), `DIR/libdnf5` (dnf5's `/var/cache/libdnf5` on
+Fedora 44), `DIR/homebrew` and, on the cluster hosts, `DIR/conda-pkgs` into
+the container, so a repeated run downloads less; `run.sh` creates them as you
+before the run, so Docker never creates one owned by root. Off by default, and off for acceptance
 runs, which must install exactly what a fresh machine installs. The checkout's
 own `~/.cache/dotfiles-bootstrap` and `~/.nvm` are never mounted.
 
@@ -67,7 +76,10 @@ own `~/.cache/dotfiles-bootstrap` and `~/.nvm` are never mounted.
 `--keep` (or `E2E_KEEP=1`) leaves the container in place after the run:
 `docker ps -a` lists it, `docker exec -it <id> bash -l` opens a shell as the
 host's user, `docker rm -f <id>` removes it. `--no-build` reuses an image that
-already exists, `--out DIR` chooses the output directory. The step that failed
+already exists, after checking (`id -u <user>` in a throwaway container) that
+its user has your uid, since images are shared by everyone on the Docker
+daemon and one built for another uid could not write the mounted `/e2e/out`;
+a mismatch is refused with exit 2. `--out DIR` chooses the output directory. The step that failed
 is the first `fail` row of `summary.tsv`, and its log is under `steps/`; a
 failed audit names the offending `log/wrappers.log` or `log/sudo.log` line.
 
