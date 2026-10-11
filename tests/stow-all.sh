@@ -343,6 +343,8 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 # A rules link that dangles (the sherlock-kit submodule is not initialized,
 # as after a plain local merge) skips only the Codex instructions sync, in
 # preflight and apply alike, with a warning; everything else still runs.
+# The install is incomplete, so the host is remembered without an applied
+# HEAD: the login updater then initializes the submodule and restows.
 mv "$FIXTURE/rules-fixture/workstation.md" "$TEST_TMP/workstation.md.saved"
 : >"$EVENT_LOG"
 : >"$CHECK_LOG"
@@ -361,8 +363,22 @@ refute_grep 'codex-instructions-sync' "$CHECK_LOG"
 assert_events "${HOST_BEFORE[@]}" "${HOST_REST[@]}"
 refute_grep 'Synchronizing host Codex instructions' "$TEST_TMP/dangling.stdout"
 grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/dangling.stdout"
-cmp "$STATE" "$TEST_TMP/expected-state"
+printf '%s\n' "$TEST_HOME" "$(uname -s)" 'host-a' '' >"$TEST_TMP/expected-skipped-state"
+cmp "$STATE" "$TEST_TMP/expected-skipped-state"
 mv "$TEST_TMP/workstation.md.saved" "$FIXTURE/rules-fixture/workstation.md"
+# Once the link resolves again, the next stow is complete and records HEAD.
+: >"$EVENT_LOG"
+: >"$CHECK_LOG"
+env \
+    HOME="$TEST_HOME" \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    EVENT_LOG="$EVENT_LOG" \
+    FILTER_PRESENT=1 \
+    LC_ALL=C \
+    bash "$FIXTURE/stow-all.sh" host-a \
+    >"$TEST_TMP/dangling-healed.stdout" 2>"$TEST_TMP/dangling-healed.stderr"
+assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
+cmp "$STATE" "$TEST_TMP/expected-state"
 
 # Git can report a clean checkout with core.filemode=false even when a helper
 # loses its executable bit. Every required helper must fail before any sync or
@@ -601,6 +617,7 @@ grep -Fxq '[dotfiles] [warn] sherlock-kit submodule not initialized; Codex instr
 cmp "$OVERRIDE" "$TEST_TMP/expected-override"
 grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/real-dangling.stdout"
 grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]" "$EVENT_LOG"
+cmp "$STATE" "$TEST_TMP/expected-skipped-state"
 mv "$TEST_TMP/workstation.md.saved" "$FIXTURE/rules-fixture/workstation.md"
 
 echo "stow-all=PASS"

@@ -18,7 +18,8 @@ set -euo pipefail
 # A host whose sherlock-kit package links the toolkit rules from the submodule
 # also gets ~/.codex/AGENTS.override.md (portable AGENTS.md plus those rules);
 # other hosts have a stale generated one removed. While the submodule is not
-# initialized, only that step is skipped with a warning.
+# initialized, only that step is skipped with a warning, and the revision is
+# not recorded as applied, so the login updater retries it.
 # All selected AI inputs are checked before any live configuration is changed.
 # The win host is installed from Windows by stow-all.ps1, not from here.
 HOST="${1:-}"
@@ -149,6 +150,7 @@ fi
 # Validate every selected package before any helper changes the live home.
 SYNC_CODEX=0
 SYNC_CODEX_INSTRUCTIONS=0
+CODEX_INSTRUCTIONS_SKIPPED=0
 if [[ -d "$COMMON_DIR/codex" || (-n "$HOST" && -d "$HOST_DIR/codex") ]]; then
     require_sync "$CODEX_SYNC" "$CODEX_PORTABLE"
     require_sync "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE"
@@ -156,8 +158,10 @@ if [[ -d "$COMMON_DIR/codex" || (-n "$HOST" && -d "$HOST_DIR/codex") ]]; then
     SYNC_CODEX=1
     # A local merge or fresh clone leaves the submodule empty and the rules
     # link dangling; the login updater must not fail every stow over that.
+    # The skip leaves the install incomplete, so HEAD is not recorded below.
     if [[ -n "$SHERLOCK_RULES" && ! -e "$SHERLOCK_RULES" ]]; then
         dotfiles_log warn 'sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)'
+        CODEX_INSTRUCTIONS_SKIPPED=1
     else
         SYNC_CODEX_INSTRUCTIONS=1
     fi
@@ -297,11 +301,14 @@ fi
 
 # Record only complete installs. A dirty manual setup still remembers the host,
 # but cannot claim that the committed HEAD was applied without local changes.
+# Neither can a skipped Codex instructions sync: an uninitialized submodule
+# looks clean to git status, and an empty HEAD makes the login updater run
+# git submodule update --init --recursive and restow at the next login.
 # Git resolves this outside the tracked tree and supports linked worktrees.
 if SYNC_STATE=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null); then
     APPLIED_HEAD=$(git rev-parse HEAD)
     SYNC_STATUS=$(git status --porcelain --untracked-files=normal --ignore-submodules=none)
-    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" ]]; then
+    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" || "$CODEX_INSTRUCTIONS_SKIPPED" == 1 ]]; then
         APPLIED_HEAD=
     fi
     (
