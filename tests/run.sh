@@ -103,4 +103,11 @@ if command -v stow >/dev/null 2>&1; then
     "$TEST_DIR/unix-installer.sh"
 fi
 
+printf '==> sherlock-kit-delivery.sh\n'
+if [[ "$require_ci" == 1 ]]; then
+    "$TEST_DIR/sherlock-kit-delivery.sh" --ci
+else
+    "$TEST_DIR/sherlock-kit-delivery.sh"
+fi
+
 echo "test-suite=PASS"
