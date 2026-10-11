@@ -72,7 +72,7 @@ fails on every login, so the host gets no update until you reconcile the two
 ## Projects
 
 Pin the toolkit in the project's own environment, for example
-`pip install "sherlock-kit @ git+https://github.com/FridrichMethod/sherlock-kit@v0.4.0"`.
+`pip install "sherlock-kit @ git+https://github.com/FridrichMethod/sherlock-kit@v0.4.1"`.
 `shk install-skill --project DIR` copies the skill into `DIR/.claude/skills/`
 and `DIR/.agents/skills/` for machines without these dotfiles; on a dotfiles
 host the personal skill shadows that copy in Claude, and `--rules` is skipped
