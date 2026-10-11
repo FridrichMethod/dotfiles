@@ -1,0 +1,60 @@
+#!/bin/bash
+# e2e wrapper for sudo: records the call, then runs the real sudo.
+#
+# The end-to-end bootstrap suite installs this file as /usr/local/bin/sudo
+# in its images (and copies it into a temp bin dir on the macOS runner),
+# ahead of the real tool on PATH, so every sudo that the bootstrap, a HUMAN
+# block or the harness runs leaves one line in $E2E_OUT/log/wrappers.log:
+#   <epoch>\t<phase>\t<tool>\t<ppid>\t<parent cmdline>\t<argv joined by space>
+# phase is $E2E_PHASE (the harness exports human:<step>, negative:<name>,
+# setup:<name> or check:<name> around each command) or "-" outside one, so
+# the audit can tell a sudo the policy allowed from one an installer ran on
+# its own. Then it execs the first sudo on PATH outside its own directory.
+# Logging never fails the call: a write error is ignored. Bash 3.2 and BSD
+# userland (macOS), no here-documents or process substitution.
+#
+# chsh and stow are this file with another tool name, and sudo-deny denies
+# instead of exec'ing (hpc images have no sudo); keep the four in step.
+
+tool=sudo
+
+# e2e_log ARGS...: append the log line (dir created as needed, errors ignored).
+e2e_log() {
+    local dir file phase parent args
+    dir=${E2E_OUT:-/e2e/out}/log
+    file=$dir/wrappers.log
+    phase=${E2E_PHASE:--}
+    if [ -r "/proc/$PPID/cmdline" ]; then
+        parent=$(tr '\0\n\t' '   ' <"/proc/$PPID/cmdline" 2>/dev/null)
+    else
+        parent=$(ps -o command= -p "$PPID" 2>/dev/null | tr '\n\t' '  ')
+    fi
+    parent=${parent% }
+    args=$(printf '%s' "$*" | tr '\n\t' '  ')
+    {
+        mkdir -p "$dir" &&
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$phase" "$tool" "$PPID" "$parent" "$args" >>"$file"
+    } 2>/dev/null || true
+}
+
+# e2e_exec_real ARGS...: exec the first $tool on PATH that is not this file.
+e2e_exec_real() {
+    local self rest dir real
+    self=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P) || self=
+    rest=$PATH:
+    while [ -n "$rest" ]; do
+        dir=${rest%%:*}
+        rest=${rest#*:}
+        [ -n "$dir" ] || dir=.
+        real=$(cd "$dir" 2>/dev/null && pwd -P) || continue
+        [ "$real" != "$self" ] || continue
+        if [ -f "$real/$tool" ] && [ -x "$real/$tool" ]; then
+            exec "$real/$tool" "$@"
+        fi
+    done
+    printf 'e2e wrapper: real %s not found\n' "$tool" >&2
+    exit 127
+}
+
+e2e_log "$@"
+e2e_exec_real "$@"
