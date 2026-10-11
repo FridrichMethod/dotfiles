@@ -262,10 +262,11 @@ the clone itself, then follows the Other Linux quick start to a host-less
   so a reader of the artifact sees what the no-write checks did not watch.
   The runner ships no `timeout` or `gtimeout`, so the per-command limits of
   `tests/e2e/lib/common.sh` (45 minutes per block line, 60 per apply, 15 per
-  read-only run) are inert there, `env.txt` records `timeout=none`, and the
-  job's 90-minute `timeout-minutes` is the backstop: a hang shows up as the
-  job's cancel, with the step named by `log/timeline` and the partial
-  `steps/NN-<step>.{out,err}` rather than by a `summary.tsv` row.
+  read-only run) go through `tests/e2e/timeout.pl`, which keeps GNU
+  `timeout`'s contract with the runner's perl (a process group of its own,
+  TERM then KILL, exit 124); `env.txt` records which one ran. A hang thus
+  fails its step with a `summary.tsv` row instead of running into the job's
+  90-minute `timeout-minutes`, as the first CI run's did.
 - `win` runs every step, not only `HW-stow`, under the runner's elevated
   token, where the Native Windows quick start has the person elevate only for
   `.\stow-all.ps1 win`: `winget import` leaves each installer's scope to that
@@ -291,10 +292,9 @@ the clone itself, then follows the Other Linux quick start to a host-less
 The harness plays the agent of [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 with the person's approvals scripted, keyed on the block's step id and kind.
 `# ` lines are notes; every other line runs as its own command (`bash -c` from
-`$HOME`, stdin closed, a 45-minute timeout where coreutils `timeout` or
-`gtimeout` exists, which is the Linux images; the `mac` runner has neither,
-`env.txt` records `timeout=none` and only the job's 90-minute
-`timeout-minutes` bounds the run) under `E2E_PHASE=human:<id>`.
+`$HOME`, stdin closed, a 45-minute timeout through coreutils `timeout` or
+`gtimeout`, or on the `mac` runner, which has neither, through
+`tests/e2e/timeout.pl`) under `E2E_PHASE=human:<id>`.
 
 | Block | Action |
 | --- | --- |

@@ -54,7 +54,7 @@ the network and takes from ten minutes to an hour per host.
 - `summary.tsv`: one tab-separated row per step, `<n> <step> <pass|fail|skip|note> <seconds> <detail>`
 - `steps/NN-<step>.log`: stdout and stderr of each step
 - `env.txt`: kernel, `/etc/os-release`, glibc, `id`, PATH, tool versions, `LMOD_DIR`, `SCRATCH`,
-  the timeout binary (`none` on the mac runner) and the paths the HOME snapshots left out
+  the timeout binary (`tests/e2e/timeout.pl` on the mac runner) and the paths the HOME snapshots left out
   (`E2E_SNAPSHOT_PRUNE`, expanded)
 - `log/wrappers.log`: every `sudo`, `chsh` and `stow` call, with the harness phase it ran in
   (the doctor's `stow --version` probe is logged like any call but is not a finding)

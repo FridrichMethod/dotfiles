@@ -486,6 +486,46 @@ expect_eq 'one log line for one call' "$(grep -c . "$WRAP/out/log/wrappers.log")
 expect_eq 'two wrapper copies and no real tool give up' "$(wrap_run "$WRAP/a:$WRAP/b:$WRAP/util" sudo)" 127
 expect_eq 'the give-up message' "$(cat "$WRAP/run.out")" 'e2e wrapper: real sudo not found'
 
+# tests/e2e/timeout.pl, the per-command limit on a machine without timeout
+# or gtimeout (the macos-15 runner): GNU timeout's exit codes, the command's
+# own status passed through, and the whole process group gone after a
+# timeout, so a hung grandchild does not outlive its step.
+if command -v perl >/dev/null 2>&1; then
+    TPL="$E2E_DIR/timeout.pl"
+    tpl_run() { # LIMIT COMMAND...: the exit code
+        local status=0
+        "$TPL" "$@" >/dev/null 2>&1 || status=$?
+        printf '%s\n' "$status"
+    }
+    start=$(date +%s)
+    expect_eq 'timeout.pl times out with 124' "$(tpl_run 1 sleep 30)" 124
+    elapsed=$(($(date +%s) - start))
+    [ "$elapsed" -le 8 ] || fail "timeout.pl took ${elapsed}s for a 1s limit"
+    expect_eq 'timeout.pl passes a status through' "$(tpl_run 10 sh -c 'exit 3')" 3
+    expect_eq 'timeout.pl passes success through' "$(tpl_run 10 true)" 0
+    expect_eq 'timeout.pl reports a signal as 128+N' "$(tpl_run 10 sh -c 'kill -TERM $$')" 143
+    expect_eq 'timeout.pl cannot run a missing command' "$(tpl_run 10 "$UNIT/no-such-command")" 127
+    expect_eq 'timeout.pl refuses a bad limit' "$(tpl_run x true)" 125
+    # A grandchild in the command's process group dies with it.
+    tpl_run 1 sh -c "sleep 30 & echo \$! >'$UNIT/grandchild.pid'; wait" >/dev/null
+    grandchild=$(cat "$UNIT/grandchild.pid")
+    sleep 1
+    if kill -0 "$grandchild" 2>/dev/null; then
+        kill "$grandchild" 2>/dev/null || true
+        fail 'timeout.pl left a grandchild running after the limit'
+    fi
+    # e2e_find_timeout picks it only when neither timeout nor gtimeout exists.
+    mkdir -p "$UNIT/noto"
+    ln -s "$(command -v perl)" "$UNIT/noto/perl"
+    expect_eq 'e2e_find_timeout falls back to timeout.pl' \
+        "$(PATH="$UNIT/noto" e2e_find_timeout && printf '%s\n' "$E2E_TIMEOUT_BIN")" "$TPL"
+    if command -v timeout >/dev/null 2>&1; then
+        expect_eq 'e2e_find_timeout prefers timeout' "$(e2e_find_timeout && printf '%s\n' "$E2E_TIMEOUT_BIN")" timeout
+    fi
+else
+    printf 'SKIP: tests/e2e/timeout.pl (perl unavailable).\n'
+fi
+
 # The sudo.log audit needs GNU date -d (Linux); the timestamps are sudo's
 # with Defaults log_year, and only the entry outside a window is reported.
 if date -d @0 +%s >/dev/null 2>&1; then
@@ -888,6 +928,12 @@ if grep -E "^[0-9]+${TAB}[^${TAB}]+${TAB}fail${TAB}" "$CLEAN_OUT/summary.tsv" >/
     cat "$CLEAN_OUT/summary.tsv" >&2
     fail 'clean: summary.tsv has a fail row'
 fi
+# Every step of the dry run went through the limit e2e_find_timeout picks on
+# this PATH: coreutils timeout on Linux, tests/e2e/timeout.pl on the macOS
+# runner (basenames: inside.sh resolves its own directory physically).
+expected_timeout=$(PATH="$TEST_BIN:$PATH" e2e_find_timeout && printf '%s\n' "${E2E_TIMEOUT_BIN:-none}")
+expect_eq 'clean env.txt names the timeout' "$(sed -n 's/^timeout=//p' "$CLEAN_OUT/env.txt" | sed 's|.*/||')" \
+    "${expected_timeout##*/}"
 expect_step clean clone pass "at $CLEAN_HOME/dotfiles"
 expect_step clean doctor-initial pass 'exit 1; '
 expect_step clean doctor-initial pass 'no writes'
