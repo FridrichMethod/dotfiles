@@ -57,7 +57,9 @@ e2e_one_line() {
 }
 
 # e2e_find_timeout: timeout (coreutils) or gtimeout (Homebrew coreutils on
-# macOS), else none: the runs then have no limit.
+# macOS), else none: the runs then have no limit. The macos-15 runner ships
+# neither, so the mac row relies on the job's timeout-minutes; env.txt
+# records which it was.
 e2e_find_timeout() {
     local name
     E2E_TIMEOUT_BIN=''

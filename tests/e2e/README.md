@@ -57,6 +57,7 @@ the network and takes from ten minutes to an hour per host.
   the timeout binary (`none` on the mac runner) and the paths the HOME snapshots left out
   (`E2E_SNAPSHOT_PRUNE`, expanded)
 - `log/wrappers.log`: every `sudo`, `chsh` and `stow` call, with the harness phase it ran in
+  (the doctor's `stow --version` probe is logged like any call but is not a finding)
 - `log/sudo.log`: sudo's own log (Ubuntu and Fedora images)
 - `log/timeline`: `<epoch> <begin|end> <phase>` around every command the harness runs
 - `snapshots/`: the `find` listings behind the no-write checks
@@ -86,7 +87,8 @@ failed audit names the offending `log/wrappers.log` or `log/sudo.log` line.
 ## Where the policy lives
 
 Which HUMAN blocks the harness runs, skips or fails on is decided in
-`lib/blocks.sh`, keyed on the block's step id and kind, and documented in
+`lib/blocks.sh` (Unix) and `lib/blocks.ps1` (Windows), keyed on the block's
+step id and kind, and documented in
 [docs/testing.md](../../docs/testing.md#human-block-policy). Each host is
 described by `hosts/<host>.env`, its image by `docker/`, and the logging
 `sudo`, `chsh` and `stow` wrappers by `wrappers/`: the images install them in
