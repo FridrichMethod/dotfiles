@@ -90,6 +90,7 @@ tests=(
     setup-host.sh
     bootstrap-windows.sh
     host-overlays.sh
+    e2e-harness.sh
 )
 
 for test_name in "${tests[@]}"; do
