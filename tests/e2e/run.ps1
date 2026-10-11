@@ -13,11 +13,15 @@
     -Host win -Tsv and setup-host.ps1 -Host win -Check and requires that
     neither wrote in HOME or TEMP, loops setup-host.ps1 -Host win -Yes (at
     most eight runs) running only the HW-stow block's line as an elevated
-    PowerShell 7 would and leaving every other HW block to the person, then
-    requires a second -Yes to exit 0 applying nothing, the stowed profile to
-    load silently, doctor.ps1 -Host win to exit 0, and the clone to stay
-    clean after every step. Between steps PATH is rebuilt from the registry,
-    as a new terminal reads it. tests/e2e/inside.sh is the Unix twin.
+    PowerShell 7 would (it must link ~\.gitconfig and record the applied
+    state, which stow-all.ps1 does only on a warning-free run), leaving every
+    non-blocking HW block to the person and refusing a pending HW-clone (the
+    clone is the harness's own, so that block means setup-host.ps1 did not
+    accept it), then requires a second -Yes to exit 0 applying nothing, the
+    stowed profile to load silently, doctor.ps1 -Host win to exit 0, and the
+    clone to stay clean after every step. Between steps PATH is rebuilt from
+    the registry, as a new terminal reads it. tests/e2e/inside.sh is the Unix
+    twin.
 
     It refuses to run anywhere but a GitHub Actions runner (GITHUB_ACTIONS is
     true) or a session that sets E2E_NATIVE=1, and only when $HOME\dotfiles

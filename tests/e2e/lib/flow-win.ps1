@@ -30,9 +30,13 @@ function Test-E2EStowed {
 function Invoke-E2EStowBlock {
     # Run the HW-stow block's one line as the person would from an elevated
     # PowerShell 7 (Invoke-Expression in a child pwsh -NoProfile
-    # -NonInteractive, in HOME), then HW-stow's verify. A WARNING line of
-    # stow-all.ps1 is a note, not a failure, as inside.sh judges stow-all.sh
-    # by its exit code alone.
+    # -NonInteractive, in HOME), then HW-stow's verify and the applied state.
+    # Unlike stow-all.sh, which writes its state file unconditionally (so
+    # inside.sh judges it by its exit code and audits the file apart),
+    # stow-all.ps1 records the applied state only when nothing warned: a
+    # WARNING line leaves .git\dotfiles-sync-windows\configuration.json
+    # unwritten and the login updater would request a restow at every login,
+    # so a warning or a missing state file fails the step, warnings quoted.
     param([Parameter(Mandatory)]$Block, [Parameter(Mandatory)][string]$Line)
     Start-E2EStep $Block.Id "human:$($Block.Id)"
     Add-E2EText $E2E['StepLog'] ("--- block`n" + ($Block.Lines -join "`n") + "`n")
@@ -52,15 +56,40 @@ function Invoke-E2EStowBlock {
         return $false
     }
     $warnings = @(@(Get-E2ELines $E2E['StepOut']) + @(Get-E2ELines $E2E['StepErr']) | Where-Object { $_ -match '^WARNING: ' })
-    Complete-E2EStep pass "1 line run as printed (run-stow); $($stowed['Detail']); $($warnings.Count) warning(s)"
-    if ($warnings.Count) { Write-E2ENote "$($Block.Id)-warnings" ($warnings -join "`n") }
+    $gitDir = Get-E2EGitOutput @('-C', $E2E['Clone'], 'rev-parse', '--absolute-git-dir')
+    if ($gitDir.Code -ne 0) {
+        $E2E['Broken'] = $Block.Id
+        Complete-E2EStep fail "git rev-parse --absolute-git-dir exited $($gitDir.Code) in the clone: $($gitDir.Text)"
+        return $false
+    }
+    $state = Join-Path (Join-Path $gitDir.Text 'dotfiles-sync-windows') 'configuration.json'
+    $recorded = [IO.File]::Exists($state)
+    if ($warnings.Count -or -not $recorded) {
+        $E2E['Broken'] = $Block.Id
+        $where = if ($recorded) { 'recorded' } else { "missing at $state" }
+        $quoted = if ($warnings.Count) { ": $(ConvertTo-E2EOneLine ($warnings -join "`n") 300)" } else { '' }
+        Complete-E2EStep fail ("stow-all.ps1 exited 0 with $($warnings.Count) warning(s), applied state $where " +
+            "(stow-all.ps1 records it only on a warning-free run)$quoted")
+        return $false
+    }
+    Complete-E2EStep pass "1 line run as printed (run-stow); $($stowed['Detail']); applied state recorded, 0 warnings"
     return $true
 }
 
 function Invoke-E2EBlocks {
     # Act on an exit-3 run's blocks in printed order; $false once a block
-    # fails or is refused (Broken is set).
+    # fails or is refused (Broken is set). A block the harness must not act on
+    # refuses the whole run first, wherever it was printed, so the stow never
+    # runs in a run that also printed one (HW-clone precedes HW-stow today;
+    # the order is setup-host.ps1's to change).
     param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blocks)
+    foreach ($block in $Blocks) {
+        if ((Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind) -ceq 'fail') {
+            $E2E['Broken'] = $block.Id
+            Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $(Get-E2EBlockText $block)"
+            return $false
+        }
+    }
     foreach ($block in $Blocks) {
         $action = Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind
         $text = Get-E2EBlockText $block
@@ -93,8 +122,10 @@ function Invoke-E2EBlocks {
 function Invoke-E2EApplyLoop {
     # setup-host.ps1 -Host win -Yes until it exits 0, at most eight runs, each
     # with the PATH a new terminal would read. Exit 3 hands the printed blocks
-    # to Invoke-E2EBlocks; a run whose blocks let nothing progress fails as
-    # "no progress"; exit 1 or 2 fails with what setup-host reported.
+    # to Invoke-E2EBlocks, which runs the stow or refuses a block by name (as
+    # inside.sh counts a run-* or fail action as progress); a run whose blocks
+    # hold neither fails as "no progress"; exit 1 or 2 fails with what
+    # setup-host reported.
     for ($n = 1; $n -le 8; $n++) {
         $name = "apply-$n"
         Update-E2EPath
@@ -114,7 +145,7 @@ function Invoke-E2EApplyLoop {
                 $actions = @($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind })
                 $pending = Get-E2EPendingIds (@($output) + @($errors))
                 $summary = Get-E2EBlocksSummary $blocks
-                if ($actions -notcontains 'run-stow') {
+                if ($actions -notcontains 'run-stow' -and $actions -notcontains 'fail') {
                     $E2E['Broken'] = $name
                     Complete-E2EStep fail "no progress: exit 3 with no block the harness may run (pending: $pending; blocks: $summary)"
                     return $false
