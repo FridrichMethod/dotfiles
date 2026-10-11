@@ -254,8 +254,11 @@ the clone itself, then follows the Other Linux quick start to a host-less
   `$HOME/work`, `$HOME/Library`, the runner's own agent directory
   `$HOME/runners` or `$HOME/actions-runner` (hosted `macos-15` runners come
   in both layouts; its `_diag` logs are appended throughout the job, so a
-  snapshot that watched it would fail every no-write step) and the
-  preinstalled `$HOME/hostedtoolcache`; `env.txt` records the expanded list,
+  snapshot that watched it would fail every no-write step), the
+  preinstalled `$HOME/hostedtoolcache` and the media folders `$HOME/Movies`,
+  `$HOME/Music` and `$HOME/Pictures`, whose libraries Apple's media daemons
+  update on their own (a run saw the TV app's library written during the
+  second apply); `env.txt` records the expanded list,
   so a reader of the artifact sees what the no-write checks did not watch.
   The runner ships no `timeout` or `gtimeout`, so the per-command limits of
   `tests/e2e/lib/common.sh` (45 minutes per block line, 60 per apply, 15 per
