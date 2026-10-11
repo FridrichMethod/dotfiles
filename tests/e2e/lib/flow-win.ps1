@@ -65,6 +65,13 @@ function Invoke-E2EBlocks {
     # the order is setup-host.ps1's to change).
     param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blocks)
     foreach ($block in $Blocks) {
+        if ((Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind) -ceq 'fail') {
+            $E2E['Broken'] = $block.Id
+            Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $(Get-E2EBlockText $block)"
+            return $false
+        }
+    }
+    foreach ($block in $Blocks) {
         $action = Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind
         $text = Get-E2EBlockText $block
         switch ($action) {
@@ -83,13 +90,6 @@ function Invoke-E2EBlocks {
                 }
                 if (-not (Invoke-E2EStowBlock -Block $block -Line $selected['Line'])) { return $false }
             }
-    foreach ($block in $Blocks) {
-        if ((Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind) -ceq 'fail') {
-            $E2E['Broken'] = $block.Id
-            Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $(Get-E2EBlockText $block)"
-            return $false
-        }
-    }
             default {
                 $E2E['Broken'] = $block.Id
                 Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $text"
