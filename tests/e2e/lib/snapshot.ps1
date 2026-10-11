@@ -17,11 +17,32 @@
 # (NTUSER.DAT and its logs flush on their own schedule), the clone's .git (as
 # inside.sh prunes it) and the out dir. E2E_SNAPSHOT_PRUNE adds ;-separated
 # paths, absolute or relative to HOME.
+#
+# Noted, not failed: AppData\LocalLow\Microsoft\CryptnetUrlCache, Windows'
+# per-user cache of CRL and OCSP downloads. Every process of the runner
+# account writes it, the Actions agent's own HTTPS traffic included, so a
+# new entry during a step cannot be pinned on the step (setup-host.ps1
+# -Check reads PATH, files, the registry and services, nothing networked).
+# A difference there is kept in snapshots\<name>.diff as "noted ..." and does
+# not fail the step; any other difference does.
 
 $script:E2EPruneRelative = @(
     'work', 'AppData\Local\Temp', 'AppData\Local\Microsoft\PowerShell', 'AppData\Local\Microsoft\Windows',
     'AppData\Local\Packages', 'AppData\Local\ConnectedDevicesPlatform', 'dotfiles\.git'
 )
+$script:E2ENotedRelative = @('AppData\LocalLow\Microsoft\CryptnetUrlCache')
+
+function Test-E2ENoted {
+    # True for a snapshot difference ("added|removed|changed <path>...") under
+    # a noted path.
+    param([Parameter(Mandatory)][string]$Difference)
+    $path = $Difference.Substring($Difference.IndexOf(' ') + 1)
+    foreach ($entry in $script:E2ENotedRelative) {
+        $prefix = [IO.Path]::GetFullPath((Join-Path $HOME $entry)).TrimEnd('\', '/')
+        if ($path.StartsWith($prefix + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
 
 function Get-E2EPruneList {
     # The pruned paths, full and without a trailing separator.
@@ -123,16 +144,19 @@ function Get-E2ENoWriteEnvironment {
 
 function Stop-E2ENoWrite {
     # The violations, or '': TEMP entries left behind, HOME files added,
-    # removed or changed (kept in snapshots\<name>.diff).
+    # removed or changed outside the noted paths (every difference is kept in
+    # snapshots\<name>.diff, the noted ones prefixed "noted ").
     param([Parameter(Mandatory)][string]$Name)
     $problems = [Collections.Generic.List[string]]::new()
     $left = @([IO.Directory]::EnumerateFileSystemEntries($E2E['NoWriteTemp']) | ForEach-Object { [IO.Path]::GetFileName($_) })
     if ($left.Count) { $problems.Add("TEMP not empty: $(ConvertTo-E2EOneLine ($left -join "`n") 200)") }
     $after = Get-E2ESnapshot -Root $HOME -Prune (Get-E2EPruneList)
     $differences = @(Compare-E2ESnapshot -Before $E2E['NoWriteHome'] -After $after)
-    [IO.File]::WriteAllText((Join-Path $E2E['Out'] "snapshots/$Name.diff"), (($differences -join "`n") + "`n"), $script:E2EUtf8)
-    if ($differences.Count) {
-        $problems.Add("HOME written ($($differences.Count) difference(s)): $(ConvertTo-E2EOneLine ($differences -join "`n") 300)")
+    $real = @($differences | Where-Object { -not (Test-E2ENoted -Difference $_) })
+    $report = @($differences | ForEach-Object { if (Test-E2ENoted -Difference $_) { "noted $_" } else { $_ } })
+    [IO.File]::WriteAllText((Join-Path $E2E['Out'] "snapshots/$Name.diff"), (($report -join "`n") + "`n"), $script:E2EUtf8)
+    if ($real.Count) {
+        $problems.Add("HOME written ($($real.Count) difference(s)): $(ConvertTo-E2EOneLine ($real -join "`n") 300)")
     }
     $E2E['NoWriteHome'] = $null
     return ($problems -join '; ')

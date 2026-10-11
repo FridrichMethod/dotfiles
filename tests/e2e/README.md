@@ -95,6 +95,7 @@ described by `hosts/<host>.env`, its image by `docker/`, and the logging
 `/usr/local/bin`, and on the mac runner the workflow installs them there too,
 before any phase opens, because macOS's `path_helper` puts `/usr/local/bin`
 ahead of `/usr/bin` in every login shell and demotes any other directory
-(`inside.sh`'s own `$E2E_OUT/bin` copy is reached only outside login shells).
+(`inside.sh`'s own `$E2E_OUT/bin` copy is reached only outside login shells;
+each wrapper skips any other wrapper copy when it looks for the real tool).
 The harness never writes inside the clone it tests, and its variables all
 start with `E2E_`.

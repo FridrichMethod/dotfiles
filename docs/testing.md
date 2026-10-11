@@ -223,7 +223,11 @@ the clone itself, then follows the Other Linux quick start to a host-less
   of `/usr/bin`, and the login-shell, doctor-final and doctor-smoke steps
   still reach the wrappers (`/etc/paths.d` would not do: its entries land
   after `/etc/paths`). `inside.sh`'s own copy in `$E2E_OUT/bin` is reached
-  only outside login shells.
+  only outside login shells. With two copies on PATH, each wrapper skips
+  every file that is itself an e2e wrapper when it looks for the real tool,
+  so a call is logged once and never bounces between the copies (the first
+  CI run hung 90 minutes on the doctor's `stow --version` that way, before
+  Homebrew's stow existed).
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.
@@ -269,9 +273,14 @@ the clone itself, then follows the Other Linux quick start to a host-less
   `-Check` runs, a second `-Yes` that applies nothing, a clean clone after
   every step, a silent load of the stowed profile); criterion 5's four audits
   have no Windows counterpart, since there are no wrappers and no sudo log
-  there, and `HW-stow` is judged by its own evidence instead (below). `pwsh`
-  is absent from the development machines, so the Windows driver's first
-  execution is the CI job.
+  there, and `HW-stow` is judged by its own evidence instead (below). The
+  home snapshots note, rather than fail, a change under
+  `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows' per-user CRL and
+  OCSP cache, which every process of the runner account writes, the Actions
+  agent's own HTTPS traffic included (the first CI run saw an entry appear
+  during `-Check`, whose probes are all local); `snapshots\<step>.diff` keeps
+  it as `noted ...`. `pwsh` is absent from the development machines, so the
+  Windows driver ran first in CI.
 
 ### HUMAN-block policy
 

@@ -49,6 +49,13 @@ e2e_exec_real() {
         real=$(cd "$dir" 2>/dev/null && pwd -P) || continue
         [ "$real" != "$self" ] || continue
         if [ -f "$real/$tool" ] && [ -x "$real/$tool" ]; then
+            # Another e2e wrapper is not the real tool: the macOS runner has
+            # one copy in /usr/local/bin and one in $E2E_OUT/bin, and each
+            # skips only its own directory, so they would exec each other
+            # forever.
+            if grep -F -e '# e2e wrapper for ' -e '# e2e denying sudo' "$real/$tool" >/dev/null 2>&1; then
+                continue
+            fi
             exec "$real/$tool" "$@"
         fi
     done
