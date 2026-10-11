@@ -6,9 +6,11 @@
 # docs/bootstrap.md "HUMAN blocks", "Running it with an agent" and "Native
 # Windows": the harness stands in for the person who opens the elevated
 # PowerShell for HW-stow (the runner is elevated) and leaves every other
-# Windows block to the person, since it can neither toggle Developer Mode,
-# decide a security setting, grant a task standing elevation, start a service,
-# install WSL nor sign in.
+# non-blocking Windows block to the person, since it can neither decide a
+# security setting, grant a task standing elevation, start a service, install
+# WSL nor sign in. HW-clone it performed and verified itself (the clone step,
+# core.symlinks on), so that block pending means setup-host.ps1 did not
+# accept the clone: a finding to fail on, never something to work around.
 
 function ConvertFrom-E2EBlocks {
     # The HUMAN blocks of an apply run's output lines, in order, as objects
@@ -79,13 +81,15 @@ function Get-E2EFailureDetail {
 function Get-E2EBlockPolicy {
     # The harness action for a block. run-stow: the HW-stow line, as the
     # person runs it from an elevated PowerShell 7. skip: a reminder for the
-    # person (Developer Mode, the execution policy, the automatic stow task,
-    # the ssh-agent service, WSL, sign-in). fail: every (id, kind) it does not
-    # know, a known id with another kind included.
+    # person about a non-blocking step (the execution policy, the automatic
+    # stow task, the ssh-agent service, WSL, sign-in). fail: HW-clone, the
+    # blocking step the clone step performed and verified itself, so pending
+    # it means setup-host.ps1 did not accept the clone; and every (id, kind)
+    # it does not know, a known id with another kind included.
     param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Kind)
     switch -CaseSensitive ("${Id}:$Kind") {
         'HW-stow:judgment' { return 'run-stow' }
-        { $_ -cin @('HW-clone:gui', 'HW-execution-policy:judgment', 'HW-auto-stow-task:judgment',
+        { $_ -cin @('HW-execution-policy:judgment', 'HW-auto-stow-task:judgment',
                 'HW-ssh-agent:sudo', 'HW-wsl:judgment', 'HW-auth:auth') } { return 'skip' }
     }
     return 'fail'

@@ -59,7 +59,10 @@ function Invoke-E2EStowBlock {
 
 function Invoke-E2EBlocks {
     # Act on an exit-3 run's blocks in printed order; $false once a block
-    # fails or is refused (Broken is set).
+    # fails or is refused (Broken is set). A block the harness must not act on
+    # refuses the whole run first, wherever it was printed, so the stow never
+    # runs in a run that also printed one (HW-clone precedes HW-stow today;
+    # the order is setup-host.ps1's to change).
     param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blocks)
     foreach ($block in $Blocks) {
         $action = Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind
@@ -80,6 +83,13 @@ function Invoke-E2EBlocks {
                 }
                 if (-not (Invoke-E2EStowBlock -Block $block -Line $selected['Line'])) { return $false }
             }
+    foreach ($block in $Blocks) {
+        if ((Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind) -ceq 'fail') {
+            $E2E['Broken'] = $block.Id
+            Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $(Get-E2EBlockText $block)"
+            return $false
+        }
+    }
             default {
                 $E2E['Broken'] = $block.Id
                 Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $text"
@@ -93,8 +103,10 @@ function Invoke-E2EBlocks {
 function Invoke-E2EApplyLoop {
     # setup-host.ps1 -Host win -Yes until it exits 0, at most eight runs, each
     # with the PATH a new terminal would read. Exit 3 hands the printed blocks
-    # to Invoke-E2EBlocks; a run whose blocks let nothing progress fails as
-    # "no progress"; exit 1 or 2 fails with what setup-host reported.
+    # to Invoke-E2EBlocks, which runs the stow or refuses a block by name (as
+    # inside.sh counts a run-* or fail action as progress); a run whose blocks
+    # hold neither fails as "no progress"; exit 1 or 2 fails with what
+    # setup-host reported.
     for ($n = 1; $n -le 8; $n++) {
         $name = "apply-$n"
         Update-E2EPath
@@ -114,7 +126,7 @@ function Invoke-E2EApplyLoop {
                 $actions = @($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind })
                 $pending = Get-E2EPendingIds (@($output) + @($errors))
                 $summary = Get-E2EBlocksSummary $blocks
-                if ($actions -notcontains 'run-stow') {
+                if ($actions -notcontains 'run-stow' -and $actions -notcontains 'fail') {
                     $E2E['Broken'] = $name
                     Complete-E2EStep fail "no progress: exit 3 with no block the harness may run (pending: $pending; blocks: $summary)"
                     return $false
