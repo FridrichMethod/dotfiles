@@ -231,6 +231,10 @@ function Complete-E2EStep {
         if ($dirty) {
             $Status = 'fail'
             $Detail = "$Detail; clone not clean: $(ConvertTo-E2EOneLine $dirty 200)"
+            # The change itself goes into the step log, so whoever reads the
+            # artifact sees what was written, not only which file.
+            $diff = Get-E2EGitOutput @('-C', $E2E['Clone'], '--no-optional-locks', 'diff', '--no-color')
+            Add-E2EText $E2E['StepLog'] ("--- git diff of the clone (exit $($diff.Code))`n$($diff.Text)`n--- end`n")
         }
     }
     $seconds = (Get-E2ENow) - $E2E['StepStart']
