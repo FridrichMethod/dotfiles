@@ -66,9 +66,8 @@ git push
 Push right away: once the daily bump lands on `origin/main`, an unpushed
 local bump has diverged from it, and the login updater's `git pull --ff-only`
 fails on every login, so the host gets no update until you reconcile the two
-(`git pull --rebase`, then push). Stow after the
-commit, because `stow-all.sh` records a revision as applied only from a clean
-tree.
+(`git pull --rebase`, then push). Stow after the commit, because
+`stow-all.sh` records a revision as applied only from a clean tree.
 
 ## Projects
 
