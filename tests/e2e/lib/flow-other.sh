@@ -27,28 +27,57 @@ e2e_step_packages() {
 # e2e_extract_helpers DOC FILE: the fenced sh block that follows the
 # "Downloads and clones by hand" heading of DOC, written to FILE: the
 # fetch_pinned and clone_listed definitions, taken from the clone instead of
-# copied here, so the test runs what the playbook prints.
+# copied here, so the test runs what the playbook prints. The file is
+# sourced at the start of every by-hand step, so nothing but those two
+# definitions may run from it: every other line must be a comment, blank,
+# or an indented line inside one of them (`fetch_pinned() {` or
+# `clone_listed() {` through the `}` in column 0); a stray top-level line,
+# an example invocation or an export, would run four times, unflagged by
+# the audits. Returns 1 with the reason printed.
 e2e_extract_helpers() {
+    local stray
     awk '
         /^#+ Downloads and clones by hand/ { seen = 1; next }
         seen && !inside && /^```sh/ { inside = 1; next }
         inside && /^```/ { exit }
         inside { print }
     ' "$1" >"$2"
-    [ -s "$2" ] || return 1
-    bash -n "$2" || return 1
-    grep -E '^fetch_pinned\(\)' "$2" >/dev/null && grep -E '^clone_listed\(\)' "$2" >/dev/null
+    if [ ! -s "$2" ]; then
+        printf 'no fenced sh block after "Downloads and clones by hand"\n'
+        return 1
+    fi
+    if ! bash -n "$2"; then
+        printf 'the fenced sh block does not parse (bash -n)\n'
+        return 1
+    fi
+    if ! grep -E '^fetch_pinned\(\) \{$' "$2" >/dev/null || ! grep -E '^clone_listed\(\) \{$' "$2" >/dev/null; then
+        printf 'the fenced sh block lacks a "fetch_pinned() {" or a "clone_listed() {" line\n'
+        return 1
+    fi
+    stray=$(awk '
+        !infn && /^(fetch_pinned|clone_listed)\(\) \{$/ { infn = 1; next }
+        infn && /^\}$/ { infn = 0; next }
+        /^#/ || /^[ \t]*$/ { next }
+        infn && /^[ \t]/ { next }
+        { print; found = 1; exit }
+        END { if (infn && !found) print "(a definition without its closing } in column 0)" }
+    ' "$2")
+    if [ -n "$stray" ]; then
+        printf 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block: %s\n' "$stray"
+        return 1
+    fi
 }
 
 # e2e_step_helpers: define the helpers from the clone's docs/bootstrap.md.
 e2e_step_helpers() {
+    local reason
     e2e_step_begin helpers setup:helpers
     E2E_HELPERS=${E2E_STEP_LOG%.log}.sh
-    if e2e_extract_helpers "$E2E_CLONE/docs/bootstrap.md" "$E2E_HELPERS" 2>>"$E2E_STEP_LOG"; then
+    if reason=$(e2e_extract_helpers "$E2E_CLONE/docs/bootstrap.md" "$E2E_HELPERS" 2>>"$E2E_STEP_LOG"); then
         e2e_step_end pass "fetch_pinned and clone_listed from docs/bootstrap.md ($(grep -c . "$E2E_HELPERS") lines)"
     else
         E2E_BROKEN=helpers
-        e2e_step_end fail 'docs/bootstrap.md has no usable fenced sh block after "Downloads and clones by hand"'
+        e2e_step_end fail "docs/bootstrap.md: $reason"
         return 1
     fi
 }

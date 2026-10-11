@@ -90,9 +90,11 @@ e2e_handle_alloc() {
 # failing line fails the step and stops the flow.
 e2e_run_block() {
     local id=$1 kind=$2 action=$3 file=$4 lines rest line count=0 rc
+    # On failure the function prints its reason (E2E_BLOCK_ERROR is lost in
+    # the subshell).
     if ! lines=$(e2e_block_lines "$action" "$E2E_SETUP_HOST" "$file"); then
         E2E_BROKEN=$id
-        e2e_fail_row "$id" "$kind block refused: $E2E_BLOCK_ERROR; block: $(e2e_block_text "$file")"
+        e2e_fail_row "$id" "$kind block refused: $lines; block: $(e2e_block_text "$file")"
         return 1
     fi
     e2e_step_begin "$id" "human:$id"

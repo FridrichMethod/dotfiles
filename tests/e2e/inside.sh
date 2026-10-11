@@ -7,8 +7,11 @@
 # stows, starts a login shell, and audits that sudo, chsh and stow were only
 # ever called inside those blocks. tests/e2e/run.sh starts it; it never runs
 # against a workstation's own home: it refuses unless it is in a container
-# (/.dockerenv), on Darwin with E2E_NATIVE=1 (the macos runner), or given
-# E2E_SANDBOX_HOME under the temp dir (the unit test's seam, Linux or Darwin).
+# (Docker's /.dockerenv or Podman's /run/.containerenv, not a toolbox or
+# distrobox that shares the real home), on Darwin with E2E_NATIVE=1 (the
+# macos runner), or given E2E_SANDBOX_HOME under the temp dir together with
+# a fixture E2E_SRC under it and stub sudo, chsh and stow first on PATH (the
+# unit test's seam, Linux or Darwin; not a dry-run mode for a real checkout).
 #
 #   E2E_HOST=<host> E2E_REV=<sha> E2E_SRC=<checkout> E2E_OUT=<dir> inside.sh
 #
@@ -98,7 +101,8 @@ E2E_OUT=$(e2e_physical "$E2E_OUT") || e2e_die "cannot enter E2E_OUT"
 [ -w "$E2E_OUT" ] || e2e_die "E2E_OUT is not writable: $E2E_OUT"
 
 # Containment: a container, the macOS runner, or the unit test's sandbox
-# home. Nothing else; a workstation's real home is never bootstrapped.
+# home with its fixture checkout and stub tools. Nothing else; a
+# workstation's real home, packages and locale are never bootstrapped.
 E2E_RUN_USER=$(id -un 2>/dev/null) || E2E_RUN_USER=${USER:-}
 [ -n "$E2E_RUN_USER" ] || e2e_die 'cannot tell the running user (id -un)'
 E2E_MODE=''
@@ -116,15 +120,44 @@ if [ -n "${E2E_SANDBOX_HOME:-}" ]; then
     esac
     real_home=$(e2e_physical "$HOME") || real_home=$HOME
     [ "$sandbox" != "$real_home" ] || e2e_die "E2E_SANDBOX_HOME is the real HOME: $sandbox"
+    # The seam relocates HOME and nothing else, so it drives only the unit
+    # test's fixture: a real checkout would run its real setup-host, whose
+    # sudo blocks reach apt, the locale and /home/linuxbrew, none of which
+    # HOME contains. E2E_SRC is physical already.
+    case $E2E_SRC in
+        "$tmp_root"/?*) ;;
+        *) e2e_die "E2E_SANDBOX_HOME drives only a fixture checkout under the temp dir $tmp_root; E2E_SRC is $E2E_SRC" ;;
+    esac
+    # And only with stub tools: the sudo, chsh and stow PATH finds must live
+    # under the temp dir too, so a checkout copied there still reaches no
+    # real sudo.
+    for tool in sudo chsh stow; do
+        found=$(command -v "$tool" 2>/dev/null) || continue
+        [ -n "$found" ] || continue
+        found_dir=$(e2e_physical "$(dirname -- "$found")") ||
+            e2e_die "E2E_SANDBOX_HOME runs only with stub tools under the temp dir $tmp_root; cannot enter the directory of $tool at $found"
+        case $found_dir/${found##*/} in
+            "$tmp_root"/?*) ;;
+            *) e2e_die "E2E_SANDBOX_HOME runs only with stub tools under the temp dir $tmp_root; $tool on PATH is $found_dir/${found##*/}" ;;
+        esac
+    done
     HOME=$sandbox
     export HOME
     E2E_MODE=sandbox
-elif [ -f /.dockerenv ]; then
+elif [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
+    # Docker writes /.dockerenv, Podman /run/.containerenv. A toolbox or
+    # distrobox container is a Podman container too, but it shares the
+    # workstation's real home, which the user/home check below would then
+    # pass for the one developer whose account the env file names.
+    if [ ! -f /.dockerenv ] && { [ -f /run/.toolboxenv ] || [ -f /run/.containersetupdone ] ||
+        [ -n "${TOOLBOX_PATH:-}" ] || [ -n "${CONTAINER_ID:-}" ]; }; then
+        e2e_die 'refusing to run in a toolbox or distrobox container, which shares the real home'
+    fi
     E2E_MODE=container
 elif [ "${E2E_NATIVE:-}" = 1 ] && [ "$(uname -s)" = Darwin ]; then
     E2E_MODE=native
 else
-    e2e_die 'refusing to run outside a container: no /.dockerenv, not Darwin with E2E_NATIVE=1, no E2E_SANDBOX_HOME'
+    e2e_die 'refusing to run outside a container: no /.dockerenv or /run/.containerenv, not Darwin with E2E_NATIVE=1, no E2E_SANDBOX_HOME'
 fi
 if [ "$E2E_MODE" != sandbox ]; then
     # The env file says who runs in the image or on the runner; a mismatch
