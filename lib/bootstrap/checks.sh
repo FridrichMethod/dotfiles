@@ -517,10 +517,6 @@ bootstrap_check_codex_override() {
         return 0
     fi
     helper=$root/common/codex/.local/bin/codex-instructions-sync
-    if [ ! -f "$helper" ] || [ ! -x "$helper" ]; then
-        bootstrap_check_result missing "no executable $helper, so ~/.codex/AGENTS.override.md cannot be checked"
-        return 0
-    fi
     live=${HOME%/}/.codex/AGENTS.override.md
     if output=$("$helper" --check --append "$rules" "$root/common/codex/.codex/AGENTS.md" "$live" </dev/null 2>&1); then
         bootstrap_codex_override_checked "$host" "$live" "${output##*"$BOOTSTRAP_NL"}"

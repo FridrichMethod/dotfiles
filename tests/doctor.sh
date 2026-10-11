@@ -992,7 +992,8 @@ assert_row codex-override missing 'codex-instructions-sync --check failed (exit 
 chmod -x "$FIXTURE/common/codex/.local/bin/codex-instructions-sync"
 run_doctor codex-no-helper -- --host wsl-ubuntu --tsv
 assert_rc 1
-assert_row codex-override missing "no executable $FIXTURE/common/codex/.local/bin/codex-instructions-sync"
+assert_row codex-override missing 'codex-instructions-sync --check failed (exit 126): '
+assert_row codex-override missing 'codex-instructions-sync: Permission denied'
 chmod +x "$FIXTURE/common/codex/.local/bin/codex-instructions-sync"
 
 # Codex truncates its global instructions at 32 KiB: a current override
