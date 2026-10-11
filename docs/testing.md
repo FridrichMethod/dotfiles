@@ -252,7 +252,8 @@ the clone itself, then follows the Other Linux quick start to a host-less
   (installed in `/usr/local/bin` by the workflow, above) and the behavioral
   signals are audited, and the home snapshots prune
   `$HOME/work`, `$HOME/Library`, the runner's own agent directory
-  `$HOME/runners` (its `_diag` logs are appended throughout the job, so a
+  `$HOME/runners` or `$HOME/actions-runner` (hosted `macos-15` runners come
+  in both layouts; its `_diag` logs are appended throughout the job, so a
   snapshot that watched it would fail every no-write step) and the
   preinstalled `$HOME/hostedtoolcache`; `env.txt` records the expanded list,
   so a reader of the artifact sees what the no-write checks did not watch.
