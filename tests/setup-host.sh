@@ -1935,7 +1935,7 @@ expect_no_event 'setup-sync:'
 expect_line hpc-login 'HUMAN-BEGIN H2-alloc alloc'
 expect_line hpc-login 'sh_dev -t 1:00:00'
 expect_text hpc-login out 'S2-login-env todo blocked by H2-alloc'
-expect_text hpc-login out 'S4-setup-sync todo blocked by S2-login-env'
+expect_text hpc-login out 'S4-setup-sync todo waiting: H2-alloc'
 expect_line hpc-login 'HUMAN-BEGIN S2-modules judgment'
 # No site module provides claude or codex here, so H7-auth does not name them.
 expect_line hpc-login 'HUMAN-BEGIN H7-auth auth'
@@ -1953,6 +1953,32 @@ expect_line hpc-alloc 'HUMAN-BEGIN H7-stow judgment'
 expect_line hpc-alloc "PATH=\"\$HOME/micromamba/envs/login/bin:\$PATH\" $FIXTURE/stow-all.sh sherlock"
 expect_no_text hpc-alloc out 'HUMAN-BEGIN H2-alloc'
 expect_no_event TRIPWIRE
+
+# An existing login env does not authorize building .venv-sync on a login node.
+rm -rf "$FIXTURE/.venv-sync"
+run_case hpc-sync-login "${HPC_ENV[@]}" -- --host sherlock --yes --only H2-alloc --only S4-setup-sync
+expect_rc hpc-sync-login 3
+expect_line hpc-sync-login 'HUMAN-BEGIN H2-alloc alloc'
+expect_no_event 'setup-sync:'
+[ ! -e "$FIXTURE/.venv-sync" ] || fail 'the sync env was built outside an allocation'
+run_case hpc-sync-only "${HPC_ENV[@]}" -- --host sherlock --yes --only S4-setup-sync
+expect_rc hpc-sync-only 3
+expect_no_event 'setup-sync:'
+run_case hpc-sync-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- --host sherlock --yes --only H2-alloc --only S4-setup-sync
+expect_rc hpc-sync-alloc 0
+expect_event "setup-sync:--python $CASE_HOME/micromamba/envs/login/bin/python3"
+# The checkout-local sync env obeys the same durable-storage rule as login.
+rm -rf "$FIXTURE/.venv-sync"
+for scratch_var in SCRATCH GROUP_SCRATCH; do
+    run_case hpc-sync-scratch "${HPC_ENV[@]}" SLURM_JOB_ID=1 "$scratch_var=$FIXTURE" -- \
+        --host sherlock --yes --only S4-setup-sync
+    expect_rc hpc-sync-scratch 1
+    expect_text hpc-sync-scratch err "refusing to build the AI-sync env under \$$scratch_var"
+    expect_no_event 'setup-sync:'
+    [ ! -e "$FIXTURE/.venv-sync" ] || fail 'the sync env was built under purged storage'
+done
+run_case hpc-sync-restored "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- --host sherlock --yes --only S4-setup-sync
+expect_rc hpc-sync-restored 0
 
 new_home sherlock-scratch
 run_case hpc-scratch "${HPC_ENV[@]}" SLURM_JOB_ID=1 SCRATCH="$TEST_TMP/homes" -- \

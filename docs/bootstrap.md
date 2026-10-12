@@ -1044,9 +1044,10 @@ files already carry the hook block.
 
 ### H2-alloc: Slurm allocation
 
-Applies to `sherlock` and `marlowe`. Solving and unpacking the login env is
-sustained work, so it runs on a compute node; setup-host refuses S2-login-env
-while `SLURM_JOB_ID` is unset and prints this block.
+Applies to `sherlock` and `marlowe`. Build both the login env and the checkout's
+AI-sync env on a compute node. setup-host refuses S2-login-env and
+S4-setup-sync while `SLURM_JOB_ID` is unset and either env needs building,
+and prints this block even when the login env already exists.
 
 - **Check:** `echo "${SLURM_JOB_ID:-none}"`
 - **Install:** Sherlock: `sh_dev -t 1:00:00`. Marlowe: an interactive job with
@@ -1294,6 +1295,12 @@ Applies to every Unix host (Windows: W1-setup-sync). `./setup-sync.sh` creates
 the checkout-local `.venv-sync` with the hash-pinned `tomlkit` that
 `./stow-all.sh` needs; it is the only write setup-host causes inside the clone.
 It needs Python 3.11 or newer.
+
+On `sherlock` and `marlowe`, create or repair `.venv-sync` only inside a Slurm
+allocation (H2-alloc), even when the login env already exists. Keep the
+checkout outside `$SCRATCH` and `$GROUP_SCRATCH`: setup-host refuses to build
+the sync env there, including through a symlink. A working env can be checked
+and used on a login node without rebuilding it.
 
 - **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/lib/config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.sh. By hand, by platform:

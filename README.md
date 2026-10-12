@@ -133,6 +133,8 @@ cd ~/dotfiles
 
 Setup installs the hash-pinned `tomlkit` dependency into this clone's ignored
 `.venv-sync`; JSON uses Python's standard library. No activation is needed.
+On Sherlock and Marlowe, build or repair this env inside a Slurm allocation
+and keep the checkout outside `$SCRATCH` and `$GROUP_SCRATCH`, as for the login env.
 The shell/PowerShell installers remain the entrypoints. Login and automatic
 update never install AI-sync dependencies or fetch Python packages. Run setup explicitly
 again when the pin changes; see [configuration sync](docs/config-sync.md).

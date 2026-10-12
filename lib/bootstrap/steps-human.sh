@@ -168,15 +168,19 @@ step_H1_fcitx5_plan() {
 # --- H2-alloc (hpc, alloc) -------------------------------------------------
 
 step_H2_alloc_check() {
+    local need=S2-login-env
     if steps_probe login-env; then
-        STEP_DETAIL='the login env exists; no allocation is needed'
-        return 0
+        if step_S4_setup_sync_check; then
+            STEP_DETAIL='the login and AI-sync envs exist; no allocation is needed'
+            return 0
+        fi
+        need=S4-setup-sync
     fi
     if bootstrap_in_allocation; then
         STEP_DETAIL="inside Slurm job $SLURM_JOB_ID"
         return 0
     fi
-    STEP_DETAIL='S2-login-env builds the login env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
+    STEP_DETAIL="$need builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)"
     return 1
 }
 

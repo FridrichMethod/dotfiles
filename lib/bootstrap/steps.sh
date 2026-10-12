@@ -159,7 +159,7 @@ steps_needs() {
             echo H1-apt-core
             ;;
         hpc:S2-login-env) echo S2-micromamba H2-alloc ;;
-        hpc:S4-setup-sync) echo S2-login-env ;;
+        hpc:S4-setup-sync) echo S2-login-env H2-alloc ;;
         hpc:H7-stow) echo S3-clones S2-login-env S4-setup-sync ;;
     esac
 }

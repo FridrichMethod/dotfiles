@@ -12,6 +12,8 @@ set -euo pipefail
 # printed as HUMAN blocks for a person (or one visible top-level agent
 # command). The only write inside the checkout is .venv-sync, made by
 # ./setup-sync.sh. --check writes nothing and makes no network calls.
+# On hpc, both login and AI-sync envs build only inside an allocation and
+# outside SCRATCH/GROUP_SCRATCH; an existing login env does not bypass this.
 # Exit: 0 every selected step done (non-blocking HUMAN reminders may still
 # print), 1 a step failed, 2 usage or refusal (also as root, or on a machine
 # that is not HOST), 3 work remains: a blocking HUMAN step pending, or auto

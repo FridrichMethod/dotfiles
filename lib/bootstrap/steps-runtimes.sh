@@ -219,6 +219,10 @@ step_S4_setup_sync_check() {
         return 0
     fi
     STEP_DETAIL="no working AI-sync runtime in $venv"
+    if [ "$STEPS_PROFILE" = hpc ] && ! bootstrap_in_allocation; then
+        STEP_DETAIL="H2-alloc: building the AI-sync env needs a Slurm allocation (SLURM_JOB_ID is unset)"
+        return 4
+    fi
     return 1
 }
 
@@ -243,7 +247,17 @@ step_S4_setup_sync_plan() {
 }
 
 step_S4_setup_sync_apply() {
-    local python
+    local python where
+    if [ "$STEPS_PROFILE" = hpc ]; then
+        if ! bootstrap_in_allocation; then
+            dotfiles_log error 'refusing to build the AI-sync env outside a Slurm allocation (H2-alloc)'
+            return 1
+        fi
+        if where=$(steps_under_scratch "$STEPS_ROOT/.venv-sync"); then
+            dotfiles_log error "refusing to build the AI-sync env under \$$where, which is purged: $STEPS_ROOT/.venv-sync"
+            return 1
+        fi
+    fi
     python=$(steps_setup_sync_python)
     if [ -z "$python" ]; then
         "$STEPS_ROOT/setup-sync.sh" >&2 </dev/null
