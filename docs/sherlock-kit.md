@@ -73,6 +73,21 @@ fails on every login, so the host gets no update until you reconcile the two
 
 Pin the toolkit in the project's own environment, for example
 `pip install "sherlock-kit @ git+https://github.com/FridrichMethod/sherlock-kit@v0.4.1"`.
+The RasRaser integration requires the 0.5.0 CLI contract and installs a tested
+wheel by SHA256 in a project runtime. Its controllers bind the executable,
+installed package files and project configuration; the personal submodule
+launcher can continue serving interactive work independently. A local migration
+gitlink may name an unpublished commit: keep its source and wheel available
+locally until publication is explicitly authorized. Do not invent a release tag
+or push merely to make that migration pin reachable from GitHub.
+
+On Sherlock, create new project environments under durable `$GROUP_HOME` or
+`$HOME` inside a compute allocation. Bounded deterministic workflow controllers
+may submit later stages with `shk --executor local` from their allocation. This
+does not authorize a future unattended agent/LLM session. Workstation publication
+and receipt collection use the DTN; controller progression does not depend on a
+workstation connection staying alive.
+
 `shk install-skill --project DIR` copies the skill into `DIR/.claude/skills/`
 and `DIR/.agents/skills/` for machines without these dotfiles; on a dotfiles
 host the personal skill shadows that copy in Claude, and `--rules` is skipped
