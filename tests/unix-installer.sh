@@ -34,7 +34,9 @@ for dependency in git stow python3; do
 done
 
 mkdir -p "$FIXTURE/common" "$FIXTURE/lib" "$FIXTURE/scripts" "$TARGET" \
-    "$FIXTURE/test-host/sample" "$GIT_TEMPLATE_DIR"
+    "$FIXTURE/test-host/sample" "$GIT_TEMPLATE_DIR" "$TARGET/.oh-my-zsh"
+# Tool packages also ship OMZ completions; simulate the prerequisite clone.
+printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$TARGET/.oh-my-zsh/oh-my-zsh.sh"
 cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
 cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \

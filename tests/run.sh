@@ -77,6 +77,8 @@ tests=(
     shell-profile.sh
     config-sync.sh
     ai-config-sync.sh
+    codex-as.sh
+    account-enrollment.sh
     codex-config-sync.sh
     fcitx5-profile-sync.sh
     stow-all.sh

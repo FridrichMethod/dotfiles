@@ -356,7 +356,9 @@ fi
 make_home() {
     local home=$1 host
     local checkout=$home/dotfiles
-    mkdir -p "$checkout/common/sherlock-kit/sherlock-kit" "$checkout/lib"
+    mkdir -p "$checkout/common/sherlock-kit/sherlock-kit" "$checkout/lib" "$home/.oh-my-zsh"
+    # Tool packages carry completions and require the prerequisite OMZ clone.
+    printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$home/.oh-my-zsh/oh-my-zsh.sh"
     cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$checkout/"
     cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
     cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$checkout/common/"

@@ -553,9 +553,19 @@ the [behavior matrix](tests/COVERAGE.md).
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Default `auto` mode with shell classification, `xhigh`, status line, notifications, fullscreen TUI, disabled attribution, hooks, voice, portable plugins |
 | [`common/claude/.claude/dotfiles/`](common/claude/.claude/dotfiles/) | `~/.claude/dotfiles/` | Local Node.js helpers for the status line, notifications, and Git hook checks |
 | [`common/claude/.local/bin/claude-as`](common/claude/.local/bin/claude-as) | `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
+| [`common/codex/.local/bin/codex-as`](common/codex/.local/bin/codex-as) | `~/.local/bin/codex-as` | Executable `codex-as NAME [ARGS...]` shares `~/.codex`, using complete credentials in untracked `~/.secrets/codex-NAME.json`; stdlib checks in `~/.local/lib/codex-as/`; serial use only, no lock |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
+
+The Codex and Claude packages install executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
+Existing accounts launch immediately. Missing accounts ask `[y/N]`, run native login in an isolated temporary configuration, save private credentials, then continue the original command. zsh/fzf-tab and Bash complete account names without reading tokens.
+Launcher messages use terminal-aware colors; redirected logs stay plain by default. `DOTFILES_COLOR=auto|always|never`, `NO_COLOR` and `TERM=dumb` follow the existing dotfiles convention; native CLI output and completion lists remain untouched.
+Both require Python 3.11+. Codex requires the audited CLI 0.162.1 and forces file authentication;
+its first initialization needs explicit confirmation and backups. Once initialized, a regular or missing
+`auth.json` stops switching. Close every CLI, desktop, IDE and other client before initializing
+or switching Codex accounts; the shared link provides no concurrency protection.
+See [first initialization, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 

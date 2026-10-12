@@ -49,6 +49,9 @@ zstyle ':fzf-tab:complete:*' fzf-preview '[[ -e "$realpath" ]] && my-fzf-preview
 
 # Custom previews for specific commands
 
+# Account launchers: never hand a credential path to the generic file preview.
+zstyle ':fzf-tab:complete:(codex-as|claude-as):*' fzf-preview 'printf "%s\n" "$word"'
+
 # kill
 zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm -w -w"
 zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
