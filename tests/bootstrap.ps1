@@ -89,6 +89,18 @@ function New-ToolShim {
         'git' = 'if ($args -contains ''core.symlinks'') { if ($env:FAKE_GIT_SYMLINKS) { $env:FAKE_GIT_SYMLINKS; exit 0 }; exit 1 }'
         'oh-my-posh' = 'if ("$args" -like ''font install *'') { $f = Join-Path $env:LOCALAPPDATA ''Microsoft/Windows/Fonts''; ' +
             '[void][IO.Directory]::CreateDirectory($f); [IO.File]::WriteAllText((Join-Path $f ''CaskaydiaMonoNerdFont-Regular.ttf''), ''f''); exit 0 }'
+        'bat' = @'
+if ("$args" -eq 'cache --build') {
+    $code = [int]"0$env:FAKE_BAT_CACHE_EXIT"
+    if ($code -eq 0) { [IO.File]::WriteAllText($env:BOOTSTRAP_TEST_BAT_CACHE, 'Catppuccin Mocha') }
+    exit $code
+}
+if ($args.Count -and $args[0] -eq '--list-themes') {
+    'Monokai Extended'
+    if ([IO.File]::Exists($env:BOOTSTRAP_TEST_BAT_CACHE)) { [IO.File]::ReadAllText($env:BOOTSTRAP_TEST_BAT_CACHE) }
+    exit 0
+}
+'@
     }[$Name]
     $common = @'
 $first = if ($args.Count) { "$($args[0])" } else { '' }
@@ -135,6 +147,7 @@ function New-Fixture {
         Packages = Join-Path $root 'packages'; State = Join-Path $root 'state'; Temp = Join-Path $root 'temp'
         PwshState = Join-Path $root 'pwsh-state'; Events = Join-Path $root 'state/events.log'
         Download = Join-Path $root 'state/theme.download'
+        BatCache = Join-Path $root 'state/bat-cache.txt'
         StoreAliases = Join-Path $root 'localappdata/Microsoft/WindowsApps'
     }
     foreach ($directory in @($fixture.Repo, $fixture.Home, $fixture.AppData, $fixture.LocalAppData,
@@ -188,7 +201,8 @@ function Set-FixtureHealthy {
     New-FixtureVenv $Fixture.Repo
     $files = @{
         (Join-Path $Fixture.LocalAppData $FontFile) = 'font'
-        (Join-Path $Fixture.AppData $ThemeFile) = 'theme'
+        (Join-Path $Fixture.AppData $ThemeFile) = 'fixture Catppuccin Mocha theme'
+        $Fixture.BatCache = 'Catppuccin Mocha'
         (Join-Path $Fixture.Repo 'common/pymol/PyMOLScripts/.git') = 'gitdir: ../../../.git/modules/PyMOLScripts'
         (Join-Path $Fixture.Repo 'common/sherlock-kit/sherlock-kit/.git') = 'gitdir: ../../../.git/modules/common/sherlock-kit/sherlock-kit'
         (Join-Path $Fixture.Home 'miniconda3/Scripts/conda.exe') = ''
@@ -238,7 +252,7 @@ exit $LASTEXITCODE
     }
     foreach ($name in @('DOTFILES_COLOR', 'BAT_CONFIG_DIR', 'ZSH', 'ZSH_CUSTOM', 'NVM_DIR', 'DOTFILES_HOST',
             'DOTFILES_AUTO_UPDATE', 'DOTFILES_SYNC_PYTHON', 'FAKE_WINGET_EXIT', 'FAKE_AUTH_EXIT',
-            'FAKE_PSRESOURCE_INSTALLED', 'FAKE_RUNTIME_EXIT')) {
+            'FAKE_PSRESOURCE_INSTALLED', 'FAKE_RUNTIME_EXIT', 'FAKE_BAT_CACHE_EXIT')) {
         [void]$start.Environment.Remove($name)
     }
     $values = @{
@@ -246,6 +260,7 @@ exit $LASTEXITCODE
         TMPDIR = $Fixture.Temp; TEMP = $Fixture.Temp; TMP = $Fixture.Temp
         NO_COLOR = '1'; POWERSHELL_TELEMETRY_OPTOUT = '1'; POWERSHELL_UPDATECHECK = 'Off'
         BOOTSTRAP_TEST_EVENTS = $Fixture.Events; FIXTURE_HOME = $Fixture.Home; FIXTURE_MODULES = $Fixture.Modules
+        BOOTSTRAP_TEST_BAT_CACHE = $Fixture.BatCache
         FIXTURE_SCRIPT = Join-Path $Fixture.Repo $Script; FIXTURE_PARAMETERS = ($Parameters | ConvertTo-Json -Compress)
         FAKE_GIT_SYMLINKS = 'true'; FAKE_WINGET_PACKAGES = $Fixture.Packages; FAKE_DOWNLOAD = $Fixture.Download
         FAKE_WINGET_ECHO = '1'; FIXTURE_NEW_VENV = $NewVenvScript
@@ -1073,6 +1088,65 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
         Assert-True (@($finalBlocks | ForEach-Object Id) -contains 'HW-auth') 'HW-auth block missing once stowed'
         Assert-Equal $final.Lines[-1] '[dotfiles] [ok] setup-host: nothing blocking remains for win' 'done summary'
         Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' } $environment) 0 'check once only non-blocking steps remain'
+    }
+
+    Test-Case 'setup-host retries a failed bat cache build without downloading the pinned theme again' {
+        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; cache retry not checked.'; return }
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture
+        $theme = Join-Path $fixture.AppData $ThemeFile
+        Remove-Item -LiteralPath $theme, $fixture.BatCache -Force
+        $failed = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' } @{ FAKE_BAT_CACHE_EXIT = '1' }
+        Assert-Exit $failed 1 'failed cache build'
+        Assert-True ($failed.Stdout.Contains('bat cache --build exited 1')) 'cache failure was not reported'
+        Assert-True ([IO.File]::Exists($theme)) 'the verified theme was not retained after the cache failure'
+        $before = Get-Snapshot (Get-FixtureRoots $fixture)
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        Assert-Exit $check 3 'cache repair plan'
+        Assert-True (@($check.Lines -like 'W1-bat-theme todo *').Count -eq 1) 'the retained theme hid its missing cache'
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'cache repair plan wrote files'
+        Assert-True (-not [IO.File]::Exists($fixture.BatCache)) '-Check built the cache'
+        $count = @(Get-FixtureEvents $fixture).Count
+        $themeBefore = Get-Snapshot @($theme)
+        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' }) 3 'retry cache build'
+        $new = @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent })
+        Assert-Equal ($new -join '|') 'bat cache --build' 'cache repair redownloaded or repeated another installer'
+        Assert-Equal (Get-Snapshot @($theme)) $themeBefore 'cache repair replaced the pinned theme'
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        Assert-True (@($check.Lines -like 'W1-bat-theme done *').Count -eq 1) 'the successful cache repair remained todo'
+    }
+
+    Test-Case 'setup-host repairs an existing pinned theme once bat becomes available' {
+        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; delayed bat not checked.'; return }
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture -Except @('bat')
+        Remove-Item -LiteralPath $fixture.BatCache -Force
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        Assert-True (@($check.Lines -like 'W1-bat-theme done *').Count -eq 1) 'a valid theme without bat was not accepted'
+        New-ToolShim $fixture.Bin bat
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        Assert-True (@($check.Lines -like 'W1-bat-theme todo *').Count -eq 1) 'bat became available but its missing cache was ignored'
+        $count = @(Get-FixtureEvents $fixture).Count
+        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' }) 3 'build delayed bat cache'
+        $new = @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent })
+        Assert-Equal ($new -join '|') 'bat cache --build' 'delayed bat repair did not reuse the existing pinned theme'
+    }
+
+    Test-Case 'setup-host refuses a preexisting bat theme that differs from the pin' {
+        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; preexisting theme not checked.'; return }
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture
+        $theme = Join-Path $fixture.AppData $ThemeFile
+        [IO.File]::WriteAllText($theme, 'user-owned theme')
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        Assert-True (@($check.Lines -like 'W1-bat-theme todo *').Count -eq 1) 'an unverified theme passed the readiness check'
+        $before = Get-Snapshot @($theme)
+        $count = @(Get-FixtureEvents $fixture).Count
+        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' }
+        Assert-Exit $run 1 'preexisting theme differs from pin'
+        Assert-True ($run.Stdout.Contains('differs from the pinned theme')) 'the existing theme failure did not explain its cause'
+        Assert-Equal (Get-Snapshot @($theme)) $before 'the unverified preexisting theme was overwritten'
+        Assert-Equal @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent }).Count 0 'a conflicting theme caused a download or cache write'
     }
 
     Test-Case 'setup-host W1-setup-sync needs a real Python and a passing runtime check' {

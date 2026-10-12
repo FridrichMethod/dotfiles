@@ -23,6 +23,10 @@
     docs step is W1-winget, W1-psresources, W1-font or W1-bat-theme decide
     their step's tiers; W1-setup-sync is core.
 
+    W1-bat-theme checks the file's pinned digest and, when bat is installed,
+    its theme cache. A retry reuses a matching file and rebuilds the cache;
+    a preexisting file with different bytes is left untouched and fails apply.
+
     HUMAN blocks follow the shared grammar (HUMAN-BEGIN <step-id> <kind>,
     command lines, HUMAN-END) for HW-clone, HW-stow, HW-auto-stow-task,
     HW-execution-policy, HW-ssh-agent, HW-wsl and HW-auth. This script never
@@ -128,6 +132,12 @@ function Get-SetupBatThemeRow {
     return $rows[0]
 }
 
+function Test-SetupBatThemePinned {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Sha256)
+    if (-not [IO.File]::Exists($Path)) { return $false }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() -ceq $Sha256
+}
+
 function Assert-SetupWingetManifest {
     # winget import reads the file itself; check only that it is the export
     # shape with at least one package, so a broken file is exit 2, not 1.
@@ -188,9 +198,18 @@ function Get-SetupStepState {
         'W1-bat-theme' {
             $rows = @(Get-SetupStepRows W1-bat-theme)
             if (-not $rows.Count) { return New-SetupState $Id skip 'no selected tier needs the bat theme' }
-            $destination = Expand-BootstrapPath (Get-SetupBatThemeRow).dest
-            if ([IO.File]::Exists($destination)) { return New-SetupState $Id done "present at $destination" }
-            return New-SetupState $Id todo "fetch the pinned theme into $destination"
+            $row = Get-SetupBatThemeRow
+            $destination = Expand-BootstrapPath $row.dest
+            if (-not [IO.File]::Exists($destination)) { return New-SetupState $Id todo "fetch the pinned theme into $destination" }
+            if (-not (Test-SetupBatThemePinned $destination $row.sha256)) {
+                return New-SetupState $Id todo "$destination differs from the pinned theme; move it aside before rerunning"
+            }
+            $bat = Find-BootstrapCommand bat
+            if (-not $bat) { return New-SetupState $Id done "theme pinned at $destination; run bat cache --build once bat is installed" }
+            $themes = @($null | & $bat --list-themes --color=never 2>$null | ForEach-Object { "$_".Trim() })
+            $name = [IO.Path]::GetFileNameWithoutExtension($destination)
+            if ($LASTEXITCODE -eq 0 -and $themes -ccontains $name) { return New-SetupState $Id done 'theme pinned and known to bat' }
+            return New-SetupState $Id todo 'theme pinned; run bat cache --build to register it'
         }
         'W1-setup-sync' {
             if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }
@@ -396,8 +415,16 @@ function Invoke-SetupStep {
         'W1-bat-theme' {
             $row = Get-SetupBatThemeRow
             $destination = Expand-BootstrapPath $row.dest
-            $result = Install-BootstrapFile -Uri $row.url -Sha256 $row.sha256 -Destination $destination
-            if (-not $result.Success) { return $result }
+            if ([IO.File]::Exists($destination)) {
+                if (-not (Test-SetupBatThemePinned $destination $row.sha256)) {
+                    return New-BootstrapResult failed "$destination differs from the pinned theme; move it aside before rerunning"
+                }
+                $result = New-BootstrapResult present "theme pinned at $destination"
+            }
+            else {
+                $result = Install-BootstrapFile -Uri $row.url -Sha256 $row.sha256 -Destination $destination
+                if (-not $result.Success) { return $result }
+            }
             $bat = Find-BootstrapCommand 'bat'
             if (-not $bat) {
                 Write-DotfilesLog warn 'W1-bat-theme: bat is not on PATH yet; run bat cache --build once it is.'

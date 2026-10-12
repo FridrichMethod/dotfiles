@@ -173,6 +173,7 @@ cd $HOME\dotfiles
 ```
 
 The [Native Windows quick start](docs/bootstrap.md#native-windows) has the full order, including the HW-* steps that need a person.
+The Windows bootstrap verifies the bat theme's pinned digest and cached registration. Rerunning it repairs a failed cache build using the existing verified file; a conflicting theme is preserved and must be moved aside before retrying.
 
 Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point at a file inside ext4. A WSL distro keeps its own clone and uses `./stow-all.sh wsl-ubuntu` as usual.
 

@@ -1651,9 +1651,13 @@ Runs only when oh-my-posh is installed (W1-winget).
 The same commit-pinned `bat-theme` row as S3-bat-theme, in bat's Windows
 config directory.
 
-- **Check:** `Test-Path "$env:APPDATA\bat\themes\Catppuccin Mocha.tmTheme"`
+- **Check:** `.\setup-host.ps1 -Host win -Check` verifies the theme's sha256 pin
+  and, when bat is installed, its registration in `bat --list-themes --color=never`.
 - **Install:** automatic via setup-host.ps1: download with the sha256 check to
   `$env:APPDATA\bat\themes\Catppuccin Mocha.tmTheme`, then `bat cache --build`.
+  A rerun reuses the matching file and repairs a missing cache, including after
+  a failed build or when bat was installed later. A file whose bytes differ from
+  the pin is preserved and fails apply: move it aside, then rerun setup-host.ps1.
 - **Verify:** `bat --list-themes | Select-String -SimpleMatch 'Catppuccin Mocha'`
 - **Human:** no
 
