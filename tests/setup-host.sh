@@ -1743,11 +1743,51 @@ mkdir -p "$CASE_HOME/.nvm/versions/node/v24.11.1/bin" "$CASE_HOME/.nvm/alias"
 printf '#!/bin/sh\necho v24.11.1\n' >"$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
 chmod 755 "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
 printf 'lts/*\n' >"$CASE_HOME/.nvm/alias/default"
+mkdir -p "$CASE_HOME/.nvm/alias/lts"
+printf 'v24.11.1\n' >"$CASE_HOME/.nvm/alias/lts/*"
 run_case nvm-done -- --host lab-ubuntu --yes --only S4-nvm
 expect_rc nvm-done 0
 expect_text nvm-done out "S4-nvm done nvm in $CASE_HOME/.nvm with node 24.11.1 and a default alias"
 expect_no_event 'nvm-sourced'
 expect_no_event 'nvm:'
+
+# Readiness follows the default alias, not an unrelated newer installation.
+# Valid partial, moving and chained aliases select the same node as .profile.
+mkdir -p "$CASE_HOME/.nvm/versions/node/v20.19.0/bin"
+printf '#!/bin/sh\necho v20.19.0\n' >"$CASE_HOME/.nvm/versions/node/v20.19.0/bin/node"
+chmod 755 "$CASE_HOME/.nvm/versions/node/v20.19.0/bin/node"
+printf 'lts/*\n' >"$CASE_HOME/.nvm/alias/current"
+for alias in v24.11.1 24 v24.11 node stable 'lts/*' current; do
+    printf '%s\n' "$alias" >"$CASE_HOME/.nvm/alias/default"
+    run_case nvm-default-valid -- --host lab-ubuntu --check --only S4-nvm
+    expect_rc nvm-default-valid 0
+    expect_no_events nvm-default-valid
+    selected=$(HOME="$CASE_HOME" NVM_DIR="$CASE_HOME/.nvm" NVM_BIN='' PATH="$SYS_BIN" \
+        "$BASH" -c '. "$1"; node --version' _ "$REPO_ROOT/common/sh/.profile")
+    [ "$selected" = v24.11.1 ] || fail "default $alias selected [$selected] in the stowed profile"
+done
+for alias in v20.19.0 v99.0.0 missing ''; do
+    printf '%s\n' "$alias" >"$CASE_HOME/.nvm/alias/default"
+    run_case nvm-default-invalid -- --host lab-ubuntu --check --only S4-nvm
+    expect_rc nvm-default-invalid 3
+    expect_line nvm-default-invalid 'HUMAN-BEGIN S4-nvm judgment'
+    expect_no_events nvm-default-invalid
+done
+printf 'default\n' >"$CASE_HOME/.nvm/alias/default"
+run_case nvm-default-cycle -- --host lab-ubuntu --check --only S4-nvm
+expect_rc nvm-default-cycle 3
+expect_no_events nvm-default-cycle
+# The pinned checkout can repair a below-floor default without reinstalling nvm.
+new_home nvm-default-repair
+nvm_checkout "$CASE_HOME" ''
+mkdir -p "$CASE_HOME/.nvm/versions/node/v24.11.1/bin" "$CASE_HOME/.nvm/alias"
+printf '#!/bin/sh\necho v24.11.1\n' >"$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
+chmod 755 "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node"
+printf 'v20.19.0\n' >"$CASE_HOME/.nvm/alias/default"
+run_case nvm-default-repair -- --host lab-ubuntu --yes --only S4-nvm
+expect_rc nvm-default-repair 0
+expect_order 'nvm-sourced' 'nvm:install --lts' 'nvm:alias default lts/*'
+expect_no_event "curl:$URL_NVM"
 
 # An nvm.sh outside a git checkout cannot be checked: moved aside, not sourced.
 new_home nvm-plain

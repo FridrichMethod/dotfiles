@@ -8,17 +8,45 @@
 
 # --- S4-nvm (macos, debian) ------------------------------------------------
 
-# steps_nvm_best DIR: the highest node version installed by nvm in DIR.
+# steps_nvm_best DIR [PREFIX]: the highest installed node version in DIR,
+# optionally restricted to a partial-version prefix ("24." or "24.11.").
 steps_nvm_best() {
     local candidate version best=''
-    for candidate in "$1"/versions/node/v*; do
+    for candidate in "$1/versions/node/v${2:-}"*; do
         [ -x "$candidate/bin/node" ] || continue
         version=${candidate##*/v}
+        bootstrap_version_parts "$version" >/dev/null || continue
         if [ -z "$best" ] || bootstrap_version_ge "$version" "$best"; then
             best=$version
         fi
     done
     printf '%s\n' "$best"
+}
+
+# steps_nvm_default DIR: the installed version selected by default, using
+# the same file-only alias resolution as common/sh/.profile. Never source
+# nvm.sh: aliases can be chained, exact, partial, node/stable or named LTS.
+# Missing targets, empty aliases, loops and relative LTS aliases fail.
+steps_nvm_default() {
+    local dir=$1 version=default hops=0 selected
+    while [ -f "$dir/alias/$version" ] && [ -r "$dir/alias/$version" ]; do
+        [ "$hops" -lt 8 ] || return 1
+        IFS= read -r version <"$dir/alias/$version" || [ -n "$version" ] || return 1
+        hops=$((hops + 1))
+    done
+    version=${version#v}
+    case $version in
+        node | stable) selected=$(steps_nvm_best "$dir") ;;
+        '' | .* | *..* | *[!0-9.]* | *.*.*.*) return 1 ;;
+        *.*.*)
+            bootstrap_version_parts "$version" >/dev/null || return 1
+            [ -x "$dir/versions/node/v$version/bin/node" ] || return 1
+            selected=$version
+            ;;
+        *) selected=$(steps_nvm_best "$dir" "${version%.}.") ;;
+    esac
+    [ -n "$selected" ] || return 1
+    printf '%s\n' "$selected"
 }
 
 # steps_nvm_commit URL: the 40-hex commit that a commit-pinned
@@ -55,12 +83,12 @@ steps_nvm_verified() {
     [ -z "$status" ]
 }
 
-# Done needs no nvm.sh at all: node at the floor and a default alias are
-# files. Anything else is finished by sourcing nvm.sh, which happens only for
+# Done needs no nvm.sh at all: the node selected by default meets the floor,
+# judged from files. Anything else is finished by sourcing nvm.sh, only for
 # the pinned, unmodified checkout; another one (an older install, a checkout
 # off the pin, a dir that is not a git checkout) is a judgment block.
 step_S4_nvm_check() {
-    local dir floor best pin=''
+    local dir floor best default pin=''
     STEPS_NVM_REFUSAL='' STEPS_NVM_PIN='' STEPS_NVM_HEAD=''
     # shellcheck disable=SC2016 # a manifest token, expanded by the library
     dir=$(bootstrap_expand_path '$NVM_DIR') || return 1
@@ -75,8 +103,12 @@ step_S4_nvm_check() {
         STEP_DETAIL="nvm has no node >= $floor${best:+ (newest is $best)}"
     elif [ ! -f "$dir/alias/default" ]; then
         STEP_DETAIL="node $best is installed, but nvm has no default alias"
+    elif ! default=$(steps_nvm_default "$dir"); then
+        STEP_DETAIL="node $best is installed, but nvm's default alias resolves to no installed node"
+    elif ! bootstrap_version_ge "$default" "$floor"; then
+        STEP_DETAIL="nvm's default selects node $default below $floor (newest installed is $best)"
     else
-        STEP_DETAIL="nvm in $dir with node $best and a default alias"
+        STEP_DETAIL="nvm in $dir with node $default and a default alias"
         return 0
     fi
     pin=$(steps_nvm_pin) || pin=

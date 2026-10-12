@@ -18,6 +18,9 @@ nvm() {
             mkdir -p "$NVM_DIR/versions/node/v24.11.1/bin" || return 1
             printf '#!/bin/sh\necho v24.11.1\n' >"$NVM_DIR/versions/node/v24.11.1/bin/node"
             chmod 755 "$NVM_DIR/versions/node/v24.11.1/bin/node"
+            mkdir -p "$NVM_DIR/alias/lts" || return 1
+            printf 'lts/krypton\n' >"$NVM_DIR/alias/lts/*"
+            printf 'v24.11.1\n' >"$NVM_DIR/alias/lts/krypton"
             ;;
         alias)
             mkdir -p "$NVM_DIR/alias" && printf '%s\n' "$3" >"$NVM_DIR/alias/$2"

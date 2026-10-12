@@ -1267,10 +1267,13 @@ so the alias must exist.
 - **Human:** no, unless an existing nvm is not the pinned checkout (judgment,
   below)
 
-**An nvm that is already there.** S4-nvm is `done` whenever `$NVM_DIR` has a
-node at the floor and a `default` alias, whatever installed nvm: those are
-files, and nothing needs `nvm.sh`. Only when node or the alias is missing does
-setup-host have to source `nvm.sh`, and then an `nvm.sh` that is not the pinned,
+**An nvm that is already there.** S4-nvm is `done` whenever `$NVM_DIR`'s
+`default` alias selects an installed node at the floor, whatever installed
+nvm: those are files, and nothing needs `nvm.sh`. It follows chained, exact,
+partial, `node`/`stable` and named LTS aliases as `common/sh/.profile` does;
+an empty, cyclic or unresolved alias, or a default below the floor, stays
+pending even when a newer node is installed. When the default needs repair,
+setup-host has to source `nvm.sh`, and then an `nvm.sh` that is not the pinned,
 unmodified checkout (an older install, a checkout at another commit, a
 directory that is not a git checkout, local edits) makes the step `human` and
 blocking, with a judgment block instead of a source: `git -C ~/.nvm fetch` and
