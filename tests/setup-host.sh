@@ -1674,6 +1674,45 @@ if [ "$(id -u)" != 0 ]; then
 fi
 rm -f "$CONTRIB_BREWFILE"
 
+# lab-ubuntu's Git credential helper needs its exact Linuxbrew executable,
+# even when a recent gh is provided on PATH by a conda env. Redirect that
+# absolute probe to a temporary fixture so no real prefix participates.
+GH_CONFIG="$TEST_TMP/gh-config"
+GH_REQUIRED="$TEST_TMP/required-gh/bin/gh"
+GH_HELPER=$("$REAL_GIT" config -f "$REPO_ROOT/lab-ubuntu/git/.gitconfig_local" \
+    --get-all credential.https://github.com.helper | sed -n 's/^!\([^ ]*\) .*/\1/p')
+[ -n "$GH_HELPER" ] || fail 'the lab GitHub credential helper is absent'
+mkdir -p "$GH_CONFIG"
+sed "s|file:$GH_HELPER|file:$GH_REQUIRED|g" "$REPO_ROOT/config/bootstrap/tools.tsv" >"$GH_CONFIG/tools.tsv"
+printf 'brew "gh"\n' >"$GH_CONFIG/cli.Brewfile"
+fake_tool "$TEST_TMP/provided-gh" gh 'gh version 2.81.0'
+gh_filter_case() {
+    local expected=$1 host=$2 rc=0
+    PATH="$TEST_TMP/provided-gh:$SYS_BIN" "$BASH" -c '
+        for lib do . "$lib" || exit 1; done
+        BOOTSTRAP_CONFIG=$GH_CONFIG
+        bootstrap_init "$REPO_ROOT"
+        STEPS_HOST=$GH_HOST
+        STEPS_PROFILE=debian
+        steps_brewfile_filtered "$GH_CONFIG/cli.Brewfile"
+    ' _ "$FIXTURE/lib/bootstrap/manifest.sh" "$FIXTURE/lib/bootstrap/platform.sh" \
+        "$FIXTURE/lib/bootstrap/version.sh" "$FIXTURE/lib/bootstrap/checks.sh" \
+        "$FIXTURE/lib/bootstrap/steps.sh" "$FIXTURE/lib/bootstrap/steps-common.sh" \
+        "$FIXTURE/lib/bootstrap/steps-packages.sh" >"$TEST_TMP/gh-filter.out" || rc=$?
+    [ "$rc" = "$expected" ] || fail "gh filter on $host: expected $expected, got $rc"
+}
+export GH_CONFIG REPO_ROOT
+GH_HOST=lab-ubuntu gh_filter_case 1 lab-ubuntu
+[ "$(cat "$TEST_TMP/gh-filter.out")" = 'brew "gh"' ] || fail 'lab gh was satisfied by an executable the Git helper cannot call'
+GH_HOST=wsl-ubuntu gh_filter_case 2 wsl-ubuntu
+[ ! -s "$TEST_TMP/gh-filter.out" ] || fail 'wsl gh unnecessarily duplicated a tool provided on PATH'
+fake_tool "${GH_REQUIRED%/*}" gh 'gh version 2.81.0'
+GH_HOST=lab-ubuntu gh_filter_case 2 lab-ubuntu
+[ ! -s "$TEST_TMP/gh-filter.out" ] || fail 'the ready lab credential executable was bundled again'
+fake_tool "${GH_REQUIRED%/*}" gh 'gh version 2.45.0'
+GH_HOST=lab-ubuntu gh_filter_case 1 lab-ubuntu
+unset GH_CONFIG
+
 # --- nvm: only the pinned, unmodified checkout is ever sourced --------------
 
 new_home nvm-moved

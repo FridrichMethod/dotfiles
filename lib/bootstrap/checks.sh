@@ -350,7 +350,11 @@ bootstrap_check_tool() {
                 bootstrap_check_result missing "no $target; $absent"
                 return 0
             }
-            if [ "$flag" != - ] && [ -x "$target" ] && [ ! -d "$target" ]; then
+            if [ "$flag" != - ] && [ ! -d "$target" ]; then
+                if [ ! -x "$target" ]; then
+                    bootstrap_check_result missing "not executable: $target; $absent"
+                    return 0
+                fi
                 bootstrap_check_version "$target" "$flag" "$floor"
             else
                 bootstrap_check_result ok "found $target"

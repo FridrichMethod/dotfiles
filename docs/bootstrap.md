@@ -859,7 +859,12 @@ honoured as brew bundle honours them; every cask is macOS-only) maps to the
 its last segment), or else to one that a `# alias: TOOL-ID NAME` line names
 (`neovim` is `nvim`, `python` is `python3`, the `claude-code` cask is
 `claude`, the `font-caskaydia-mono-nerd-font` cask is `nerd-font`). The entry
-is satisfied when the doctor's own probe for that row (`bootstrap_check_tool`,
+uses a host-only alias before a general row: on lab-ubuntu, `gh` maps to
+`gh-linuxbrew`, which checks `/home/linuxbrew/.linuxbrew/bin/gh`, the exact
+executable its GitHub/Gist credential helpers invoke, even from GUI Git.
+That required file must be executable and meet the floor. The general `gh`
+row continues to check PATH on every platform. An entry is satisfied when
+the doctor's own probe for that row (`bootstrap_check_tool`,
 `lib/bootstrap/checks.sh`) reports `ok`: the tool is found and, when the row
 has a floor, at or above it, whoever installed it; for the font, a
 CaskaydiaMono Nerd Font file in a font directory. One below its floor, of

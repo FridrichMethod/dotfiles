@@ -635,6 +635,18 @@ assert_row file-tool ok "2.81.0 >= 2.50.0 at $TEST_HOME/.fake-file-tool"
 run_doctor file-version-old FILE_TOOL_VERSION=2.45.0 -- --host lab-ubuntu --tsv
 assert_rc 1
 assert_row file-tool outdated "2.45.0 < 2.50.0 at $TEST_HOME/.fake-file-tool" 'docs/bootstrap.md X-host-tools'
+chmod 644 "$TEST_HOME/.fake-file-tool"
+run_doctor file-version-not-executable -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row file-tool missing "not executable: $TEST_HOME/.fake-file-tool"
+chmod 755 "$TEST_HOME/.fake-file-tool"
+mv "$TEST_HOME/.fake-file-tool" "$TEST_HOME/.fake-file-tool.saved"
+mkdir "$TEST_HOME/.fake-file-tool"
+run_doctor file-version-directory -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row file-tool missing "no $TEST_HOME/.fake-file-tool"
+rmdir "$TEST_HOME/.fake-file-tool"
+mv "$TEST_HOME/.fake-file-tool.saved" "$TEST_HOME/.fake-file-tool"
 
 run_doctor zsh-custom "ZSH_CUSTOM=$TEST_TMP/custom" -- --host lab-ubuntu --tsv
 assert_rc 1

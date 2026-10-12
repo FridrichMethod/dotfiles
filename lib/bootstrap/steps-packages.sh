@@ -49,16 +49,29 @@ steps_brew_guard_applies() {
 }
 
 # steps_brew_tool_id NAME: the tools.tsv row of this host that the Brewfile
-# entry NAME (a tap's formula by its last segment) installs: the row whose id
-# is NAME, else the first "# alias: TOOL-ID NAME" whose TOOL-ID has a row
-# here. 1 when there is none.
+# entry NAME (a tap's formula by its last segment) installs: a host-only
+# "# alias: TOOL-ID NAME" takes precedence over the general NAME row,
+# otherwise NAME, then the first applicable alias. A host can require a
+# particular executable (lab-ubuntu's Git credential gh) as well as PATH's
+# tool. 1 when there is none.
 steps_brew_tool_id() {
-    local name=${1##*/} ids id
+    local name=${1##*/} ids id row lines
+    ids=$(bootstrap_tool_aliases "$name")$BOOTSTRAP_NL || ids=$BOOTSTRAP_NL
+    lines=$ids
+    while [ -n "$lines" ]; do
+        id=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        [ -n "$id" ] || continue
+        row=$(steps_tool_row "$id") || continue
+        if [ "$(bootstrap_field "$row" 3)" = "$STEPS_HOST" ]; then
+            printf '%s\n' "$id"
+            return 0
+        fi
+    done
     if steps_tool_row "$name" >/dev/null; then
         printf '%s\n' "$name"
         return 0
     fi
-    ids=$(bootstrap_tool_aliases "$name")$BOOTSTRAP_NL || return 1
     while [ -n "$ids" ]; do
         id=${ids%%"$BOOTSTRAP_NL"*}
         ids=${ids#*"$BOOTSTRAP_NL"}

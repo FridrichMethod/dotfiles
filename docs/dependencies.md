@@ -147,6 +147,7 @@ prints) appear at the start of the When absent cell.
 | `aria2` | all | brew `aria2` | brew `aria2` | login env `aria2` | winget `aria2.aria2` | aria2c downloads with the stowed aria2.conf fail |
 | `uv` | all | brew `uv` | brew `uv` | login env `uv` | winget `astral-sh.uv` | uv and the oh-my-zsh uv plugin are unavailable |
 | `gh` | all | brew `gh` | brew `gh` (on lab-ubuntu also git's github.com credential helper, by full path) | login env `gh` | winget `GitHub.cli` | >= 2.50.0. gh auth git-credential and GitHub CLI workflows fail |
+| `gh-linuxbrew` | lab-ubuntu | - | brew `gh` at `/home/linuxbrew/.linuxbrew/bin/gh` | - | - | >= 2.50.0. GitHub/Gist credential helpers call this exact executable, including GUI Git |
 | `xclip` | lab-ubuntu | - | lab-ubuntu: apt `xclip` | - | - | fzf Ctrl-Y cannot copy to the X clipboard |
 | `wl-clipboard` | lab-ubuntu | - | lab-ubuntu: apt `wl-clipboard` | - | - | no clipboard copy from Wayland sessions |
 
