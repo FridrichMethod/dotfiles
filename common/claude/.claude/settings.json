@@ -144,6 +144,7 @@
     "mode": "hold"
   },
   "skipWorkflowUsageWarning": true,
+  "workflowSizeGuideline": "large",
   "skipAutoPermissionPrompt": true,
   "showClearContextOnPlanAccept": true,
   "showThinkingSummaries": true,
