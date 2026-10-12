@@ -706,6 +706,34 @@ assert_eq "$(heredoc_offenders "$TEST_TMP/heredoc.sh" | cut -d: -f2 | tr '\n' ' 
 assert_eq "$(heredoc_offenders "$TEST_TMP/absent.sh")" "$TEST_TMP/absent.sh: missing" \
     'the here-document scan reports a missing file'
 
+# ----------------------------------------------- manual nvm verification
+echo '==> the manual nvm block fails closed when Git status cannot verify it'
+MANUAL_HOME="$TEST_TMP/manual-home"
+MANUAL_REPO="$MANUAL_HOME/dotfiles"
+MANUAL_NVM="$MANUAL_HOME/.nvm"
+mkdir -p "$MANUAL_REPO/config/bootstrap" "$MANUAL_NVM"
+printf '%s\n' 'printf "manual-nvm-sourced\n"' 'nvm() { :; }' >"$MANUAL_NVM/nvm.sh"
+"$REAL_GIT" init -q "$MANUAL_NVM"
+"$REAL_GIT" -C "$MANUAL_NVM" add nvm.sh
+"$REAL_GIT" -C "$MANUAL_NVM" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm initial
+MANUAL_PIN=$("$REAL_GIT" -C "$MANUAL_NVM" rev-parse HEAD)
+printf 'nvm\tscript\thttps://raw.githubusercontent.com/nvm-sh/nvm/%s/install.sh\n' "$MANUAL_PIN" \
+    >"$MANUAL_REPO/config/bootstrap/installers.tsv"
+# HEAD still resolves, but a corrupt index makes the tracked-file check fail.
+printf 'invalid index\n' >"$MANUAL_NVM/.git/index"
+MANUAL_BLOCK=$(awk '
+    /^### S4-nvm:/ { section = 1 }
+    section && /^  ```sh$/ { block = 1; next }
+    block && /^  ```$/ { exit }
+    block { sub(/^  /, ""); print }
+' "$REPO_ROOT/docs/bootstrap.md")
+[ -n "$MANUAL_BLOCK" ] || fail 'the documented manual nvm block is absent'
+manual_rc=0
+HOME="$MANUAL_HOME" NVM_DIR="$MANUAL_NVM" DOTFILES_DIR="$MANUAL_REPO" \
+    "$BASH" -c "$MANUAL_BLOCK" >"$TEST_TMP/manual-nvm.out" 2>"$TEST_TMP/manual-nvm.err" || manual_rc=$?
+[ "$manual_rc" -ne 0 ] || fail 'manual nvm verification ignored a failed git status'
+[ ! -s "$TEST_TMP/manual-nvm.out" ] || fail 'manual nvm verification sourced nvm.sh after a failed git status'
+
 # ----------------------------------------------------------- validator
 echo '==> manifest validator'
 "$TEST_PYTHON" -I -B -m unittest discover -s "$TEST_DIR" -p test_bootstrap_manifest.py

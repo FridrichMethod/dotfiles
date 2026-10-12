@@ -1247,14 +1247,14 @@ so the alias must exist.
       case $c in
           '' | *[!0-9a-f]*) echo "installers.tsv names no nvm commit: [$c]" >&2 && exit 1 ;;
       esac
-      test "${#c}" -eq 40
+      test "${#c}" -eq 40 || exit 1
       if [ ! -s "$d/nvm.sh" ]; then
-          f=$(fetch_pinned nvm)
-          mkdir -p "$d"
-          NVM_DIR=$d NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f"
+          f=$(fetch_pinned nvm) || exit 1
+          mkdir -p "$d" || exit 1
+          NVM_DIR=$d NVM_INSTALL_VERSION=$c PROFILE=/dev/null bash "$f" || exit 1
       fi
-      head=$(git -C "$d" rev-parse HEAD)
-      changed=$(git -C "$d" status --porcelain --untracked-files=no)
+      head=$(git -C "$d" rev-parse HEAD) || exit 1
+      changed=$(git -C "$d" status --porcelain --untracked-files=no) || exit 1
       if [ "$head" != "$c" ] || [ -n "$changed" ]; then
           echo "$d is at $head (or has local changes), not the pinned nvm commit $c; not sourced" >&2
           exit 1
