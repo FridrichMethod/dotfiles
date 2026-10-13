@@ -95,6 +95,16 @@ for knob in $READ_KNOBS; do
         exit 1
     fi
 done
+# Commit hooks export a relative index path. The manifest suite creates a
+# linked worktree whose .git is a file, so fixture Git must clear this path.
+if ! env GIT_INDEX_FILE=.git/index /bin/bash "$TEST_DIR/bootstrap-manifest.sh" \
+    >"$TEST_TMP/git-hook.stdout" 2>"$TEST_TMP/git-hook.stderr"; then
+    cat "$TEST_TMP/git-hook.stdout" "$TEST_TMP/git-hook.stderr" >&2
+    printf 'ERROR: bootstrap manifest fixtures inherited the commit index.\n' >&2
+    exit 1
+fi
+grep -Fxq 'bootstrap-manifest=PASS' "$TEST_TMP/git-hook.stdout"
+
 # The provisioning exports in the caller's shell change nothing.
 if ! env DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_HOST= _DOTFILES_CHECKED=1 \
     AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=1 _AWESOME_SKILLS_CHECKED=1 \

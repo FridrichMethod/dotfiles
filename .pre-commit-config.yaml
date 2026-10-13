@@ -70,6 +70,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: english-documentation
+        name: English documentation (ASCII only, including submodules)
+        entry: python -B scripts/check-docs.py
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: english-documentation-tests
+        name: documentation policy regression tests
+        entry: python -B tests/test_docs_ascii.py
+        language: python
+        pass_filenames: false
+        files: ^(scripts/check-docs\.py|tests/test_docs_ascii\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh
@@ -107,11 +119,11 @@ repos:
         pass_filenames: false
         files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/codex/(\.codex/config\.toml|\.local/bin/codex-config-sync)|tests/codex-config-sync\.sh)$
       - id: codex-as
-        name: serial Codex account executable (isolated Bash/zsh)
+        name: Codex account views and native sharing (isolated Bash/zsh)
         entry: tests/codex-as.sh
         language: script
         pass_filenames: false
-        files: ^(common/codex/\.local/(bin/codex-as|lib/codex-as/.*)|tests/(codex-as\.sh|test_codex_as\.py))$
+        files: ^(common/codex/\.local/(bin/codex-as|lib/codex-as/.*)|tests/(codex-as\.sh|test_codex_as\.py|test_codex_sharing_native\.py))$
       - id: account-enrollment
         name: account enrollment and completion (isolated HOME and native CLI fakes)
         entry: tests/account-enrollment.sh

@@ -2,7 +2,7 @@
 
 # `~/.dotfiles`
 
-**Cross-platform shell, terminal, and tool configs — one repo, six hosts, zero conditionals.**
+**Cross-platform shell, terminal, and tool configs - one repo, six hosts, zero conditionals.**
 
 Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Boring on purpose.
 
@@ -19,7 +19,7 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-FAB040?style=flat-square&logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
 
-<sub>macOS · WSL · Ubuntu · Stanford Sherlock HPC · Marlowe · Windows</sub>
+<sub>macOS / WSL / Ubuntu / Stanford Sherlock HPC / Marlowe / Windows</sub>
 
 </div>
 
@@ -44,13 +44,13 @@ cd ~/dotfiles && git submodule update --init --recursive
 
 ## Highlights
 
-- **One installer command after setup** — `./stow-all.sh <host>`, or `.\stow-all.ps1 win` on native Windows.
+- **One installer command after setup** - `./stow-all.sh <host>`, or `.\stow-all.ps1 win` on native Windows.
 - **Layered configs**: `common/` is the baseline; `<host>/` overrides where machines differ.
 - **Cross-host AI defaults**: global Claude Code and Codex instructions, curated permissions, guarded exec policies, reasoning effort, and portable plugin declarations live in `common/`.
-- **No templating, no conditionals** — Stow symlinks the right files into `$HOME`.
+- **No templating, no conditionals** - Stow symlinks the right files into `$HOME`.
 - **Self-healing**: a shell hook checks for upstream changes once per login session and fast-forwards behind branches.
 - **Skill sync**: a weekly background hook keeps `~/.claude/skills/` and `~/.codex/skills/` aligned with [awesome-skills](https://github.com/FridrichMethod/awesome-skills) (~1,668 skills).
-- **CI-checked**: Ubuntu, macOS and native Windows run behavioral tests; Ubuntu also runs `shellcheck`, `shfmt`, `stylua`, and hygiene hooks — same as the local pre-commit.
+- **CI-checked**: Ubuntu, macOS and native Windows run behavioral tests; Ubuntu also runs `shellcheck`, `shfmt`, `stylua`, and hygiene hooks - same as the local pre-commit.
 - **HPC-aware**: Stanford Sherlock and Marlowe overlays handle login-node quirks, module systems, and SLURM-friendly defaults.
 
 ## Table of Contents
@@ -163,7 +163,7 @@ For an agent started outside the clone, paste the [prompt in docs/bootstrap.md](
 
 ### On Windows
 
-GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead — same layering, same `.stowrc` ignores, same idempotency. Turn on Developer Mode first (Settings > System > For developers), so Git can create the tracked symlinks, then clone with `core.symlinks` and run `stow-all.ps1` from an **elevated** PowerShell 7+:
+GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead - same layering, same `.stowrc` ignores, same idempotency. Turn on Developer Mode first (Settings > System > For developers), so Git can create the tracked symlinks, then clone with `core.symlinks` and run `stow-all.ps1` from an **elevated** PowerShell 7+:
 
 ```powershell
 git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
@@ -231,34 +231,34 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
-| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) — each auto-updated daily by GitHub Actions |
+| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) - each auto-updated daily by GitHub Actions |
 | **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
-| **CI** | `shellcheck` · `shfmt` · `stylua` · YAML/JSON/TOML hygiene |
+| **CI** | `shellcheck`, `shfmt`, `stylua`, YAML/JSON/TOML hygiene |
 
 ## Architecture
 
 ```text
-                                      ┌──────────────────────────┐
-                                      │     ~/.dotfiles          │
-                                      │     (this repo)          │
-                                      └────────────┬─────────────┘
-                                                   │
-                          ┌────────────────────────┼────────────────────────┐
-                          ▼                        ▼                        ▼
-                ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-                │     common/     │      │     <host>/     │      │   stow-all.sh   │
-                │  shared layer   │      │  overlay layer  │      │   installer     │
-                └────────┬────────┘      └────────┬────────┘      └────────┬────────┘
-                         │                        │                        │
-                         └──────────┬─────────────┘                        │
-                                    │   stow --restow --no-folding   ◀─────┘
-                                    ▼
-                              ┌───────────┐
-                              │    $HOME  │
-                              │  symlinks │
-                              └───────────┘
+                                      +--------------------------+
+                                      |     ~/.dotfiles          |
+                                      |     (this repo)          |
+                                      +------------+-------------+
+                                                   |
+                          +------------------------+------------------------+
+                          v                        v                        v
+                +-----------------+      +-----------------+      +-----------------+
+                |     common/     |      |     <host>/     |      |   stow-all.sh   |
+                |  shared layer   |      |  overlay layer  |      |   installer     |
+                +--------+--------+      +--------+--------+      +--------+--------+
+                         |                        |                        |
+                         +----------+-------------+                        |
+                                    |   stow --restow --no-folding   <-----+
+                                    v
+                              +-----------+
+                              |    $HOME  |
+                              |  symlinks |
+                              +-----------+
 ```
 
 <details>
@@ -266,52 +266,52 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 
 ```text
 dotfiles/
-├── common/                       shared defaults (stowed first)
-│   ├── aria2/                    download client
-│   ├── bash/                     .bashrc, .bash_aliases, .bash_profile
-│   ├── claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
-│   ├── codex/                    ~/.codex/AGENTS.md + portable config/exec rules
-│   ├── conda/                    .condarc
-│   ├── git/                      .gitconfig (with [include] ~/.gitconfig_local)
-│   ├── kitty/                    Kitty terminal
-│   ├── pymol/PyMOLScripts/       submodule — daily auto-update via Actions
-│   ├── sh/                       POSIX .profile + .aliases (sourced by bash/zsh)
-│   ├── sherlock-kit/             sherlock-kit/ submodule (Sherlock toolkit) — daily auto-update
-│   ├── ssh/                      minimal ~/.ssh/config + Include config.d/*.conf
-│   ├── tcsh/                     .tcshrc
-│   ├── tmux/                     .tmux.conf
-│   ├── vim/                      .vimrc
-│   ├── wezterm/                  .wezterm.lua
-│   ├── xonsh/                    .xonshrc
-│   └── zsh/                      .zshrc, .zshenv, .zprofile, .p10k.zsh
-│
-├── mac/                          macOS overrides
-├── wsl-ubuntu/                   WSL 2 Ubuntu overrides
-├── lab-ubuntu/                   lab Ubuntu (Fcitx5 IME + claude helper)
-├── sherlock/                     Stanford Sherlock HPC
-├── marlowe/                      Marlowe HPC
-├── win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
-│
-├── .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a daily sync per submodule
-├── .gitattributes                LF everywhere (Windows clones set autocrlf)
-├── .pre-commit-config.yaml       shellcheck · shfmt · stylua · hygiene
-├── .stowrc                       Stow defaults (--target=~, ignores)
-├── config/bootstrap/             day-zero manifests (tools, Brewfiles, apt, clones, pinned installers)
-├── docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
-├── lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
-├── doctor.sh                     read-only day-zero check (POSIX)
-├── doctor.ps1                    read-only day-zero check (Windows)
-├── setup-host.sh                 day-zero installer that stops before stow (POSIX)
-├── setup-host.ps1                day-zero installer (Windows)
-├── stow-all.sh                   one-command installer (POSIX)
-├── stow-all.ps1                  one-command installer (Windows)
-├── scripts/                      hooks the shell or a task runs, not you
-│   ├── dotfiles-update.sh        session-once auto-pull on shell login
-│   ├── dotfiles-update.ps1       the same hook, for PowerShell on Windows
-│   ├── dotfiles-auto-stow.ps1    elevated restow worker (Windows task)
-│   └── awesome-skills-update.sh  weekly Claude/Codex skill sync
-├── AGENTS.md                     repository guide for every agent
-└── CLAUDE.md                     @AGENTS.md import stub for Claude Code
++-- common/                       shared defaults (stowed first)
+|   +-- aria2/                    download client
+|   +-- bash/                     .bashrc, .bash_aliases, .bash_profile
+|   +-- claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
+|   +-- codex/                    ~/.codex/AGENTS.md + portable config/exec rules
+|   +-- conda/                    .condarc
+|   +-- git/                      .gitconfig (with [include] ~/.gitconfig_local)
+|   +-- kitty/                    Kitty terminal
+|   +-- pymol/PyMOLScripts/       submodule - daily auto-update via Actions
+|   +-- sh/                       POSIX .profile + .aliases (sourced by bash/zsh)
+|   +-- sherlock-kit/             sherlock-kit/ submodule (Sherlock toolkit) - daily auto-update
+|   +-- ssh/                      minimal ~/.ssh/config + Include config.d/*.conf
+|   +-- tcsh/                     .tcshrc
+|   +-- tmux/                     .tmux.conf
+|   +-- vim/                      .vimrc
+|   +-- wezterm/                  .wezterm.lua
+|   +-- xonsh/                    .xonshrc
+|   +-- zsh/                      .zshrc, .zshenv, .zprofile, .p10k.zsh
+|
++-- mac/                          macOS overrides
++-- wsl-ubuntu/                   WSL 2 Ubuntu overrides
++-- lab-ubuntu/                   lab Ubuntu (Fcitx5 IME + claude helper)
++-- sherlock/                     Stanford Sherlock HPC
++-- marlowe/                      Marlowe HPC
++-- win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
+|
++-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a daily sync per submodule
++-- .gitattributes                LF everywhere (Windows clones set autocrlf)
++-- .pre-commit-config.yaml       shellcheck | shfmt | stylua | hygiene
++-- .stowrc                       Stow defaults (--target=~, ignores)
++-- config/bootstrap/             day-zero manifests (tools, Brewfiles, apt, clones, pinned installers)
++-- docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
++-- lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
++-- doctor.sh                     read-only day-zero check (POSIX)
++-- doctor.ps1                    read-only day-zero check (Windows)
++-- setup-host.sh                 day-zero installer that stops before stow (POSIX)
++-- setup-host.ps1                day-zero installer (Windows)
++-- stow-all.sh                   one-command installer (POSIX)
++-- stow-all.ps1                  one-command installer (Windows)
++-- scripts/                      hooks the shell or a task runs, not you
+|   +-- dotfiles-update.sh        session-once auto-pull on shell login
+|   +-- dotfiles-update.ps1       the same hook, for PowerShell on Windows
+|   +-- dotfiles-auto-stow.ps1    elevated restow worker (Windows task)
+|   +-- awesome-skills-update.sh  weekly Claude/Codex skill sync
++-- AGENTS.md                     repository guide for every agent
++-- CLAUDE.md                     @AGENTS.md import stub for Claude Code
 ```
 
 </details>
@@ -347,17 +347,17 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 ## How Stow Layering Works
 
 ```text
-   common/zsh/.zshrc        ──stow──▶  ~/.zshrc            (baseline)
-   common/git/.gitconfig    ──stow──▶  ~/.gitconfig        (baseline)
-   common/claude/.claude/CLAUDE.md ──stow──▶ ~/.claude/CLAUDE.md
-   common/codex/.codex/AGENTS.md   ──stow──▶ ~/.codex/AGENTS.md
-   settings/config/rules baselines ──sync──▶ mutable live files
-   mac/git/.gitconfig_local ──stow──▶  ~/.gitconfig_local  (host override, [include]'d)
-   mac/ssh/.ssh/config.d/*  ──stow──▶  ~/.ssh/config.d/*   (host-specific endpoints)
+   common/zsh/.zshrc        --stow-->  ~/.zshrc            (baseline)
+   common/git/.gitconfig    --stow-->  ~/.gitconfig        (baseline)
+   common/claude/.claude/CLAUDE.md --stow--> ~/.claude/CLAUDE.md
+   common/codex/.codex/AGENTS.md   --stow--> ~/.codex/AGENTS.md
+   settings/config/rules baselines --sync--> mutable live files
+   mac/git/.gitconfig_local --stow-->  ~/.gitconfig_local  (host override, [include]'d)
+   mac/ssh/.ssh/config.d/*  --stow-->  ~/.ssh/config.d/*   (host-specific endpoints)
 ```
 
-1. **`common/`** is stowed first — every package, every host. Shared baseline.
-2. **`<host>/`** is stowed second — overrides where the machine differs.
+1. **`common/`** is stowed first - every package, every host. Shared baseline.
+2. **`<host>/`** is stowed second - overrides where the machine differs.
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 5. On a host with a `sherlock-kit` package, `codex-instructions-sync` writes `~/.codex/AGENTS.override.md` after the dry run (other hosts lose a stale generated one). While the submodule is not initialized it warns `sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`, skips only that step and records no applied revision, so the login updater retries.
@@ -369,8 +369,8 @@ The shared shell profile prepends `/usr/local/man` while retaining the default
 manual search directories when `MANPATH` was unset or empty. Repeated sourcing
 preserves existing search paths without duplicating the entry.
 
-> **Git overrides** flow through `[include] path = ~/.gitconfig_local` — the shared `.gitconfig` includes the host file if it exists.
-> **SSH overrides** flow through `Include ~/.ssh/config.d/*.conf` — the shared root config delegates to per-concern fragments.
+> **Git overrides** flow through `[include] path = ~/.gitconfig_local` - the shared `.gitconfig` includes the host file if it exists.
+> **SSH overrides** flow through `Include ~/.ssh/config.d/*.conf` - the shared root config delegates to per-concern fragments.
 >
 > Stow does not merge two files that target the same path. If a host needs a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define the same target in both layers.
 
@@ -379,7 +379,7 @@ preserves existing search paths without duplicating the entry.
 Two small hooks run on each interactive shell login, and the pull hook has a PowerShell twin for Windows. All are session-throttled, so subshells and tmux panes never re-run them.
 
 <details open>
-<summary><strong><code>scripts/dotfiles-update.sh</code></strong> — pulls this repo when behind</summary>
+<summary><strong><code>scripts/dotfiles-update.sh</code></strong> - pulls this repo when behind</summary>
 
 Fetches the remote, fast-forwards if behind, updates submodules, and automatically re-stows the selected host. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells). Automatic updates skip working trees with local file changes, including submodule changes; they never stash, reset, or discard work.
 
@@ -420,7 +420,7 @@ Set these variables before the update hook runs. A failed stow does not advance 
 
 Session marker: `_DOTFILES_CHECKED` is exported so nested shells skip; a fresh login with a clean environment checks again. Successful stow updates files on disk; start a new shell/application to load the settings. Windows Terminal needs a restart.
 
-**On Windows** — `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1`, only in an interactive console (not for `-File`/`-Command` scripts, `-NonInteractive` or piped stdin), and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
+**On Windows** - `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1`, only in an interactive console (not for `-File`/`-Command` scripts, `-NonInteractive` or piped stdin), and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
 
 ```powershell
 cd "$HOME\dotfiles"
@@ -448,9 +448,9 @@ Unregister-ScheduledTask -TaskName (Get-DotfilesTaskName $PWD.Path)
 </details>
 
 <details>
-<summary><strong><code>scripts/awesome-skills-update.sh</code></strong> — weekly Claude/Codex skill sync</summary>
+<summary><strong><code>scripts/awesome-skills-update.sh</code></strong> - weekly Claude/Codex skill sync</summary>
 
-Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/awesome-skills`](https://github.com/FridrichMethod/awesome-skills) — a curated collection of ~1,668 Claude Code / Codex skills for AI4Protein, bioinformatics, AI development, and academic writing.
+Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/awesome-skills`](https://github.com/FridrichMethod/awesome-skills) - a curated collection of ~1,668 Claude Code / Codex skills for AI4Protein, bioinformatics, AI development, and academic writing.
 
 **Behavior**
 
@@ -458,13 +458,13 @@ Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/a
 |---|---|
 | First-time install | Foreground (you see the curl progress) |
 | Refresh interval | Every **7 days** |
-| Subsequent refreshes | **Background** — never blocks shell startup |
+| Subsequent refreshes | **Background** - never blocks shell startup |
 | Lock directory | `${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/in-progress.lock` |
 | Log | `$XDG_CACHE_HOME/awesome-skills/last.log` |
-| Failure handling | Stamp not advanced → retries next shell session |
+| Failure handling | Stamp not advanced -> retries next shell session |
 | Manual trigger | `sync-skills` alias |
 
-**Requirements** — `bash`, `curl`, `tar`, `rsync`. The hook silently no-ops if `curl` is missing; the installer errors clearly if `tar`/`rsync` are missing. All four are pre-installed on macOS and most Linux desktop distros. Minimal Linux boxes usually just need `rsync`:
+**Requirements** - `bash`, `curl`, `tar`, `rsync`. The hook silently no-ops if `curl` is missing; the installer errors clearly if `tar`/`rsync` are missing. All four are pre-installed on macOS and most Linux desktop distros. Minimal Linux boxes usually just need `rsync`:
 
 | Platform | Install command |
 |---|---|
@@ -505,7 +505,7 @@ sync-skills
 
 ## Pre-commit Hooks
 
-Optional but recommended — same tools CI runs.
+Optional but recommended - same tools CI runs.
 
 ```bash
 pip install pre-commit          # or: brew install pre-commit
@@ -521,6 +521,7 @@ pre-commit run --all-files
 | **shfmt** | shell files and extensionless sync helpers (4-space indent, indented `case`, POSIX/Bash/Zsh-aware) |
 | **stylua** | `*.lua`, `*.luau` |
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
+| **english-documentation** | English ASCII documentation, including agent guides, skills and recursively initialized submodules; rejects non-ASCII characters and control characters except tabs and line breaks |
 | **gitleaks** | secrets in the staged changes, so it guards commits only in a clone where `pre-commit install` ran; CI also scans every commit on every ref with the manual-stage `gitleaks-history` hook (`pre-commit run --hook-stage manual gitleaks-history` locally). [`.gitleaks.toml`](.gitleaks.toml) adds Claude Code OAuth tokens and any file under a `.secrets/` directory to the default rules |
 | **behavior** | structured config merges, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
@@ -536,6 +537,12 @@ part of `ci.yml` or pre-commit. See
 [testing commands and limitations](docs/testing.md), the
 [end-to-end bootstrap suite](docs/testing.md#end-to-end-bootstrap-opt-in) and
 the [behavior matrix](tests/COVERAGE.md).
+
+Write all documentation in English with ASCII punctuation and diagrams. Chinese,
+emoji and decorative Unicode characters are rejected. The documentation hook
+checks tracked and unignored new documents in this repo and all submodules;
+initialize them with `git submodule update --init --recursive` before running
+pre-commit. The sherlock-kit submodule also carries an independent documentation hook.
 
 ## AI Assistant Configuration
 
@@ -556,7 +563,7 @@ the [behavior matrix](tests/COVERAGE.md).
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Default `auto` mode with shell classification, `xhigh`, status line, notifications, fullscreen TUI, disabled attribution, hooks, voice, portable plugins |
 | [`common/claude/.claude/dotfiles/`](common/claude/.claude/dotfiles/) | `~/.claude/dotfiles/` | Local Node.js helpers for the status line, notifications, and Git hook checks |
 | [`common/claude/.local/bin/claude-as`](common/claude/.local/bin/claude-as) | `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
-| [`common/codex/.local/bin/codex-as`](common/codex/.local/bin/codex-as) | `~/.local/bin/codex-as` | Executable `codex-as NAME [ARGS...]` shares `~/.codex`, using complete credentials in untracked `~/.secrets/codex-NAME.json`; stdlib checks in `~/.local/lib/codex-as/`; serial use only, no lock |
+| [`common/codex/.local/bin/codex-as`](common/codex/.local/bin/codex-as) | `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases; Python stdlib helpers in `~/.local/lib/codex-as/` |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
@@ -565,9 +572,16 @@ The Codex and Claude packages install executable `codex-as` and `claude-as` on P
 Existing accounts launch immediately. Missing accounts ask `[y/N]`, run native login in an isolated temporary configuration, save private credentials, then continue the original command. zsh/fzf-tab and Bash complete account names without reading tokens.
 Launcher messages use terminal-aware colors; redirected logs stay plain by default. `DOTFILES_COLOR=auto|always|never`, `NO_COLOR` and `TERM=dumb` follow the existing dotfiles convention; native CLI output and completion lists remain untouched.
 Both require Python 3.11+. Codex requires the audited CLI 0.162.1 and forces file authentication;
-its first initialization needs explicit confirmation and backups. Once initialized, a regular or missing
-`auth.json` stops switching. Close every CLI, desktop, IDE and other client before initializing
-or switching Codex accounts; the shared link provides no concurrency protection.
+existing root authentication migrates explicitly with `codex-as --migrate DEFAULT_ACCOUNT`,
+after closing root, desktop and IDE clients. Migration backs up credentials, restricts the
+owned `.codex` and `.codex/.tmp` directories to 0700, and keeps native `codex` on the selected
+default; ordinary account launches do not change that root link.
+Accounts and different sessions can run concurrently and share history. Resume by UUID,
+`--last` or picker; explicit session names are refused. Account leases exclude credential
+maintenance while wrapper clients are active, and native thread locks exclude two writers
+to the same session. Same-account OAuth refresh retains native cross-process limitations.
+Ambiguous credential divergence requires `codex-as --recover NAME`; shared config paths
+must be absolute, while cloud policy, remote plugin caches and auth-bound integrations remain isolated.
 See [first initialization, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
@@ -673,7 +687,7 @@ stow --restow --no-folding -d common newtool
 
 ## Conventions
 
-- **Keep secrets out** of version control — use `*_local` files referenced by `[include]` chains.
+- **Keep secrets out** of version control - use `*_local` files referenced by `[include]` chains.
 - **Stow order is sacred**: `common/` first, host second.
 - **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
 - **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync`, and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
@@ -688,8 +702,8 @@ stow --restow --no-folding -d common newtool
 
 ## License
 
-[MIT](LICENSE) — see the file for the full text.
+[MIT](LICENSE) - see the file for the full text.
 
 <div align="center">
-<sub>Built with <a href="https://www.gnu.org/software/stow/">GNU Stow</a> · CI by <a href="https://docs.github.com/actions">GitHub Actions</a> · Polished with <a href="https://pre-commit.com/">pre-commit</a></sub>
+<sub>Built with <a href="https://www.gnu.org/software/stow/">GNU Stow</a> | CI by <a href="https://docs.github.com/actions">GitHub Actions</a> | Polished with <a href="https://pre-commit.com/">pre-commit</a></sub>
 </div>

@@ -51,6 +51,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_config_sync.py')
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_config_sync.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Configuration backend tests failed.' }
 
+Write-Output '==> test_docs_ascii.py'
+& $syncPython -I -B (Join-Path $PSScriptRoot 'test_docs_ascii.py')
+if ($LASTEXITCODE -ne 0) { throw 'Documentation policy tests failed.' }
 Write-Output '==> test_bootstrap_manifest.py'
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }
