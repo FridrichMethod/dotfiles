@@ -73,13 +73,12 @@ fails on every login, so the host gets no update until you reconcile the two
 
 Pin the toolkit in the project's own environment, for example
 `pip install "sherlock-kit @ git+https://github.com/FridrichMethod/sherlock-kit@v0.4.1"`.
-The RasRaser integration requires the 0.5.0 CLI contract and installs a tested
-wheel by SHA256 in a project runtime. Its controllers bind the executable,
-installed package files and project configuration; the personal submodule
-launcher can continue serving interactive work independently. A local migration
-gitlink may name an unpublished commit: keep its source and wheel available
-locally until publication is explicitly authorized. Do not invent a release tag
-or push merely to make that migration pin reachable from GitHub.
+Projects can install a tested wheel pinned by SHA256 and bind its executable,
+installed package files and configuration independently of the personal submodule
+launcher. If a development gitlink refers to an unpublished commit, keep the
+source and wheel available locally until publication is explicitly authorized.
+Project names, runtime paths, resource profiles and workflow-specific acceptance
+requirements belong in the consuming project's repository.
 
 On Sherlock, create new project environments under durable `$GROUP_HOME` or
 `$HOME` inside a compute allocation. Bounded deterministic workflow controllers
