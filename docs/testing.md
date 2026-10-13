@@ -8,7 +8,7 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout with recursive submodules; pre-commit installs its pinned hooks |
+| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; pre-commit installs its pinned hooks |
 | `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; retain system Bash and BSD utilities |
 | `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; Git and PowerShell come from the runner and are checked explicitly |
 
@@ -22,17 +22,14 @@ integration check, installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
 
-The `english-documentation` hook runs on every pre-commit invocation. It checks
-tracked and unignored new Markdown, reStructuredText, plain-text documentation
-and README-style files in this repo and recursively in submodules. Documents
-must use English and ASCII punctuation and diagrams. Only printable ASCII,
-tabs, carriage returns and newlines are allowed; non-ASCII text, emoji and
-other control characters fail with a file, line and column. Missing submodules
-fail with `git submodule update --init --recursive`; this hook never initializes
-them or accesses the network. The sherlock-kit submodule also enforces the same
-character policy through an independent hook. `tests/test_docs_ascii.py` verifies positive
-examples, rejected characters, unstaged edits, ignored files, invalid UTF-8,
-nested submodule traversal and missing-module failures using local Git fixtures.
+The `english-documentation` hook uses native `pygrep`, configured entirely in
+`.pre-commit-config.yaml`, to check selected Markdown, reStructuredText,
+plain-text documentation and README-style files in this repository. It checks
+staged files on commit and tracked files with `--all-files`. Only printable
+ASCII, tabs, carriage returns and newlines are allowed; other characters fail
+with a file and line. The hook enforces the character set; English wording is
+also a documentation policy and review requirement. Submodule contents are
+outside this hook's scope; sherlock-kit has its own independent hook.
 
 Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
 knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
@@ -122,7 +119,7 @@ Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
 `brew shellenv` line applies only once brew can run.
 
 `tests/sherlock-kit-delivery.sh` checks the sherlock-kit submodule delivery.
-By default it builds a fixture submodule tree,
+By default it builds a fixture submodule tree (CI checks out no submodules),
 compares each link's exact relative `readlink` text, stows every host package
 into a temporary home, and covers the generated Codex override and the
 warn-and-skip path of an uninitialized submodule; without GNU Stow it prints

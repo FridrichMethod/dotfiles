@@ -71,17 +71,11 @@ repos:
   - repo: local
     hooks:
       - id: english-documentation
-        name: English documentation (ASCII only, including submodules)
-        entry: python -B scripts/check-docs.py
-        language: python
-        pass_filenames: false
-        always_run: true
-      - id: english-documentation-tests
-        name: documentation policy regression tests
-        entry: python -B tests/test_docs_ascii.py
-        language: python
-        pass_filenames: false
-        files: ^(scripts/check-docs\.py|tests/test_docs_ascii\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$
+        name: English documentation (ASCII only)
+        language: pygrep
+        entry: '[^\x09\x0a\x0d\x20-\x7e]'
+        types: [file]
+        files: '(?i)(\.(md|markdown|mdx|rst|txt)$|(^|/)(README|CHANGELOG|CONTRIBUTING|AUTHORS|LICENSE|NOTICE)(\.[^/]*)?$)'
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh

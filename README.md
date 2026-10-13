@@ -521,7 +521,7 @@ pre-commit run --all-files
 | **shfmt** | shell files and extensionless sync helpers (4-space indent, indented `case`, POSIX/Bash/Zsh-aware) |
 | **stylua** | `*.lua`, `*.luau` |
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
-| **english-documentation** | English ASCII documentation, including agent guides, skills and recursively initialized submodules; rejects non-ASCII characters and control characters except tabs and line breaks |
+| **english-documentation** | This repository's documentation, including agent guides and skills; a native `pygrep` hook rejects non-ASCII characters and control characters except tabs and line breaks |
 | **gitleaks** | secrets in the staged changes, so it guards commits only in a clone where `pre-commit install` ran; CI also scans every commit on every ref with the manual-stage `gitleaks-history` hook (`pre-commit run --hook-stage manual gitleaks-history` locally). [`.gitleaks.toml`](.gitleaks.toml) adds Claude Code OAuth tokens and any file under a `.secrets/` directory to the default rules |
 | **behavior** | structured config merges, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
@@ -540,9 +540,10 @@ the [behavior matrix](tests/COVERAGE.md).
 
 Write all documentation in English with ASCII punctuation and diagrams. Chinese,
 emoji and decorative Unicode characters are rejected. The documentation hook
-checks tracked and unignored new documents in this repo and all submodules;
-initialize them with `git submodule update --init --recursive` before running
-pre-commit. The sherlock-kit submodule also carries an independent documentation hook.
+uses native `pygrep` configured entirely in YAML. It checks staged documents on
+commit and tracked documents with `--all-files`, within this repository only.
+Submodule repositories manage their own checks; sherlock-kit has an independent
+documentation hook.
 
 ## AI Assistant Configuration
 

@@ -70,7 +70,6 @@ if [[ "$prerequisites_only" == 1 ]]; then
 fi
 
 node --test "$TEST_DIR/claude-customizations.cjs"
-python3 -B "$TEST_DIR/test_docs_ascii.py"
 
 tests=(
     test-entrypoints.sh

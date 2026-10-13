@@ -20,7 +20,7 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 ## Required conventions
 
 - Keep secrets and machine-specific absolute paths out of version control.
-- Write documentation in English using printable ASCII, tabs and line breaks only. This includes README files, agent guides, skills, docs and submodule repositories. Use ASCII punctuation and diagrams; do not add Chinese text, emoji or decorative Unicode symbols. Pre-commit checks the working tree and recursively checks initialized submodules; initialize submodules before running it.
+- Write this repository's documentation in English using printable ASCII, tabs and line breaks only. This includes README files, agent guides, skills and docs. Use ASCII punctuation and diagrams; do not add Chinese text, emoji or decorative Unicode symbols. The native pre-commit pygrep hook checks selected files in this repository; submodules follow their own checks.
 - Preserve the Stow flow: `common/` first, host second.
 - Update `README.md` and `stow-all.sh` usage together when setup behavior changes.
 
