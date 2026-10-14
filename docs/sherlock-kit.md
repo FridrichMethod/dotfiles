@@ -56,8 +56,8 @@ A manual bump from a clean checkout:
 ```sh
 git pull --ff-only
 git submodule update --remote --merge common/sherlock-kit/sherlock-kit
-bash tests/sherlock-kit-delivery.sh --real
 git add common/sherlock-kit/sherlock-kit
+bash tests/sherlock-kit-delivery.sh --real
 git commit -m "chore(deps): update sherlock-kit submodule to latest"
 git push
 ./stow-all.sh <host>
