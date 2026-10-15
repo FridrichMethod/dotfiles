@@ -2028,7 +2028,10 @@ fail-closed behavior beyond what is stated.
   and `keybindings`, and a stub for each built-in profile, which
   `tests/windows-installer.sh` requires); another Terminal release may order
   the arrays differently, so commit what it writes if `git status` shows the
-  file after Terminal starts.
+  file after Terminal starts. The Windows PowerShell and Command Prompt stubs
+  stay `"hidden": true`: Terminal treats a generated profile that its
+  `state.json` lists but `settings.json` omits as deleted, so a visible stub
+  brings both profiles back on a host that had already dropped them.
 
 ## Known follow-ups
 

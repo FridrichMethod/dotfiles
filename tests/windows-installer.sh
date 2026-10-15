@@ -65,8 +65,11 @@ grep -Fq 'untrusted mount point' "$REPO_ROOT/README.md"
 # Windows Terminal rewrites the stowed settings.json through its link when it
 # loads a file that is not in its own form: it adds a stub for each built-in
 # profile missing from profiles.list (the e2e win row saw it on its first
-# CI run). Keep both stubs, and the strict JSON, ASCII and never-disabled
-# PowerShell 7 source that AGENTS.md asks of this file.
+# CI run). Keep both stubs hidden: Terminal treats a generated profile that
+# state.json lists but settings.json omits as deleted, so a visible stub
+# would bring them back on hosts that already dropped them. Also keep the
+# strict JSON, ASCII and never-disabled PowerShell 7 source that AGENTS.md
+# asks of this file.
 python3 - "$REPO_ROOT/win/terminal/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json" <<'PY'
 import json
 import sys
@@ -80,10 +83,13 @@ except UnicodeDecodeError as error:
 settings = json.loads(raw)
 builtin = {'{61c54bbd-c2c6-5271-96e7-009a87ff44bf}': 'Windows PowerShell',
            '{0caa0dad-35be-5f56-a8ff-afceeeaa6101}': 'Command Prompt'}
-listed = {profile.get('guid') for profile in settings['profiles']['list']}
+listed = {profile.get('guid'): profile for profile in settings['profiles']['list']}
 missing = [name for guid, name in builtin.items() if guid not in listed]
 if missing:
     sys.exit(f'ERROR: {path} lacks the built-in Windows Terminal profile stubs: {", ".join(missing)}')
+shown = [name for guid, name in builtin.items() if listed[guid].get('hidden') is not True]
+if shown:
+    sys.exit(f'ERROR: {path} does not hide the built-in Windows Terminal profile stubs: {", ".join(shown)}')
 if 'Windows.Terminal.PowershellCore' in settings.get('disabledProfileSources', []):
     sys.exit(f'ERROR: {path} disables Windows.Terminal.PowershellCore')
 PY
