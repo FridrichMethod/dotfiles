@@ -572,7 +572,7 @@ documentation hook.
 The Codex and Claude packages install executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
 Existing accounts launch immediately. Missing accounts ask `[y/N]`, run native login in an isolated temporary configuration, save private credentials, then continue the original command. zsh/fzf-tab and Bash complete account names without reading tokens.
 Launcher messages use terminal-aware colors; redirected logs stay plain by default. `DOTFILES_COLOR=auto|always|never`, `NO_COLOR` and `TERM=dumb` follow the existing dotfiles convention; native CLI output and completion lists remain untouched.
-Both require Python 3.11+. Codex requires the audited CLI 0.162.1 and forces file authentication;
+Both require Python 3.11+. Codex requires CLI 0.161.0 or newer and forces file authentication;
 existing root authentication migrates explicitly with `codex-as --migrate DEFAULT_ACCOUNT`,
 after closing root, desktop and IDE clients. Migration backs up credentials, restricts the
 owned `.codex` and `.codex/.tmp` directories to 0700, and keeps native `codex` on the selected
