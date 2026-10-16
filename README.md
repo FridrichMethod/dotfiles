@@ -572,11 +572,10 @@ documentation hook.
 The Codex and Claude packages install executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
 Existing accounts launch immediately. Missing accounts ask `[y/N]`, run native login in an isolated temporary configuration, save private credentials, then continue the original command. zsh/fzf-tab and Bash complete account names without reading tokens.
 Launcher messages use terminal-aware colors; redirected logs stay plain by default. `DOTFILES_COLOR=auto|always|never`, `NO_COLOR` and `TERM=dumb` follow the existing dotfiles convention; native CLI output and completion lists remain untouched.
-Both require Python 3.11+. Codex requires CLI 0.161.0 or newer and forces file authentication;
-existing root authentication migrates explicitly with `codex-as --migrate DEFAULT_ACCOUNT`,
-after closing root, desktop and IDE clients. Migration backs up credentials, restricts the
-owned `.codex` and `.codex/.tmp` directories to 0700, and keeps native `codex` on the selected
-default; ordinary account launches do not change that root link.
+Both require Python 3.11+. Codex requires CLI 0.161.0 or newer and forces file authentication.
+Apart from `--help`, `codex-as` has no options of its own: `codex-as NAME ARGS...` is `codex ARGS...` as NAME.
+The root `~/.codex/auth.json` stays native; `codex-as` never reads or changes it, so root
+login/logout and desktop clients keep their own token chain.
 Accounts and different sessions can run concurrently and share history. Resume by UUID,
 `--last` or picker; explicit session names are refused. Account leases exclude credential
 maintenance while wrapper clients are active, and native thread locks exclude two writers
@@ -586,9 +585,9 @@ holds that session. Confirmation ends its old runtime and spawned agents, restor
 saved archive visibility, then resumes the same UUID with the selected account.
 Close other views of that session first. Interrupted takeovers keep a private recovery
 record; retry the same command. Picker/`--last`, exec and fork do not perform takeover.
-Ambiguous credential divergence requires `codex-as --recover NAME`; shared config paths
+Ambiguous credential divergence stops with both copies kept and a manual relink command; shared config paths
 must be absolute, while cloud policy, remote plugin caches and auth-bound integrations remain isolated.
-See [first initialization, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
+See [account layout, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 

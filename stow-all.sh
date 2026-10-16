@@ -16,7 +16,7 @@ set -euo pipefail
 # sync helpers write anything when a Stow dry run finds a conflicting file.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
 # The common Codex package also links codex-as into ~/.local/bin (no source).
-# Account launchers confirm first initialization/enrollment after closing clients;
+# Account launchers confirm new-account enrollment on first use;
 # installation never logs in or switches credentials. See docs/account-launchers.md.
 # A host whose sherlock-kit package links the toolkit rules from the submodule
 # also gets ~/.codex/AGENTS.override.md (portable AGENTS.md plus those rules);
