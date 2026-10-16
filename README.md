@@ -584,7 +584,8 @@ An explicit `codex-as NAME resume UUID` offers confirmed takeover when the root 
 holds that session. Confirmation ends its old runtime and spawned agents, restores
 saved archive visibility, then resumes the same UUID with the selected account.
 Close other views of that session first. Interrupted takeovers keep a private recovery
-record; retry the same command. Picker/`--last`, exec and fork do not perform takeover.
+record; retry the same command. Picker/`--last` first list the daemon-held sessions with
+their UUIDs; they, exec and fork do not perform takeover.
 Ambiguous credential divergence stops with both copies kept and a manual relink command; shared config paths
 must be absolute, while cloud policy, remote plugin caches and auth-bound integrations remain isolated.
 See [account layout, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
