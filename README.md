@@ -573,7 +573,9 @@ The Codex and Claude packages install executable `codex-as` and `claude-as` on P
 Existing accounts launch immediately. Missing accounts ask `[y/N]`, run native login in an isolated temporary configuration, save private credentials, then continue the original command. zsh/fzf-tab and Bash complete account names without reading tokens.
 Launcher messages use terminal-aware colors; redirected logs stay plain by default. `DOTFILES_COLOR=auto|always|never`, `NO_COLOR` and `TERM=dumb` follow the existing dotfiles convention; native CLI output and completion lists remain untouched.
 Both require Python 3.11+. Codex requires CLI 0.161.0 or newer and forces file authentication.
-Apart from `--help`, `codex-as` has no options of its own: `codex-as NAME ARGS...` is `codex ARGS...` as NAME.
+Apart from `--help`, `codex-as` has no options of its own: `codex-as NAME ARGS...` runs `codex ARGS...` as NAME,
+refusing what would change, revoke or bypass that login, daemon-only commands, session names,
+and settings that would split the shared state.
 The root `~/.codex/auth.json` stays native; `codex-as` never reads or changes it, so root
 login/logout and desktop clients keep their own token chain.
 Accounts and different sessions can run concurrently and share history. Resume by UUID,
@@ -582,11 +584,13 @@ maintenance while wrapper clients are active, and native thread locks exclude tw
 to the same session. Same-account OAuth refresh retains native cross-process limitations.
 Interactive resume takes sessions over from the root daemon (Desktop's backend): an
 idle `codex-as NAME resume UUID` without a prompt, one that may be running after a
-confirmation, and before the picker or `--last` the idle sessions they list by default
-(this directory and its linked worktrees; all with `--all`).
+confirmation, for `--last` only the session it opens when idle, and before the picker the
+idle sessions it lists by default (this directory or the same place in a linked worktree;
+all with `--all`).
 Takeover ends the old runtime and spawned agents there, restores saved archive
 visibility, then resumes with the selected account. Interrupted takeovers keep a private
-recovery record that the next resume finishes. Exec, fork and sessions held by other
+recovery record that the next `resume`, `fork` or `exec resume` of that UUID, picker or
+`resume --last` finishes. Exec, fork and sessions held by other
 processes are never taken over.
 Ambiguous credential divergence stops with both copies kept and a manual relink command; shared config paths
 must be absolute, while cloud policy, remote plugin caches and auth-bound integrations remain isolated.
