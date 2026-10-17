@@ -580,12 +580,13 @@ Accounts and different sessions can run concurrently and share history. Resume b
 `--last` or picker; explicit session names are refused. Account leases exclude credential
 maintenance while wrapper clients are active, and native thread locks exclude two writers
 to the same session. Same-account OAuth refresh retains native cross-process limitations.
-An explicit `codex-as NAME resume UUID` offers confirmed takeover when the root daemon
-holds that session. Confirmation ends its old runtime and spawned agents, restores
-saved archive visibility, then resumes the same UUID with the selected account.
-Close other views of that session first. Interrupted takeovers keep a private recovery
-record; retry the same command. Picker/`--last` first list the daemon-held sessions with
-their UUIDs; they, exec and fork do not perform takeover.
+Interactive resume takes sessions over from the root daemon (Desktop's backend): an
+idle `codex-as NAME resume UUID` without a prompt, one that may be running after a
+confirmation, and before the picker or `--last` every idle top-level session it holds.
+Takeover ends the old runtime and spawned agents there, restores saved archive
+visibility, then resumes with the selected account. Interrupted takeovers keep a private
+recovery record that the next resume finishes. Exec, fork and sessions held by other
+processes are never taken over.
 Ambiguous credential divergence stops with both copies kept and a manual relink command; shared config paths
 must be absolute, while cloud policy, remote plugin caches and auth-bound integrations remain isolated.
 See [account layout, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
