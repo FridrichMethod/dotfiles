@@ -582,7 +582,8 @@ maintenance while wrapper clients are active, and native thread locks exclude tw
 to the same session. Same-account OAuth refresh retains native cross-process limitations.
 Interactive resume takes sessions over from the root daemon (Desktop's backend): an
 idle `codex-as NAME resume UUID` without a prompt, one that may be running after a
-confirmation, and before the picker or `--last` every idle top-level session it holds.
+confirmation, and before the picker or `--last` the idle sessions they list by default
+(this directory and its linked worktrees; all with `--all`).
 Takeover ends the old runtime and spawned agents there, restores saved archive
 visibility, then resumes with the selected account. Interrupted takeovers keep a private
 recovery record that the next resume finishes. Exec, fork and sessions held by other
