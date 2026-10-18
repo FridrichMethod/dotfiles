@@ -103,6 +103,12 @@ jobs:
           $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
           $crlf = @(git -C common/codex/coding-agent-kit ls-files --eol | Select-String -SimpleMatch 'w/crlf')
           if ($crlf.Count) { throw "CRLF in coding-agent-kit: $($crlf -join '; ')" }
+      - name: Require tracked symlinks into the submodule
+        run: |
+          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
+          $link = Get-Item -LiteralPath common/claude/.claude/dotfiles/statusline.cjs -Force
+          if ($link.LinkType -ne 'SymbolicLink') { throw "statusline.cjs is a $($link.GetType().Name), not a symlink" }
+          if (-not (Test-Path -LiteralPath $link.FullName -PathType Leaf)) { throw 'statusline.cjs does not resolve' }
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"

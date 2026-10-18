@@ -239,6 +239,35 @@ public static class DotfilesCallerMitigation {
         Assert-Link (Join-Path $fixture.Target '.pymolrc') $source
     }
 
+    Test-Case 'source symlinks into the submodule cross packages, stay trusted and resolve from the target' {
+        # The coding-agent-kit links climb out of their package into the
+        # submodule checkout inside the codex package.
+        $fixture = New-Fixture
+        Write-FixtureFile (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/fixture.cjs') 'kit fixture'
+        $source = Join-Path $fixture.Repo 'common/claude/.claude/dotfiles/fixture.cjs'
+        [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
+        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/fixture.cjs' | Out-Null
+        $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
+        Assert-True (-not [IO.Path]::IsPathRooted($originalTarget)) 'Fixture source target is not relative.'
+        Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
+        Invoke-FixtureGit -C $fixture.Repo add common
+        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'cross-package symlink fixture'
+        $before = & $gitExecutable -C $fixture.Repo show HEAD:common/claude/.claude/dotfiles/fixture.cjs
+        Assert-Success (Invoke-Install $fixture)
+        Assert-Success (Invoke-Install $fixture)
+        Assert-Equal $originalTarget @((Get-Item -LiteralPath $source -Force).Target)[0] 'Cross-package source symlink text changed.'
+        Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/claude/.claude/dotfiles/fixture.cjs) `
+            'Git source symlink payload changed.'
+        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Cross-package source install dirtied the checkout.'
+        $installed = Join-Path $fixture.Target '.claude/dotfiles/fixture.cjs'
+        Assert-Link $installed $source
+        . (Join-Path $sourceRoot 'lib/windows-link-trust.ps1')
+        $errors = Get-DotfilesLinkReadErrors -Paths @($source, $installed)
+        Assert-Equal 0 $errors[$source] 'Guarded process rejected the cross-package source link.'
+        Assert-Equal 0 $errors[$installed] 'Guarded process rejected the target link to it.'
+        Assert-Equal 'kit fixture' ([IO.File]::ReadAllText($installed)) 'The target link does not resolve into the submodule.'
+    }
+
     Test-Case 'a submodule checkout inside an allowlisted package is never linked' {
         $fixture = New-Fixture
         # Written after the fixture commit, as a submodule checkout's gitfile is:

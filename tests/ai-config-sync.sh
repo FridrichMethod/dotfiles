@@ -416,11 +416,11 @@ if command -v stow >/dev/null 2>&1; then
     grep -Fxq 'claude-live-sentinel' "$STOW_TARGET/.claude/settings.json"
     grep -Fxq 'codex-live-sentinel' "$STOW_TARGET/.codex/config.toml"
     grep -Fxq 'rules-live-sentinel' "$STOW_TARGET/.codex/rules/portable.rules"
-    [[ -L "$STOW_TARGET/.claude/CLAUDE.md" ]]
-    [[ -L "$STOW_TARGET/.claude/dotfiles/statusline.cjs" ]]
-    [[ -L "$STOW_TARGET/.claude/dotfiles/notify.cjs" ]]
-    [[ -L "$STOW_TARGET/.claude/dotfiles/check-git-hooks.cjs" ]]
-    [[ -L "$STOW_TARGET/.codex/AGENTS.md" ]]
+    [[ -L "$STOW_TARGET/.claude/CLAUDE.md" && -e "$STOW_TARGET/.claude/CLAUDE.md" ]]
+    [[ -L "$STOW_TARGET/.claude/dotfiles/statusline.cjs" && -e "$STOW_TARGET/.claude/dotfiles/statusline.cjs" ]]
+    [[ -L "$STOW_TARGET/.claude/dotfiles/notify.cjs" && -e "$STOW_TARGET/.claude/dotfiles/notify.cjs" ]]
+    [[ -L "$STOW_TARGET/.claude/dotfiles/check-git-hooks.cjs" && -e "$STOW_TARGET/.claude/dotfiles/check-git-hooks.cjs" ]]
+    [[ -L "$STOW_TARGET/.codex/AGENTS.md" && -e "$STOW_TARGET/.codex/AGENTS.md" ]]
     # .stowrc keeps the coding-agent-kit checkout inside the codex package unstowed.
     [[ ! -e "$STOW_TARGET/coding-agent-kit" && ! -L "$STOW_TARGET/coding-agent-kit" ]]
 fi

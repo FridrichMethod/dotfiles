@@ -126,6 +126,13 @@ repos:
         pass_filenames: false
         files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(sync-runtime\.sh|terminal\.sh)|common/(claude|codex|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
         types: []
+      - id: coding-agent-kit-delivery
+        name: coding-agent-kit submodule delivery, links and binding twins
+        entry: tests/coding-agent-kit-delivery.sh
+        language: script
+        pass_filenames: false
+        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|common/(claude|codex)/.*|lib/sync-runtime\.sh|setup-sync\.(sh|ps1)|requirements-sync\.txt|docs/account-launchers\.md|\.github/workflows/update-coding-agent-kit-submodule\.yml|tests/coding-agent-kit-delivery\.sh)$
+        types: []
       - id: unix-installer-integration
         name: real Git and Stow integration
         entry: tests/unix-installer.sh
