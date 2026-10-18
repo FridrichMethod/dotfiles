@@ -24,6 +24,17 @@ This repository stores cross-platform dotfiles managed with GNU Stow.
 - Preserve the Stow flow: `common/` first, host second.
 - Update `README.md` and `stow-all.sh` usage together when setup behavior changes.
 
+## Weight and dependencies
+
+These files are installed on every host, including fresh machines and clusters, so they must run on what a host already has and stay small enough to audit.
+
+- At run time a stowed helper needs only POSIX `sh` or Bash with ordinary POSIX utilities, the Python 3.11+ standard library run as `python3 -I -B`, and the tool it wraps. It never needs a pip package, virtual environment, Node, compiler, network service or background process of its own. The one exception is the pinned tomlkit that the TOML-writing sync helpers load from an explicitly provisioned interpreter (see AI assistant configuration). Installing tools stays with `setup-host` (see Bootstrap and doctor).
+- A missing optional tool narrows the feature; a missing required tool fails once with a message that names it, never with a traceback or a half-done run. For example, codex-as without `git` limits takeover to the launch directory.
+- A wrapper forwards to the native tool instead of reimplementing it. It requires a minimum version, never an exact pin or an upper bound. Anything beyond the tool's documented CLI and files (internal socket paths, wire protocols, lock layouts) is best effort: a failure there warns and falls back to plain native behavior, and blocks or asks only where continuing could lose work.
+- Keep helper code proportional to what it adds over the native tool. A feature that needs its own protocol client, journal or lock scheme must justify its code and test cost; prefer the native tool's own feature when one exists.
+- Tests use the Python standard library (`unittest`), the shells under test and fakes for third-party CLIs, run in a temporary HOME, and reach no network beyond `127.0.0.1` fixtures. A test may use a real host tool (zsh, codex) when it is present and must skip cleanly when it is absent; anything that needs Docker, the internet or real credentials is opt-in, like `tests/e2e/run.sh`. Tests never touch the real home, its credentials or running daemons.
+- CI runs every pre-commit hook on every push, so keep hooks scoped by `files:` and fast: test parsing and other pure logic in process, and spawn real shells and child processes only for behavior that needs them (exec, signals, umask, TTY, file modes).
+
 ## Working commands
 
 - Provision AI-sync parser once per clone: `./setup-sync.sh` (Windows: `./setup-sync.ps1`), with Python 3.11+.
