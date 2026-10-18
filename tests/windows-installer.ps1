@@ -62,7 +62,8 @@ function New-Fixture {
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
     foreach ($relative in @('stow-all.ps1', 'scripts/dotfiles-auto-stow.ps1', '.stowrc',
-            'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
+            'lib/config_sync.py', 'common/codex/coding-agent-kit/lib/config_sync.py',
+            'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
             'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
@@ -396,6 +397,26 @@ public static class DotfilesCallerMitigation {
         } finally { $env:DOTFILES_SYNC_PYTHON = $savedPython }
         Assert-True (-not (Test-Path -LiteralPath $fixture.Target)) 'Missing runtime caused a partial install.'
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo '.venv-sync'))) 'Installer provisioned dependencies implicitly.'
+        Assert-NoState $fixture
+    }
+
+    Test-Case 'an uninitialized coding-agent-kit skips every AI sync with one warning' {
+        $fixture = New-Fixture
+        Remove-Item -LiteralPath (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/config_sync.py')
+        $warning = 'coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)'
+        $result = Invoke-Install $fixture -StrictMode $false
+        Assert-Success $result
+        Assert-True ($result.Output.Contains($warning)) "Missing engine warning: $($result.Output)"
+        Assert-True (-not $result.Output.Contains('Synchronizing portable Codex and Claude settings')) 'The sync step ran without the engine.'
+        foreach ($relative in @('.codex/config.toml', '.codex/rules/portable.rules', '.claude/settings.json')) {
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $relative))) "AI live file written without the engine: $relative"
+        }
+        Assert-Link (Join-Path $fixture.Target '.gitconfig') (Join-Path $fixture.Repo 'win/git/.gitconfig')
+        Assert-NoState $fixture
+        $strictTarget = Join-Path $fixture.Root 'strict target'
+        # The error view wraps the long message; match only its start.
+        Assert-Failure (Invoke-Install $fixture -TargetOverride $strictTarget) 'Stow preflight failed: coding-agent-kit submodule'
+        Assert-True (-not (Test-Path -LiteralPath $strictTarget)) 'Strict engine warning caused a partial install.'
         Assert-NoState $fixture
     }
 

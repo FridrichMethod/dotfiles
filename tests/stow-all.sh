@@ -145,6 +145,10 @@ mkdir -p \
     "$FIXTURE/host-a/fcitx5/.config/fcitx5" \
     "$FIXTURE/host-a/sherlock-kit/.claude/rules" \
     "$FIXTURE/rules-fixture"
+# The installer skips every AI sync while the coding-agent-kit engine is
+# absent; an empty stand-in marks the submodule as initialized.
+mkdir -p "$FIXTURE/common/codex/coding-agent-kit/lib"
+: >"$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py"
 
 printf '%s\n' 'common-claude' >"$FIXTURE/common/claude/.claude/settings.json"
 printf '%s\n' 'common-codex' >"$FIXTURE/common/codex/.codex/config.toml"
@@ -386,6 +390,53 @@ env \
     bash "$FIXTURE/stow-all.sh" host-a \
     >"$TEST_TMP/dangling-healed.stdout" 2>"$TEST_TMP/dangling-healed.stderr"
 assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
+cmp "$STATE" "$TEST_TMP/expected-state"
+
+# An uninitialized coding-agent-kit submodule (no engine, as after a fresh
+# clone or a plain local merge) skips every Codex and Claude sync, preflight
+# included, with one warning; both dry runs, fcitx5 and both stows still run.
+# The install is incomplete, so the host is remembered without an applied HEAD.
+mv "$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py" "$TEST_TMP/config_sync.py.saved"
+: >"$EVENT_LOG"
+: >"$CHECK_LOG"
+env \
+    HOME="$TEST_HOME" \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    EVENT_LOG="$EVENT_LOG" \
+    LC_ALL=C \
+    bash "$FIXTURE/stow-all.sh" host-a \
+    >"$TEST_TMP/engine-absent.stdout" 2>"$TEST_TMP/engine-absent.stderr"
+[[ ! -s "$CHECK_LOG" ]]
+assert_events \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]" \
+    "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]" \
+    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
+    "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
+printf '%s\n' '[dotfiles] [warn] coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)' \
+    >"$TEST_TMP/expected-engine-absent.stderr"
+cmp "$TEST_TMP/engine-absent.stderr" "$TEST_TMP/expected-engine-absent.stderr"
+refute_grep 'Checking selected AI configuration' "$TEST_TMP/engine-absent.stdout"
+grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/engine-absent.stdout"
+cmp "$STATE" "$TEST_TMP/expected-skipped-state"
+mv "$TEST_TMP/config_sync.py.saved" "$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py"
+# With the engine back, the next stow is complete and records HEAD again.
+: >"$EVENT_LOG"
+: >"$CHECK_LOG"
+env \
+    HOME="$TEST_HOME" \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    EVENT_LOG="$EVENT_LOG" \
+    LC_ALL=C \
+    bash "$FIXTURE/stow-all.sh" host-a \
+    >"$TEST_TMP/engine-restored.stdout" 2>"$TEST_TMP/engine-restored.stderr"
+assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" \
+    "sync:claude-settings-sync:[$FIXTURE/host-a/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
+    "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]" \
+    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
+    "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
 cmp "$STATE" "$TEST_TMP/expected-state"
 
 # Git can report a clean checkout with core.filemode=false even when a helper
