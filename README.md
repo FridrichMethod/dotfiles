@@ -231,7 +231,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
-| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) - each auto-updated daily by GitHub Actions |
+| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) - each auto-updated daily by GitHub Actions; [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling) - bumped only through a reviewed pull request |
 | **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
