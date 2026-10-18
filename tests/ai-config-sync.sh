@@ -417,6 +417,8 @@ if command -v stow >/dev/null 2>&1; then
     [[ -L "$STOW_TARGET/.claude/dotfiles/notify.cjs" ]]
     [[ -L "$STOW_TARGET/.claude/dotfiles/check-git-hooks.cjs" ]]
     [[ -L "$STOW_TARGET/.codex/AGENTS.md" ]]
+    # .stowrc keeps the coding-agent-kit checkout inside the codex package unstowed.
+    [[ ! -e "$STOW_TARGET/coding-agent-kit" && ! -L "$STOW_TARGET/coding-agent-kit" ]]
 fi
 
 if command -v codex >/dev/null 2>&1; then

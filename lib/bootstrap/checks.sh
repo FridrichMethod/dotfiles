@@ -430,9 +430,11 @@ bootstrap_check_venv_sync() {
 
 # The files each submodule must provide, by its .gitmodules path, relative to
 # it: what the stowed links point at (PyMOL's .pymolrc; sherlock-kit's rules,
-# skill and shk entry point). A submodule not listed here needs only its .git.
+# skill and shk entry point; coding-agent-kit's engine, launchers and Claude
+# helpers). A submodule not listed here needs only its .git.
 BOOTSTRAP_SUBMODULE_SENTINELS='common/pymol/PyMOLScripts configs/.pymolrc
-common/sherlock-kit/sherlock-kit src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk'
+common/sherlock-kit/sherlock-kit src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk
+common/codex/coding-agent-kit lib/config_sync.py common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as common/codex/.local/lib/codex-as/launch.py common/claude/.local/lib/claude-as/launch.py common/claude/.claude/dotfiles/statusline.cjs common/claude/.claude/dotfiles/notify.cjs common/claude/.claude/dotfiles/check-git-hooks.cjs'
 
 # bootstrap_submodule_paths ROOT: the path of every submodule in
 # ROOT/.gitmodules, one per line (its `path =` lines, as doctor.ps1 reads them).

@@ -100,6 +100,10 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|tests/ai-config-sync\.sh)$
+        # identify tags the coding-agent-kit gitlink `directory` and a link
+        # `symlink`; the default `types: [file]` would skip a bump or a link
+        # change, so every hook that runs the sync engine clears it.
+        types: []
       - id: claude-customizations
         name: Claude status line, notifications and Git hook guard
         entry: node --test tests/claude-customizations.cjs
@@ -130,18 +134,21 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
+        types: []
       - id: sherlock-kit-delivery
         name: sherlock-kit submodule delivery and stow
         entry: tests/sherlock-kit-delivery.sh
         language: script
         pass_filenames: false
         files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(config_sync\.py|sync-runtime\.sh|terminal\.sh)|common/(claude|codex|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
+        types: []
       - id: unix-installer-integration
         name: real Git and Stow integration
         entry: tests/unix-installer.sh
         language: script
         pass_filenames: false
         files: ^(stow-all\.sh|scripts/dotfiles-update\.sh|\.stowrc|lib/.*|common/(claude|codex)/.*|tests/unix-installer\.sh)$
+        types: []
       - id: fcitx5-profile-sync
         name: fcitx5 profile sync behavior
         entry: tests/fcitx5-profile-sync.sh
@@ -184,6 +191,7 @@ repos:
         language: script
         pass_filenames: false
         files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|docs/bootstrap\.md|tests/doctor\.sh)$
+        types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks
         entry: tests/setup-host.sh

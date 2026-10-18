@@ -25,3 +25,8 @@
 
 --ignore=(^|/)__pycache__(/.*)?
 --ignore=\.py[cod]$
+
+# The coding-agent-kit submodule checkout lives inside the codex package and
+# is linked file by file from common/claude and common/codex. A package-local
+# ignore file would replace Stow's built-in ignore list for the whole package.
+--ignore=^coding-agent-kit(/|$)

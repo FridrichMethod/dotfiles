@@ -80,6 +80,8 @@ function New-Fixture {
     Write-FixtureFile (Join-Path $repo 'common/sh/.profile') 'POSIX package must not be installed'
     Write-FixtureFile (Join-Path $repo 'win/git/.gitconfig') "[user]`n    name = host fixture`n"
     Write-FixtureFile (Join-Path $repo 'win/terminal/AppData/Local/terminal/settings.json') '{"theme":"host"}'
+    # A file at the coding-agent-kit submodule path; .stowrc keeps it unstowed.
+    Write-FixtureFile (Join-Path $repo 'common/codex/coding-agent-kit/lib/x.py') "# fixture`n"
     Invoke-FixtureGit init --quiet --initial-branch=main $repo
     Invoke-FixtureGit -C $repo config user.name 'Dotfiles tests'
     Invoke-FixtureGit -C $repo config user.email 'dotfiles-tests@example.invalid'
@@ -234,6 +236,20 @@ public static class DotfilesCallerMitigation {
         Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/pymol/.pymolrc) 'Git source symlink payload changed.'
         Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Source symlink install dirtied the checkout.'
         Assert-Link (Join-Path $fixture.Target '.pymolrc') $source
+    }
+
+    Test-Case 'a submodule checkout inside an allowlisted package is never linked' {
+        $fixture = New-Fixture
+        # Written after the fixture commit, as a submodule checkout's gitfile is:
+        # Git never tracks or reports a .git path component.
+        Write-FixtureFile (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/.git') 'gitdir: ../../../.git/modules/x'
+        Assert-Success (Invoke-Install $fixture)
+        Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target 'coding-agent-kit') -Force -ErrorAction SilentlyContinue)) `
+            'The submodule checkout was installed.'
+        $checkoutLinks = @(Get-ChildItem -LiteralPath $fixture.Target -Recurse -Force |
+                Where-Object { $_.LinkType -and @($_.Target)[0] -like '*coding-agent-kit*' })
+        Assert-Equal 0 $checkoutLinks.Count "Links into the submodule checkout: $(($checkoutLinks | ForEach-Object FullName) -join ', ')"
+        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'The submodule gitfile dirtied the checkout.'
     }
 
     Test-Case 'uppercase WIN is normalized before selecting the overlay' {
