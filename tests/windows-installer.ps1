@@ -62,8 +62,8 @@ function New-Fixture {
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
     foreach ($relative in @('stow-all.ps1', 'scripts/dotfiles-auto-stow.ps1', '.stowrc',
-            'lib/config_sync.py', 'common/codex/coding-agent-kit/lib/config_sync.py',
-            'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
+            'common/codex/coding-agent-kit/lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1',
+            'lib/windows-link-trust.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
             'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
@@ -155,7 +155,7 @@ try {
     }
     & $env:DOTFILES_SYNC_PYTHON -I -B -c 'import tomlkit'
     if ($LASTEXITCODE -ne 0) { throw 'The configured sync interpreter lacks tomlkit.' }
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'lib/config_sync.py') -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'common/codex/coding-agent-kit/lib/config_sync.py') -PathType Leaf)) {
         throw 'Shared configuration backend is missing; native integration cannot run.'
     }
     $gitBash = Get-TestGitBash
@@ -352,7 +352,7 @@ public static class DotfilesCallerMitigation {
         $fixture = New-Fixture
         Assert-Success (Invoke-Install $fixture -Preview)
         Assert-True (-not (Test-Path -LiteralPath $fixture.Target)) 'WhatIf created the absent target.'
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'lib/__pycache__'))) 'WhatIf wrote Python bytecode.'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/__pycache__'))) 'WhatIf wrote Python bytecode.'
         Assert-NoState $fixture
     }
 

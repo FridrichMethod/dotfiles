@@ -1307,7 +1307,7 @@ checkout outside `$SCRATCH` and `$GROUP_SCRATCH`: setup-host refuses to build
 the sync env there, including through a symlink. A working env can be checked
 and used on a login node without rebuilding it.
 
-- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/lib/config_sync.py --runtime-check`
+- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/common/codex/coding-agent-kit/lib/config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.sh. By hand, by platform:
   macOS `./setup-sync.sh --python /opt/homebrew/bin/python3` (Intel:
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
@@ -1678,7 +1678,7 @@ config directory.
 
 ### W1-setup-sync: AI-sync runtime on Windows
 
-- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B lib\config_sync.py --runtime-check`
+- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B common\codex\coding-agent-kit\lib\config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.ps1:
   `.\setup-sync.ps1 -Python <path>`, with the first `python3` or `python` on
   PATH that reports 3.11 or newer; a Microsoft Store alias does not count. When

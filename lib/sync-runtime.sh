@@ -20,4 +20,4 @@ if [ ! -x "$sync_python" ]; then
     exit 1
 fi
 
-exec "$sync_python" -I -B -X utf8 "$sync_root/lib/config_sync.py" "$sync_kind" "$@"
+exec "$sync_python" -I -B -X utf8 "$sync_root/common/codex/coding-agent-kit/lib/config_sync.py" "$sync_kind" "$@"

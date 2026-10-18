@@ -19,6 +19,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not create the AI-sync virtual environme
 $SyncRuntime = if ($IsWindows) { Join-Path $SyncVenv 'Scripts/python.exe' } else { Join-Path $SyncVenv 'bin/python' }
 & $SyncRuntime -I -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: --no-deps -r (Join-Path $PSScriptRoot 'requirements-sync.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Could not install the pinned AI-sync dependency.' }
-& $SyncRuntime -I -B (Join-Path $PSScriptRoot 'lib/config_sync.py') --runtime-check
+& $SyncRuntime -I -B (Join-Path $PSScriptRoot 'common/codex/coding-agent-kit/lib/config_sync.py') --runtime-check
 if ($LASTEXITCODE -ne 0) { throw 'AI-sync runtime validation failed.' }
 Write-Host "AI-sync runtime ready in $SyncVenv; no shell activation is needed."

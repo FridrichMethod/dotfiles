@@ -42,10 +42,15 @@ for dependency in bash sh git python3 node; do
     fi
 done
 sync_python=${DOTFILES_SYNC_PYTHON:-$TEST_DIR/../.venv-sync/bin/python}
+engine=$TEST_DIR/../common/codex/coding-agent-kit/lib/config_sync.py
+if [[ ! -f "$engine" ]]; then
+    printf 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.\n' >&2
+    missing=1
+fi
 if [[ ! -x "$sync_python" ]]; then
     printf 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.\n' >&2
     missing=1
-elif ! "$sync_python" -I -B "$TEST_DIR/../lib/config_sync.py" --runtime-check; then
+elif [[ -f "$engine" ]] && ! "$sync_python" -I -B "$engine" --runtime-check; then
     missing=1
 fi
 export DOTFILES_SYNC_PYTHON="$sync_python"

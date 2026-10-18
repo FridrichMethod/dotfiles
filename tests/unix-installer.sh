@@ -16,6 +16,10 @@ FIXTURE="$TEST_TMP/checkout with spaces"
 TARGET="$TEST_TMP/home with spaces"
 SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
 export DOTFILES_SYNC_PYTHON="$SYNC_PYTHON"
+[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
+    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
+    exit 1
+}
 # An inherited Git override must never redirect fixture writes to a caller's
 # real index/object database or import hooks from a custom template directory.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
@@ -39,8 +43,7 @@ mkdir -p "$FIXTURE/common" "$FIXTURE/lib" "$FIXTURE/scripts" "$TARGET" \
 printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$TARGET/.oh-my-zsh/oh-my-zsh.sh"
 cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
 cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
-cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
-    "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
+cp "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
 cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
 # The copy brings the coding-agent-kit checkout along as a plain tree; its
 # gitfile names a module directory that the fixture repository does not have.

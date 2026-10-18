@@ -7,7 +7,8 @@
 # wrapper functions standing in for Invoke-WebRequest and PSResourceGet.
 # The fixture's .venv-sync interpreter logs its runtime check: a shell script
 # on Unix; on Windows a venv of a real Python 3.11+ (DOTFILES_SYNC_PYTHON, this
-# checkout's .venv-sync or PATH) running a stand-in lib/config_sync.py.
+# checkout's .venv-sync or PATH) running a stand-in engine at
+# common/codex/coding-agent-kit/lib/config_sync.py.
 # Nothing touches the runner's real home, profile, modules or network. Runs on
 # Linux and macOS pwsh as well as Windows; Windows-only probes are guarded,
 # and every guarded assertion prints a SKIP line.
@@ -162,7 +163,9 @@ function New-Fixture {
         [IO.File]::Copy((Join-Path $sourceRoot $file), $target)
     }
     # Stand-in runtime check for the Windows venv; FAKE_RUNTIME_EXIT fails it.
-    [IO.File]::WriteAllText((Join-Path $fixture.Repo 'lib/config_sync.py'), @'
+    $engine = Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/config_sync.py'
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $engine))
+    [IO.File]::WriteAllText($engine, @'
 import os, sys
 with open(os.environ["BOOTSTRAP_TEST_EVENTS"], "a", encoding="utf-8") as log:
     log.write("config_sync.py " + " ".join(sys.argv[1:]) + "\n")

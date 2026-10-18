@@ -37,7 +37,11 @@ if (-not (Test-Path -LiteralPath $syncPython -PathType Leaf)) {
     throw 'AI-sync runtime missing; run setup-sync.ps1 explicitly.'
 }
 $env:DOTFILES_SYNC_PYTHON = $syncPython
-& $syncPython -I -B (Join-Path $repoRoot 'lib/config_sync.py') --runtime-check
+$engine = Join-Path $repoRoot 'common/codex/coding-agent-kit/lib/config_sync.py'
+if (-not (Test-Path -LiteralPath $engine -PathType Leaf)) {
+    throw 'coding-agent-kit submodule not initialized; run git submodule update --init --recursive.'
+}
+& $syncPython -I -B $engine --runtime-check
 if ($LASTEXITCODE -ne 0) { throw 'Configuration runtime check failed.' }
 if ($CheckPrerequisites) {
     Write-Output 'test-prerequisites=PASS'

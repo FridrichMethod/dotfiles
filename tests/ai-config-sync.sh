@@ -17,6 +17,10 @@ CLAUDE_PORTABLE="$REPO_ROOT/common/claude/.claude/settings.json"
 CLAUDE_SYNC="$REPO_ROOT/common/claude/.local/bin/claude-settings-sync"
 CODEX_RULES_PORTABLE="$REPO_ROOT/common/codex/.codex/rules/portable.rules"
 CODEX_RULES_SYNC="$REPO_ROOT/common/codex/.local/bin/codex-rules-sync"
+[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
+    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
+    exit 1
+}
 
 hash_file() {
     if command -v shasum >/dev/null 2>&1; then
