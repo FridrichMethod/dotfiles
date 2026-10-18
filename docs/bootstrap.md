@@ -1604,8 +1604,10 @@ elevated command is the person's.
 
 ### HW-clone: Clone with symlinks enabled
 
-The checkout contains symlinks (`common/pymol/.pymolrc*`) that Git for Windows
-only creates when `core.symlinks` is true and the process may create symlinks.
+The checkout contains symlinks (`common/pymol/.pymolrc*`, and the
+coding-agent-kit links in `common/claude` and `common/codex`) that Git for
+Windows only creates when `core.symlinks` is true and the process may create
+symlinks.
 
 - **Check:** `git -C $HOME\dotfiles config core.symlinks; (Get-Item $HOME\dotfiles\common\pymol\.pymolrc).LinkType`
 - **Install:** turn on Developer Mode (Settings > System > For developers), then

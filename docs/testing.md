@@ -8,14 +8,16 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; pre-commit installs its pinned hooks |
-| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; retain system Bash and BSD utilities |
-| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; Git and PowerShell come from the runner and are checked explicitly |
+| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; only the coding-agent-kit submodule, whose pinned commit must be on its `main`; pre-commit installs its pinned hooks |
+| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; only the coding-agent-kit submodule; retain system Bash and BSD utilities |
+| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; a local `core.symlinks` re-checkout of `common/claude` and `common/codex`, then only the coding-agent-kit submodule, required to be LF with resolving links into it; Git and PowerShell come from the runner and are checked explicitly |
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
-hash-pinned configuration parser. Both entrypoints validate this runtime and
-require the shared Python backend tests, including safe replacement failures.
+hash-pinned configuration parser. Both entrypoints validate this runtime against
+the coding-agent-kit engine and require the AI integration tests, which rerun
+the engine's Python backend tests, including safe replacement failures, on this
+checkout's real settings.
 In CI mode GNU Stow is required too, so its real symlink fixture cannot silently
 skip. On developer machines, `./tests/run.sh` reports a missing optional Stow
 integration check, installed-Codex exec-policy check, or PowerShell check.
@@ -29,7 +31,8 @@ staged files on commit and tracked files with `--all-files`. Only printable
 ASCII, tabs, carriage returns and newlines are allowed; other characters fail
 with a file and line. The hook enforces the character set; English wording is
 also a documentation policy and review requirement. Submodule contents are
-outside this hook's scope; sherlock-kit has its own independent hook.
+outside this hook's scope; sherlock-kit and coding-agent-kit have their own
+independent hooks.
 
 Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
 knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
@@ -119,7 +122,8 @@ Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
 `brew shellenv` line applies only once brew can run.
 
 `tests/sherlock-kit-delivery.sh` checks the sherlock-kit submodule delivery.
-By default it builds a fixture submodule tree (CI checks out no submodules),
+By default it builds a fixture submodule tree (CI checks out only the
+coding-agent-kit submodule),
 compares each link's exact relative `readlink` text, stows every host package
 into a temporary home, and covers the generated Codex override and the
 warn-and-skip path of an uninitialized submodule; without GNU Stow it prints
@@ -128,6 +132,29 @@ update Action and acceptance runs. `tests/doctor.sh` runs the real
 `codex-instructions-sync` for its `codex-override` cases, so like
 `tests/stow-all.sh` it needs the AI-sync runtime (`DOTFILES_SYNC_PYTHON` or
 `.venv-sync`).
+
+The engine's own suites (configuration merges, Codex config sync, codex-as and
+account enrollment) live in coding-agent-kit, whose CI runs them on frozen
+fixtures. `tests/ai-integration.sh` runs `tests/test_ai_integration.py` (the
+dotfiles-content cases and the setup-sync refusals), then exports the
+committed submodule tree to a temporary directory, copies the real
+`config.toml`, `settings.json` and `portable.rules` over its fixtures, and
+runs the engine and Claude helper tests there; `tests/run.ps1` does the same
+natively on Windows. `tests/coding-agent-kit-delivery.sh`, modeled on the
+sherlock-kit test, checks the `.gitmodules` entry and `.stowrc` line, the 14
+relative links and their exact texts, that the launchers and setup files here
+match the submodule's reference copies and its tomlkit pin, the
+uninitialized-submodule skip, the paths `--help` prints, and the bump
+workflow. `--ci` fails instead of skipping without GNU Stow, and `--real`
+checks the real checkout at the staged gitlink, for the bump workflow.
+
+Every test that runs the sync engine needs the coding-agent-kit submodule
+initialized: `tests/run.sh`, `tests/run.ps1`, `tests/stow-all.sh`,
+`tests/doctor.sh`, `tests/unix-installer.sh`, `tests/sherlock-kit-delivery.sh`,
+`tests/ai-config-sync.sh`, `tests/ai-integration.sh` and the Python and Node
+tests they run stop at once with an error that names
+`git submodule update --init --recursive`. Initialize it first, as CI does:
+`git submodule update --init -- common/codex/coding-agent-kit`.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
