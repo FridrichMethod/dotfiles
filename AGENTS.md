@@ -157,5 +157,5 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
   - `shfmt`
   - `stylua`
   - basic hygiene hooks
-- One bump workflow each (`update-pymolscripts-submodule.yml`, `update-sherlock-kit-submodule.yml`).
+- One bump workflow each (`update-pymolscripts-submodule.yml`, `update-sherlock-kit-submodule.yml`, `update-coding-agent-kit-submodule.yml`).
 - If CI behavior affects contributors, update `README.md` in the same change.

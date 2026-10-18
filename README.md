@@ -292,7 +292,7 @@ dotfiles/
 +-- marlowe/                      Marlowe HPC
 +-- win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 |
-+-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a daily sync per submodule
++-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a sync per submodule (daily for PyMOLScripts and sherlock-kit, manual for coding-agent-kit)
 +-- .gitattributes                LF everywhere (Windows clones set autocrlf)
 +-- .pre-commit-config.yaml       shellcheck | shfmt | stylua | hygiene
 +-- .stowrc                       Stow defaults (--target=~, ignores)

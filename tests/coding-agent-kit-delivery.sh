@@ -14,8 +14,8 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
 # libraries, completions and Claude helpers (docs/coding-agent-kit.md). The
 # structure checks always run, with git, bash and coreutils only: the
 # .gitmodules entry, the .stowrc ignore line, the gitlink, every link's exact
-# relative text, the binding that stays in dotfiles as regular files and the
-# Windows allowlist. With the submodule initialized, check_real proves that
+# relative text, the binding that stays in dotfiles as regular files, the
+# Windows allowlist and the bump workflow. With the submodule initialized, check_real proves that
 # every link resolves into it, the modes, the binding twins and the tomlkit
 # pin, and the paths --help names must be regular files here. The real
 # stow-all.sh then stows copies into temporary homes with the checkout full,
@@ -237,6 +237,41 @@ check_windows() {
     expect_line "$WINDOWS_PACKAGES" "$REPO_ROOT/stow-all.ps1"
 }
 
+# line_of TEXT FILE: the number of the first line of FILE holding TEXT, or
+# empty.
+line_of() {
+    grep -m 1 -n -F -- "$1" "$2" | cut -d: -f1 || true
+}
+
+# A bump changes code that runs in every Codex and Claude session at the next
+# login, so the Action runs only by hand, stages the bump, refuses it unless
+# delivery, binding, pin and the target commit's own CI all hold, and pushes
+# only a review branch, never main.
+check_automation() {
+    local workflow=$REPO_ROOT/.github/workflows/update-coding-agent-kit-submodule.yml triggers stage guard ci commit push
+    [[ -f "$workflow" ]] || fail "missing ${workflow#"$REPO_ROOT"/}"
+    triggers=$(sed -n '/^on:/,/^[^[:space:]#]/{/^  [^[:space:]#]/p;}' "$workflow")
+    [[ "$triggers" == '  workflow_dispatch:' ]] ||
+        fail "the coding-agent-kit bump must run on workflow_dispatch only: $triggers"
+    ! grep -Eq '^[[:space:]]*schedule:' "$workflow" || fail 'the coding-agent-kit bump must not run on a schedule'
+    expect_line "          git submodule update --remote --merge -- $SUBMODULE" "$workflow"
+    stage=$(line_of "git add $SUBMODULE" "$workflow")
+    guard=$(line_of 'bash tests/coding-agent-kit-delivery.sh --real' "$workflow")
+    ci=$(line_of 'repos/FridrichMethod/coding-agent-kit/commits/$SHA/check-runs' "$workflow")
+    commit=$(line_of 'git commit -m "chore(deps): update coding-agent-kit submodule to latest"' "$workflow")
+    push=$(line_of 'git push origin "HEAD:refs/heads/$branch"' "$workflow")
+    [[ -n "$stage" && -n "$guard" && "$stage" -lt "$guard" ]] ||
+        fail 'the Action must stage its bump before --real checks the recorded gitlink'
+    [[ -n "$ci" && "$guard" -lt "$ci" ]] ||
+        fail 'the Action must require the check runs of the target commit after --real'
+    [[ -n "$commit" && "$ci" -lt "$commit" ]] ||
+        fail 'the Action must commit "chore(deps): update coding-agent-kit submodule to latest" after its guards'
+    [[ -n "$push" && "$commit" -lt "$push" ]] || fail 'the Action must push HEAD:refs/heads/$branch after committing'
+    expect_grep 'branch="bump/coding-agent-kit-' "$workflow"
+    [[ "$(grep -c 'git push' "$workflow")" == 1 ]] || fail 'the Action may push only its review branch'
+    ! grep -Eq 'git push.*main|refs/heads/main' "$workflow" || fail 'the Action must never push main'
+}
+
 # gitignore_patterns: the patterns of dotfiles' .gitignore that the
 # submodule's own .gitignore must hold, since superproject ignores do not
 # apply inside it: all of them, with the two venv lines as one .venv*/ and
@@ -325,6 +360,7 @@ check_gitmodules
 check_stowrc
 check_index
 check_windows
+check_automation
 
 if [[ "$real" == 1 || -e "$REPO_ROOT/$SUBMODULE/.git" ]]; then
     check_real "$REPO_ROOT"
