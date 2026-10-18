@@ -1616,7 +1616,8 @@ symlinks.
   `git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles`.
   Clone onto NTFS, never into a WSL distribution. An existing clone made
   without symlinks: `git -C $HOME\dotfiles config core.symlinks true`, then
-  `git -C $HOME\dotfiles checkout -- common/pymol`.
+  `git -C $HOME\dotfiles checkout -- common/pymol common/claude/.claude/dotfiles common/claude/.local common/claude/.oh-my-zsh common/codex/.local common/codex/.oh-my-zsh`
+  (the narrow pathspec leaves the settings in `.claude/` and `.codex/` alone).
 - **Verify:** `core.symlinks` prints `true`, `LinkType` prints `SymbolicLink`,
   and `git -C $HOME\dotfiles status --porcelain` is empty.
 - **Human:** yes (gui: Developer Mode is a Settings toggle)
