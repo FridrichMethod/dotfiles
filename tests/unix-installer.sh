@@ -42,6 +42,9 @@ cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
     "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
 cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
+# The copy brings the coding-agent-kit checkout along as a plain tree; its
+# gitfile names a module directory that the fixture repository does not have.
+rm -f "$FIXTURE/common/codex/coding-agent-kit/.git"
 printf '%s\n' 'host overlay fixture' >"$FIXTURE/test-host/sample/.fixture-host"
 git init -q -b main "$FIXTURE"
 git -C "$FIXTURE" add common lib scripts test-host stow-all.sh .stowrc

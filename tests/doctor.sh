@@ -251,6 +251,17 @@ printf '## Sherlock: agent running on Sherlock\n\nFixture cluster rules.\n' >"$S
 printf -- '---\nname: sherlock-kit\ndescription: fixture\n---\n' >"$SK_DATA/skills/sherlock-kit/SKILL.md"
 printf '#!/bin/sh\n' >"$SK_TREE/bin/shk"
 chmod +x "$SK_TREE/bin/shk"
+# A coding-agent-kit tree with its nine sentinel files (the engine and what
+# the package links point at), for the cases with a third .gitmodules entry.
+CAK_TREE="$FIXTURE/common/codex/coding-agent-kit"
+CAK_SENTINELS='lib/config_sync.py common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as
+common/codex/.local/lib/codex-as/launch.py common/claude/.local/lib/claude-as/launch.py
+common/claude/.claude/dotfiles/statusline.cjs common/claude/.claude/dotfiles/notify.cjs
+common/claude/.claude/dotfiles/check-git-hooks.cjs'
+for sentinel in $CAK_SENTINELS; do
+    mkdir -p "$CAK_TREE/${sentinel%/*}"
+    [ -f "$CAK_TREE/$sentinel" ] || printf '# fixture %s\n' "$sentinel" >"$CAK_TREE/$sentinel"
+done
 GITMODULES_BOTH='[submodule "common/pymol/PyMOLScripts"]
 	path = common/pymol/PyMOLScripts
 	url = https://github.com/FridrichMethod/PyMOLScripts.git
@@ -923,6 +934,43 @@ mv "$TEST_TMP/sherlock-kit.hidden" "$SK_TREE"
 run_doctor submodule-restored -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row submodule ok
+
+# With coding-agent-kit as the third entry, its nine sentinels are checked in
+# .gitmodules order after the other two, each one on its own, and an
+# uninitialized checkout lists all of them.
+printf '%s\n' "$GITMODULES_BOTH" '[submodule "common/codex/coding-agent-kit"]' \
+    '	path = common/codex/coding-agent-kit' '	url = https://github.com/FridrichMethod/coding-agent-kit.git' \
+    '	branch = main' >"$FIXTURE/.gitmodules"
+run_doctor submodule-coding-agent-kit -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule ok 'common/pymol/PyMOLScripts, common/sherlock-kit/sherlock-kit, common/codex/coding-agent-kit' -
+number=0
+cak_missing=
+for sentinel in $CAK_SENTINELS; do
+    number=$((number + 1))
+    cak_missing="$cak_missing, common/codex/coding-agent-kit/$sentinel"
+    mv "$CAK_TREE/$sentinel" "$TEST_TMP/sentinel.hidden"
+    run_doctor "submodule-coding-agent-kit-$number" -- --host lab-ubuntu --tsv
+    assert_rc 1
+    assert_row submodule missing \
+        "no common/codex/coding-agent-kit/$sentinel; the stowed links dangle (git submodule update --init --recursive)" \
+        'docs/bootstrap.md P0-preflight'
+    case $(tsv_field submodule 4) in
+        *', '*) case_fail 'submodule detail names more than the hidden sentinel' ;;
+    esac
+    mv "$TEST_TMP/sentinel.hidden" "$CAK_TREE/$sentinel"
+done
+mv "$CAK_TREE" "$TEST_TMP/coding-agent-kit.hidden"
+mkdir "$CAK_TREE"
+run_doctor submodule-coding-agent-kit-empty -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row submodule missing "no ${cak_missing#, }; the stowed links dangle (git submodule update --init --recursive)"
+rmdir "$CAK_TREE"
+mv "$TEST_TMP/coding-agent-kit.hidden" "$CAK_TREE"
+printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
+run_doctor submodule-coding-agent-kit-restored -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule ok 'common/pymol/PyMOLScripts, common/sherlock-kit/sherlock-kit' -
 
 # codex-override: on a host whose sherlock-kit package links the toolkit
 # rules (wsl-ubuntu here), ~/.codex/AGENTS.override.md must be what

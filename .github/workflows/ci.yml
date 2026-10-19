@@ -18,6 +18,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      # Only this submodule: the tests expect PyMOLScripts and sherlock-kit
+      # to be absent, as they are without a recursive checkout.
+      - name: Check out the coding-agent-kit submodule only
+        run: git submodule update --init -- common/codex/coding-agent-kit
+      - name: Require the pinned coding-agent-kit commit on its main
+        run: |
+          git -C common/codex/coding-agent-kit fetch --quiet origin main
+          git -C common/codex/coding-agent-kit merge-base --is-ancestor HEAD FETCH_HEAD
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -55,6 +63,8 @@ jobs:
         shell: /bin/bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the coding-agent-kit submodule only
+        run: git submodule update --init -- common/codex/coding-agent-kit
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -78,6 +88,21 @@ jobs:
         shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
     steps:
       - uses: actions/checkout@v6
+      # A local core.symlinks, then a fresh checkout of these two packages
+      # only, so their links into coding-agent-kit become real symlinks; the
+      # other tracked links stay text files, as without it.
+      - name: Re-check out the claude and codex packages with symlinks
+        run: |
+          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
+          git config core.symlinks true
+          git checkout -- common/claude common/codex
+      - name: Check out the coding-agent-kit submodule only
+        run: git submodule update --init -- common/codex/coding-agent-kit
+      - name: Require LF line endings in the submodule checkout
+        run: |
+          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
+          $crlf = @(git -C common/codex/coding-agent-kit ls-files --eol | Select-String -SimpleMatch 'w/crlf')
+          if ($crlf.Count) { throw "CRLF in coding-agent-kit: $($crlf -join '; ')" }
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
