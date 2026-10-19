@@ -1546,7 +1546,10 @@ interactive `claude` or `codex`.
   - Kerberos for Sherlock and Marlowe: `kinit <SUNetID>@stanford.edu` on the
     workstation (krb5 is a host tool, X-host-tools); the ssh config delegates the
     ticket. The block setup-host prints on sherlock and marlowe also lists
-    `kinit`, for a session on the cluster that has no delegated ticket.
+    `kinit`, for a session on the cluster that has no delegated ticket. The
+    `kstanford` alias (`common/sh/.aliases`) requests a 25 h ticket renewable
+    for 7 days and, when kstart's `krenew` is installed, starts one background
+    `krenew -K 60` that renews it until then; after that, run it again.
   - lab-ubuntu: Git Credential Manager with `credentialStore = gpg` needs a gpg
     key and `pass init <gpg-key-id>`. wsl-ubuntu uses the Windows-side Git
     Credential Manager from Git for Windows.
