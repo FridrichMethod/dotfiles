@@ -315,6 +315,24 @@ Invoke-PortableSync @sync
         Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq $originalTarget) 'Source relative target was rewritten.'
         Assert-True ((Get-Item -LiteralPath $fixture.Destination -Force).LinkType -eq 'SymbolicLink') 'Source repair did not allow destination install.'
     }
+    Test-Case 'source trust repair preserves a relative target that crosses packages' {
+        # The coding-agent-kit links climb out of their package into the
+        # submodule checkout inside the codex package.
+        $fixture = New-ControlFixture
+        $kitFile = Join-Path $fixture.Root 'common/codex/coding-agent-kit/x'
+        [void][IO.Directory]::CreateDirectory((Split-Path $kitFile -Parent))
+        [IO.File]::WriteAllText($kitFile, 'source content')
+        Remove-Item -LiteralPath $fixture.Source -Force
+        $relative = ('..', 'codex', 'coding-agent-kit', 'x') -join [IO.Path]::DirectorySeparatorChar
+        New-Item -ItemType SymbolicLink -Path $fixture.Source -Value $relative | Out-Null
+        $originalTarget = @((Get-Item -LiteralPath $fixture.Source -Force).Target)[0]
+        Assert-True (-not [IO.Path]::IsPathRooted($originalTarget) -and $originalTarget.StartsWith('..')) 'Fixture source target is not relative.'
+        $result = Invoke-Control $fixture -SourceError 448
+        Assert-True (-not $result.Failed) $result.Errors
+        Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq $originalTarget) 'Cross-package relative target was rewritten.'
+        Assert-True ([IO.File]::ReadAllText($fixture.Source) -ceq 'source content') 'Repaired source no longer resolves into the submodule.'
+        Assert-True ((Get-Item -LiteralPath $fixture.Destination -Force).LinkType -eq 'SymbolicLink') 'Source repair did not allow destination install.'
+    }
     Test-Case 'other read failures are reported instead of being treated as trustworthy' {
         $fixture = New-ControlFixture
         New-Item -ItemType SymbolicLink -Path $fixture.Destination -Value $fixture.Source | Out-Null

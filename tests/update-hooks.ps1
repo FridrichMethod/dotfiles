@@ -256,6 +256,58 @@ try {
         Assert-Equal 1 (Get-InstallCount $fixture) 'Matching retry marker did not permit apply.'
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $directory 'submodules.json'))) 'Successful sync left pending marker.'
     }
+    Test-Case 'pull that adds a submodule and links a tracked file into it' {
+        # The coding-agent-kit migration: one fast-forward registers a
+        # submodule and turns a tracked regular file into a relative link that
+        # resolves only once the updater has checked the submodule out.
+        $fixture = New-Fixture
+        $kit = New-Fixture
+        Invoke-TestGit -C $fixture.Seed config core.symlinks true
+        Invoke-TestGit -C $fixture.Repo config core.symlinks true
+        [void][IO.Directory]::CreateDirectory((Join-Path $kit.Seed 'bin'))
+        [IO.File]::WriteAllText((Join-Path $kit.Seed 'bin/tool'), 'tool content' + [Environment]::NewLine)
+        Invoke-TestGit -C $kit.Seed add bin/tool
+        Invoke-TestGit -C $kit.Seed commit --quiet -m 'add tool'
+        Invoke-TestGit -C $kit.Seed push --quiet
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Seed 'pkg'))
+        [IO.File]::WriteAllText((Join-Path $fixture.Seed 'pkg/tool'), 'tool content' + [Environment]::NewLine)
+        Invoke-TestGit -C $fixture.Seed add pkg/tool
+        Invoke-TestGit -C $fixture.Seed commit --quiet -m 'track the tool'
+        Invoke-TestGit -C $fixture.Seed push --quiet
+        Invoke-TestGit -C $fixture.Repo pull --ff-only --quiet
+        Save-DotfilesStowState $fixture.Repo 'win'
+        $previous = Get-AppliedHead $fixture
+        Assert-Equal (Get-DotfilesHead $fixture.Repo) $previous 'Baseline was not acknowledged.'
+        # The seed commit: add the submodule and stage the link entry directly
+        # in place of the tracked file, so the seed needs no link privilege.
+        Invoke-TestGit -C $fixture.Seed -c protocol.file.allow=always submodule add --quiet $kit.Remote kit
+        $linkText = Join-Path $fixture.Root 'link-text'
+        [IO.File]::WriteAllText($linkText, '../kit/bin/tool')
+        $blob = & $global:DotfilesTestGitExecutable -C $fixture.Seed hash-object -w --no-filters $linkText
+        if ($LASTEXITCODE -ne 0) { throw 'Could not store the link text.' }
+        Invoke-TestGit -C $fixture.Seed update-index --cacheinfo "120000,$blob,pkg/tool"
+        Invoke-TestGit -C $fixture.Seed commit --quiet -m 'link the tool from the submodule'
+        Invoke-TestGit -C $fixture.Seed push --quiet
+        # The updater's own submodule update clones a file:// URL; allow that
+        # in this run's temporary global config only.
+        [IO.File]::AppendAllText($env:GIT_CONFIG_GLOBAL, "[protocol `"file`"]`n`tallow = always`n")
+        try { Invoke-DotfilesUpdate $fixture.Repo }
+        finally { [IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '') }
+        $head = Get-DotfilesHead $fixture.Repo
+        Assert-True ($head -ne $previous) 'HEAD did not fast-forward.'
+        Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'kit/bin/tool') -PathType Leaf) 'Submodule was not checked out.'
+        $link = Get-Item -LiteralPath (Join-Path $fixture.Repo 'pkg/tool') -Force
+        Assert-Equal 'SymbolicLink' $link.LinkType 'Tracked file did not become a symbolic link.'
+        Assert-Equal '../kit/bin/tool' (@($link.Target)[0] -replace '\\', '/') 'Link target text changed.'
+        Assert-Equal ('tool content' + [Environment]::NewLine) ([IO.File]::ReadAllText($link.FullName)) 'Link does not resolve into the submodule.'
+        Assert-Equal 1 (Get-InstallCount $fixture) 'Installer must run once.'
+        Assert-Equal $head (Get-AppliedHead $fixture) 'Success not acknowledged.'
+        $directory = Get-DotfilesStateDirectory $fixture.Repo
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $directory 'submodules.json'))) 'Successful sync left pending marker.'
+        $status = & $global:DotfilesTestGitExecutable -C $fixture.Repo status --porcelain --ignore-submodules=none
+        Assert-Equal 0 $LASTEXITCODE 'Cannot read the checkout status.'
+        Assert-Equal '' (@($status) -join "`n") 'Checkout is not clean after the update.'
+    }
     Test-Case 'host changes apply unchanged HEAD including common-only' {
         $fixture = New-Fixture
         Save-DotfilesStowState $fixture.Repo 'win'

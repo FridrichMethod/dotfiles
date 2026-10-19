@@ -214,7 +214,7 @@ step_S4_nvm_apply() {
 step_S4_setup_sync_check() {
     local venv=$STEPS_ROOT/.venv-sync
     if [ -f "$venv/pyvenv.cfg" ] && [ -x "$venv/bin/python" ] &&
-        "$venv/bin/python" -I -B -X utf8 "$STEPS_ROOT/lib/config_sync.py" --runtime-check >/dev/null 2>&1 </dev/null; then
+        "$venv/bin/python" -I -B -X utf8 "$STEPS_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" --runtime-check >/dev/null 2>&1 </dev/null; then
         STEP_DETAIL="AI-sync runtime ready in $venv"
         return 0
     fi

@@ -88,18 +88,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(common/sh/\.profile|common/zsh/\.zshrc|common/zsh/\.oh-my-zsh/custom/(nvm|fzf-tab)\.zsh|tests/shell-profile\.sh)$
-      - id: structured-config-sync
-        name: structured configuration merge and safe writes
-        entry: tests/config-sync.sh
-        language: script
-        pass_filenames: false
-        files: ^(lib/.*|requirements-sync\.txt|setup-sync\.(sh|ps1)|tests/(test_config_sync\.py|config-sync\.sh)|common/(claude|codex)/\.local/bin/.*)$
       - id: ai-config-sync
         name: ai config and rules sync
         entry: tests/ai-config-sync.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|tests/ai-config-sync\.sh)$
+        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|lib/sync-runtime\.sh|setup-sync\.(sh|ps1)|requirements-sync\.txt|tests/ai-config-sync\.sh)$
         # identify tags the coding-agent-kit gitlink `directory` and a link
         # `symlink`; the default `types: [file]` would skip a bump or a link
         # change, so every hook that runs the sync engine clears it.
@@ -109,38 +103,35 @@ repos:
         entry: node --test tests/claude-customizations.cjs
         language: system
         pass_filenames: false
-        files: (^|/)(common/claude/.*|tests/claude-customizations\.cjs)$
-      - id: codex-config-sync
-        name: codex config sync behavior
-        entry: tests/codex-config-sync.sh
+        files: (^|/)(common/claude/.*|common/codex/coding-agent-kit|tests/claude-customizations\.cjs)$
+        types: []
+      - id: ai-integration
+        name: AI tooling integration with the real dotfiles content
+        entry: tests/ai-integration.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/codex/(\.codex/config\.toml|\.local/bin/codex-config-sync)|tests/codex-config-sync\.sh)$
-      - id: codex-as
-        name: Codex account views and native sharing (isolated Bash/zsh)
-        entry: tests/codex-as.sh
-        language: script
-        pass_filenames: false
-        files: ^(common/codex/\.local/(bin/codex-as|lib/codex-as/.*)|tests/(codex-as\.sh|test_codex_as\.py|test_codex_sharing_native\.py))$
-      - id: account-enrollment
-        name: account enrollment and completion (isolated HOME and native CLI fakes)
-        entry: tests/account-enrollment.sh
-        language: script
-        pass_filenames: false
-        files: ^(\.stowrc|common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|tests/(account-enrollment\.sh|test_account_enrollment\.py))$
+        files: ^(\.stowrc|setup-sync\.(sh|ps1)|common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|lib/sync-runtime\.sh|tests/(ai-integration\.sh|test_ai_integration\.py))$
+        types: []
       - id: stow-installer
         name: POSIX stow installer behavior
         entry: tests/stow-all.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
+        files: (^|/)(stow-all\.sh|lib/terminal\.sh|common/codex/coding-agent-kit|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
         types: []
       - id: sherlock-kit-delivery
         name: sherlock-kit submodule delivery and stow
         entry: tests/sherlock-kit-delivery.sh
         language: script
         pass_filenames: false
-        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(config_sync\.py|sync-runtime\.sh|terminal\.sh)|common/(claude|codex|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
+        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(sync-runtime\.sh|terminal\.sh)|common/(claude|codex|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
+        types: []
+      - id: coding-agent-kit-delivery
+        name: coding-agent-kit submodule delivery, links and binding twins
+        entry: tests/coding-agent-kit-delivery.sh
+        language: script
+        pass_filenames: false
+        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|common/(claude|codex)/.*|lib/sync-runtime\.sh|setup-sync\.(sh|ps1)|requirements-sync\.txt|docs/account-launchers\.md|\.github/workflows/update-coding-agent-kit-submodule\.yml|tests/coding-agent-kit-delivery\.sh)$
         types: []
       - id: unix-installer-integration
         name: real Git and Stow integration
@@ -190,7 +181,7 @@ repos:
         entry: tests/doctor.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|docs/bootstrap\.md|tests/doctor\.sh)$
+        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|common/codex/coding-agent-kit|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|docs/bootstrap\.md|tests/doctor\.sh)$
         types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks

@@ -396,12 +396,13 @@ bootstrap_check_locale() {
 }
 
 # bootstrap_sync_runtime_ok PYTHON ROOT: 0 when PYTHON passes
-# ROOT/lib/config_sync.py --runtime-check (Python 3.11+ and the pinned
+# ROOT/common/codex/coding-agent-kit/lib/config_sync.py --runtime-check (the
+# engine in the coding-agent-kit submodule; Python 3.11+ and the pinned
 # tomlkit), as setup-sync.sh, setup-host's S4-setup-sync and doctor.ps1
 # judge it. -I -B: isolated, and no bytecode is written.
 bootstrap_sync_runtime_ok() {
     [ -n "$1" ] && [ -f "$1" ] && [ -x "$1" ] || return 1
-    "$1" -I -B -X utf8 "$2/lib/config_sync.py" --runtime-check </dev/null >/dev/null 2>&1
+    "$1" -I -B -X utf8 "$2/common/codex/coding-agent-kit/lib/config_sync.py" --runtime-check </dev/null >/dev/null 2>&1
 }
 
 # bootstrap_check_venv_sync ROOT: the AI-sync interpreter lib/sync-runtime.sh

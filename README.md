@@ -271,6 +271,7 @@ dotfiles/
 |   +-- bash/                     .bashrc, .bash_aliases, .bash_profile
 |   +-- claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
 |   +-- codex/                    ~/.codex/AGENTS.md + portable config/exec rules
+|   |   +-- coding-agent-kit/     submodule - codex-as, claude-as, Claude helpers, sync engine
 |   +-- conda/                    .condarc
 |   +-- git/                      .gitconfig (with [include] ~/.gitconfig_local)
 |   +-- kitty/                    Kitty terminal
@@ -292,13 +293,13 @@ dotfiles/
 +-- marlowe/                      Marlowe HPC
 +-- win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 |
-+-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a daily sync per submodule
++-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a sync per submodule (daily for PyMOLScripts and sherlock-kit, manual for coding-agent-kit)
 +-- .gitattributes                LF everywhere (Windows clones set autocrlf)
 +-- .pre-commit-config.yaml       shellcheck | shfmt | stylua | hygiene
 +-- .stowrc                       Stow defaults (--target=~, ignores)
 +-- config/bootstrap/             day-zero manifests (tools, Brewfiles, apt, clones, pinned installers)
 +-- docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
-+-- lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
++-- lib/                          sourced helpers (terminal output, bootstrap steps)
 +-- doctor.sh                     read-only day-zero check (POSIX)
 +-- doctor.ps1                    read-only day-zero check (Windows)
 +-- setup-host.sh                 day-zero installer that stops before stow (POSIX)
@@ -361,7 +362,8 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 5. On a host with a `sherlock-kit` package, `codex-instructions-sync` writes `~/.codex/AGENTS.override.md` after the dry run (other hosts lose a stale generated one). While the submodule is not initialized it warns `sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`, skips only that step and records no applied revision, so the login updater retries.
-6. Before the Stow dry runs, `stow-all.sh` removes the dangling `~/.local/bin/shk` that 0.3 stowed from the since-deleted `common/codex` launcher, because the host dry run would abort on it. Only that exact link goes, with an info line; a live link, a foreign link or a file stays for the dry run to report.
+6. While the `coding-agent-kit` submodule is not initialized, `stow-all.sh` and `stow-all.ps1` warn `coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)`, skip every Claude and Codex sync step, still stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
+7. Before the Stow dry runs, `stow-all.sh` removes the dangling `~/.local/bin/shk` that 0.3 stowed from the since-deleted `common/codex` launcher, because the host dry run would abort on it. Only that exact link goes, with an info line; a live link, a foreign link or a file stays for the dry run to report.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
 
@@ -523,7 +525,7 @@ pre-commit run --all-files
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
 | **english-documentation** | This repository's documentation, including agent guides and skills; a native `pygrep` hook rejects non-ASCII characters and control characters except tabs and line breaks |
 | **gitleaks** | secrets in the staged changes, so it guards commits only in a clone where `pre-commit install` ran; CI also scans every commit on every ref with the manual-stage `gitleaks-history` hook (`pre-commit run --hook-stage manual gitleaks-history` locally). [`.gitleaks.toml`](.gitleaks.toml) adds Claude Code OAuth tokens and any file under a `.secrets/` directory to the default rules |
-| **behavior** | structured config merges, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
+| **behavior** | structured config merges on the real settings (the coding-agent-kit engine suites), coding-agent-kit delivery, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
 CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
 `windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
@@ -542,8 +544,8 @@ Write all documentation in English with ASCII punctuation and diagrams. Chinese,
 emoji and decorative Unicode characters are rejected. The documentation hook
 uses native `pygrep` configured entirely in YAML. It checks staged documents on
 commit and tracked documents with `--all-files`, within this repository only.
-Submodule repositories manage their own checks; sherlock-kit has an independent
-documentation hook.
+Submodule repositories manage their own checks; sherlock-kit and coding-agent-kit
+have independent documentation hooks.
 
 ## AI Assistant Configuration
 
@@ -570,31 +572,10 @@ documentation hook.
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
 
 The Codex and Claude packages install executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
-Existing accounts launch immediately. Missing accounts ask `[y/N]`, run native login in an isolated temporary configuration, save private credentials, then continue the original command. zsh/fzf-tab and Bash complete account names without reading tokens.
-Launcher messages use terminal-aware colors; redirected logs stay plain by default. `DOTFILES_COLOR=auto|always|never`, `NO_COLOR` and `TERM=dumb` follow the existing dotfiles convention; native CLI output and completion lists remain untouched.
-Both require Python 3.11+. Codex requires CLI 0.161.0 or newer and forces file authentication.
-Apart from `--help`, `codex-as` has no options of its own: `codex-as NAME ARGS...` runs `codex ARGS...` as NAME,
-refusing what would change, revoke or bypass that login, daemon-only commands, session names,
-and settings that would split the shared state.
-The root `~/.codex/auth.json` stays native; `codex-as` never reads or changes it, so root
-login/logout and desktop clients keep their own token chain.
-Accounts and different sessions can run concurrently and share history. Resume by UUID,
-`--last` or picker; explicit session names are refused. Account leases exclude credential
-maintenance while wrapper clients are active, and native thread locks exclude two writers
-to the same session. Same-account OAuth refresh retains native cross-process limitations.
-Interactive resume takes sessions over from the root daemon (Desktop's backend): an
-idle `codex-as NAME resume UUID` without a prompt, one that may be running after a
-confirmation, for `--last` only the session it opens when idle, and before the picker the
-idle sessions it lists by default (this directory or the same place in a linked worktree;
-all with `--all`).
-Takeover ends the old runtime and spawned agents there, restores saved archive
-visibility, then resumes with the selected account. Interrupted takeovers keep a private
-recovery record that the next `resume`, `fork` or `exec resume` of that UUID, picker or
-`resume --last` finishes. Exec, fork and sessions held by other
-processes are never taken over.
-Ambiguous credential divergence stops with both copies kept and a manual relink command; shared config paths
-must be absolute, while cloud policy, remote plugin caches and auth-bound integrations remain isolated.
-See [account layout, new accounts, completion and safety boundaries](docs/account-launchers.md), and [Codex source verification](docs/codex-as.md). Installing does not start login or switch real accounts.
+Both come from the [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) submodule (see [Codex and Claude tooling](#codex-and-claude-tooling-submodule)); its README describes account views, login, completion, concurrency, takeover and resume.
+Existing accounts launch immediately; a missing account asks before a native login. Both need Python 3.11+, and `codex-as` needs Codex CLI 0.161.0 or newer.
+`codex-as` never reads or changes the root `~/.codex/auth.json`, so root login/logout and desktop clients keep their own token chain.
+See [account layout, new accounts, completion and safety boundaries](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md), and [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md). Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
@@ -615,11 +596,8 @@ Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permi
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
-Claude's local helpers require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line):
+`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/dotfiles/*.cjs`, which come from the coding-agent-kit submodule. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The [coding-agent-kit README](https://github.com/FridrichMethod/coding-agent-kit) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
 
-- **Status line:** shows the active model, reported effort, project and Git branch (or detached commit), context usage, and estimated session cost. For example: `Opus | xhigh | dotfiles (main) | ctx 38% | ~$1.23`. Missing usage/cost data shows `?`; cost is Claude's estimate, not an invoice. It performs only bounded Git ref reads, without scanning the worktree or contacting the network. See the [status-line reference](https://code.claude.com/docs/en/statusline).
-- **Notifications:** `permission_prompt` and `idle_prompt` events emit [Claude's `terminalSequence`](https://code.claude.com/docs/en/hooks#emit-terminal-notifications), using OSC 99 for Kitty, OSC 777 for Ghostty/Warp/rxvt, or OSC 9 for iTerm2/WezTerm/Windows Terminal. The terminal handles desktop delivery, including remote sessions when terminal identification is available. Enable notifications for the terminal in OS settings; unsupported terminals and non-interactive sessions may ignore them. The notice contains only the project name and a fixed status, never prompt or command contents. The plugin's existing Stop notification remains separate.
-- **Git hook checks:** a local `PreToolUse` helper replaces per-Bash `npx block-no-verify@1.1.2` execution. It blocks common `--no-verify`, commit `-n`, and `-c core.hooksPath=...` forms without npm startup or downloads. This is a conservative text check, not a shell parser; quoted text can trigger it, and indirect bypasses are outside its scope. Successful checks do not grant permission or skip the classifier.
 - **Plugin hooks:** the enabled Everything Claude Code plugin owns its SessionStart, Stop, and SessionEnd hooks. Empty portable arrays remove the old copied registrations during sync; disabling the plugin disables those lifecycle features. This prevents stale copies after plugin updates, rather than assuming a speedup from copies Claude may already deduplicate.
 
 Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to link the helpers and sync these defaults, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
@@ -636,7 +614,7 @@ TOML is parsed and edited with `tomlkit`, including multiline values and quoted
 keys; it is not reconstructed with AWK or regular expressions. Normal sync never
 rewrites the portable baseline. Cleaning runtime state left in an old polluted
 baseline is an explicit `codex-config-sync --migrate-portable PORTABLE LIVE`
-operation; review the [migration safeguards](docs/config-sync.md) first.
+operation; review the [migration safeguards](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/config-sync.md) first.
 The updater verifies the applied HEAD/host after installation before reporting
 success; see the [update and locking contract](docs/update-contract.md).
 
@@ -658,6 +636,29 @@ After cloning on a new machine:
 # H7-sync-skills: the skill sync starts in the first new shell after the stow unless AWESOME_SKILLS_AUTO_UPDATE=0
 # then authenticate GitHub, Claude Code and Codex on this host (H7-auth)
 ```
+
+## Codex and Claude tooling (submodule)
+
+[coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) is the submodule
+`common/codex/coding-agent-kit`. It holds `codex-as`, `claude-as`, the Claude
+status line, notification and Git hook check helpers, and the AI config sync
+engine `lib/config_sync.py`; the settings themselves stay in this repository.
+The checkout sits inside the `codex` package, where the `.stowrc` line
+`--ignore=^coding-agent-kit(/|$)` keeps it out of `$HOME`. `common/claude` and
+`common/codex` link its 14 delivered files one by one with relative links, so
+every stowed `$HOME` path is unchanged.
+
+The four `*-sync` launchers, `lib/sync-runtime.sh`, `setup-sync.*` and
+`requirements-sync.txt` stay regular files here, so an existing `.venv-sync`
+keeps working; `tests/coding-agent-kit-delivery.sh` checks them against the
+submodule's reference copies and its tomlkit pin. While the submodule is not
+initialized, the installers skip every Claude and Codex sync with one warning
+and record no applied revision. A bump is manual:
+`update-coding-agent-kit-submodule.yml` pushes a review branch, and the pull
+request you open from it runs the full CI before you merge. The login updater
+then updates submodules and restows. `./doctor.sh` reports the `submodule` row.
+Develop the tooling in a separate clone, never inside this checkout. See
+[docs/coding-agent-kit.md](docs/coding-agent-kit.md).
 
 ## Sherlock toolkit (submodule)
 
@@ -702,8 +703,8 @@ stow --restow --no-folding -d common newtool
 - **Keep secrets out** of version control - use `*_local` files referenced by `[include]` chains.
 - **Stow order is sacred**: `common/` first, host second.
 - **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
-- **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync`, and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
-- **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist aligned whenever shared Codex settings change.
+- **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync` (its engine is in the coding-agent-kit submodule), and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
+- **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist (owned by the coding-agent-kit engine; see [docs/coding-agent-kit.md](docs/coding-agent-kit.md) for the change order) aligned whenever shared Codex settings change.
 - **Codex exec policy is layered**: keep reviewed cross-host guardrails in `portable.rules`; leave generated or project/host-specific approvals in the untracked `default.rules`.
 - **fcitx5 profile is materialized**: fcitx5 rewrites `~/.config/fcitx5/profile` at runtime, so `.stowrc` excludes it and `fcitx5-profile-sync` writes the tracked baseline as a machine-local regular file; the baseline is authoritative and re-asserted on stow. Invalid directory or special-file targets fail visibly; an existing link remains intact until its replacement is fully staged, so staging failures preserve the old profile.
 - **GNOME owns the lab-ubuntu X keymap**: mutter rebuilds it after `~/.xprofile` runs and drops `setxkbmap` options, so `lab-ubuntu/fcitx5/.xprofile` declares CapsLock-as-`Hyper_L` (the fcitx5 English/Chinese trigger) and frees Super+Space (the fcitx5 input-method cycle) through `gsettings` on each X login. It calls `/usr/bin/gsettings` by path because Linuxbrew's `gsettings` has no dconf backend and silently writes a keyfile GNOME never reads.

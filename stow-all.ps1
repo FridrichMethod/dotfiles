@@ -467,6 +467,15 @@ $syncPlan = @(
         Portable = $claudePortable; Live = Join-Path $Target '.claude\settings.json' }
 )
 
+# The helpers exec the engine from the coding-agent-kit submodule. Mirroring
+# stow-all.sh, skip every sync with one warning while it is not initialized;
+# the warning keeps the revision unacknowledged and fails -Strict.
+$aiEngine = Join-Path $commonRoot 'codex\coding-agent-kit\lib\config_sync.py'
+if (-not (Test-Path -LiteralPath $aiEngine -PathType Leaf)) {
+    $script:Warnings.Add('coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)')
+    $syncPlan = @()
+}
+
 # Validate every selected merge and every ignore expression before mutation.
 # --check must also leave a missing target directory absent during -WhatIf.
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync -CheckOnly }
@@ -506,7 +515,7 @@ if ($script:LinkReadErrors[$PSCommandPath] -ne 0) {
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow preflight failed: $($script:Warnings -join '; ')"
 }
-if (-not $WhatIfPreference) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
+if (-not $WhatIfPreference -and $syncPlan.Count) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync }
 
 Write-DotfilesLog step "Stowing common packages: $($CommonPackages -join ' ')"

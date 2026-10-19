@@ -28,5 +28,5 @@ else
     setup_runtime=$setup_venv/Scripts/python.exe
 fi
 "$setup_runtime" -I -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: --no-deps -r "$setup_root/requirements-sync.txt"
-"$setup_runtime" -I -B "$setup_root/lib/config_sync.py" --runtime-check
+"$setup_runtime" -I -B "$setup_root/common/codex/coding-agent-kit/lib/config_sync.py" --runtime-check
 echo "AI-sync runtime ready in $setup_venv; no shell activation is needed."

@@ -1,0 +1,65 @@
+name: update coding-agent-kit submodule
+
+on:
+  # Manual only: a bump changes code that runs in every Codex and Claude
+  # session on every host at its next login. This run never pushes main: it
+  # pushes a review branch, and the pull request you open from it runs the
+  # full ci.yml before you merge.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      # Staged, so the guard checks the gitlink this run would commit.
+      - name: Stage coding-agent-kit at its latest main
+        id: bump
+        run: |
+          git submodule update --init -- common/codex/coding-agent-kit
+          git submodule update --remote --merge -- common/codex/coding-agent-kit
+          git add common/codex/coding-agent-kit
+          if git diff --cached --quiet -- common/codex/coding-agent-kit; then
+            echo "changed=0" >>"$GITHUB_OUTPUT"
+          else
+            echo "changed=1" >>"$GITHUB_OUTPUT"
+            echo "sha=$(git -C common/codex/coding-agent-kit rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+          fi
+      # Links, completeness, binding twins and the tomlkit pin: a pin change
+      # is a human two-repo change, never an automatic bump.
+      - name: Refuse a bump that breaks delivery, the binding or the pin
+        if: steps.bump.outputs.changed == '1'
+        run: bash tests/coding-agent-kit-delivery.sh --real
+      # The check-run names are the job names of coding-agent-kit's ci.yml.
+      - name: Require green coding-agent-kit CI on the target commit
+        if: steps.bump.outputs.changed == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.bump.outputs.sha }}
+        run: |
+          missing=$(gh api "repos/FridrichMethod/coding-agent-kit/commits/$SHA/check-runs?per_page=100" \
+            --jq '["Linux behavior and lint", "macOS system Bash behavior", "Windows native PowerShell behavior"] - [.check_runs[] | select(.status == "completed" and .conclusion == "success") | .name] | join(", ")')
+          if [ -n "$missing" ]; then
+            echo "coding-agent-kit CI is not green on $SHA: $missing"
+            exit 1
+          fi
+      - name: Push the bump to a review branch, never to main
+        if: steps.bump.outputs.changed == '1'
+        env:
+          SHA: ${{ steps.bump.outputs.sha }}
+        run: |
+          branch="bump/coding-agent-kit-${SHA:0:12}"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deps): update coding-agent-kit submodule to latest"
+          git push origin "HEAD:refs/heads/$branch"
+          echo "Open a pull request: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1" >>"$GITHUB_STEP_SUMMARY"
+      - name: Report an up-to-date submodule
+        if: steps.bump.outputs.changed == '0'
+        run: echo "Submodule already up to date, nothing to commit."

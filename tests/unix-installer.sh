@@ -16,6 +16,10 @@ FIXTURE="$TEST_TMP/checkout with spaces"
 TARGET="$TEST_TMP/home with spaces"
 SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
 export DOTFILES_SYNC_PYTHON="$SYNC_PYTHON"
+[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
+    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
+    exit 1
+}
 # An inherited Git override must never redirect fixture writes to a caller's
 # real index/object database or import hooks from a custom template directory.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
@@ -39,8 +43,7 @@ mkdir -p "$FIXTURE/common" "$FIXTURE/lib" "$FIXTURE/scripts" "$TARGET" \
 printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$TARGET/.oh-my-zsh/oh-my-zsh.sh"
 cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
 cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
-cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
-    "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
+cp "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
 cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
 # The copy brings the coding-agent-kit checkout along as a plain tree; its
 # gitfile names a module directory that the fixture repository does not have.
@@ -63,6 +66,11 @@ grep -Fq '[dotfiles] [ok] Stow completed (test-host)' "$TEST_TMP/install.log"
 ! grep -Eq '^(Validated|Synchronized) ' "$TEST_TMP/install.log"
 ! grep -q "$(printf '\033')" "$TEST_TMP/install.log"
 [[ -L "$TARGET/.fixture-host" ]]
+# The launchers and helpers resolve through two links: the home link to the
+# package path, and the package link into the coding-agent-kit checkout.
+[[ -e "$TARGET/.local/bin/codex-as" && -e "$TARGET/.claude/dotfiles/statusline.cjs" ]]
+env HOME="$TARGET" "$TARGET/.local/bin/codex-as" --help >/dev/null
+env HOME="$TARGET" "$TARGET/.local/bin/claude-as" --help >/dev/null
 [[ -L "$TARGET/.local/bin/codex-config-sync" ]]
 [[ -f "$TARGET/.codex/config.toml" && ! -L "$TARGET/.codex/config.toml" ]]
 [[ -f "$TARGET/.claude/settings.json" && ! -L "$TARGET/.claude/settings.json" ]]
@@ -102,6 +110,28 @@ fi
 grep -Fxq 'delivered by automatic stow' "$TARGET/.fixture-new"
 printf '%s\n' "$TARGET" "$(uname -s)" test-host "$(git -C "$FIXTURE" rev-parse HEAD)" >"$TEST_TMP/expected-state"
 cmp "$STATE" "$TEST_TMP/expected-state"
+[[ -z "$(git -C "$FIXTURE" status --porcelain)" ]]
+
+# Without DOTFILES_SYNC_PYTHON, the stowed sync launchers find the checkout's
+# default .venv-sync four directories above the real launcher file, and name
+# that checkout's setup-sync.sh when it is missing.
+mkdir -p "$FIXTURE/.venv-sync/bin"
+printf '%s\n' '#!/bin/sh' "exec \"$SYNC_PYTHON\" \"\$@\"" >"$FIXTURE/.venv-sync/bin/python"
+chmod +x "$FIXTURE/.venv-sync/bin/python"
+env -u DOTFILES_SYNC_PYTHON HOME="$TARGET" "$TARGET/.local/bin/codex-config-sync" --check \
+    "$FIXTURE/common/codex/.codex/config.toml" "$TARGET/.codex/config.toml"
+env -u DOTFILES_SYNC_PYTHON HOME="$TARGET" "$TARGET/.local/bin/claude-settings-sync" --check \
+    "$FIXTURE/common/claude/.claude/settings.json" "$TARGET/.claude/settings.json"
+rm -r "$FIXTURE/.venv-sync"
+printf '%s\n' "config-sync: Python runtime unavailable; run $(cd -P -- "$FIXTURE" && pwd -P)/setup-sync.sh (or setup-sync.ps1) explicitly, or set DOTFILES_SYNC_PYTHON to a provisioned interpreter path" \
+    >"$TEST_TMP/expected-no-venv"
+for helper in codex-config-sync claude-settings-sync; do
+    rc=0
+    env -u DOTFILES_SYNC_PYTHON HOME="$TARGET" "$TARGET/.local/bin/$helper" --check \
+        "$TEST_TMP/unused-portable" "$TEST_TMP/unused-live" 2>"$TEST_TMP/no-venv.err" || rc=$?
+    [[ "$rc" == 1 ]]
+    cmp "$TEST_TMP/no-venv.err" "$TEST_TMP/expected-no-venv"
+done
 [[ -z "$(git -C "$FIXTURE" status --porcelain)" ]]
 
 # A malformed final baseline fails preflight before any earlier sync writes.

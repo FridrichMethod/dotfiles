@@ -62,7 +62,8 @@ function New-Fixture {
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
     foreach ($relative in @('stow-all.ps1', 'scripts/dotfiles-auto-stow.ps1', '.stowrc',
-            'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
+            'common/codex/coding-agent-kit/lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1',
+            'lib/windows-link-trust.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
             'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
@@ -154,7 +155,7 @@ try {
     }
     & $env:DOTFILES_SYNC_PYTHON -I -B -c 'import tomlkit'
     if ($LASTEXITCODE -ne 0) { throw 'The configured sync interpreter lacks tomlkit.' }
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'lib/config_sync.py') -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'common/codex/coding-agent-kit/lib/config_sync.py') -PathType Leaf)) {
         throw 'Shared configuration backend is missing; native integration cannot run.'
     }
     $gitBash = Get-TestGitBash
@@ -236,6 +237,35 @@ public static class DotfilesCallerMitigation {
         Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/pymol/.pymolrc) 'Git source symlink payload changed.'
         Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Source symlink install dirtied the checkout.'
         Assert-Link (Join-Path $fixture.Target '.pymolrc') $source
+    }
+
+    Test-Case 'source symlinks into the submodule cross packages, stay trusted and resolve from the target' {
+        # The coding-agent-kit links climb out of their package into the
+        # submodule checkout inside the codex package.
+        $fixture = New-Fixture
+        Write-FixtureFile (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/fixture.cjs') 'kit fixture'
+        $source = Join-Path $fixture.Repo 'common/claude/.claude/dotfiles/fixture.cjs'
+        [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
+        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/fixture.cjs' | Out-Null
+        $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
+        Assert-True (-not [IO.Path]::IsPathRooted($originalTarget)) 'Fixture source target is not relative.'
+        Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
+        Invoke-FixtureGit -C $fixture.Repo add common
+        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'cross-package symlink fixture'
+        $before = & $gitExecutable -C $fixture.Repo show HEAD:common/claude/.claude/dotfiles/fixture.cjs
+        Assert-Success (Invoke-Install $fixture)
+        Assert-Success (Invoke-Install $fixture)
+        Assert-Equal $originalTarget @((Get-Item -LiteralPath $source -Force).Target)[0] 'Cross-package source symlink text changed.'
+        Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/claude/.claude/dotfiles/fixture.cjs) `
+            'Git source symlink payload changed.'
+        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Cross-package source install dirtied the checkout.'
+        $installed = Join-Path $fixture.Target '.claude/dotfiles/fixture.cjs'
+        Assert-Link $installed $source
+        . (Join-Path $sourceRoot 'lib/windows-link-trust.ps1')
+        $errors = Get-DotfilesLinkReadErrors -Paths @($source, $installed)
+        Assert-Equal 0 $errors[$source] 'Guarded process rejected the cross-package source link.'
+        Assert-Equal 0 $errors[$installed] 'Guarded process rejected the target link to it.'
+        Assert-Equal 'kit fixture' ([IO.File]::ReadAllText($installed)) 'The target link does not resolve into the submodule.'
     }
 
     Test-Case 'a submodule checkout inside an allowlisted package is never linked' {
@@ -351,7 +381,7 @@ public static class DotfilesCallerMitigation {
         $fixture = New-Fixture
         Assert-Success (Invoke-Install $fixture -Preview)
         Assert-True (-not (Test-Path -LiteralPath $fixture.Target)) 'WhatIf created the absent target.'
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'lib/__pycache__'))) 'WhatIf wrote Python bytecode.'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/__pycache__'))) 'WhatIf wrote Python bytecode.'
         Assert-NoState $fixture
     }
 
@@ -396,6 +426,26 @@ public static class DotfilesCallerMitigation {
         } finally { $env:DOTFILES_SYNC_PYTHON = $savedPython }
         Assert-True (-not (Test-Path -LiteralPath $fixture.Target)) 'Missing runtime caused a partial install.'
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo '.venv-sync'))) 'Installer provisioned dependencies implicitly.'
+        Assert-NoState $fixture
+    }
+
+    Test-Case 'an uninitialized coding-agent-kit skips every AI sync with one warning' {
+        $fixture = New-Fixture
+        Remove-Item -LiteralPath (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/config_sync.py')
+        $warning = 'coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)'
+        $result = Invoke-Install $fixture -StrictMode $false
+        Assert-Success $result
+        Assert-True ($result.Output.Contains($warning)) "Missing engine warning: $($result.Output)"
+        Assert-True (-not $result.Output.Contains('Synchronizing portable Codex and Claude settings')) 'The sync step ran without the engine.'
+        foreach ($relative in @('.codex/config.toml', '.codex/rules/portable.rules', '.claude/settings.json')) {
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $relative))) "AI live file written without the engine: $relative"
+        }
+        Assert-Link (Join-Path $fixture.Target '.gitconfig') (Join-Path $fixture.Repo 'win/git/.gitconfig')
+        Assert-NoState $fixture
+        $strictTarget = Join-Path $fixture.Root 'strict target'
+        # The error view wraps the long message; match only its start.
+        Assert-Failure (Invoke-Install $fixture -TargetOverride $strictTarget) 'Stow preflight failed: coding-agent-kit submodule'
+        Assert-True (-not (Test-Path -LiteralPath $strictTarget)) 'Strict engine warning caused a partial install.'
         Assert-NoState $fixture
     }
 

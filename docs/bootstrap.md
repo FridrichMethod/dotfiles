@@ -1307,7 +1307,7 @@ checkout outside `$SCRATCH` and `$GROUP_SCRATCH`: setup-host refuses to build
 the sync env there, including through a symlink. A working env can be checked
 and used on a login node without rebuilding it.
 
-- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/lib/config_sync.py --runtime-check`
+- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/common/codex/coding-agent-kit/lib/config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.sh. By hand, by platform:
   macOS `./setup-sync.sh --python /opt/homebrew/bin/python3` (Intel:
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
@@ -1607,8 +1607,10 @@ elevated command is the person's.
 
 ### HW-clone: Clone with symlinks enabled
 
-The checkout contains symlinks (`common/pymol/.pymolrc*`) that Git for Windows
-only creates when `core.symlinks` is true and the process may create symlinks.
+The checkout contains symlinks (`common/pymol/.pymolrc*`, and the
+coding-agent-kit links in `common/claude` and `common/codex`) that Git for
+Windows only creates when `core.symlinks` is true and the process may create
+symlinks.
 
 - **Check:** `git -C $HOME\dotfiles config core.symlinks; (Get-Item $HOME\dotfiles\common\pymol\.pymolrc).LinkType`
 - **Install:** turn on Developer Mode (Settings > System > For developers), then
@@ -1617,7 +1619,8 @@ only creates when `core.symlinks` is true and the process may create symlinks.
   `git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles`.
   Clone onto NTFS, never into a WSL distribution. An existing clone made
   without symlinks: `git -C $HOME\dotfiles config core.symlinks true`, then
-  `git -C $HOME\dotfiles checkout -- common/pymol`.
+  `git -C $HOME\dotfiles checkout -- common/pymol common/claude/.claude/dotfiles common/claude/.local common/claude/.oh-my-zsh common/codex/.local common/codex/.oh-my-zsh`
+  (the narrow pathspec leaves the settings in `.claude/` and `.codex/` alone).
 - **Verify:** `core.symlinks` prints `true`, `LinkType` prints `SymbolicLink`,
   and `git -C $HOME\dotfiles status --porcelain` is empty.
 - **Human:** yes (gui: Developer Mode is a Settings toggle)
@@ -1681,7 +1684,7 @@ config directory.
 
 ### W1-setup-sync: AI-sync runtime on Windows
 
-- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B lib\config_sync.py --runtime-check`
+- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B common\codex\coding-agent-kit\lib\config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.ps1:
   `.\setup-sync.ps1 -Python <path>`, with the first `python3` or `python` on
   PATH that reports 3.11 or newer; a Microsoft Store alias does not count. When

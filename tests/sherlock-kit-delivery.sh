@@ -350,6 +350,10 @@ SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
 if [[ ! -x "$SYNC_PYTHON" ]]; then
     fail 'AI-sync runtime missing; run ./setup-sync.sh explicitly.'
 fi
+[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
+    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
+    exit 1
+}
 
 # make_home HOME [initialized]: a temporary home holding a checkout subset at
 # ~/dotfiles, as on the hosts, with an empty or a fake submodule.
@@ -360,7 +364,7 @@ make_home() {
     # Tool packages carry completions and require the prerequisite OMZ clone.
     printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$home/.oh-my-zsh/oh-my-zsh.sh"
     cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$checkout/"
-    cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
+    cp "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
     cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$checkout/common/"
     # The coding-agent-kit checkout comes along as a plain tree, without its gitfile.
     rm -f "$checkout/common/codex/coding-agent-kit/.git"
