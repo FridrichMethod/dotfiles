@@ -7,7 +7,8 @@
     Runs five steps in order, each checked first and applied only when it is
     todo, then prints the person-only steps as HUMAN blocks:
 
-      W1-winget       winget import config/bootstrap/winget.json --no-upgrade
+      W1-winget       winget import config/bootstrap/winget.json --no-upgrade,
+                      less the packages whose tools the doctor already finds
       W1-psresources  Install-PSResource PSFzf, CompletionPredictor and
                       Microsoft.WinGet.CommandNotFound -Scope CurrentUser
       W1-font         oh-my-posh font install CascadiaMono (needs oh-my-posh)
@@ -22,6 +23,12 @@
     A step runs when a selected tier needs it: tools.tsv rows whose Windows
     docs step is W1-winget, W1-psresources, W1-font or W1-bat-theme decide
     their step's tiers; W1-setup-sync is core.
+
+    W1-winget leaves out each package whose tool the doctor already reports
+    ok, whoever installed it (the package maps to its tools.tsv row through
+    the "# alias: TOOL-ID PackageIdentifier" lines, as Brewfile entries do
+    in setup-host.sh), so winget adds no second copy of a tool that another
+    installer provides, such as Claude Code's and Codex's own installers.
 
     W1-bat-theme checks the file's pinned digest and, when bat is installed,
     its theme cache. A retry reuses a matching file and rebuilds the cache;
@@ -117,6 +124,60 @@ function Get-SetupMissingNames {
             $flag = if ($_.floor -cne '-') { $_.version_flag } else { '-' }
             -not (Test-BootstrapTool -Probe $_.probe -VersionFlag $flag).Found
         } | ForEach-Object { $_.id })
+}
+
+function Get-SetupWingetToolRow {
+    # The win tools.tsv row that the winget package Id installs, through the
+    # "# alias: TOOL-ID Id" lines (steps_brew_tool_id in setup-host.sh): a
+    # win-only row before a general one. $null when no row maps to it.
+    param([Parameter(Mandatory)][string]$Id)
+    if (-not $script:ToolAliases.ContainsKey($Id)) { return $null }
+    $rows = @(foreach ($toolId in $script:ToolAliases[$Id]) { $script:ToolRows | Where-Object { $_.id -ceq $toolId } })
+    $winOnly = @($rows | Where-Object { $_.hosts -ceq 'win' })
+    if ($winOnly.Count) { return $winOnly[0] }
+    if ($rows.Count) { return $rows[0] }
+    return $null
+}
+
+function Test-SetupToolProvided {
+    # True when the doctor reports Row ok (Get-DoctorToolResult): found with
+    # its version flag (a Store alias stub does not count) and, when the row
+    # has a floor, at or above it; an unknown version against a floor fails.
+    param([Parameter(Mandatory)]$Row)
+    $probe = Test-BootstrapTool -Probe $Row.probe -VersionFlag $Row.version_flag
+    if (-not $probe.Found) { return $false }
+    return $Row.floor -ceq '-' -or (Compare-BootstrapVersion $probe.Version $Row.floor) -eq 0
+}
+
+function Get-SetupWingetProvided {
+    # The packages of the winget export at Manifest whose tool the doctor
+    # already finds (Test-SetupToolProvided), as Id and Tool, in file order.
+    param([Parameter(Mandatory)][string]$Manifest)
+    $sources = ([IO.File]::ReadAllText($Manifest) | ConvertFrom-Json).Sources
+    foreach ($id in @($sources | ForEach-Object { $_.Packages } | ForEach-Object { $_.PackageIdentifier })) {
+        $row = Get-SetupWingetToolRow $id
+        if ($row -and (Test-SetupToolProvided $row)) { [pscustomobject]@{ Id = $id; Tool = $row.id } }
+    }
+}
+
+function Invoke-SetupWingetImport {
+    # W1-winget's import: Manifest itself when no package is provided, else a
+    # scratch copy without the provided ones (Write-BootstrapWingetManifest),
+    # removed afterwards. Nothing to import is success without running winget.
+    param([Parameter(Mandatory)][string]$Manifest)
+    $provided = @(Get-SetupWingetProvided $Manifest)
+    if (-not $provided.Count) { return Invoke-BootstrapWingetImport -Path $Manifest }
+    $names = @($provided | ForEach-Object { "$($_.Id) ($($_.Tool))" })
+    Write-DotfilesLog info "W1-winget: leaving out packages whose tools the doctor already finds: $($names -join ', ')"
+    $scratch = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-bootstrap-' + [Guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($scratch)
+    try {
+        $filtered = Join-Path $scratch 'winget.json'
+        $kept = Write-BootstrapWingetManifest -Path $Manifest -Destination $filtered -Exclude @($provided | ForEach-Object { $_.Id })
+        if (-not $kept) { return New-BootstrapResult present 'the doctor already finds the tool of every winget package' }
+        return Invoke-BootstrapWingetImport -Path $filtered
+    }
+    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 function Get-SetupBatThemeRow {
@@ -391,8 +452,7 @@ function Invoke-SetupStep {
     param([Parameter(Mandatory)][string]$Id)
     switch -CaseSensitive ($Id) {
         'W1-winget' {
-            $manifest = Join-Path $RepoRoot 'config/bootstrap/winget.json'
-            $result = Invoke-BootstrapWingetImport -Path $manifest
+            $result = Invoke-SetupWingetImport (Join-Path $RepoRoot 'config/bootstrap/winget.json')
             if (-not $result.Success) { return $result }
             Update-BootstrapSessionPath
             $missing = @(Get-SetupMissingNames @(Get-SetupStepRows W1-winget))
@@ -513,6 +573,7 @@ function Invoke-BootstrapSetup {
         $script:ToolRows = @(Get-BootstrapManifestRows -Path (Join-Path $config 'tools.tsv') -Header @(
                     'id', 'tier', 'hosts', 'probe', 'version_flag', 'floor', 'absent', 'doc') |
                 Where-Object { Test-BootstrapHostMatch $_.hosts win })
+        $script:ToolAliases = Get-BootstrapToolAliases -Path (Join-Path $config 'tools.tsv')
         $script:InstallerRows = @(Get-BootstrapManifestRows -Path (Join-Path $config 'installers.tsv') -Header @(
                     'id', 'kind', 'url', 'sha256', 'dest', 'hosts', 'arch', 'tier', 'human'))
         Assert-SetupWingetManifest (Join-Path $config 'winget.json')
@@ -595,6 +656,7 @@ if (-not (Test-Path -LiteralPath $libraryPath -PathType Leaf)) {
 }
 . $libraryPath
 $script:ToolRows = @()
+$script:ToolAliases = [Collections.Generic.Dictionary[string, Collections.Generic.List[string]]]::new([StringComparer]::Ordinal)
 $script:InstallerRows = @()
 $script:SetupStatus = 1
 try { Invoke-BootstrapSetup }

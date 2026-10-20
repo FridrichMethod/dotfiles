@@ -28,6 +28,7 @@ $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W
 $HumanSteps = @('HW-clone', 'HW-stow', 'HW-auto-stow-task', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
 $InstallEvent = '^(winget |Install-PSResource |oh-my-posh font |Invoke-WebRequest |bat cache |setup-sync\.ps1)'
 $RuntimeEvent = '--runtime-check$'
+$ScratchImport = '^(winget import -i ).+[\\/]dotfiles-bootstrap-[0-9a-f]{32}[\\/]winget\.json( --no-upgrade )'
 $FontFile = 'Microsoft/Windows/Fonts/CaskaydiaMonoNerdFont-Regular.ttf'
 $ThemeFile = 'bat/themes/Catppuccin Mocha.tmTheme'
 
@@ -125,6 +126,13 @@ function New-WingetShim {
     param([string]$Directory)
     New-Shim $Directory 'winget' @'
 $code = if ($env:FAKE_WINGET_EXIT) { [int]$env:FAKE_WINGET_EXIT } else { 0 }
+# Record the ids the import file asks for while it exists: W1-winget removes
+# its scratch copy afterwards.
+if ($args.Count -ge 3 -and $args[0] -eq 'import' -and [IO.File]::Exists("$($args[2])")) {
+    $ids = @(([IO.File]::ReadAllText("$($args[2])") | ConvertFrom-Json).Sources | ForEach-Object { $_.Packages } |
+            ForEach-Object { $_.PackageIdentifier })
+    Add-Content -LiteralPath $env:BOOTSTRAP_TEST_EVENTS -Value ((@('winget-import-packages') + $ids) -join ' ')
+}
 if ($args.Count -and $args[0] -eq 'import' -and $code -eq 0 -and $env:FAKE_WINGET_PACKAGES) {
     foreach ($file in [IO.Directory]::GetFiles($env:FAKE_WINGET_PACKAGES)) {
         [IO.File]::Copy($file, (Join-Path $PSScriptRoot ([IO.Path]::GetFileName($file))), $true)
@@ -304,10 +312,30 @@ function Assert-Exit {
 }
 function Get-FixtureEvents($Fixture) { return @([IO.File]::ReadAllLines($Fixture.Events)) }
 function Get-RuntimeChecks($Fixture) { return @(Get-FixtureEvents $Fixture | Where-Object { $_ -cmatch $RuntimeEvent }) }
-function Get-InstallEvents($Fixture) { return @(Get-FixtureEvents $Fixture | Where-Object { $_ -cmatch $InstallEvent }) }
-function Get-ImportEvent($Fixture) {
-    return "winget import -i $(Join-Path $Fixture.Repo 'config/bootstrap/winget.json') --no-upgrade --ignore-unavailable " +
+function Get-InstallEvents($Fixture) {
+    # W1-winget's scratch copy of winget.json has a fresh name on every run.
+    return @(Get-FixtureEvents $Fixture | Where-Object { $_ -cmatch $InstallEvent } |
+            ForEach-Object { $_ -creplace $ScratchImport, '$1<scratch>/winget.json$2' })
+}
+function Get-ImportEvent {
+    # The import event Get-InstallEvents shows: of winget.json itself, or with
+    # -Scratch of W1-winget's copy less the provided packages.
+    param($Fixture, [switch]$Scratch)
+    $manifest = if ($Scratch) { '<scratch>/winget.json' } else { Join-Path $Fixture.Repo 'config/bootstrap/winget.json' }
+    return "winget import -i $manifest --no-upgrade --ignore-unavailable " +
         '--accept-package-agreements --accept-source-agreements --disable-interactivity'
+}
+function Get-ImportedPackages($Fixture) {
+    # The PackageIdentifiers of each winget import, as the winget shim read them.
+    return @(Get-FixtureEvents $Fixture | Where-Object { $_ -cmatch '^winget-import-packages( |$)' } |
+            ForEach-Object { $_.Substring('winget-import-packages'.Length).Trim() })
+}
+function Get-WingetIds {
+    # winget.json's PackageIdentifiers in file order, less Without.
+    param([string[]]$Without = @())
+    $manifest = [IO.File]::ReadAllText((Join-Path $sourceRoot 'config/bootstrap/winget.json')) | ConvertFrom-Json
+    return @($manifest.Sources | ForEach-Object { $_.Packages } | ForEach-Object { $_.PackageIdentifier } |
+            Where-Object { $_ -cnotin $Without })
 }
 function Get-Snapshot {
     # Every file with its size and modification time, and every directory by
@@ -691,6 +719,34 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
         }
     }
 
+    Test-Case 'alias lines map every winget package to a row and the filtered manifest keeps the rest' {
+        $aliases = Get-BootstrapToolAliases -Path (Join-Path $sourceRoot 'config/bootstrap/tools.tsv')
+        Assert-Equal ($aliases['OpenAI.Codex'] -join ',') 'codex' 'codex package'
+        Assert-Equal ($aliases['Anthropic.ClaudeCode'] -join ',') 'claude' 'claude package'
+        Assert-Equal ($aliases['Python.Python.3.12'] -join ',') 'python3' 'python package'
+        Assert-True (-not $aliases.ContainsKey('openai.codex')) 'alias lookup ignored case'
+        $unmapped = @(Get-WingetIds | Where-Object { -not $aliases.ContainsKey($_) })
+        Assert-Equal ($unmapped -join ',') '' 'winget packages without an alias line'
+        $sample = Join-Path $testRoot 'aliases.tsv'
+        [IO.File]::WriteAllText($sample, "# alias: a X`n# alias: b X`n#alias: c X`n# alias: d`n# alias: e Y z`nid`n")
+        $parsed = Get-BootstrapToolAliases -Path $sample
+        Assert-Equal "$($parsed.Count):$($parsed['X'] -join ',')" '1:a,b' 'alias lines in file order, malformed ones ignored'
+
+        $source = Join-Path $sourceRoot 'config/bootstrap/winget.json'
+        $filtered = Join-Path $testRoot 'winget-filtered.json'
+        $kept = Write-BootstrapWingetManifest -Path $source -Destination $filtered -Exclude @('Git.Git', 'OpenAI.Codex')
+        $expected = Get-WingetIds -Without @('Git.Git', 'OpenAI.Codex')
+        Assert-Equal $kept $expected.Count 'kept count'
+        $written = [IO.File]::ReadAllText($filtered) | ConvertFrom-Json
+        $original = [IO.File]::ReadAllText($source) | ConvertFrom-Json
+        Assert-Equal $written.'$schema' $original.'$schema' 'schema kept'
+        Assert-Equal $written.Sources[0].SourceDetails.Name 'winget' 'source details kept'
+        $left = @($written.Sources | ForEach-Object { $_.Packages } | ForEach-Object { $_.PackageIdentifier })
+        Assert-Equal ($left -join ',') ($expected -join ',') 'remaining packages in file order'
+        Assert-Equal (Write-BootstrapWingetManifest -Path $source -Destination $filtered -Exclude (Get-WingetIds)) 0 'nothing kept'
+        Assert-Equal @(([IO.File]::ReadAllText($filtered) | ConvertFrom-Json).Sources).Count 0 'a source without packages dropped'
+    }
+
     Test-Case 'PSResource installs only what PSResourceGet lacks' {
         $script:MockInstalled = @('PSFzf')
         $script:MockEvents.Clear()
@@ -1050,10 +1106,13 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
         Assert-Exit $run 3 'full apply'
         $url = @([IO.File]::ReadAllLines((Join-Path $fixture.Repo 'config/bootstrap/installers.tsv')) |
                 Where-Object { $_.StartsWith("bat-theme`t") })[0].Split("`t")[2]
-        $expected = @((Get-ImportEvent $fixture), 'Install-PSResource -Name Microsoft.WinGet.CommandNotFound -Scope CurrentUser -TrustRepository -AcceptLicense',
+        $expected = @((Get-ImportEvent $fixture -Scratch), 'Install-PSResource -Name Microsoft.WinGet.CommandNotFound -Scope CurrentUser -TrustRepository -AcceptLicense',
             'oh-my-posh font install CascadiaMono', "Invoke-WebRequest $url", 'bat cache --build',
             "setup-sync.ps1 -Python $([IO.Path]::Combine($fixture.Bin, 'python3.ps1'))")
         Assert-Equal ((Get-InstallEvents $fixture) -join "`n") ($expected -join "`n") 'apply events'
+        # Before the import only git is on PATH, plus the running PowerShell:
+        # pwsh puts $PSHOME first on its own PATH. Store stubs do not count.
+        Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") ((Get-WingetIds -Without @('Microsoft.PowerShell', 'Git.Git')) -join ' ') 'imported packages'
         Assert-Equal @(Get-RuntimeChecks $fixture).Count 1 'runtime check after setup-sync'
         $queries = @(Get-FixtureEvents $fixture | Where-Object { $_ -like 'Get-InstalledPSResource *' })
         Assert-Equal ($queries -join ',') 'Get-InstalledPSResource CompletionPredictor,Get-InstalledPSResource Microsoft.WinGet.CommandNotFound' 'PSResourceGet queries'
@@ -1189,6 +1248,30 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'what-if wrote files'
     }
 
+    Test-Case 'setup-host W1-winget imports only the packages whose tools the doctor does not report ok' {
+        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; W1-winget filter not checked.'; return }
+        # jq is missing and fzf is below its floor; claude and codex come from
+        # other installers, so winget must not add a second copy.
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture -Except @('jq')
+        New-ToolShim $fixture.Bin 'fzf' '0.44.1 (d4c1a6d)'
+        New-ToolShim $fixture.Packages 'jq'
+        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true }
+        Assert-Exit $run 3 'apply with jq missing and fzf outdated'
+        Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") 'junegunn.fzf jqlang.jq' 'imported packages'
+        $imports = @(Get-FixtureEvents $fixture | Where-Object { $_ -cmatch '^winget import ' })
+        Assert-Equal $imports.Count 1 'winget import runs'
+        Assert-True ($imports[0] -cmatch $ScratchImport -and $imports[0].Contains($fixture.Temp)) "scratch manifest outside TEMP: $($imports[0])"
+        $left = @($run.Lines | Where-Object { $_.StartsWith('[dotfiles] [info] W1-winget: leaving out packages whose tools the doctor already finds: ') })
+        Assert-Equal $left.Count 1 "left-out line: $($run.Stdout)"
+        foreach ($name in @('Microsoft.PowerShell (pwsh)', 'Git.Git (git)', 'Python.Python.3.12 (python3)',
+                'Anthropic.ClaudeCode (claude)', 'OpenAI.Codex (codex)', 'wez.wezterm (wezterm)')) {
+            Assert-True $left[0].Contains($name) "left-out line lacks ${name}: $($left[0])"
+        }
+        Assert-True (-not ($left[0].Contains('junegunn.fzf') -or $left[0].Contains('jqlang.jq'))) "left out a needed package: $($left[0])"
+        Assert-Equal @(Get-ChildItem -LiteralPath $fixture.Temp -Filter 'dotfiles-bootstrap-*').Count 0 'scratch left behind'
+    }
+
     Test-Case 'setup-host skips the font without oh-my-posh and stops at a failed step' {
         if ($machineTools) { Skip-Assertion 'oh-my-posh or the Nerd Font is installed on this machine; font skip not checked.'; return }
         if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; failure stops not checked.'; return }
@@ -1197,7 +1280,8 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData $FontFile) -Force
         $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'desktop' }
         Assert-Exit $run 3 'desktop apply without oh-my-posh'
-        Assert-True (@(Get-FixtureEvents $fixture) -contains (Get-ImportEvent $fixture)) 'winget import did not run'
+        Assert-True (@(Get-InstallEvents $fixture) -contains (Get-ImportEvent $fixture -Scratch)) 'winget import did not run'
+        Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") 'JanDeDobbeleer.OhMyPosh' 'imported more than the missing package'
         Assert-True (-not @(Get-FixtureEvents $fixture | Where-Object { $_ -like 'oh-my-posh*' }).Count) 'font installed without oh-my-posh'
         Assert-True ($run.Lines -contains '[dotfiles] [info] W1-font: skip: oh-my-posh is not on PATH, so the font is not installed') "font skip line: $($run.Stdout)"
 

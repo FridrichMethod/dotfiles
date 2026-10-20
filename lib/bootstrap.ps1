@@ -71,6 +71,23 @@ function Get-BootstrapManifestRows {
     if ($null -eq $columns) { throw [IO.InvalidDataException]::new("${Path}: no header row") }
 }
 
+function Get-BootstrapToolAliases {
+    # bootstrap_tool_aliases for every name at once: the "# alias: TOOL-ID
+    # NAME" lines of tools.tsv as a case-sensitive NAME -> TOOL-IDs map, in
+    # file order. Other lines, and alias lines without exactly two words after
+    # "alias:", are ignored, as the awk in lib/bootstrap/manifest.sh does.
+    param([Parameter(Mandatory)][string]$Path)
+    $aliases = [Collections.Generic.Dictionary[string, Collections.Generic.List[string]]]::new([StringComparer]::Ordinal)
+    foreach ($line in [IO.File]::ReadAllLines($Path)) {
+        if (-not $line.StartsWith('# alias: ')) { continue }
+        $words = $line.Split([char[]]" `t`r", [StringSplitOptions]::RemoveEmptyEntries)
+        if ($words.Count -ne 4) { continue }
+        if (-not $aliases.ContainsKey($words[3])) { $aliases[$words[3]] = [Collections.Generic.List[string]]::new() }
+        $aliases[$words[3]].Add($words[2])
+    }
+    return , $aliases
+}
+
 function Get-BootstrapBatConfigDirectory {
     # bat honours BAT_CONFIG_DIR first; its Windows default is %APPDATA%\bat.
     if ($env:BAT_CONFIG_DIR) { return $env:BAT_CONFIG_DIR }
@@ -437,8 +454,31 @@ function Invoke-BootstrapWinget {
         '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity', '--no-upgrade')
 }
 
+function Write-BootstrapWingetManifest {
+    # Write the winget export at Path to Destination less the packages whose
+    # PackageIdentifier is in Exclude, every other property kept; a source
+    # left without packages is dropped. Returns the number of packages kept.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Destination,
+        [AllowEmptyCollection()][string[]]$Exclude = @())
+    $manifest = [IO.File]::ReadAllText($Path) | ConvertFrom-Json
+    $kept = 0
+    $sources = foreach ($source in @($manifest.Sources)) {
+        $packages = @($source.Packages | Where-Object { $_.PackageIdentifier -cnotin $Exclude })
+        if (-not $packages.Count) { continue }
+        $source.Packages = $packages
+        $kept += $packages.Count
+        $source
+    }
+    $manifest.Sources = @($sources)
+    [IO.File]::WriteAllText($Destination, ($manifest | ConvertTo-Json -Depth 10))
+    return $kept
+}
+
 function Invoke-BootstrapWingetImport {
-    # Import config/bootstrap/winget.json; installed packages are left alone.
+    # Import a winget export (config/bootstrap/winget.json, or W1-winget's
+    # copy of it less the packages already provided); installed packages are
+    # left alone.
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path)
     return Invoke-BootstrapWingetCommand @('import', '-i', $Path, '--no-upgrade', '--ignore-unavailable',

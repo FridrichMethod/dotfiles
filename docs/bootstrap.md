@@ -1634,12 +1634,26 @@ Terminal, WezTerm, Claude Code and Codex.
 
 - **Check:** `winget list --id Git.Git -e` (or `.\doctor.ps1 -Host win`)
 - **Install:** automatic via setup-host.ps1:
-  `winget import --import-file config\bootstrap\winget.json --no-upgrade --ignore-unavailable --accept-package-agreements --accept-source-agreements --disable-interactivity`.
+  `winget import --import-file config\bootstrap\winget.json --no-upgrade --ignore-unavailable --accept-package-agreements --accept-source-agreements --disable-interactivity`,
+  less the packages whose tools the doctor already finds (below).
   Already-installed packages count as success; other failures fail the step.
   Open a new terminal afterwards so the new PATH entries apply.
 - **Verify:** `.\doctor.ps1 -Host win` shows the winget rows `ok`.
 - **Human:** no (setup-host.ps1 runs it; a machine-wide installer may still
   raise a UAC prompt for the person to accept)
+
+**Tools that another installer already provides.** As in S2-brew-bundle, the
+goal is a green doctor, not a winget copy of every tool: winget sees only the
+installs it made, so `--no-upgrade` alone would add a second Claude Code or
+Codex next to the one from its own installer. Each package maps to the win
+`tools.tsv` row that a `# alias: TOOL-ID PackageIdentifier` line names (a
+win-only row first). setup-host.ps1 leaves the package out of the import when
+the doctor's own probe for that row reports `ok`: the tool is found with its
+version flag (a Microsoft Store alias stub does not count) and, when the row
+has a floor, at or above it, whoever installed it. A tool below its floor is
+not provided, so its package stays in. The rest goes to winget as a copy of
+`winget.json` in a scratch directory that is removed afterwards; when nothing
+is left out, winget reads `winget.json` itself.
 
 ### W1-psresources: PowerShell modules
 
