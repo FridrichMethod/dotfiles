@@ -40,7 +40,7 @@ $ToolText = [ordered]@{
     delta = 'delta 0.18.2'; tldr = 'tlrc v1.9.3'; jq = 'jq-1.7.1'; nvim = 'NVIM v0.10.2'
     aria2c = 'aria2 version 1.37.0'; uv = 'uv 0.5.4'; gh = 'gh version 2.63.0 (2024-11-27)'
     node = 'v22.11.0'; claude = '2.0.14 (Claude Code)'; codex = 'codex-cli 0.161.0'; wezterm = ''; wt = ''
-    'oh-my-posh' = '24.11.4'; 'pre-commit' = 'pre-commit 4.0.1'
+    'oh-my-posh' = '24.11.4'; 'pre-commit' = 'pre-commit 4.0.1'; make = 'GNU Make 4.4.1'
 }
 
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }

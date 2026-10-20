@@ -1627,10 +1627,10 @@ symlinks.
 
 ### W1-winget: winget import
 
-Installs the 22 packages of [`winget.json`](../config/bootstrap/winget.json):
+Installs the 23 packages of [`winget.json`](../config/bootstrap/winget.json):
 PowerShell 7, Git, Python 3.12, Node.js LTS, the CLI tools (fzf, zoxide, eza,
-bat, fd, ripgrep, delta, jq, Neovim, uv, gh, tlrc, aria2), oh-my-posh, Windows
-Terminal, WezTerm, Claude Code and Codex.
+bat, fd, ripgrep, delta, jq, Neovim, uv, gh, tlrc, aria2, GNU Make),
+oh-my-posh, Windows Terminal, WezTerm, Claude Code and Codex.
 
 - **Check:** `winget list --id Git.Git -e` (or `.\doctor.ps1 -Host win`)
 - **Install:** automatic via setup-host.ps1:

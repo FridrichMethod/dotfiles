@@ -76,6 +76,9 @@ gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows f
 gh-linuxbrew	cli	lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/gh	--version	2.50.0	the GitHub and Gist credential helpers in .gitconfig_local fail	S2-brew-bundle
 xclip	cli	lab-ubuntu	xclip	-	-	fzf Ctrl-Y cannot copy to the X clipboard	H1-apt-core
 wl-clipboard	cli	lab-ubuntu	wl-copy	-	-	no clipboard copy from Wayland sessions	H1-apt-core
+# Windows only: macOS has make from the Xcode CLT, Ubuntu from build-essential
+# and the HPC hosts from the OS.
+make	cli	win	make	--version	-	make targets in project Makefiles cannot run	W1-winget
 nvm	ai	mac,wsl-ubuntu,lab-ubuntu	file:$NVM_DIR/nvm.sh	-	-	no default node on PATH and no nvm function	S4-nvm
 node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
 # Claude Code and Codex are not checked on sherlock and marlowe: there they come from optional site
@@ -160,6 +163,7 @@ lmod	host	sherlock,marlowe	env:LMOD_DIR	-	-	ml and module are undefined, so over
 # alias: uv astral-sh.uv
 # alias: gh GitHub.cli
 # alias: gh-linuxbrew gh
+# alias: make ezwinports.make
 # alias: node nvm
 # alias: node OpenJS.NodeJS.LTS
 # alias: node nodejs

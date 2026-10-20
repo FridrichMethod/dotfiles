@@ -150,6 +150,7 @@ prints) appear at the start of the When absent cell.
 | `gh-linuxbrew` | lab-ubuntu | - | brew `gh` at `/home/linuxbrew/.linuxbrew/bin/gh` | - | - | >= 2.50.0. GitHub/Gist credential helpers call this exact executable, including GUI Git |
 | `xclip` | lab-ubuntu | - | lab-ubuntu: apt `xclip` | - | - | fzf Ctrl-Y cannot copy to the X clipboard |
 | `wl-clipboard` | lab-ubuntu | - | lab-ubuntu: apt `wl-clipboard` | - | - | no clipboard copy from Wayland sessions |
+| `make` | win | - | - | - | winget `ezwinports.make` | make targets in project Makefiles cannot run |
 
 ### AI tier
 

@@ -81,7 +81,7 @@ WINGET_REQUIRED = (
     "ajeetdsouza.zoxide", "eza-community.eza", "sharkdp.bat", "sharkdp.fd",
     "BurntSushi.ripgrep.MSVC", "dandavison.delta", "jqlang.jq", "Neovim.Neovim", "astral-sh.uv",
     "GitHub.cli", "JanDeDobbeleer.OhMyPosh", "Microsoft.WindowsTerminal", "wez.wezterm",
-    "Anthropic.ClaudeCode", "OpenAI.Codex", "tldr-pages.tlrc", "aria2.aria2")
+    "Anthropic.ClaudeCode", "OpenAI.Codex", "tldr-pages.tlrc", "aria2.aria2", "ezwinports.make")
 WINGET_SCHEMA = "https://aka.ms/winget-packages.schema.2.0.json"
 SKILL_NAME = "dotfiles-bootstrap"
 SKILL_CLAUDE = Path(".claude/skills") / SKILL_NAME / "SKILL.md"
