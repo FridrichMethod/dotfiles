@@ -14,10 +14,8 @@ macOS and Windows runners' homes.)
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
-hash-pinned configuration parser. Both entrypoints validate this runtime against
-the coding-agent-kit engine and require the AI integration tests, which rerun
-the engine's Python backend tests, including safe replacement failures, on this
-checkout's real settings.
+hash-pinned configuration parser. Both entrypoints validate this runtime and
+require the shared Python backend tests, including safe replacement failures.
 In CI mode GNU Stow is required too, so its real symlink fixture cannot silently
 skip. On developer machines, `./tests/run.sh` reports a missing optional Stow
 integration check, installed-Codex exec-policy check, or PowerShell check.
@@ -133,28 +131,25 @@ update Action and acceptance runs. `tests/doctor.sh` runs the real
 `tests/stow-all.sh` it needs the AI-sync runtime (`DOTFILES_SYNC_PYTHON` or
 `.venv-sync`).
 
-The engine's own suites (configuration merges, Codex config sync, codex-as and
-account enrollment) live in coding-agent-kit, whose CI runs them on frozen
-fixtures. `tests/ai-integration.sh` runs `tests/test_ai_integration.py` (the
-dotfiles-content cases and the setup-sync refusals), then exports the
-committed submodule tree to a temporary directory, copies the real
-`config.toml`, `settings.json` and `portable.rules` over its fixtures, and
-runs the engine and Claude helper tests there; `tests/run.ps1` does the same
-natively on Windows. `tests/coding-agent-kit-delivery.sh`, modeled on the
-sherlock-kit test, checks the `.gitmodules` entry and `.stowrc` line, the 14
-relative links and their exact texts, that the launchers and setup files here
-match the submodule's reference copies and its tomlkit pin, the
-uninitialized-submodule skip, the paths `--help` prints, and the bump
-workflow. `--ci` fails instead of skipping without GNU Stow, and `--real`
-checks the real checkout at the staged gitlink, for the bump workflow.
+The launcher suites (codex-as and account enrollment) and the Claude helper
+suite live in coding-agent-kit, whose CI runs them on frozen fixtures.
+`tests/ai-integration.sh` runs `tests/test_ai_integration.py` (the
+dotfiles-content cases), then exports the committed submodule tree to a
+temporary directory, copies the real `settings.json` over its fixture, and
+runs the Claude helper tests there; `tests/run.ps1` does the same natively on
+Windows. `tests/coding-agent-kit-delivery.sh`, modeled on the sherlock-kit
+test, checks the `.gitmodules` entry and `.stowrc` line, the 14 relative links
+and their exact texts, the dangling-link warning of an uninitialized
+submodule, the paths `--help` prints, and the bump workflow. `--ci` fails
+instead of skipping without GNU Stow, and `--real` checks the real checkout at
+the staged gitlink, for the bump workflow.
 
-Every test that runs the sync engine needs the coding-agent-kit submodule
-initialized: `tests/run.sh`, `tests/run.ps1`, `tests/stow-all.sh`,
-`tests/doctor.sh`, `tests/unix-installer.sh`, `tests/sherlock-kit-delivery.sh`,
-`tests/ai-config-sync.sh`, `tests/ai-integration.sh` and the Python and Node
-tests they run stop at once with an error that names
-`git submodule update --init --recursive`. Initialize it first, as CI does:
-`git submodule update --init -- common/codex/coding-agent-kit`.
+The tests of the delivered launchers and helpers need the coding-agent-kit
+submodule initialized: `tests/claude-customizations.cjs`,
+`tests/ai-integration.sh` and `tests/test_ai_integration.py` stop at once with
+an error that names `git submodule update --init --recursive`, and
+`tests/coding-agent-kit-delivery.sh --ci` fails. Initialize it first, as CI
+does: `git submodule update --init -- common/codex/coding-agent-kit`.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 

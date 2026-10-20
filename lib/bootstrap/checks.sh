@@ -396,13 +396,12 @@ bootstrap_check_locale() {
 }
 
 # bootstrap_sync_runtime_ok PYTHON ROOT: 0 when PYTHON passes
-# ROOT/common/codex/coding-agent-kit/lib/config_sync.py --runtime-check (the
-# engine in the coding-agent-kit submodule; Python 3.11+ and the pinned
+# ROOT/lib/config_sync.py --runtime-check (Python 3.11+ and the pinned
 # tomlkit), as setup-sync.sh, setup-host's S4-setup-sync and doctor.ps1
 # judge it. -I -B: isolated, and no bytecode is written.
 bootstrap_sync_runtime_ok() {
     [ -n "$1" ] && [ -f "$1" ] && [ -x "$1" ] || return 1
-    "$1" -I -B -X utf8 "$2/common/codex/coding-agent-kit/lib/config_sync.py" --runtime-check </dev/null >/dev/null 2>&1
+    "$1" -I -B -X utf8 "$2/lib/config_sync.py" --runtime-check </dev/null >/dev/null 2>&1
 }
 
 # bootstrap_check_venv_sync ROOT: the AI-sync interpreter lib/sync-runtime.sh
@@ -431,11 +430,11 @@ bootstrap_check_venv_sync() {
 
 # The files each submodule must provide, by its .gitmodules path, relative to
 # it: what the stowed links point at (PyMOL's .pymolrc; sherlock-kit's rules,
-# skill and shk entry point; coding-agent-kit's engine, launchers and Claude
+# skill and shk entry point; coding-agent-kit's launchers and Claude
 # helpers). A submodule not listed here needs only its .git.
 BOOTSTRAP_SUBMODULE_SENTINELS='common/pymol/PyMOLScripts configs/.pymolrc
 common/sherlock-kit/sherlock-kit src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk
-common/codex/coding-agent-kit lib/config_sync.py common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as common/codex/.local/lib/codex-as/launch.py common/claude/.local/lib/claude-as/launch.py common/claude/.claude/dotfiles/statusline.cjs common/claude/.claude/dotfiles/notify.cjs common/claude/.claude/dotfiles/check-git-hooks.cjs'
+common/codex/coding-agent-kit common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as common/codex/.local/lib/codex-as/launch.py common/claude/.local/lib/claude-as/launch.py common/claude/.claude/dotfiles/statusline.cjs common/claude/.claude/dotfiles/notify.cjs common/claude/.claude/dotfiles/check-git-hooks.cjs'
 
 # bootstrap_submodule_paths ROOT: the path of every submodule in
 # ROOT/.gitmodules, one per line (its `path =` lines, as doctor.ps1 reads them).

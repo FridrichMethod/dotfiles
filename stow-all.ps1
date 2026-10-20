@@ -292,6 +292,39 @@ function Test-ContentEquivalent {
     return [string]::Equals($textA, $textB, [StringComparison]::Ordinal)
 }
 
+function Test-DotfilesLinkDangles {
+    <#
+    .SYNOPSIS
+        True when a symlink's own target is missing.
+    .DESCRIPTION
+        Resolves the link's raw target text against its directory and never
+        asks RedirectionGuard: the guarded probe rejects an untrusted link with
+        Win32 448 whether or not its target exists. This process does not
+        enforce the mitigation.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $link = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if (-not $link -or $link.LinkType -ne 'SymbolicLink') { return $false }
+    $resolved = [IO.Path]::GetFullPath(@($link.Target)[0], (Split-Path -Parent $link.FullName))
+    return -not ([IO.File]::Exists($resolved) -or [IO.Directory]::Exists($resolved))
+}
+
+function Get-DotfilesDanglingKitLink {
+    <#
+    .SYNOPSIS
+        Lists the tracked links of the claude and codex packages that dangle.
+    .DESCRIPTION
+        They are the launchers and Claude helpers in the coding-agent-kit
+        submodule, so they dangle while it is not checked out at its gitlink,
+        whatever the kit layout, and however trusted each link is.
+    #>
+    @(git -C $RepoRoot ls-files -s -- common/claude common/codex 2>$null |
+            Where-Object { $_.StartsWith('120000 ') } |
+            ForEach-Object { [IO.Path]::GetFullPath((Join-Path $RepoRoot ($_ -split "`t", 2)[1])) } |
+            Where-Object { Test-DotfilesLinkDangles -Path $_ })
+}
+
 function Invoke-StowPackage {
     param(
         [Parameter(Mandatory)][string]$PackageRoot,
@@ -323,10 +356,10 @@ function Invoke-StowPackage {
         $sourceRepaired = $false
         if ($item.LinkType -eq 'SymbolicLink') {
             $sourceError = $script:LinkReadErrors[$item.FullName]
+            $danglingWarning = "dangling source skipped: $PackageName/$relativeUnix " +
+                '(run: git submodule update --init --recursive)'
             if ($sourceError -in @(2, 3)) {
-                $script:Warnings.Add(
-                    "dangling source skipped: $PackageName/$relativeUnix " +
-                    '(run: git submodule update --init --recursive)')
+                $script:Warnings.Add($danglingWarning)
                 continue
             }
             if ($sourceError -eq 448) {
@@ -343,6 +376,12 @@ function Invoke-StowPackage {
                 $script:LinkReadErrors[$item.FullName] = $sourceError
                 $script:Repaired++
                 $sourceRepaired = $true
+                # Trusted now, the link reaches its target, which may be missing:
+                # an untrusted link that dangles probes as 448, not as 2 or 3.
+                if ($sourceError -in @(2, 3) -and (Test-DotfilesLinkDangles -Path $item.FullName)) {
+                    $script:Warnings.Add($danglingWarning)
+                    continue
+                }
             }
             if ($sourceError -ne 0) {
                 $script:Warnings.Add("source unreadable under RedirectionGuard, skipped: $PackageName/$relativeUnix (Win32 $sourceError)")
@@ -468,15 +507,6 @@ $syncPlan = @(
         Portable = $claudePortable; Live = Join-Path $Target '.claude\settings.json' }
 )
 
-# The helpers exec the engine from the coding-agent-kit submodule. Mirroring
-# stow-all.sh, skip every sync with one warning while it is not initialized;
-# the warning keeps the revision unacknowledged and fails -Strict.
-$aiEngine = Join-Path $commonRoot 'codex\coding-agent-kit\lib\config_sync.py'
-if (-not (Test-Path -LiteralPath $aiEngine -PathType Leaf)) {
-    $script:Warnings.Add('coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)')
-    $syncPlan = @()
-}
-
 # Validate every selected merge and every ignore expression before mutation.
 # --check must also leave a missing target directory absent during -WhatIf.
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync -CheckOnly }
@@ -513,10 +543,17 @@ $script:LinkReadErrors = Get-DotfilesLinkReadErrors -Paths $probePaths.ToArray()
 if ($script:LinkReadErrors[$PSCommandPath] -ne 0) {
     throw 'The installer checkout is not readable under RedirectionGuard; repair its parent path first.'
 }
+# Tracked links of the claude and codex packages, the launchers and Claude
+# helpers in the coding-agent-kit submodule, dangle while it is not checked
+# out, trusted or not. Mirroring stow-all.sh, the syncs still run; one warning
+# keeps the revision unacknowledged and fails -Strict before any change.
+if (@(Get-DotfilesDanglingKitLink).Count) {
+    $script:Warnings.Add('coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)')
+}
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow preflight failed: $($script:Warnings -join '; ')"
 }
-if (-not $WhatIfPreference -and $syncPlan.Count) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
+if (-not $WhatIfPreference) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync }
 
 Write-DotfilesLog step "Stowing common packages: $($CommonPackages -join ' ')"

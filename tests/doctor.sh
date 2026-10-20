@@ -28,10 +28,6 @@ if [[ ! -x "$SYNC_PYTHON" ]]; then
     echo 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.' >&2
     exit 1
 fi
-[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
-    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
-    exit 1
-}
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-doctor.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 cleanup() {
@@ -50,9 +46,8 @@ SHELL_TMP="$TEST_TMP/tmp"
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
     "$FAKE_BIN" "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
 cp "$REPO_ROOT/doctor.sh" "$FIXTURE/doctor.sh"
-cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/sync-runtime.sh" "$FIXTURE/lib/"
-mkdir -p "$FIXTURE/common/codex/coding-agent-kit/lib"
-cp "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" "$FIXTURE/common/codex/coding-agent-kit/lib/"
+cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/config_sync.py" \
+    "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 # The real step headings: every doc step a manifest row cites must have one.
 cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
@@ -179,9 +174,8 @@ write_fake "$FAKE_BIN/fc-list" <<'SH'
 printf 'fc-list %s\n' "$*" >>"$EVENT_LOG"
 SH
 
-# A sync interpreter: it passes the engine's --runtime-check
-# (common/codex/coding-agent-kit/lib/config_sync.py) unless SYNC_RUNTIME_RC
-# says otherwise (a venv without tomlkit), and logs the call.
+# A sync interpreter: it passes lib/config_sync.py --runtime-check unless
+# SYNC_RUNTIME_RC says otherwise (a venv without tomlkit), and logs the call.
 # Any other call (codex-instructions-sync --check) runs in the real Python.
 write_fake "$FAKE_BIN/sync-python" <<SH
 #!/bin/sh
@@ -258,10 +252,10 @@ printf '## Sherlock: agent running on Sherlock\n\nFixture cluster rules.\n' >"$S
 printf -- '---\nname: sherlock-kit\ndescription: fixture\n---\n' >"$SK_DATA/skills/sherlock-kit/SKILL.md"
 printf '#!/bin/sh\n' >"$SK_TREE/bin/shk"
 chmod +x "$SK_TREE/bin/shk"
-# A coding-agent-kit tree with its nine sentinel files (the engine and what
-# the package links point at), for the cases with a third .gitmodules entry.
+# A coding-agent-kit tree with its eight sentinel files (what the package
+# links point at), for the cases with a third .gitmodules entry.
 CAK_TREE="$FIXTURE/common/codex/coding-agent-kit"
-CAK_SENTINELS='lib/config_sync.py common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as
+CAK_SENTINELS='common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as
 common/codex/.local/lib/codex-as/launch.py common/claude/.local/lib/claude-as/launch.py
 common/claude/.claude/dotfiles/statusline.cjs common/claude/.claude/dotfiles/notify.cjs
 common/claude/.claude/dotfiles/check-git-hooks.cjs'
@@ -556,7 +550,7 @@ assert_event 'fzf --version'
 assert_no_event 'fc-list'
 [ ! -e "$TEST_HOME/.local/state/gh/device-id" ] || case_fail 'gh --version wrote its telemetry device id'
 [ ! -e "$TEST_HOME/.tldrc" ] || case_fail 'tldr --version updated its page cache'
-assert_event "sync-python -I -B -X utf8 $FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py --runtime-check"
+assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'
 
@@ -942,7 +936,7 @@ run_doctor submodule-restored -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row submodule ok
 
-# With coding-agent-kit as the third entry, its nine sentinels are checked in
+# With coding-agent-kit as the third entry, its eight sentinels are checked in
 # .gitmodules order after the other two, each one on its own, and an
 # uninitialized checkout lists all of them.
 printf '%s\n' "$GITMODULES_BOTH" '[submodule "common/codex/coding-agent-kit"]' \

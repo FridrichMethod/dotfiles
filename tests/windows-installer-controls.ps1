@@ -69,6 +69,11 @@ $definitions = ($ast.FindAll({ param($node)
         }, $false) | ForEach-Object { $_.Extent.Text }) -join "`n"
 $installerText = [IO.File]::ReadAllText($installerPath)
 $completion = $installerText.Substring($installerText.IndexOf('# Preserve PowerShell''s warning stream'))
+# The kit-link warning and the Strict stop that follows it, before any sync.
+$preflightStart = $installerText.IndexOf('# Tracked links of the claude and codex packages')
+$preflightEnd = $installerText.IndexOf('if (-not $WhatIfPreference) { Write-DotfilesLog step ''Synchronizing')
+if ($preflightStart -lt 0 -or $preflightEnd -le $preflightStart) { throw 'Cannot find the kit-link preflight in stow-all.ps1.' }
+$kitPreflight = $installerText.Substring($preflightStart, $preflightEnd - $preflightStart)
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-stow-controls-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testRoot)
 $script:Passed = 0
@@ -101,6 +106,22 @@ function New-ControlFixture {
     [IO.File]::WriteAllText($stateHelper, 'function Save-DotfilesStowState { param($Repo, $HostDir, $ExpectedHead) [IO.File]::WriteAllText((Join-Path $Repo "state-saved"), "saved") }')
     return [pscustomobject]@{ Root = $root; Package = $package; Source = $source; Target = $target
         Destination = Join-Path $target '.fixture'; State = Join-Path $root 'state-saved' }
+}
+function New-KitLinkFixture {
+    # A tracked claude-package link into an empty coding-agent-kit submodule,
+    # as after a clone without --recurse-submodules.
+    $fixture = New-ControlFixture
+    $relative = '.claude/dotfiles/fixture.cjs'
+    $link = [IO.Path]::GetFullPath((Join-Path $fixture.Root "common/claude/$relative"))
+    [void][IO.Directory]::CreateDirectory((Split-Path $link -Parent))
+    $text = ('..', '..', '..', 'codex', 'coding-agent-kit', 'helpers', 'fixture.cjs') -join [IO.Path]::DirectorySeparatorChar
+    New-Item -ItemType SymbolicLink -Path $link -Value $text | Out-Null
+    foreach ($arguments in @(@('init', '--quiet'), @('-c', 'core.symlinks=true', 'add', '--', 'common/claude'))) {
+        & git -C $fixture.Root @arguments 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Fixture Git command failed: git $arguments" }
+    }
+    return [pscustomobject]@{ Root = $fixture.Root; Source = $link; Text = $text; Target = $fixture.Target
+        Destination = [IO.Path]::GetFullPath((Join-Path $fixture.Target $relative)); State = $fixture.State }
 }
 function Invoke-Control {
     param($Fixture, [string]$Decline = '', [switch]$Preview, [switch]$Strict,
@@ -332,6 +353,45 @@ Invoke-PortableSync @sync
         Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq $originalTarget) 'Cross-package relative target was rewritten.'
         Assert-True ([IO.File]::ReadAllText($fixture.Source) -ceq 'source content') 'Repaired source no longer resolves into the submodule.'
         Assert-True ((Get-Item -LiteralPath $fixture.Destination -Force).LinkType -eq 'SymbolicLink') 'Source repair did not allow destination install.'
+    }
+    Test-Case 'an untrusted dangling coding-agent-kit link warns once and stops Strict before any change' {
+        # RedirectionGuard rejects an untrusted link with 448 before it looks
+        # for the target, so only the link's own text shows that it dangles.
+        $kitWarning = 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
+        $dangling = 'dangling source skipped: claude/.claude/dotfiles/fixture.cjs (run: git submodule update --init --recursive)'
+        $action = $kitPreflight + "`n" + 'Invoke-StowPackage -PackageRoot (Join-Path $RepoRoot "common") -PackageName claude -GlobalIgnores @()'
+        # Once repaired, the trusted link reaches its missing target.
+        $reprobe = @'
+function Get-DotfilesLinkReadErrors {
+    param([string[]]$Paths)
+    $result = @{}
+    foreach ($path in $Paths) { $result[$path] = if ($path -eq $Fixture.Source) { 3 } else { 0 } }
+    return $result
+}
+'@
+        foreach ($elevated in @($true, $false)) {
+            $fixture = New-KitLinkFixture
+            $strict = Invoke-Control $fixture -SourceError 448 -Elevated $elevated -Strict -Action $action
+            Assert-True $strict.Failed 'Strict accepted an untrusted dangling kit link.'
+            Assert-True ($strict.Errors.Contains("Stow preflight failed: $kitWarning")) $strict.Errors
+            Assert-True ([regex]::Matches($strict.Errors, [regex]::Escape($kitWarning)).Count -eq 1) "Expected one kit warning: $($strict.Errors)"
+            Assert-True ($strict.Prompts.Count -eq 0) 'Strict changed something before its preflight stopped.'
+            $result = Invoke-Control $fixture -SourceError 448 -Elevated $elevated -Preparation $reprobe -Action $action
+            Assert-True (-not $result.Failed) $result.Errors
+            $warnings = @($result.Values[-1].Warnings | ForEach-Object { [string]$_ })
+            Assert-True (@($warnings -ceq $kitWarning).Count -eq 1) "Expected one kit warning: $($warnings -join '; ')"
+            Assert-True (-not @($warnings -clike 'source unreadable under RedirectionGuard*').Count) "A dangling link was reported as unreadable: $($warnings -join '; ')"
+            if ($elevated) {
+                Assert-True ($result.Values[-1].Repaired -eq 1) 'The untrusted kit link was not repaired.'
+                Assert-True (@($warnings -ceq $dangling).Count -eq 1) "The repaired link was not reported as dangling: $($warnings -join '; ')"
+            } else {
+                Assert-True ($result.Prompts.Count -eq 0) 'An unelevated run rewrote an untrusted link.'
+                Assert-True (@($warnings -clike 'untrusted source symlink left in place: claude/*').Count -eq 1) ($warnings -join '; ')
+            }
+            Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq $fixture.Text) 'The kit link lost its relative target.'
+            Assert-True (-not (Get-Item -LiteralPath $fixture.Destination -Force -ErrorAction SilentlyContinue)) 'The dangling kit link was installed.'
+            Assert-True (-not (Test-Path -LiteralPath $fixture.State)) 'A dangling kit link advanced state.'
+        }
     }
     Test-Case 'other read failures are reported instead of being treated as trustworthy' {
         $fixture = New-ControlFixture

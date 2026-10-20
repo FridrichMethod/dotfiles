@@ -23,9 +23,9 @@ set -euo pipefail
 # other hosts have a stale generated one removed. While the submodule is not
 # initialized, only that step is skipped with a warning, and the revision is
 # not recorded as applied, so the login updater retries it.
-# The Claude and Codex sync helpers run the engine in the coding-agent-kit
-# submodule. While it is not initialized, every AI sync step is skipped with
-# one warning, Stow still runs, and the revision is not recorded as applied.
+# The codex-as and claude-as launchers and the Claude helpers are links into
+# the coding-agent-kit submodule. While a tracked link dangles, Stow and every
+# sync still run, with one warning, and the revision is not recorded as applied.
 # All selected AI inputs are checked before any live configuration is changed.
 # A dangling home link that Stow made for a since-deleted package file (today
 # only the 0.3 ~/.local/bin/shk) is removed before the Stow dry runs.
@@ -179,17 +179,20 @@ if [[ -d "$COMMON_DIR/claude" || (-n "$HOST" && -d "$HOST_DIR/claude") ]]; then
     require_sync "$CLAUDE_SYNC" "$CLAUDE_PORTABLE"
     SYNC_CLAUDE=1
 fi
-# The helpers exec the engine from the coding-agent-kit submodule, which a
-# fresh clone or local merge leaves empty. Skip every AI sync rather than
-# some; the skip leaves the install incomplete, so HEAD is not recorded below.
-AI_SYNC_SKIPPED=0
-if [[ ("$SYNC_CODEX" == 1 || "$SYNC_CLAUDE" == 1) &&
-    ! -f "$COMMON_DIR/codex/coding-agent-kit/lib/config_sync.py" ]]; then
-    dotfiles_log warn 'coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)'
-    AI_SYNC_SKIPPED=1
-    SYNC_CODEX=0
-    SYNC_CODEX_INSTRUCTIONS=0
-    SYNC_CLAUDE=0
+# A clone without --recurse-submodules, a local merge or a failed submodule
+# update leaves the launcher and helper links of the claude and codex packages
+# dangling. Any tracked link there that does not resolve counts, whatever the
+# kit layout. Stow and every sync still run, but the install is incomplete, so
+# HEAD is not recorded below and the login updater retries the update.
+KIT_LINKS_DANGLING=0
+while IFS= read -r -d '' kit_entry; do
+    kit_link=${kit_entry#*$'\t'}
+    if [[ "$kit_entry" == '120000 '* && -L "$kit_link" && ! -e "$kit_link" ]]; then
+        KIT_LINKS_DANGLING=1
+    fi
+done < <(git ls-files -s -z -- common/claude common/codex 2>/dev/null || true)
+if [[ "$KIT_LINKS_DANGLING" == 1 ]]; then
+    dotfiles_log warn 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
 fi
 SYNC_FCITX5=0
 if [[ -n "$HOST" && -d "$HOST_DIR/fcitx5" ]]; then
@@ -344,15 +347,15 @@ fi
 
 # Record only complete installs. A dirty manual setup still remembers the host,
 # but cannot claim that the committed HEAD was applied without local changes.
-# Neither can a skipped AI sync (all of them, or only the Codex instructions):
-# an uninitialized submodule looks clean to git status, and an empty HEAD makes
-# the login updater run git submodule update --init --recursive and restow at
-# the next login.
+# Neither can a skipped Codex instructions sync or a dangling coding-agent-kit
+# link: an uninitialized submodule looks clean to git status, and an empty HEAD
+# makes the login updater run git submodule update --init --recursive and
+# restow at the next login.
 # Git resolves this outside the tracked tree and supports linked worktrees.
 if SYNC_STATE=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null); then
     APPLIED_HEAD=$(git rev-parse HEAD)
     SYNC_STATUS=$(git status --porcelain --untracked-files=normal --ignore-submodules=none)
-    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" || "$CODEX_INSTRUCTIONS_SKIPPED" == 1 || "$AI_SYNC_SKIPPED" == 1 ]]; then
+    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" || "$CODEX_INSTRUCTIONS_SKIPPED" == 1 || "$KIT_LINKS_DANGLING" == 1 ]]; then
         APPLIED_HEAD=
     fi
     (

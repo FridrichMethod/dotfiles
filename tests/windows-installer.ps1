@@ -62,8 +62,7 @@ function New-Fixture {
     $target = Join-Path $root 'target home with spaces'
     [void][IO.Directory]::CreateDirectory($repo)
     foreach ($relative in @('stow-all.ps1', 'scripts/dotfiles-auto-stow.ps1', '.stowrc',
-            'common/codex/coding-agent-kit/lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1',
-            'lib/windows-link-trust.ps1',
+            'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
             'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
@@ -155,7 +154,7 @@ try {
     }
     & $env:DOTFILES_SYNC_PYTHON -I -B -c 'import tomlkit'
     if ($LASTEXITCODE -ne 0) { throw 'The configured sync interpreter lacks tomlkit.' }
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'common/codex/coding-agent-kit/lib/config_sync.py') -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'lib/config_sync.py') -PathType Leaf)) {
         throw 'Shared configuration backend is missing; native integration cannot run.'
     }
     $gitBash = Get-TestGitBash
@@ -381,7 +380,7 @@ public static class DotfilesCallerMitigation {
         $fixture = New-Fixture
         Assert-Success (Invoke-Install $fixture -Preview)
         Assert-True (-not (Test-Path -LiteralPath $fixture.Target)) 'WhatIf created the absent target.'
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/__pycache__'))) 'WhatIf wrote Python bytecode.'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'lib/__pycache__'))) 'WhatIf wrote Python bytecode.'
         Assert-NoState $fixture
     }
 
@@ -429,23 +428,34 @@ public static class DotfilesCallerMitigation {
         Assert-NoState $fixture
     }
 
-    Test-Case 'an uninitialized coding-agent-kit skips every AI sync with one warning' {
+    Test-Case 'a dangling coding-agent-kit link still syncs, with one preflight warning' {
         $fixture = New-Fixture
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/lib/config_sync.py')
-        $warning = 'coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)'
+        $kitFile = Join-Path $fixture.Repo 'common/codex/coding-agent-kit/fixture.cjs'
+        Write-FixtureFile $kitFile 'kit fixture'
+        $source = Join-Path $fixture.Repo 'common/claude/.claude/dotfiles/fixture.cjs'
+        [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
+        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/fixture.cjs' | Out-Null
+        Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
+        Invoke-FixtureGit -C $fixture.Repo add common/claude
+        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'submodule link fixture'
+        # The tracked link dangles, as after a clone without --recurse-submodules.
+        Remove-Item -LiteralPath $kitFile
+        $warning = 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
         $result = Invoke-Install $fixture -StrictMode $false
         Assert-Success $result
-        Assert-True ($result.Output.Contains($warning)) "Missing engine warning: $($result.Output)"
-        Assert-True (-not $result.Output.Contains('Synchronizing portable Codex and Claude settings')) 'The sync step ran without the engine.'
+        Assert-Equal 1 ([regex]::Matches($result.Output, [regex]::Escape($warning)).Count) "Expected one kit warning: $($result.Output)"
+        Assert-True ($result.Output.Contains('Synchronizing portable Codex and Claude settings')) 'The sync step did not run.'
         foreach ($relative in @('.codex/config.toml', '.codex/rules/portable.rules', '.claude/settings.json')) {
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $relative))) "AI live file written without the engine: $relative"
+            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Target $relative) -PathType Leaf) "AI live file not written: $relative"
         }
+        Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target '.claude/dotfiles/fixture.cjs') -Force -ErrorAction SilentlyContinue)) `
+            'The dangling source was linked.'
         Assert-Link (Join-Path $fixture.Target '.gitconfig') (Join-Path $fixture.Repo 'win/git/.gitconfig')
         Assert-NoState $fixture
         $strictTarget = Join-Path $fixture.Root 'strict target'
         # The error view wraps the long message; match only its start.
-        Assert-Failure (Invoke-Install $fixture -TargetOverride $strictTarget) 'Stow preflight failed: coding-agent-kit submodule'
-        Assert-True (-not (Test-Path -LiteralPath $strictTarget)) 'Strict engine warning caused a partial install.'
+        Assert-Failure (Invoke-Install $fixture -TargetOverride $strictTarget) 'Stow preflight failed: coding-agent-kit links'
+        Assert-True (-not (Test-Path -LiteralPath $strictTarget)) 'Strict dangling-link warning caused a partial install.'
         Assert-NoState $fixture
     }
 

@@ -30,10 +30,6 @@ if [[ ! -x "$SYNC_PYTHON" ]]; then
     echo 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.' >&2
     exit 1
 fi
-[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
-    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
-    exit 1
-}
 export DOTFILES_COLOR=auto
 mkdir -p "$FIXTURE/.git" "$FAKE_BIN" "$TEST_HOME"
 mkdir "$FIXTURE/lib"
@@ -116,6 +112,11 @@ case ${1:-} in
         printf '%s' "${INSTALL_DIRTY:-}"
         exit 0
         ;;
+    ls-files)
+        # The fixture tracks one link, codex-as into the coding-agent-kit checkout.
+        printf '120000 %s 0\tcommon/codex/.local/bin/codex-as\0' 0000000000000000000000000000000000000000
+        exit 0
+        ;;
 esac
 {
     printf 'git:'
@@ -149,10 +150,11 @@ mkdir -p \
     "$FIXTURE/host-a/fcitx5/.config/fcitx5" \
     "$FIXTURE/host-a/sherlock-kit/.claude/rules" \
     "$FIXTURE/rules-fixture"
-# The installer skips every AI sync while the coding-agent-kit engine is
-# absent; an empty stand-in marks the submodule as initialized.
-mkdir -p "$FIXTURE/common/codex/coding-agent-kit/lib"
-: >"$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py"
+# The codex-as launcher is a package link into the coding-agent-kit checkout,
+# which the installer only warns about while that link dangles.
+mkdir -p "$FIXTURE/common/codex/coding-agent-kit/bin"
+printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/codex/coding-agent-kit/bin/codex-as"
+ln -s ../../coding-agent-kit/bin/codex-as "$FIXTURE/common/codex/.local/bin/codex-as"
 
 printf '%s\n' 'common-claude' >"$FIXTURE/common/claude/.claude/settings.json"
 printf '%s\n' 'common-codex' >"$FIXTURE/common/codex/.codex/config.toml"
@@ -396,51 +398,43 @@ env \
 assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
 cmp "$STATE" "$TEST_TMP/expected-state"
 
-# An uninitialized coding-agent-kit submodule (no engine, as after a fresh
-# clone or a plain local merge) skips every Codex and Claude sync, preflight
-# included, with one warning; both dry runs, fcitx5 and both stows still run.
-# The install is incomplete, so the host is remembered without an applied HEAD.
-mv "$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py" "$TEST_TMP/config_sync.py.saved"
+# An uninitialized coding-agent-kit submodule (as after a clone without
+# --recurse-submodules or a plain local merge) leaves the tracked codex-as
+# link dangling. Every sync, preflight included, both dry runs and both stows
+# still run, with one warning. The install is incomplete, so the host is
+# remembered without an applied HEAD.
+mv "$FIXTURE/common/codex/coding-agent-kit/bin/codex-as" "$TEST_TMP/kit-codex-as.saved"
 : >"$EVENT_LOG"
 : >"$CHECK_LOG"
 env \
     HOME="$TEST_HOME" \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     EVENT_LOG="$EVENT_LOG" \
+    FILTER_PRESENT=1 \
     LC_ALL=C \
     bash "$FIXTURE/stow-all.sh" host-a \
-    >"$TEST_TMP/engine-absent.stdout" 2>"$TEST_TMP/engine-absent.stderr"
-[[ ! -s "$CHECK_LOG" ]]
-assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]" \
-    "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]" \
-    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
-printf '%s\n' '[dotfiles] [warn] coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)' \
-    >"$TEST_TMP/expected-engine-absent.stderr"
-cmp "$TEST_TMP/engine-absent.stderr" "$TEST_TMP/expected-engine-absent.stderr"
-refute_grep 'Checking selected AI configuration' "$TEST_TMP/engine-absent.stdout"
-grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/engine-absent.stdout"
+    >"$TEST_TMP/kit-dangling.stdout" 2>"$TEST_TMP/kit-dangling.stderr"
+cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
+assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
+printf '%s\n' '[dotfiles] [warn] coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)' \
+    >"$TEST_TMP/expected-kit-dangling.stderr"
+cmp "$TEST_TMP/kit-dangling.stderr" "$TEST_TMP/expected-kit-dangling.stderr"
+grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/kit-dangling.stdout"
 cmp "$STATE" "$TEST_TMP/expected-skipped-state"
-mv "$TEST_TMP/config_sync.py.saved" "$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py"
-# With the engine back, the next stow is complete and records HEAD again.
+mv "$TEST_TMP/kit-codex-as.saved" "$FIXTURE/common/codex/coding-agent-kit/bin/codex-as"
+# Once the link resolves again, the next stow is complete and records HEAD.
 : >"$EVENT_LOG"
 : >"$CHECK_LOG"
 env \
     HOME="$TEST_HOME" \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     EVENT_LOG="$EVENT_LOG" \
+    FILTER_PRESENT=1 \
     LC_ALL=C \
     bash "$FIXTURE/stow-all.sh" host-a \
-    >"$TEST_TMP/engine-restored.stdout" 2>"$TEST_TMP/engine-restored.stderr"
-assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" \
-    "sync:claude-settings-sync:[$FIXTURE/host-a/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
-    "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]" \
-    'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
+    >"$TEST_TMP/kit-restored.stdout" 2>"$TEST_TMP/kit-restored.stderr"
+assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
+[[ ! -s "$TEST_TMP/kit-restored.stderr" ]]
 cmp "$STATE" "$TEST_TMP/expected-state"
 
 # Git can report a clean checkout with core.filemode=false even when a helper
@@ -683,8 +677,7 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 # generated one, a foreign override is kept (with a warning without rules,
 # fail-closed with them), and a dry-run conflict or a dangling rules link
 # leaves the override as it was.
-cp "$REPO_ROOT/lib/sync-runtime.sh" "$FIXTURE/lib/"
-cp "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" "$FIXTURE/common/codex/coding-agent-kit/lib/config_sync.py"
+cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT/common/codex/.local/bin/codex-instructions-sync" "$FIXTURE/common/codex/.local/bin/"
 OVERRIDE="$TEST_HOME/.codex/AGENTS.override.md"
 MARKER="<!-- Generated by dotfiles codex-instructions-sync. Edit common/codex/.codex/AGENTS.md or the host's sherlock-kit rules, then rerun stow-all.sh. -->"

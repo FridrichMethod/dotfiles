@@ -1,12 +1,13 @@
 # Codex and Claude tooling (submodule)
 
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) holds
-the `codex-as` and `claude-as` launchers, the Claude status line, notification
-and Git hook check helpers, and the AI config sync engine `lib/config_sync.py`.
-This repository carries it as the submodule `common/codex/coding-agent-kit`,
-and `.gitmodules` follows its `main` branch. The settings themselves (both
-global instruction files, `settings.json`, `config.toml`, `portable.rules`)
-stay here, and so does the choice of which hosts get a Codex override.
+the `codex-as` and `claude-as` launchers and the Claude status line,
+notification and Git hook check helpers. This repository carries it as the
+submodule `common/codex/coding-agent-kit`, and `.gitmodules` follows its
+`main` branch. The settings themselves (both global instruction files,
+`settings.json`, `config.toml`, `portable.rules`) stay here, with the AI config
+sync engine and its runtime ([configuration sync](config-sync.md)), and so
+does the choice of which hosts get a Codex override.
 
 The checkout sits inside the `codex` package. The `.stowrc` line
 `--ignore=^coding-agent-kit(/|$)` keeps it out of `$HOME`; a
@@ -43,28 +44,12 @@ their own. `settings.json` runs the three `.cjs` helpers through
 `~/.claude/dotfiles/`, and `docs/account-launchers.md` stays here as a pointer
 because `codex-as --help` and `claude-as --help` name it.
 
-## Binding
-
-The sync runtime stays here as regular files: the four launchers
-`claude-settings-sync`, `codex-config-sync`, `codex-rules-sync` and
-`codex-instructions-sync`, `lib/sync-runtime.sh`, `setup-sync.sh`,
-`setup-sync.ps1` and `requirements-sync.txt`. The launchers look for
-`.venv-sync` four directories above their real file, so the existing
-`~/dotfiles/.venv-sync` keeps working and every message keeps its text.
-`lib/sync-runtime.sh` and both `setup-sync` scripts run the engine at
-`common/codex/coding-agent-kit/lib/config_sync.py`.
-
-The submodule keeps reference copies of these files for its own tests.
-`tests/coding-agent-kit-delivery.sh` requires the launchers and
-`requirements-sync.txt` to equal their copies, the three edited files to
-differ only in the engine path, and the `tomlkit==` pin here to equal the
-engine's `TOMLKIT_VERSION`.
-
 ## Updates
 
-A bump is manual, because the engine writes the Claude permission policy on
-every host at its next login. Dispatch `update-coding-agent-kit-submodule.yml`
-from the Actions tab. It moves the gitlink to coding-agent-kit `main`, runs
+A bump is manual, because the launchers and the Claude Git hook check run in
+every Codex and Claude session from the next login. Dispatch
+`update-coding-agent-kit-submodule.yml` from the Actions tab. It moves the
+gitlink to coding-agent-kit `main`, runs
 `bash tests/coding-agent-kit-delivery.sh --real`, requires the linux, macos
 and windows jobs of coding-agent-kit to have passed on that commit, and
 pushes the branch `bump/coding-agent-kit-<first 12 hex of the sha>`, never
@@ -91,39 +76,14 @@ Push the branch and open a pull request, as above. Never record a gitlink at a
 commit that is not on coding-agent-kit's `main`: a host that cannot fetch it
 fails its submodule update at every login.
 
-### Changing the tomlkit pin
+### Real settings and the helper tests
 
-The guard refuses pin drift, so a pin change is a human two-repo change:
-
-1. In coding-agent-kit, change `requirements-sync.txt`, `TOMLKIT_VERSION` in
-   `lib/config_sync.py` and the reference copy together, and land them on its
-   `main`.
-2. Here, make one commit by hand that moves the gitlink and updates this
-   repository's `requirements-sync.txt` to the same bytes.
-3. After the merge, run `./setup-sync.sh` (`.\setup-sync.ps1` on Windows) on
-   each host yourself; profiles and automatic updates never install. On
-   Sherlock and Marlowe, do it inside a Slurm allocation.
-
-### Real settings and the engine tests
-
-coding-agent-kit tests itself on frozen copies of this repository's data.
-`tests/fixtures/codex-config.toml`, `tests/fixtures/claude-settings.json` and
-`tests/fixtures/portable.rules` there are an interface: `tests/ai-integration.sh`
-(and `tests/run.ps1` on Windows) exports the pinned submodule tree to a
-temporary directory, copies the real `config.toml`, `settings.json` and
-`portable.rules` over those three files, and runs the engine suite and the
-Claude helper tests on them. Every real-data assertion therefore still runs on
-every change to the settings.
-
-Most settings values, such as `effortLevel`, `defaultMode` or the
-`pluginConfigs` choice, change in one commit here, with any assertion in
-`tests/ai-config-sync.sh` or `tests/claude-customizations.cjs`. Three
-`config.toml` facts are also asserted by the engine suite: the set of owned
-keys (the engine enforces it at every sync), the `CLAUDE.md` fallback and
-`network_proxy = true`. Change those in this order: first the fixture and the
-assertion in coding-agent-kit, landed on its `main`; then one commit here that
-changes the data, bumps the gitlink and updates any assertion here. The
-automatic bump cannot carry such a change.
+coding-agent-kit tests its Claude helpers on a frozen copy of this
+repository's `settings.json`; `tests/fixtures/claude-settings.json` there is an
+interface. `tests/ai-integration.sh` (and `tests/run.ps1` on Windows) exports
+the pinned submodule tree to a temporary directory, copies the real
+`settings.json` over that file and runs the helper tests on it, so they still
+run on every change to the settings.
 
 ## Develop in a separate clone
 
@@ -137,23 +97,17 @@ records no applied revision.
 A fresh clone without `--recurse-submodules`, or a local merge, can leave the
 submodule empty. Then:
 
-- `./stow-all.sh` warns
-  `coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)`,
-  skips every Claude and Codex sync step, still stows, and exits 0. It records
-  no applied revision, so the login updater initializes the submodule and
-  restows at the next login. On a fresh home the 14 links dangle until then.
-- `stow-all.ps1` adds the same warning. With `-Strict` it stops before any
-  change; without it, it stows with one `dangling source skipped` warning per
-  link and saves no state.
-- `./setup-sync.sh` builds the venv, then fails its runtime check with
-  Python's `can't open file` (exit 2); `setup-sync.ps1` prints that line and
-  `AI-sync runtime validation failed.` (exit 1). After the submodule is
-  initialized the venv is complete.
-- `./doctor.sh` reports the `submodule` row as missing with the fix. Its
-  `venv-sync` row then also says the venv fails
-  `lib/config_sync.py --runtime-check`, and on hosts with a Codex override the
-  `codex-override` row fails, although the venv is fine. `setup-host --check`
-  lists the sync env as pending for the same reason.
+- `./stow-all.sh` finds a tracked link under `common/claude` or `common/codex`
+  that does not resolve and warns once
+  `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`.
+  It still runs every Claude and Codex sync, still stows, and exits 0. It
+  records no applied revision, so the login updater initializes the submodule
+  and restows at the next login. On a fresh home the 14 links dangle until
+  then.
+- `stow-all.ps1` adds the same warning before any change. With `-Strict` it
+  stops there; without it, it syncs, stows with one `dangling source skipped`
+  warning per link and saves no state.
+- `./doctor.sh` reports the `submodule` row as missing with the fix.
 
 Run `git submodule update --init --recursive`, then `./stow-all.sh <host>`
 (`.\stow-all.ps1 win` on Windows).
@@ -192,7 +146,7 @@ count includes every file of the submodule checkout.
   `./doctor.sh --host <host>` (`.\doctor.ps1` on Windows). Never rewrite
   coding-agent-kit's `main` or move its tags; fix forward there and bump again.
 - Back to regular files: a forward commit reverts the switch to the links and
-  writes the engine, the 14 delivered files, `docs/account-launchers.md` and
+  writes the 14 delivered files, `docs/account-launchers.md` and
   `docs/codex-as.md` back from the submodule commit that `main` records
   (`git -C common/codex/coding-agent-kit archive <sha> -- <paths> | tar -x`),
   so hosts get exactly the bytes they run. The submodule stays registered,
@@ -217,6 +171,6 @@ count includes every file of the submodule checkout.
 git submodule status common/codex/coding-agent-kit
 readlink common/codex/.local/bin/codex-as     # ../../../codex/coding-agent-kit/common/codex/.local/bin/codex-as
 ls -L ~/.local/bin/codex-as ~/.claude/dotfiles/statusline.cjs
-./doctor.sh --host <host>                     # submodule, venv-sync and codex-override rows ok
+./doctor.sh --host <host>                     # submodule row ok
 bash tests/coding-agent-kit-delivery.sh       # fixtures; --ci fails without stow, --real checks the submodule
 ```

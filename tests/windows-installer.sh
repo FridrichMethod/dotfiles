@@ -25,6 +25,11 @@ grep -Fq '$sourceError -eq 448' "$INSTALLER"
 grep -Fq -- '-Value @($item.Target)[0] -Force -Confirm:$false' "$INSTALLER"
 grep -Fq 'SetProcessMitigationPolicy(16, ref flags' "$REPO_ROOT/lib/windows-link-trust.ps1"
 grep -Fq '$start.RedirectStandardInput = $true' "$REPO_ROOT/lib/windows-link-trust.ps1"
+# The probe rejects an untrusted link with 448 whatever its target, so a
+# coding-agent-kit link dangles by its own target text, in the preflight and
+# after a source repair (windows-installer-controls.ps1 runs both).
+grep -Fq 'if (@(Get-DotfilesDanglingKitLink).Count) {' "$INSTALLER"
+grep -Fq '(Test-DotfilesLinkDangles -Path $item.FullName)' "$INSTALLER"
 
 if ! grep -Fq 'Repair untrusted symlink' "$INSTALLER"; then
     echo "ERROR: installer must repair untrusted symlinks, not skip them" >&2

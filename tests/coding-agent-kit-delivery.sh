@@ -14,14 +14,14 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
 # libraries, completions and Claude helpers (docs/coding-agent-kit.md). The
 # structure checks always run, with git, bash and coreutils only: the
 # .gitmodules entry, the .stowrc ignore line, the gitlink, every link's exact
-# relative text, the binding that stays in dotfiles as regular files, the
-# Windows allowlist and the bump workflow. With the submodule initialized, check_real proves that
-# every link resolves into it, the modes, the binding twins and the tomlkit
-# pin, and the paths --help names must be regular files here. The real
-# stow-all.sh then stows copies into temporary homes with the checkout full,
-# emptied and restored. --real requires the submodule at the gitlink the
-# index records and stops after check_real (the bump Action's guard). --ci
-# turns every SKIP into a failure.
+# relative text, the sync launchers that stay in dotfiles as regular files,
+# the Windows allowlist and the bump workflow. With the submodule initialized,
+# check_real proves that every link resolves into it and the modes, and the
+# paths --help names must be regular files here. The real stow-all.sh then
+# stows copies into temporary homes with the checkout full, emptied and
+# restored. --real requires the submodule at the gitlink the index records and
+# stops after check_real (the bump Action's guard). --ci turns every SKIP into
+# a failure.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -48,7 +48,7 @@ SUBMODULE=common/codex/coding-agent-kit
 SUBMODULE_URL=https://github.com/FridrichMethod/coding-agent-kit.git
 STOWRC_LINE='--ignore=^coding-agent-kit(/|$)'
 WINDOWS_PACKAGES="\$CommonPackages = @('claude', 'codex', 'conda', 'git', 'pymol', 'ssh', 'wezterm')"
-WARNING='[dotfiles] [warn] coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)'
+WARNING='[dotfiles] [warn] coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
 # The 14 package files that are links into the submodule (same path there).
 DELIVERED='common/claude/.claude/dotfiles/check-git-hooks.cjs
 common/claude/.claude/dotfiles/notify.cjs
@@ -66,14 +66,12 @@ common/codex/.local/share/bash-completion/completions/codex-as
 common/codex/.oh-my-zsh/custom/completions/_codex-as'
 # The two executables among them.
 EXECUTABLES='common/claude/.local/bin/claude-as common/codex/.local/bin/codex-as'
-# The binding stays in dotfiles; the submodule holds byte-identical twins of
-# these, and of three files that differ only in the engine path.
+# The sync launchers stay in dotfiles as regular files; the submodule still
+# carries copies of them under common/.
 LAUNCHERS='common/claude/.local/bin/claude-settings-sync common/codex/.local/bin/codex-config-sync
 common/codex/.local/bin/codex-rules-sync common/codex/.local/bin/codex-instructions-sync'
-TWINS="$LAUNCHERS requirements-sync.txt"
-ENGINE_CALLERS='lib/sync-runtime.sh setup-sync.sh setup-sync.ps1'
-# The fixture paths dotfiles' real-data overlay replaces with the real files.
-FIXTURES='tests/fixtures/codex-config.toml tests/fixtures/claude-settings.json tests/fixtures/portable.rules'
+# The fixture path dotfiles' real-data overlay replaces with the real file.
+FIXTURES='tests/fixtures/claude-settings.json'
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -175,7 +173,7 @@ index_mode() {
 }
 
 # The index holds the gitlink, exactly the 14 links with their computed
-# texts, and the binding as regular files; no package path besides the
+# texts, and the sync launchers as regular files; no package path besides the
 # gitlink names coding-agent-kit, which .stowrc would hide.
 check_index() {
     local actual expected path text rest
@@ -245,8 +243,8 @@ line_of() {
 
 # A bump changes code that runs in every Codex and Claude session at the next
 # login, so the Action runs only by hand, stages the bump, refuses it unless
-# delivery, binding, pin and the target commit's own CI all hold, and pushes
-# only a review branch, never main.
+# delivery and the target commit's own CI both hold, and pushes only a review
+# branch, never main.
 check_automation() {
     local workflow=$REPO_ROOT/.github/workflows/update-coding-agent-kit-submodule.yml triggers stage guard ci commit push
     [[ -f "$workflow" ]] || fail "missing ${workflow#"$REPO_ROOT"/}"
@@ -282,19 +280,13 @@ gitignore_patterns() {
     printf '%s\n' '.venv*/'
 }
 
-# tomlkit_pin FILE: the version that FILE pins, from requirements-sync.txt's
-# tomlkit== line or config_sync.py's TOMLKIT_VERSION.
-tomlkit_pin() {
-    sed -n -e 's/^tomlkit==\([^ ]*\).*$/\1/p' -e 's/^TOMLKIT_VERSION = "\([^"]*\)"$/\1/p' "$1"
-}
-
 # check_real ROOT: the submodule of ROOT is checked out at the gitlink the
 # index records, every link resolves to a regular file at the same path in
-# it, the modes and the file list are the delivery contract, and the binding
-# twins and the tomlkit pin match. An uninitialized submodule or an unstaged
-# bump fails instead of passing; the bump Action stages its bump first.
+# it, and the modes and the file list are the delivery contract. An
+# uninitialized submodule or an unstaged bump fails instead of passing; the
+# bump Action stages its bump first.
 check_real() {
-    local root=$1 checkout=$1/$SUBMODULE physical path text revision recorded mode expected actual pin twin_pin pattern
+    local root=$1 checkout=$1/$SUBMODULE physical path text revision recorded mode expected actual pattern
     [[ -e "$checkout/.git" ]] ||
         fail "coding-agent-kit submodule not initialized at $SUBMODULE; run git submodule update --init --recursive"
     revision=$(checkout_git rev-parse HEAD)
@@ -325,22 +317,6 @@ check_real() {
     fi
     [[ -z "$(checkout_git ls-files -s | awk '$1 == 120000')" ]] ||
         fail "coding-agent-kit $revision tracks a symlink"
-    # The binding stays in dotfiles; the twins are byte-identical, except that
-    # the three engine callers name the engine inside the submodule.
-    for path in $TWINS; do
-        cmp -s "$root/$path" "$checkout/$path" || fail "$path differs from its coding-agent-kit twin"
-    done
-    for path in $ENGINE_CALLERS; do
-        [[ "$(grep -c 'lib/config_sync\.py' "$checkout/$path")" == 1 ]] ||
-            fail "the coding-agent-kit twin of $path does not name lib/config_sync.py on exactly one line"
-        sed 's#lib/config_sync\.py#common/codex/coding-agent-kit/lib/config_sync.py#' "$checkout/$path" |
-            cmp -s - "$root/$path" ||
-            fail "$path differs from its coding-agent-kit twin beyond the engine path"
-    done
-    pin=$(tomlkit_pin "$root/requirements-sync.txt")
-    twin_pin=$(tomlkit_pin "$checkout/lib/config_sync.py")
-    [[ -n "$pin" && "$pin" == "$twin_pin" ]] ||
-        fail "requirements-sync.txt pins tomlkit ${pin:-(none)}, but coding-agent-kit $revision requires ${twin_pin:-(none)}; a pin change is a two-repo change"
     for path in $FIXTURES; do
         [[ -f "$checkout/$path" ]] || fail "coding-agent-kit $revision lacks $path, which the real-data overlay replaces"
     done
@@ -389,7 +365,7 @@ fi
 # make_home HOME: a temporary home holding a checkout subset at ~/dotfiles,
 # as on the hosts, with the submodule as a plain tree. Its repository
 # excludes that tree, so the status stays clean whether it is full or empty
-# and only the skip can blank the applied HEAD.
+# and only the dangling-link check can blank the applied HEAD.
 make_home() {
     local home=$1
     local checkout=$home/dotfiles
@@ -397,7 +373,7 @@ make_home() {
     # The packages carry completions and require the prerequisite OMZ clone.
     printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$home/.oh-my-zsh/oh-my-zsh.sh"
     cp "$REPO_ROOT/stow-all.sh" "$checkout/"
-    cp "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
+    cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
     cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$checkout/common/"
     cp -RP "$REPO_ROOT/.stowrc" "$checkout/"
     rm -f "$checkout/$SUBMODULE/.git"
@@ -488,9 +464,9 @@ done
 assert_state "$HOME_FULL" "$(fixture_git -C "$HOME_FULL/dotfiles" rev-parse HEAD)"
 snapshot "$HOME_FULL" >"$TEST_TMP/full.snapshot"
 
-# An empty checkout: one warning, no AI sync and no applied HEAD, while Stow
-# still links all 14 package entries with the same text; they dangle until
-# the submodule is checked out.
+# An empty checkout: one warning and no applied HEAD, while every AI sync
+# still writes its live file and Stow still links all 14 package entries with
+# the same text; they dangle until the submodule is checked out.
 HOME_EMPTY=$TEST_TMP/empty/home
 make_home "$HOME_EMPTY"
 empty_submodule "$HOME_EMPTY"
@@ -501,8 +477,9 @@ if ! cmp -s "$TEST_TMP/expected-empty.stderr" "$TEST_TMP/empty.stderr"; then
     fail 'an uninitialized submodule must give exactly the one warning'
 fi
 assert_state "$HOME_EMPTY" ''
-for path in .codex/config.toml .codex/rules/portable.rules .codex/AGENTS.override.md .claude/settings.json; do
-    [[ ! -e "$HOME_EMPTY/$path" && ! -L "$HOME_EMPTY/$path" ]] || fail "an uninitialized submodule still wrote ~/$path"
+for path in .codex/config.toml .codex/rules/portable.rules .claude/settings.json; do
+    [[ -f "$HOME_EMPTY/$path" && ! -L "$HOME_EMPTY/$path" ]] || fail "an uninitialized submodule kept the sync from writing ~/$path"
+    cmp -s "$HOME_FULL/$path" "$HOME_EMPTY/$path" || fail "~/$path differs from the initialized home"
 done
 while read -r path; do
     link=$(home_link "$path")

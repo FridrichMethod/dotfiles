@@ -592,15 +592,14 @@ function Get-BootstrapSyncPython {
 }
 
 function Test-BootstrapSyncRuntime {
-    # True when Python passes common/codex/coding-agent-kit/lib/config_sync.py
-    # --runtime-check (the engine in the coding-agent-kit submodule; Python
+    # True when Python passes lib/config_sync.py --runtime-check (Python
     # 3.11+ and the pinned tomlkit), the check setup-sync itself ends with.
     # Read-only: -B writes no bytecode, and its output is discarded.
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Python, [Parameter(Mandatory)][string]$RepoRoot)
     if (-not $Python -or -not [IO.File]::Exists($Python)) { return $false }
     $ErrorActionPreference = 'Continue'
     $PSNativeCommandUseErrorActionPreference = $false
-    try { $null | & $Python -I -B -X utf8 (Join-Path $RepoRoot 'common/codex/coding-agent-kit/lib/config_sync.py') --runtime-check *> $null }
+    try { $null | & $Python -I -B -X utf8 (Join-Path $RepoRoot 'lib/config_sync.py') --runtime-check *> $null }
     catch { return $false }
     return $LASTEXITCODE -eq 0
 }
