@@ -189,19 +189,22 @@ function ConvertFrom-BootstrapVersionText {
 }
 
 function Use-BootstrapToolEnvironment {
-    # Run Action with GH_TELEMETRY=0 and GH_NO_UPDATE_NOTIFIER=1, which
-    # doctor.sh and setup-host.sh export: recent gh releases write a telemetry
-    # device id on any command, --version included, and the notifier checks
-    # GitHub for a release. The process environment outlives this script in
+    # Run Action with GH_TELEMETRY=0, GH_NO_UPDATE_NOTIFIER=1 and
+    # TLDR_AUTO_UPDATE_DISABLED=1, which doctor.sh and setup-host.sh export:
+    # recent gh releases write a telemetry device id on any command, --version
+    # included, the notifier checks GitHub for a release, and the tldr C
+    # client answers even --version by downloading the pages archive once its
+    # cache is two weeks old. The process environment outlives this script in
     # an interactive session, so the caller's values are restored.
     param([Parameter(Mandatory)][scriptblock]$Action)
     $saved = @{}
-    foreach ($name in @('GH_TELEMETRY', 'GH_NO_UPDATE_NOTIFIER')) {
+    foreach ($name in @('GH_TELEMETRY', 'GH_NO_UPDATE_NOTIFIER', 'TLDR_AUTO_UPDATE_DISABLED')) {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
     }
     try {
         $env:GH_TELEMETRY = '0'
         $env:GH_NO_UPDATE_NOTIFIER = '1'
+        $env:TLDR_AUTO_UPDATE_DISABLED = '1'
         & $Action
     }
     finally {
@@ -380,6 +383,24 @@ function Test-BootstrapTool {
     return [pscustomobject]@{ Found = [bool]$path; Path = [string]$path; Version = $version }
 }
 
+function Get-BootstrapToolStatus {
+    # bootstrap_check_tool's verdict on one tools.tsv row, which doctor.ps1
+    # reports and W1-winget's filter trusts: Status is ok, missing, outdated
+    # (below the floor) or unknown (found, but no version to hold against the
+    # floor); Probe is the Test-BootstrapTool result. The row is probed with
+    # its version flag, so for a row that has one a Store alias stub that
+    # prints no version does not count; a presence-only row takes the first
+    # PATH candidate.
+    param([Parameter(Mandatory)]$Row)
+    $probe = Test-BootstrapTool -Probe $Row.probe -VersionFlag $Row.version_flag
+    $status = if (-not $probe.Found) { 'missing' }
+    elseif ($Row.floor -ceq '-') { 'ok' }
+    else {
+        switch (Compare-BootstrapVersion $probe.Version $Row.floor) { 0 { 'ok' } 1 { 'outdated' } default { 'unknown' } }
+    }
+    return [pscustomobject]@{ Status = $status; Probe = $probe }
+}
+
 function Select-BootstrapCommand {
     # The first PATH candidate, over the comma alternatives of a command
     # Probe in order, whose VersionFlag output carries a version >= Floor:
@@ -458,10 +479,15 @@ function Write-BootstrapWingetManifest {
     # Write the winget export at Path to Destination less the packages whose
     # PackageIdentifier is in Exclude, every other property kept; a source
     # left without packages is dropped. Returns the number of packages kept.
+    # ConvertFrom-Json reads CreationDate as a DateTime, written back in local
+    # time (the same instant), unless -DateKind String (PowerShell 7.5+)
+    # keeps its text.
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Destination,
         [AllowEmptyCollection()][string[]]$Exclude = @())
-    $manifest = [IO.File]::ReadAllText($Path) | ConvertFrom-Json
+    $parse = @{}
+    if ($PSVersionTable.PSVersion -ge [version]'7.5') { $parse['DateKind'] = 'String' }
+    $manifest = [IO.File]::ReadAllText($Path) | ConvertFrom-Json @parse
     $kept = 0
     $sources = foreach ($source in @($manifest.Sources)) {
         $packages = @($source.Packages | Where-Object { $_.PackageIdentifier -cnotin $Exclude })
@@ -542,7 +568,8 @@ function Install-BootstrapFile {
         return New-BootstrapResult installed "verified sha256 $Sha256"
     }
     catch { return New-BootstrapResult failed "download of $Uri failed: $($_.Exception.Message)" }
-    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+    # Never ask, and never skip, under the caller's -Confirm or -WhatIf.
+    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue }
 }
 
 function Get-BootstrapVenvPython {

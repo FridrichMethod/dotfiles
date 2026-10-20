@@ -122,22 +122,19 @@ function Assert-DoctorToolRow {
 function Get-DoctorToolResult {
     param([Parameter(Mandatory)]$Row, [string]$Selection)
     $step = Get-BootstrapDocRef -Step $Row.doc -ProfileName windows
-    $probe = Test-BootstrapTool -Probe $Row.probe -VersionFlag $Row.version_flag
-    if (-not $probe.Found) {
-        $result = New-DoctorResult missing $Row.id $Row.tier "missing: $($Row.absent)" $step
-    }
-    elseif ($Row.floor -cne '-') {
-        $result = switch (Compare-BootstrapVersion $probe.Version $Row.floor) {
-            0 { New-DoctorResult ok $Row.id $Row.tier $probe.Version $step }
-            1 { New-DoctorResult outdated $Row.id $Row.tier "$($probe.Version) < $($Row.floor)" $step }
-            default {
-                New-DoctorResult warn $Row.id $Row.tier "version unknown at $($probe.Path) (needs >= $($Row.floor))" $step
-            }
+    # The same verdict W1-winget's filter in setup-host.ps1 relies on.
+    $state = Get-BootstrapToolStatus $Row
+    $probe = $state.Probe
+    $result = switch -CaseSensitive ($state.Status) {
+        'missing' { New-DoctorResult missing $Row.id $Row.tier "missing: $($Row.absent)" $step }
+        'outdated' { New-DoctorResult outdated $Row.id $Row.tier "$($probe.Version) < $($Row.floor)" $step }
+        'unknown' {
+            New-DoctorResult warn $Row.id $Row.tier "version unknown at $($probe.Path) (needs >= $($Row.floor))" $step
         }
-    }
-    else {
-        $detail = if ($probe.Version) { $probe.Version } else { 'present' }
-        $result = New-DoctorResult ok $Row.id $Row.tier $detail $step
+        default {
+            $detail = if ($probe.Version) { $probe.Version } else { 'present' }
+            New-DoctorResult ok $Row.id $Row.tier $detail $step
+        }
     }
     return Limit-DoctorResult $result $Selection
 }

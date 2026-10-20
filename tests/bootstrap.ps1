@@ -593,13 +593,25 @@ try {
 if ($env:GH_TELEMETRY -ne '0') { [IO.File]::WriteAllText($env:BOOTSTRAP_TEST_DEVICE_ID, 'id') }
 Write-Output 'gh version 2.81.0 (2025-09-01)'
 '@
+        # Like the tldr C client, this one downloads its pages archive on any
+        # command, --version included, unless TLDR_AUTO_UPDATE_DISABLED is set.
+        $pages = Join-Path $root 'tldr-pages'
+        New-Shim $bin 'tldr' @'
+if (-not $env:TLDR_AUTO_UPDATE_DISABLED) { [IO.File]::WriteAllText($env:BOOTSTRAP_TEST_TLDR_PAGES, 'pages') }
+Write-Output 'tldr v1.6.1 (v2.3 spec)'
+'@
         Use-Environment @{ PATH = $bin; PSModulePath = $modules; WINDIR = $windir; LOCALAPPDATA = $local
             BOOTSTRAP_TEST_EVENTS = (Join-Path $root 'events.log'); BOOTSTRAP_TEST_FLAG = 'set'
-            BOOTSTRAP_TEST_DEVICE_ID = $deviceId; GH_TELEMETRY = 'caller'; GH_NO_UPDATE_NOTIFIER = 'caller' } {
+            BOOTSTRAP_TEST_DEVICE_ID = $deviceId; GH_TELEMETRY = 'caller'; GH_NO_UPDATE_NOTIFIER = 'caller'
+            BOOTSTRAP_TEST_TLDR_PAGES = $pages; TLDR_AUTO_UPDATE_DISABLED = $null } {
             Assert-Equal (Get-BootstrapToolVersion -Path (Join-Path $bin 'gh.ps1') -Flag '--version') '2.81.0' 'gh version'
             Assert-True (-not (Test-Path -LiteralPath $deviceId)) 'gh --version wrote its telemetry device id'
             Assert-Equal $env:GH_TELEMETRY 'caller' 'the caller GH_TELEMETRY was not restored'
             Assert-Equal $env:GH_NO_UPDATE_NOTIFIER 'caller' 'the caller GH_NO_UPDATE_NOTIFIER was not restored'
+            Assert-Equal (Get-BootstrapToolVersion -Path (Join-Path $bin 'tldr.ps1') -Flag '--version') '1.6.1' 'tldr version'
+            Assert-True (-not (Test-Path -LiteralPath $pages)) 'tldr --version downloaded its pages archive'
+            # Use-Environment's $null leaves an empty variable off Windows.
+            Assert-True (-not $env:TLDR_AUTO_UPDATE_DISABLED) 'an unset TLDR_AUTO_UPDATE_DISABLED was left set'
             Remove-Item -LiteralPath Env:GH_TELEMETRY
             [void](Get-BootstrapToolVersion -Path (Join-Path $bin 'gh.ps1') -Flag '--version')
             Assert-True (-not (Test-Path -LiteralPath Env:GH_TELEMETRY)) 'an unset GH_TELEMETRY was left set'
@@ -743,6 +755,11 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
         Assert-Equal $written.Sources[0].SourceDetails.Name 'winget' 'source details kept'
         $left = @($written.Sources | ForEach-Object { $_.Packages } | ForEach-Object { $_.PackageIdentifier })
         Assert-Equal ($left -join ',') ($expected -join ',') 'remaining packages in file order'
+        if ($PSVersionTable.PSVersion -ge [version]'7.5') {
+            $date = '"CreationDate"\s*:\s*"([^"]*)"'
+            Assert-Equal ([regex]::Match([IO.File]::ReadAllText($filtered), $date).Groups[1].Value) `
+            ([regex]::Match([IO.File]::ReadAllText($source), $date).Groups[1].Value) 'CreationDate text'
+        }
         Assert-Equal (Write-BootstrapWingetManifest -Path $source -Destination $filtered -Exclude (Get-WingetIds)) 0 'nothing kept'
         Assert-Equal @(([IO.File]::ReadAllText($filtered) | ConvertFrom-Json).Sources).Count 0 'a source without packages dropped'
     }
@@ -1026,8 +1043,18 @@ Write-Output 'gh version 2.81.0 (2025-09-01)'
             Assert-True ($run.Stdout.Contains('Invalid manifest: installers.tsv bat-theme needs an https url')) "pin message: $($run.Stdout)"
         }
         [IO.File]::WriteAllLines($installers, $pinned)
-        [IO.File]::WriteAllText((Join-Path $fixture.Repo 'config/bootstrap/winget.json'), '{"Sources": []}')
+        $wingetFile = Join-Path $fixture.Repo 'config/bootstrap/winget.json'
+        [IO.File]::WriteAllText($wingetFile, '{"Sources": []}')
         Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }) 2 'empty winget.json'
+        # W1-winget's filter walks every source, so a later broken one is a
+        # manifest error too, not a crash during apply.
+        $good = '{"Packages": [{"PackageIdentifier": "Git.Git"}], "SourceDetails": {"Name": "winget"}}'
+        foreach ($later in @('{"SourceDetails": {"Name": "winget"}}', '{"Packages": [{"Id": "Git.Git"}]}', '{"Packages": []}')) {
+            [IO.File]::WriteAllText($wingetFile, "{`"Sources`": [$good, $later]}")
+            $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+            Assert-Exit $run 2 "winget.json with a later source $later"
+            Assert-True ($run.Stdout.Contains('every source needs packages, each with a PackageIdentifier')) "source message: $($run.Stdout)"
+        }
     }
 
     Test-Case 'setup-host -PrintManual prints every HUMAN block, accurate and paste-safe' {

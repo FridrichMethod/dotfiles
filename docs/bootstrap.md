@@ -1648,12 +1648,23 @@ installs it made, so `--no-upgrade` alone would add a second Claude Code or
 Codex next to the one from its own installer. Each package maps to the win
 `tools.tsv` row that a `# alias: TOOL-ID PackageIdentifier` line names (a
 win-only row first). setup-host.ps1 leaves the package out of the import when
-the doctor's own probe for that row reports `ok`: the tool is found with its
-version flag (a Microsoft Store alias stub does not count) and, when the row
-has a floor, at or above it, whoever installed it. A tool below its floor is
-not provided, so its package stays in. The rest goes to winget as a copy of
-`winget.json` in a scratch directory that is removed afterwards; when nothing
-is left out, winget reads `winget.json` itself.
+the doctor's own verdict on that row (`Get-BootstrapToolStatus` in
+`lib/bootstrap.ps1`) is `ok`: the tool is on PATH, whoever installed it, and
+at or above the row's floor. A row with a version flag must print a version,
+so a Microsoft Store alias stub does not count for it; a presence-only row
+(`codex`, `nvim`, `wezterm`, `wt`) takes the first PATH match. The rest goes
+to winget as a copy of `winget.json` in a scratch directory that is removed
+afterwards; when nothing is left out, winget reads `winget.json` itself.
+
+The verdict is the one the doctor gives in the same session. The step is
+`todo` only while a tool is missing; a tool below its floor stays `outdated`
+in the doctor and keeps its package in the import only when another tool
+starts the step (`--no-upgrade` never upgrades a winget install). Probes see
+this process's PATH: a tool installed by hand after the terminal opened is
+not seen, and one from an activated venv or conda environment counts, so run
+setup-host.ps1 from a new terminal with no environment activated. The running
+PowerShell 7 always counts for `Microsoft.PowerShell`, which HW-clone installs
+before the clone.
 
 ### W1-psresources: PowerShell modules
 

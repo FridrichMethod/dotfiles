@@ -169,7 +169,7 @@ GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-al
 git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
 .\doctor.ps1 -Host win        # read-only: what is missing or outdated
-.\setup-host.ps1 -Host win    # a new machine: winget tools, modules, font, bat theme and .venv-sync; prints the HW-* blocks
+.\setup-host.ps1 -Host win    # a new machine: winget tools the doctor does not already find, modules, font, bat theme and .venv-sync; prints the HW-* blocks
 .\setup-sync.ps1              # an existing machine instead: Python 3.11+; isolated environment inside this clone
 .\stow-all.ps1 win            # elevated; add -WhatIf for a dry run
 ```

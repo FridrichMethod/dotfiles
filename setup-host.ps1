@@ -25,10 +25,12 @@
     their step's tiers; W1-setup-sync is core.
 
     W1-winget leaves out each package whose tool the doctor already reports
-    ok, whoever installed it (the package maps to its tools.tsv row through
-    the "# alias: TOOL-ID PackageIdentifier" lines, as Brewfile entries do
-    in setup-host.sh), so winget adds no second copy of a tool that another
-    installer provides, such as Claude Code's and Codex's own installers.
+    ok in this session, whoever installed it (the package maps to its
+    tools.tsv row through the "# alias: TOOL-ID PackageIdentifier" lines, as
+    Brewfile entries do in setup-host.sh), so winget adds no second copy of a
+    tool that another installer provides, such as Claude Code's and Codex's
+    own installers. Probes see this process's PATH, as the doctor run here
+    does; run it from a new terminal after installing tools by hand.
 
     W1-bat-theme checks the file's pinned digest and, when bat is installed,
     its theme cache. A retry reuses a matching file and rebuilds the cache;
@@ -139,24 +141,15 @@ function Get-SetupWingetToolRow {
     return $null
 }
 
-function Test-SetupToolProvided {
-    # True when the doctor reports Row ok (Get-DoctorToolResult): found with
-    # its version flag (a Store alias stub does not count) and, when the row
-    # has a floor, at or above it; an unknown version against a floor fails.
-    param([Parameter(Mandatory)]$Row)
-    $probe = Test-BootstrapTool -Probe $Row.probe -VersionFlag $Row.version_flag
-    if (-not $probe.Found) { return $false }
-    return $Row.floor -ceq '-' -or (Compare-BootstrapVersion $probe.Version $Row.floor) -eq 0
-}
-
 function Get-SetupWingetProvided {
     # The packages of the winget export at Manifest whose tool the doctor
-    # already finds (Test-SetupToolProvided), as Id and Tool, in file order.
+    # reports ok in this session (Get-BootstrapToolStatus, the doctor's own
+    # verdict), as Id and Tool, in file order.
     param([Parameter(Mandatory)][string]$Manifest)
     $sources = ([IO.File]::ReadAllText($Manifest) | ConvertFrom-Json).Sources
     foreach ($id in @($sources | ForEach-Object { $_.Packages } | ForEach-Object { $_.PackageIdentifier })) {
         $row = Get-SetupWingetToolRow $id
-        if ($row -and (Test-SetupToolProvided $row)) { [pscustomobject]@{ Id = $id; Tool = $row.id } }
+        if ($row -and (Get-BootstrapToolStatus $row).Status -ceq 'ok') { [pscustomobject]@{ Id = $id; Tool = $row.id } }
     }
 }
 
@@ -177,7 +170,8 @@ function Invoke-SetupWingetImport {
         if (-not $kept) { return New-BootstrapResult present 'the doctor already finds the tool of every winget package' }
         return Invoke-BootstrapWingetImport -Path $filtered
     }
-    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+    # Never ask, and never skip, under -Confirm or -WhatIf.
+    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue }
 }
 
 function Get-SetupBatThemeRow {
@@ -200,15 +194,23 @@ function Test-SetupBatThemePinned {
 }
 
 function Assert-SetupWingetManifest {
-    # winget import reads the file itself; check only that it is the export
-    # shape with at least one package, so a broken file is exit 2, not 1.
+    # winget import reads the file itself, but W1-winget's filter walks every
+    # source and package: check the export shape (at least one source, each
+    # with packages, each package with a PackageIdentifier), so a broken file
+    # is exit 2, not 1.
     param([Parameter(Mandatory)][string]$Path)
-    try {
-        $manifest = [IO.File]::ReadAllText($Path) | ConvertFrom-Json
-        $count = @($manifest.Sources[0].Packages | Where-Object { $_.PackageIdentifier }).Count
-    }
+    try { $sources = @(([IO.File]::ReadAllText($Path) | ConvertFrom-Json).Sources) }
     catch { throw [IO.InvalidDataException]::new("${Path}: $($_.Exception.Message)") }
-    if (-not $count) { throw [IO.InvalidDataException]::new("${Path}: no PackageIdentifier entries") }
+    if (-not $sources.Count) { throw [IO.InvalidDataException]::new("${Path}: no PackageIdentifier entries") }
+    foreach ($source in $sources) {
+        $packages = @(if ($source.PSObject.Properties['Packages']) { $source.Packages })
+        $named = @($packages | Where-Object {
+                $_.PSObject.Properties['PackageIdentifier'] -and $_.PackageIdentifier -is [string] -and $_.PackageIdentifier
+            })
+        if (-not $packages.Count -or $named.Count -ne $packages.Count) {
+            throw [IO.InvalidDataException]::new("${Path}: every source needs packages, each with a PackageIdentifier")
+        }
+    }
 }
 
 function Get-SetupSyncPythonSpec {
