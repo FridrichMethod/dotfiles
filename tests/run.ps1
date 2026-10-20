@@ -48,6 +48,13 @@ if ($CheckPrerequisites) {
     exit 0
 }
 
+Write-Output '==> test_config_sync.py'
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_config_sync.py') -PathType Leaf)) {
+    throw 'Required configuration backend test suite is missing.'
+}
+& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_config_sync.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Configuration backend tests failed.' }
+
 Write-Output '==> test_ai_integration.py'
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.py') -PathType Leaf)) {
     throw 'Required AI integration test suite is missing.'

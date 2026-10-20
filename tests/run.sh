@@ -80,8 +80,10 @@ tests=(
     test-entrypoints.sh
     terminal.sh
     shell-profile.sh
+    config-sync.sh
     ai-config-sync.sh
     ai-integration.sh
+    codex-config-sync.sh
     fcitx5-profile-sync.sh
     stow-all.sh
     update-hooks.sh
