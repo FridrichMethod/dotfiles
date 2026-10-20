@@ -33,7 +33,8 @@
 .PARAMETER Strict
     Fail if any package, link or portable sync was skipped or warned.
     Successful installations remember the host and applied revision for
-    the login updater. Register the Windows worker once with:
+    the login updater. Register the Windows worker once, from the MSI
+    PowerShell 7 (docs/bootstrap.md HW-clone), with:
       .\scripts\dotfiles-auto-stow.ps1 -Register
 
 .PARAMETER HostDir

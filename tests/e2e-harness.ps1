@@ -208,7 +208,7 @@ function Get-BlockLines {
             "& $(ConvertTo-Quoted (Join-Path $Clone 'stow-all.ps1')) win"
         }
         'HW-auto-stow-task' {
-            'judgment', '# Optional, elevated PowerShell 7: lets the login updater restow without a UAC prompt.',
+            'judgment', '# Optional, elevated PowerShell 7 (the MSI, see HW-clone): lets the login updater restow without a UAC prompt.',
             "& $(ConvertTo-Quoted (Join-Path (Join-Path $Clone 'scripts') 'dotfiles-auto-stow.ps1')) -Register"
         }
         'HW-execution-policy' {

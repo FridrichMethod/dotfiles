@@ -176,7 +176,7 @@ Clone onto NTFS, not into WSL. In Windows PowerShell or Terminal:
 ```powershell
 # Settings > System > For developers > Developer Mode: On (HW-clone)
 winget install --id Git.Git -e
-winget install --id Microsoft.PowerShell -e
+winget install --id Microsoft.PowerShell -e --source winget --installer-type wix   # the MSI (HW-clone)
 # open a new PowerShell 7 (pwsh) window, then:
 git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
@@ -1614,9 +1614,19 @@ symlinks.
 
 - **Check:** `git -C $HOME\dotfiles config core.symlinks; (Get-Item $HOME\dotfiles\common\pymol\.pymolrc).LinkType`
 - **Install:** turn on Developer Mode (Settings > System > For developers), then
-  `winget install --id Git.Git -e`, `winget install --id Microsoft.PowerShell -e`,
+  `winget install --id Git.Git -e`,
+  `winget install --id Microsoft.PowerShell -e --source winget --installer-type wix`,
   and in a new `pwsh` window
   `git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles`.
+  `--installer-type wix` selects the MSI, in `Program Files\PowerShell\7`.
+  Since PowerShell 7.6.0 winget installs the MSIX package by default, whose
+  `$PSHOME` under `Program Files\WindowsApps` is named for its version and
+  replaced by each update. HW-auto-stow-task starts pwsh by that path, so it
+  refuses the MSIX package; remove one already installed with
+  `Get-AppxPackage Microsoft.PowerShell | Remove-AppxPackage`. PowerShell 7.7
+  ships only the MSIX package; 7.6 is the LTS release. Once 7.7 is the newest
+  release, add `--version` with the newest 7.6 one
+  (`winget show --id Microsoft.PowerShell -e --versions` lists them).
   Clone onto NTFS, never into a WSL distribution. An existing clone made
   without symlinks: `git -C $HOME\dotfiles config core.symlinks true`, then
   `git -C $HOME\dotfiles checkout -- common/pymol common/claude/.claude/dotfiles common/claude/.local common/claude/.oh-my-zsh common/codex/.local common/codex/.oh-my-zsh`
@@ -1753,10 +1763,18 @@ by processes that enforce RedirectionGuard, such as current Windows OpenSSH
 Optional. The login updater can restow after a pull through a current-user task
 that runs this checkout's scripts with highest privileges.
 
-- **Check:** `Get-ScheduledTask -TaskName 'Dotfiles-Restow-*' -ErrorAction Ignore`
+- **Check:** from `$HOME\dotfiles`:
+  `. .\scripts\dotfiles-auto-stow.ps1; Get-DotfilesTaskStatus (Get-DotfilesTaskName $PWD.Path)`
+  (this checkout's task only)
 - **Install:** in an elevated PowerShell 7: `.\scripts\dotfiles-auto-stow.ps1 -Register`
-  (the block names it by its full path, as for HW-stow)
-- **Verify:** the check lists one task.
+  (the block names it by its full path, as for HW-stow). The task starts the
+  registering pwsh by path, so `-Register` refuses a pwsh whose folder is
+  named for its version (the MSIX package, a dotnet tool, a versioned zip),
+  which an update replaces; register from the MSI that HW-clone installs.
+  The login hook refuses to start a task whose program is gone and warns
+  about one in a WindowsApps folder; setup-host counts neither as done.
+- **Verify:** the check prints `State` `Ok` and, as `Program`, the
+  `pwsh.exe` in `Program Files\PowerShell\7`.
 - **Human:** yes (judgment: it grants a checkout script standing elevation)
 
 ### HW-ssh-agent: ssh-agent service

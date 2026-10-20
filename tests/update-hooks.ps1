@@ -95,6 +95,7 @@ function Test-Case {
     $global:DotfilesTestElevated = $true
     $global:DotfilesTestFailGitCommand = ''
     $global:DotfilesTestFailTaskStart = $false
+    $global:DotfilesTestTaskProgram = $global:DotfilesTestGitExecutable
     $global:DotfilesTestGitCalls = [Collections.Generic.List[string]]::new()
     $global:DotfilesTestTaskCalls = [Collections.Generic.List[string]]::new()
     foreach ($environmentName in @('DOTFILES_HOST', 'DOTFILES_AUTO_STOW', 'DOTFILES_AUTO_UPDATE',
@@ -141,6 +142,14 @@ try {
         param([string]$TaskName)
         $global:DotfilesTestTaskCalls.Add($TaskName)
         if ($global:DotfilesTestFailTaskStart) { throw 'Injected task startup failure.' }
+    }
+    # The registered task starts DotfilesTestTaskProgram (an existing file by
+    # default); $null stands for no registered task.
+    function Get-ScheduledTask {
+        [CmdletBinding()]
+        param([string]$TaskName)
+        if ($null -eq $global:DotfilesTestTaskProgram) { return }
+        [pscustomobject]@{ TaskName = $TaskName; Actions = @([pscustomobject]@{ Execute = $global:DotfilesTestTaskProgram }) }
     }
 
     Test-Case 'pull applies new revision once' {
@@ -466,10 +475,105 @@ try {
         function New-ScheduledTaskPrincipal { throw 'WhatIf attempted to create a principal.' }
         function New-ScheduledTaskSettingsSet { throw 'WhatIf attempted to create settings.' }
         function Register-ScheduledTask { throw 'WhatIf attempted to register a task.' }
+        # The pwsh running this suite may be any package; the next case covers
+        # the real check. This one proves what the branch passes and uses.
+        function Get-DotfilesTaskShell {
+            param([string]$PowerShellHome, [string]$Version)
+            $global:DotfilesTestShellQuery = @($PowerShellHome, $Version)
+            return 'X:\stable\pwsh.exe'
+        }
         $preview = [scriptblock]::Create('[CmdletBinding(SupportsShouldProcess)]param([string]$RegistrationRoot) $DotfilesRepoRoot = $RegistrationRoot; $Register = $true; $Apply = $false; ' + $registration[0].Extent.Text)
         & $preview -RegistrationRoot $sourceRoot -WhatIf
         Assert-True ($registration[0].Extent.Text -match '-LogonType Interactive -RunLevel Highest') 'Registration principal lost interactive highest-privilege contract.'
         Assert-True ($registration[0].Extent.Text -match '-MultipleInstances IgnoreNew') 'Task overlap guard missing.'
+        $running = $PSVersionTable.PSVersion
+        Assert-Equal $PSHOME $global:DotfilesTestShellQuery[0] 'Registration did not check its own $PSHOME.'
+        Assert-Equal ('{0}.{1}.{2}' -f $running.Major, $running.Minor, $running.Patch) $global:DotfilesTestShellQuery[1] 'Registration did not check its own version.'
+        function New-ScheduledTaskAction {
+            param([string]$Execute, [string]$Argument, [string]$WorkingDirectory)
+            $global:DotfilesTestTaskExecute = $Execute
+            throw 'Recorded action.'
+        }
+        Assert-Throws { & $preview -RegistrationRoot $sourceRoot } '^Recorded action\.$'
+        Assert-Equal 'X:\stable\pwsh.exe' $global:DotfilesTestTaskExecute 'Task does not start the checked pwsh.'
+        # A refused pwsh stops registration before the elevation check and
+        # ShouldProcess, so an ordinary shell and -WhatIf report it too, and
+        # before any Scheduled Tasks command.
+        function Get-DotfilesTaskShell { throw 'Injected refusal.' }
+        Assert-Throws { & $preview -RegistrationRoot $sourceRoot -WhatIf } '^Injected refusal\.$'
+        Assert-Throws { & $preview -RegistrationRoot $sourceRoot } '^Injected refusal\.$'
+        $global:DotfilesTestElevated = $false
+        Assert-Throws { & $preview -RegistrationRoot $sourceRoot } '^Injected refusal\.$'
+    }
+    Test-Case 'task shell refuses a pwsh whose folder is named for its version' {
+        # Windows paths as strings: off Windows no C: drive exists, and the
+        # helper must not need one.
+        $separator = [IO.Path]::DirectorySeparatorChar
+        $msi = 'C:\Program Files\PowerShell\7'
+        Assert-Equal "$msi${separator}pwsh.exe" (Get-DotfilesTaskShell $msi '7.6.7') 'MSI pwsh not used by path.'
+        $msix = 'C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe'
+        Assert-Throws { Get-DotfilesTaskShell $msix '7.6.7' } 'named for its version.*Remove-AppxPackage.*--installer-type wix'
+        Assert-Throws { Get-DotfilesTaskShell $msix.ToLowerInvariant().Replace('\', '/') '7.6.7' } 'named for its version'
+        # Another volume, and a WindowsApps segment alone.
+        Assert-Throws { Get-DotfilesTaskShell 'D:\WindowsApps\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\' '9.9.9' } 'named for its version'
+        Assert-Throws { Get-DotfilesTaskShell 'D:\tools\.store\powershell\7.6.7\powershell\7.6.7\tools\net9.0\any\win' '7.6.7' } 'named for its version'
+        Assert-Throws { Get-DotfilesTaskShell 'D:\tools\PowerShell-7.6.6' '7.6.6' } 'named for its version'
+        $sibling = 'C:\Program Files\WindowsAppsTools\PowerShell'
+        Assert-Equal "$sibling${separator}pwsh.exe" (Get-DotfilesTaskShell $sibling '7.6.7') 'A sibling of WindowsApps was refused.'
+        # A zip replaced in place keeps its path, whatever the folder says.
+        $zip = 'D:\tools\PowerShell-7.6.6'
+        Assert-Equal "$zip${separator}pwsh.exe" (Get-DotfilesTaskShell $zip '7.6.7') 'A folder named for another version was refused.'
+    }
+    Test-Case 'dispatch refuses a task whose program is gone and retries' {
+        $fixture = New-Fixture
+        $global:DotfilesTestElevated = $false
+        $global:DotfilesTestTaskProgram = Join-Path (Join-Path $testRoot 'removed pwsh') 'pwsh.exe'
+        Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'removed pwsh.*no longer exists.*-Register again'
+        Assert-Equal 0 $global:DotfilesTestTaskCalls.Count 'Task with a missing program was started.'
+        Assert-Equal '' (Get-AppliedHead $fixture) 'Refused dispatch acknowledged HEAD.'
+        $global:DotfilesTestTaskProgram = ''
+        Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'names no program to start.*-Register again'
+        Assert-Equal 0 $global:DotfilesTestTaskCalls.Count 'Task naming no program was started.'
+        # Re-registered; quotes around the program are accepted.
+        $global:DotfilesTestTaskProgram = '"' + $global:DotfilesTestGitExecutable + '"'
+        Invoke-DotfilesUpdate $fixture.Repo
+        Assert-Equal 1 $global:DotfilesTestTaskCalls.Count 'Dispatch not retried after re-registration.'
+    }
+    Test-Case 'dispatch warns about a task in a WindowsApps folder but starts it' {
+        $fixture = New-Fixture
+        $global:DotfilesTestElevated = $false
+        $package = Join-Path (Join-Path $testRoot 'WindowsApps') 'Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe'
+        [void][IO.Directory]::CreateDirectory($package)
+        $global:DotfilesTestTaskProgram = Join-Path $package 'pwsh.exe'
+        [IO.File]::WriteAllText($global:DotfilesTestTaskProgram, '')
+        $warnings = @(Invoke-DotfilesUpdate $fixture.Repo *>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match 'next pwsh update removes' })
+        Assert-Equal 1 $warnings.Count 'Versioned task program not warned about.'
+        Assert-True ($warnings[0] -match '\[warn\].*-Register again') "Warning lacks the fix: $($warnings[0])"
+        Assert-Equal 1 $global:DotfilesTestTaskCalls.Count 'Still-working task was not started.'
+    }
+    Test-Case 'task status separates missing, empty, gone, versioned and working programs' {
+        $global:DotfilesTestTaskProgram = $null
+        Assert-Equal 'Missing' (Get-DotfilesTaskStatus 'any').State 'No task.'
+        $global:DotfilesTestTaskProgram = ''
+        Assert-Equal 'NoProgram' (Get-DotfilesTaskStatus 'any').State 'Empty Execute.'
+        $global:DotfilesTestTaskProgram = Join-Path (Join-Path $testRoot 'removed pwsh') 'pwsh.exe'
+        Assert-Equal 'Gone' (Get-DotfilesTaskStatus 'any').State 'Removed program.'
+        # Task Scheduler resolves a bare name on PATH; it cannot be tested here.
+        $global:DotfilesTestTaskProgram = 'pwsh.exe'
+        Assert-Equal 'Ok' (Get-DotfilesTaskStatus 'any').State 'Bare program name.'
+        $global:DotfilesTestTaskProgram = '"' + $global:DotfilesTestGitExecutable + '"'
+        $status = Get-DotfilesTaskStatus 'any'
+        Assert-Equal 'Ok' $status.State 'Quoted existing program.'
+        Assert-Equal $global:DotfilesTestGitExecutable $status.Program 'Quotes kept in the program.'
+        $package = Join-Path (Join-Path (Join-Path $testRoot 'status') 'WindowsApps') 'Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe'
+        [void][IO.Directory]::CreateDirectory($package)
+        $global:DotfilesTestTaskProgram = Join-Path $package 'pwsh.exe'
+        [IO.File]::WriteAllText($global:DotfilesTestTaskProgram, '')
+        Assert-Equal 'Versioned' (Get-DotfilesTaskStatus 'any').State 'Program in a WindowsApps folder.'
+        # setup-host counts only a working task as done; it runs only on
+        # Windows against the real Task Scheduler, so pin its one call here.
+        $setupHost = [IO.File]::ReadAllText((Join-Path $sourceRoot 'setup-host.ps1'))
+        Assert-True ($setupHost.Contains("return (Get-DotfilesTaskStatus (Get-DotfilesTaskName `$RepoRoot)).State -ceq 'Ok'")) 'setup-host HW-auto-stow-task check does not require a working task.'
     }
     Test-Case 'worker branch retains all-stream log capture without changing caller preferences' {
         $fixture = New-Fixture

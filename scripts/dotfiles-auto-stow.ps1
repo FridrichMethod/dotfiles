@@ -10,6 +10,10 @@
     installer).
     The task executes this checkout's scripts with administrator privileges.
     Registration is explicit; the login hook never prompts for elevation.
+    The task starts the registering pwsh by path, so -Register refuses a pwsh
+    whose folder is named for its version (the MSIX package, a dotnet tool or
+    a versioned zip), and the login hook refuses a task whose program is gone;
+    register from the MSI that docs/bootstrap.md HW-clone installs.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param([switch]$Register, [switch]$Apply)
@@ -63,6 +67,54 @@ function Test-DotfilesElevated {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     return ([Security.Principal.WindowsPrincipal]$identity).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# The task keeps the registering pwsh's path, so that path must survive
+# upgrades. The MSI's $PSHOME (Program Files\PowerShell\7) does. A folder named
+# for its version does not: the MSIX package's under a WindowsApps folder on
+# any volume, a dotnet tool's store and a versioned zip. An update replaces it,
+# and the task would later start a program that is gone. Plain string tests
+# and Path.Combine, which unlike Join-Path never resolves a drive, keep this
+# valid off Windows, where the tests also run it. Without a version only the
+# WindowsApps segment counts, for a path whose version is unknown.
+function Test-DotfilesVersionedFolder {
+    param([Parameter(Mandatory)][string]$Path, [AllowEmptyString()][string]$Version = '')
+    $folder = $Path.Replace('/', '\').TrimEnd('\')
+    return (@($folder.Split('\')) -contains 'WindowsApps') -or
+        ($Version -and $folder.IndexOf($Version, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+}
+
+function Get-DotfilesTaskShell {
+    param(
+        [Parameter(Mandatory)][string]$PowerShellHome,
+        [Parameter(Mandatory)][string]$Version
+    )
+    if (Test-DotfilesVersionedFolder $PowerShellHome $Version) {
+        throw ("This pwsh runs from a folder named for its version ($PowerShellHome), which an update replaces. " +
+            'Register from the MSI in Program Files\PowerShell\7 instead: remove an MSIX PowerShell ' +
+            '(Get-AppxPackage Microsoft.PowerShell | Remove-AppxPackage), then run ' +
+            'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix (docs/bootstrap.md HW-clone).')
+    }
+    return [IO.Path]::Combine($PowerShellHome, 'pwsh.exe')
+}
+
+# How a registered task's program stands: Missing (no such task), NoProgram,
+# Gone, Versioned (it still runs, but from a WindowsApps folder an update will
+# remove) or Ok. Start-ScheduledTask accepts a task whose program is gone, so
+# the login hook and setup-host ask here first. Task Scheduler finds a bare
+# program name on PATH, so only a full path is tested.
+function Get-DotfilesTaskStatus {
+    param([Parameter(Mandatory)][string]$TaskName)
+    $task = @(Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) | Select-Object -First 1
+    if ($null -eq $task) { return [pscustomobject]@{ State = 'Missing'; Program = '' } }
+    $execute = @($task.Actions | ForEach-Object { $_.Execute }) | Select-Object -First 1
+    $program = [Environment]::ExpandEnvironmentVariables(([string]$execute).Trim().Trim('"'))
+    $state = if (-not $program) { 'NoProgram' }
+    elseif (-not [IO.Path]::IsPathRooted($program)) { 'Ok' }
+    elseif (-not (Test-Path -LiteralPath $program -PathType Leaf)) { 'Gone' }
+    elseif (Test-DotfilesVersionedFolder $program) { 'Versioned' }
+    else { 'Ok' }
+    return [pscustomobject]@{ State = $state; Program = $program }
 }
 
 function Read-DotfilesState {
@@ -269,12 +321,20 @@ function Invoke-DotfilesUpdate {
         if (Test-DotfilesElevated) { Invoke-DotfilesApply $Repo }
         else {
             $taskName = Get-DotfilesTaskName $Repo
+            # A pwsh that an update or uninstall removed would fail unseen.
+            $status = Get-DotfilesTaskStatus $taskName
+            $again = "Run .\scripts\dotfiles-auto-stow.ps1 -Register again from elevated PowerShell 7 (the MSI, see docs/bootstrap.md HW-clone) in $Repo."
+            switch ($status.State) {
+                'NoProgram' { throw "$taskName names no program to start. $again" }
+                'Gone' { throw "$taskName starts '$($status.Program)', which no longer exists. $again" }
+                'Versioned' { Write-DotfilesLog warn "$taskName starts '$($status.Program)' from a folder the next pwsh update removes. $again" }
+            }
             try {
                 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
                 Write-DotfilesLog info "Restow queued. Log: $(Join-Path $directory 'restow.log')"
             }
             catch {
-                throw "Cannot start $taskName. Run .\scripts\dotfiles-auto-stow.ps1 -Register once from elevated PowerShell in $Repo. $($_.Exception.Message)"
+                throw "Cannot start $taskName. Run .\scripts\dotfiles-auto-stow.ps1 -Register once from elevated PowerShell 7 (the MSI, see docs/bootstrap.md HW-clone) in $Repo. $($_.Exception.Message)"
             }
         }
     }
@@ -282,11 +342,14 @@ function Invoke-DotfilesUpdate {
 
 if ($Register -and $Apply) { throw 'Choose either -Register or -Apply.' }
 if ($Register) {
+    # Checked first: elevating cannot help a pwsh that can never register.
+    $version = $PSVersionTable.PSVersion
+    $taskShell = Get-DotfilesTaskShell $PSHOME ('{0}.{1}.{2}' -f $version.Major, $version.Minor, $version.Patch)
     if (-not (Test-DotfilesElevated)) { throw 'Register from elevated PowerShell 7+.' }
     $repo = $DotfilesRepoRoot
     $taskName = Get-DotfilesTaskName $repo
     if ($PSCmdlet.ShouldProcess($taskName, 'Register current-user task that runs checkout scripts with highest privileges')) {
-        $action = New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'pwsh.exe') `
+        $action = New-ScheduledTaskAction -Execute $taskShell `
             -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "{0}" -Apply' -f $PSCommandPath) `
             -WorkingDirectory $repo
         $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `

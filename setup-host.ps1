@@ -342,8 +342,10 @@ function Test-SetupHumanDone {
             if (-not $IsWindows -or -not (Test-Path -LiteralPath $autoStow -PathType Leaf)) { return $false }
             # Without switches the script only defines functions, here in
             # this function's scope; its task name is keyed to this checkout.
+            # A task whose pwsh an update or uninstall removed, or will, is
+            # not done.
             . $autoStow
-            return [bool](Get-ScheduledTask -TaskName (Get-DotfilesTaskName $RepoRoot) -ErrorAction SilentlyContinue)
+            return (Get-DotfilesTaskStatus (Get-DotfilesTaskName $RepoRoot)).State -ceq 'Ok'
         }
         'HW-execution-policy' {
             if (-not $IsWindows) { return $false }
@@ -394,7 +396,7 @@ function Get-SetupHumanBlock {
         }
         'HW-auto-stow-task' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# Optional, elevated PowerShell 7: lets the login updater restow without a UAC prompt.'
+                    '# Optional, elevated PowerShell 7 (the MSI, see HW-clone): lets the login updater restow without a UAC prompt.'
                     "& $(ConvertTo-SetupQuoted (Join-Path (Join-Path $RepoRoot 'scripts') 'dotfiles-auto-stow.ps1')) -Register"
                 ) }
         }
