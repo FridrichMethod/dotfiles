@@ -19,12 +19,15 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
 # that stay in dotfiles as regular files, the Windows allowlist and the bump
 # workflow. With the submodule initialized, check_real proves that every link
 # resolves to the kit file the map names, tracked with its mode at the
-# gitlink, and that the kit carries what dotfiles relies on; the docs path
-# that --help prints must be a file of the kit. The real stow-all.sh then
-# stows copies into temporary homes with the checkout full, emptied and
-# restored. --real requires the submodule at the gitlink the index records and
-# stops after those checks (the bump Action's guard). --ci turns every SKIP
-# into a failure.
+# gitlink, and that the kit carries what dotfiles relies on and reads no knob
+# the test entry points leave set; the docs path that --help prints must be a
+# file of the kit. Fixture superprojects then show check_real refusing a kit
+# commit with a nested submodule, a .gitmodules or an unlisted knob, and the
+# real stow-all.sh stows copies into temporary homes with the checkout full,
+# emptied and restored. --real requires the submodule at the gitlink the index
+# records and stops after the real checks (the bump Action's gate 3, before
+# --ci). --ci turns every SKIP into a failure. Sourced, as by
+# tests/test-entrypoints.sh, it only defines its checks.
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -138,12 +141,18 @@ check_hook_index() {
     )
 }
 
-fixture_git() {
+# in_fixture_env CMD...: CMD against a temporary repository, without the
+# caller's git environment or the operator's git config.
+in_fixture_env() {
     (
         unset_git_env
         export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-        git -c user.name=fixture -c user.email=fixture@example.invalid "$@"
+        "$@"
     )
+}
+
+fixture_git() {
+    in_fixture_env git -c user.name=fixture -c user.email=fixture@example.invalid "$@"
 }
 
 # link_text PATH KIT_PATH: the text of the link at common/PACKAGE/REST to the
@@ -295,55 +304,169 @@ check_windows() {
     expect_line "$WINDOWS_PACKAGES" "$REPO_ROOT/stow-all.ps1"
 }
 
-# line_of TEXT FILE: the number of the first line of FILE holding TEXT, or
-# empty.
+# line_of TEXT FILE: the number of the first line of FILE that is exactly
+# TEXT, or empty.
 line_of() {
-    grep -m 1 -n -F -- "$1" "$2" | cut -d: -f1 || true
+    grep -m 1 -n -F -x -- "$1" "$2" | cut -d: -f1 || true
 }
 
 # A bump changes code that runs in every Codex and Claude session at the next
-# login, so the Action runs only by hand, stages the bump, refuses it unless
-# delivery and the target commit's own CI both hold, and pushes only a review
-# branch, never main.
+# login, and the Action's own push to main starts no ci.yml run. So it runs
+# daily and by hand, one run at a time, on main; a dispatch runs the workflow
+# file of the ref it names, so the job runs only for main, and the
+# concurrency group is keyed on the ref, so such a skipped run cannot
+# displace a pending main run. It reads the release tag of the pin and takes
+# only the newest release with the same MAJOR.MINOR, then refuses it unless
+# the release is on the kit's main ahead of the pin, every GitHub Actions run
+# of the kit's three CI jobs on it passed, delivery holds at the staged
+# gitlink and in stowed temporary homes, and the real-settings suite passes
+# with GNU Stow and zsh installed. Only then does it commit and make its one
+# push, to main. Of the job's own git commands only that push gets the
+# token; actions/checkout used it for its fetch and did not persist it, so
+# the release's code finds none, and setup-node takes it through its default
+# input, both before the release is staged. The here-document lists lines
+# that must appear exactly and in this order, so deleting or reordering any
+# gate fails.
+# Last, the whole file must equal its reviewed copy in tests/fixtures, both
+# regular files tracked as 100644 (a link would compare a file with itself),
+# so any other edit (an env mapping, a step output, a shell or an inserted
+# line) fails until that copy changes in the same commit.
 check_automation() {
-    local workflow=$REPO_ROOT/.github/workflows/update-coding-agent-kit-submodule.yml triggers stage guard ci commit push
+    local workflow=$REPO_ROOT/.github/workflows/update-coding-agent-kit-submodule.yml triggers cron sibling line number
+    local reviewed=$REPO_ROOT/tests/fixtures/update-coding-agent-kit-submodule.yml previous=0 steps guarded tokens file
     [[ -f "$workflow" ]] || fail "missing ${workflow#"$REPO_ROOT"/}"
     triggers=$(sed -n '/^on:/,/^[^[:space:]#]/{/^  [^[:space:]#]/p;}' "$workflow")
-    [[ "$triggers" == '  workflow_dispatch:' ]] ||
-        fail "the coding-agent-kit bump must run on workflow_dispatch only: $triggers"
-    ! grep -Eq '^[[:space:]]*schedule:' "$workflow" || fail 'the coding-agent-kit bump must not run on a schedule'
-    expect_line "          git submodule update --remote --merge -- $SUBMODULE" "$workflow"
-    stage=$(line_of "git add $SUBMODULE" "$workflow")
-    guard=$(line_of 'bash tests/coding-agent-kit-delivery.sh --real' "$workflow")
-    ci=$(line_of 'repos/FridrichMethod/coding-agent-kit/commits/$SHA/check-runs' "$workflow")
-    commit=$(line_of 'git commit -m "chore(deps): update coding-agent-kit submodule to latest"' "$workflow")
-    push=$(line_of 'git push origin "HEAD:refs/heads/$branch"' "$workflow")
-    [[ -n "$stage" && -n "$guard" && "$stage" -lt "$guard" ]] ||
-        fail 'the Action must stage its bump before --real checks the recorded gitlink'
-    [[ -n "$ci" && "$guard" -lt "$ci" ]] ||
-        fail 'the Action must require the check runs of the target commit after --real'
-    [[ -n "$commit" && "$ci" -lt "$commit" ]] ||
-        fail 'the Action must commit "chore(deps): update coding-agent-kit submodule to latest" after its guards'
-    [[ -n "$push" && "$commit" -lt "$push" ]] || fail 'the Action must push HEAD:refs/heads/$branch after committing'
-    expect_grep 'branch="bump/coding-agent-kit-' "$workflow"
-    [[ "$(grep -c 'git push' "$workflow")" == 1 ]] || fail 'the Action may push only its review branch'
-    ! grep -Eq 'git push.*main|refs/heads/main' "$workflow" || fail 'the Action must never push main'
+    [[ "$triggers" == $'  schedule:\n  workflow_dispatch:' ]] ||
+        fail "the coding-agent-kit bump must run on schedule and workflow_dispatch only: $triggers"
+    cron='    - cron: "17 5 * * *"'
+    expect_line "$cron" "$workflow"
+    for sibling in update-pymolscripts-submodule.yml update-sherlock-kit-submodule.yml; do
+        ! grep -Fxq -- "$cron" "$REPO_ROOT/.github/workflows/$sibling" ||
+            fail "the coding-agent-kit bump must not start with $sibling and race its push to main"
+    done
+    for line in 'concurrency:' '  group: update-coding-agent-kit-submodule-${{ github.ref }}' \
+        '  cancel-in-progress: false' \
+        "    if: github.ref == 'refs/heads/main'" '        shell: bash' '          ref: main' \
+        '          persist-credentials: false'; do
+        expect_line "$line" "$workflow"
+    done
+    # The workflow itself names the token only for gate 2's read and the
+    # push, and sets no action's token input (both take it by default).
+    tokens=$(grep -c -F 'secrets.GITHUB_TOKEN' "$workflow" || true)
+    [[ "$tokens" == 2 ]] && grep -Fxq -- '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' "$workflow" &&
+        grep -Fxq -- '          TOKEN: ${{ secrets.GITHUB_TOKEN }}' "$workflow" &&
+        ! grep -Eq 'github\.token|^ +token:' "$workflow" ||
+        fail 'the coding-agent-kit bump must pass the token only to gate 2 and the push step'
+    while IFS= read -r line; do
+        number=$(line_of "$line" "$workflow")
+        [[ -n "$number" && "$number" -gt "$previous" ]] ||
+            fail "the coding-agent-kit bump lacks this exact line after line $previous: $line"
+        previous=$number
+    done <<'EOF'
+          git submodule update --init -- common/codex/coding-agent-kit
+          pinned_sha=$(git rev-parse HEAD:common/codex/coding-agent-kit)
+          git -C common/codex/coding-agent-kit fetch --quiet --tags origin +refs/heads/main:refs/remotes/origin/main
+            { grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' || true; } | sort -V
+          pinned=$(git -C common/codex/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
+          if [ -z "$pinned" ]; then
+            echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed pull request"
+            exit 1
+          candidate=$(git -C common/codex/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
+          newest=$(git -C common/codex/coding-agent-kit tag --list | releases | tail -n 1)
+          if [ "${newest%.*}" != "${pinned%.*}" ]; then
+          if [ "$candidate" = "$pinned" ]; then
+            echo "changed=0" >>"$GITHUB_OUTPUT"
+            exit 0
+            echo "changed=1"
+          git -C common/codex/coding-agent-kit merge-base --is-ancestor "$SHA" refs/remotes/origin/main ||
+            { echo "::error::coding-agent-kit $TAG ($SHA) is not on its main"; exit 1; }
+          git -C common/codex/coding-agent-kit merge-base --is-ancestor "$PINNED_SHA" "$SHA" ||
+            { echo "::error::coding-agent-kit $TAG ($SHA) does not descend from the pinned $PINNED_SHA"; exit 1; }
+          missing=$(gh api "repos/FridrichMethod/coding-agent-kit/commits/$SHA/check-runs?per_page=100" \
+            --jq '["Linux behavior and lint", "macOS system Bash behavior", "Windows native PowerShell behavior"] - ([.check_runs[] | select(.app.slug == "github-actions") | .name] - [.check_runs[] | select(.app.slug == "github-actions" and (.status != "completed" or .conclusion != "success")) | .name]) | join(", ")')
+          [ -z "$missing" ] ||
+            { echo "::error::coding-agent-kit CI is not green on $TAG ($SHA): $missing"; exit 1; }
+      - uses: actions/setup-node@v6
+          node-version: "24"
+          git -C common/codex/coding-agent-kit checkout --quiet --detach "$SHA"
+          git add common/codex/coding-agent-kit
+          sudo apt-get install --yes --no-install-recommends stow zsh
+          ./setup-sync.sh
+          bash tests/coding-agent-kit-delivery.sh --real
+          bash tests/coding-agent-kit-delivery.sh --ci
+        run: bash tests/ai-integration.sh
+          [ "$(git diff --cached --name-only)" = common/codex/coding-agent-kit ] ||
+          git commit -m "chore(deps): update coding-agent-kit submodule to $TAG"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push origin HEAD:main
+EOF
+    # Every step after the checkout and the pick runs exactly when the pick
+    # found a newer release, and none may fail without failing the run; the
+    # only other condition is the job's, on main.
+    steps=$(grep -c '^      - ' "$workflow" || true)
+    guarded=$(grep -c -F -x "        if: steps.pick.outputs.changed == '1'" "$workflow" || true)
+    [[ "$guarded" == $((steps - 2)) && "$(grep -c -E '^[[:space:]]*if:' "$workflow")" == $((guarded + 1)) ]] ||
+        fail "every step after the pick must run if and only if steps.pick.outputs.changed == '1'"
+    ! grep -q 'continue-on-error' "$workflow" || fail 'no step of the coding-agent-kit bump may continue on error'
+    [[ "$(grep -c -E '^[[:space:]]*git .*[[:space:]]push[[:space:]]' "$workflow")" == 1 ]] ||
+        fail 'the Action must push once, to main'
+    ! grep -Eq 'bump/|branch=|/compare/' "$workflow" || fail 'the Action must leave no review branch'
+    # A main that moved fails the push; a rebase would skip gate 4 on it.
+    ! grep -Eq '^[[:space:]]*git .*[[:space:]](rebase|pull)([[:space:]]|$)' "$workflow" ||
+        fail 'the Action must never rebase onto or pull a main that moved'
+    expect_grep 'Pushes made with GITHUB_TOKEN do not trigger ci.yml' "$workflow"
+    [[ -f "$reviewed" ]] || fail "missing ${reviewed#"$REPO_ROOT"/}"
+    for file in "$workflow" "$reviewed"; do
+        [[ ! -L "$file" && "$(index_mode "${file#"$REPO_ROOT"/}")" == 100644 ]] ||
+            fail "${file#"$REPO_ROOT"/} must be a regular file tracked as 100644"
+    done
+    if ! cmp -s "$reviewed" "$workflow"; then
+        diff -u "$reviewed" "$workflow" >&2 || true
+        fail "${workflow#"$REPO_ROOT"/} differs from its reviewed copy ${reviewed#"$REPO_ROOT"/}; change both in the same commit"
+    fi
+}
+
+# check_kit_knobs ROOT: every CODING_AGENT_KIT_* (or _CODING_AGENT_KIT_*) name
+# in the kit's code at the gitlink ROOT's index records, outside the kit's own
+# tests/, docs/, .github/ and Markdown, is on the unset list of
+# ROOT/tests/run.sh, which every test entry point carries
+# (tests/test-entrypoints.sh), so a caller's kit knob never reaches a suite.
+# A name embedded in a longer identifier does not count. check_real runs it,
+# so the bump Action's gate 3 refuses a release that reads a new knob, and
+# tests/test-entrypoints.sh calls it for the checked-out submodule.
+check_kit_knobs() {
+    local root=$1 checkout=$1/$SUBMODULE recorded knobs names knob
+    recorded=$(git -C "$root" ls-files -s -- "$SUBMODULE" | cut -d' ' -f2)
+    checkout_git cat-file -e "$recorded^{commit}" 2>/dev/null ||
+        fail "the $SUBMODULE checkout lacks the recorded gitlink $recorded; run git submodule update"
+    knobs=$(sed -n '/^unset DOTFILES_AUTO_UPDATE /,/[^\\]$/p' "$root/tests/run.sh" | tr -d '\\' | tr -s ' ' '\n')
+    [[ -n "$knobs" ]] || fail 'tests/run.sh has no unset statement for the dotfiles knobs'
+    names=$(checkout_git -c grep.lineNumber=false -c grep.column=false \
+        grep -I -h -o --no-color -E '(^|[^A-Za-z0-9_])_?CODING_AGENT_KIT_[A-Z_]+' "$recorded" \
+        -- ':!tests' ':!docs' ':!.github' ':!*.md') ||
+        fail "git grep found no CODING_AGENT_KIT_* name in coding-agent-kit $recorded"
+    for knob in $(sed -E 's/^[^A-Z_]//' <<<"$names" | LC_ALL=C sort -u); do
+        grep -Fxq -- "$knob" <<<"$knobs" ||
+            fail "coding-agent-kit $recorded reads $knob, which tests/run.sh and the other test entry points do not unset; bump it through a reviewed pull request that adds it to every entry point"
+    done
 }
 
 # check_real ROOT: the submodule of ROOT is checked out at the gitlink the
-# index records, every link resolves to a regular file at its kit path of the
-# map, which that commit tracks with its mode, and the kit carries the
-# overlay files, .gitattributes line and .gitignore patterns dotfiles relies
-# on. An uninitialized submodule or an unstaged bump fails instead of passing;
-# the bump Action stages its bump first.
+# index records, its code reads no knob the entry points leave set, every
+# link resolves to a regular file at its kit path of the map, which that
+# commit tracks with its mode, the kit tracks no symlink, nested submodule
+# or .gitmodules, and it carries the overlay files, .gitattributes line and
+# .gitignore patterns dotfiles relies on. An uninitialized submodule or an
+# unstaged bump fails instead of passing; the bump Action stages its bump
+# first.
 check_real() {
-    local root=$1 checkout=$1/$SUBMODULE physical path kit text revision recorded mode content pattern
+    local root=$1 checkout=$1/$SUBMODULE physical path kit text revision recorded mode content pattern entries
     [[ -e "$checkout/.git" ]] ||
         fail "coding-agent-kit submodule not initialized at $SUBMODULE; run git submodule update --init --recursive"
     revision=$(checkout_git rev-parse HEAD)
     recorded=$(git -C "$root" ls-files -s -- "$SUBMODULE" | cut -d' ' -f2)
     [[ "$revision" == "$recorded" ]] ||
         fail "coding-agent-kit is checked out at $revision, which is not the recorded gitlink $recorded; stage the bump (git add $SUBMODULE) or check out the recorded commit (git submodule update)"
+    check_kit_knobs "$root"
     physical=$(cd -P -- "$checkout" && pwd -P)
     while read -r path kit; do
         text=$(readlink "$root/$path")
@@ -357,8 +480,14 @@ check_real() {
             fail "coding-agent-kit $revision does not track $kit as $mode"
         [[ "$mode" == 100644 || -x "$root/$path" ]] || fail "$path is not executable through its link"
     done <<<"$LINK_MAP"
-    [[ -z "$(checkout_git ls-tree -r "$recorded" | awk '$1 == 120000')" ]] ||
-        fail "coding-agent-kit $revision tracks a symlink"
+    # A nested submodule would have every host's login updater, which runs
+    # git submodule update --init --recursive, clone its URL, and fail and
+    # skip the restow at each login where it cannot.
+    entries=$(checkout_git ls-tree -r "$recorded" |
+        awk -F '\t' '$1 ~ /^(120000|160000) / { printf "%s%s", sep, $2; sep = ", " }')
+    [[ -z "$entries" ]] || fail "coding-agent-kit $revision tracks a symlink or a nested submodule: $entries"
+    ! checkout_git cat-file -e "$recorded:.gitmodules" 2>/dev/null ||
+        fail "coding-agent-kit $revision has a .gitmodules"
     for path in $FIXTURES; do
         [[ "$(kit_entry "$recorded" "$path")" == '100644 blob' ]] ||
             fail "coding-agent-kit $revision lacks $path, which the real-data overlay uses"
@@ -374,6 +503,50 @@ check_real() {
     printf 'coding-agent-kit-delivery: real submodule %s resolves every delivered link\n' "$revision"
 }
 
+# real_fixture ROOT: a superproject like a host checkout after git submodule
+# update --init: the 14 links, tests/run.sh and a clone of the kit, checked
+# out at the gitlink commit that its index records.
+real_fixture() {
+    local root=$1 path kit_git_dir
+    fixture_git init -q "$root"
+    mkdir -p "$root/tests"
+    cp "$REPO_ROOT/tests/run.sh" "$root/tests/"
+    while read -r path _; do
+        mkdir -p "$root/${path%/*}"
+        cp -RP "$REPO_ROOT/$path" "$root/$path"
+    done <<<"$LINK_MAP"
+    kit_git_dir=$(cd -- "$REPO_ROOT/$SUBMODULE" && unset_git_env && git rev-parse --absolute-git-dir)
+    fixture_git clone -q --shared --no-checkout "$kit_git_dir" "$root/$SUBMODULE"
+    record_kit "$root" "$(git -C "$REPO_ROOT" ls-files -s -- "$SUBMODULE" | cut -d' ' -f2)"
+}
+
+# record_kit ROOT COMMIT: the fixture kit checked out at COMMIT, which the
+# index of ROOT then records.
+record_kit() {
+    fixture_git -C "$1/$SUBMODULE" checkout -q --detach "$2"
+    fixture_git -C "$1" update-index --add --cacheinfo "160000,$2,$SUBMODULE"
+}
+
+# commit_kit ROOT MESSAGE: commits what is staged in the fixture kit and
+# records the new commit.
+commit_kit() {
+    fixture_git -C "$1/$SUBMODULE" commit -q -m "$2"
+    record_kit "$1" "$(fixture_git -C "$1/$SUBMODULE" rev-parse HEAD)"
+}
+
+# expect_real_failure CASE ROOT TEXT: check_real refuses ROOT, saying TEXT.
+expect_real_failure() {
+    if in_fixture_env check_real "$2" >"$TEST_TMP/real-$1.out" 2>&1; then
+        cat "$TEST_TMP/real-$1.out" >&2
+        fail "check_real accepted the $1 fixture"
+    fi
+    expect_grep "$3" "$TEST_TMP/real-$1.out"
+}
+
+# Sourced, as tests/test-entrypoints.sh does for check_kit_knobs, the test
+# only defines its checks.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-coding-agent-kit-delivery.XXXXXX")"
 # macOS TMPDIR ends in '/', and /var may itself be a symlink.
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
@@ -385,6 +558,21 @@ check_index
 check_sentinels
 check_windows
 check_automation
+# check_automation on a copy of the bump workflows whose reviewed copy is a
+# link to the workflow, which cmp would compare with itself: refused.
+AUTOMATION_ROOT=$TEST_TMP/automation
+mkdir -p "$AUTOMATION_ROOT/.github/workflows" "$AUTOMATION_ROOT/tests/fixtures"
+cp "$REPO_ROOT/.github/workflows/"update-*-submodule.yml "$AUTOMATION_ROOT/.github/workflows/"
+ln -s ../../.github/workflows/update-coding-agent-kit-submodule.yml \
+    "$AUTOMATION_ROOT/tests/fixtures/update-coding-agent-kit-submodule.yml"
+fixture_git init -q "$AUTOMATION_ROOT"
+fixture_git -C "$AUTOMATION_ROOT" add -A
+if (REPO_ROOT=$AUTOMATION_ROOT && in_fixture_env check_automation) >"$TEST_TMP/automation-link.out" 2>&1; then
+    cat "$TEST_TMP/automation-link.out" >&2
+    fail 'check_automation accepted a reviewed copy that links to the workflow'
+fi
+expect_grep 'tests/fixtures/update-coding-agent-kit-submodule.yml must be a regular file tracked as 100644' \
+    "$TEST_TMP/automation-link.out"
 
 if [[ "$real" == 1 || -e "$REPO_ROOT/$SUBMODULE/.git" ]]; then
     check_real "$REPO_ROOT"
@@ -399,6 +587,40 @@ if [[ "$real" == 1 ]]; then
     echo 'coding-agent-kit-delivery=PASS'
     exit 0
 fi
+
+# check_real on fixture superprojects: the recorded kit commit passes, and
+# each change below, committed on it and recorded, fails.
+REAL_ROOT=$TEST_TMP/real/dotfiles
+REAL_KIT=$REAL_ROOT/$SUBMODULE
+real_fixture "$REAL_ROOT"
+REAL_COMMIT=$(fixture_git -C "$REAL_KIT" rev-parse HEAD)
+in_fixture_env check_real "$REAL_ROOT" >"$TEST_TMP/real-pass.out"
+expect_grep 'resolves every delivered link' "$TEST_TMP/real-pass.out"
+# A nested submodule: its gitlink, and its .gitmodules entry on its own.
+fixture_git -C "$REAL_KIT" update-index --add --cacheinfo "160000,$REAL_COMMIT,vendor/nested"
+commit_kit "$REAL_ROOT" 'fixture: vendor a nested submodule'
+expect_real_failure nested-gitlink "$REAL_ROOT" 'tracks a symlink or a nested submodule: vendor/nested'
+# A tracked symlink: the checkout must work where links are unsupported.
+record_kit "$REAL_ROOT" "$REAL_COMMIT"
+ln -s codex-as "$REAL_KIT/bin/alias"
+fixture_git -C "$REAL_KIT" add bin/alias
+commit_kit "$REAL_ROOT" 'fixture: track a symlink'
+expect_real_failure symlink "$REAL_ROOT" 'tracks a symlink or a nested submodule: bin/alias'
+record_kit "$REAL_ROOT" "$REAL_COMMIT"
+printf '[submodule "vendor/nested"]\n\tpath = vendor/nested\n\turl = https://example.invalid/nested.git\n' \
+    >"$REAL_KIT/.gitmodules"
+fixture_git -C "$REAL_KIT" add .gitmodules
+commit_kit "$REAL_ROOT" 'fixture: add a .gitmodules'
+expect_real_failure gitmodules "$REAL_ROOT" 'has a .gitmodules'
+# A knob that the test entry points do not unset, with or without the
+# leading underscore of an internal name.
+for knob in CODING_AGENT_KIT_DEBUG _CODING_AGENT_KIT_TRACE; do
+    record_kit "$REAL_ROOT" "$REAL_COMMIT"
+    printf ': "${%s:-}"\n' "$knob" >>"$REAL_KIT/bin/codex-as"
+    fixture_git -C "$REAL_KIT" add bin/codex-as
+    commit_kit "$REAL_ROOT" "fixture: read $knob"
+    expect_real_failure "knob$knob" "$REAL_ROOT" "reads $knob, which tests/run.sh and the other test entry points do not unset"
+done
 
 if ! command -v stow >/dev/null 2>&1; then
     skip 'real GNU Stow for the coding-agent-kit stow behavior (install stow to enable)'
