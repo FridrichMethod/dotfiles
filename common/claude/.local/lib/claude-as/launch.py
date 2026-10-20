@@ -1,1 +1,1 @@
-../../../../codex/coding-agent-kit/common/claude/.local/lib/claude-as/launch.py
+../../../../codex/coding-agent-kit/lib/claude-as/launch.py

@@ -242,10 +242,10 @@ public static class DotfilesCallerMitigation {
         # The coding-agent-kit links climb out of their package into the
         # submodule checkout inside the codex package.
         $fixture = New-Fixture
-        Write-FixtureFile (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/fixture.cjs') 'kit fixture'
+        Write-FixtureFile (Join-Path $fixture.Repo 'common/codex/coding-agent-kit/helpers/fixture.cjs') 'kit fixture'
         $source = Join-Path $fixture.Repo 'common/claude/.claude/dotfiles/fixture.cjs'
         [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
-        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/fixture.cjs' | Out-Null
+        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/helpers/fixture.cjs' | Out-Null
         $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
         Assert-True (-not [IO.Path]::IsPathRooted($originalTarget)) 'Fixture source target is not relative.'
         Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
@@ -430,11 +430,11 @@ public static class DotfilesCallerMitigation {
 
     Test-Case 'a dangling coding-agent-kit link still syncs, with one preflight warning' {
         $fixture = New-Fixture
-        $kitFile = Join-Path $fixture.Repo 'common/codex/coding-agent-kit/fixture.cjs'
+        $kitFile = Join-Path $fixture.Repo 'common/codex/coding-agent-kit/helpers/fixture.cjs'
         Write-FixtureFile $kitFile 'kit fixture'
         $source = Join-Path $fixture.Repo 'common/claude/.claude/dotfiles/fixture.cjs'
         [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
-        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/fixture.cjs' | Out-Null
+        New-Item -ItemType SymbolicLink -Path $source -Value '../../../codex/coding-agent-kit/helpers/fixture.cjs' | Out-Null
         Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
         Invoke-FixtureGit -C $fixture.Repo add common/claude
         Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'submodule link fixture'

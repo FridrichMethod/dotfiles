@@ -14,7 +14,8 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 REAL_GIT=$(command -v git) || {
@@ -257,13 +258,11 @@ printf '## Sherlock: agent running on Sherlock\n\nFixture cluster rules.\n' >"$S
 printf -- '---\nname: sherlock-kit\ndescription: fixture\n---\n' >"$SK_DATA/skills/sherlock-kit/SKILL.md"
 printf '#!/bin/sh\n' >"$SK_TREE/bin/shk"
 chmod +x "$SK_TREE/bin/shk"
-# A coding-agent-kit tree with its eight sentinel files (what the package
+# A coding-agent-kit tree with its seven sentinel files (what the package
 # links point at), for the cases with a third .gitmodules entry.
 CAK_TREE="$FIXTURE/common/codex/coding-agent-kit"
-CAK_SENTINELS='common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as
-common/codex/.local/lib/codex-as/launch.py common/claude/.local/lib/claude-as/launch.py
-common/claude/.claude/dotfiles/statusline.cjs common/claude/.claude/dotfiles/notify.cjs
-common/claude/.claude/dotfiles/check-git-hooks.cjs'
+CAK_SENTINELS='bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py
+helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
 for sentinel in $CAK_SENTINELS; do
     mkdir -p "$CAK_TREE/${sentinel%/*}"
     [ -f "$CAK_TREE/$sentinel" ] || printf '# fixture %s\n' "$sentinel" >"$CAK_TREE/$sentinel"
@@ -941,7 +940,7 @@ run_doctor submodule-restored -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row submodule ok
 
-# With coding-agent-kit as the third entry, its eight sentinels are checked in
+# With coding-agent-kit as the third entry, its seven sentinels are checked in
 # .gitmodules order after the other two, each one on its own, and an
 # uninitialized checkout lists all of them.
 printf '%s\n' "$GITMODULES_BOTH" '[submodule "common/codex/coding-agent-kit"]' \

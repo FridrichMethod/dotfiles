@@ -7,7 +7,8 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-entrypoints.XXXXXX")"
@@ -51,7 +52,9 @@ fi
 # Every entry point drops the same dotfiles knobs, tests/run.ps1 too, and the
 # list names every DOTFILES_* and AWESOME_SKILLS_* variable the code can read
 # (but DOTFILES_SYNC_PYTHON, which tests/run.sh provisions), so a shell that
-# exports DOTFILES_AUTO_UPDATE=0 while provisioning cannot fail a suite.
+# exports DOTFILES_AUTO_UPDATE=0 while provisioning cannot fail a suite. It
+# also names every CODING_AGENT_KIT_* variable that the coding-agent-kit
+# launchers the suites run can read.
 REPO_ROOT="$(cd -- "$TEST_DIR/.." && pwd)"
 # knob_list FILE: the names of FILE's "unset DOTFILES_AUTO_UPDATE ..." statement.
 knob_list() {
@@ -95,6 +98,27 @@ for knob in $READ_KNOBS; do
         exit 1
     fi
 done
+# The same for the kit's knobs, from its code outside its own tests and docs,
+# when the submodule is checked out.
+KIT_ROOT=$REPO_ROOT/common/codex/coding-agent-kit
+if [[ -e "$KIT_ROOT/.git" ]]; then
+    if ! KIT_NAMES=$(
+        unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+            GIT_ALTERNATE_OBJECT_DIRECTORIES
+        git -C "$KIT_ROOT" -c grep.lineNumber=false -c grep.column=false \
+            grep -I -h -o --no-color -E '(^|[^A-Za-z0-9_])CODING_AGENT_KIT_[A-Z_]+' \
+            -- ':!tests' ':!docs' ':!.github' ':!*.md'
+    ); then
+        printf 'ERROR: git grep found no CODING_AGENT_KIT_* name in %s.\n' "$KIT_ROOT" >&2
+        exit 1
+    fi
+    for knob in $(printf '%s\n' "$KIT_NAMES" | sed -E 's/^[^A-Z_]//' | LC_ALL=C sort -u); do
+        if ! grep -Fxq -- "$knob" <<<"$KNOBS"; then
+            printf 'ERROR: coding-agent-kit reads %s, which the test entry points do not unset.\n' "$knob" >&2
+            exit 1
+        fi
+    done
+fi
 # Commit hooks export a relative index path. The manifest suite creates a
 # linked worktree whose .git is a file, so fixture Git must clear this path.
 if ! env GIT_INDEX_FILE=.git/index /bin/bash "$TEST_DIR/bootstrap-manifest.sh" \

@@ -7,7 +7,8 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-real-install.XXXXXX")"
@@ -64,10 +65,15 @@ grep -Fq '[dotfiles] [ok] Stow completed (test-host)' "$TEST_TMP/install.log"
 ! grep -q "$(printf '\033')" "$TEST_TMP/install.log"
 [[ -L "$TARGET/.fixture-host" ]]
 # The launchers and helpers resolve through two links: the home link to the
-# package path, and the package link into the coding-agent-kit checkout.
+# package path, and the package link into the coding-agent-kit checkout. The
+# launchers find that checkout through both, spaces included, and name its
+# docs; no configuration of the caller is in reach.
 [[ -e "$TARGET/.local/bin/codex-as" && -e "$TARGET/.claude/dotfiles/statusline.cjs" ]]
-env HOME="$TARGET" "$TARGET/.local/bin/codex-as" --help >/dev/null
-env HOME="$TARGET" "$TARGET/.local/bin/claude-as" --help >/dev/null
+KIT_DOCS="$(cd -P -- "$FIXTURE/common/codex/coding-agent-kit" && pwd -P)/docs/account-launchers.md"
+for launcher in codex-as claude-as; do
+    env -u XDG_CONFIG_HOME HOME="$TARGET" "$TARGET/.local/bin/$launcher" --help >"$TEST_TMP/help.out"
+    grep -Fxq "Details and manual repair: $KIT_DOCS" "$TEST_TMP/help.out"
+done
 [[ -L "$TARGET/.local/bin/codex-config-sync" ]]
 [[ -f "$TARGET/.codex/config.toml" && ! -L "$TARGET/.codex/config.toml" ]]
 [[ -f "$TARGET/.claude/settings.json" && ! -L "$TARGET/.claude/settings.json" ]]

@@ -7,7 +7,8 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO_ROOT/stow-all.sh"
@@ -151,10 +152,11 @@ mkdir -p \
     "$FIXTURE/host-a/sherlock-kit/.claude/rules" \
     "$FIXTURE/rules-fixture"
 # The codex-as launcher is a package link into the coding-agent-kit checkout,
-# which the installer only warns about while that link dangles.
+# with the tracked link's text, which the installer only warns about while
+# that link dangles.
 mkdir -p "$FIXTURE/common/codex/coding-agent-kit/bin"
 printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/codex/coding-agent-kit/bin/codex-as"
-ln -s ../../coding-agent-kit/bin/codex-as "$FIXTURE/common/codex/.local/bin/codex-as"
+ln -s ../../../codex/coding-agent-kit/bin/codex-as "$FIXTURE/common/codex/.local/bin/codex-as"
 
 printf '%s\n' 'common-claude' >"$FIXTURE/common/claude/.claude/settings.json"
 printf '%s\n' 'common-codex' >"$FIXTURE/common/codex/.codex/config.toml"

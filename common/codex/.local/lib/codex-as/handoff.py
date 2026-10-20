@@ -1,1 +1,1 @@
-../../../../codex/coding-agent-kit/common/codex/.local/lib/codex-as/handoff.py
+../../../../codex/coding-agent-kit/lib/codex-as/handoff.py

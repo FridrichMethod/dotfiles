@@ -17,7 +17,8 @@ set -euo pipefail
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
 # The common Codex package also links codex-as into ~/.local/bin (no source).
 # Account launchers confirm new-account enrollment on first use;
-# installation never logs in or switches credentials. See docs/account-launchers.md.
+# installation never logs in or switches credentials. See
+# common/codex/coding-agent-kit/docs/account-launchers.md.
 # A host whose sherlock-kit package links the toolkit rules from the submodule
 # also gets ~/.codex/AGENTS.override.md (portable AGENTS.md plus those rules);
 # other hosts have a stale generated one removed. While the submodule is not
