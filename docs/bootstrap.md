@@ -666,7 +666,7 @@ have a minimum), the overlay the person chose, and a complete checkout.
   submodules, `git -C ~/dotfiles submodule update --init --recursive`.
 - **Verify:** no submodule line starts with `-`, and
   `ls -L ~/dotfiles/common/pymol/.pymolrc` and
-  `ls -L ~/dotfiles/common/codex/.local/bin/codex-as` (coding-agent-kit)
+  `ls -L ~/dotfiles/common/coding-agent-kit/.local/bin/codex-as` (coding-agent-kit)
   resolve, as does
   `ls -L ~/dotfiles/<host>/sherlock-kit/.claude/skills/sherlock-kit/SKILL.md` on a
   host with a `sherlock-kit` package (`lab-ubuntu`, `wsl-ubuntu`, `sherlock`;
@@ -674,7 +674,11 @@ have a minimum), the overlay the person chose, and a complete checkout.
   `submodule` check is `ok`. setup-host's P0-preflight line records the OS, architecture,
   glibc and detected platform, and warns about a missing submodule, a
   `DOTFILES_DIR` that names another checkout, or uncommitted changes in the
-  checkout ([X-rc-protection](#x-rc-protection-rc-file-protection)).
+  checkout ([X-rc-protection](#x-rc-protection-rc-file-protection)). A
+  `submodule` warning that names `common/codex/coding-agent-kit` is the
+  checkout the pull across the kit's move into its own package left behind:
+  run the `rm -rf` it prints, and keep `.git/modules/common/codex/coding-agent-kit`,
+  the repository of the current checkout ([coding-agent-kit](coding-agent-kit.md)).
 - **Human:** yes (judgment: the person names the host overlay, and a clone
   outside `~/dotfiles` also needs `DOTFILES_DIR` exported; setup-host prints no
   block for this step)
@@ -1614,7 +1618,7 @@ elevated command is the person's.
 ### HW-clone: Clone with symlinks enabled
 
 The checkout contains symlinks (`common/pymol/.pymolrc*`, and the
-coding-agent-kit links in `common/claude` and `common/codex`) that Git for
+coding-agent-kit links in `common/coding-agent-kit`) that Git for
 Windows only creates when `core.symlinks` is true and the process may create
 symlinks.
 
@@ -1635,8 +1639,9 @@ symlinks.
   (`winget show --id Microsoft.PowerShell -e --versions` lists them).
   Clone onto NTFS, never into a WSL distribution. An existing clone made
   without symlinks: `git -C $HOME\dotfiles config core.symlinks true`, then
-  `git -C $HOME\dotfiles checkout -- common/pymol common/claude/.claude/dotfiles common/claude/.local common/claude/.oh-my-zsh common/codex/.local common/codex/.oh-my-zsh`
-  (the narrow pathspec leaves the settings in `.claude/` and `.codex/` alone).
+  `git -C $HOME\dotfiles checkout -- common/pymol common/coding-agent-kit`
+  (only the packages with tracked links: settings you edited in `.claude/` and
+  `.codex/` stay).
 - **Verify:** `core.symlinks` prints `true`, `LinkType` prints `SymbolicLink`,
   and `git -C $HOME\dotfiles status --porcelain` is empty.
 - **Human:** yes (gui: Developer Mode is a Settings toggle)

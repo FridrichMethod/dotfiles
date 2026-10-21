@@ -14,17 +14,19 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
 # How the coding-agent-kit submodule delivers the Codex and Claude launchers,
 # libraries, completions and Claude helpers (docs/coding-agent-kit.md). The
 # structure checks always run, with git, bash and coreutils only: the
-# .gitmodules entry, the .stowrc ignore line, the gitlink, every link's exact
-# relative text from the link map, the doctor's sentinels, the sync launchers
-# that stay in dotfiles as regular files, the Windows allowlist and the bump
-# workflow. With the submodule initialized, check_real proves that every link
+# .gitmodules entry, the coding-agent-kit package's local ignore file, the
+# .stowrc and .gitignore lines that keep a pre-move checkout harmless, the
+# gitlink, every link's exact relative text from the link map, the doctor's
+# sentinels, the sync launchers that stay in dotfiles as regular files, the
+# Windows allowlist and the bump workflow. With the submodule initialized, check_real proves that every link
 # resolves to the kit file the map names, tracked with its mode at the
 # gitlink, and that the kit carries what dotfiles relies on and reads no knob
 # the test entry points leave set; the docs path that --help prints must be a
 # file of the kit. Fixture superprojects then show check_real refusing a kit
 # commit with a nested submodule, a .gitmodules or an unlisted knob, and the
 # real stow-all.sh stows copies into temporary homes with the checkout full,
-# emptied and restored. --real requires the submodule at the gitlink the index
+# emptied and restored, and a home stowed from the pre-move layout converges
+# to the same home. --real requires the submodule at the gitlink the index
 # records and stops after the real checks (the bump Action's gate 3, before
 # --ci). --ci turns every SKIP into a failure. Sourced, as by
 # tests/test-entrypoints.sh, it only defines its checks.
@@ -50,29 +52,43 @@ for argument in "$@"; do
     esac
 done
 
-SUBMODULE=common/codex/coding-agent-kit
+# The submodule keeps the name of its first path, so every host reuses its
+# module directory .git/modules/common/codex/coding-agent-kit; only its path
+# moved, into a package of its own.
+SUBMODULE_NAME=common/codex/coding-agent-kit
+SUBMODULE=common/coding-agent-kit/coding-agent-kit
+PACKAGE=common/coding-agent-kit
 SUBMODULE_URL=https://github.com/FridrichMethod/coding-agent-kit.git
+# The pre-move checkout that a fast-forward leaves behind on a host where the
+# submodule was checked out; .gitignore keeps it out of git status and the
+# .stowrc line keeps Stow from linking it.
+LEFTOVER=common/codex/coding-agent-kit
 STOWRC_LINE='--ignore=^coding-agent-kit(/|$)'
-WINDOWS_PACKAGES="\$CommonPackages = @('claude', 'codex', 'conda', 'git', 'pymol', 'ssh', 'wezterm')"
+GITIGNORE_LINE=/$LEFTOVER/
+# Path-anchored, as in common/sherlock-kit: Stow matches a pattern with a
+# slash against "/PATH", so only the package-root checkout is ignored.
+LOCAL_IGNORE='^/coding-agent-kit$
+^/coding-agent-kit/'
+WINDOWS_PACKAGES="\$CommonPackages = @('claude', 'codex', 'coding-agent-kit', 'conda', 'git', 'pymol', 'ssh', 'wezterm')"
 WARNING='[dotfiles] [warn] coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
 # The link map: each of the 14 package files that are links into the
-# submodule, and the kit file it points at. The package paths, and so the
-# home paths Stow links, stay put whatever the kit's layout; a kit that moves
-# a file changes only the text of its link here.
-LINK_MAP='common/claude/.claude/dotfiles/check-git-hooks.cjs helpers/check-git-hooks.cjs
-common/claude/.claude/dotfiles/notify.cjs helpers/notify.cjs
-common/claude/.claude/dotfiles/statusline.cjs helpers/statusline.cjs
-common/claude/.local/bin/claude-as bin/claude-as
-common/claude/.local/lib/claude-as/launch.py lib/claude-as/launch.py
-common/claude/.local/share/bash-completion/completions/claude-as completions/bash/claude-as
-common/claude/.oh-my-zsh/custom/completions/_claude-as completions/zsh/_claude-as
-common/codex/.local/bin/codex-as bin/codex-as
-common/codex/.local/lib/codex-as/check.py lib/codex-as/check.py
-common/codex/.local/lib/codex-as/handoff.py lib/codex-as/handoff.py
-common/codex/.local/lib/codex-as/launch.py lib/codex-as/launch.py
-common/codex/.local/lib/codex-as/layout.py lib/codex-as/layout.py
-common/codex/.local/share/bash-completion/completions/codex-as completions/bash/codex-as
-common/codex/.oh-my-zsh/custom/completions/_codex-as completions/zsh/_codex-as'
+# submodule, and the kit file it points at. The home paths Stow links stay
+# put whatever the kit's layout; a kit that moves a file changes only the
+# text of its link here.
+LINK_MAP='common/coding-agent-kit/.claude/dotfiles/check-git-hooks.cjs helpers/check-git-hooks.cjs
+common/coding-agent-kit/.claude/dotfiles/notify.cjs helpers/notify.cjs
+common/coding-agent-kit/.claude/dotfiles/statusline.cjs helpers/statusline.cjs
+common/coding-agent-kit/.local/bin/claude-as bin/claude-as
+common/coding-agent-kit/.local/bin/codex-as bin/codex-as
+common/coding-agent-kit/.local/lib/claude-as/launch.py lib/claude-as/launch.py
+common/coding-agent-kit/.local/lib/codex-as/check.py lib/codex-as/check.py
+common/coding-agent-kit/.local/lib/codex-as/handoff.py lib/codex-as/handoff.py
+common/coding-agent-kit/.local/lib/codex-as/launch.py lib/codex-as/launch.py
+common/coding-agent-kit/.local/lib/codex-as/layout.py lib/codex-as/layout.py
+common/coding-agent-kit/.local/share/bash-completion/completions/claude-as completions/bash/claude-as
+common/coding-agent-kit/.local/share/bash-completion/completions/codex-as completions/bash/codex-as
+common/coding-agent-kit/.oh-my-zsh/custom/completions/_claude-as completions/zsh/_claude-as
+common/coding-agent-kit/.oh-my-zsh/custom/completions/_codex-as completions/zsh/_codex-as'
 # The two kit executables among them.
 EXECUTABLES='bin/claude-as bin/codex-as'
 # The sync launchers stay in dotfiles as regular files.
@@ -155,17 +171,37 @@ fixture_git() {
     in_fixture_env git -c user.name=fixture -c user.email=fixture@example.invalid "$@"
 }
 
-# link_text PATH KIT_PATH: the text of the link at common/PACKAGE/REST to the
-# kit file KIT_PATH. It climbs one level more than REST has directories, to
-# common/, and enters the submodule there: ../codex/coding-agent-kit/KIT_PATH
-# for a top-level REST.
+# link_text PATH KIT_PATH: the text of the link at common/coding-agent-kit/REST
+# to the kit file KIT_PATH. It climbs as many levels as REST has directories,
+# to the package root, and enters the submodule there:
+# ../../coding-agent-kit/bin/codex-as for .local/bin/codex-as.
 link_text() {
-    local rest=${1#common/*/} text=../
+    local rest=${1#common/*/} text=''
     while [[ "$rest" == */* ]]; do
         text=../$text
         rest=${rest#*/}
     done
-    printf '%scodex/coding-agent-kit/%s\n' "$text" "$2"
+    printf '%scoding-agent-kit/%s\n' "$text" "$2"
+}
+
+# legacy_package KIT_PATH: the package that linked KIT_PATH before the kit got
+# its own package: claude for the Claude launcher and helpers, else codex.
+legacy_package() {
+    case $1 in
+        helpers/* | *claude-as*) printf 'claude\n' ;;
+        *) printf 'codex\n' ;;
+    esac
+}
+
+# legacy_link PATH KIT_PATH: "LEGACY_PATH TEXT", the pre-move link for the map
+# entry PATH: the same path in common/claude or common/codex, climbing one
+# level more, to common/, and entering the checkout at
+# common/codex/coding-agent-kit (../../../codex/coding-agent-kit/bin/codex-as).
+legacy_link() {
+    local text
+    text=$(link_text "$1" "$2")
+    printf 'common/%s/%s ../%scodex/coding-agent-kit/%s\n' \
+        "$(legacy_package "$2")" "${1#common/*/}" "${text%coding-agent-kit/*}" "$2"
 }
 
 # kit_paths: the kit side of the link map, one path per line.
@@ -191,25 +227,37 @@ launcher_help() {
 check_gitmodules() {
     local expected actual
     expected=$(printf '%s\n' \
-        "submodule.$SUBMODULE.path $SUBMODULE" \
-        "submodule.$SUBMODULE.url $SUBMODULE_URL" \
-        "submodule.$SUBMODULE.branch main")
+        "submodule.$SUBMODULE_NAME.path $SUBMODULE" \
+        "submodule.$SUBMODULE_NAME.url $SUBMODULE_URL" \
+        "submodule.$SUBMODULE_NAME.branch main")
     actual=$(git -C "$REPO_ROOT" config -f .gitmodules --get-regexp '^submodule\.common/codex/coding-agent-kit\.') ||
-        fail ".gitmodules has no $SUBMODULE entry"
+        fail ".gitmodules has no $SUBMODULE_NAME entry"
     [[ "$actual" == "$expected" ]] ||
-        fail ".gitmodules entry for $SUBMODULE is not exactly path, url $SUBMODULE_URL and branch main: $actual"
+        fail ".gitmodules entry $SUBMODULE_NAME is not exactly path $SUBMODULE, url $SUBMODULE_URL and branch main: $actual"
 }
 
-# The checkout sits inside the codex package; this one line keeps Stow and
-# stow-all.ps1 from linking it, without replacing Stow's built-in ignores.
-check_stowrc() {
+# The checkout sits at the root of its own package, whose local ignore file
+# keeps Stow and stow-all.ps1 from linking it (a package-local file replaces
+# Stow's built-in ignores only for that package). The pre-move checkout that
+# a fast-forward leaves on a host must stay out of git status, or the login
+# updater stops at "Checkout changed during update" and then at every later
+# login, and out of Stow, or it links its whole tree into the home.
+check_ignores() {
+    local actual
+    actual=$(grep -v -e '^#' -e '^$' "$REPO_ROOT/$PACKAGE/.stow-local-ignore") ||
+        fail "$PACKAGE/.stow-local-ignore names no pattern"
+    [[ "$actual" == "$LOCAL_IGNORE" ]] ||
+        fail "$PACKAGE/.stow-local-ignore must hold exactly the path-anchored ^/coding-agent-kit\$ and ^/coding-agent-kit/: $actual"
+    [[ "$(index_mode "$PACKAGE/.stow-local-ignore")" == 100644 ]] ||
+        fail "$PACKAGE/.stow-local-ignore is not tracked as a 100644 regular file"
     expect_line "$STOWRC_LINE" "$REPO_ROOT/.stowrc"
+    expect_line "$GITIGNORE_LINE" "$REPO_ROOT/.gitignore"
 }
 
-# index_links: every tracked symlink under common/claude, common/codex and
-# docs as "PATH -> TEXT".
+# index_links: every tracked symlink under common/coding-agent-kit,
+# common/claude, common/codex and docs as "PATH -> TEXT".
 index_links() {
-    local mode sha path pattern='^(common/claude|common/codex|docs)/'
+    local mode sha path pattern='^(common/coding-agent-kit|common/claude|common/codex|docs)/'
     git -C "$REPO_ROOT" ls-files -s | while read -r mode sha _ path; do
         [[ "$mode" == 120000 && "$path" =~ $pattern ]] || continue
         printf '%s -> %s\n' "$path" "$(git -C "$REPO_ROOT" cat-file blob "$sha")"
@@ -222,8 +270,9 @@ index_mode() {
 }
 
 # The index holds the gitlink, exactly the 14 links of the map with their
-# computed texts, and the sync launchers as regular files; no package path
-# besides the gitlink names coding-agent-kit, which .stowrc would hide.
+# computed texts, and the sync launchers as regular files; nothing at the
+# pre-move path; no package path besides the gitlink names coding-agent-kit,
+# which .stowrc would hide.
 check_index() {
     local actual expected path kit text rest
     [[ "$(index_mode "$SUBMODULE")" == 160000 ]] || fail "$SUBMODULE is not a gitlink (mode 160000)"
@@ -233,8 +282,9 @@ check_index() {
     done <<<"$LINK_MAP" | LC_ALL=C sort)
     if [[ "$actual" != "$expected" ]]; then
         diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") >&2 || true
-        fail 'the tracked links under common/claude, common/codex and docs differ from the link map'
+        fail 'the tracked links under common/coding-agent-kit, common/claude, common/codex and docs differ from the link map'
     fi
+    [[ -z "$(git -C "$REPO_ROOT" ls-files -- "$LEFTOVER")" ]] || fail "the index still tracks $LEFTOVER"
     while read -r path kit; do
         text=$(link_text "$path" "$kit")
         [[ -L "$REPO_ROOT/$path" ]] || fail "$path is not a symlink in the checkout"
@@ -284,7 +334,7 @@ check_help_paths() {
     recorded=$(git -C "$REPO_ROOT" ls-files -s -- "$SUBMODULE" | cut -d' ' -f2)
     physical=$(cd -P -- "$checkout" && pwd -P)
     mkdir -p "$home"
-    for launcher in common/codex/.local/bin/codex-as common/claude/.local/bin/claude-as; do
+    for launcher in $PACKAGE/.local/bin/codex-as $PACKAGE/.local/bin/claude-as; do
         output=$(launcher_help "$home" "$REPO_ROOT/$launcher") || fail "$launcher --help failed"
         docs=$(sed -n 's/^Details and manual repair: //p' <<<"$output")
         [[ "$docs" == "$physical"/* && -f "$docs" ]] ||
@@ -363,24 +413,24 @@ check_automation() {
             fail "the coding-agent-kit bump lacks this exact line after line $previous: $line"
         previous=$number
     done <<'EOF'
-          git submodule update --init -- common/codex/coding-agent-kit
-          pinned_sha=$(git rev-parse HEAD:common/codex/coding-agent-kit)
-          git -C common/codex/coding-agent-kit fetch --quiet --tags origin +refs/heads/main:refs/remotes/origin/main
+          git submodule update --init -- common/coding-agent-kit/coding-agent-kit
+          pinned_sha=$(git rev-parse HEAD:common/coding-agent-kit/coding-agent-kit)
+          git -C common/coding-agent-kit/coding-agent-kit fetch --quiet --tags origin +refs/heads/main:refs/remotes/origin/main
             { grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' || true; } | sort -V
-          pinned=$(git -C common/codex/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
+          pinned=$(git -C common/coding-agent-kit/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
           if [ -z "$pinned" ]; then
             echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed pull request"
             exit 1
-          candidate=$(git -C common/codex/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
-          newest=$(git -C common/codex/coding-agent-kit tag --list | releases | tail -n 1)
+          candidate=$(git -C common/coding-agent-kit/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
+          newest=$(git -C common/coding-agent-kit/coding-agent-kit tag --list | releases | tail -n 1)
           if [ "${newest%.*}" != "${pinned%.*}" ]; then
           if [ "$candidate" = "$pinned" ]; then
             echo "changed=0" >>"$GITHUB_OUTPUT"
             exit 0
             echo "changed=1"
-          git -C common/codex/coding-agent-kit merge-base --is-ancestor "$SHA" refs/remotes/origin/main ||
+          git -C common/coding-agent-kit/coding-agent-kit merge-base --is-ancestor "$SHA" refs/remotes/origin/main ||
             { echo "::error::coding-agent-kit $TAG ($SHA) is not on its main"; exit 1; }
-          git -C common/codex/coding-agent-kit merge-base --is-ancestor "$PINNED_SHA" "$SHA" ||
+          git -C common/coding-agent-kit/coding-agent-kit merge-base --is-ancestor "$PINNED_SHA" "$SHA" ||
             { echo "::error::coding-agent-kit $TAG ($SHA) does not descend from the pinned $PINNED_SHA"; exit 1; }
           missing=$(gh api "repos/FridrichMethod/coding-agent-kit/commits/$SHA/check-runs?per_page=100" \
             --jq '["Linux behavior and lint", "macOS system Bash behavior", "Windows native PowerShell behavior"] - ([.check_runs[] | select(.app.slug == "github-actions") | .name] - [.check_runs[] | select(.app.slug == "github-actions" and (.status != "completed" or .conclusion != "success")) | .name]) | join(", ")')
@@ -388,14 +438,14 @@ check_automation() {
             { echo "::error::coding-agent-kit CI is not green on $TAG ($SHA): $missing"; exit 1; }
       - uses: actions/setup-node@v6
           node-version: "24"
-          git -C common/codex/coding-agent-kit checkout --quiet --detach "$SHA"
-          git add common/codex/coding-agent-kit
+          git -C common/coding-agent-kit/coding-agent-kit checkout --quiet --detach "$SHA"
+          git add common/coding-agent-kit/coding-agent-kit
           sudo apt-get install --yes --no-install-recommends stow zsh
           ./setup-sync.sh
           bash tests/coding-agent-kit-delivery.sh --real
           bash tests/coding-agent-kit-delivery.sh --ci
         run: bash tests/ai-integration.sh
-          [ "$(git diff --cached --name-only)" = common/codex/coding-agent-kit ] ||
+          [ "$(git diff --cached --name-only)" = common/coding-agent-kit/coding-agent-kit ] ||
           git commit -m "chore(deps): update coding-agent-kit submodule to $TAG"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push origin HEAD:main
 EOF
@@ -553,7 +603,7 @@ TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
 check_gitmodules
-check_stowrc
+check_ignores
 check_index
 check_sentinels
 check_windows
@@ -644,8 +694,8 @@ make_home() {
     printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$home/.oh-my-zsh/oh-my-zsh.sh"
     cp "$REPO_ROOT/stow-all.sh" "$checkout/"
     cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
-    cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$checkout/common/"
-    cp -RP "$REPO_ROOT/.stowrc" "$checkout/"
+    cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$REPO_ROOT/$PACKAGE" "$checkout/common/"
+    cp -RP "$REPO_ROOT/.stowrc" "$REPO_ROOT/.gitignore" "$checkout/"
     rm -f "$checkout/$SUBMODULE/.git"
     fixture_git init -q "$checkout"
     printf '/%s/\n' "$SUBMODULE" >>"$checkout/.git/info/exclude"
@@ -684,6 +734,24 @@ stow_home() {
 # home_link PATH: where Stow links the package file PATH in the home.
 home_link() {
     printf '%s\n' "${1#common/*/}"
+}
+
+# legacy_layout CHECKOUT: the pre-move layout in CHECKOUT, committed: the 14
+# links at the same paths in common/claude and common/codex, climbing to
+# common/ and entering the checkout at common/codex/coding-agent-kit, and no
+# coding-agent-kit package.
+legacy_layout() {
+    local checkout=$1 path kit legacy text
+    mv "$checkout/$SUBMODULE" "$checkout/$LEFTOVER"
+    printf '/%s/\n' "$LEFTOVER" >>"$checkout/.git/info/exclude"
+    while read -r path kit; do
+        read -r legacy text <<<"$(legacy_link "$path" "$kit")"
+        mkdir -p "$checkout/${legacy%/*}"
+        ln -s "$text" "$checkout/$legacy"
+    done <<<"$LINK_MAP"
+    rm -rf "${checkout:?}/$PACKAGE"
+    fixture_git -C "$checkout" add -A
+    fixture_git -C "$checkout" commit -q -m 'fixture: pre-move layout'
 }
 
 # assert_state HOME APPLIED: the recorded state names HOME and, on line 4,
@@ -777,6 +845,59 @@ snapshot "$HOME_EMPTY" >"$TEST_TMP/restored.snapshot"
 if ! cmp -s "$TEST_TMP/full.snapshot" "$TEST_TMP/restored.snapshot"; then
     diff -u "$TEST_TMP/full.snapshot" "$TEST_TMP/restored.snapshot" >&2 || true
     fail 'the restored home differs from the initialized one'
+fi
+
+# The package's local ignore file alone keeps the checkout out of the home:
+# real Stow with no .stowrc (run where none is in reach, as after the cleanup
+# that drops the line) links exactly the 14 package links, and the anchored
+# pattern still lets a package-local .config/coding-agent-kit/ through.
+ALONE=$TEST_TMP/alone
+mkdir -p "$ALONE/home" "$ALONE/target" "$ALONE/stow"
+cp -RP "$HOME_FULL/dotfiles/$PACKAGE" "$ALONE/stow/"
+mkdir -p "$ALONE/stow/coding-agent-kit/.config/coding-agent-kit"
+printf 'kept\n' >"$ALONE/stow/coding-agent-kit/.config/coding-agent-kit/kept"
+(cd "$ALONE" && HOME=$ALONE/home stow --no-folding -d "$ALONE/stow" -t "$ALONE/target" coding-agent-kit) ||
+    fail 'Stow without .stowrc refused the coding-agent-kit package'
+[[ -f "$ALONE/target/.config/coding-agent-kit/kept" ]] || fail 'the local ignore hid .config/coding-agent-kit/'
+[[ ! -e "$ALONE/target/coding-agent-kit" && ! -L "$ALONE/target/coding-agent-kit" ]] ||
+    fail 'the local ignore alone let Stow link the checkout'
+alone_links=$(cd "$ALONE/target" && find . -type l | sed 's|^\./||' | LC_ALL=C sort)
+expected_links=$(
+    while read -r path _; do home_link "$path"; done <<<"$LINK_MAP"
+    printf '%s\n' .config/coding-agent-kit/kept
+)
+[[ "$alone_links" == "$(LC_ALL=C sort <<<"$expected_links")" ]] ||
+    fail "Stow without .stowrc linked: $alone_links"
+
+# A home stowed from the pre-move layout, as on every host before the kit got
+# its own package. A fast-forward deletes the old links and leaves the old
+# checkout behind (git cannot remove a submodule checkout that holds files);
+# the submodule update fills the new path. One restow then converges to
+# exactly the home of a fresh install: Stow replaces each home link whose
+# package file is gone with the new package's link at the same path, the
+# leftover is linked nowhere, and nothing warns.
+HOME_MOVED=$TEST_TMP/moved/home
+make_home "$HOME_MOVED"
+MOVED_CHECKOUT=$HOME_MOVED/dotfiles
+MOVED_HEAD=$(fixture_git -C "$MOVED_CHECKOUT" rev-parse HEAD)
+legacy_layout "$MOVED_CHECKOUT"
+stow_home legacy "$HOME_MOVED"
+[[ ! -s "$TEST_TMP/legacy.stderr" ]] || fail "the pre-move stow warned: $(cat "$TEST_TMP/legacy.stderr")"
+while read -r path kit; do
+    link=$(home_link "$path")
+    [[ "$(readlink "$HOME_MOVED/$link")" == */dotfiles/common/$(legacy_package "$kit")/$link && -f "$HOME_MOVED/$link" ]] ||
+        fail "the pre-move stow did not link ~/$link to common/$(legacy_package "$kit")/$link"
+done <<<"$LINK_MAP"
+fixture_git -C "$MOVED_CHECKOUT" checkout -q --detach "$MOVED_HEAD"
+restore_submodule "$HOME_MOVED"
+[[ -f "$MOVED_CHECKOUT/$LEFTOVER/bin/codex-as" ]] || fail 'the fixture lost its pre-move checkout'
+stow_home moved "$HOME_MOVED"
+[[ ! -s "$TEST_TMP/moved.stderr" ]] || fail "the stow after the move warned: $(cat "$TEST_TMP/moved.stderr")"
+assert_state "$HOME_MOVED" "$MOVED_HEAD"
+snapshot "$HOME_MOVED" >"$TEST_TMP/moved.snapshot"
+if ! cmp -s "$TEST_TMP/full.snapshot" "$TEST_TMP/moved.snapshot"; then
+    diff -u "$TEST_TMP/full.snapshot" "$TEST_TMP/moved.snapshot" >&2 || true
+    fail 'the home stowed across the move differs from a fresh install'
 fi
 
 echo 'coding-agent-kit-delivery=PASS'

@@ -26,7 +26,9 @@
 --ignore=(^|/)__pycache__(/.*)?
 --ignore=\.py[cod]$
 
-# The coding-agent-kit submodule checkout lives inside the codex package and
-# is linked file by file from common/claude and common/codex. A package-local
-# ignore file would replace Stow's built-in ignore list for the whole package.
+# The pre-move coding-agent-kit checkout that a fast-forward leaves in the
+# codex package on a host where the submodule was checked out (.gitignore keeps
+# it out of git status); without this line Stow would link its whole tree.
+# common/coding-agent-kit/.stow-local-ignore ignores the current checkout.
+# Drop this line only after no host has the leftover (docs/coding-agent-kit.md).
 --ignore=^coding-agent-kit(/|$)

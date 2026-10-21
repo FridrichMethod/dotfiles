@@ -167,8 +167,14 @@ function Get-DoctorStructuralResults {
             })
     }
     $absent = @($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path (Join-Path $RepoRoot $_) '.git')) })
+    # The checkout that the pull across coding-agent-kit's move into its own
+    # package leaves behind; its module directory is the current checkout's.
+    $leftover = [IO.Path]::Combine($RepoRoot, 'common', 'codex', 'coding-agent-kit')
     if ($absent.Count) {
         New-DoctorResult missing submodule core "not initialized: $($absent -join ', '); run git submodule update --init --recursive" P0-preflight
+    }
+    elseif ($paths -notcontains 'common/codex/coding-agent-kit' -and (Test-Path -LiteralPath $leftover)) {
+        New-DoctorResult warn submodule core "$($paths.Count) initialized; remove the pre-move coding-agent-kit checkout: Remove-Item -LiteralPath '$($leftover -replace "'", "''")' -Recurse -Force (keep .git\modules\common\codex\coding-agent-kit, the repository of common\coding-agent-kit\coding-agent-kit)" P0-preflight
     }
     else { New-DoctorResult ok submodule core "$($paths.Count) initialized" P0-preflight }
 

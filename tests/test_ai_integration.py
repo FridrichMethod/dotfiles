@@ -2,7 +2,7 @@
 
 The launcher suites live in the coding-agent-kit submodule and run there on
 frozen fixtures. These cases read what only dotfiles owns: the fzf-tab preview,
-the alias files, .stowrc and the package link that delivers codex-as. The
+the alias files, the Stow ignores and the package link that delivers codex-as. The
 fixtures are the parts of the launcher suites' setUp they read.
 """
 
@@ -14,8 +14,8 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "common/codex/.local"
-KIT = ROOT / "common/codex/coding-agent-kit"
+SOURCE = ROOT / "common/coding-agent-kit/.local"
+KIT = ROOT / "common/coding-agent-kit/coding-agent-kit"
 SHELLS = [shutil.which(name) for name in ("bash", "zsh") if shutil.which(name)]
 ENV_CONFLICTS = (
     "CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY",
@@ -98,16 +98,18 @@ class Enrollment(IsolatedHome):
         packages = self.base / 'packages'
         target = self.base / 'stowed home'
         target.mkdir(mode=0o700)
-        for tool in ('codex', 'claude'):
-            shutil.copytree(ROOT / f'common/{tool}', packages / tool)
-        apple = packages / 'codex/.local/bin/._fake-appledouble'
+        shutil.copytree(ROOT / 'common/coding-agent-kit', packages / 'coding-agent-kit')
+        apple = packages / 'coding-agent-kit/.local/bin/._fake-appledouble'
         apple.write_text('fixture')
-        result = subprocess.run([stow, f'--dir={packages}', f'--target={target}', '--no-folding', 'codex', 'claude'],
+        result = subprocess.run([stow, f'--dir={packages}', f'--target={target}', '--no-folding', 'coding-agent-kit'],
                                 cwd=ROOT, env=self.env | {'HOME': str(target)}, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         for tool in ('codex', 'claude'):
             self.assertTrue((target / f'.oh-my-zsh/custom/completions/_{tool}-as').is_symlink(), 'Stow dropped zsh completion')
         self.assertFalse((target / '.local/bin/._fake-appledouble').exists())
+        # The package's own ignore file (and, while it stays, the .stowrc line
+        # read from cwd) keeps its submodule checkout unstowed.
+        self.assertFalse((target / 'coding-agent-kit').exists())
 
 
 if __name__ == "__main__":

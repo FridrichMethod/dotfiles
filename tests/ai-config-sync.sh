@@ -404,7 +404,7 @@ if command -v stow >/dev/null 2>&1; then
             --no-folding \
             --target="$STOW_TARGET" \
             -d "$REPO_ROOT/common" \
-            claude codex
+            claude codex coding-agent-kit
     )
 
     [[ ! -L "$STOW_TARGET/.claude/settings.json" ]]
@@ -414,8 +414,8 @@ if command -v stow >/dev/null 2>&1; then
     grep -Fxq 'codex-live-sentinel' "$STOW_TARGET/.codex/config.toml"
     grep -Fxq 'rules-live-sentinel' "$STOW_TARGET/.codex/rules/portable.rules"
     [[ -L "$STOW_TARGET/.claude/CLAUDE.md" && -e "$STOW_TARGET/.claude/CLAUDE.md" ]]
-    # The launchers, libraries, completions and helpers resolve through their
-    # package links into the coding-agent-kit checkout.
+    # The launchers, libraries, completions and helpers resolve through the
+    # coding-agent-kit package's links into its checkout.
     for kit_link in .claude/dotfiles/statusline.cjs .claude/dotfiles/notify.cjs \
         .claude/dotfiles/check-git-hooks.cjs .local/bin/codex-as .local/bin/claude-as \
         .local/lib/codex-as/launch.py .local/lib/codex-as/check.py .local/lib/codex-as/layout.py \
@@ -425,7 +425,8 @@ if command -v stow >/dev/null 2>&1; then
         [[ -L "$STOW_TARGET/$kit_link" && -f "$STOW_TARGET/$kit_link" ]]
     done
     [[ -L "$STOW_TARGET/.codex/AGENTS.md" && -e "$STOW_TARGET/.codex/AGENTS.md" ]]
-    # .stowrc keeps the coding-agent-kit checkout inside the codex package unstowed.
+    # The package's .stow-local-ignore (and, while it stays, the .stowrc line)
+    # keeps the checkout itself unstowed.
     [[ ! -e "$STOW_TARGET/coding-agent-kit" && ! -L "$STOW_TARGET/coding-agent-kit" ]]
 fi
 

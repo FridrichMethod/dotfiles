@@ -55,22 +55,22 @@ jobs:
       - name: Find the pinned release and the newest release of its line
         id: pick
         run: |
-          git submodule update --init -- common/codex/coding-agent-kit
-          pinned_sha=$(git rev-parse HEAD:common/codex/coding-agent-kit)
+          git submodule update --init -- common/coding-agent-kit/coding-agent-kit
+          pinned_sha=$(git rev-parse HEAD:common/coding-agent-kit/coding-agent-kit)
           # Every tag, and the main that gate 1 checks the release against.
-          git -C common/codex/coding-agent-kit fetch --quiet --tags origin +refs/heads/main:refs/remotes/origin/main
+          git -C common/coding-agent-kit/coding-agent-kit fetch --quiet --tags origin +refs/heads/main:refs/remotes/origin/main
           # releases: the vMAJOR.MINOR.PATCH tag names on stdin, oldest first.
           releases() {
             { grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' || true; } | sort -V
           }
-          pinned=$(git -C common/codex/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
+          pinned=$(git -C common/coding-agent-kit/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
           if [ -z "$pinned" ]; then
             echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed pull request"
             echo "coding-agent-kit is pinned at the untagged commit $pinned_sha: until a release is pinned, bumps go through a reviewed pull request." >>"$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          candidate=$(git -C common/codex/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
-          newest=$(git -C common/codex/coding-agent-kit tag --list | releases | tail -n 1)
+          candidate=$(git -C common/coding-agent-kit/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
+          newest=$(git -C common/coding-agent-kit/coding-agent-kit tag --list | releases | tail -n 1)
           if [ "${newest%.*}" != "${pinned%.*}" ]; then
             echo "::notice::coding-agent-kit $newest is a newer release line than $pinned; bump to it through a reviewed pull request"
             echo "coding-agent-kit $newest is a newer release line than $pinned: bump to it through a reviewed pull request, never this workflow." >>"$GITHUB_STEP_SUMMARY"
@@ -80,7 +80,7 @@ jobs:
             echo "changed=0" >>"$GITHUB_OUTPUT"
             exit 0
           fi
-          sha=$(git -C common/codex/coding-agent-kit rev-parse "refs/tags/$candidate^{commit}")
+          sha=$(git -C common/coding-agent-kit/coding-agent-kit rev-parse "refs/tags/$candidate^{commit}")
           {
             echo "changed=1"
             echo "pinned=$pinned"
@@ -97,9 +97,9 @@ jobs:
           SHA: ${{ steps.pick.outputs.sha }}
           PINNED_SHA: ${{ steps.pick.outputs.pinned_sha }}
         run: |
-          git -C common/codex/coding-agent-kit merge-base --is-ancestor "$SHA" refs/remotes/origin/main ||
+          git -C common/coding-agent-kit/coding-agent-kit merge-base --is-ancestor "$SHA" refs/remotes/origin/main ||
             { echo "::error::coding-agent-kit $TAG ($SHA) is not on its main"; exit 1; }
-          git -C common/codex/coding-agent-kit merge-base --is-ancestor "$PINNED_SHA" "$SHA" ||
+          git -C common/coding-agent-kit/coding-agent-kit merge-base --is-ancestor "$PINNED_SHA" "$SHA" ||
             { echo "::error::coding-agent-kit $TAG ($SHA) does not descend from the pinned $PINNED_SHA"; exit 1; }
       # Gate 2: the check-run names are the job names of coding-agent-kit's
       # ci.yml. Each must have a GitHub Actions run on the release commit,
@@ -130,8 +130,8 @@ jobs:
         env:
           SHA: ${{ steps.pick.outputs.sha }}
         run: |
-          git -C common/codex/coding-agent-kit checkout --quiet --detach "$SHA"
-          git add common/codex/coding-agent-kit
+          git -C common/coding-agent-kit/coding-agent-kit checkout --quiet --detach "$SHA"
+          git add common/coding-agent-kit/coding-agent-kit
       # The runner image has neither GNU Stow nor zsh; with them no case of
       # gates 3 and 4 skips. Both gates run on the pinned AI-sync runtime.
       - name: Install GNU Stow, zsh and the AI-sync runtime
@@ -176,7 +176,7 @@ jobs:
           TAG: ${{ steps.pick.outputs.tag }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          [ "$(git diff --cached --name-only)" = common/codex/coding-agent-kit ] ||
+          [ "$(git diff --cached --name-only)" = common/coding-agent-kit/coding-agent-kit ] ||
             { echo "::error::the gates left more than the gitlink staged"; exit 1; }
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"

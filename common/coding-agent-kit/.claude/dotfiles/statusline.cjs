@@ -1,0 +1,1 @@
+../../coding-agent-kit/helpers/statusline.cjs

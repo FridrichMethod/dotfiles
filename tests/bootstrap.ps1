@@ -213,7 +213,7 @@ function Set-FixtureHealthy {
         $Fixture.BatCache = 'Catppuccin Mocha'
         (Join-Path $Fixture.Repo 'common/pymol/PyMOLScripts/.git') = 'gitdir: ../../../.git/modules/PyMOLScripts'
         (Join-Path $Fixture.Repo 'common/sherlock-kit/sherlock-kit/.git') = 'gitdir: ../../../.git/modules/common/sherlock-kit/sherlock-kit'
-        (Join-Path $Fixture.Repo 'common/codex/coding-agent-kit/.git') = 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit'
+        (Join-Path $Fixture.Repo 'common/coding-agent-kit/coding-agent-kit/.git') = 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit'
         (Join-Path $Fixture.Home 'miniconda3/Scripts/conda.exe') = ''
     }
     foreach ($path in $files.Keys) {
@@ -908,6 +908,19 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
         Assert-Exit $run 0 'working DOTFILES_SYNC_PYTHON without .venv-sync'
         Assert-True ($run.Lines -contains "ok`tvenv-sync`tcore`tDOTFILES_SYNC_PYTHON=$alternatePython passes the runtime check`t-") "override ok row: $($run.Stdout)"
+
+        # The checkout the pull across coding-agent-kit's move leaves at the old
+        # path: a warning naming the one removal and the module directory to keep.
+        $leftover = [IO.Path]::Combine($fixture.Repo, 'common', 'codex', 'coding-agent-kit')
+        [void][IO.Directory]::CreateDirectory((Join-Path $leftover 'bin'))
+        [IO.File]::WriteAllText((Join-Path $leftover '.git'), 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit')
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
+        Assert-Exit $run 0 'a leftover pre-move checkout only warns'
+        $expected = "warn`tsubmodule`tcore`t3 initialized; remove the pre-move coding-agent-kit checkout: Remove-Item -LiteralPath '$leftover' -Recurse -Force (keep .git\modules\common\codex\coding-agent-kit, the repository of common\coding-agent-kit\coding-agent-kit)`tdocs/bootstrap.md P0-preflight"
+        Assert-True ($run.Lines -contains $expected) "leftover row: $($run.Stdout)"
+        Remove-Item -LiteralPath $leftover -Recurse -Force
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
+        Assert-True ($run.Lines -contains "ok`tsubmodule`tcore`t3 initialized`t-") "submodule row without the leftover: $($run.Stdout)"
 
         Remove-Item -LiteralPath (Join-Path $fixture.Repo 'common/pymol/PyMOLScripts/.git') -Force
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }

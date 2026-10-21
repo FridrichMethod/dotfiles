@@ -69,7 +69,7 @@ $kit = Join-Path ([IO.Path]::GetTempPath()) "dotfiles-kit-$PID"
 $tar = "$kit.tar"
 [void][IO.Directory]::CreateDirectory($kit)
 try {
-    & git -C (Join-Path $repoRoot 'common/codex/coding-agent-kit') archive --format=tar -o $tar HEAD
+    & git -C (Join-Path $repoRoot 'common/coding-agent-kit/coding-agent-kit') archive --format=tar -o $tar HEAD
     if ($LASTEXITCODE -ne 0) { throw 'Could not export the coding-agent-kit tree.' }
     $tarExe = if ($IsWindows) { Join-Path $env:SystemRoot 'System32\tar.exe' } else { 'tar' }
     & $tarExe -xf $tar -C $kit

@@ -114,8 +114,13 @@ case ${1:-} in
         exit 0
         ;;
     ls-files)
-        # The fixture tracks one link, codex-as into the coding-agent-kit checkout.
-        printf '120000 %s 0\tcommon/codex/.local/bin/codex-as\0' 0000000000000000000000000000000000000000
+        # The fixture tracks one link, codex-as into the coding-agent-kit
+        # checkout, listed only for a pathspec that names its package.
+        for argument do
+            if [ "$argument" = common/coding-agent-kit ]; then
+                printf '120000 %s 0\tcommon/coding-agent-kit/.local/bin/codex-as\0' 0000000000000000000000000000000000000000
+            fi
+        done
         exit 0
         ;;
 esac
@@ -151,12 +156,12 @@ mkdir -p \
     "$FIXTURE/host-a/fcitx5/.config/fcitx5" \
     "$FIXTURE/host-a/sherlock-kit/.claude/rules" \
     "$FIXTURE/rules-fixture"
-# The codex-as launcher is a package link into the coding-agent-kit checkout,
-# with the tracked link's text, which the installer only warns about while
-# that link dangles.
-mkdir -p "$FIXTURE/common/codex/coding-agent-kit/bin"
-printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/codex/coding-agent-kit/bin/codex-as"
-ln -s ../../../codex/coding-agent-kit/bin/codex-as "$FIXTURE/common/codex/.local/bin/codex-as"
+# The codex-as launcher is a link of the coding-agent-kit package into its
+# checkout, with the tracked link's text, which the installer only warns about
+# while that link dangles.
+mkdir -p "$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin" "$FIXTURE/common/coding-agent-kit/.local/bin"
+printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin/codex-as"
+ln -s ../../coding-agent-kit/bin/codex-as "$FIXTURE/common/coding-agent-kit/.local/bin/codex-as"
 
 printf '%s\n' 'common-claude' >"$FIXTURE/common/claude/.claude/settings.json"
 printf '%s\n' 'common-codex' >"$FIXTURE/common/codex/.codex/config.toml"
@@ -284,13 +289,13 @@ printf '%s\n' \
     >"$TEST_TMP/expected-checks"
 cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
 assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "sync:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
     "sync:codex-instructions-sync:[$FIXTURE/common/codex/.codex/AGENTS.md][$TEST_HOME/.codex/AGENTS.override.md]" \
     "sync:claude-settings-sync:[$FIXTURE/common/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
 grep -Fq "Stowing from $FIXTURE" "$TEST_TMP/common-only.stdout"
 grep -Fq 'Synchronizing host Codex instructions' "$TEST_TMP/common-only.stdout"
 grep -Fq 'Stowing common packages:' "$TEST_TMP/common-only.stdout"
@@ -338,7 +343,7 @@ printf '%s\n' \
     >"$TEST_TMP/expected-checks"
 cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
 HOST_BEFORE=(
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
     "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
     "sync:codex-config-sync:[$FIXTURE/host-a/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
     "sync:codex-rules-sync:[$FIXTURE/host-a/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]"
@@ -349,7 +354,7 @@ HOST_REST=(
     "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]"
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]'
     'git:[config][--local][--remove-section][filter.codex-portable]'
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
     "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5][sherlock-kit]"
 )
 assert_events "${HOST_BEFORE[@]}" "$HOST_INSTRUCTIONS" "${HOST_REST[@]}"
@@ -405,7 +410,7 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 # link dangling. Every sync, preflight included, both dry runs and both stows
 # still run, with one warning. The install is incomplete, so the host is
 # remembered without an applied HEAD.
-mv "$FIXTURE/common/codex/coding-agent-kit/bin/codex-as" "$TEST_TMP/kit-codex-as.saved"
+mv "$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin/codex-as" "$TEST_TMP/kit-codex-as.saved"
 : >"$EVENT_LOG"
 : >"$CHECK_LOG"
 env \
@@ -423,7 +428,7 @@ printf '%s\n' '[dotfiles] [warn] coding-agent-kit links dangle; codex-as, claude
 cmp "$TEST_TMP/kit-dangling.stderr" "$TEST_TMP/expected-kit-dangling.stderr"
 grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/kit-dangling.stdout"
 cmp "$STATE" "$TEST_TMP/expected-skipped-state"
-mv "$TEST_TMP/kit-codex-as.saved" "$FIXTURE/common/codex/coding-agent-kit/bin/codex-as"
+mv "$TEST_TMP/kit-codex-as.saved" "$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin/codex-as"
 # Once the link resolves again, the next stow is complete and records HEAD.
 : >"$EVENT_LOG"
 : >"$CHECK_LOG"
@@ -502,7 +507,7 @@ if env \
     exit 1
 fi
 assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
 
 cmp "$STATE" "$TEST_TMP/expected-state"
@@ -512,7 +517,7 @@ if run_fixture dry-conflict STOW_DRY_RC=1; then
     echo "ERROR: installer ignored a Stow dry-run conflict" >&2
     exit 1
 fi
-assert_events "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
+assert_events "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
 grep -Fq 'WARNING! stowing would cause conflicts' "$TEST_TMP/dry-conflict.stderr"
 grep -Fq 'Stow would conflict with the files listed above, so nothing was changed' "$TEST_TMP/dry-conflict.stderr"
 grep -Fq 'never stow --adopt' "$TEST_TMP/dry-conflict.stderr"
@@ -540,10 +545,10 @@ fi
 assert_events
 grep -Fq 'X-recovery' "$TEST_TMP/omz-recovery.stderr"
 run_fixture omz-override DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1
-grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][zsh]" "$EVENT_LOG"
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit][zsh]" "$EVENT_LOG"
 printf '%s\n' '# fixture oh-my-zsh' >"$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
 run_fixture omz-cloned
-grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][zsh]" "$EVENT_LOG"
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit][zsh]" "$EVENT_LOG"
 rm -rf "$FIXTURE/common/zsh" "$TEST_HOME/.oh-my-zsh"
 cp "$TEST_TMP/state.saved" "$STATE"
 
@@ -568,9 +573,9 @@ mv "$FIXTURE/common/codex" "$TEST_TMP/saved-codex"
 mv "$FIXTURE/common/claude" "$TEST_TMP/saved-claude"
 run_fixture absent-packages
 assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][coding-agent-kit]" \
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][coding-agent-kit]"
 mv "$TEST_TMP/saved-codex" "$FIXTURE/common/codex"
 mv "$TEST_TMP/saved-claude" "$FIXTURE/common/claude"
 

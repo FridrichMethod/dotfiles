@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve starting dotfiles HEAD.' }
 # allowlist instead of every package: Git Bash sources ~/.bashrc and
 # ~/.bash_profile, so linking the Linux shell packages in would break it.
 # Terminal/editor packages are listed only where the tool runs natively.
-$CommonPackages = @('claude', 'codex', 'conda', 'git', 'pymol', 'ssh', 'wezterm')
+$CommonPackages = @('claude', 'codex', 'coding-agent-kit', 'conda', 'git', 'pymol', 'ssh', 'wezterm')
 
 $script:Linked = 0
 $script:Repaired = 0
@@ -179,7 +179,10 @@ function Test-StowIgnored {
     .DESCRIPTION
         GNU Stow matches patterns containing a slash against the relative
         path and all others against the basename. Testing both is a superset
-        that is correct for every pattern this repo currently ships.
+        that is correct for every pattern this repo currently ships. A local
+        pattern with a slash is matched against "/PATH" (Stow.pm
+        compile_ignore_regexps), so ^/vendored/ names only the package-root
+        vendored/; test that form too.
     #>
     param(
         [Parameter(Mandatory)][string]$RelativePath,
@@ -190,6 +193,7 @@ function Test-StowIgnored {
     $leaf = Split-Path -Leaf $RelativePath
     foreach ($pattern in $Patterns) {
         if ($RelativePath -match $pattern -or $leaf -match $pattern) { return $true }
+        if ($pattern.Contains('/') -and ('/' + $RelativePath) -match $pattern) { return $true }
     }
     return $false
 }
@@ -313,13 +317,13 @@ function Test-DotfilesLinkDangles {
 function Get-DotfilesDanglingKitLink {
     <#
     .SYNOPSIS
-        Lists the tracked links of the claude and codex packages that dangle.
+        Lists the tracked links of the coding-agent-kit package that dangle.
     .DESCRIPTION
-        They are the launchers and Claude helpers in the coding-agent-kit
-        submodule, so they dangle while it is not checked out at its gitlink,
-        whatever the kit layout, and however trusted each link is.
+        They are the launchers and Claude helpers in the package's submodule,
+        so they dangle while it is not checked out at its gitlink, whatever
+        the kit layout, and however trusted each link is.
     #>
-    @(git -C $RepoRoot ls-files -s -- common/claude common/codex 2>$null |
+    @(git -C $RepoRoot ls-files -s -- common/coding-agent-kit 2>$null |
             Where-Object { $_.StartsWith('120000 ') } |
             ForEach-Object { [IO.Path]::GetFullPath((Join-Path $RepoRoot ($_ -split "`t", 2)[1])) } |
             Where-Object { Test-DotfilesLinkDangles -Path $_ })
@@ -479,8 +483,8 @@ $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 # the portable merge source wholesale.
 $codexPortable = Join-Path $commonRoot 'codex\.codex\config.toml'
 $codexRulesPortable = Join-Path $commonRoot 'codex\.codex\rules\portable.rules'
-# The common Claude package also links its local hooks/status line; Node.js 22+
-# must be on PATH when Claude runs those helpers.
+# The coding-agent-kit package links Claude's local hooks/status line; Node.js
+# 22+ must be on PATH when Claude runs those helpers.
 $claudePortable = Join-Path $commonRoot 'claude\.claude\settings.json'
 if ($HostDir) {
     $codexHost = Join-Path $RepoRoot "$HostDir\codex\.codex\config.toml"
@@ -543,7 +547,7 @@ $script:LinkReadErrors = Get-DotfilesLinkReadErrors -Paths $probePaths.ToArray()
 if ($script:LinkReadErrors[$PSCommandPath] -ne 0) {
     throw 'The installer checkout is not readable under RedirectionGuard; repair its parent path first.'
 }
-# Tracked links of the claude and codex packages, the launchers and Claude
+# Tracked links of the coding-agent-kit package, the launchers and Claude
 # helpers in the coding-agent-kit submodule, dangle while it is not checked
 # out, trusted or not. Mirroring stow-all.sh, the syncs still run; one warning
 # keeps the revision unacknowledged and fails -Strict before any change.

@@ -10,7 +10,7 @@ macOS and Windows runners' homes.)
 | --- | --- | --- |
 | `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; only the coding-agent-kit submodule, whose pinned commit must be on its `main`; pre-commit installs its pinned hooks |
 | `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; only the coding-agent-kit submodule; retain system Bash and BSD utilities |
-| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; a local `core.symlinks` re-checkout of `common/claude` and `common/codex`, then only the coding-agent-kit submodule, required to be LF with resolving links into it; Git and PowerShell come from the runner and are checked explicitly |
+| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; a local `core.symlinks` re-checkout of `common/coding-agent-kit`, then only the coding-agent-kit submodule, required to be LF with resolving links into it; Git and PowerShell come from the runner and are checked explicitly |
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
@@ -171,9 +171,10 @@ committed submodule tree to a temporary directory, copies the real
 `tests/run.ps1` does the same natively on Windows.
 
 `tests/coding-agent-kit-delivery.sh`, modeled on the sherlock-kit test, checks
-with git, bash and coreutils only: the `.gitmodules` entry and `.stowrc` line;
-the 14 links against its map from package path to kit path, with their exact
-relative texts; the coding-agent-kit sentinels of `lib/bootstrap/checks.sh`,
+with git, bash and coreutils only: the `.gitmodules` entry, the package's
+path-anchored `.stow-local-ignore` and the `.stowrc` and `.gitignore` lines
+that keep a pre-move checkout harmless; the 14 links against its map from
+package path to kit path, with their exact relative texts; the coding-agent-kit sentinels of `lib/bootstrap/checks.sh`,
 each a kit path of the map; the four `*-sync` launchers as regular files; the
 Windows package allowlist; and the bump workflow. That workflow check requires
 a daily schedule at a minute of its own plus dispatch, one run at a time on
@@ -218,7 +219,7 @@ submodule initialized: `tests/claude-customizations.cjs`,
 `tests/ai-integration.sh` and `tests/test_ai_integration.py` stop at once with
 an error that names `git submodule update --init --recursive`, and
 `tests/coding-agent-kit-delivery.sh --ci` fails. Initialize it first, as CI
-does: `git submodule update --init -- common/codex/coding-agent-kit`.
+does: `git submodule update --init -- common/coding-agent-kit/coding-agent-kit`.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
