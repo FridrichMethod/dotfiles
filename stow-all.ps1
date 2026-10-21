@@ -179,7 +179,10 @@ function Test-StowIgnored {
     .DESCRIPTION
         GNU Stow matches patterns containing a slash against the relative
         path and all others against the basename. Testing both is a superset
-        that is correct for every pattern this repo currently ships.
+        that is correct for every pattern this repo currently ships. A local
+        pattern with a slash is matched against "/PATH" (Stow.pm
+        compile_ignore_regexps), so ^/vendored/ names only the package-root
+        vendored/; test that form too.
     #>
     param(
         [Parameter(Mandatory)][string]$RelativePath,
@@ -190,6 +193,7 @@ function Test-StowIgnored {
     $leaf = Split-Path -Leaf $RelativePath
     foreach ($pattern in $Patterns) {
         if ($RelativePath -match $pattern -or $leaf -match $pattern) { return $true }
+        if ($pattern.Contains('/') -and ('/' + $RelativePath) -match $pattern) { return $true }
     }
     return $false
 }

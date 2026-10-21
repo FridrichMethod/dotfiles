@@ -222,6 +222,31 @@ try {
             [IO.File]::SetAttributes($fixture.Source, $attributes)
         }
     }
+    Test-Case 'a path-anchored local ignore skips only the package-root entry, as GNU Stow does' {
+        # Stow matches a pattern that contains a slash against "/PATH", so
+        # ^/vendored/ hides the package's vendored/ tree (a submodule
+        # checkout) but not .config/vendored/. The other patterns must keep
+        # matching exactly as before.
+        $fixture = New-ControlFixture
+        [IO.File]::WriteAllText((Join-Path $fixture.Package '.stow-local-ignore'),
+            "^/vendored`$`n^/vendored/`n(^|/)ignored[.]txt`$`n")
+        $installed = @('.config/vendored/kept', '.claude/skills/vendored/SKILL.md', 'notvendored/kept')
+        $ignored = @('vendored/bin/tool', 'vendored/.git', 'ignored.txt', 'sub/ignored.txt', 'coding-agent-kit/lib/x.py')
+        foreach ($relative in @($installed + $ignored)) {
+            $path = Join-Path $fixture.Package $relative
+            [void][IO.Directory]::CreateDirectory((Split-Path $path -Parent))
+            [IO.File]::WriteAllText($path, $relative)
+        }
+        $action = 'Invoke-StowPackage -PackageRoot (Join-Path $RepoRoot "common") -PackageName git -GlobalIgnores @(''^coding-agent-kit(/|$)'')'
+        $result = Invoke-Control $fixture -Action $action
+        Assert-True (-not $result.Failed) $result.Errors
+        foreach ($relative in @('.fixture') + $installed) {
+            Assert-True ((Get-Item -LiteralPath (Join-Path $fixture.Target $relative) -Force -ErrorAction SilentlyContinue).LinkType -eq 'SymbolicLink') "Not installed: $relative"
+        }
+        foreach ($relative in $ignored) {
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $relative))) "Ignored path installed: $relative"
+        }
+    }
     Test-Case 'declining a conflict preserves original bytes and suppresses replacement and state' {
         $fixture = New-ControlFixture
         [IO.File]::WriteAllText($fixture.Destination, 'irreplaceable original')
