@@ -405,8 +405,11 @@ the clone itself, then follows the Other Linux quick start to a host-less
   `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows' per-user CRL and
   OCSP cache, which every process of the runner account writes, the Actions
   agent's own HTTPS traffic included (the first CI run saw an entry appear
-  during `-Check`, whose probes are all local); `snapshots\<step>.diff` keeps
-  it as `noted ...`. `pwsh` is absent from the development machines, so the
+  during `-Check`, whose probes are all local). The same holds for
+  `AppData\Local\Microsoft\TokenBroker\Cache`, the Web Account Manager's
+  token cache, which Windows' token broker refreshes on its own (a run saw a
+  `.tbres` entry change during `-Check`). `snapshots\<step>.diff` keeps both
+  as `noted ...`. `pwsh` is absent from the development machines, so the
   Windows driver ran first in CI.
 
 ### HUMAN-block policy
