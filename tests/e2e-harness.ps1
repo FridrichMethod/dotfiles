@@ -675,7 +675,7 @@ try {
         }
     }
 
-    Test-Case 'Test-E2ENoted and Stop-E2ENoWrite: CryptnetUrlCache differences are noted, every other HOME difference fails (bug 4)' {
+    Test-Case 'Test-E2ENoted and Stop-E2ENoWrite: CryptnetUrlCache and TokenBroker cache differences are noted, every other HOME difference fails (bug 4)' {
         # The driver compares Windows paths ('\' below the noted root); off
         # Windows $HOME's own separator is '/', so the entries below the
         # root are spelled the Windows way on every platform.
@@ -689,6 +689,10 @@ try {
         Assert-True (Test-E2ENoted "removed $content") 'a removed cache entry'
         Assert-True (Test-E2ENoted "added $($content.ToUpperInvariant())") 'a cache entry in another case'
         Assert-True (-not (Test-E2ENoted "added ${noted}Old\Content\x")) 'a sibling sharing the prefix'
+        $broker = [IO.Path]::Combine($HOME, 'AppData', 'Local', 'Microsoft', 'TokenBroker', 'Cache')
+        Assert-True (Test-E2ENoted "changed $broker\01c5cb21ab1d4fd56e65159d6c36cd5db1f647e1.tbres (2750|1 -> 2750|2)") 'a token broker cache entry'
+        Assert-True (-not (Test-E2ENoted "added ${broker}Old\x")) 'a sibling of the token broker cache sharing its prefix'
+        Assert-True (-not (Test-E2ENoted "added $([IO.Path]::Combine($HOME, 'AppData', 'Local', 'Microsoft', 'TokenBroker', 'Accounts'))\x")) 'the token broker outside its cache'
         Assert-True (-not (Test-E2ENoted "added $profileFile")) 'a HOME file'
         Assert-True (-not (Test-E2ENoted "changed $gitconfig (link|a -> 12|3)")) 'the stowed .gitconfig'
 
@@ -1023,6 +1027,17 @@ try {
         Assert-Equal "$($call.Environment['TEMP'])|$($call.Environment['TMP'])" "$temp|$temp" 'its TEMP and TMP'
         Assert-Equal @(Get-SummaryRows)[0].Detail 'exit 3; 4 todo, 6 human; no writes' 'a noted cache entry passes -Check'
         Assert-Equal (Read-Utf8 (Join-Path $E2E['Out'] 'snapshots/check-nowrite.diff')) "noted added $noted\Content\A1`n" 'the noted diff'
+
+        # Windows' token broker refreshes a cache entry on its own, as it did
+        # during -Check on a GitHub windows runner.
+        $ticket = [IO.Path]::Combine($HOME, 'AppData', 'Local', 'Microsoft', 'TokenBroker', 'Cache') + '\01c5cb21ab1d4fd56e65159d6c36cd5db1f647e1.tbres'
+        $clone = New-DryRun
+        Add-Run 3 $plan
+        $script:Snapshots.Enqueue((New-FakeSnapshot @{ $gitconfig = 'link|x'; $ticket = '2750|1' }))
+        $script:Snapshots.Enqueue((New-FakeSnapshot @{ $gitconfig = 'link|x'; $ticket = '2750|2' }))
+        Use-DryRun { Invoke-E2EStepCheckNoWrite }
+        Assert-Equal @(Get-SummaryRows)[0].Detail 'exit 3; 4 todo, 6 human; no writes' 'a refreshed token broker cache entry passes -Check'
+        Assert-Equal (Read-Utf8 (Join-Path $E2E['Out'] 'snapshots/check-nowrite.diff')) "noted changed $ticket (2750|1 -> 2750|2)`n" 'the noted token broker diff'
 
         $clone = New-DryRun
         Add-Run 3 $plan
