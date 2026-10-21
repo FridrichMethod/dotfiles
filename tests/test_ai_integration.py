@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import select
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -144,12 +145,21 @@ class Enrollment(IsolatedHome):
     @unittest.skipIf(os.name == "nt", "zsh and fzf-tab")
     def test_real_fzf_tab_previews_accounts_through_the_kit(self):
         # Real fzf-tab (FZF_TAB_TEST_DIR names a checkout; the bootstrap clones
-        # it to $ZSH_CUSTOM/plugins/fzf-tab) in an interactive zsh, with dotfiles'
-        # zstyles and a fake fzf that runs fzf-tab's own preview command.
+        # it to $ZSH_CUSTOM/plugins/fzf-tab, CI's macOS job to the runner's temp)
+        # in an interactive zsh, with dotfiles' zstyles and a fake fzf that runs
+        # fzf-tab's own preview command.
         zsh, plugin = shutil.which("zsh"), Path(os.environ.get("FZF_TAB_TEST_DIR", "/nonexistent"))
         if not zsh or not (plugin / "fzf-tab.plugin.zsh").is_file():
             self.skipTest("zsh and an fzf-tab checkout in FZF_TAB_TEST_DIR")
         import pty  # POSIX only: native Windows Python has no termios, so not at module level
+        # A hang below fails with its traceback, not the CI job's timeout. An alarm, not a
+        # watchdog thread: forking a multi-threaded process can deadlock the child.
+        def hung(signum, frame):
+            signal.alarm(10)  # again, should the cleanup of the session hang too
+            raise TimeoutError("the real fzf-tab case hung")
+        self.addCleanup(signal.signal, signal.SIGALRM, signal.signal(signal.SIGALRM, hung))
+        self.addCleanup(signal.alarm, 0)
+        signal.alarm(120)
         self.preview_home()
         log = self.base / "previews.log"
         # fzf-tab splits its fzf-command on spaces, so not below the spaced HOME.
@@ -166,8 +176,10 @@ class Enrollment(IsolatedHome):
             f"autoload -Uz compinit && compinit -u -d '{self.base}/zcompdump'\n"
             f"source '{plugin}/fzf-tab.plugin.zsh'\nsource '{PREVIEW}'\n"
             f"zstyle ':fzf-tab:*' fzf-command '{fake}'\nzstyle ':fzf-tab:*' fzf-flags --ansi\nPS1='READY> '\n")
+        # The caller's PATH behind the launchers, as in every other case: they
+        # need Python 3.11+, which /usr/bin does not have on a macOS runner.
         env = self.env | {"ZDOTDIR": str(rc), "SHELL": zsh, "TERM": "xterm-256color", "FAKE_FZF_LOG": str(log),
-                          "TMPPREFIX": str(self.base / "zsh"), "PATH": os.pathsep.join((str(self.command_bin), "/usr/bin", "/bin"))}
+                          "TMPPREFIX": str(self.base / "zsh")}
         for line, expected in ((b"codex-as \t", ["=== A  -- alice@example.com", "A (Codex)", "email   alice@example.com",
                                                  "plan    plus", "usage   not recorded yet",
                                                  "=== B", "B (Codex)", "email   not recorded yet",
@@ -182,22 +194,31 @@ class Enrollment(IsolatedHome):
                     os.chdir(self.cwd)
                     # No global rc: a distribution zshrc may run its own compinit, which prompts.
                     os.execve(zsh, [zsh, "--no-globalrcs", "-i"], env)
+                output = b""
                 try:
-                    output, deadline = b"", time.monotonic() + 20
+                    deadline = time.monotonic() + 20
                     while b"READY> " not in output and time.monotonic() < deadline:
                         if select.select([fd], [], [], 0.1)[0]:
                             output += os.read(fd, 4096)
                     os.write(fd, line)
                     while not log.exists() and time.monotonic() < deadline:
                         if select.select([fd], [], [], 0.1)[0]:
-                            os.read(fd, 4096)
+                            output += os.read(fd, 4096)
                     time.sleep(0.5)
                 finally:
-                    os.kill(pid, 9)  # only the test's own interactive zsh
-                    os.waitpid(pid, 0)
+                    # The session pty.fork started (its pid is the process group too): only
+                    # the test's own zsh and what it ran. The terminal is closed before the
+                    # wait: on macOS and the BSDs the last close of a terminal with unread
+                    # output can wait for it to drain, and nothing would read it.
+                    try:
+                        os.killpg(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     os.close(fd)
-                self.assertTrue(log.exists(), "fzf-tab never ran the fake fzf")
-                self.assertEqual(log.read_text().splitlines(), expected)
+                    os.waitpid(pid, 0)
+                shown = output.decode(errors="replace")[-2000:]
+                self.assertTrue(log.exists(), "fzf-tab never ran the fake fzf; the terminal showed:\n" + shown)
+                self.assertEqual(log.read_text().splitlines(), expected, shown)
 
     @unittest.skipIf(os.name == "nt", "GNU Stow")
     def test_real_stow_installs_underscore_completions_and_ignores_appledouble(self):
