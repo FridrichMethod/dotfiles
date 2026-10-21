@@ -17,8 +17,6 @@ case ":$PATH:" in
     *":$HOME/micromamba/envs/login/bin:"*) ;;
     *) export PATH="$HOME/micromamba/envs/login/bin:$PATH" ;;
 esac
-# sherlock-kit runs its Slurm programs here directly instead of through ssh.
-export SHK_EXECUTOR=local
 
 # Cache
 if [ -n "$SCRATCH" ]; then

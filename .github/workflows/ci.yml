@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      # Only this submodule: the tests expect PyMOLScripts and sherlock-kit
+      # Only this submodule: the tests expect PyMOLScripts
       # to be absent, as they are without a recursive checkout.
       - name: Check out the coding-agent-kit submodule only
         run: git submodule update --init -- common/coding-agent-kit/coding-agent-kit

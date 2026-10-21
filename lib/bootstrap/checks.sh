@@ -15,8 +15,7 @@
 # Checks only read. git runs with --no-optional-locks, so it never refreshes
 # the index. Fonts are found by file name, never through fc-list, which
 # creates fontconfig caches under ~/.cache and in its prefix. venv-sync runs
-# Python with -I -B, so it writes no bytecode, as does codex-override through
-# codex-instructions-sync --check, which never writes. Tools whose version flag writes
+# Python with -I -B, so it writes no bytecode. Tools whose version flag writes
 # are presence-only rows in tools.tsv, so they never run: brew
 # (.git/describe-cache), codex (~/.codex/tmp/arg0), nvim (its log) and
 # pre-commit (__pycache__). Only bootstrap_check_auth (doctor.sh --online)
@@ -36,8 +35,7 @@ stow-links core H7-stow
 path-order core H7-stow
 rc-pollution core X-rc-protection
 omz-order core X-recovery
-nvm-homebrew ai S4-nvm
-codex-override ai H7-stow'
+nvm-homebrew ai S4-nvm'
 
 # Files under common/ that third-party installers append to through the stow
 # symlinks in $HOME.
@@ -429,11 +427,10 @@ bootstrap_check_venv_sync() {
 }
 
 # The files each submodule must provide, by its .gitmodules path, relative to
-# it: what the stowed links point at (PyMOL's .pymolrc; sherlock-kit's rules,
-# skill and shk entry point; coding-agent-kit's launchers and Claude
+# it: what the stowed links point at (PyMOL's .pymolrc and
+# coding-agent-kit's launchers and Claude
 # helpers). A submodule not listed here needs only its .git.
 BOOTSTRAP_SUBMODULE_SENTINELS='common/pymol/PyMOLScripts configs/.pymolrc
-common/sherlock-kit/sherlock-kit src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk
 common/coding-agent-kit/coding-agent-kit bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
 
 # The coding-agent-kit checkout that the pull across the kit's move into its
@@ -487,7 +484,8 @@ bootstrap_submodule_missing() {
 # so the stowed links into it resolve; a pre-move coding-agent-kit checkout
 # that no .gitmodules path names is a warning with the rm that removes it.
 bootstrap_check_submodule() {
-    local lines path missing='' found='' leftover=$1/$BOOTSTRAP_KIT_LEFTOVER
+    local lines path missing='' found='' leftover=$1/$BOOTSTRAP_KIT_LEFTOVER advice=''
+    local sherlock_leftover=$1/common/sherlock-kit/sherlock-kit
     if [ ! -f "$1/.gitmodules" ]; then
         bootstrap_check_result ok "no .gitmodules, so no submodule to check"
         return 0
@@ -504,87 +502,24 @@ bootstrap_check_submodule() {
     case "$found, " in
         *", $BOOTSTRAP_KIT_LEFTOVER, "*) leftover='' ;;
     esac
+    if [ -n "$leftover" ] && { [ -e "$leftover" ] || [ -L "$leftover" ]; }; then
+        advice="remove the pre-move coding-agent-kit checkout: rm -rf \"$leftover\" (keep .git/modules/$BOOTSTRAP_KIT_LEFTOVER, the repository of common/coding-agent-kit/coding-agent-kit)"
+    fi
+    case "$found, " in
+        *", common/sherlock-kit/sherlock-kit, "*) sherlock_leftover='' ;;
+    esac
+    if [ -n "$sherlock_leftover" ] && { [ -e "$sherlock_leftover" ] || [ -L "$sherlock_leftover" ]; }; then
+        advice="${advice:+$advice; }inspect and remove the retired sherlock-kit checkout manually: rm -rf \"$sherlock_leftover\" (inspect and retain .git/modules/common/sherlock-kit/sherlock-kit until any local work is recovered)"
+    fi
     if [ -n "$missing" ]; then
         bootstrap_check_result missing "no ${missing#, }; the stowed links dangle (git submodule update --init --recursive)"
-    elif [ -n "$leftover" ] && { [ -e "$leftover" ] || [ -L "$leftover" ]; }; then
-        bootstrap_check_result warn "submodules checked out: ${found#, }; remove the pre-move coding-agent-kit checkout: rm -rf \"$leftover\" (keep .git/modules/$BOOTSTRAP_KIT_LEFTOVER, the repository of common/coding-agent-kit/coding-agent-kit)"
+    elif [ -n "$advice" ]; then
+        bootstrap_check_result warn "submodules checked out: ${found#, }; $advice"
     elif [ -n "$found" ]; then
         bootstrap_check_result ok "submodules checked out: ${found#, }"
     else
         bootstrap_check_result ok "no submodule in .gitmodules"
     fi
-}
-
-# Local advisory threshold for global instruction size, not a Codex truncation limit.
-# project_doc_max_bytes limits project documents separately in Codex 0.162.1.
-BOOTSTRAP_CODEX_OVERRIDE_MAX=28672
-
-# bootstrap_check_codex_override ROOT HOST: on a host whose sherlock-kit
-# package links the toolkit rules, ~/.codex/AGENTS.override.md is the file
-# ./stow-all.sh generates from common/codex/.codex/AGENTS.md and those rules,
-# as codex-instructions-sync --check (Python -I -B, which writes nothing)
-# judges it. Platform mode and hosts without the rules link skip.
-bootstrap_check_codex_override() {
-    local root=$1 host=${2:-} rules helper live output rc
-    if [ -z "$host" ]; then
-        bootstrap_check_result skip "no host overlay, so no sherlock-kit rules reach Codex"
-        return 0
-    fi
-    rules=$root/$host/sherlock-kit/.claude/rules/sherlock-kit.md
-    if [ ! -L "$rules" ] && [ ! -e "$rules" ]; then
-        bootstrap_check_result skip "$host has no sherlock-kit rules; Codex reads ~/.codex/AGENTS.md"
-        return 0
-    fi
-    helper=$root/common/codex/.local/bin/codex-instructions-sync
-    live=${HOME%/}/.codex/AGENTS.override.md
-    if output=$("$helper" --check --append "$rules" "$root/common/codex/.codex/AGENTS.md" "$live" </dev/null 2>&1); then
-        bootstrap_codex_override_checked "$host" "$live" "${output##*"$BOOTSTRAP_NL"}"
-    else
-        rc=$?
-        bootstrap_codex_override_failed "$host" "$live" "$rc" "$output"
-    fi
-}
-
-# bootstrap_codex_override_checked HOST LIVE LAST: judge a --check that
-# succeeded by its last line, which ends in (current) or (stale).
-bootstrap_codex_override_checked() {
-    local host=$1 live=$2 bytes
-    case $3 in
-        *'(current)')
-            bytes=$(wc -c 2>/dev/null <"$live") || bytes=
-            bytes=${bytes//[!0-9]/}
-            if [ "${bytes:-0}" -gt "$BOOTSTRAP_CODEX_OVERRIDE_MAX" ]; then
-                bootstrap_check_result warn "generated ~/.codex/AGENTS.override.md is current but $bytes bytes, over the local 28 KiB advisory threshold; review context usage in common/codex/.codex/AGENTS.md or the $host sherlock-kit rules"
-            else
-                bootstrap_check_result ok "generated ~/.codex/AGENTS.override.md is current: common/codex/.codex/AGENTS.md plus the $host sherlock-kit rules (${bytes:-?} bytes)"
-            fi
-            ;;
-        *'(stale)')
-            if [ -e "$live" ] || [ -L "$live" ]; then
-                bootstrap_check_result outdated "generated ~/.codex/AGENTS.override.md is stale; rerun ./stow-all.sh $host to regenerate it from common/codex/.codex/AGENTS.md and the $host sherlock-kit rules"
-            else
-                bootstrap_check_result missing "no ~/.codex/AGENTS.override.md, so Codex misses the $host sherlock-kit rules; rerun ./stow-all.sh $host"
-            fi
-            ;;
-        *) bootstrap_check_result missing "codex-instructions-sync --check reported neither current nor stale: $3" ;;
-    esac
-}
-
-# bootstrap_codex_override_failed HOST LIVE RC OUTPUT: judge a failed
-# --check: the rules link dangles (the only message with the submodule hint),
-# LIVE is not the helper's own file, or anything else went wrong.
-bootstrap_codex_override_failed() {
-    local host=$1 live=$2
-    case $4 in
-        *'git submodule update --init --recursive'*)
-            bootstrap_check_result missing "the $host sherlock-kit rules link dangles, so ~/.codex/AGENTS.override.md cannot be checked (git submodule update --init --recursive)"
-            ;;
-        *'not generated by codex-instructions-sync'* | *"refusing to replace a symlink: $live"* | \
-            *"not a regular file: $live"* | *"not provably generated: $live"*)
-            bootstrap_check_result human "the override ~/.codex/AGENTS.override.md was not generated by codex-instructions-sync (a hand-written file, a symlink or not a regular file): Codex reads it instead of ~/.codex/AGENTS.md and the $host sherlock-kit rules; move it aside, then rerun ./stow-all.sh $host"
-            ;;
-        *) bootstrap_check_result missing "codex-instructions-sync --check failed (exit $3): ${4%%"$BOOTSTRAP_NL"*}" ;;
-    esac
 }
 
 # bootstrap_physical_path PATH: PATH with every symlink resolved (readlink
@@ -788,7 +723,6 @@ bootstrap_check_structural() {
         rc-pollution) bootstrap_check_rc_pollution "$2" ;;
         omz-order) bootstrap_check_omz_order ;;
         nvm-homebrew) bootstrap_check_nvm_homebrew ;;
-        codex-override) bootstrap_check_codex_override "$2" "${5-${HOST-}}" ;;
         *) bootstrap_check_result warn "unknown structural check $1" ;;
     esac
 }

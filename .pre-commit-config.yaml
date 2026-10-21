@@ -138,14 +138,7 @@ repos:
         entry: tests/stow-all.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
-        types: []
-      - id: sherlock-kit-delivery
-        name: sherlock-kit submodule delivery and stow
-        entry: tests/sherlock-kit-delivery.sh
-        language: script
-        pass_filenames: false
-        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(config_sync\.py|sync-runtime\.sh|terminal\.sh)|common/(claude|codex|coding-agent-kit|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
+        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|\.stowrc|tests/stow-all\.sh)$
         types: []
       - id: coding-agent-kit-delivery
         name: coding-agent-kit submodule delivery and links
@@ -202,7 +195,7 @@ repos:
         entry: tests/doctor.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|docs/bootstrap\.md|tests/doctor\.sh)$
+        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|docs/bootstrap\.md|tests/doctor\.sh)$
         types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks

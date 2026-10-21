@@ -32,3 +32,6 @@
 # common/coding-agent-kit/.stow-local-ignore ignores the current checkout.
 # Drop this line only after no host has the leftover (docs/coding-agent-kit.md).
 --ignore=^coding-agent-kit(/|$)
+
+# Retired Sherlock checkout may remain without its package ignore file.
+--ignore=^sherlock-kit(/|$)

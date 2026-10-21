@@ -2,10 +2,6 @@
 	path = common/pymol/PyMOLScripts
 	url = https://github.com/FridrichMethod/PyMOLScripts.git
 	branch = main
-[submodule "common/sherlock-kit/sherlock-kit"]
-	path = common/sherlock-kit/sherlock-kit
-	url = https://github.com/FridrichMethod/sherlock-kit.git
-	branch = main
 [submodule "common/codex/coding-agent-kit"]
 	path = common/coding-agent-kit/coding-agent-kit
 	url = https://github.com/FridrichMethod/coding-agent-kit.git

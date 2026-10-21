@@ -9,9 +9,9 @@ backend is deliberately small; no general application framework is involved.
 | --- | --- |
 | Unix installation | Bash, Git, GNU Stow (and its Perl runtime), ordinary POSIX utilities |
 | Native Windows installation | PowerShell 7+, Git for Windows / Git Bash, elevated symlink creation |
-| All four AI sync helpers | Python 3.11+; no package installation during login or stow |
+| All three AI sync helpers | Python 3.11+; no package installation during login or stow |
 | Codex TOML merge | Exact `tomlkit` pin in `requirements-sync.txt` |
-| Claude JSON / Codex rules / Codex instructions alone | Python standard library only, via an explicitly selected interpreter |
+| Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
 | Default parser setup | Python's `venv` and pip support; downloads the pinned wheel unless pre-provisioned offline |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Optional skill downloads | Bash, curl, tar, rsync |
@@ -161,14 +161,10 @@ prints) appear at the start of the When absent cell.
 | `claude` | mac, wsl-ubuntu, lab-ubuntu, win | cask `claude-code` | pinned `claude` (inspect) | not checked: optional site module (`ml spider claude-code`) | winget `Anthropic.ClaudeCode` | Claude Code is unavailable |
 | `codex` | mac, wsl-ubuntu, lab-ubuntu, win | cask `codex` | pinned `codex` (codex-package) | not checked: optional site module (`ml spider codex`) | winget `OpenAI.Codex` | Codex is unavailable |
 
-Outside every tier: the Sherlock toolkit (`shk`) comes with the
-`common/sherlock-kit/sherlock-kit` submodule, not from a package manager.
-`./setup-host.sh` installs nothing for it; on `lab-ubuntu`, `wsl-ubuntu` and
-`sherlock`, `./stow-all.sh <host>` links its rules, skill and stdlib-only
-`bin/shk`, which needs only Python 3.11+ as `python3`, and the doctor's
-`submodule` row checks those files. Projects that pin a release install it
-into their own environment with pip, and that env's `shk` wins while it is
-active. No Windows host gets it. See [sherlock-kit.md](sherlock-kit.md).
+The Sherlock toolkit is installed and pinned by consumer projects from its
+[standalone repository](https://github.com/FridrichMethod/sherlock-kit).
+Dotfiles does not install `shk`, toolkit rules or skills. See
+[sherlock-kit.md](sherlock-kit.md) for migration of older hosts.
 
 ### Desktop tier
 

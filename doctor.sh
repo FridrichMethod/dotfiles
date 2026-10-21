@@ -7,8 +7,7 @@ set -euo pipefail
 # Example: ./doctor.sh --host lab-ubuntu
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
 # has, plus structural checks (locale, .venv-sync, submodule, stow links, PATH
-# order, rc-file pollution, oh-my-zsh order, Homebrew nvm, the generated Codex
-# instructions override). Read-only and
+# order, rc-file pollution, oh-my-zsh order and Homebrew nvm). Read-only and
 # offline: it installs nothing, writes nothing and uses no network unless
 # --online (auth status probes) or --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
@@ -72,7 +71,7 @@ usage() {
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
         'and of the structural setup (locale, venv-sync, submodule, stow-links,' \
-        'path-order, rc-pollution, omz-order, nvm-homebrew, codex-override).' \
+        'path-order, rc-pollution, omz-order, nvm-homebrew).' \
         '' \
         'Host selection (default: DOTFILES_HOST, else the host ./stow-all.sh recorded):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \

@@ -169,6 +169,22 @@ try {
     }
     $gitBash = Get-TestGitBash
 
+    Test-Case 'exact retired launcher links converge and preserve legacy manual overrides' {
+        $fixture = New-Fixture
+        foreach ($name in @('shk', 'codex-instructions-sync')) {
+            $link = Join-Path $fixture.Target ".local/bin/$name"
+            [void][IO.Directory]::CreateDirectory((Split-Path $link -Parent))
+            New-Item -ItemType SymbolicLink -Path $link -Value (Join-Path $fixture.Repo "common/codex/.local/bin/$name") | Out-Null
+        }
+        $override = Join-Path $fixture.Target '.codex/AGENTS.override.md'
+        Write-FixtureFile $override 'manual override'
+        Assert-Success (Invoke-Install $fixture)
+        foreach ($name in @('shk', 'codex-instructions-sync')) {
+            Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target ".local/bin/$name") -Force -ErrorAction SilentlyContinue)) "Retired $name survived."
+        }
+        Assert-Equal 'manual override' ([IO.File]::ReadAllText($override)) 'Windows changed a legacy override.'
+        Assert-Success (Invoke-Install $fixture)
+    }
     Test-Case 'real links, host precedence, ignore rules, allowlist and materialized AI files' {
         $fixture = New-Fixture
         $portable = Join-Path $fixture.Repo 'common/codex/.codex/config.toml'

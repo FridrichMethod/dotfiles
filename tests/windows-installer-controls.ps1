@@ -203,6 +203,47 @@ function Test-Case([string]$Name, [scriptblock]$Action) {
     Write-Output "PASS: $Name"
 }
 try {
+    Test-Case 'retired launcher links honor preview, decline and Strict without following targets' {
+        foreach ($name in @('shk', 'codex-instructions-sync')) {
+            foreach ($mode in @('apply', 'preview', 'decline', 'strict')) {
+                $fixture = New-ControlFixture
+                $relative = ".local/bin/$name"
+                $link = Join-Path $fixture.Target $relative
+                [void][IO.Directory]::CreateDirectory((Split-Path $link -Parent))
+                $oldSource = Join-Path $fixture.Root "common/codex/$relative"
+                New-Item -ItemType SymbolicLink -Path $link -Value $oldSource | Out-Null
+                $decline = if ($mode -in @('decline', 'strict')) { 'Remove retired dotfiles symlink' } else { '' }
+                $result = Invoke-Control $fixture -Preview:($mode -eq 'preview') -Strict:($mode -eq 'strict') -Decline $decline `
+                    -Action "Remove-RetiredLink '$relative' 'common/codex/$relative'"
+                Assert-True ($result.Failed -eq ($mode -eq 'strict')) "Wrong Strict result: $($result.Errors)"
+                $remaining = Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue
+                Assert-True ([bool]$remaining -eq ($mode -ne 'apply')) "Retirement changed the wrong entry in $mode mode."
+                Assert-True ((Test-Path -LiteralPath $fixture.State) -eq ($mode -eq 'apply')) "Retirement acknowledged $mode."
+                if ($mode -in @('decline', 'strict')) {
+                    Assert-True (@($result.Prompts | Where-Object { $_ -like '*Remove retired dotfiles symlink*' }).Count -eq 1) 'Removal asked more than once.'
+                }
+            }
+            foreach ($kind in @('live', 'foreign', 'file')) {
+                $fixture = New-ControlFixture
+                $relative = ".local/bin/$name"
+                $link = Join-Path $fixture.Target $relative
+                [void][IO.Directory]::CreateDirectory((Split-Path $link -Parent))
+                $oldSource = Join-Path $fixture.Root "common/codex/$relative"
+                if ($kind -eq 'file') { [IO.File]::WriteAllText($link, 'manual') }
+                else {
+                    if ($kind -eq 'live') {
+                        [void][IO.Directory]::CreateDirectory((Split-Path $oldSource -Parent))
+                        [IO.File]::WriteAllText($oldSource, 'live')
+                    } else { $oldSource = Join-Path $fixture.Root "foreign/$name" }
+                    New-Item -ItemType SymbolicLink -Path $link -Value $oldSource | Out-Null
+                }
+                $result = Invoke-Control $fixture -Action "Remove-RetiredLink '$relative' 'common/codex/$relative'"
+                Assert-True (-not $result.Failed) $result.Errors
+                Assert-True ([bool](Get-Item -LiteralPath $link -Force)) "Lost $kind entry."
+                Assert-True ($result.Prompts.Count -eq 0) "Prompted for $kind entry."
+            }
+        }
+    }
     Test-Case 'fixture cleanup preserves external read-only targets and removes dangling links' {
         $fixture = New-ControlFixture
         $cleanupRoot = Join-Path $fixture.Root 'cleanup'

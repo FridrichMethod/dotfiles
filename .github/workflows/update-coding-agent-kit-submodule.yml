@@ -2,8 +2,8 @@ name: update coding-agent-kit submodule
 
 on:
   schedule:
-    # Run daily at 05:17 UTC, after the PyMOLScripts (04:00) and sherlock-kit
-    # (04:30) bumps and off the top of the hour, where GitHub delays
+    # Run daily at 05:17 UTC, after the PyMOLScripts (04:00)
+    # bump and off the top of the hour, where GitHub delays
     # scheduled runs most. Delays still happen: a push that lands on main
     # first makes this run's push fail as non-fast-forward, nothing is
     # bumped, and the next run retries.

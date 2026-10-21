@@ -32,7 +32,7 @@ staged files on commit and tracked files with `--all-files`. Only printable
 ASCII, tabs, carriage returns and newlines are allowed; other characters fail
 with a file and line. The hook enforces the character set; English wording is
 also a documentation policy and review requirement. Submodule contents are
-outside this hook's scope; sherlock-kit and coding-agent-kit have their own
+outside this hook's scope; coding-agent-kit has its own
 independent hooks.
 
 Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
@@ -161,17 +161,12 @@ overlays in a clean environment with a missing, a non-executable and a fake
 Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
 `brew shellenv` line applies only once brew can run.
 
-`tests/sherlock-kit-delivery.sh` checks the sherlock-kit submodule delivery.
-By default it builds a fixture submodule tree (CI checks out only the
-coding-agent-kit submodule),
-compares each link's exact relative `readlink` text, stows every host package
-into a temporary home, and covers the generated Codex override and the
-warn-and-skip path of an uninitialized submodule; without GNU Stow it prints
-`SKIP:`, and `--ci` fails instead. `--real` checks the real checkout, for the
-update Action and acceptance runs. `tests/doctor.sh` runs the real
-`codex-instructions-sync` for its `codex-override` cases, so like
-`tests/stow-all.sh` it needs the AI-sync runtime (`DOTFILES_SYNC_PYTHON` or
-`.venv-sync`).
+`tests/stow-all.sh` and `tests/unix-installer.sh` cover retired Sherlock
+links, deleted source parents, generated override retirement, foreign entries,
+repeat installs and ignored leftover checkouts. The latter uses real GNU Stow
+and the real local-remote updater flow. Windows controls and native installer
+fixtures cover the two exact retired launcher links, preview and decline
+behavior. Native Windows coverage requires the Windows CI job.
 
 The launcher, configuration and Claude helper suites live in
 coding-agent-kit, whose CI runs them on frozen fixtures.
@@ -182,12 +177,12 @@ committed submodule tree to a temporary directory, copies the real
 `settings.json` over its fixture, and runs the Claude helper tests there;
 `tests/run.ps1` does the same natively on Windows.
 
-`tests/coding-agent-kit-delivery.sh`, modeled on the sherlock-kit test, checks
+`tests/coding-agent-kit-delivery.sh` checks
 with git, bash and coreutils only: the `.gitmodules` entry, the package's
 path-anchored `.stow-local-ignore` and the `.stowrc` and `.gitignore` lines
 that keep a pre-move checkout harmless; the 14 links against its map from
 package path to kit path, with their exact relative texts; the coding-agent-kit sentinels of `lib/bootstrap/checks.sh`,
-each a kit path of the map; the four `*-sync` launchers as regular files; the
+each a kit path of the map; the three `*-sync` launchers as regular files; the
 Windows package allowlist; and the bump workflow. That workflow check requires
 a daily schedule at a minute of its own plus dispatch, one run at a time on
 `main` under `bash` in a concurrency group keyed on the ref (so a skipped run

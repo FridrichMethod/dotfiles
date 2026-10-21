@@ -96,7 +96,7 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # checks, core-symlinks, the -Online and --smoke rows); tools.tsv never uses
 # them (tests/test_bootstrap_manifest.py RESERVED_IDS).
 $ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
-    'nvm-homebrew', 'core-symlinks', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'codex-override')
+    'nvm-homebrew', 'core-symlinks', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.
@@ -170,11 +170,19 @@ function Get-DoctorStructuralResults {
     # The checkout that the pull across coding-agent-kit's move into its own
     # package leaves behind; its module directory is the current checkout's.
     $leftover = [IO.Path]::Combine($RepoRoot, 'common', 'codex', 'coding-agent-kit')
+    $advice = @()
+    if ($paths -notcontains 'common/codex/coding-agent-kit' -and (Get-Item -LiteralPath $leftover -Force -ErrorAction SilentlyContinue)) {
+        $advice += "remove the pre-move coding-agent-kit checkout: Remove-Item -LiteralPath '$($leftover -replace "'", "''")' -Recurse -Force (keep .git\modules\common\codex\coding-agent-kit, the repository of common\coding-agent-kit\coding-agent-kit)"
+    }
+    $retired = Join-Path $RepoRoot 'common/sherlock-kit/sherlock-kit'
+    if ($paths -notcontains 'common/sherlock-kit/sherlock-kit' -and (Get-Item -LiteralPath $retired -Force -ErrorAction SilentlyContinue)) {
+        $advice += "inspect and remove the retired sherlock-kit checkout manually: Remove-Item -LiteralPath '$($retired -replace "'", "''")' -Recurse -Force (inspect and retain .git/modules/common/sherlock-kit/sherlock-kit until any local work is recovered)"
+    }
     if ($absent.Count) {
         New-DoctorResult missing submodule core "not initialized: $($absent -join ', '); run git submodule update --init --recursive" P0-preflight
     }
-    elseif ($paths -notcontains 'common/codex/coding-agent-kit' -and (Test-Path -LiteralPath $leftover)) {
-        New-DoctorResult warn submodule core "$($paths.Count) initialized; remove the pre-move coding-agent-kit checkout: Remove-Item -LiteralPath '$($leftover -replace "'", "''")' -Recurse -Force (keep .git\modules\common\codex\coding-agent-kit, the repository of common\coding-agent-kit\coding-agent-kit)" P0-preflight
+    elseif ($advice.Count) {
+        New-DoctorResult warn submodule core "$($paths.Count) initialized; $($advice -join '; ')" P0-preflight
     }
     else { New-DoctorResult ok submodule core "$($paths.Count) initialized" P0-preflight }
 

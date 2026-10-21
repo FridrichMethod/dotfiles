@@ -264,14 +264,11 @@ the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
 `tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
 `submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order`,
-`nvm-homebrew` and `codex-override`. `submodule` reads `.gitmodules` and
-requires each submodule's sentinel files (the targets of the stowed links;
-the `.git` of one it has none for). `codex-override` runs only on a host whose
-`sherlock-kit` package links the toolkit rules (otherwise `skip`) and judges
-`~/.codex/AGENTS.override.md` with `codex-instructions-sync --check`, which
-writes nothing: stale is `outdated`, absent or a dangling rules link
-`missing`, a file the helper did not generate `human`, and a current one over
-28 KiB `warn` (Codex truncates global instructions at 32 KiB). The step it cites is the one that installs the tool on that
+and `nvm-homebrew`. `submodule` reads `.gitmodules` and requires each
+submodule's sentinel files (the targets of stowed links; the `.git` of one it
+has none for). Retired Sherlock and pre-move coding-agent-kit checkouts are
+warnings with manual removal advice; missing current submodules take precedence.
+The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
 locale check at P0-preflight (`claude` and `codex` are not checked there); on `macos` the apt rows (git-lfs, tmux and
@@ -667,10 +664,7 @@ have a minimum), the overlay the person chose, and a complete checkout.
 - **Verify:** no submodule line starts with `-`, and
   `ls -L ~/dotfiles/common/pymol/.pymolrc` and
   `ls -L ~/dotfiles/common/coding-agent-kit/.local/bin/codex-as` (coding-agent-kit)
-  resolve, as does
-  `ls -L ~/dotfiles/<host>/sherlock-kit/.claude/skills/sherlock-kit/SKILL.md` on a
-  host with a `sherlock-kit` package (`lab-ubuntu`, `wsl-ubuntu`, `sherlock`;
-  after H7-stow, `ls -L ~/.claude/skills/sherlock-kit/SKILL.md`); the doctor's
+  resolve; the doctor's
   `submodule` check is `ok`. setup-host's P0-preflight line records the OS, architecture,
   glibc and detected platform, and warns about a missing submodule, a
   `DOTFILES_DIR` that names another checkout, or uncommitted changes in the
@@ -1136,13 +1130,10 @@ in the environment it starts from, so sessions on several nodes do not race its
 updater over the shared home. Do not leave agents running unattended on login
 nodes.
 
-**Sherlock toolkit.** `shk` is neither a site module nor a `tools.tsv` row,
-and setup-host installs nothing for it: it arrives with the
-`common/sherlock-kit/sherlock-kit` submodule. On `lab-ubuntu`, `wsl-ubuntu`
-and `sherlock`, H7-stow links its rules, skill and stdlib-only `shk` (Python
-3.11+ as `python3`) and generates the Codex override; a project env's
-pip-installed `shk` wins while that env is active.
-[sherlock-kit.md](sherlock-kit.md) describes the delivery and its updates.
+**Sherlock toolkit.** Consumer projects install and pin `shk` from its
+[standalone repository](https://github.com/FridrichMethod/sherlock-kit).
+Neither setup-host nor Stow installs its launcher, rules or skill.
+[sherlock-kit.md](sherlock-kit.md) covers retirement of earlier delivery.
 
 **OS and glibc.** Record `cat /etc/os-release` and `ldd --version` on each
 cluster; vendor binaries and conda-forge builds each need a minimum glibc.
@@ -1465,11 +1456,7 @@ them there, unpack the same tarball into your home on that host by hand.
 Applies to every Unix host (Windows: HW-stow), after S3-clones and
 S4-setup-sync. `./stow-all.sh H` runs the Claude and Codex sync helpers (writing
 `~/.claude/settings.json`, `~/.codex/config.toml` and
-`~/.codex/rules/portable.rules`, and on a host with a `sherlock-kit` package
-`~/.codex/AGENTS.override.md`: the common `AGENTS.md` plus that host's rules;
-while the submodule is not initialized it warns
-`sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`
-and skips only that file), links `common/` and then the overlay into
+`~/.codex/rules/portable.rules`), links `common/` and then the overlay into
 `$HOME`, tightens `~/.ssh` modes and records the host for the doctor and the
 login updater. While the coding-agent-kit submodule is not checked out, it
 warns once that the kit's links dangle, still syncs and stows, and records no
@@ -1514,7 +1501,7 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
   anything, when one is left.
 - **Verify:** `ls -l ~/.zshrc ~/.profile ~/.gitconfig` shows links into
   `~/dotfiles/common/`; in a new shell the doctor's `stow-links`,
-  `path-order` and (on a host with a `sherlock-kit` package) `codex-override`
+  and `path-order`
   checks are `ok` (path-order warns only when a command in
   `~/.local/bin` is shadowed by a second install earlier on PATH: remove the
   one you do not use).

@@ -123,3 +123,10 @@ test -z "$(git -C "$CLONE" log --oneline --branches --not main)" &&
 - Inspect the final diff or artifact before reporting completion.
 - State the outcome, key changes, validation performed, and remaining risks or limitations.
 - When blocked, identify the concrete blocker and the smallest user action needed to continue.
+
+## Stanford Sherlock
+
+- Before Sherlock work, and again after a summary or context compaction, read `/etc/agents/AGENTS.md` and the task's topic files (`storage.md`, `slurm.md`, `software.md`, `policy.md` beside it). Their numbered site rules take precedence. On Sherlock, read them locally. From a workstation, check the user's existing control master with the project's `shk doctor`; once usable, read with `ssh -oBatchMode=yes -oProxyCommand=false sherlock-plain cat /etc/agents/AGENTS.md`, then read the topic files through the same master. Never log in or authenticate for the user.
+- Use the current project's own pinned sherlock-kit (`shk`) for jobs, status and transfers. If it has none, ask before adding `sherlock-kit @ git+https://github.com/FridrichMethod/sherlock-kit@<latest release tag>` to its environment. Preserve existing project pins; never use a global, another project's or a development copy, or fall back to `ssh ... sbatch`.
+- Read that install's `shk rules workstation` (on Sherlock: `shk rules cluster`). `shk install-skill --project DIR --rules workstation|cluster` copies the skill and requested Claude rules; Codex gets a hint to append the rules output to the project's `AGENTS.md` and must read the rules directly if they are not loaded.
+- Inside Sherlock jobs, invoke the project's pinned install on Sherlock by absolute path from an environment in `$GROUP_HOME`, or use the skill's `sha256sum` one-liner for manifests. Build environments only inside a Slurm allocation.

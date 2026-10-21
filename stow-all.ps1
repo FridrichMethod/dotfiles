@@ -148,6 +148,28 @@ function Test-StowShouldProcess {
     return $false
 }
 
+function Remove-RetiredLink {
+    # Advanced binding supplies the PSCmdlet used by Test-StowShouldProcess,
+    # including when this function is invoked outside the installer script.
+    param(
+        [Parameter(Mandatory)][string]$RelativePath,
+        [Parameter(Mandatory)][string]$SourcePath
+    )
+    $link = Join-Path $Target $RelativePath
+    $item = Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue
+    if (-not $item -or $item.LinkType -ne 'SymbolicLink') { return }
+    try {
+        $text = @($item.Target)[0]
+        $resolved = [IO.Path]::GetFullPath($text, (Split-Path $link -Parent))
+        $expected = [IO.Path]::GetFullPath((Join-Path $RepoRoot $SourcePath))
+        if ($resolved -ne $expected -or [IO.File]::Exists($resolved) -or [IO.Directory]::Exists($resolved)) { return }
+    } catch { return } # A foreign or unresolvable target is never ours to remove.
+    if (Test-StowShouldProcess $link 'Remove retired dotfiles symlink') {
+        if ($item.PSIsContainer) { [IO.Directory]::Delete($link) }
+        else { [IO.File]::Delete($link) }
+    }
+}
+
 function Get-StowIgnorePattern {
     <#
     .SYNOPSIS
@@ -497,11 +519,6 @@ if ($HostDir) {
     $claudeHost = Join-Path $RepoRoot "$HostDir\claude\.claude\settings.json"
     if (Test-Path -LiteralPath $claudeHost) { $claudePortable = $claudeHost }
 }
-# Deliberate POSIX-only exception: stow-all.sh also runs a fourth helper,
-# codex-instructions-sync, which generates ~/.codex/AGENTS.override.md only on
-# hosts whose sherlock-kit package links the toolkit rules (lab-ubuntu,
-# wsl-ubuntu, sherlock). No Windows host carries those rules, so this plan
-# keeps three helpers; add a step here before giving a Windows host the rules.
 $syncPlan = @(
     @{ Label = 'Codex settings'; Helper = Join-Path $commonRoot 'codex\.local\bin\codex-config-sync'
         Portable = $codexPortable; Live = Join-Path $Target '.codex\config.toml' },
@@ -556,6 +573,11 @@ if (@(Get-DotfilesDanglingKitLink).Count) {
 }
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow preflight failed: $($script:Warnings -join '; ')"
+}
+Remove-RetiredLink '.local/bin/shk' 'common/codex/.local/bin/shk'
+Remove-RetiredLink '.local/bin/codex-instructions-sync' 'common/codex/.local/bin/codex-instructions-sync'
+if ($Strict -and $script:Warnings.Count -gt 0) {
+    throw "Stow retirement failed: $($script:Warnings -join '; ')"
 }
 if (-not $WhatIfPreference) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync }

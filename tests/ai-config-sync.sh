@@ -323,18 +323,28 @@ if ! diff \
     exit 1
 fi
 
-# Sherlock instructions reach agents only through the sherlock-kit submodule's
-# linked rules (docs/sherlock-kit.md), never as a block spliced into the
-# common global files that every host, Sherlock included, stows. The class
-# spells out \b, which BSD grep on macOS does not promise in an ERE.
-for global_instructions in \
-    "$REPO_ROOT/common/claude/.claude/CLAUDE.md" \
-    "$REPO_ROOT/common/codex/.codex/AGENTS.md"; do
-    if grep -Eq 'SHERLOCK-KIT|(^|[^[:alnum:]_])shk([^[:alnum:]_]|$)' "$global_instructions"; then
-        echo "ERROR: ${global_instructions#"$REPO_ROOT"/} carries Sherlock toolkit text; it belongs in the sherlock-kit submodule rules" >&2
-        exit 1
-    fi
-done
+# Global Sherlock policy must stay host-neutral and identical for both agents;
+# project-local pinned installs supply the detailed toolkit rules.
+python3 -I -B - "$REPO_ROOT" <<'PY_POLICY'
+from pathlib import Path
+import re
+import sys
+
+root = Path(sys.argv[1])
+sections = []
+for relative in ("common/claude/.claude/CLAUDE.md", "common/codex/.codex/AGENTS.md"):
+    content = (root / relative).read_bytes()
+    assert b"SHERLOCK-KIT" not in content, f"{relative}: legacy Sherlock block marker"
+    heading = b"## Stanford Sherlock\n"
+    assert content.count(heading) == 1, f"{relative}: expected one Stanford Sherlock section"
+    section = content.split(heading, 1)[1].split(b"\n## ", 1)[0]
+    assert section.strip(), f"{relative}: empty Stanford Sherlock section"
+    assert not re.search(rb"\bv?\d+\.\d+(?:\.\d+)?\b", section), (
+        f"{relative}: global Sherlock policy must not pin a release"
+    )
+    sections.append(section)
+assert sections[0] == sections[1], "global Stanford Sherlock sections differ"
+PY_POLICY
 
 if grep -Eq '(/Users/|/home/|/apps/)' "$CODEX_RULES_PORTABLE"; then
     echo "ERROR: portable Codex policy contains a host-specific path" >&2

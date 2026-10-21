@@ -32,7 +32,7 @@ The same files are on [GitHub](https://github.com/FridrichMethod/coding-agent-ki
 where `main` may be ahead of the pinned release.
 
 The checkout sits at the root of its own Stow package, `common/coding-agent-kit`,
-laid out like `common/sherlock-kit`. The package's `.stow-local-ignore` holds
+with its own ignore file. The package's `.stow-local-ignore` holds
 the path-anchored `^/coding-agent-kit$` and `^/coding-agent-kit/`: Stow matches
 a pattern with a slash against `/PATH`, so only the package-root checkout is
 ignored, and `stow-all.ps1` (which stows the package on Windows too) matches
@@ -174,9 +174,9 @@ steps through the job's files (`$GITHUB_PATH`, `$GITHUB_ENV`) and the
 checkout's `.git`. Only a separate push job would stop that, and such a
 release runs on every host at its next login anyway.
 
-The schedule follows the PyMOLScripts (04:00 UTC) and sherlock-kit (04:30)
-bumps and stays off the top of the hour, where GitHub delays scheduled runs
-most, but nothing orders the three pushes. When another push lands on `main`
+The schedule follows the PyMOLScripts (04:00 UTC)
+bump and stays off the top of the hour, where GitHub delays scheduled runs
+most, but nothing orders the two pushes. When another push lands on `main`
 first, this run's push fails as non-fast-forward, nothing is bumped, and the
 next run retries. The run never rebases and retries, which would push a
 gitlink that gate 4 never ran against the new `main`'s `settings.json`.

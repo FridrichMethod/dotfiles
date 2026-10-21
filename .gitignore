@@ -71,3 +71,6 @@ coverage.xml
 # (git cannot remove a submodule checkout that holds files). Keep this line:
 # without it a host that pulls the move stops updating (docs/coding-agent-kit.md).
 /common/codex/coding-agent-kit/
+
+# Retired submodule checkout retained on existing hosts.
+/common/sherlock-kit/sherlock-kit/

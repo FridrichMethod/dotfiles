@@ -65,7 +65,7 @@ SUBMODULE_URL=https://github.com/FridrichMethod/coding-agent-kit.git
 LEFTOVER=common/codex/coding-agent-kit
 STOWRC_LINE='--ignore=^coding-agent-kit(/|$)'
 GITIGNORE_LINE=/$LEFTOVER/
-# Path-anchored, as in common/sherlock-kit: Stow matches a pattern with a
+# Path-anchored: Stow matches a pattern with a
 # slash against "/PATH", so only the package-root checkout is ignored.
 LOCAL_IGNORE='^/coding-agent-kit$
 ^/coding-agent-kit/'
@@ -93,7 +93,7 @@ common/coding-agent-kit/.oh-my-zsh/custom/completions/_codex-as completions/zsh/
 EXECUTABLES='bin/claude-as bin/codex-as'
 # The sync launchers stay in dotfiles as regular files.
 LAUNCHERS='common/claude/.local/bin/claude-settings-sync common/codex/.local/bin/codex-config-sync
-common/codex/.local/bin/codex-rules-sync common/codex/.local/bin/codex-instructions-sync'
+common/codex/.local/bin/codex-rules-sync'
 # The kit test and fixture that dotfiles' real-data overlay runs with the real
 # settings.json in place of the fixture (tests/ai-integration.sh, tests/run.ps1).
 FIXTURES='tests/claude-customizations.cjs tests/fixtures/claude-settings.json'
@@ -390,10 +390,9 @@ check_automation() {
         fail "the coding-agent-kit bump must run on schedule and workflow_dispatch only: $triggers"
     cron='    - cron: "17 5 * * *"'
     expect_line "$cron" "$workflow"
-    for sibling in update-pymolscripts-submodule.yml update-sherlock-kit-submodule.yml; do
-        ! grep -Fxq -- "$cron" "$REPO_ROOT/.github/workflows/$sibling" ||
-            fail "the coding-agent-kit bump must not start with $sibling and race its push to main"
-    done
+    sibling=update-pymolscripts-submodule.yml
+    ! grep -Fxq -- "$cron" "$REPO_ROOT/.github/workflows/$sibling" ||
+        fail "the coding-agent-kit bump must not start with $sibling and race its push to main"
     for line in 'concurrency:' '  group: update-coding-agent-kit-submodule-${{ github.ref }}' \
         '  cancel-in-progress: false' \
         "    if: github.ref == 'refs/heads/main'" '        shell: bash' '          ref: main' \

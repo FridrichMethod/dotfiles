@@ -183,7 +183,6 @@ Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point 
 
 Like `stow-all.sh`, the Windows installer validates all selected AI inputs and the parser runtime with the shared helpers' read-only `--check`, synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. A later filesystem failure can still produce a partial install, but must not acknowledge the revision; retry after fixing it. Windows-only differences from the POSIX installer:
 
-- **No Codex instructions override.** No Windows host has a `sherlock-kit` package, so `codex-instructions-sync` runs only from `stow-all.sh`.
 - **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
 - **Pre-existing files are adopted, not clobbered.** A byte-identical file, or valid UTF-8 differing only by CRLF, is replaced by its link; case-only and binary differences are backed up to `<name>.stow-backup-<timestamp>-<unique-id>` first.
 - **Link trust is checked in a separate process.** The probe enables RedirectionGuard before opening source and destination links, without changing the calling shell. Elevated runs rebuild rejected links, retaining relative targets for repository-side links. An unavailable or failed trust probe stops installation; other unreadable links and unelevated repairs are reported as incomplete.
@@ -231,7 +230,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
-| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) - each auto-updated daily by GitHub Actions; [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling) - patch releases bumped daily by GitHub Actions, a new minor release only through a reviewed pull request |
+| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) - auto-updated daily by GitHub Actions; [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling) - patch releases bumped daily by GitHub Actions, a new minor release only through a reviewed pull request |
 | **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
@@ -277,7 +276,6 @@ dotfiles/
 |   +-- kitty/                    Kitty terminal
 |   +-- pymol/PyMOLScripts/       submodule - daily auto-update via Actions
 |   +-- sh/                       POSIX .profile + .aliases (sourced by bash/zsh)
-|   +-- sherlock-kit/             sherlock-kit/ submodule (Sherlock toolkit) - daily auto-update
 |   +-- ssh/                      minimal ~/.ssh/config + Include config.d/*.conf
 |   +-- tcsh/                     .tcshrc
 |   +-- tmux/                     .tmux.conf
@@ -326,7 +324,7 @@ dotfiles/
 | **Editor** | Vim |
 | **Version Control** | Git, SSH |
 | **Science** | Conda (`.condarc`), PyMOL scripts (submodule) |
-| **HPC** | Sherlock toolkit `shk`, its agent rules and skill (submodule; lab-ubuntu, wsl-ubuntu, sherlock) |
+| **HPC** | Cluster shell profiles and version-free Sherlock guidance; toolkit installed by consumer projects |
 | **AI Assistants** | Claude Code (`CLAUDE.md`, `settings.json`), OpenAI Codex (`AGENTS.md`, `config.toml`, `portable.rules`) |
 | **Utilities** | Aria2 |
 | **Input (Linux)** | Fcitx5 (lab-ubuntu only) |
@@ -336,12 +334,12 @@ dotfiles/
 | Host | Platform | Overlay packages | Files |
 |---|---|---|---:|
 | [`mac/`](mac/) | macOS | `bash`, `git`, `sh`, `ssh`, `zsh` | 7 |
-| [`wsl-ubuntu/`](wsl-ubuntu/) | WSL 2 | `bash`, `git`, `sh`, `sherlock-kit`, `ssh`, `zsh` | 10 |
-| [`lab-ubuntu/`](lab-ubuntu/) | Ubuntu (lab) | `bash`, `claude`, `fcitx5`, `git`, `sh`, `sherlock-kit`, `ssh`, `zsh` | 15 |
-| [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `sherlock-kit`, `terminfo`, `zsh` | 9 |
+| [`wsl-ubuntu/`](wsl-ubuntu/) | WSL 2 | `bash`, `git`, `sh`, `ssh`, `zsh` | 6 |
+| [`lab-ubuntu/`](lab-ubuntu/) | Ubuntu (lab) | `bash`, `claude`, `fcitx5`, `git`, `sh`, `ssh`, `zsh` | 11 |
+| [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `terminfo`, `zsh` | 5 |
 | [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `git`, `sh`, `zsh` | 5 |
 | [`win/`](win/) | Windows | `git`, `oh-my-posh`, `powershell`, `ssh`, `terminal`, `wsl` | 9 |
-| [`common/`](common/) | _shared baseline_ | 17 packages | 56 |
+| [`common/`](common/) | _shared baseline_ | 17 packages | 66 |
 
 Other Linux distributions have no overlay: stow `common/` alone with `./stow-all.sh` (no host) and install the tools by hand; `./doctor.sh --platform other` checks them (see [docs/bootstrap.md](docs/bootstrap.md#x-other-linux-other-linux-distributions)).
 
@@ -361,9 +359,8 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 2. **`<host>/`** is stowed second - overrides where the machine differs.
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
-5. On a host with a `sherlock-kit` package, `codex-instructions-sync` writes `~/.codex/AGENTS.override.md` after the dry run (other hosts lose a stale generated one). While the submodule is not initialized it warns `sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`, skips only that step and records no applied revision, so the login updater retries.
+5. After read-only preflight, retire exact dangling links from removed Sherlock packages before Stow dry runs. After successful Stow, remove only an override with the exact retired generator marker; preserve foreign files with an actionable warning. See [migration](docs/sherlock-kit.md).
 6. While a tracked link in `common/coding-agent-kit` dangles (its `coding-agent-kit` submodule is not checked out), `stow-all.sh` and `stow-all.ps1` warn once `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`, still run every Claude and Codex sync and stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
-7. Before the Stow dry runs, `stow-all.sh` removes the dangling `~/.local/bin/shk` that 0.3 stowed from the since-deleted `common/codex` launcher, because the host dry run would abort on it. Only that exact link goes, with an info line; a live link, a foreign link or a file stays for the dry run to report.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
 
@@ -550,7 +547,7 @@ Write all documentation in English with ASCII punctuation and diagrams. Chinese,
 emoji and decorative Unicode characters are rejected. The documentation hook
 uses native `pygrep` configured entirely in YAML. It checks staged documents on
 commit and tracked documents with `--all-files`, within this repository only.
-Submodule repositories manage their own checks; sherlock-kit and coding-agent-kit
+Submodule repositories manage their own checks; coding-agent-kit
 have independent documentation hooks.
 
 ## AI Assistant Configuration
@@ -609,7 +606,7 @@ The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/d
 
 Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to link the helpers and sync these defaults, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
 
-Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored (the one file there that dotfiles manages is the first-party `~/.claude/rules/sherlock-kit.md` link into the sherlock-kit submodule, see [Sherlock toolkit](#sherlock-toolkit-submodule)): Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. With native ancestor loading enabled, no extra `AGENTS.md` should exist in any ancestor directory on a host, including `~/.claude/AGENTS.md`: Claude Code treats that file as the home directory's `.claude/AGENTS.md` and can inject it into descendant projects.
+Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. With native ancestor loading enabled, no extra `AGENTS.md` should exist in any ancestor directory on a host, including `~/.claude/AGENTS.md`: Claude Code treats that file as the home directory's `.claude/AGENTS.md` and can inject it into descendant projects.
 
 #### Mutable Codex Desktop state
 
@@ -631,7 +628,7 @@ The portable baseline selects `default_permissions = "workspace-net"` with `appr
 
 Codex applies the most restrictive matching rule across active files. The portable policy uses only targeted `prompt` rules: `git clean`, `git reset --hard`, recursive or forced deletion, irreversible overwrite and disk-management tools, and privilege escalation route to automatic review. Simple file deletion, empty-directory removal, moves, routine workspace execution, package managers, and ordinary Git/GitHub operations do not incur this second review layer. Exec-policy has one shell reviewer setting rather than a per-command reviewer selector, so the global `AGENTS.md` requires the main agent to obtain explicit user authorization before catastrophic targets such as a filesystem, home, workspace, repository root, mount point, device, or broad ambiguous glob. No portable rule is `forbidden`, so an explicitly authorized operation remains reviewable rather than permanently blocked. Rerun `./stow-all.sh <host>` after pulling portable policy changes.
 
-The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, third-party copies under `~/.claude/rules/` (only the first-party `sherlock-kit.md` link is managed), Codex-generated `~/.codex/rules/default.rules`, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
+The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, third-party copies under `~/.claude/rules/`, Codex-generated `~/.codex/rules/default.rules`, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
 
 Third-party skills are also not stored in this repository. [`scripts/awesome-skills-update.sh`](scripts/awesome-skills-update.sh) installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
 
@@ -653,7 +650,7 @@ After cloning on a new machine:
 notification and Git hook check helpers; the settings and the AI config sync
 engine `lib/config_sync.py` stay in this repository. The checkout sits at the
 root of its own Stow package, `common/coding-agent-kit`, laid out like
-`common/sherlock-kit`: the package's `.stow-local-ignore` (`^/coding-agent-kit$`
+other tool packages: the package's `.stow-local-ignore` (`^/coding-agent-kit$`
 and `^/coding-agent-kit/`) keeps it out of `$HOME`, and 14 relative links link
 its files one by one, for example
 `common/coding-agent-kit/.local/bin/codex-as -> ../../coding-agent-kit/bin/codex-as`.
@@ -701,27 +698,18 @@ exists. The login updater then updates submodules and restows. `./doctor.sh`
 reports the `submodule` row. Develop the tooling in a separate clone, never
 inside this checkout. See [docs/coding-agent-kit.md](docs/coding-agent-kit.md).
 
-## Sherlock toolkit (submodule)
+## Sherlock toolkit migration
 
-[sherlock-kit](https://github.com/FridrichMethod/sherlock-kit) is the submodule
-`common/sherlock-kit/sherlock-kit`, wired like PyMOLScripts: it follows `main`,
-a path-anchored `.stow-local-ignore` keeps the checkout out of `$HOME`, and
-only relative links point into it. The `lab-ubuntu`, `wsl-ubuntu` and
-`sherlock` overlays each have a `sherlock-kit` package that links:
+[sherlock-kit](https://github.com/FridrichMethod/sherlock-kit) is standalone.
+Consumer projects pin their own installation and declare their integration.
+Dotfiles retains version-free global guidance and SSH configuration, and no
+longer delivers `shk`, toolkit rules, skills, overrides or daily toolkit bumps.
 
-- `~/.claude/rules/sherlock-kit.md` to the workstation rules (the cluster rules
-  on Sherlock), which Claude Code loads as user memory;
-- `~/.claude/skills/sherlock-kit` and `~/.agents/skills/sherlock-kit` to the
-  skill directory;
-- `~/.local/bin/shk` to the stdlib-only `bin/shk` (Python 3.11+); an active
-  project env's pip-installed `shk` wins.
-
-Codex reads one global file, so on those hosts `./stow-all.sh` runs
-`codex-instructions-sync` to write `~/.codex/AGENTS.override.md` (the common
-`AGENTS.md` plus the host's rules). The daily
-`update-sherlock-kit-submodule.yml` bump reaches each host through the login
-updater, which updates submodules and restows. `./doctor.sh` reports the
-`submodule` and `codex-override` rows. See [docs/sherlock-kit.md](docs/sherlock-kit.md).
+Existing hosts converge on the next successful Stow. Retired checkouts and their
+Git module stores are never automatically deleted; the doctor reports them with
+manual cleanup advice. Foreign home files remain untouched. See the exact
+retirement and legacy Windows inspection steps in
+[docs/sherlock-kit.md](docs/sherlock-kit.md).
 
 ## Adding a New Package
 

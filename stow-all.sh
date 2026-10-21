@@ -20,19 +20,9 @@ set -euo pipefail
 # ~/.local/bin (no source). Account launchers confirm new-account enrollment
 # on first use; installation never logs in or switches credentials. See
 # common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md.
-# A host whose sherlock-kit package links the toolkit rules from the submodule
-# also gets ~/.codex/AGENTS.override.md (portable AGENTS.md plus those rules);
-# other hosts have a stale generated one removed. While the submodule is not
-# initialized, only that step is skipped with a warning, and the revision is
-# not recorded as applied, so the login updater retries it.
-# The codex-as and claude-as launchers and the Claude helpers are links of the
-# coding-agent-kit package into its submodule. While a tracked link dangles,
-# Stow and every sync still run, with one warning, and the revision is not
-# recorded as applied.
-# All selected AI inputs are checked before any live configuration is changed.
-# A dangling home link that Stow made for a since-deleted package file (today
-# only the 0.3 ~/.local/bin/shk) is removed before the Stow dry runs.
-# The win host is installed from Windows by stow-all.ps1, not from here.
+# Retired Sherlock links and generated Codex overrides are removed only when
+# their exact historical ownership is established; foreign files are preserved.
+
 HOST="${1:-}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -r "$REPO_ROOT/lib/terminal.sh" ]]; then
@@ -144,38 +134,13 @@ CLAUDE_PORTABLE="$COMMON_DIR/claude/.claude/settings.json"
 if [[ -n "$HOST" && -f "$HOST_DIR/claude/.claude/settings.json" ]]; then
     CLAUDE_PORTABLE="$HOST_DIR/claude/.claude/settings.json"
 fi
-# Codex reads one global instructions file, so the host's sherlock-kit rules
-# reach it only through a generated override. -L also selects a dangling link,
-# which is reported below instead of being mistaken for a host without rules.
-CODEX_INSTRUCTIONS_SYNC="$COMMON_DIR/codex/.local/bin/codex-instructions-sync"
-CODEX_INSTRUCTIONS_PORTABLE="$COMMON_DIR/codex/.codex/AGENTS.md"
-CODEX_INSTRUCTIONS_LIVE="$HOME/.codex/AGENTS.override.md"
-SHERLOCK_RULES=''
-if [[ -n "$HOST" ]]; then
-    host_rules="$HOST_DIR/sherlock-kit/.claude/rules/sherlock-kit.md"
-    if [[ -L "$host_rules" || -e "$host_rules" ]]; then
-        SHERLOCK_RULES=$host_rules
-    fi
-fi
-
 # Validate every selected package before any helper changes the live home.
 SYNC_CODEX=0
-SYNC_CODEX_INSTRUCTIONS=0
-CODEX_INSTRUCTIONS_SKIPPED=0
 if [[ -d "$COMMON_DIR/codex" || (-n "$HOST" && -d "$HOST_DIR/codex") ]]; then
     require_sync "$CODEX_SYNC" "$CODEX_PORTABLE"
     require_sync "$CODEX_RULES_SYNC" "$CODEX_RULES_PORTABLE"
-    require_sync "$CODEX_INSTRUCTIONS_SYNC" "$CODEX_INSTRUCTIONS_PORTABLE"
     SYNC_CODEX=1
-    # A local merge or fresh clone leaves the submodule empty and the rules
-    # link dangling; the login updater must not fail every stow over that.
-    # The skip leaves the install incomplete, so HEAD is not recorded below.
-    if [[ -n "$SHERLOCK_RULES" && ! -e "$SHERLOCK_RULES" ]]; then
-        dotfiles_log warn 'sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)'
-        CODEX_INSTRUCTIONS_SKIPPED=1
-    else
-        SYNC_CODEX_INSTRUCTIONS=1
-    fi
+
 fi
 SYNC_CLAUDE=0
 if [[ -d "$COMMON_DIR/claude" || (-n "$HOST" && -d "$HOST_DIR/claude") ]]; then
@@ -205,19 +170,6 @@ if [[ -n "$HOST" && -d "$HOST_DIR/fcitx5" ]]; then
     SYNC_FCITX5=1
 fi
 
-# Hosts without the rules link run the helper without --append: it removes a
-# stale generated override and only warns about a file it did not generate.
-# $1 is --check for the preflight and absent for the apply step.
-sync_codex_instructions() {
-    if [[ -n "$SHERLOCK_RULES" ]]; then
-        "$CODEX_INSTRUCTIONS_SYNC" --quiet ${1:+"$1"} --append "$SHERLOCK_RULES" \
-            "$CODEX_INSTRUCTIONS_PORTABLE" "$CODEX_INSTRUCTIONS_LIVE"
-    else
-        "$CODEX_INSTRUCTIONS_SYNC" --quiet ${1:+"$1"} \
-            "$CODEX_INSTRUCTIONS_PORTABLE" "$CODEX_INSTRUCTIONS_LIVE"
-    fi
-}
-
 # Validate runtime dependencies and both documents for every selected AI
 # helper. A malformed later baseline must not partially apply earlier ones.
 # This is a read-only preflight, not a transaction across independent files.
@@ -229,35 +181,49 @@ if [[ "$SYNC_CODEX" == 1 ]]; then
     "$CODEX_RULES_SYNC" --quiet --check "$CODEX_RULES_PORTABLE" \
         "$HOME/.codex/rules/portable.rules"
 fi
-if [[ "$SYNC_CODEX_INSTRUCTIONS" == 1 ]]; then
-    sync_codex_instructions --check
-fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
     "$CLAUDE_SYNC" --quiet --check "$CLAUDE_PORTABLE" "$HOME/.claude/settings.json"
 fi
 
-# A link Stow made for a package file this checkout has since deleted stays
-# dangling in the home, and the dry run of another stow directory that claims
-# its path aborts on it ("existing target is not owned by stow"). Only a
-# dangling link whose text names exactly the retired source in this checkout
-# is removed; a live link, a foreign link or a file is left for the dry run to
-# report. Stow wrote the text between physical paths, so cd -P resolves its
-# directory from the link's physical directory; the retired source's own
-# directory must still exist. This runs after the read-only preflight.
+# Retire only dangling links to exact deleted package sources. realpath resolves
+# existing symlink ancestors but tolerates parents removed with the package.
+# Foreign loops or inaccessible paths are preserved, never installation errors.
 remove_retired_link() {
-    local link=$HOME/$1 text dir
+    local link=$HOME/$1
     [[ -L "$link" && ! -e "$link" ]] || return 0
-    text=$(readlink "$link")
-    # A foreign text may name a directory that does not exist: not retired.
-    dir=$(cd -P -- "${link%/*}" && cd -P -- "$(dirname -- "$text")" 2>/dev/null && pwd -P) || return 0
-    [[ "$dir/${text##*/}" == "$REPO_PHYSICAL/$2" ]] || return 0
+    if ! python3 -I -B - "$link" "$REPO_PHYSICAL/$2" <<'PYTHON'
+import os
+import sys
+try:
+    link, source = sys.argv[1:]
+    target = os.path.join(os.path.dirname(link), os.readlink(link))
+    for path in (target, source):
+        try:
+            os.path.realpath(path, strict=True)
+        except FileNotFoundError:
+            pass
+    resolved = os.path.realpath(target, strict=False)
+    expected = os.path.realpath(source, strict=False)
+    # realpath(strict=False) leaves a loop unresolved; never claim its ownership.
+    if resolved != expected or os.path.islink(resolved):
+        sys.exit(1)
+except (OSError, ValueError):
+    sys.exit(1)
+PYTHON
+    then
+        return 0
+    fi
     rm -f -- "$link"
     dotfiles_log info "Removed retired link $link (its source $2 was deleted)"
 }
 REPO_PHYSICAL=$(pwd -P)
-# The 0.3 sherlock-kit launcher; the host sherlock-kit packages link shk now.
-# Its directory still holds the codex sync helpers this script runs.
 remove_retired_link .local/bin/shk common/codex/.local/bin/shk
+remove_retired_link .local/bin/codex-instructions-sync common/codex/.local/bin/codex-instructions-sync
+for retired_host in lab-ubuntu wsl-ubuntu sherlock; do
+    for retired_path in .claude/rules/sherlock-kit.md .claude/skills/sherlock-kit .agents/skills/sherlock-kit .local/bin/shk; do
+        remove_retired_link "$retired_path" "$retired_host/sherlock-kit/$retired_path"
+    done
+done
 
 # Stow never replaces a regular file (a fresh home's ~/.bashrc and ~/.profile
 # from /etc/skel, for one). A dry run of both stows finds every conflict
@@ -285,10 +251,6 @@ if [[ "$SYNC_CODEX" == 1 ]]; then
     dotfiles_log step 'Synchronizing portable Codex rules'
     "$CODEX_RULES_SYNC" --quiet "$CODEX_RULES_PORTABLE" \
         "$HOME/.codex/rules/portable.rules"
-fi
-if [[ "$SYNC_CODEX_INSTRUCTIONS" == 1 ]]; then
-    dotfiles_log step 'Synchronizing host Codex instructions'
-    sync_codex_instructions
 fi
 if [[ "$SYNC_CLAUDE" == 1 ]]; then
     dotfiles_log step 'Synchronizing portable Claude settings'
@@ -348,17 +310,63 @@ if [[ -d "$HOME/.ssh" ]]; then
     fi
 fi
 
+# Codex gives AGENTS.override.md precedence over AGENTS.md. Retire only the
+# exact generated regular file after Stow and SSH permission handling succeed,
+# immediately before applied-state recording.
+# lstat and O_NOFOLLOW/O_NONBLOCK keep symlinks and FIFOs out of the read path.
+python3 -I -B - "$HOME/.codex/AGENTS.override.md" <<'PYTHON'
+import os
+import stat
+import sys
+path = sys.argv[1]
+marker = b"<!-- Generated by dotfiles codex-instructions-sync. Edit common/codex/.codex/AGENTS.md or the host's sherlock-kit rules, then rerun stow-all.sh. -->"
+def warn():
+    print(f"stow-all: warning: left foreign {path} unchanged; Codex reads it instead of AGENTS.md; inspect and move it aside manually if obsolete", file=sys.stderr)
+try:
+    before = os.lstat(path)
+except FileNotFoundError:
+    sys.exit(0)
+except OSError:
+    warn()
+    sys.exit(0)
+if not stat.S_ISREG(before.st_mode):
+    warn()
+    sys.exit(0)
+try:
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        owned = stat.S_ISREG(opened.st_mode) and stream.readline(len(marker) + 2).rstrip(b"\n") == marker
+except OSError:
+    warn()
+    sys.exit(0)
+if not owned:
+    warn()
+    sys.exit(0)
+def identity(info):
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+try:
+    unchanged = identity(os.lstat(path)) == identity(before) == identity(opened)
+except OSError:
+    unchanged = False
+if not unchanged:
+    sys.exit(f"stow-all: retired override changed during inspection; retry: {path}")
+try:
+    os.unlink(path)
+except OSError as exc:
+    sys.exit(f"stow-all: cannot remove generated override {path}: {exc}")
+PYTHON
+
 # Record only complete installs. A dirty manual setup still remembers the host,
 # but cannot claim that the committed HEAD was applied without local changes.
-# Neither can a skipped Codex instructions sync or a dangling coding-agent-kit
-# link: an uninitialized submodule looks clean to git status, and an empty HEAD
+# Neither can a dangling coding-agent-kit link: an uninitialized submodule looks clean to git status, and an empty HEAD
 # makes the login updater run git submodule update --init --recursive and
 # restow at the next login.
 # Git resolves this outside the tracked tree and supports linked worktrees.
 if SYNC_STATE=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null); then
     APPLIED_HEAD=$(git rev-parse HEAD)
     SYNC_STATUS=$(git status --porcelain --untracked-files=normal --ignore-submodules=none)
-    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" || "$CODEX_INSTRUCTIONS_SKIPPED" == 1 || "$KIT_LINKS_DANGLING" == 1 ]]; then
+    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" || "$KIT_LINKS_DANGLING" == 1 ]]; then
         APPLIED_HEAD=
     fi
     (
