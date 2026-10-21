@@ -1618,7 +1618,7 @@ elevated command is the person's.
 ### HW-clone: Clone with symlinks enabled
 
 The checkout contains symlinks (`common/pymol/.pymolrc*`, and the
-coding-agent-kit links in `common/claude` and `common/codex`) that Git for
+coding-agent-kit links in `common/coding-agent-kit`) that Git for
 Windows only creates when `core.symlinks` is true and the process may create
 symlinks.
 

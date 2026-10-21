@@ -659,8 +659,9 @@ changed once, when the kit moved out of the `codex` package. The submodule
 kept its first name, `common/codex/coding-agent-kit`, so every host reuses its
 module directory. On a host that had it checked out, the pull across that move
 leaves the old checkout at `common/codex/coding-agent-kit`: `.gitignore` keeps
-it out of `git status` and the `.stowrc` line `--ignore=^coding-agent-kit(/|$)`
-keeps it out of `$HOME`. The launchers follow their links to the checkout, and
+it out of `git status`, the `.stowrc` line `--ignore=^coding-agent-kit(/|$)`
+keeps it out of `$HOME`, and `./doctor.sh` warns, naming the `rm -rf` that
+removes it, until it is gone. The launchers follow their links to the checkout, and
 `--help` names its
 `common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md`. Stow does
 the installing here; the kit's own `install.sh` is for hosts without dotfiles.
