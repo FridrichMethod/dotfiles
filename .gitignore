@@ -65,3 +65,9 @@ coverage.xml
 
 # End-to-end bootstrap runs (tests/e2e/run.sh)
 /tests/e2e/out/
+
+# The coding-agent-kit checkout that a fast-forward across the kit's move to
+# common/coding-agent-kit leaves on a host where the submodule was checked out
+# (git cannot remove a submodule checkout that holds files). Keep this line:
+# without it a host that pulls the move stops updating (docs/coding-agent-kit.md).
+/common/codex/coding-agent-kit/

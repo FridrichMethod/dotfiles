@@ -253,11 +253,12 @@ AI sync itself uses no link and keeps working. Repair it with:
 
 ```powershell
 git -C $HOME\dotfiles config core.symlinks true
-git -C $HOME\dotfiles checkout -- common/pymol common/claude/.claude/dotfiles common/claude/.local common/claude/.oh-my-zsh common/codex/.local common/codex/.oh-my-zsh
+git -C $HOME\dotfiles checkout -- common/pymol common/coding-agent-kit
 ```
 
-then run `.\stow-all.ps1 win` from an elevated PowerShell. The pathspec stops
-short of `.claude/` and `.codex/`, whose settings you may have edited in place.
+then run `.\stow-all.ps1 win` from an elevated PowerShell. The pathspec names
+only the packages with tracked links, so settings you edited in place in
+`.claude/` and `.codex/` stay.
 
 A non-elevated pull creates the links as untrusted, which processes enforcing
 RedirectionGuard reject. The elevated restow (the `Dotfiles-Restow-*` task or a

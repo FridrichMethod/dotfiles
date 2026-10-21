@@ -362,9 +362,9 @@ make_home() {
     printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$home/.oh-my-zsh/oh-my-zsh.sh"
     cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$checkout/"
     cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$checkout/lib/"
-    cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$checkout/common/"
+    cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$REPO_ROOT/common/coding-agent-kit" "$checkout/common/"
     # The coding-agent-kit checkout comes along as a plain tree, without its gitfile.
-    rm -f "$checkout/common/codex/coding-agent-kit/.git"
+    rm -f "$checkout/common/coding-agent-kit/coding-agent-kit/.git"
     cp -P "$REPO_ROOT/common/sherlock-kit/.stow-local-ignore" "$checkout/common/sherlock-kit/"
     for host in $HOSTS; do
         mkdir "$checkout/$host"

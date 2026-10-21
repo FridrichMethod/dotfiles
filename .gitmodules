@@ -7,6 +7,6 @@
 	url = https://github.com/FridrichMethod/sherlock-kit.git
 	branch = main
 [submodule "common/codex/coding-agent-kit"]
-	path = common/codex/coding-agent-kit
+	path = common/coding-agent-kit/coding-agent-kit
 	url = https://github.com/FridrichMethod/coding-agent-kit.git
 	branch = main

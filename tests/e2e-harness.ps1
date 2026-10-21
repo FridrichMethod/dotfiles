@@ -208,7 +208,7 @@ function Get-BlockLines {
             'gui', '# Turn on Developer Mode (Settings > System > For developers) so Git can create symlinks.',
             '# A fresh clone: git clone -c core.symlinks=true --recurse-submodules <repository URL>',
             "git -C $repo config core.symlinks true",
-            "git -C $repo checkout -- common/pymol common/claude/.claude/dotfiles common/claude/.local common/claude/.oh-my-zsh common/codex/.local common/codex/.oh-my-zsh"
+            "git -C $repo checkout -- common/pymol common/coding-agent-kit"
         }
         'HW-stow' {
             'judgment', '# From an elevated PowerShell 7 (Run as administrator); it writes ~\.claude, ~\.codex and ~\.ssh.',

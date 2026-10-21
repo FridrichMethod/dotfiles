@@ -120,7 +120,7 @@ done
 # The same for the kit's knobs, from its code at the recorded gitlink outside
 # its own tests and docs, when the submodule is checked out. The delivery
 # test owns that check, so the bump Action's gate 3 runs it on every release.
-if [[ -e "$REPO_ROOT/common/codex/coding-agent-kit/.git" ]]; then
+if [[ -e "$REPO_ROOT/common/coding-agent-kit/coding-agent-kit/.git" ]]; then
     (
         set --
         # shellcheck source=tests/coding-agent-kit-delivery.sh

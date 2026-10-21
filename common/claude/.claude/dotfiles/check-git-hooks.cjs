@@ -1,1 +1,0 @@
-../../../codex/coding-agent-kit/helpers/check-git-hooks.cjs

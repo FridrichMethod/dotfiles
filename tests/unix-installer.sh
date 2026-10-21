@@ -42,10 +42,10 @@ cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
 cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
     "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
-cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
+cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$REPO_ROOT/common/coding-agent-kit" "$FIXTURE/common/"
 # The copy brings the coding-agent-kit checkout along as a plain tree; its
 # gitfile names a module directory that the fixture repository does not have.
-rm -f "$FIXTURE/common/codex/coding-agent-kit/.git"
+rm -f "$FIXTURE/common/coding-agent-kit/coding-agent-kit/.git"
 printf '%s\n' 'host overlay fixture' >"$FIXTURE/test-host/sample/.fixture-host"
 git init -q -b main "$FIXTURE"
 git -C "$FIXTURE" add common lib scripts test-host stow-all.sh .stowrc
@@ -69,7 +69,7 @@ grep -Fq '[dotfiles] [ok] Stow completed (test-host)' "$TEST_TMP/install.log"
 # launchers find that checkout through both, spaces included, and name its
 # docs; no configuration of the caller is in reach.
 [[ -e "$TARGET/.local/bin/codex-as" && -e "$TARGET/.claude/dotfiles/statusline.cjs" ]]
-KIT_DOCS="$(cd -P -- "$FIXTURE/common/codex/coding-agent-kit" && pwd -P)/docs/account-launchers.md"
+KIT_DOCS="$(cd -P -- "$FIXTURE/common/coding-agent-kit/coding-agent-kit" && pwd -P)/docs/account-launchers.md"
 for launcher in codex-as claude-as; do
     env -u XDG_CONFIG_HOME HOME="$TARGET" "$TARGET/.local/bin/$launcher" --help >"$TEST_TMP/help.out"
     grep -Fxq "Details and manual repair: $KIT_DOCS" "$TEST_TMP/help.out"
@@ -170,5 +170,133 @@ grep -Fq '.fixture-host' "$TEST_TMP/conflict.log"
 [[ ! -e "$TARGET/.codex/config.toml" ]]
 [[ ! -L "$TARGET/.fixture-host" ]] && grep -Fxq 'a file of the home' "$TARGET/.fixture-host"
 cmp "$STATE" "$TEST_TMP/expected-state"
+
+# A host stowed before the kit got its own package pulls the move through the
+# real login updater. The fast-forward deletes the old gitlink but leaves its
+# checkout, which holds files ("unable to rmdir", hidden by the updater); the
+# submodule update fills the new path from the same module directory, since
+# the submodule kept its name; .gitignore keeps the leftover out of git
+# status, so the restow runs in that one login and the next login changes
+# nothing. Without that line the leftover is untracked and the updater stops
+# at "Checkout changed during update", then at "Local changes" at every later
+# login, with every kit link in the home dangling.
+# shellcheck source=tests/coding-agent-kit-delivery.sh
+source "$REPO_ROOT/tests/coding-agent-kit-delivery.sh"
+MOVE_ROOT=$TEST_TMP/move
+KIT_COMMIT=$(git -C "$REPO_ROOT" ls-files -s -- "$SUBMODULE" | cut -d' ' -f2)
+git clone -q --bare "$(cd -- "$REPO_ROOT/$SUBMODULE" && git rev-parse --absolute-git-dir)" "$MOVE_ROOT/kit.git"
+# A submodule clone refuses a local path unless file transport is allowed;
+# only these commands get it.
+move_git() {
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always git "$@"
+}
+# move_tree WORK: the files of this checkout that a host needs, in WORK.
+move_tree() {
+    mkdir -p "$1/lib" "$1/scripts" "$1/common"
+    cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$REPO_ROOT/.gitignore" "$1/"
+    cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$1/scripts/"
+    cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$1/lib/"
+    cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$REPO_ROOT/$PACKAGE" "$1/common/"
+    rm -rf "${1:?}/$SUBMODULE"
+}
+# move_gitmodules WORK PATH: the kit submodule, under its kept name, at PATH.
+move_gitmodules() {
+    git config -f "$1/.gitmodules" "submodule.$SUBMODULE_NAME.path" "$2"
+    git config -f "$1/.gitmodules" "submodule.$SUBMODULE_NAME.url" "$MOVE_ROOT/kit.git"
+}
+# expect_log FILE TEXT: FILE holds TEXT, or the test fails showing FILE.
+expect_log() {
+    if ! grep -Fq -- "$2" "$1"; then
+        cat "$1" >&2
+        exit 1
+    fi
+}
+# move_case NAME GITIGNORE: a remote whose main is the pre-move layout, a host
+# stowed from it with the kit checked out, then the move pushed (with the
+# .gitignore line only when GITIGNORE is 1) and two logins.
+move_case() {
+    local name=$1 with_gitignore=$2 work=$MOVE_ROOT/$1/work remote=$MOVE_ROOT/$1/remote.git
+    local home=$MOVE_ROOT/$1/home path kit legacy text login
+    mkdir -p "$home/.oh-my-zsh"
+    printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$home/.oh-my-zsh/oh-my-zsh.sh"
+    move_tree "$work"
+    # The pre-move commit: the 14 links in common/claude and common/codex, the
+    # gitlink at the old path, the dangling-link check over those packages.
+    git init -q -b main "$work"
+    rm -rf "${work:?}/$PACKAGE"
+    while read -r path kit; do
+        read -r legacy text <<<"$(legacy_link "$path" "$kit")"
+        mkdir -p "$work/${legacy%/*}"
+        ln -s "$text" "$work/$legacy"
+    done <<<"$LINK_MAP"
+    grep -Fxv -- "$GITIGNORE_LINE" "$REPO_ROOT/.gitignore" >"$work/.gitignore" || true
+    sed "s|ls-files -s -z -- $PACKAGE |ls-files -s -z -- common/claude common/codex |" \
+        "$REPO_ROOT/stow-all.sh" >"$work/stow-all.sh"
+    grep -Fq -- '-- common/claude common/codex ' "$work/stow-all.sh"
+    move_gitmodules "$work" "$LEFTOVER"
+    git -C "$work" add -A
+    git -C "$work" update-index --add --cacheinfo "160000,$KIT_COMMIT,$LEFTOVER"
+    git -C "$work" commit -qm 'Fixture: pre-move layout'
+    git clone -q --bare "$work" "$remote"
+    git -C "$work" remote add origin "$remote"
+    move_git clone -q "$remote" "$home/dotfiles"
+    move_git -C "$home/dotfiles" submodule update -q --init
+    [[ -f "$home/dotfiles/$LEFTOVER/bin/codex-as" ]]
+    if ! env HOME="$home" bash "$home/dotfiles/stow-all.sh" >"$MOVE_ROOT/$name.stow.log" 2>&1; then
+        cat "$MOVE_ROOT/$name.stow.log" >&2
+        return 1
+    fi
+    [[ "$(readlink "$home/.local/bin/codex-as")" == ../../dotfiles/common/codex/.local/bin/codex-as ]]
+    # The move commit: this checkout's files and the gitlink at the new path.
+    git -C "$work" rm -rq --cached common
+    rm -rf "${work:?}/common"
+    move_tree "$work"
+    [[ "$with_gitignore" == 1 ]] || grep -Fxv -- "$GITIGNORE_LINE" "$REPO_ROOT/.gitignore" >"$work/.gitignore"
+    move_gitmodules "$work" "$SUBMODULE"
+    git -C "$work" add -A
+    git -C "$work" update-index --add --cacheinfo "160000,$KIT_COMMIT,$SUBMODULE"
+    git -C "$work" commit -qm 'Fixture: move the kit into its own package'
+    git -C "$work" push -q origin main
+    for login in 1 2; do
+        env -u _DOTFILES_CHECKED HOME="$home" DOTFILES_DIR="$home/dotfiles" DOTFILES_AUTO_UPDATE=1 \
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always \
+            bash --noprofile --norc -ic '. "$DOTFILES_DIR/scripts/dotfiles-update.sh"' \
+            >"$MOVE_ROOT/$name.login$login.log" 2>&1
+    done
+}
+
+move_case guarded 1
+MOVED=$MOVE_ROOT/guarded/home
+MOVED_HEAD=$(git -C "$MOVED/dotfiles" rev-parse HEAD)
+[[ "$MOVED_HEAD" == "$(git -C "$MOVE_ROOT/guarded/work" rev-parse HEAD)" ]]
+expect_log "$MOVE_ROOT/guarded.login1.log" '[dotfiles] [ok] Pulled successfully.'
+expect_log "$MOVE_ROOT/guarded.login1.log" '[dotfiles] [ok] Stow completed; open a new shell to load updated config.'
+# The next login has nothing to do (bash -i without a terminal may still
+# print its job-control notice).
+if grep -Fq '[dotfiles]' "$MOVE_ROOT/guarded.login2.log"; then
+    cat "$MOVE_ROOT/guarded.login2.log" >&2
+    exit 1
+fi
+[[ "$(sed -n 4p "$MOVED/dotfiles/.git/dotfiles-sync-unix")" == "$MOVED_HEAD" ]]
+[[ ! -e "$MOVED/dotfiles/.git/dotfiles-sync-unix.submodules-pending" ]]
+[[ -z "$(git -C "$MOVED/dotfiles" status --porcelain --untracked-files=normal --ignore-submodules=none)" ]]
+# The leftover is still there, ignored and linked nowhere; the new checkout
+# is at the gitlink and every home link resolves into the new package.
+[[ -f "$MOVED/dotfiles/$LEFTOVER/bin/codex-as" && -f "$MOVED/dotfiles/$SUBMODULE/bin/codex-as" ]]
+[[ "$(git -C "$MOVED/dotfiles/$SUBMODULE" rev-parse HEAD)" == "$KIT_COMMIT" ]]
+[[ ! -e "$MOVED/coding-agent-kit" && ! -L "$MOVED/coding-agent-kit" ]]
+while read -r path _; do
+    link=${path#"$PACKAGE"/}
+    if [[ "$(readlink "$MOVED/$link")" != */dotfiles/$path || ! -f "$MOVED/$link" ]]; then
+        echo "ERROR: ~/$link -> $(readlink "$MOVED/$link") after the move" >&2
+        exit 1
+    fi
+done <<<"$LINK_MAP"
+
+move_case unguarded 0
+expect_log "$MOVE_ROOT/unguarded.login1.log" '[dotfiles] [warn] Checkout changed during update; automatic stow skipped.'
+expect_log "$MOVE_ROOT/unguarded.login2.log" \
+    "[dotfiles] [warn] Local changes in $MOVE_ROOT/unguarded/home/dotfiles; automatic pull and stow skipped."
+[[ "$(git -C "$MOVE_ROOT/unguarded/home/dotfiles" status --porcelain --untracked-files=normal)" == "?? $LEFTOVER/" ]]
 
 echo 'unix-installer=PASS'

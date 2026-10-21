@@ -271,7 +271,7 @@ dotfiles/
 |   +-- bash/                     .bashrc, .bash_aliases, .bash_profile
 |   +-- claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
 |   +-- codex/                    ~/.codex/AGENTS.md + portable config/exec rules
-|   |   +-- coding-agent-kit/     submodule - codex-as, claude-as, Claude helpers
+|   +-- coding-agent-kit/         coding-agent-kit/ submodule - codex-as, claude-as, Claude helpers
 |   +-- conda/                    .condarc
 |   +-- git/                      .gitconfig (with [include] ~/.gitconfig_local)
 |   +-- kitty/                    Kitty terminal
@@ -362,7 +362,7 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 5. On a host with a `sherlock-kit` package, `codex-instructions-sync` writes `~/.codex/AGENTS.override.md` after the dry run (other hosts lose a stale generated one). While the submodule is not initialized it warns `sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`, skips only that step and records no applied revision, so the login updater retries.
-6. While a tracked link in `common/claude` or `common/codex` dangles (the `coding-agent-kit` submodule is not checked out), `stow-all.sh` and `stow-all.ps1` warn once `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`, still run every Claude and Codex sync and stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
+6. While a tracked link in `common/coding-agent-kit` dangles (its `coding-agent-kit` submodule is not checked out), `stow-all.sh` and `stow-all.ps1` warn once `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`, still run every Claude and Codex sync and stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
 7. Before the Stow dry runs, `stow-all.sh` removes the dangling `~/.local/bin/shk` that 0.3 stowed from the since-deleted `common/codex` launcher, because the host dry run would abort on it. Only that exact link goes, with an info line; a live link, a foreign link or a file stays for the dry run to report.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
@@ -567,19 +567,19 @@ have independent documentation hooks.
 |---|---|---|
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Default `auto` mode with shell classification, `xhigh`, status line, notifications, fullscreen TUI, disabled attribution, hooks, voice, portable plugins |
-| [`common/claude/.claude/dotfiles/`](common/claude/.claude/dotfiles/) | `~/.claude/dotfiles/` | Local Node.js helpers for the status line, notifications, and Git hook checks |
-| [`common/claude/.local/bin/claude-as`](common/claude/.local/bin/claude-as) | `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
-| [`common/codex/.local/bin/codex-as`](common/codex/.local/bin/codex-as) | `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases; Python stdlib modules in the kit's `lib/codex-as/` |
+| [`common/coding-agent-kit/.claude/dotfiles/`](common/coding-agent-kit/.claude/dotfiles/) | `~/.claude/dotfiles/` | Local Node.js helpers for the status line, notifications, and Git hook checks |
+| [`common/coding-agent-kit/.local/bin/claude-as`](common/coding-agent-kit/.local/bin/claude-as) | `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
+| [`common/coding-agent-kit/.local/bin/codex-as`](common/coding-agent-kit/.local/bin/codex-as) | `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases; Python stdlib modules in the kit's `lib/codex-as/` |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
 
-The Codex and Claude packages install executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
+The coding-agent-kit package installs executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
 Both come from the [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) submodule (see [Codex and Claude tooling](#codex-and-claude-tooling-submodule)); its README describes account views, login, completion, concurrency, takeover and resume.
 Existing accounts launch immediately; a missing account asks before a native login. Both need Python 3.11+, and `codex-as` needs Codex CLI 0.161.0 or newer.
 `codex-as` never reads or changes the root `~/.codex/auth.json`, so root login/logout and desktop clients keep their own token chain.
 The `~/.codex` and `~/.secrets` roots and the `codex` and `claude` executables are the kit's defaults; its optional configuration file can change them, and dotfiles ships none.
-In this checkout, `common/codex/coding-agent-kit/docs/account-launchers.md` covers account layout, new accounts, completion and safety boundaries, and `common/codex/coding-agent-kit/docs/codex-as.md` Codex source verification (on GitHub: [account launchers](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md), [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md)). Installing does not start login or switch real accounts.
+In this checkout, `common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md` covers account layout, new accounts, completion and safety boundaries, and `common/coding-agent-kit/coding-agent-kit/docs/codex-as.md` Codex source verification (on GitHub: [account launchers](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md), [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md)). Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
@@ -600,7 +600,7 @@ Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permi
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
-`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/dotfiles/*.cjs`, which link to the coding-agent-kit submodule's `helpers/`. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's README (`common/codex/coding-agent-kit/README.md`, [on GitHub](https://github.com/FridrichMethod/coding-agent-kit)) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
+`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/dotfiles/*.cjs`, which link to the coding-agent-kit submodule's `helpers/`. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's README (`common/coding-agent-kit/coding-agent-kit/README.md`, [on GitHub](https://github.com/FridrichMethod/coding-agent-kit)) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
 
 - **Plugin hooks:** the enabled Everything Claude Code plugin owns its SessionStart, Stop, and SessionEnd hooks. Empty portable arrays remove the old copied registrations during sync; disabling the plugin disables those lifecycle features. This prevents stale copies after plugin updates, rather than assuming a speedup from copies Claude may already deduplicate.
 
@@ -644,25 +644,32 @@ After cloning on a new machine:
 ## Codex and Claude tooling (submodule)
 
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) is the submodule
-`common/codex/coding-agent-kit`, a standalone project laid out as `bin/`,
-`lib/`, `completions/` and `helpers/`. It holds `codex-as`, `claude-as`, their
-Bash and zsh completions and the Claude status line, notification and Git hook
-check helpers; the settings and the AI config sync engine `lib/config_sync.py`
-stay in this repository. The checkout sits inside the `codex` package, where
-the `.stowrc` line `--ignore=^coding-agent-kit(/|$)` keeps it out of `$HOME`.
-`common/claude` and `common/codex` link 14 of its files one by one with
-relative links at the package paths they always had, for example
-`common/codex/.local/bin/codex-as -> ../../../codex/coding-agent-kit/bin/codex-as`,
-so every stowed `$HOME` link keeps its text. The launchers follow those links
-to the checkout, and `--help` names its
-`common/codex/coding-agent-kit/docs/account-launchers.md`. Stow does the
-installing here; the kit's own `install.sh` is for hosts without dotfiles.
+`common/coding-agent-kit/coding-agent-kit`, a standalone project laid out as
+`bin/`, `lib/`, `completions/` and `helpers/`. It holds `codex-as`,
+`claude-as`, their Bash and zsh completions and the Claude status line,
+notification and Git hook check helpers; the settings and the AI config sync
+engine `lib/config_sync.py` stay in this repository. The checkout sits at the
+root of its own Stow package, `common/coding-agent-kit`, laid out like
+`common/sherlock-kit`: the package's `.stow-local-ignore` (`^/coding-agent-kit$`
+and `^/coding-agent-kit/`) keeps it out of `$HOME`, and 14 relative links link
+its files one by one, for example
+`common/coding-agent-kit/.local/bin/codex-as -> ../../coding-agent-kit/bin/codex-as`.
+The `$HOME` paths are the ones these files always had; their link texts
+changed once, when the kit moved out of the `codex` package. The submodule
+kept its first name, `common/codex/coding-agent-kit`, so every host reuses its
+module directory. On a host that had it checked out, the pull across that move
+leaves the old checkout at `common/codex/coding-agent-kit`: `.gitignore` keeps
+it out of `git status` and the `.stowrc` line `--ignore=^coding-agent-kit(/|$)`
+keeps it out of `$HOME`. The launchers follow their links to the checkout, and
+`--help` names its
+`common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md`. Stow does
+the installing here; the kit's own `install.sh` is for hosts without dotfiles.
 
 The kit reads an optional
 `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml` for the `codex`
 and `claude` executables and the `~/.codex` and `~/.secrets` roots. Dotfiles
 ships none, so the defaults apply; `codex-as --show-config` prints the
-effective values, and `common/codex/coding-agent-kit/docs/configuration.md`
+effective values, and `common/coding-agent-kit/coding-agent-kit/docs/configuration.md`
 gives the rules.
 
 While the submodule is not checked out, the installers warn once that its

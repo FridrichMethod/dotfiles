@@ -23,12 +23,12 @@ process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_TEMPLATE_DIR = path.join(gitEnvironment, 'empty-template');
 fs.mkdirSync(process.env.GIT_TEMPLATE_DIR);
 
-// The helpers are links into the coding-agent-kit submodule.
-const scripts = path.resolve(__dirname, '../common/claude/.claude/dotfiles');
+// The helpers are links of the coding-agent-kit package into its submodule.
+const scripts = path.resolve(__dirname, '../common/coding-agent-kit/.claude/dotfiles');
 if (!fs.statSync(path.join(scripts, 'statusline.cjs'), { throwIfNoEntry: false })?.isFile()) {
   throw new Error('coding-agent-kit submodule not initialized; run git submodule update --init --recursive.');
 }
-const settings = JSON.parse(fs.readFileSync(path.join(scripts, '../settings.json'), 'utf8'));
+const settings = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../common/claude/.claude/settings.json'), 'utf8'));
 
 test('Git fixtures use ordinary empty config and template paths', () => {
   assert.ok(fs.lstatSync(process.env.GIT_CONFIG_GLOBAL).isFile());

@@ -70,7 +70,7 @@ $definitions = ($ast.FindAll({ param($node)
 $installerText = [IO.File]::ReadAllText($installerPath)
 $completion = $installerText.Substring($installerText.IndexOf('# Preserve PowerShell''s warning stream'))
 # The kit-link warning and the Strict stop that follows it, before any sync.
-$preflightStart = $installerText.IndexOf('# Tracked links of the claude and codex packages')
+$preflightStart = $installerText.IndexOf('# Tracked links of the coding-agent-kit package')
 $preflightEnd = $installerText.IndexOf('if (-not $WhatIfPreference) { Write-DotfilesLog step ''Synchronizing')
 if ($preflightStart -lt 0 -or $preflightEnd -le $preflightStart) { throw 'Cannot find the kit-link preflight in stow-all.ps1.' }
 $kitPreflight = $installerText.Substring($preflightStart, $preflightEnd - $preflightStart)
@@ -128,15 +128,15 @@ function New-ControlFixture {
         Destination = Join-Path $target '.fixture'; State = Join-Path $root 'state-saved' }
 }
 function New-KitLinkFixture {
-    # A tracked claude-package link into an empty coding-agent-kit submodule,
-    # as after a clone without --recurse-submodules.
+    # A tracked coding-agent-kit package link into its empty submodule, as
+    # after a clone without --recurse-submodules.
     $fixture = New-ControlFixture
     $relative = '.claude/dotfiles/fixture.cjs'
-    $link = [IO.Path]::GetFullPath((Join-Path $fixture.Root "common/claude/$relative"))
+    $link = [IO.Path]::GetFullPath((Join-Path $fixture.Root "common/coding-agent-kit/$relative"))
     [void][IO.Directory]::CreateDirectory((Split-Path $link -Parent))
-    $text = ('..', '..', '..', 'codex', 'coding-agent-kit', 'helpers', 'fixture.cjs') -join [IO.Path]::DirectorySeparatorChar
+    $text = ('..', '..', 'coding-agent-kit', 'helpers', 'fixture.cjs') -join [IO.Path]::DirectorySeparatorChar
     New-Item -ItemType SymbolicLink -Path $link -Value $text | Out-Null
-    foreach ($arguments in @(@('init', '--quiet'), @('-c', 'core.symlinks=true', 'add', '--', 'common/claude'))) {
+    foreach ($arguments in @(@('init', '--quiet'), @('-c', 'core.symlinks=true', 'add', '--', 'common/coding-agent-kit'))) {
         & git -C $fixture.Root @arguments 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Fixture Git command failed: git $arguments" }
     }
@@ -382,14 +382,14 @@ Invoke-PortableSync @sync
         Assert-True ((Get-Item -LiteralPath $fixture.Destination -Force).LinkType -eq 'SymbolicLink') 'Source repair did not allow destination install.'
     }
     Test-Case 'source trust repair preserves a relative target that crosses packages' {
-        # The coding-agent-kit links climb out of their package into the
-        # submodule checkout inside the codex package.
+        # A link that climbs out of its package into another one, as the
+        # coding-agent-kit links did before the kit got its own package.
         $fixture = New-ControlFixture
-        $kitFile = Join-Path $fixture.Root 'common/codex/coding-agent-kit/x'
+        $kitFile = Join-Path $fixture.Root 'common/vendored/checkout/x'
         [void][IO.Directory]::CreateDirectory((Split-Path $kitFile -Parent))
         [IO.File]::WriteAllText($kitFile, 'source content')
         Remove-Item -LiteralPath $fixture.Source -Force
-        $relative = ('..', 'codex', 'coding-agent-kit', 'x') -join [IO.Path]::DirectorySeparatorChar
+        $relative = ('..', 'vendored', 'checkout', 'x') -join [IO.Path]::DirectorySeparatorChar
         New-Item -ItemType SymbolicLink -Path $fixture.Source -Value $relative | Out-Null
         $originalTarget = @((Get-Item -LiteralPath $fixture.Source -Force).Target)[0]
         Assert-True (-not [IO.Path]::IsPathRooted($originalTarget) -and $originalTarget.StartsWith('..')) 'Fixture source target is not relative.'
@@ -403,8 +403,8 @@ Invoke-PortableSync @sync
         # RedirectionGuard rejects an untrusted link with 448 before it looks
         # for the target, so only the link's own text shows that it dangles.
         $kitWarning = 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
-        $dangling = 'dangling source skipped: claude/.claude/dotfiles/fixture.cjs (run: git submodule update --init --recursive)'
-        $action = $kitPreflight + "`n" + 'Invoke-StowPackage -PackageRoot (Join-Path $RepoRoot "common") -PackageName claude -GlobalIgnores @()'
+        $dangling = 'dangling source skipped: coding-agent-kit/.claude/dotfiles/fixture.cjs (run: git submodule update --init --recursive)'
+        $action = $kitPreflight + "`n" + 'Invoke-StowPackage -PackageRoot (Join-Path $RepoRoot "common") -PackageName coding-agent-kit -GlobalIgnores @()'
         # Once repaired, the trusted link reaches its missing target.
         $reprobe = @'
 function Get-DotfilesLinkReadErrors {
@@ -431,7 +431,7 @@ function Get-DotfilesLinkReadErrors {
                 Assert-True (@($warnings -ceq $dangling).Count -eq 1) "The repaired link was not reported as dangling: $($warnings -join '; ')"
             } else {
                 Assert-True ($result.Prompts.Count -eq 0) 'An unelevated run rewrote an untrusted link.'
-                Assert-True (@($warnings -clike 'untrusted source symlink left in place: claude/*').Count -eq 1) ($warnings -join '; ')
+                Assert-True (@($warnings -clike 'untrusted source symlink left in place: coding-agent-kit/*').Count -eq 1) ($warnings -join '; ')
             }
             Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq $fixture.Text) 'The kit link lost its relative target.'
             Assert-True (-not (Get-Item -LiteralPath $fixture.Destination -Force -ErrorAction SilentlyContinue)) 'The dangling kit link was installed.'

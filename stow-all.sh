@@ -7,26 +7,28 @@ set -euo pipefail
 # If no host-dir is provided, only stow common.
 # Successful setup remembers this home/platform/host for automatic login stow.
 # DOTFILES_AUTO_STOW=0 disables automatic stow in the login updater.
-# The common Claude package links local Node helpers and syncs its defaults;
-# Node.js 22+ must be on PATH when Claude runs the hooks and status line.
+# The coding-agent-kit package links Claude's local Node helpers and the claude
+# package syncs its defaults; Node.js 22+ must be on PATH when Claude runs the
+# hooks and status line.
 # Day-zero prerequisites come from ./setup-host.sh and are checked by ./doctor.sh.
 # It refuses to stow the zsh package before oh-my-zsh is cloned, since Stow
 # would create a real ~/.oh-my-zsh/custom that blocks the clone
 # (DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1 stows anyway), and stops before the AI
 # sync helpers write anything when a Stow dry run finds a conflicting file.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
-# The common Codex package also links codex-as into ~/.local/bin (no source).
-# Account launchers confirm new-account enrollment on first use;
-# installation never logs in or switches credentials. See
-# common/codex/coding-agent-kit/docs/account-launchers.md.
+# The common coding-agent-kit package links codex-as and claude-as into
+# ~/.local/bin (no source). Account launchers confirm new-account enrollment
+# on first use; installation never logs in or switches credentials. See
+# common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md.
 # A host whose sherlock-kit package links the toolkit rules from the submodule
 # also gets ~/.codex/AGENTS.override.md (portable AGENTS.md plus those rules);
 # other hosts have a stale generated one removed. While the submodule is not
 # initialized, only that step is skipped with a warning, and the revision is
 # not recorded as applied, so the login updater retries it.
-# The codex-as and claude-as launchers and the Claude helpers are links into
-# the coding-agent-kit submodule. While a tracked link dangles, Stow and every
-# sync still run, with one warning, and the revision is not recorded as applied.
+# The codex-as and claude-as launchers and the Claude helpers are links of the
+# coding-agent-kit package into its submodule. While a tracked link dangles,
+# Stow and every sync still run, with one warning, and the revision is not
+# recorded as applied.
 # All selected AI inputs are checked before any live configuration is changed.
 # A dangling home link that Stow made for a since-deleted package file (today
 # only the 0.3 ~/.local/bin/shk) is removed before the Stow dry runs.
@@ -181,7 +183,7 @@ if [[ -d "$COMMON_DIR/claude" || (-n "$HOST" && -d "$HOST_DIR/claude") ]]; then
     SYNC_CLAUDE=1
 fi
 # A clone without --recurse-submodules, a local merge or a failed submodule
-# update leaves the launcher and helper links of the claude and codex packages
+# update leaves the launcher and helper links of the coding-agent-kit package
 # dangling. Any tracked link there that does not resolve counts, whatever the
 # kit layout. Stow and every sync still run, but the install is incomplete, so
 # HEAD is not recorded below and the login updater retries the update.
@@ -191,7 +193,7 @@ while IFS= read -r -d '' kit_entry; do
     if [[ "$kit_entry" == '120000 '* && -L "$kit_link" && ! -e "$kit_link" ]]; then
         KIT_LINKS_DANGLING=1
     fi
-done < <(git ls-files -s -z -- common/claude common/codex 2>/dev/null || true)
+done < <(git ls-files -s -z -- common/coding-agent-kit 2>/dev/null || true)
 if [[ "$KIT_LINKS_DANGLING" == 1 ]]; then
     dotfiles_log warn 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
 fi

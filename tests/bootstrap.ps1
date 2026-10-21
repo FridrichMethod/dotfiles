@@ -213,7 +213,7 @@ function Set-FixtureHealthy {
         $Fixture.BatCache = 'Catppuccin Mocha'
         (Join-Path $Fixture.Repo 'common/pymol/PyMOLScripts/.git') = 'gitdir: ../../../.git/modules/PyMOLScripts'
         (Join-Path $Fixture.Repo 'common/sherlock-kit/sherlock-kit/.git') = 'gitdir: ../../../.git/modules/common/sherlock-kit/sherlock-kit'
-        (Join-Path $Fixture.Repo 'common/codex/coding-agent-kit/.git') = 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit'
+        (Join-Path $Fixture.Repo 'common/coding-agent-kit/coding-agent-kit/.git') = 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit'
         (Join-Path $Fixture.Home 'miniconda3/Scripts/conda.exe') = ''
     }
     foreach ($path in $files.Keys) {

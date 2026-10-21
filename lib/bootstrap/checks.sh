@@ -434,7 +434,7 @@ bootstrap_check_venv_sync() {
 # helpers). A submodule not listed here needs only its .git.
 BOOTSTRAP_SUBMODULE_SENTINELS='common/pymol/PyMOLScripts configs/.pymolrc
 common/sherlock-kit/sherlock-kit src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk
-common/codex/coding-agent-kit bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
+common/coding-agent-kit/coding-agent-kit bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
 
 # bootstrap_submodule_paths ROOT: the path of every submodule in
 # ROOT/.gitmodules, one per line (its `path =` lines, as doctor.ps1 reads them).

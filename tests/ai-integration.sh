@@ -21,8 +21,9 @@ if [[ ! -x "$sync_python" ]]; then
     echo 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.' >&2
     exit 1
 fi
-# The launchers and Claude helpers are links into the coding-agent-kit submodule.
-[[ -f "$REPO_ROOT/common/codex/.local/bin/codex-as" && -f "$REPO_ROOT/common/claude/.claude/dotfiles/statusline.cjs" ]] || {
+# The launchers and Claude helpers are links of the coding-agent-kit package
+# into its submodule.
+[[ -f "$REPO_ROOT/common/coding-agent-kit/.local/bin/codex-as" && -f "$REPO_ROOT/common/coding-agent-kit/.claude/dotfiles/statusline.cjs" ]] || {
     echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
     exit 1
 }
@@ -37,7 +38,7 @@ trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 # so every change to the settings or the gitlink re-validates both against
 # each other. The kit is an archive of the committed submodule HEAD; the
 # checkout itself is never touched.
-sub=$REPO_ROOT/common/codex/coding-agent-kit
+sub=$REPO_ROOT/common/coding-agent-kit/coding-agent-kit
 kit=$TEST_TMP/kit
 mkdir -p "$kit"
 # A pre-commit run exports the GIT_DIR and GIT_INDEX_FILE of the commit in
