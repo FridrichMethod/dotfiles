@@ -531,7 +531,10 @@ pre-commit run --all-files
 | **behavior** | test entry points and hook file patterns, structured config merges, coding-agent-kit delivery, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
 CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
-`windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
+`windows-2025`. `ci.yml` runs on pull requests, on pushes to `main`, and on
+pushes to `ci/**` branches: push a change to a `ci/` branch to check it on all
+three, then fast-forward `main` to the green commit. Unix runs
+`./tests/run.sh --ci`; Windows runs
 `pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI`. Each platform's
 assigned suites are mandatory, including native Windows installer fixtures;
 missing dependencies fail CI instead of silently skipping tests. A second,

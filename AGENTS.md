@@ -151,6 +151,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 ## Workflows and checks
 
 - Keep workflow definitions in `.github/workflows/*.yml`.
+- `ci.yml` runs on pull requests, on pushes to `main` and on pushes to `ci/**` branches. Land a change by pushing it to a `ci/**` branch (and an `e2e-ci/**` branch when bootstrap or e2e behavior changes), then fast-forwarding `main` to that exact green commit and deleting the branches; every host pulls `main` at login, so it only ever receives commits CI passed on all three systems.
 - Pin action versions and avoid unnecessary matrix complexity.
 - Keep CI aligned with `.pre-commit-config.yaml` tools:
   - `shellcheck`

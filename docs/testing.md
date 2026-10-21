@@ -1,6 +1,9 @@
 # Cross-platform testing
 
-The `ci.yml` workflow uses three explicit operating-system jobs. Tests operate
+The `ci.yml` workflow uses three explicit operating-system jobs. It runs on pull
+requests, on pushes to `main` and on pushes to `ci/**` branches, so a change can
+be checked on all three before `main` is fast-forwarded to it (a pull request
+from a `ci/**` branch runs it twice). Tests operate
 on temporary repositories and targets; they must not install into the runner's
 real user profile. (The opt-in `bootstrap-e2e.yml` workflow, [below](#end-to-end-bootstrap-opt-in),
 is the one exception: it installs for real, into fresh containers and the
