@@ -7,7 +7,8 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-ai-sync.XXXXXX")"
@@ -17,10 +18,6 @@ CLAUDE_PORTABLE="$REPO_ROOT/common/claude/.claude/settings.json"
 CLAUDE_SYNC="$REPO_ROOT/common/claude/.local/bin/claude-settings-sync"
 CODEX_RULES_PORTABLE="$REPO_ROOT/common/codex/.codex/rules/portable.rules"
 CODEX_RULES_SYNC="$REPO_ROOT/common/codex/.local/bin/codex-rules-sync"
-[[ -f "$REPO_ROOT/common/codex/coding-agent-kit/lib/config_sync.py" ]] || {
-    echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
-    exit 1
-}
 
 hash_file() {
     if command -v shasum >/dev/null 2>&1; then
@@ -417,9 +414,16 @@ if command -v stow >/dev/null 2>&1; then
     grep -Fxq 'codex-live-sentinel' "$STOW_TARGET/.codex/config.toml"
     grep -Fxq 'rules-live-sentinel' "$STOW_TARGET/.codex/rules/portable.rules"
     [[ -L "$STOW_TARGET/.claude/CLAUDE.md" && -e "$STOW_TARGET/.claude/CLAUDE.md" ]]
-    [[ -L "$STOW_TARGET/.claude/dotfiles/statusline.cjs" && -e "$STOW_TARGET/.claude/dotfiles/statusline.cjs" ]]
-    [[ -L "$STOW_TARGET/.claude/dotfiles/notify.cjs" && -e "$STOW_TARGET/.claude/dotfiles/notify.cjs" ]]
-    [[ -L "$STOW_TARGET/.claude/dotfiles/check-git-hooks.cjs" && -e "$STOW_TARGET/.claude/dotfiles/check-git-hooks.cjs" ]]
+    # The launchers, libraries, completions and helpers resolve through their
+    # package links into the coding-agent-kit checkout.
+    for kit_link in .claude/dotfiles/statusline.cjs .claude/dotfiles/notify.cjs \
+        .claude/dotfiles/check-git-hooks.cjs .local/bin/codex-as .local/bin/claude-as \
+        .local/lib/codex-as/launch.py .local/lib/codex-as/check.py .local/lib/codex-as/layout.py \
+        .local/lib/codex-as/handoff.py .local/lib/claude-as/launch.py \
+        .local/share/bash-completion/completions/codex-as .local/share/bash-completion/completions/claude-as \
+        .oh-my-zsh/custom/completions/_codex-as .oh-my-zsh/custom/completions/_claude-as; do
+        [[ -L "$STOW_TARGET/$kit_link" && -f "$STOW_TARGET/$kit_link" ]]
+    done
     [[ -L "$STOW_TARGET/.codex/AGENTS.md" && -e "$STOW_TARGET/.codex/AGENTS.md" ]]
     # .stowrc keeps the coding-agent-kit checkout inside the codex package unstowed.
     [[ ! -e "$STOW_TARGET/coding-agent-kit" && ! -L "$STOW_TARGET/coding-agent-kit" ]]

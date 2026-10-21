@@ -665,7 +665,9 @@ have a minimum), the overlay the person chose, and a complete checkout.
   hooks default to `DOTFILES_DIR=$HOME/dotfiles`); for an existing clone without
   submodules, `git -C ~/dotfiles submodule update --init --recursive`.
 - **Verify:** no submodule line starts with `-`, and
-  `ls -L ~/dotfiles/common/pymol/.pymolrc` resolves, as does
+  `ls -L ~/dotfiles/common/pymol/.pymolrc` and
+  `ls -L ~/dotfiles/common/codex/.local/bin/codex-as` (coding-agent-kit)
+  resolve, as does
   `ls -L ~/dotfiles/<host>/sherlock-kit/.claude/skills/sherlock-kit/SKILL.md` on a
   host with a `sherlock-kit` package (`lab-ubuntu`, `wsl-ubuntu`, `sherlock`;
   after H7-stow, `ls -L ~/.claude/skills/sherlock-kit/SKILL.md`); the doctor's
@@ -1307,7 +1309,7 @@ checkout outside `$SCRATCH` and `$GROUP_SCRATCH`: setup-host refuses to build
 the sync env there, including through a symlink. A working env can be checked
 and used on a login node without rebuilding it.
 
-- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/common/codex/coding-agent-kit/lib/config_sync.py --runtime-check`
+- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/lib/config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.sh. By hand, by platform:
   macOS `./setup-sync.sh --python /opt/homebrew/bin/python3` (Intel:
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
@@ -1465,9 +1467,13 @@ while the submodule is not initialized it warns
 `sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`
 and skips only that file), links `common/` and then the overlay into
 `$HOME`, tightens `~/.ssh` modes and records the host for the doctor and the
-login updater. Stow refuses to replace regular files, and Ubuntu's `/etc/skel`
-creates `~/.bashrc` and `~/.profile` (RHEL-family homes, such as Sherlock's,
-also `~/.bash_profile`). `./stow-all.sh` runs a Stow dry run of every package
+login updater. While the coding-agent-kit submodule is not checked out, it
+warns once that the kit's links dangle, still syncs and stows, and records no
+applied revision, so the login updater retries
+([coding-agent-kit](coding-agent-kit.md#uninitialized-submodule)). Stow
+refuses to replace regular files, and Ubuntu's `/etc/skel` creates
+`~/.bashrc` and `~/.profile` (RHEL-family homes, such as Sherlock's, also
+`~/.bash_profile`). `./stow-all.sh` runs a Stow dry run of every package
 before the sync helpers write anything and stops on a conflict, and it refuses
 to stow the zsh package before oh-my-zsh is cloned.
 
@@ -1719,7 +1725,7 @@ config directory.
 
 ### W1-setup-sync: AI-sync runtime on Windows
 
-- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B common\codex\coding-agent-kit\lib\config_sync.py --runtime-check`
+- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B lib\config_sync.py --runtime-check`
 - **Install:** automatic via setup-host.ps1:
   `.\setup-sync.ps1 -Python <path>`, with the first `python3` or `python` on
   PATH that reports 3.11 or newer; a Microsoft Store alias does not count. When

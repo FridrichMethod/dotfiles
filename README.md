@@ -231,7 +231,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
-| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) - each auto-updated daily by GitHub Actions; [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling) - bumped only through a reviewed pull request |
+| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`sherlock-kit`](https://github.com/FridrichMethod/sherlock-kit) - each auto-updated daily by GitHub Actions; [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling) - patch releases bumped daily by GitHub Actions, a new minor release only through a reviewed pull request |
 | **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
@@ -271,7 +271,7 @@ dotfiles/
 |   +-- bash/                     .bashrc, .bash_aliases, .bash_profile
 |   +-- claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
 |   +-- codex/                    ~/.codex/AGENTS.md + portable config/exec rules
-|   |   +-- coding-agent-kit/     submodule - codex-as, claude-as, Claude helpers, sync engine
+|   |   +-- coding-agent-kit/     submodule - codex-as, claude-as, Claude helpers
 |   +-- conda/                    .condarc
 |   +-- git/                      .gitconfig (with [include] ~/.gitconfig_local)
 |   +-- kitty/                    Kitty terminal
@@ -293,13 +293,13 @@ dotfiles/
 +-- marlowe/                      Marlowe HPC
 +-- win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 |
-+-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a sync per submodule (daily for PyMOLScripts and sherlock-kit, manual for coding-agent-kit)
++-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a daily sync per submodule (coding-agent-kit only within its pinned minor release)
 +-- .gitattributes                LF everywhere (Windows clones set autocrlf)
 +-- .pre-commit-config.yaml       shellcheck | shfmt | stylua | hygiene
 +-- .stowrc                       Stow defaults (--target=~, ignores)
 +-- config/bootstrap/             day-zero manifests (tools, Brewfiles, apt, clones, pinned installers)
 +-- docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
-+-- lib/                          sourced helpers (terminal output, bootstrap steps)
++-- lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
 +-- doctor.sh                     read-only day-zero check (POSIX)
 +-- doctor.ps1                    read-only day-zero check (Windows)
 +-- setup-host.sh                 day-zero installer that stops before stow (POSIX)
@@ -362,7 +362,7 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 5. On a host with a `sherlock-kit` package, `codex-instructions-sync` writes `~/.codex/AGENTS.override.md` after the dry run (other hosts lose a stale generated one). While the submodule is not initialized it warns `sherlock-kit submodule not initialized; Codex instructions left unchanged (git submodule update --init --recursive)`, skips only that step and records no applied revision, so the login updater retries.
-6. While the `coding-agent-kit` submodule is not initialized, `stow-all.sh` and `stow-all.ps1` warn `coding-agent-kit submodule not initialized; Claude and Codex settings left unchanged (git submodule update --init --recursive)`, skip every Claude and Codex sync step, still stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
+6. While a tracked link in `common/claude` or `common/codex` dangles (the `coding-agent-kit` submodule is not checked out), `stow-all.sh` and `stow-all.ps1` warn once `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`, still run every Claude and Codex sync and stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
 7. Before the Stow dry runs, `stow-all.sh` removes the dangling `~/.local/bin/shk` that 0.3 stowed from the since-deleted `common/codex` launcher, because the host dry run would abort on it. Only that exact link goes, with an info line; a live link, a foreign link or a file stays for the dry run to report.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
@@ -413,6 +413,9 @@ keeps color there, so login-hook messages are not plain just because the prompt
 buffered them. Automatic stow still writes the installer's own output to a log
 file, so those lines stay plain and only surface when stow fails.
 `TERM=dumb` and nonempty `NO_COLOR` disable color even with `DOTFILES_COLOR=always`.
+`codex-as` and `claude-as` do not read `DOTFILES_COLOR`: they come from the
+coding-agent-kit submodule and take the same values from
+`CODING_AGENT_KIT_COLOR`, with the same `NO_COLOR` and `TERM=dumb` rules.
 Shared helpers are quiet during installation, but validation and write errors
 remain visible. This does not change your prompt, terminal theme, fonts or PATH.
 PowerShell's native warning/error/`WhatIf` rendering remains PowerShell-controlled;
@@ -525,7 +528,7 @@ pre-commit run --all-files
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
 | **english-documentation** | This repository's documentation, including agent guides and skills; a native `pygrep` hook rejects non-ASCII characters and control characters except tabs and line breaks |
 | **gitleaks** | secrets in the staged changes, so it guards commits only in a clone where `pre-commit install` ran; CI also scans every commit on every ref with the manual-stage `gitleaks-history` hook (`pre-commit run --hook-stage manual gitleaks-history` locally). [`.gitleaks.toml`](.gitleaks.toml) adds Claude Code OAuth tokens and any file under a `.secrets/` directory to the default rules |
-| **behavior** | structured config merges on the real settings (the coding-agent-kit engine suites), coding-agent-kit delivery, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
+| **behavior** | test entry points and hook file patterns, structured config merges, coding-agent-kit delivery, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
 CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
 `windows-2025`. Unix runs `./tests/run.sh --ci`; Windows runs
@@ -566,7 +569,7 @@ have independent documentation hooks.
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Default `auto` mode with shell classification, `xhigh`, status line, notifications, fullscreen TUI, disabled attribution, hooks, voice, portable plugins |
 | [`common/claude/.claude/dotfiles/`](common/claude/.claude/dotfiles/) | `~/.claude/dotfiles/` | Local Node.js helpers for the status line, notifications, and Git hook checks |
 | [`common/claude/.local/bin/claude-as`](common/claude/.local/bin/claude-as) | `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
-| [`common/codex/.local/bin/codex-as`](common/codex/.local/bin/codex-as) | `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases; Python stdlib helpers in `~/.local/lib/codex-as/` |
+| [`common/codex/.local/bin/codex-as`](common/codex/.local/bin/codex-as) | `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases; Python stdlib modules in the kit's `lib/codex-as/` |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
@@ -575,7 +578,8 @@ The Codex and Claude packages install executable `codex-as` and `claude-as` on P
 Both come from the [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) submodule (see [Codex and Claude tooling](#codex-and-claude-tooling-submodule)); its README describes account views, login, completion, concurrency, takeover and resume.
 Existing accounts launch immediately; a missing account asks before a native login. Both need Python 3.11+, and `codex-as` needs Codex CLI 0.161.0 or newer.
 `codex-as` never reads or changes the root `~/.codex/auth.json`, so root login/logout and desktop clients keep their own token chain.
-See [account layout, new accounts, completion and safety boundaries](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md), and [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md). Installing does not start login or switch real accounts.
+The `~/.codex` and `~/.secrets` roots and the `codex` and `claude` executables are the kit's defaults; its optional configuration file can change them, and dotfiles ships none.
+In this checkout, `common/codex/coding-agent-kit/docs/account-launchers.md` covers account layout, new accounts, completion and safety boundaries, and `common/codex/coding-agent-kit/docs/codex-as.md` Codex source verification (on GitHub: [account launchers](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md), [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md)). Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
@@ -596,7 +600,7 @@ Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permi
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
-`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/dotfiles/*.cjs`, which come from the coding-agent-kit submodule. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The [coding-agent-kit README](https://github.com/FridrichMethod/coding-agent-kit) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
+`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/dotfiles/*.cjs`, which link to the coding-agent-kit submodule's `helpers/`. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's README (`common/codex/coding-agent-kit/README.md`, [on GitHub](https://github.com/FridrichMethod/coding-agent-kit)) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
 
 - **Plugin hooks:** the enabled Everything Claude Code plugin owns its SessionStart, Stop, and SessionEnd hooks. Empty portable arrays remove the old copied registrations during sync; disabling the plugin disables those lifecycle features. This prevents stale copies after plugin updates, rather than assuming a speedup from copies Claude may already deduplicate.
 
@@ -614,7 +618,7 @@ TOML is parsed and edited with `tomlkit`, including multiline values and quoted
 keys; it is not reconstructed with AWK or regular expressions. Normal sync never
 rewrites the portable baseline. Cleaning runtime state left in an old polluted
 baseline is an explicit `codex-config-sync --migrate-portable PORTABLE LIVE`
-operation; review the [migration safeguards](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/config-sync.md) first.
+operation; review the [migration safeguards](docs/config-sync.md) first.
 The updater verifies the applied HEAD/host after installation before reporting
 success; see the [update and locking contract](docs/update-contract.md).
 
@@ -640,25 +644,46 @@ After cloning on a new machine:
 ## Codex and Claude tooling (submodule)
 
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) is the submodule
-`common/codex/coding-agent-kit`. It holds `codex-as`, `claude-as`, the Claude
-status line, notification and Git hook check helpers, and the AI config sync
-engine `lib/config_sync.py`; the settings themselves stay in this repository.
-The checkout sits inside the `codex` package, where the `.stowrc` line
-`--ignore=^coding-agent-kit(/|$)` keeps it out of `$HOME`. `common/claude` and
-`common/codex` link its 14 delivered files one by one with relative links, so
-every stowed `$HOME` path is unchanged.
+`common/codex/coding-agent-kit`, a standalone project laid out as `bin/`,
+`lib/`, `completions/` and `helpers/`. It holds `codex-as`, `claude-as`, their
+Bash and zsh completions and the Claude status line, notification and Git hook
+check helpers; the settings and the AI config sync engine `lib/config_sync.py`
+stay in this repository. The checkout sits inside the `codex` package, where
+the `.stowrc` line `--ignore=^coding-agent-kit(/|$)` keeps it out of `$HOME`.
+`common/claude` and `common/codex` link 14 of its files one by one with
+relative links at the package paths they always had, for example
+`common/codex/.local/bin/codex-as -> ../../../codex/coding-agent-kit/bin/codex-as`,
+so every stowed `$HOME` link keeps its text. The launchers follow those links
+to the checkout, and `--help` names its
+`common/codex/coding-agent-kit/docs/account-launchers.md`. Stow does the
+installing here; the kit's own `install.sh` is for hosts without dotfiles.
 
-The four `*-sync` launchers, `lib/sync-runtime.sh`, `setup-sync.*` and
-`requirements-sync.txt` stay regular files here, so an existing `.venv-sync`
-keeps working; `tests/coding-agent-kit-delivery.sh` checks them against the
-submodule's reference copies and its tomlkit pin. While the submodule is not
-initialized, the installers skip every Claude and Codex sync with one warning
-and record no applied revision. A bump is manual:
-`update-coding-agent-kit-submodule.yml` pushes a review branch, and the pull
-request you open from it runs the full CI before you merge. The login updater
-then updates submodules and restows. `./doctor.sh` reports the `submodule` row.
-Develop the tooling in a separate clone, never inside this checkout. See
-[docs/coding-agent-kit.md](docs/coding-agent-kit.md).
+The kit reads an optional
+`${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml` for the `codex`
+and `claude` executables and the `~/.codex` and `~/.secrets` roots. Dotfiles
+ships none, so the defaults apply; `codex-as --show-config` prints the
+effective values, and `common/codex/coding-agent-kit/docs/configuration.md`
+gives the rules.
+
+While the submodule is not checked out, the installers warn once that its
+links dangle, still sync and stow, and record no applied revision.
+`update-coding-agent-kit-submodule.yml` runs daily at 05:17 UTC and on
+dispatch from `main`. It moves the gitlink only to the newest `vX.Y.Z` tag
+with the pinned `X.Y`, and only when that release is on the kit's `main` and
+descends from the pin, every GitHub Actions run of the kit's three CI jobs on
+it passed, `tests/coding-agent-kit-delivery.sh --real` and `--ci` pass at the
+staged gitlink with GNU Stow and zsh installed, and `tests/ai-integration.sh`
+passes the real `settings.json` against the release's helper suite. Its
+checkout keeps no credential, and no step that runs the release's code gets
+the token. It then commits
+`chore(deps): update coding-agent-kit submodule to vX.Y.Z` and pushes `main`;
+that push starts no `ci.yml` run, and when another push reached `main` first
+it fails and the next run retries. A new minor release (breaking while the kit
+is 0.x), an untagged pin or a failed gate goes through a reviewed pull
+request instead, and the job summary names a newer release line when one
+exists. The login updater then updates submodules and restows. `./doctor.sh`
+reports the `submodule` row. Develop the tooling in a separate clone, never
+inside this checkout. See [docs/coding-agent-kit.md](docs/coding-agent-kit.md).
 
 ## Sherlock toolkit (submodule)
 
@@ -703,8 +728,8 @@ stow --restow --no-folding -d common newtool
 - **Keep secrets out** of version control - use `*_local` files referenced by `[include]` chains.
 - **Stow order is sacred**: `common/` first, host second.
 - **AI configs are shared baselines**: keep credentials, caches, sessions, project trust, absolute host paths, and generated memories out of `common/claude` and `common/codex`.
-- **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync` (its engine is in the coding-agent-kit submodule), and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
-- **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist (owned by the coding-agent-kit engine; see [docs/coding-agent-kit.md](docs/coding-agent-kit.md) for the change order) aligned whenever shared Codex settings change.
+- **Claude live state is merged**: keep the `.stowrc` exclusion, `claude-settings-sync`, and the portable `settings.json` aligned whenever shared Claude settings change; keep machine-specific paths out of the tracked baseline.
+- **Codex live state is merged**: keep the `.stowrc` exclusion, `codex-config-sync`, and the portable key allowlist aligned whenever shared Codex settings change.
 - **Codex exec policy is layered**: keep reviewed cross-host guardrails in `portable.rules`; leave generated or project/host-specific approvals in the untracked `default.rules`.
 - **fcitx5 profile is materialized**: fcitx5 rewrites `~/.config/fcitx5/profile` at runtime, so `.stowrc` excludes it and `fcitx5-profile-sync` writes the tracked baseline as a machine-local regular file; the baseline is authoritative and re-asserted on stow. Invalid directory or special-file targets fail visibly; an existing link remains intact until its replacement is fully staged, so staging failures preserve the old profile.
 - **GNOME owns the lab-ubuntu X keymap**: mutter rebuilds it after `~/.xprofile` runs and drops `setxkbmap` options, so `lab-ubuntu/fcitx5/.xprofile` declares CapsLock-as-`Hyper_L` (the fcitx5 English/Chinese trigger) and frees Super+Space (the fcitx5 input-method cycle) through `gsettings` on each X login. It calls `/usr/bin/gsettings` by path because Linuxbrew's `gsettings` has no dconf backend and silently writes a keyfile GNOME never reads.

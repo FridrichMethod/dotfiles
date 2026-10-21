@@ -23,11 +23,11 @@ process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_TEMPLATE_DIR = path.join(gitEnvironment, 'empty-template');
 fs.mkdirSync(process.env.GIT_TEMPLATE_DIR);
 
-const engine = path.resolve(__dirname, '../common/codex/coding-agent-kit/lib/config_sync.py');
-if (!fs.statSync(engine, { throwIfNoEntry: false })?.isFile()) {
+// The helpers are links into the coding-agent-kit submodule.
+const scripts = path.resolve(__dirname, '../common/claude/.claude/dotfiles');
+if (!fs.statSync(path.join(scripts, 'statusline.cjs'), { throwIfNoEntry: false })?.isFile()) {
   throw new Error('coding-agent-kit submodule not initialized; run git submodule update --init --recursive.');
 }
-const scripts = path.resolve(__dirname, '../common/claude/.claude/dotfiles');
 const settings = JSON.parse(fs.readFileSync(path.join(scripts, '../settings.json'), 'utf8'));
 
 test('Git fixtures use ordinary empty config and template paths', () => {

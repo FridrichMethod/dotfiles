@@ -76,6 +76,12 @@ repos:
         entry: '[^\x09\x0a\x0d\x20-\x7e]'
         types: [file]
         files: '(?i)(\.(md|markdown|mdx|rst|txt)$|(^|/)(README|CHANGELOG|CONTRIBUTING|AUTHORS|LICENSE|NOTICE)(\.[^/]*)?$)'
+      - id: test-entrypoints
+        name: test entry points, fixture Git isolation and hook file patterns
+        entry: tests/test-entrypoints.sh
+        language: script
+        pass_filenames: false
+        files: ^(\.pre-commit-config\.yaml|tests/[^/]+\.(sh|ps1))$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh
@@ -88,15 +94,23 @@ repos:
         language: script
         pass_filenames: false
         files: ^(common/sh/\.profile|common/zsh/\.zshrc|common/zsh/\.oh-my-zsh/custom/(nvm|fzf-tab)\.zsh|tests/shell-profile\.sh)$
+      - id: structured-config-sync
+        name: structured configuration merge and safe writes
+        entry: tests/config-sync.sh
+        language: script
+        pass_filenames: false
+        # test_config_sync.py also reads and asserts the real Codex config.toml.
+        files: ^(lib/.*|requirements-sync\.txt|setup-sync\.(sh|ps1)|tests/(test_config_sync\.py|config-sync\.sh)|common/codex/\.codex/config\.toml|common/(claude|codex)/\.local/bin/.*)$
+        # identify tags a tracked link `symlink` and the coding-agent-kit
+        # gitlink `directory`; the default `types: [file]` would skip a link
+        # change or a bump, so every hook whose files can name either clears it.
+        types: []
       - id: ai-config-sync
         name: ai config and rules sync
         entry: tests/ai-config-sync.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|lib/sync-runtime\.sh|setup-sync\.(sh|ps1)|requirements-sync\.txt|tests/ai-config-sync\.sh)$
-        # identify tags the coding-agent-kit gitlink `directory` and a link
-        # `symlink`; the default `types: [file]` would skip a bump or a link
-        # change, so every hook that runs the sync engine clears it.
+        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|lib/(config_sync\.py|sync-runtime\.sh)|setup-sync\.(sh|ps1)|requirements-sync\.txt|tests/ai-config-sync\.sh)$
         types: []
       - id: claude-customizations
         name: Claude status line, notifications and Git hook guard
@@ -105,33 +119,40 @@ repos:
         pass_filenames: false
         files: (^|/)(common/claude/.*|common/codex/coding-agent-kit|tests/claude-customizations\.cjs)$
         types: []
+      - id: codex-config-sync
+        name: codex config sync behavior
+        entry: tests/codex-config-sync.sh
+        language: script
+        pass_filenames: false
+        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|lib/(config_sync\.py|sync-runtime\.sh)|common/codex/(\.codex/config\.toml|\.local/bin/codex-config-sync)|tests/codex-config-sync\.sh)$
+        types: []
       - id: ai-integration
         name: AI tooling integration with the real dotfiles content
         entry: tests/ai-integration.sh
         language: script
         pass_filenames: false
-        files: ^(\.stowrc|setup-sync\.(sh|ps1)|common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|lib/sync-runtime\.sh|tests/(ai-integration\.sh|test_ai_integration\.py))$
+        files: ^(\.stowrc|common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|tests/(ai-integration\.sh|test_ai_integration\.py))$
         types: []
       - id: stow-installer
         name: POSIX stow installer behavior
         entry: tests/stow-all.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.sh|lib/terminal\.sh|common/codex/coding-agent-kit|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
+        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|common/codex/coding-agent-kit|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|\.stowrc|tests/stow-all\.sh)$
         types: []
       - id: sherlock-kit-delivery
         name: sherlock-kit submodule delivery and stow
         entry: tests/sherlock-kit-delivery.sh
         language: script
         pass_filenames: false
-        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(sync-runtime\.sh|terminal\.sh)|common/(claude|codex|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
+        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|lib/(config_sync\.py|sync-runtime\.sh|terminal\.sh)|common/(claude|codex|sherlock-kit)/.*|[^/]+/sherlock-kit/.*|sherlock/sh/\.config/sh/\.profile|\.github/workflows/update-sherlock-kit-submodule\.yml|tests/sherlock-kit-delivery\.sh)$
         types: []
       - id: coding-agent-kit-delivery
-        name: coding-agent-kit submodule delivery, links and binding twins
+        name: coding-agent-kit submodule delivery and links
         entry: tests/coding-agent-kit-delivery.sh
         language: script
         pass_filenames: false
-        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|common/(claude|codex)/.*|lib/sync-runtime\.sh|setup-sync\.(sh|ps1)|requirements-sync\.txt|docs/account-launchers\.md|\.github/workflows/update-coding-agent-kit-submodule\.yml|tests/coding-agent-kit-delivery\.sh)$
+        files: ^(\.gitmodules|\.stowrc|stow-all\.(sh|ps1)|common/(claude|codex)/.*|lib/bootstrap/checks\.sh|\.github/workflows/update-coding-agent-kit-submodule\.yml|tests/(coding-agent-kit-delivery\.sh|run\.sh|fixtures/update-coding-agent-kit-submodule\.yml))$
         types: []
       - id: unix-installer-integration
         name: real Git and Stow integration
@@ -157,7 +178,7 @@ repos:
         entry: tests/windows-installer.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/(terminal|windows-link-trust)\.ps1|tests/(terminal|windows-installer-controls)\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
+        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/config_sync\.py|lib/(terminal|windows-link-trust)\.ps1|tests/(terminal|windows-installer-controls)\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$
       - id: powershell-profile
         name: PowerShell profile contract and prompt theme
         entry: tests/powershell-profile.sh
@@ -181,7 +202,7 @@ repos:
         entry: tests/doctor.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|common/codex/coding-agent-kit|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|docs/bootstrap\.md|tests/doctor\.sh)$
+        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|lib/config_sync\.py|common/codex/coding-agent-kit|lib/sync-runtime\.sh|common/codex/\.local/bin/codex-instructions-sync|docs/bootstrap\.md|tests/doctor\.sh)$
         types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks

@@ -1,1 +1,1 @@
-../../../codex/coding-agent-kit/common/claude/.claude/dotfiles/check-git-hooks.cjs
+../../../codex/coding-agent-kit/helpers/check-git-hooks.cjs

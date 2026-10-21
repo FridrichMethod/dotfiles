@@ -1,1 +1,1 @@
-../../../codex/coding-agent-kit/common/claude/.claude/dotfiles/notify.cjs
+../../../codex/coding-agent-kit/helpers/notify.cjs

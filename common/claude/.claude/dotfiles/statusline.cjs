@@ -1,1 +1,1 @@
-../../../codex/coding-agent-kit/common/claude/.claude/dotfiles/statusline.cjs
+../../../codex/coding-agent-kit/helpers/statusline.cjs

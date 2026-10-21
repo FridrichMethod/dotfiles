@@ -7,7 +7,8 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 # Unix contract checks supplement tests/windows-installer.ps1, which exercises
 # actual links and helper processes in the native Windows CI job. A normal
@@ -25,6 +26,11 @@ grep -Fq '$sourceError -eq 448' "$INSTALLER"
 grep -Fq -- '-Value @($item.Target)[0] -Force -Confirm:$false' "$INSTALLER"
 grep -Fq 'SetProcessMitigationPolicy(16, ref flags' "$REPO_ROOT/lib/windows-link-trust.ps1"
 grep -Fq '$start.RedirectStandardInput = $true' "$REPO_ROOT/lib/windows-link-trust.ps1"
+# The probe rejects an untrusted link with 448 whatever its target, so a
+# coding-agent-kit link dangles by its own target text, in the preflight and
+# after a source repair (windows-installer-controls.ps1 runs both).
+grep -Fq 'if (@(Get-DotfilesDanglingKitLink).Count) {' "$INSTALLER"
+grep -Fq '(Test-DotfilesLinkDangles -Path $item.FullName)' "$INSTALLER"
 
 if ! grep -Fq 'Repair untrusted symlink' "$INSTALLER"; then
     echo "ERROR: installer must repair untrusted symlinks, not skip them" >&2

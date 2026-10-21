@@ -1,1 +1,1 @@
-../../../../codex/coding-agent-kit/common/codex/.local/lib/codex-as/layout.py
+../../../../codex/coding-agent-kit/lib/codex-as/layout.py

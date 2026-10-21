@@ -1,9 +1,9 @@
 """Dotfiles-content halves of the coding-agent-kit suites, on the real files.
 
-The engine suites live in the coding-agent-kit submodule and run there on
+The launcher suites live in the coding-agent-kit submodule and run there on
 frozen fixtures. These cases read what only dotfiles owns: the fzf-tab preview,
-the alias files, .stowrc and the setup-sync scripts. The case bodies are the
-originals; the fixtures are the parts of the engine suites' setUp they read.
+the alias files, .stowrc and the package link that delivers codex-as. The
+fixtures are the parts of the launcher suites' setUp they read.
 """
 
 import os
@@ -15,7 +15,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "common/codex/.local"
-ENGINE = ROOT / "common/codex/coding-agent-kit/lib/config_sync.py"
+KIT = ROOT / "common/codex/coding-agent-kit"
 SHELLS = [shutil.which(name) for name in ("bash", "zsh") if shutil.which(name)]
 ENV_CONFLICTS = (
     "CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY",
@@ -28,7 +28,8 @@ ENV_CONFLICTS = (
 
 
 def setUpModule():
-    if not ENGINE.is_file():
+    # codex-as is a link into the coding-agent-kit submodule.
+    if not (SOURCE / "bin/codex-as").is_file():
         raise RuntimeError("coding-agent-kit submodule not initialized; run git submodule update --init --recursive.")
 
 
@@ -50,11 +51,15 @@ class IsolatedHome(unittest.TestCase):
         credential.chmod(0o600)
         self.command_bin = self.home / ".local/bin"
         self.command_bin.mkdir(parents=True)
-        shutil.copy2(SOURCE / "bin/codex-as", self.command_bin / "codex-as")
+        # Linked as Stow links it: the launcher finds its kit, and so its lib/,
+        # through the package link; a copy would stand alone.
+        (self.command_bin / "codex-as").symlink_to(SOURCE / "bin/codex-as")
         self.cwd = self.base / "current working directory"
         self.cwd.mkdir()
         self.env = os.environ.copy()
-        for name in (*ENV_CONFLICTS, "CODEX_HOME", "CODEX_SQLITE_HOME", "PYTHONPATH", "BASH_ENV", "ENV", "ZDOTDIR"):
+        # No configuration of the caller's coding-agent-kit is in reach.
+        for name in (*ENV_CONFLICTS, "CODEX_HOME", "CODEX_SQLITE_HOME", "PYTHONPATH", "BASH_ENV", "ENV", "ZDOTDIR",
+                     "XDG_CONFIG_HOME", "CODING_AGENT_KIT_CONFIG", "CODING_AGENT_KIT_COLOR"):
             self.env.pop(name, None)
         self.env.update(HOME=str(self.home), PATH=os.pathsep.join((str(self.command_bin), self.env["PATH"])))
 
@@ -70,6 +75,7 @@ class CodexAs(IsolatedHome):
             result = subprocess.run(command, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Concurrent accounts", result.stdout)
+            self.assertIn(f"Details and manual repair: {KIT.resolve()}/docs/account-launchers.md\n", result.stdout)
 
 
 class Enrollment(IsolatedHome):
@@ -102,34 +108,6 @@ class Enrollment(IsolatedHome):
         for tool in ('codex', 'claude'):
             self.assertTrue((target / f'.oh-my-zsh/custom/completions/_{tool}-as').is_symlink(), 'Stow dropped zsh completion')
         self.assertFalse((target / '.local/bin/._fake-appledouble').exists())
-
-
-class FilesystemTests(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="dotfiles sync tests ")
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name)
-
-    def test_setup_rejects_linked_environment_without_touching_target(self):
-        external = self.directory / "external environment"
-        external.mkdir()
-        marker = external / "pyvenv.cfg"
-        marker.write_bytes(b"sentinel: not ours")
-        linked = self.directory / ".venv-sync"
-        linked.symlink_to(external, target_is_directory=True)
-        if os.name == "nt":
-            setup = self.directory / "setup-sync.ps1"
-            shutil.copyfile(ROOT / setup.name, setup)
-            command = ["pwsh", "-NoProfile", "-NonInteractive", "-File", str(setup), "-Python", "must-not-run"]
-        else:
-            setup = self.directory / "setup-sync.sh"
-            shutil.copyfile(ROOT / setup.name, setup)
-            command = ["sh", str(setup), "--python", "must-not-run"]
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Refusing" if os.name == "nt" else "refusing", result.stderr)
-        self.assertEqual(marker.read_bytes(), b"sentinel: not ours")
-        self.assertEqual(list(external.iterdir()), [marker])
 
 
 if __name__ == "__main__":

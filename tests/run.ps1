@@ -12,7 +12,8 @@ $PSNativeCommandUseErrorActionPreference = $false
 foreach ($knob in @('DOTFILES_AUTO_UPDATE', 'DOTFILES_AUTO_STOW', 'DOTFILES_HOST', 'DOTFILES_DIR',
         '_DOTFILES_CHECKED', 'DOTFILES_STOW_WITHOUT_OH_MY_ZSH', 'DOTFILES_COLOR',
         'AWESOME_SKILLS_AUTO_UPDATE', 'AWESOME_SKILLS_FORCE', 'AWESOME_SKILLS_BG',
-        'AWESOME_SKILLS_INSTALLER_URL', 'AWESOME_SKILLS_REFRESH_DAYS', '_AWESOME_SKILLS_CHECKED')) {
+        'AWESOME_SKILLS_INSTALLER_URL', 'AWESOME_SKILLS_REFRESH_DAYS', '_AWESOME_SKILLS_CHECKED',
+        'CODING_AGENT_KIT_CONFIG', 'CODING_AGENT_KIT_COLOR')) {
     Remove-Item -LiteralPath "Env:$knob" -ErrorAction Ignore
 }
 
@@ -37,16 +38,19 @@ if (-not (Test-Path -LiteralPath $syncPython -PathType Leaf)) {
     throw 'AI-sync runtime missing; run setup-sync.ps1 explicitly.'
 }
 $env:DOTFILES_SYNC_PYTHON = $syncPython
-$engine = Join-Path $repoRoot 'common/codex/coding-agent-kit/lib/config_sync.py'
-if (-not (Test-Path -LiteralPath $engine -PathType Leaf)) {
-    throw 'coding-agent-kit submodule not initialized; run git submodule update --init --recursive.'
-}
-& $syncPython -I -B $engine --runtime-check
+& $syncPython -I -B (Join-Path $repoRoot 'lib/config_sync.py') --runtime-check
 if ($LASTEXITCODE -ne 0) { throw 'Configuration runtime check failed.' }
 if ($CheckPrerequisites) {
     Write-Output 'test-prerequisites=PASS'
     exit 0
 }
+
+Write-Output '==> test_config_sync.py'
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_config_sync.py') -PathType Leaf)) {
+    throw 'Required configuration backend test suite is missing.'
+}
+& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_config_sync.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Configuration backend tests failed.' }
 
 Write-Output '==> test_ai_integration.py'
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.py') -PathType Leaf)) {
@@ -55,11 +59,11 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.p
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_integration.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'AI integration tests failed.' }
 
-# Real-data overlay, as in tests/ai-integration.sh: the engine suites of the
-# pinned coding-agent-kit tree run again with the real settings in place of
-# their frozen fixtures. Windows uses the bsdtar in System32 by full path, so
-# Git for Windows' GNU tar, which reads C: in an archive path as a remote
-# host, is never picked up from PATH.
+# Real-data overlay, as in tests/ai-integration.sh: the Claude helper suite of
+# the pinned coding-agent-kit tree runs again with the real settings.json in
+# place of its frozen fixture. Windows uses the bsdtar in System32 by full
+# path, so Git for Windows' GNU tar, which reads C: in an archive path as a
+# remote host, is never picked up from PATH.
 Write-Output '==> real-data overlay of coding-agent-kit'
 $kit = Join-Path ([IO.Path]::GetTempPath()) "dotfiles-kit-$PID"
 $tar = "$kit.tar"
@@ -70,11 +74,7 @@ try {
     $tarExe = if ($IsWindows) { Join-Path $env:SystemRoot 'System32\tar.exe' } else { 'tar' }
     & $tarExe -xf $tar -C $kit
     if ($LASTEXITCODE -ne 0) { throw 'Could not unpack the coding-agent-kit tree.' }
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'common/codex/.codex/config.toml') (Join-Path $kit 'tests/fixtures/codex-config.toml')
     Copy-Item -LiteralPath (Join-Path $repoRoot 'common/claude/.claude/settings.json') (Join-Path $kit 'tests/fixtures/claude-settings.json')
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'common/codex/.codex/rules/portable.rules') (Join-Path $kit 'tests/fixtures/portable.rules')
-    & $syncPython -I -B -m unittest discover -s (Join-Path $kit 'tests') -p 'test_config_sync.py' -v
-    if ($LASTEXITCODE -ne 0) { throw 'Configuration backend tests failed on the real data.' }
     & node --test (Join-Path $kit 'tests/claude-customizations.cjs')
     if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed on the real data.' }
 }

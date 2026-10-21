@@ -14,10 +14,8 @@ macOS and Windows runners' homes.)
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
-hash-pinned configuration parser. Both entrypoints validate this runtime against
-the coding-agent-kit engine and require the AI integration tests, which rerun
-the engine's Python backend tests, including safe replacement failures, on this
-checkout's real settings.
+hash-pinned configuration parser. Both entrypoints validate this runtime and
+require the shared Python backend tests, including safe replacement failures.
 In CI mode GNU Stow is required too, so its real symlink fixture cannot silently
 skip. On developer machines, `./tests/run.sh` reports a missing optional Stow
 integration check, installed-Codex exec-policy check, or PowerShell check.
@@ -37,16 +35,46 @@ independent hooks.
 Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
 knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
 `DOTFILES_AUTO_STOW`, `DOTFILES_HOST`, `DOTFILES_DIR`, `DOTFILES_COLOR`,
-`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, the `AWESOME_SKILLS_*` controls and both
-session markers. The bootstrap playbook tells people to export
+`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, the `AWESOME_SKILLS_*` controls, both
+session markers, and the coding-agent-kit launchers' `CODING_AGENT_KIT_CONFIG`
+and `CODING_AGENT_KIT_COLOR`. The bootstrap playbook tells people to export
 `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0` while provisioning, and a
 test or `pre-commit run` started from such a shell must behave as in CI; each
 case sets the knobs it exercises. `tests/test-entrypoints.sh` checks that every
 entry point carries the same list, that it covers every `DOTFILES_*` and
 `AWESOME_SKILLS_*` name in a tracked file outside `tests/`, `docs/`,
 `.github/` and Markdown, whatever reads it (shell, PowerShell or Python;
-`DOTFILES_SYNC_PYTHON` excepted, since `tests/run.sh` provisions it), and that
-a suite passes under those exports.
+`DOTFILES_SYNC_PYTHON` excepted, since `tests/run.sh` provisions it), that,
+with the submodule checked out, it covers every `CODING_AGENT_KIT_*` (or
+`_CODING_AGENT_KIT_*`) name in the kit's code at the recorded gitlink outside
+the kit's own `tests/`, `docs/`, `.github/` and Markdown (through
+`check_kit_knobs` of `tests/coding-agent-kit-delivery.sh`, which the bump
+workflow's gate 3 runs too), and that a suite passes under those exports. The
+suites that run a
+launcher also drop `XDG_CONFIG_HOME`, so no kit configuration file of the
+caller is in reach.
+
+A commit hook in a linked worktree exports an absolute `GIT_DIR` and
+`GIT_INDEX_FILE`, which `git -C` does not override, so fixture Git would
+reinitialize, stage and commit into the caller's repository. Every suite that
+runs fixture Git in its own body drops them first, and
+`tests/test-entrypoints.sh` checks that the Bash suites
+(`bootstrap-manifest.sh`, `doctor.sh`, `e2e-harness.sh`, `setup-host.sh`,
+`unix-installer.sh`) unset them and the PowerShell ones
+(`e2e-harness.ps1`, `windows-installer-controls.ps1`) remove every `GIT_*`
+variable. It reruns the manifest suite under a relative `GIT_INDEX_FILE` and,
+when pwsh is present, the installer controls under the `GIT_DIR` and
+`GIT_INDEX_FILE` of a throwaway repository's linked worktree, which must keep
+its index, `HEAD` and `core.bare`. It also reads `.pre-commit-config.yaml`
+the way pre-commit selects files: the engine hooks must run on
+`lib/config_sync.py` and `lib/sync-runtime.sh` (`structured-config-sync` and
+`codex-config-sync` on the real Codex `config.toml` too), the delivery hook
+on `tests/run.sh`, the bump workflow and its reviewed copy, and its own
+`test-entrypoints` hook, which runs on any test entry point, on
+`.pre-commit-config.yaml` itself. That hook runs the test without
+`tests/run.sh` in front of it, so a failed check prints the run it captured
+(a clone without `.venv-sync` sees `run ./setup-sync.sh`), and any other
+failed assertion names its line.
 
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
 runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
@@ -133,28 +161,64 @@ update Action and acceptance runs. `tests/doctor.sh` runs the real
 `tests/stow-all.sh` it needs the AI-sync runtime (`DOTFILES_SYNC_PYTHON` or
 `.venv-sync`).
 
-The engine's own suites (configuration merges, Codex config sync, codex-as and
-account enrollment) live in coding-agent-kit, whose CI runs them on frozen
-fixtures. `tests/ai-integration.sh` runs `tests/test_ai_integration.py` (the
-dotfiles-content cases and the setup-sync refusals), then exports the
+The launcher, configuration and Claude helper suites live in
+coding-agent-kit, whose CI runs them on frozen fixtures.
+`tests/ai-integration.sh` runs `tests/test_ai_integration.py` (the
+dotfiles-content cases, with `codex-as` linked to its package link as Stow
+links it, so it finds the kit checkout and names its docs), then exports the
 committed submodule tree to a temporary directory, copies the real
-`config.toml`, `settings.json` and `portable.rules` over its fixtures, and
-runs the engine and Claude helper tests there; `tests/run.ps1` does the same
-natively on Windows. `tests/coding-agent-kit-delivery.sh`, modeled on the
-sherlock-kit test, checks the `.gitmodules` entry and `.stowrc` line, the 14
-relative links and their exact texts, that the launchers and setup files here
-match the submodule's reference copies and its tomlkit pin, the
-uninitialized-submodule skip, the paths `--help` prints, and the bump
-workflow. `--ci` fails instead of skipping without GNU Stow, and `--real`
-checks the real checkout at the staged gitlink, for the bump workflow.
+`settings.json` over its fixture, and runs the Claude helper tests there;
+`tests/run.ps1` does the same natively on Windows.
 
-Every test that runs the sync engine needs the coding-agent-kit submodule
-initialized: `tests/run.sh`, `tests/run.ps1`, `tests/stow-all.sh`,
-`tests/doctor.sh`, `tests/unix-installer.sh`, `tests/sherlock-kit-delivery.sh`,
-`tests/ai-config-sync.sh`, `tests/ai-integration.sh` and the Python and Node
-tests they run stop at once with an error that names
-`git submodule update --init --recursive`. Initialize it first, as CI does:
-`git submodule update --init -- common/codex/coding-agent-kit`.
+`tests/coding-agent-kit-delivery.sh`, modeled on the sherlock-kit test, checks
+with git, bash and coreutils only: the `.gitmodules` entry and `.stowrc` line;
+the 14 links against its map from package path to kit path, with their exact
+relative texts; the coding-agent-kit sentinels of `lib/bootstrap/checks.sh`,
+each a kit path of the map; the four `*-sync` launchers as regular files; the
+Windows package allowlist; and the bump workflow. That workflow check requires
+a daily schedule at a minute of its own plus dispatch, one run at a time on
+`main` under `bash` in a concurrency group keyed on the ref (so a skipped run
+of another branch cannot displace a pending `main` run), the job only for
+`refs/heads/main` (a dispatch runs the workflow file of the branch it names),
+a checkout without persisted credentials, the token named only in gate 2 and
+the push step, the pick of the newest tag with the pinned MAJOR.MINOR,
+`actions/setup-node` before the release is staged (of the job's own git
+commands only the push gets the token; `actions/checkout` used it for its
+fetch without persisting it, and `actions/setup-node` takes it by default,
+both before the release is staged), the lines of the four gates (release on
+the kit's `main` and descending from the pin; every GitHub Actions run of the
+kit's three CI jobs completed with success;
+GNU Stow, zsh and `.venv-sync` provisioned, then `--real` and `--ci` at the
+staged gitlink; `tests/ai-integration.sh`) in that order before the commit,
+every step after the pick guarded by it, no `continue-on-error`, exactly one
+push, to `main`, with no review branch and no rebase or pull; and last the
+whole file byte for byte against its reviewed copy
+`tests/fixtures/update-coding-agent-kit-submodule.yml`, both regular files
+tracked as 100644, so an edit to an env mapping, a step output, a `shell:`
+or an inserted line fails until that copy changes in the same commit; a
+fixture whose reviewed copy is a link to the workflow, which would compare
+the workflow with itself, is refused. With the submodule initialized,
+the test also checks that each link resolves to its kit file, tracked with
+its mode at the gitlink; that the kit's code at the gitlink reads no
+`CODING_AGENT_KIT_*` or `_CODING_AGENT_KIT_*` name missing from the unset list
+of `tests/run.sh`; that the kit tracks no symlink, nested submodule or
+`.gitmodules` and still has the overlay files, its `.gitattributes` line and
+a fixed list of `.gitignore` patterns; and that `codex-as --help` and
+`claude-as --help` name a docs file of the kit at the gitlink. Fixture
+superprojects with a clone of the kit then show those checks passing the
+gitlink commit and refusing it with a nested gitlink, a tracked symlink, a
+`.gitmodules` or an unlisted knob added. It then stows copies into temporary
+homes with the checkout full, emptied (one dangling-link warning, the live AI
+files still written, no applied revision) and restored. `--ci` fails instead
+of skipping without GNU Stow, and `--real` stops after the submodule checks at
+the staged gitlink, as the bump workflow's gate 3 runs it before `--ci`.
+
+The tests of the delivered launchers and helpers need the coding-agent-kit
+submodule initialized: `tests/claude-customizations.cjs`,
+`tests/ai-integration.sh` and `tests/test_ai_integration.py` stop at once with
+an error that names `git submodule update --init --recursive`, and
+`tests/coding-agent-kit-delivery.sh --ci` fails. Initialize it first, as CI
+does: `git submodule update --init -- common/codex/coding-agent-kit`.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 

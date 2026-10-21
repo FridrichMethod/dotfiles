@@ -14,11 +14,17 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED
+    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
+    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURES="$REPO_ROOT/tests/fixtures/bootstrap"
 REAL_GIT=$(command -v git)
+# A commit hook in a linked worktree exports an absolute GIT_DIR and
+# GIT_INDEX_FILE, which -C does not override: the fixture and remote git
+# init and commit would reinitialize and commit into the caller's repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-setup-host.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 # The shared-prefix cases make a fixture Cellar read-only; give write back
