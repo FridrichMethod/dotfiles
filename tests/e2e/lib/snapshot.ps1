@@ -19,10 +19,13 @@
 # paths, absolute or relative to HOME.
 #
 # Noted, not failed: AppData\LocalLow\Microsoft\CryptnetUrlCache, Windows'
-# per-user cache of CRL and OCSP downloads. Every process of the runner
-# account writes it, the Actions agent's own HTTPS traffic included, so a
-# new entry during a step cannot be pinned on the step (setup-host.ps1
-# -Check reads PATH, files, the registry and services, nothing networked).
+# per-user cache of CRL and OCSP downloads, and
+# AppData\Local\Microsoft\TokenBroker\Cache, the Web Account Manager's
+# token cache. Every process of the runner account writes the first, the
+# Actions agent's own HTTPS traffic included, and Windows' token broker
+# refreshes the second on its own, so a new or changed entry during a step
+# cannot be pinned on the step (setup-host.ps1 -Check reads PATH, files, the
+# registry and services, nothing networked and no account).
 # A difference there is kept in snapshots\<name>.diff as "noted ..." and does
 # not fail the step; any other difference does.
 
@@ -30,7 +33,7 @@ $script:E2EPruneRelative = @(
     'work', 'AppData\Local\Temp', 'AppData\Local\Microsoft\PowerShell', 'AppData\Local\Microsoft\Windows',
     'AppData\Local\Packages', 'AppData\Local\ConnectedDevicesPlatform', 'dotfiles\.git'
 )
-$script:E2ENotedRelative = @('AppData\LocalLow\Microsoft\CryptnetUrlCache')
+$script:E2ENotedRelative = @('AppData\LocalLow\Microsoft\CryptnetUrlCache', 'AppData\Local\Microsoft\TokenBroker\Cache')
 
 function Test-E2ENoted {
     # True for a snapshot difference ("added|removed|changed <path>...") under
