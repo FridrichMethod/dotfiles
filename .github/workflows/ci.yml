@@ -74,6 +74,13 @@ jobs:
           package-manager-cache: false
       - name: Install Unix test dependencies
         run: brew install stow
+      # fzf-tab as the bootstrap clones it, for the real fzf-tab preview case
+      # of tests/test_ai_integration.py (this runner has zsh; ubuntu-24.04 has none).
+      - name: Check out fzf-tab for the real fzf-tab preview test
+        run: |
+          read -r url ref < <(awk -F '\t' '$1 == "fzf-tab" { print $3, $4 }' config/bootstrap/git-clones.tsv)
+          git clone --quiet --depth 1 --branch "$ref" "$url" "$RUNNER_TEMP/fzf-tab"
+          echo "FZF_TAB_TEST_DIR=$RUNNER_TEMP/fzf-tab" >> "$GITHUB_ENV"
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.sh
       - name: Run behavior tests with system Bash and BSD utilities

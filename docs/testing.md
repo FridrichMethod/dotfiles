@@ -9,7 +9,7 @@ macOS and Windows runners' homes.)
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
 | `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; only the coding-agent-kit submodule, whose pinned commit must be on its `main`; pre-commit installs its pinned hooks |
-| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; only the coding-agent-kit submodule; retain system Bash and BSD utilities |
+| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; only the coding-agent-kit submodule; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
 | `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; a local `core.symlinks` re-checkout of `common/coding-agent-kit`, then only the coding-agent-kit submodule, required to be LF with resolving links into it; Git and PowerShell come from the runner and are checked explicitly |
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
@@ -121,6 +121,9 @@ fetches a missing page from GitHub.
 `FZF_TAB_TEST_DIR` set to an fzf-tab checkout (the bootstrap clones it to
 `~/.oh-my-zsh/custom/plugins/fzf-tab`) it also drives real fzf-tab in an
 interactive zsh with a fake fzf. Without that variable the second case skips.
+CI's macOS job clones fzf-tab from its `config/bootstrap/git-clones.tsv` row
+and sets the variable, so both cases run there; the `ubuntu-24.04` runner has
+no zsh, so both skip in the Linux job.
 
 The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
 unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs

@@ -144,8 +144,9 @@ class Enrollment(IsolatedHome):
     @unittest.skipIf(os.name == "nt", "zsh and fzf-tab")
     def test_real_fzf_tab_previews_accounts_through_the_kit(self):
         # Real fzf-tab (FZF_TAB_TEST_DIR names a checkout; the bootstrap clones
-        # it to $ZSH_CUSTOM/plugins/fzf-tab) in an interactive zsh, with dotfiles'
-        # zstyles and a fake fzf that runs fzf-tab's own preview command.
+        # it to $ZSH_CUSTOM/plugins/fzf-tab, CI's macOS job to the runner's temp)
+        # in an interactive zsh, with dotfiles' zstyles and a fake fzf that runs
+        # fzf-tab's own preview command.
         zsh, plugin = shutil.which("zsh"), Path(os.environ.get("FZF_TAB_TEST_DIR", "/nonexistent"))
         if not zsh or not (plugin / "fzf-tab.plugin.zsh").is_file():
             self.skipTest("zsh and an fzf-tab checkout in FZF_TAB_TEST_DIR")
@@ -166,8 +167,10 @@ class Enrollment(IsolatedHome):
             f"autoload -Uz compinit && compinit -u -d '{self.base}/zcompdump'\n"
             f"source '{plugin}/fzf-tab.plugin.zsh'\nsource '{PREVIEW}'\n"
             f"zstyle ':fzf-tab:*' fzf-command '{fake}'\nzstyle ':fzf-tab:*' fzf-flags --ansi\nPS1='READY> '\n")
+        # The caller's PATH behind the launchers, as in every other case: they
+        # need Python 3.11+, which /usr/bin does not have on a macOS runner.
         env = self.env | {"ZDOTDIR": str(rc), "SHELL": zsh, "TERM": "xterm-256color", "FAKE_FZF_LOG": str(log),
-                          "TMPPREFIX": str(self.base / "zsh"), "PATH": os.pathsep.join((str(self.command_bin), "/usr/bin", "/bin"))}
+                          "TMPPREFIX": str(self.base / "zsh")}
         for line, expected in ((b"codex-as \t", ["=== A  -- alice@example.com", "A (Codex)", "email   alice@example.com",
                                                  "plan    plus", "usage   not recorded yet",
                                                  "=== B", "B (Codex)", "email   not recorded yet",
