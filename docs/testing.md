@@ -116,6 +116,12 @@ client's missing-page error must never reach the preview, and the C client
 must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
 fetches a missing page from GitHub.
 
+`tests/test_ai_integration.py` evaluates the account preview of
+`custom/fzf-tab.zsh` under the context fzf-tab really looks up; with
+`FZF_TAB_TEST_DIR` set to an fzf-tab checkout (the bootstrap clones it to
+`~/.oh-my-zsh/custom/plugins/fzf-tab`) it also drives real fzf-tab in an
+interactive zsh with a fake fzf. Without that variable the second case skips.
+
 The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
 unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs
 the standard-library validator `tests/test_bootstrap_manifest.py`, which checks

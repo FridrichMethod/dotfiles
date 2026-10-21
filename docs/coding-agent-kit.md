@@ -87,6 +87,21 @@ Never run the kit's `install.sh` on a dotfiles host. Stow already links the
 launchers and completions, and `install.sh` refuses those links (it replaces
 only links of its own) and changes nothing.
 
+## Account details in completion
+
+From v0.3.0 the kit keeps what it last saw about each account in
+`${XDG_STATE_HOME:-~/.local/state}/coding-agent-kit/accounts/`: the Codex email
+and plan, a Claude label entered at enrolment (or with
+`claude-as --set-label NAME [LABEL]`), and the last 5-hour and weekly usage
+(Codex from the rollouts of a run, Claude from its status line). The zsh
+completions show the email or label next to each account, and dotfiles'
+fzf-tab preview (`common/zsh/.oh-my-zsh/custom/fzf-tab.zsh`) runs
+`codex-as --account-info NAME` or `claude-as --account-info NAME` for an
+account, offline and without opening a credential; any other word previews as
+itself. The kit's `docs/account-launchers.md` says where each field comes from
+and its gaps. Emails and labels show in previews, screen shares and agent
+transcripts; no token is ever printed.
+
 ## Configuration
 
 The launchers read an optional TOML file,

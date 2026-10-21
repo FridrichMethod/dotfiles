@@ -50,7 +50,16 @@ zstyle ':fzf-tab:complete:*' fzf-preview '[[ -e "$realpath" ]] && my-fzf-preview
 # Custom previews for specific commands
 
 # Account launchers: never hand a credential path to the generic file preview.
-zstyle ':fzf-tab:complete:(codex-as|claude-as):*' fzf-preview 'printf "%s\n" "$word"'
+# An account shows the kit's offline --account-info (last-seen email or label
+# and usage; it opens no credential), any other word only itself. fzf-tab keys
+# this context on the command alone, so the group, the [%d] description of
+# the completion, tells an account from an argument.
+zstyle ':fzf-tab:complete:(codex-as|claude-as):*' fzf-preview \
+    'case $group in
+    ("[Codex accounts]") codex-as --account-info "$word" 2>/dev/null || printf "%s\n" "$word" ;;
+    ("[Claude accounts]") claude-as --account-info "$word" 2>/dev/null || printf "%s\n" "$word" ;;
+    (*) printf "%s\n" "$word" ;;
+    esac'
 
 # kill
 zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm -w -w"
