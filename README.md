@@ -666,6 +666,11 @@ removes it, until it is gone. The launchers follow their links to the checkout, 
 `common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md`. Stow does
 the installing here; the kit's own `install.sh` is for hosts without dotfiles.
 
+From v0.3.0 `codex-as --account-info NAME` and `claude-as --account-info NAME`
+print an account's last-seen email or label and usage, offline; the zsh
+completions describe each account with it and the fzf-tab preview shows it
+(see [docs/coding-agent-kit.md](docs/coding-agent-kit.md#account-details-in-completion)).
+
 The kit reads an optional
 `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml` for the `codex`
 and `claude` executables and the `~/.codex` and `~/.secrets` roots. Dotfiles
