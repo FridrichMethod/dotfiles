@@ -9,7 +9,6 @@ fixtures are the parts of the launcher suites' setUp they read.
 import json
 import os
 from pathlib import Path
-import pty
 import select
 import shutil
 import subprocess
@@ -150,6 +149,7 @@ class Enrollment(IsolatedHome):
         zsh, plugin = shutil.which("zsh"), Path(os.environ.get("FZF_TAB_TEST_DIR", "/nonexistent"))
         if not zsh or not (plugin / "fzf-tab.plugin.zsh").is_file():
             self.skipTest("zsh and an fzf-tab checkout in FZF_TAB_TEST_DIR")
+        import pty  # POSIX only: native Windows Python has no termios, so not at module level
         self.preview_home()
         log = self.base / "previews.log"
         # fzf-tab splits its fzf-command on spaces, so not below the spaced HOME.
