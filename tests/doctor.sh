@@ -21,6 +21,11 @@ REAL_GIT=$(command -v git) || {
     echo 'ERROR: git is required for the doctor fixture repo.' >&2
     exit 1
 }
+# A commit hook in a linked worktree exports an absolute GIT_DIR and
+# GIT_INDEX_FILE, which -C does not override: the fixture's git init and
+# commit would reinitialize and commit into the caller's repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 # The real codex-instructions-sync that the codex-override row runs needs
 # only a standard-library Python 3.11+; the runtime check stays a fake.
 SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"

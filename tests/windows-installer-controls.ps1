@@ -76,6 +76,26 @@ if ($preflightStart -lt 0 -or $preflightEnd -le $preflightStart) { throw 'Cannot
 $kitPreflight = $installerText.Substring($preflightStart, $preflightEnd - $preflightStart)
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-stow-controls-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testRoot)
+# -C cannot neutralize an inherited GIT_DIR or GIT_INDEX_FILE, which a commit
+# hook in a linked worktree exports, absolute: the fixture git init and add
+# would reinitialize and stage into the caller's repository, and the
+# installer's own git in each runspace would read its index. Remove every
+# GIT_* entry for the whole run, as tests/windows-installer.ps1 does, and
+# restore them at the end.
+$environmentNames = @(@('GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TEMPLATE_DIR') +
+    @(Get-ChildItem Env: | Where-Object Name -Like 'GIT_*' | Select-Object -ExpandProperty Name) |
+    Sort-Object -Unique)
+$savedEnvironment = @{}
+foreach ($name in $environmentNames) {
+    $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+    Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath "Env:$name") { throw "Environment override was not removed: $name" }
+}
+$env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'empty.gitconfig'
+[IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '')
+$env:GIT_CONFIG_NOSYSTEM = '1'
+$env:GIT_TEMPLATE_DIR = Join-Path $testRoot 'empty-git-template'
+[void][IO.Directory]::CreateDirectory($env:GIT_TEMPLATE_DIR)
 $script:Passed = 0
 $script:FixtureNumber = 0
 
@@ -412,6 +432,13 @@ function Get-DotfilesLinkReadErrors {
         }
     }
 } finally {
+    foreach ($name in $environmentNames) {
+        if ($null -eq $savedEnvironment[$name]) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+        } else {
+            [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name])
+        }
+    }
     Remove-ControlFixture $testRoot
 }
 Write-Output "windows-installer-controls=PASS ($script:Passed cases)"

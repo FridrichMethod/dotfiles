@@ -35,6 +35,13 @@ $Utf8 = [Text.UTF8Encoding]::new($false)
 
 # Git sees only the temp repositories: no system or global configuration
 # (Git for Windows' autocrlf among them) and no repository above the temp dir.
+# -C cannot neutralize an inherited GIT_DIR or GIT_INDEX_FILE, which a commit
+# hook in a linked worktree exports, absolute: New-TempClone would then
+# reinitialize and commit into the caller's repository. Remove every GIT_*
+# entry first.
+foreach ($name in @(Get-ChildItem Env: | Where-Object Name -Like 'GIT_*' | Select-Object -ExpandProperty Name)) {
+    Remove-Item -LiteralPath "Env:$name"
+}
 $env:GIT_CONFIG_NOSYSTEM = '1'
 $env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'gitconfig'
 $env:GIT_CEILING_DIRECTORIES = $testRoot

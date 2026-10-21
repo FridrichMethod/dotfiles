@@ -35,6 +35,11 @@ TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 STARTED=$(date +%s)
 TAB=$(printf '\t')
+# A commit hook in a linked worktree exports an absolute GIT_DIR and
+# GIT_INDEX_FILE, which -C does not override: the fixture source's git init
+# and commits would reinitialize and commit into the caller's repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
