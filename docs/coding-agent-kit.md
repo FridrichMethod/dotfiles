@@ -311,13 +311,14 @@ Fix forward: never rewrite coding-agent-kit's `main` or move its tags.
   `git submodule deinit`, which leave an untracked checkout that freezes the
   login updater, or get it cloned again at the next pull. Use one forward
   commit that removes the gitlink and the `.gitmodules` entry, adds
-  `/common/codex/coding-agent-kit/` to `.gitignore`, keeps the `.stowrc` line,
-  and drops the doctor sentinels, the CI submodule steps, the bump workflow
-  and their test cases. Per-host cleanup is then optional:
-  `rm -rf ~/dotfiles/common/codex/coding-agent-kit ~/dotfiles/.git/modules/common/codex/coding-agent-kit`
-  (the same two paths under `$HOME\dotfiles` on Windows). Drop the
-  `.gitignore` and `.stowrc` lines only in a later commit, after every host
-  has done that cleanup.
+  `/common/coding-agent-kit/coding-agent-kit/` to `.gitignore`, keeps the
+  package's `.stow-local-ignore`, and drops the doctor sentinels, the CI
+  submodule steps, the bump workflow and their test cases. Per-host cleanup is
+  then optional:
+  `rm -rf ~/dotfiles/common/coding-agent-kit/coding-agent-kit ~/dotfiles/common/codex/coding-agent-kit ~/dotfiles/.git/modules/common/codex/coding-agent-kit`
+  (the same three paths under `$HOME\dotfiles` on Windows); only then is the
+  module directory unused. Drop the new `.gitignore` line only in a later
+  commit, after every host has done that cleanup.
 
 ## Verify
 

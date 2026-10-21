@@ -972,6 +972,40 @@ assert_rc 1
 assert_row submodule missing "no ${cak_missing#, }; the stowed links dangle (git submodule update --init --recursive)"
 rmdir "$CAK_TREE"
 mv "$TEST_TMP/coding-agent-kit.hidden" "$CAK_TREE"
+
+# The checkout that the pull across coding-agent-kit's move into its own
+# package leaves at the old path: a warning that names the one rm to run and
+# the module directory to keep, after the check of every submodule; absent,
+# or still the submodule's .gitmodules path, it is not reported.
+LEFTOVER_TREE="$FIXTURE/common/codex/coding-agent-kit"
+mkdir -p "$LEFTOVER_TREE/bin"
+printf 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit\n' >"$LEFTOVER_TREE/.git"
+printf '# fixture leftover\n' >"$LEFTOVER_TREE/bin/codex-as"
+run_doctor submodule-coding-agent-kit-leftover -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule warn \
+    "submodules checked out: common/pymol/PyMOLScripts, common/sherlock-kit/sherlock-kit, common/coding-agent-kit/coding-agent-kit; remove the pre-move coding-agent-kit checkout: rm -rf \"$FIXTURE/common/codex/coding-agent-kit\" (keep .git/modules/common/codex/coding-agent-kit, the repository of common/coding-agent-kit/coding-agent-kit)" \
+    'docs/bootstrap.md P0-preflight'
+run_doctor submodule-coding-agent-kit-leftover-text -- --host lab-ubuntu
+assert_rc 0
+# Missing sentinels still take precedence over the leftover.
+mv "$CAK_TREE/bin/codex-as" "$TEST_TMP/sentinel.hidden"
+run_doctor submodule-coding-agent-kit-leftover-missing -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row submodule missing "no common/coding-agent-kit/coding-agent-kit/bin/codex-as; the stowed links dangle"
+mv "$TEST_TMP/sentinel.hidden" "$CAK_TREE/bin/codex-as"
+# A .gitmodules that still names the old path (as before the move) is no leftover.
+printf '%s\n' "$GITMODULES_BOTH" '[submodule "common/codex/coding-agent-kit"]' \
+    '	path = common/codex/coding-agent-kit' '	url = https://github.com/FridrichMethod/coding-agent-kit.git' \
+    '	branch = main' >"$FIXTURE/.gitmodules"
+for sentinel in $CAK_SENTINELS; do
+    mkdir -p "$LEFTOVER_TREE/${sentinel%/*}"
+    [ -f "$LEFTOVER_TREE/$sentinel" ] || printf '# fixture %s\n' "$sentinel" >"$LEFTOVER_TREE/$sentinel"
+done
+run_doctor submodule-coding-agent-kit-old-path -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule ok 'common/pymol/PyMOLScripts, common/sherlock-kit/sherlock-kit, common/codex/coding-agent-kit' -
+rm -rf "$LEFTOVER_TREE"
 printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
 run_doctor submodule-coding-agent-kit-restored -- --host lab-ubuntu --tsv
 assert_rc 0

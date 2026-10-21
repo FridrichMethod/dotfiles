@@ -436,6 +436,13 @@ BOOTSTRAP_SUBMODULE_SENTINELS='common/pymol/PyMOLScripts configs/.pymolrc
 common/sherlock-kit/sherlock-kit src/sherlock_kit/data/rules/workstation.md src/sherlock_kit/data/rules/cluster.md src/sherlock_kit/data/skills/sherlock-kit/SKILL.md bin/shk
 common/coding-agent-kit/coding-agent-kit bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
 
+# The coding-agent-kit checkout that the pull across the kit's move into its
+# own package leaves on a host where it was checked out. .gitignore and
+# .stowrc keep it harmless; only its owner removes it. Its module directory,
+# .git/modules/common/codex/coding-agent-kit, is the repository of the
+# current checkout and must stay.
+BOOTSTRAP_KIT_LEFTOVER=common/codex/coding-agent-kit
+
 # bootstrap_submodule_paths ROOT: the path of every submodule in
 # ROOT/.gitmodules, one per line (its `path =` lines, as doctor.ps1 reads them).
 bootstrap_submodule_paths() {
@@ -477,9 +484,10 @@ bootstrap_submodule_missing() {
 
 # bootstrap_check_submodule ROOT: every submodule in ROOT/.gitmodules is
 # checked out, judged by its sentinel files (or its .git without sentinels),
-# so the stowed links into it resolve.
+# so the stowed links into it resolve; a pre-move coding-agent-kit checkout
+# that no .gitmodules path names is a warning with the rm that removes it.
 bootstrap_check_submodule() {
-    local lines path missing='' found=''
+    local lines path missing='' found='' leftover=$1/$BOOTSTRAP_KIT_LEFTOVER
     if [ ! -f "$1/.gitmodules" ]; then
         bootstrap_check_result ok "no .gitmodules, so no submodule to check"
         return 0
@@ -493,8 +501,13 @@ bootstrap_check_submodule() {
         found="$found, $path"
         missing="$missing$(bootstrap_submodule_missing "$1" "$path")"
     done
+    case "$found, " in
+        *", $BOOTSTRAP_KIT_LEFTOVER, "*) leftover='' ;;
+    esac
     if [ -n "$missing" ]; then
         bootstrap_check_result missing "no ${missing#, }; the stowed links dangle (git submodule update --init --recursive)"
+    elif [ -n "$leftover" ] && { [ -e "$leftover" ] || [ -L "$leftover" ]; }; then
+        bootstrap_check_result warn "submodules checked out: ${found#, }; remove the pre-move coding-agent-kit checkout: rm -rf \"$leftover\" (keep .git/modules/$BOOTSTRAP_KIT_LEFTOVER, the repository of common/coding-agent-kit/coding-agent-kit)"
     elif [ -n "$found" ]; then
         bootstrap_check_result ok "submodules checked out: ${found#, }"
     else
