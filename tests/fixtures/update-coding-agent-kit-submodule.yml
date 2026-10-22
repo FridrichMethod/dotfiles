@@ -117,7 +117,7 @@ jobs:
             --jq '["Linux behavior and lint", "macOS system Bash behavior", "Windows native PowerShell behavior"] - ([.check_runs[] | select(.app.slug == "github-actions") | .name] - [.check_runs[] | select(.app.slug == "github-actions" and (.status != "completed" or .conclusion != "success")) | .name]) | join(", ")')
           [ -z "$missing" ] ||
             { echo "::error::coding-agent-kit CI is not green on $TAG ($SHA): $missing"; exit 1; }
-      # Gate 4 needs Node for the release's helper suite. The action takes
+      # Gate 4 runs the release's Claude helpers with Node. The action takes
       # the token, so it runs before the release is staged.
       - uses: actions/setup-node@v6
         if: steps.pick.outputs.changed == '1'
@@ -153,9 +153,10 @@ jobs:
           bash tests/coding-agent-kit-delivery.sh --real
           bash tests/coding-agent-kit-delivery.sh --ci
       # Gate 4: codex-as through dotfiles' alias files in Bash and zsh, the
-      # fzf-tab account preview and a real Stow of the completions, then the
-      # release's Claude helper suite on the real settings.json.
-      - name: Refuse a release that breaks the real settings overlay
+      # fzf-tab account preview, a real Stow of the completions, and each
+      # status line and hook command of the real settings.json, run through a
+      # shell on the release's Claude helpers linked into a temporary home.
+      - name: Refuse a release that breaks the real settings and aliases
         if: steps.pick.outputs.changed == '1'
         run: bash tests/ai-integration.sh
       # Pushes made with GITHUB_TOKEN do not trigger ci.yml (GitHub starts no
