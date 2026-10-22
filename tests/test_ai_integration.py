@@ -65,7 +65,8 @@ class IsolatedHome(unittest.TestCase):
         # No configuration of the caller's coding-agent-kit is in reach.
         for name in (*ENV_CONFLICTS, "CODEX_HOME", "CODEX_SQLITE_HOME", "PYTHONPATH", "BASH_ENV", "ENV", "ZDOTDIR",
                      "XDG_CONFIG_HOME", "XDG_STATE_HOME", "CODING_AGENT_KIT_CONFIG", "CODING_AGENT_KIT_COLOR",
-                     "CODING_AGENT_KIT_USAGE_FILE", "CODING_AGENT_KIT_TOKEN_ID", "CLAUDE_CODE_OAUTH_TOKEN"):
+                     "CODING_AGENT_KIT_USAGE_FILE", "CODING_AGENT_KIT_TOKEN_ID", "CODING_AGENT_KIT_CLAUDE_PID",
+                     "CLAUDE_CODE_OAUTH_TOKEN"):
             self.env.pop(name, None)
         self.env.update(HOME=str(self.home), PATH=os.pathsep.join((str(self.command_bin), self.env["PATH"])))
 
