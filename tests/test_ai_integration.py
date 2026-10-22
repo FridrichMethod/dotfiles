@@ -1,14 +1,17 @@
 """Dotfiles-content halves of the coding-agent-kit suites, on the real files.
 
-The launcher suites live in the coding-agent-kit submodule and run there on
-frozen fixtures. These cases read what only dotfiles owns: the fzf-tab preview,
-the alias files, the Stow ignores and the package link that delivers codex-as. The
-fixtures are the parts of the launcher suites' setUp they read.
+The launcher and helper suites live in the coding-agent-kit submodule and run
+there on the kit's own fixtures. These cases read what only dotfiles owns: the
+fzf-tab preview, the alias files, the Stow ignores, the package links that
+deliver codex-as and the Claude helpers, and the settings.json commands that
+run those helpers. The fixtures are the parts of the launcher suites' setUp
+they read; they reach the kit only through its package links.
 """
 
 import json
 import os
 from pathlib import Path
+import re
 import select
 import shutil
 import signal
@@ -241,6 +244,95 @@ class Enrollment(IsolatedHome):
         # The package's own ignore file (and, while it stays, the .stowrc line
         # read from cwd) keeps its submodule checkout unstowed.
         self.assertFalse((target / 'coding-agent-kit').exists())
+
+
+SETTINGS = ROOT / "common/claude/.claude/settings.json"
+# The Claude helpers of the coding-agent-kit package, which Stow links to
+# ~/.claude/dotfiles/: links into the submodule.
+HELPERS = ROOT / "common/coding-agent-kit/.claude/dotfiles"
+HELPER_PATH = re.compile(r"/\.claude/dotfiles/([^/'\"\s]+)")
+
+
+def bash_tool(command):
+    return {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
+
+
+# Where settings.json wires each delivered helper, and for each run the JSON
+# Claude Code writes to its stdin there (inputs as in the kit's own suite),
+# the exit status, and the stream that must carry output (None: neither may).
+# A command that cannot load its helper exits 1 instead.
+HELPER_RUNS = {
+    "statusline.cjs": ("statusLine", [({"model": {"display_name": "Opus"}}, 0, "stdout")]),
+    "notify.cjs": ("Notification", [({"hook_event_name": "Notification", "notification_type": "idle_prompt"},
+                                     0, "stdout")]),
+    "check-git-hooks.cjs": ("PreToolUse", [(bash_tool("git status"), 0, None),
+                                           (bash_tool("git commit --no-verify -m test"), 2, "stderr")]),
+}
+
+
+def wired_helpers():
+    """(event, command, helper) for the status line and each hook command loading a helper from ~/.claude/dotfiles/."""
+    settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
+    commands = [("statusLine", settings.get("statusLine", {}).get("command", ""))]
+    commands += [(event, hook.get("command", "")) for event, groups in settings.get("hooks", {}).items()
+                 for group in groups for hook in group.get("hooks", [])]
+    return [(event, command, name) for event, command in commands for name in HELPER_PATH.findall(command)]
+
+
+class ClaudeHelperWiring(unittest.TestCase):
+    def test_settings_wire_exactly_the_delivered_helpers(self):
+        kit = KIT.resolve()
+        delivered = sorted(path.name for path in HELPERS.iterdir())
+        for name in delivered:
+            target = (HELPERS / name).resolve()
+            self.assertTrue((HELPERS / name).is_symlink() and target.is_file() and target.is_relative_to(kit),
+                            f"{HELPERS / name} is not a link to a file of the submodule")
+        wired = wired_helpers()
+        self.assertEqual(sorted({name for _, _, name in wired}), delivered,
+                         "settings.json must load exactly the helpers the coding-agent-kit package delivers")
+        self.assertEqual(sorted(HELPER_RUNS), delivered, "each delivered helper needs its runs in HELPER_RUNS")
+        for event, command, name in wired:
+            self.assertEqual(event, HELPER_RUNS[name][0], command)
+
+
+class ClaudeHelperCommands(IsolatedHome):
+    @unittest.skipIf(os.name == "nt", "a POSIX shell runs the commands; tests/claude-customizations.cjs covers Windows")
+    def test_settings_commands_run_the_stowed_helpers_through_a_shell(self):
+        if not shutil.which("node", path=self.env["PATH"]):
+            self.skipTest("node not installed")
+        # A pre-commit run exports the GIT_DIR of the commit in progress; the
+        # status line runs git.
+        env = {key: value for key, value in self.env.items() if not key.startswith("GIT_")}
+
+        def run(command, stdin):
+            # As Claude Code runs a status line or hook command: the exact
+            # string through a shell, the event JSON on stdin.
+            return subprocess.run(command, shell=True, cwd=self.cwd, env=env, input=json.dumps(stdin),
+                                  capture_output=True, text=True, timeout=60)
+
+        wired = wired_helpers()
+        self.assertTrue(wired, "settings.json loads no helper from ~/.claude/dotfiles/")
+        installed = self.home / ".claude/dotfiles"
+        # Before the stow, each command looks for its helper under the spaced
+        # HOME and finds none.
+        for _, command, name in wired:
+            self.assertIn(name, HELPER_RUNS, f"{command} loads no helper the coding-agent-kit package delivers")
+            first_stdin = HELPER_RUNS[name][1][0][0]
+            result = run(command, first_stdin)
+            self.assertEqual((result.returncode, result.stdout), (1, ""), command)
+            self.assertIn(str(installed / name), result.stderr)
+        installed.mkdir(parents=True)
+        for path in HELPERS.iterdir():
+            (installed / path.name).symlink_to(path)  # as Stow links them, to the package links
+        for _, command, name in wired:
+            for stdin, status, stream in HELPER_RUNS[name][1]:
+                with self.subTest(helper=name, stdin=stdin):
+                    result = run(command, stdin)
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    if stream:
+                        self.assertTrue(getattr(result, stream).strip(), f"{name} wrote nothing to {stream}")
+                    else:
+                        self.assertEqual((result.stdout, result.stderr), ("", ""))
 
 
 if __name__ == "__main__":
