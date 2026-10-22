@@ -1,3 +1,7 @@
+# Stow also ignores each pattern here with no slash but a trailing one, which
+# git matches at any depth: add every new one to .stowrc too
+# (tests/test_stow_ignores.py).
+
 # OS metadata
 .DS_Store
 .DS_Store?

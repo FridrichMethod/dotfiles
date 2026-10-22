@@ -362,7 +362,9 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 5. After read-only preflight, retire exact dangling links from removed Sherlock packages before Stow dry runs. After successful Stow, remove only an override with the exact retired generator marker; preserve foreign files with an actionable warning. See [migration](docs/sherlock-kit.md).
 6. While a tracked link in `common/coding-agent-kit` dangles (its `coding-agent-kit` submodule is not checked out), `stow-all.sh` and `stow-all.ps1` warn once `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`, still run every Claude and Codex sync and stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
 
-`.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1.
+`.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1, and Stow 2.4 drops a lone backslash, so a literal dot is written `[.]`.
+
+Stow never links what git ignores: `.stowrc` also ignores each `.gitignore` pattern with no slash but a trailing one (OS metadata, editor files, language caches, `node_modules`, build and coverage output), with everything below a matching directory, so a cache or log left in a package stays out of the home. A new such `.gitignore` line needs its `.stowrc` counterpart; `tests/test_stow_ignores.py` fails until both agree, and also fails if an ignore would keep a tracked package file out of the home.
 
 The shared shell profile prepends `/usr/local/man` while retaining the default
 manual search directories when `MANPATH` was unset or empty. Repeated sourcing

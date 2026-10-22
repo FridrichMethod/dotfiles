@@ -1,9 +1,17 @@
 --target=~
 
---ignore=\.DS_Store
-# Stow's rc parser removes a single backslash. A character class keeps the
-# AppleDouble dot literal, so /_zsh-completion files are not accidentally ignored.
---ignore=[.]_.*
+# Never link what git ignores: each .gitignore pattern with no slash but a
+# trailing one, as a whole path component with everything below it
+# (tests/test_stow_ignores.py).
+# Stow 2.4 splits this file like a shell, dropping a lone backslash, and 2.3
+# splits it on spaces: a character class such as [.] keeps a metacharacter
+# literal for both, and for stow-all.ps1.
+# OS metadata
+--ignore=(^|/)([.]DS_Store[^/]?|[.]_[^/]*|[.]AppleDouble|[.]LSOverride|Icon[^/]|[.]Spotlight-V100|[.]Trashes|[.]fseventsd|[.]TemporaryItems|[.]VolumeIcon[.]icns|[.]apdisk|Desktop[.]ini|Thumbs[.]db|ehthumbs[.]db|[$]RECYCLE[.]BIN|[^/]*[.]stackdump)(/.*)?$
+# Editor and IDE files
+--ignore=(^|/)([^/]*~|[^/]*[.](sw[pomn]|tmp|bak|orig|rej|patch|iml|code-workspace|sublime-project|sublime-workspace|log)|[.][#][^/]*|[#][^/]*[#]|[.]idea|[.]vscode|[.]history)(/.*)?$
+# Language caches, dependencies, build and test output, Cursor
+--ignore=(^|/)(__pycache__|[^/]*[.]py[cod]|[.]pytest_cache|[.]mypy_cache|[.]ruff_cache|[.]tox|[.]venv|[.]cache|node_modules|dist|build|coverage|[.]coverage|coverage[.]xml|[.]cursor)(/.*)?$
 
 # common/codex/.codex/config.toml is a portable merge source, not a symlink
 # target. Codex Desktop owns the mutable regular file at ~/.codex/config.toml.
@@ -20,11 +28,7 @@
 # target. fcitx5 owns the mutable regular file at ~/.config/fcitx5/profile.
 --ignore=(^|/)\.config/fcitx5/profile$
 
---ignore=(^|/)\.Trash-[0-9]+(/.*)?
---ignore=(^|/)\.Trash(/.*)?
-
---ignore=(^|/)__pycache__(/.*)?
---ignore=\.py[cod]$
+--ignore=(^|/)[.]Trash(-[0-9]+)?(/.*)?$
 
 # The pre-move coding-agent-kit checkout that a fast-forward leaves in the
 # codex package on a host where the submodule was checked out (.gitignore keeps

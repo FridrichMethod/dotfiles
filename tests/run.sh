@@ -82,6 +82,7 @@ tests=(
     codex-config-sync.sh
     fcitx5-profile-sync.sh
     stow-all.sh
+    stow-ignores.sh
     update-hooks.sh
     powershell-profile.sh
     awesome-skills-update.sh

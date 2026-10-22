@@ -78,6 +78,11 @@ function New-Fixture {
     Write-FixtureFile (Join-Path $repo 'common/git/.stow-local-ignore') "(^|/)ignored[.]txt$`n"
     Write-FixtureFile (Join-Path $repo 'common/git/ignored.txt') 'local ignore sentinel'
     Write-FixtureFile (Join-Path $repo 'common/git/.DS_Store') 'global ignore sentinel'
+    # .stowrc ignores what .gitignore does, a cache directory and a log among
+    # them, but not a look-alike of the ignored build/ directory.
+    Write-FixtureFile (Join-Path $repo 'common/git/.config/tool/.ruff_cache/CACHEDIR.TAG') 'cache ignore sentinel'
+    Write-FixtureFile (Join-Path $repo 'common/git/.config/tool/debug.log') 'log ignore sentinel'
+    Write-FixtureFile (Join-Path $repo 'common/git/.config/tool/build.sh') 'build/ look-alike'
     # Stow matches a local pattern with a slash against "/PATH": only the
     # package-root vendored/ is ignored, not .config/vendored/.
     Write-FixtureFile (Join-Path $repo 'common/conda/.stow-local-ignore') "^/vendored`$`n^/vendored/`n"
@@ -194,9 +199,11 @@ try {
         Assert-Link (Join-Path $fixture.Target '.fixture-conda') (Join-Path $fixture.Repo 'common/conda/.fixture-conda')
         Assert-Link (Join-Path $fixture.Target 'AppData/Local/terminal/settings.json') `
             (Join-Path $fixture.Repo 'win/terminal/AppData/Local/terminal/settings.json')
-        foreach ($relative in @('.profile', 'ignored.txt', '.DS_Store', '.stow-local-ignore', 'vendored')) {
+        foreach ($relative in @('.profile', 'ignored.txt', '.DS_Store', '.stow-local-ignore', 'vendored',
+                '.config/tool/.ruff_cache', '.config/tool/debug.log')) {
             Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $relative))) "Ignored path installed: $relative"
         }
+        Assert-Link (Join-Path $fixture.Target '.config/tool/build.sh') (Join-Path $fixture.Repo 'common/git/.config/tool/build.sh')
         Assert-Link (Join-Path $fixture.Target '.config/vendored/kept') (Join-Path $fixture.Repo 'common/conda/.config/vendored/kept')
         foreach ($relative in @('.codex/config.toml', '.codex/rules/portable.rules', '.claude/settings.json')) {
             $item = Get-Item -LiteralPath (Join-Path $fixture.Target $relative) -Force

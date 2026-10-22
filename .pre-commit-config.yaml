@@ -140,6 +140,12 @@ repos:
         pass_filenames: false
         files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|\.stowrc|tests/stow-all\.sh)$
         types: []
+      - id: stow-ignores
+        name: Stow ignores what git ignores and links every tracked file
+        entry: tests/stow-ignores.sh
+        language: script
+        pass_filenames: false
+        files: ^(\.stowrc|\.gitignore|stow-all\.ps1|tests/(stow-ignores\.sh|test_stow_ignores\.py))$
       - id: coding-agent-kit-delivery
         name: coding-agent-kit submodule delivery and links
         entry: tests/coding-agent-kit-delivery.sh

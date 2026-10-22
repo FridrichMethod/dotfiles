@@ -87,6 +87,10 @@ Write-Output '==> test_bootstrap_manifest.py'
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }
 
+Write-Output '==> test_stow_ignores.py'
+& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_stow_ignores.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Stow ignore tests failed.' }
+
 Write-Output '==> claude-customizations.cjs'
 & node --test (Join-Path $PSScriptRoot 'claude-customizations.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed.' }

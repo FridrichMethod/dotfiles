@@ -161,6 +161,19 @@ overlays in a clean environment with a missing, a non-executable and a fake
 Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
 `brew shellenv` line applies only once brew can run.
 
+`tests/stow-ignores.sh` (and `tests/run.ps1`) runs `tests/test_stow_ignores.py`:
+it builds a name from each `.gitignore` pattern with no slash but a trailing
+one, plus
+near misses such as `kept-NAME` and `NAME-kept`, asks `git check-ignore`
+which of them git ignores, and requires `.stowrc` to agree as Stow 2.3
+(split on spaces), Stow 2.4 (split like a shell, dropping a lone backslash)
+and `stow-all.ps1` (case-insensitive and unanchored) read it, and the
+installed Stow on a real package (2.3.1 in the Linux job, 2.4 in the macOS
+one). Stow cannot tell a directory from a file,
+so `build/` also hides a file named `build`; the suite therefore also
+requires every tracked package file but the four materialized ones to stay
+linked.
+
 `tests/stow-all.sh` and `tests/unix-installer.sh` cover retired Sherlock
 links, deleted source parents, generated override retirement, foreign entries,
 repeat installs and ignored leftover checkouts. The latter uses real GNU Stow
