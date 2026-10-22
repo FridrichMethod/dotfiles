@@ -150,8 +150,9 @@ of the same `vX.Y` line. Before it commits, it requires, in this order:
    full, emptied and restored;
 4. `tests/ai-integration.sh` passes on `.venv-sync`: `codex-as` through the
    alias files in Bash and zsh, the fzf-tab account preview, a real Stow of
-   the completions, and the release's Claude helper suite on the real
-   `settings.json` ([below](#real-settings-and-the-helper-tests)).
+   the completions, and each status line and hook command of the real
+   `settings.json` run on the release's Claude helpers
+   ([below](#real-settings-and-the-helper-tests)).
 
 It then commits `chore(deps): update coding-agent-kit submodule to vX.Y.Z` as
 github-actions[bot] and pushes `main`. A push made with `GITHUB_TOKEN` starts
@@ -224,12 +225,19 @@ commit is on the kit's `main`. After the merge the daily run follows the new
 
 ### Real settings and the helper tests
 
-coding-agent-kit tests its Claude helpers on a frozen copy of this
-repository's `settings.json`; `tests/fixtures/claude-settings.json` there is an
-interface. `tests/ai-integration.sh` (and `tests/run.ps1` on Windows) exports
-the pinned submodule tree to a temporary directory, copies the real
-`settings.json` over that file and runs the helper tests on it, so they still
-run on every change to the settings and, as gate 4, on every bump.
+coding-agent-kit tests its Claude helpers on fixtures of its own; this
+repository tests how its `settings.json` runs them, and reaches the kit only
+through the package links. `tests/test_ai_integration.py`, which
+`tests/ai-integration.sh` runs, collects the status line and every hook
+command that loads a helper from `~/.claude/dotfiles/`. They must load exactly
+the helpers the coding-agent-kit package delivers, each at the event it
+serves. In a temporary home whose path has a space, with those helpers linked
+as Stow links them, each exact command then runs through a shell with that
+`HOME` and the event's JSON on stdin, as Claude Code runs it, and must exit as
+Claude Code expects with output. So the settings run on every change to them
+and, as gate 4, on every bump. `tests/ai-integration.sh` fails without
+`node`. On Windows the command case skips; `tests/claude-customizations.cjs`
+runs the same commands without a shell there and on Unix.
 
 ## Develop in a separate clone
 

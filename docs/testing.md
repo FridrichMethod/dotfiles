@@ -182,13 +182,16 @@ fixtures cover the two exact retired launcher links, preview and decline
 behavior. Native Windows coverage requires the Windows CI job.
 
 The launcher, configuration and Claude helper suites live in
-coding-agent-kit, whose CI runs them on frozen fixtures.
-`tests/ai-integration.sh` runs `tests/test_ai_integration.py` (the
-dotfiles-content cases, with `codex-as` linked to its package link as Stow
-links it, so it finds the kit checkout and names its docs), then exports the
-committed submodule tree to a temporary directory, copies the real
-`settings.json` over its fixture, and runs the Claude helper tests there;
-`tests/run.ps1` does the same natively on Windows.
+coding-agent-kit, whose CI runs them on its own fixtures.
+`tests/ai-integration.sh` runs `tests/test_ai_integration.py`, the
+dotfiles-content cases, which reach the kit only through its package links:
+`codex-as` linked to its package link as Stow links it, so it finds the kit
+checkout and names its docs, and the real `settings.json`, whose status line
+and hook commands must load exactly the Claude helpers the package delivers
+and, run through `sh` in a temporary home with those helpers linked as Stow
+links them, must run them. It fails without `node`, which those command cases
+need. `tests/run.ps1` runs the same file natively on Windows, where only the
+wiring case runs.
 
 `tests/coding-agent-kit-delivery.sh` checks
 with git, bash and coreutils only: the `.gitmodules` entry, the package's
@@ -223,8 +226,8 @@ the test also checks that each link resolves to its kit file, tracked with
 its mode at the gitlink; that the kit's code at the gitlink reads no
 `CODING_AGENT_KIT_*` or `_CODING_AGENT_KIT_*` name missing from the unset list
 of `tests/run.sh`; that the kit tracks no symlink, nested submodule or
-`.gitmodules` and still has the overlay files, its `.gitattributes` line and
-a fixed list of `.gitignore` patterns; and that `codex-as --help` and
+`.gitmodules` and still has its `.gitattributes` line and a fixed list of
+`.gitignore` patterns; and that `codex-as --help` and
 `claude-as --help` name a docs file of the kit at the gitlink. Fixture
 superprojects with a clone of the kit then show those checks passing the
 gitlink commit and refusing it with a nested gitlink, a tracked symlink, a

@@ -688,7 +688,7 @@ with the pinned `X.Y`, and only when that release is on the kit's `main` and
 descends from the pin, every GitHub Actions run of the kit's three CI jobs on
 it passed, `tests/coding-agent-kit-delivery.sh --real` and `--ci` pass at the
 staged gitlink with GNU Stow and zsh installed, and `tests/ai-integration.sh`
-passes the real `settings.json` against the release's helper suite. Its
+runs the commands of the real `settings.json` on the release's helpers. Its
 checkout keeps no credential, and no step that runs the release's code gets
 the token. It then commits
 `chore(deps): update coding-agent-kit submodule to vX.Y.Z` and pushes `main`;
