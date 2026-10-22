@@ -158,7 +158,8 @@ github-actions[bot] and pushes `main`. A push made with `GITHUB_TOKEN` starts
 no `ci.yml` run, so the four gates are all the checking a patch release gets
 before every host pulls it at its next login. A failed gate fails the run and
 bumps nothing, even when an older patch of the line would pass: tag a fixed
-patch, or bump through a reviewed pull request as for a new minor release.
+patch, or bump through a reviewed change as for a new minor release (a `ci/**`
+branch, see AGENTS.md).
 When the kit has a newer release line, the job summary says so, but the run
 never takes it. On the next login the updater fast-forwards, runs
 `git submodule update --init --recursive` and restows the remembered host.

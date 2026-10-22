@@ -418,7 +418,7 @@ check_automation() {
             { grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' || true; } | sort -V
           pinned=$(git -C common/coding-agent-kit/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
           if [ -z "$pinned" ]; then
-            echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed pull request"
+            echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed change"
             exit 1
           candidate=$(git -C common/coding-agent-kit/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
           newest=$(git -C common/coding-agent-kit/coding-agent-kit tag --list | releases | tail -n 1)
@@ -495,7 +495,7 @@ check_kit_knobs() {
         fail "git grep found no CODING_AGENT_KIT_* name in coding-agent-kit $recorded"
     for knob in $(sed -E 's/^[^A-Z_]//' <<<"$names" | LC_ALL=C sort -u); do
         grep -Fxq -- "$knob" <<<"$knobs" ||
-            fail "coding-agent-kit $recorded reads $knob, which tests/run.sh and the other test entry points do not unset; bump it through a reviewed pull request that adds it to every entry point"
+            fail "coding-agent-kit $recorded reads $knob, which tests/run.sh and the other test entry points do not unset; bump it through a reviewed change that adds it to every entry point"
     done
 }
 

@@ -25,7 +25,7 @@ concurrency:
 # host at its next login, so this run follows only the release line of the
 # pin: the newest vMAJOR.MINOR.PATCH tag with the pinned MAJOR.MINOR. A new
 # MINOR (breaking while the kit is 0.x), an untagged pin and anything that
-# fails a gate go through a reviewed pull request instead.
+# fails a gate go through a reviewed change instead.
 jobs:
   bump:
     # A dispatch runs the workflow file of the ref it names, so the gates are
@@ -65,15 +65,15 @@ jobs:
           }
           pinned=$(git -C common/coding-agent-kit/coding-agent-kit tag --points-at "$pinned_sha" | releases | tail -n 1)
           if [ -z "$pinned" ]; then
-            echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed pull request"
-            echo "coding-agent-kit is pinned at the untagged commit $pinned_sha: until a release is pinned, bumps go through a reviewed pull request." >>"$GITHUB_STEP_SUMMARY"
+            echo "::error::coding-agent-kit is pinned at $pinned_sha, which carries no vMAJOR.MINOR.PATCH release tag; bumps go through a reviewed change"
+            echo "coding-agent-kit is pinned at the untagged commit $pinned_sha: until a release is pinned, bumps go through a reviewed change." >>"$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           candidate=$(git -C common/coding-agent-kit/coding-agent-kit tag --list "${pinned%.*}.*" | releases | tail -n 1)
           newest=$(git -C common/coding-agent-kit/coding-agent-kit tag --list | releases | tail -n 1)
           if [ "${newest%.*}" != "${pinned%.*}" ]; then
-            echo "::notice::coding-agent-kit $newest is a newer release line than $pinned; bump to it through a reviewed pull request"
-            echo "coding-agent-kit $newest is a newer release line than $pinned: bump to it through a reviewed pull request, never this workflow." >>"$GITHUB_STEP_SUMMARY"
+            echo "::notice::coding-agent-kit $newest is a newer release line than $pinned; bump to it through a reviewed change"
+            echo "coding-agent-kit $newest is a newer release line than $pinned: bump to it through a reviewed change, never this workflow." >>"$GITHUB_STEP_SUMMARY"
           fi
           if [ "$candidate" = "$pinned" ]; then
             echo "coding-agent-kit is up to date at $pinned." | tee -a "$GITHUB_STEP_SUMMARY"

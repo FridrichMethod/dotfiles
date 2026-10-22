@@ -151,13 +151,14 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 
 - Keep workflow definitions in `.github/workflows/*.yml`.
 - `ci.yml` runs on pull requests, on pushes to `main` and on pushes to `ci/**` branches. Land a change by pushing it to a `ci/**` branch (and an `e2e-ci/**` branch when bootstrap or e2e behavior changes), then fast-forwarding `main` to that exact green commit and deleting the branches; every host pulls `main` at login, so it only ever receives commits CI passed on all three systems.
+- Agents land their own changes this way without a pull request and without asking before each push, merge or kit release, once the local checks (`tests/run.sh --ci`, `pre-commit run --all-files`) and every job of that `ci.yml` run are green. They still ask before anything this guide forbids or that cannot be undone: moving or deleting a tag, rewriting `main`, or deleting someone else's work.
 - Pin action versions and avoid unnecessary matrix complexity.
 - Keep CI aligned with `.pre-commit-config.yaml` tools:
   - `shellcheck`
   - `shfmt`
   - `stylua`
   - basic hygiene hooks
-- One bump workflow each (`update-pymolscripts-submodule.yml`, `update-coding-agent-kit-submodule.yml`: daily, gated, to main, only patch tags of the pinned MAJOR.MINOR; a new minor by reviewed PR; edit it with its reviewed copy `tests/fixtures/update-coding-agent-kit-submodule.yml`).
+- One bump workflow each (`update-pymolscripts-submodule.yml`, `update-coding-agent-kit-submodule.yml`: daily, gated, to main, only patch tags of the pinned MAJOR.MINOR; a new minor by a reviewed change landed like any other; edit it with its reviewed copy `tests/fixtures/update-coding-agent-kit-submodule.yml`).
 - If CI behavior affects contributors, update `README.md` in the same change.
 
 - Sherlock toolkit installation and project integration belong to its standalone repository and each consumer project. Dotfiles ships only version-free global guidance. Keep the retired Sherlock checkout ignored; never delete a checkout or its module store automatically. Installer retirement recognizes only exact historical source paths and the frozen generated-override marker; foreign files and links stay untouched.
