@@ -130,11 +130,12 @@ def git_ignored(paths, scratch):
     env = os.environ | {"GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1"}
     subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
     shutil.copyfile(ROOT / ".gitignore", repo / ".gitignore")
-    result = subprocess.run(["git", "-C", str(repo), "check-ignore", "--no-index", "--stdin"], env=env,
-                            input="".join(f"pkg/{path}\n" for path in paths), capture_output=True, text=True)
+    # NUL-separated bytes: a text-mode pipe on Windows would end each path in \r.
+    result = subprocess.run(["git", "-C", str(repo), "check-ignore", "--no-index", "--stdin", "-z"], env=env,
+                            input="".join(f"pkg/{path}\0" for path in paths).encode(), capture_output=True)
     if result.returncode not in (0, 1):
-        raise AssertionError(result.stderr)
-    return {line.removeprefix("pkg/") for line in result.stdout.splitlines()}
+        raise AssertionError(result.stderr.decode(errors="replace"))
+    return {path.removeprefix("pkg/") for path in result.stdout.decode().split("\0") if path}
 
 
 class StowIgnoreTest(unittest.TestCase):
