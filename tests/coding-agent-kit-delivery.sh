@@ -94,9 +94,6 @@ EXECUTABLES='bin/claude-as bin/codex-as'
 # The sync launchers stay in dotfiles as regular files.
 LAUNCHERS='common/claude/.local/bin/claude-settings-sync common/codex/.local/bin/codex-config-sync
 common/codex/.local/bin/codex-rules-sync'
-# The kit test and fixture that dotfiles' real-data overlay runs with the real
-# settings.json in place of the fixture (tests/ai-integration.sh, tests/run.ps1).
-FIXTURES='tests/claude-customizations.cjs tests/fixtures/claude-settings.json'
 # Patterns the kit's own .gitignore must hold. Superproject ignores do not
 # apply inside a submodule, and what a host's file manager, editor, Python or
 # a test virtual environment leaves in the checkout would otherwise make it
@@ -369,8 +366,9 @@ line_of() {
 # only the newest release with the same MAJOR.MINOR, then refuses it unless
 # the release is on the kit's main ahead of the pin, every GitHub Actions run
 # of the kit's three CI jobs on it passed, delivery holds at the staged
-# gitlink and in stowed temporary homes, and the real-settings suite passes
-# with GNU Stow and zsh installed. Only then does it commit and make its one
+# gitlink and in stowed temporary homes, and tests/ai-integration.sh passes,
+# the real settings.json commands running the release's Claude helpers, with
+# GNU Stow and zsh installed. Only then does it commit and make its one
 # push, to main. Of the job's own git commands only that push gets the
 # token; actions/checkout used it for its fetch and did not persist it, so
 # the release's code finds none, and setup-node takes it through its default
@@ -503,8 +501,8 @@ check_kit_knobs() {
 # index records, its code reads no knob the entry points leave set, every
 # link resolves to a regular file at its kit path of the map, which that
 # commit tracks with its mode, the kit tracks no symlink, nested submodule
-# or .gitmodules, and it carries the overlay files, .gitattributes line and
-# .gitignore patterns dotfiles relies on. An uninitialized submodule or an
+# or .gitmodules, and it carries the .gitattributes line and .gitignore
+# patterns dotfiles relies on. An uninitialized submodule or an
 # unstaged bump fails instead of passing; the bump Action stages its bump
 # first.
 check_real() {
@@ -537,10 +535,6 @@ check_real() {
     [[ -z "$entries" ]] || fail "coding-agent-kit $revision tracks a symlink or a nested submodule: $entries"
     ! checkout_git cat-file -e "$recorded:.gitmodules" 2>/dev/null ||
         fail "coding-agent-kit $revision has a .gitmodules"
-    for path in $FIXTURES; do
-        [[ "$(kit_entry "$recorded" "$path")" == '100644 blob' ]] ||
-            fail "coding-agent-kit $revision lacks $path, which the real-data overlay uses"
-    done
     content=$(checkout_git show "$recorded:.gitattributes") || fail "coding-agent-kit $revision has no .gitattributes"
     grep -Fxq -- '* text=auto eol=lf' <<<"$content" ||
         fail "coding-agent-kit $revision lacks the .gitattributes line '* text=auto eol=lf'"

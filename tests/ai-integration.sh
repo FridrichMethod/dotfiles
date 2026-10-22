@@ -27,27 +27,13 @@ fi
     echo 'ERROR: coding-agent-kit submodule not initialized; run git submodule update --init --recursive.' >&2
     exit 1
 }
+# The settings.json cases run the Claude helpers with node and skip without
+# it; this entry point, which the bump Action runs as gate 4, fails instead.
+command -v node >/dev/null 2>&1 || {
+    echo 'ERROR: node not found; the settings.json cases of the Claude helpers need it.' >&2
+    exit 1
+}
 export DOTFILES_SYNC_PYTHON="$sync_python"
-TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-ai-integration.XXXXXX")"
-trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
 "$sync_python" -I -B -m unittest discover -s "$TEST_DIR" -p 'test_ai_integration.py' -v
-
-# Real-data overlay: the Claude helper suite of the pinned coding-agent-kit
-# tree runs again with the real settings.json in place of its frozen fixture,
-# so every change to the settings or the gitlink re-validates both against
-# each other. The kit is an archive of the committed submodule HEAD; the
-# checkout itself is never touched.
-sub=$REPO_ROOT/common/coding-agent-kit/coding-agent-kit
-kit=$TEST_TMP/kit
-mkdir -p "$kit"
-# A pre-commit run exports the GIT_DIR and GIT_INDEX_FILE of the commit in
-# progress; the archive must read the submodule's own repository.
-(
-    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
-        GIT_ALTERNATE_OBJECT_DIRECTORIES
-    git -C "$sub" archive --format=tar HEAD
-) | tar -x -C "$kit"
-cp "$REPO_ROOT/common/claude/.claude/settings.json" "$kit/tests/fixtures/claude-settings.json"
-node --test "$kit/tests/claude-customizations.cjs"
-echo "ai-integration-overlay=PASS"
+echo "ai-integration=PASS"

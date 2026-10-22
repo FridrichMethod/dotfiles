@@ -60,29 +60,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.p
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_integration.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'AI integration tests failed.' }
 
-# Real-data overlay, as in tests/ai-integration.sh: the Claude helper suite of
-# the pinned coding-agent-kit tree runs again with the real settings.json in
-# place of its frozen fixture. Windows uses the bsdtar in System32 by full
-# path, so Git for Windows' GNU tar, which reads C: in an archive path as a
-# remote host, is never picked up from PATH.
-Write-Output '==> real-data overlay of coding-agent-kit'
-$kit = Join-Path ([IO.Path]::GetTempPath()) "dotfiles-kit-$PID"
-$tar = "$kit.tar"
-[void][IO.Directory]::CreateDirectory($kit)
-try {
-    & git -C (Join-Path $repoRoot 'common/coding-agent-kit/coding-agent-kit') archive --format=tar -o $tar HEAD
-    if ($LASTEXITCODE -ne 0) { throw 'Could not export the coding-agent-kit tree.' }
-    $tarExe = if ($IsWindows) { Join-Path $env:SystemRoot 'System32\tar.exe' } else { 'tar' }
-    & $tarExe -xf $tar -C $kit
-    if ($LASTEXITCODE -ne 0) { throw 'Could not unpack the coding-agent-kit tree.' }
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'common/claude/.claude/settings.json') (Join-Path $kit 'tests/fixtures/claude-settings.json')
-    & node --test (Join-Path $kit 'tests/claude-customizations.cjs')
-    if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed on the real data.' }
-}
-finally {
-    Remove-Item -LiteralPath $kit, $tar -Recurse -Force -ErrorAction SilentlyContinue
-}
-
 Write-Output '==> test_bootstrap_manifest.py'
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }
