@@ -14,6 +14,7 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
@@ -906,31 +907,42 @@ rm -rf "${FIXTURE:?}/common/coding-agent-kit" "${FIXTURE:?}/common/pymol" "${FIX
     "${FIXTURE:?}/common/codex/coding-agent-kit"
 
 # The payload repos: each selected item passes its unix-probe row, and the
-# kit's Claude helpers are there; a shortfall warns (the next interactive
-# shell installs it), never fails.
+# kit's Claude helpers are there; a shortfall warns with what to run (the
+# next interactive shell installs it) and, for the kit, what fails until
+# then, never fails.
 mv "$TEST_HOME/.claude/coding-agent-kit/notify.cjs" "$TEST_TMP/notify.hidden"
 rm "$TEST_HOME/.pymolrc.py"
 run_doctor payloads-short -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs (Claude's status line and hooks fail), pymol; the next interactive shell installs them, or run sync-payloads now" \
+assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: the next interactive shell installs them, or run sync-payloads ITEM now (sh $FIXTURE/scripts/payload-update.sh --now ITEM); until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" \
     'docs/bootstrap.md H7-payloads'
 run_doctor payloads-selected DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
 assert_row payloads ok 'installed: skills' -
 run_doctor payloads-none DOTFILES_PAYLOAD_ITEMS= -- --host lab-ubuntu --tsv
 assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
+# The old hook's opt-out leaves skills out, as the payload hook does.
+run_doctor payloads-old-optout AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
+assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
 run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
-assert_row payloads warn 'not installed: kit; the next interactive shell installs them'
-# An item whose last run stopped for a person (the hook's ITEM.attention)
-# warns first, whatever else is short, and only for a selected item.
-mkdir -p "$TEST_HOME/.local/state/dotfiles/payload"
-printf '1700000000 3\n' >"$TEST_HOME/.local/state/dotfiles/payload/skills.attention"
-run_doctor payloads-person -- --host lab-ubuntu --tsv
+assert_row payloads warn 'not installed: kit: the next interactive shell installs them'
+# The hook's failure records (ITEM.failed), worded by the person-status row,
+# and a kit path still linked into the retired package, which waits for
+# stow-all, come first, each with what to run; only for selected items.
+PAYLOAD_STATE=$TEST_HOME/.local/state/dotfiles/payload
+mkdir -p "$PAYLOAD_STATE" "$TEST_HOME/.local/bin"
+printf '1700000000 3\n[dotfiles] [error] skills: stopped for a person\n' >"$PAYLOAD_STATE/skills.failed"
+printf '1700000000 1\n' >"$PAYLOAD_STATE/kit.failed"
+ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$TEST_HOME/.local/bin/codex-as"
+run_doctor payloads-records -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row payloads warn "stopped for a person: skills (run sync-payloads ITEM and do what its installer asks); not installed: ~/.claude/coding-agent-kit/notify.cjs (Claude's status line and hooks fail), pymol" \
+assert_row payloads warn "kit failed its last run (exit 1, see $PAYLOAD_STATE/kit.failed): run sync-payloads kit; kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit; skills stopped for a person (exit 3, see $PAYLOAD_STATE/skills.failed): run sync-payloads skills and do what it asks; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol" \
     'docs/bootstrap.md H7-payloads'
-run_doctor payloads-person-unselected DOTFILES_PAYLOAD_ITEMS=kit -- --host lab-ubuntu --tsv
-assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs"
-rm -r "$TEST_HOME/.local/state/dotfiles"
+run_doctor payloads-records-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+assert_row payloads warn "not installed: pymol: the next interactive shell"
+case $(tsv_field payloads 4) in
+    *kit* | *skills*) case_fail 'the payloads row named an unselected item' ;;
+esac
+rm -r "$TEST_HOME/.local/state/dotfiles" "$TEST_HOME/.local/bin/codex-as"
 mv "$TEST_TMP/notify.hidden" "$TEST_HOME/.claude/coding-agent-kit/notify.cjs"
 printf '# fixture\n' >"$TEST_HOME/.pymolrc.py"
 mv "$FIXTURE/config/payloads.tsv" "$TEST_TMP/payloads.hidden"

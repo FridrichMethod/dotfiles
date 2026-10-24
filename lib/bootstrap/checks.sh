@@ -467,32 +467,53 @@ bootstrap_check_submodule() {
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 
-# bootstrap_check_payloads ROOT: each item of DOTFILES_PAYLOAD_ITEMS (default
-# kit pymol skills) passes its unix-probe row of ROOT/config/payloads.tsv, and
-# the kit's Claude helpers are there, and none has stopped for a person (an
-# ITEM.attention the hook left in its state directory). A shortfall only
-# warns: the first interactive shell after the stow installs what is missing
-# (scripts/payload-update.sh), and sync-payloads does it now.
+# bootstrap_check_payloads ROOT [HOST]: each item of DOTFILES_PAYLOAD_ITEMS
+# (default kit pymol skills) passes its unix-probe row of
+# ROOT/config/payloads.tsv and an installed kit left the Claude helpers; an
+# item whose last run failed (the hook's ITEM.failed) or that waits for
+# stow-all (a stow-links path still linked into the retired package) is named
+# with what to run. Every shortfall only warns.
 bootstrap_check_payloads() {
-    local config=$1/config/payloads.tsv items item line probe helper short='' found='' person=''
-    local state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload
+    local config=$1/config/payloads.tsv items item line probe person links package path last code
+    local state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload short='' found='' issues=''
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
         return 0
     fi
-    items=${DOTFILES_PAYLOAD_ITEMS-kit pymol skills}
-    items="$items "
+    items=" ${DOTFILES_PAYLOAD_ITEMS-kit pymol skills} "
+    # The old hook's opt-out, which the payload hook honors until 2027-01-31.
+    [ "${AWESOME_SKILLS_AUTO_UPDATE-}" != 0 ] || items=${items/ skills / }
+    items="${items# } "
     while [ -n "$items" ]; do
         item=${items%% *}
         items=${items#* }
         [ -n "$item" ] || continue
-        [ ! -f "$state/$item.attention" ] || person="$person, $item"
-        probe=
+        probe='' person='' links=''
         while IFS= read -r line || [ -n "$line" ]; do
             case $line in
                 "$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"*) probe=${line#"$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"} ;;
+                "$item${BOOTSTRAP_TAB}person-status$BOOTSTRAP_TAB"*) person=${line#"$item${BOOTSTRAP_TAB}person-status$BOOTSTRAP_TAB"} ;;
+                "$item${BOOTSTRAP_TAB}stow-links$BOOTSTRAP_TAB"*) links=${line#"$item${BOOTSTRAP_TAB}stow-links$BOOTSTRAP_TAB"} ;;
             esac
         done <"$config"
+        if [ -f "$state/$item.failed" ]; then
+            last='' code=''
+            IFS=' ' read -r last code _ <"$state/$item.failed" || :
+            if [ -n "$person" ] && [ "$code" = "$person" ]; then
+                issues="$issues; $item stopped for a person (exit $code, see $state/$item.failed): run sync-payloads $item and do what it asks"
+            else
+                issues="$issues; $item failed its last run (exit $code, see $state/$item.failed): run sync-payloads $item"
+            fi
+        fi
+        package=${links%% *}
+        for path in ${links#"$package"}; do
+            case $(readlink "$HOME/$path" 2>/dev/null) in
+                *"common/$package/"*)
+                    issues="$issues; $item waits for stow-all: ~/$path is still a link the retired $package Stow package made, which its installer refuses: run $1/stow-all.sh${2:+ $2}, then sync-payloads $item"
+                    break
+                    ;;
+            esac
+        done
         if [ -z "$probe" ]; then
             short="$short, $item (no unix-probe row)"
         elif ! (eval "$probe") >/dev/null 2>&1; then
@@ -501,21 +522,20 @@ bootstrap_check_payloads() {
             found="$found, $item"
             # An installed kit must have left the helpers settings.json runs.
             if [ "$item" = kit ]; then
-                for helper in $BOOTSTRAP_KIT_HELPERS; do
-                    [ -f "$HOME/.claude/coding-agent-kit/$helper" ] ||
-                        short="$short, ~/.claude/coding-agent-kit/$helper (Claude's status line and hooks fail)"
+                for path in $BOOTSTRAP_KIT_HELPERS; do
+                    [ -f "$HOME/.claude/coding-agent-kit/$path" ] || short="$short, ~/.claude/coding-agent-kit/$path"
                 done
             fi
         fi
     done
-    if [ -n "$person" ]; then
-        person="stopped for a person: ${person#, } (run sync-payloads ITEM and do what its installer asks)"
-        if [ -n "$short" ]; then
-            person="$person; not installed: ${short#, }"
-        fi
-        bootstrap_check_result warn "$person"
-    elif [ -n "$short" ]; then
-        bootstrap_check_result warn "not installed: ${short#, }; the next interactive shell installs them, or run sync-payloads now"
+    if [ -n "$short" ]; then
+        issues="$issues; not installed: ${short#, }: the next interactive shell installs them, or run sync-payloads ITEM now (sh $1/scripts/payload-update.sh --now ITEM)"
+        case $short in
+            *kit*) issues="$issues; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ;;
+        esac
+    fi
+    if [ -n "$issues" ]; then
+        bootstrap_check_result warn "${issues#; }"
     elif [ -n "$found" ]; then
         bootstrap_check_result ok "installed: ${found#, }"
     else
@@ -724,7 +744,7 @@ bootstrap_check_structural() {
         rc-pollution) bootstrap_check_rc_pollution "$2" ;;
         omz-order) bootstrap_check_omz_order ;;
         nvm-homebrew) bootstrap_check_nvm_homebrew ;;
-        payloads) bootstrap_check_payloads "$2" ;;
+        payloads) bootstrap_check_payloads "$2" "${5-${HOST-}}" ;;
         *) bootstrap_check_result warn "unknown structural check $1" ;;
     esac
 }

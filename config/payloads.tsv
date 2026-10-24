@@ -16,12 +16,14 @@
 #   windows-update   is also the update for PyMOLScripts and awesome-skills);
 #                    the kit's names the channel, so a reviewed change of the
 #                    channel row moves every installed host to that channel
-#   person-status    an exit status with which the repo stops for a person:
-#                    the hook records it in ITEM.attention, warns about it in
-#                    every later session and the doctor, and clears it on the
-#                    next success (awesome-skills' 3: an interrupted update
-#                    it cannot undo alone; its message names the --restore
-#                    command to run)
+#   person-status    an exit status with which the repo stops for a person,
+#                    which the hook and the doctor word as such (awesome-
+#                    skills' 3: an interrupted update it cannot undo alone;
+#                    its message names the --restore command to run)
+#   stow-links       PACKAGE PATH...: HOME paths the installer refuses while
+#                    they are links into the retired dotfiles package
+#                    common/PACKAGE, which stow-all removes; until it has run
+#                    the hook does not call the installer and says so
 # The probes test the paths each installer documents as an install: the kit's
 # managed root (a current/install.sh on Unix; on Windows install.ps1, the
 # entry point of later runs, and the current file), PyMOL's two rc files, and
@@ -32,10 +34,12 @@
 #   payload_script INTERPRETER SOURCE [ARG...]       (sh)
 #   Invoke-DotfilesPayloadScript SOURCE [ARG...]     (PowerShell)
 # which download SOURCE when it is a URL (curl or wget; Invoke-WebRequest)
-# into a temporary file, never piping it into a shell, run it with ARG and
-# return its exit status (75: another run holds that repo's lock).
+# into a temporary file within DOTFILES_PAYLOAD_TIMEOUT seconds, never piping
+# it into a shell, run it with ARG and return its exit status (75: another
+# run holds that repo's lock).
 kit	channel	0.6
 kit	days	1
+kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"
 kit	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.sh --channel "$channel"
 kit	unix-update	payload_script sh "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh" --update --channel "$channel"

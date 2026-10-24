@@ -1,42 +1,23 @@
 #!/bin/sh
-# Keep the first-party payload repos (coding-agent-kit, PyMOLScripts,
-# awesome-skills) installed and current through each repo's own documented
-# install and update command, which config/payloads.tsv names. Each repo owns
-# its installation, update, selection and locking; this hook only decides
-# when to call it (docs/payloads.md).
+# Keep the payload repos (coding-agent-kit, PyMOLScripts, awesome-skills)
+# installed and current through the install and update commands of
+# config/payloads.tsv; each repo owns its installation and locking, this hook
+# only decides when to call it (docs/payloads.md has the whole contract).
 #
-# Sourced at the tail of common/zsh/.zshrc and, for bash and sh, of
-# common/sh/.profile: in an interactive shell, once per session, it runs
-# itself as `sh scripts/payload-update.sh --auto`, so its logic never depends
-# on the calling shell's dialect or options. An automatic run installs an
-# absent item in the foreground, so a person sees the first install, and
-# refreshes the installed ones in one detached background run once an item's
-# refresh interval (its days row) has passed since its last success. A failed
-# or interrupted run records nothing, so the next session tries again.
-#
-#   sh scripts/payload-update.sh --now [ITEM...]
-# runs the given items (default: those of DOTFILES_PAYLOAD_ITEMS) in the
-# foreground whatever their intervals, and exits 1 when one failed; the
-# sync-payloads and sync-skills aliases call it.
-#
-# Knobs:
-#   DOTFILES_PAYLOAD_AUTO_UPDATE  0 disables the automatic runs (not --now)
-#   DOTFILES_PAYLOAD_ITEMS        the items it manages (default: kit pymol
-#                                 skills; empty manages none)
-#   DOTFILES_DIR                  the checkout the rc files source this from
-#                                 (default: ~/dotfiles)
-# State, in ${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/: one stamp per
-# item (the time of its last success), worker.pid (the background run, which
-# keeps a second one from starting while it lives, for a day at most) and
-# payload.log (the
-# output of the last background run). The repos' installers lock themselves
-# and exit 75 while another run holds the lock; that is neither a success
-# nor a failure here. An item whose installer exits with its person-status
-# row has stopped for a person: ITEM.attention records it, every later
-# automatic run warns about it, and the next success removes it.
+# Sourced from the interactive rc files, once per session it runs
+# `sh scripts/payload-update.sh --auto`: an absent item installs in the
+# foreground; a refresh whose days row has passed, and any retry six hours
+# after a failure (ITEM.failed, reported by every later session and the
+# doctor), runs in one detached background run (--worker) into payload.log.
+# `--now [ITEM...]` (the sync-payloads alias) runs items in the foreground
+# whatever their state and exits 1 when one failed. Knobs:
+# DOTFILES_PAYLOAD_AUTO_UPDATE=0 (no automatic runs), DOTFILES_PAYLOAD_ITEMS
+# (default: kit pymol skills), DOTFILES_PAYLOAD_TIMEOUT (seconds per
+# download, default 60), DOTFILES_DIR; AWESOME_SKILLS_AUTO_UPDATE=0 leaves
+# skills out of the automatic runs until 2027-01-31.
 
 case ${1-} in
-    --auto | --now) ;;
+    --auto | --now | --worker) ;;
     *)
         # Sourced from an interactive rc file.
         case $- in
@@ -57,28 +38,19 @@ esac
 set -fu
 mode=$1
 shift
-
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
-self=$repo/scripts/payload-update.sh
 if [ -r "$repo/lib/terminal.sh" ]; then
     # shellcheck source=lib/terminal.sh
     . "$repo/lib/terminal.sh"
 else
-    dotfiles_log() {
-        case $1 in
-            warn | error) printf '[dotfiles] [%s] %s\n' "$1" "$2" >&2 ;;
-            *) printf '[dotfiles] [%s] %s\n' "$1" "$2" ;;
-        esac
-    }
+    dotfiles_log() { printf '[dotfiles] [%s] %s\n' "$1" "$2" >&2; }
 fi
-
-# fail MESSAGE: an automatic run never fails the shell; --now exits 1.
+# fail MESSAGE: --now exits 1; an automatic run never fails the shell.
 fail() {
     dotfiles_log error "$1"
     [ "$mode" != --auto ] || exit 0
     exit 1
 }
-
 case ${HOME-} in
     /*) ;;
     *) fail 'payload-update: HOME must be an absolute path.' ;;
@@ -86,10 +58,16 @@ esac
 config=$repo/config/payloads.tsv
 [ -r "$config" ] || fail "payload-update: missing $config."
 state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload
+(umask 077 && mkdir -p "$state") || fail "payload-update: cannot create $state."
 tab=$(printf '\t')
+timeout=${DOTFILES_PAYLOAD_TIMEOUT:-60}
+case $timeout in
+    '' | 0 | *[!0-9]*) timeout=60 ;;
+esac
+connect=10
+[ "$timeout" -ge 10 ] || connect=$timeout
 
-# field ITEM FIELD: set value to the value of config's ITEM<TAB>FIELD row;
-# 1 when there is none.
+# field ITEM FIELD: set value to config's ITEM<TAB>FIELD row; 1 without one.
 field() {
     while IFS= read -r line || [ -n "$line" ]; do
         case $line in
@@ -103,16 +81,14 @@ field() {
     return 1
 }
 
-# payload_script INTERPRETER SOURCE [ARG...]: run SOURCE with INTERPRETER and
-# ARG, stdin closed, and return its status. A URL is downloaded into a
-# temporary file first, never piped into the interpreter, so a broken
-# download runs nothing.
-download=
+# payload_script INTERPRETER SOURCE [ARG...]: run SOURCE with ARG, stdin
+# closed, and return its status. A URL is first downloaded into a temporary
+# file, within the timeout; after one failed download a run tries no other.
+download='' offline=''
 trap '[ -z "$download" ] || rm -f "$download"' 0
 trap 'exit 1' HUP INT TERM
 payload_script() {
-    interpreter=$1
-    source=$2
+    interpreter=$1 source=$2
     shift 2
     if ! command -v "$interpreter" >/dev/null 2>&1; then
         dotfiles_log error "$interpreter is not installed; it runs $source"
@@ -120,19 +96,22 @@ payload_script() {
     fi
     case $source in
         *://*)
+            if [ -n "$offline" ]; then
+                dotfiles_log error "skipped $source: a download already failed in this run"
+                return 1
+            fi
+            offline=1
             download=$(mktemp "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
             if command -v curl >/dev/null 2>&1; then
-                fetched=curl
-                curl -fsSL -o "$download" -- "$source" || fetched=
+                curl -fsSL --connect-timeout "$connect" --max-time "$timeout" -o "$download" -- "$source" && offline=
             elif command -v wget >/dev/null 2>&1; then
-                fetched=wget
-                wget -q -O "$download" -- "$source" || fetched=
+                wget -q -T "$timeout" -t 1 -O "$download" -- "$source" && offline=
             else
                 dotfiles_log error "neither curl nor wget is installed; cannot download $source"
                 return 1
             fi
-            if [ -z "$fetched" ] || [ ! -s "$download" ]; then
-                dotfiles_log error "cannot download $source"
+            if [ -n "$offline" ] || [ ! -s "$download" ]; then
+                dotfiles_log error "cannot download $source (within ${timeout}s)"
                 return 1
             fi
             set -- "$download" "$@"
@@ -158,62 +137,82 @@ installed() {
     (eval "$value") >/dev/null 2>&1
 }
 
-# run ITEM: install ITEM when absent, else update it, and stamp a success.
-# Sets status to the command's exit status and returns it.
+# stowed ITEM: a path of its stow-links row (PACKAGE PATH...) is still a link
+# into the retired common/PACKAGE, which the repo's installer refuses; sets
+# value to that path.
+stowed() {
+    field "$1" stow-links || return 1
+    # shellcheck disable=SC2086 # a word list; set -f keeps it from globbing
+    set -- $value
+    package=$1
+    shift
+    for path; do
+        case $(readlink "$HOME/$path" 2>/dev/null) in
+            *"common/$package/"*)
+                value=$path
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+# record FILE: set last and code to the time and status FILE starts with.
+record() {
+    last='' code=''
+    IFS=' ' read -r last code _ 2>/dev/null <"$1" || :
+    case $last in
+        '' | *[!0-9]*) return 1 ;;
+    esac
+}
+
+# run ITEM: install ITEM when absent, else update it; stamp a success and
+# record a failure. Sets status to the command's exit status and returns it.
 run() {
-    action=update
-    installed "$1" || action=install
+    status=1
+    if stowed "$1"; then
+        dotfiles_log warn "$1: ~/$value is still a link the retired Stow package made, which its installer refuses; run $repo/stow-all.sh with this host first (the next login's automatic stow does), then sync-payloads $1"
+        return 1
+    fi
+    action=update doing=updating
+    installed "$1" || action=install doing='installing (later updates run in the background)'
     field kit channel
     # shellcheck disable=SC2034 # for the evaluated command
     channel=$value
-    person=
-    ! field "$1" person-status || person=$value
-    status=1
+    field "$1" person-status
+    person=$value
     if ! field "$1" "unix-$action" && ! field "$1" unix-install; then
         dotfiles_log error "$1: config/payloads.tsv has no unix-install row"
         return 1
     fi
-    if [ "$action" = install ]; then
-        dotfiles_log step "$1: installing (later updates run in the background)"
-    else
-        dotfiles_log step "$1: updating"
-    fi
-    status=0
+    dotfiles_log step "$1: $doing"
+    start=0 status=0
+    [ "$mode" != --worker ] || start=$(wc -l <"$state/payload.log")
     eval "$value" || status=$?
     case $status in
         0)
-            if (umask 077 && mkdir -p "$state" && date +%s >"$state/$1.stamp.tmp" &&
-                mv -f "$state/$1.stamp.tmp" "$state/$1.stamp" && rm -f "$state/$1.attention"); then
-                dotfiles_log ok "$1: ${action} done"
+            if (umask 077 && date +%s >"$state/$1.stamp.tmp" && mv -f "$state/$1.stamp.tmp" "$state/$1.stamp" &&
+                rm -f "$state/$1.failed"); then
+                dotfiles_log ok "$1: $action done"
             else
                 dotfiles_log error "$1: cannot record the success in $state"
                 status=1
             fi
+            return "$status"
             ;;
-        75) dotfiles_log info "$1: another run holds its lock; the next session tries again" ;;
-        "$person")
-            dotfiles_log error "$1: stopped for a person (exit $status): do what its message says, then run sync-payloads $1"
-            (umask 077 && mkdir -p "$state" && printf '%s %s\n' "$(date +%s)" "$status" >"$state/$1.attention") ||
-                dotfiles_log error "$1: cannot record that in $state"
+        75)
+            dotfiles_log info "$1: another run holds its lock; the next session tries again"
+            return 75
             ;;
+        "$person") dotfiles_log error "$1: stopped for a person (exit $status): do what its message says, then run sync-payloads $1" ;;
         *) dotfiles_log error "$1: $action failed (exit $status); retry with: sync-payloads $1" ;;
     esac
+    (
+        umask 077
+        date +"%s $status" >"$state/$1.failed"
+        [ "$mode" != --worker ] || tail -n "+$((start + 1))" "$state/payload.log" | tail -n 20 >>"$state/$1.failed"
+    ) || dotfiles_log error "$1: cannot record the failure in $state"
     return "$status"
-}
-
-# due ITEM: its last success is at least its days row old (or unrecorded).
-due() {
-    field "$1" days
-    days=$value
-    case $days in
-        '' | *[!0-9]*) days=1 ;;
-    esac
-    last=
-    IFS= read -r last 2>/dev/null <"$state/$1.stamp" || :
-    case $last in
-        '' | *[!0-9]*) return 0 ;;
-    esac
-    [ $((now - last)) -ge $((days * 86400)) ]
 }
 
 if [ "$#" -eq 0 ]; then
@@ -225,7 +224,7 @@ for item in "$@"; do
         fail "payload-update: unknown item '$item'; config/payloads.tsv names kit, pymol and skills."
 done
 
-if [ "$mode" = --now ]; then
+if [ "$mode" != --auto ]; then
     failed=0
     for item in "$@"; do
         run "$item" || [ "$status" = 75 ] || failed=1
@@ -233,39 +232,38 @@ if [ "$mode" = --now ]; then
     exit "$failed"
 fi
 
-# --auto: first installs now, refreshes in one detached background run.
+# --auto: a first install now; a due refresh, and any retry six hours after
+# a failure, in one detached background run.
+case "${AWESOME_SKILLS_AUTO_UPDATE-} $* " in
+    "0 "*" skills "*)
+        dotfiles_log warn 'AWESOME_SKILLS_AUTO_UPDATE=0 leaves skills out until 2027-01-31, when it stops working; set DOTFILES_PAYLOAD_ITEMS="kit pymol" instead'
+        # shellcheck disable=SC2046 # a word list; set -f keeps it from globbing
+        set -- $(for item in "$@"; do [ "$item" = skills ] || printf '%s\n' "$item"; done)
+        ;;
+esac
 now=$(date +%s)
 later=
 for item in "$@"; do
-    if [ -f "$state/$item.attention" ]; then
-        dotfiles_log warn "$item: its last run stopped for a person; run sync-payloads $item to see what it asks (background runs log to $state/payload.log)"
-    fi
-    if ! installed "$item"; then
+    if record "$state/$item.failed"; then
+        field "$item" person-status
+        what=failed hint=
+        [ "$code" != "$value" ] || what='stopped for a person' hint=' and do what it asks'
+        dotfiles_log warn "$item: its last run $what (exit $code, see $state/$item.failed); run sync-payloads $item$hint"
+        [ $((now - last)) -lt 21600 ] || later="$later $item"
+    elif ! installed "$item"; then
         run "$item" || :
-    elif due "$item"; then
-        later="$later $item"
+    else
+        field "$item" days
+        case $value in
+            '' | *[!0-9]*) value=1 ;;
+        esac
+        if ! record "$state/$item.stamp" || [ $((now - last)) -ge $((value * 86400)) ]; then
+            later="$later $item"
+        fi
     fi
 done
 [ -n "$later" ] || exit 0
-(umask 077 && mkdir -p "$state") || exit 0
-# worker.pid: the PID of the last background run and when it started. A
-# live one younger than a day blocks a new run; an older one is a reused PID.
-pid='' started=''
-IFS=' ' read -r pid started 2>/dev/null <"$state/worker.pid" || :
-case $pid in
-    '' | *[!0-9]*) ;;
-    *)
-        case $started in
-            '' | *[!0-9]*) started=$now ;;
-        esac
-        if [ $((now - started)) -lt 86400 ] && kill -0 "$pid" 2>/dev/null; then
-            exit 0
-        fi
-        ;;
-esac
-# The run outlives this process and the shell that started it; started from
-# here, it never enters that shell's job table.
+# Started from here, the run never enters the shell's job table.
 # shellcheck disable=SC2086 # a word list
-sh "$self" --now $later </dev/null >"$state/payload.log" 2>&1 &
-printf '%s %s\n' "$!" "$now" >"$state/worker.pid"
+sh "$repo/scripts/payload-update.sh" --worker $later </dev/null >"$state/payload.log" 2>&1 &
 exit 0

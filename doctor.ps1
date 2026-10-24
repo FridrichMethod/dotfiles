@@ -186,11 +186,11 @@ function Get-DoctorStructuralResults {
 
 function Get-DoctorPayloadResult {
     # Each item of DOTFILES_PAYLOAD_ITEMS (default kit pymol skills) passes
-    # its windows-probe row of config/payloads.tsv, and an installed kit left
-    # the Claude helpers that settings.json runs, and none has stopped for a
-    # person (an ITEM.attention the hook left in its state directory). A
-    # shortfall only warns: the next interactive PowerShell installs what is
-    # missing (scripts/payload-update.ps1), and sync-payloads does it now.
+    # its windows-probe row of config/payloads.tsv and an installed kit left
+    # the Claude helpers; an item whose last run failed (the hook's
+    # ITEM.failed) or that waits for stow-all (a stow-links path still linked
+    # into the retired package) is named with what to run. Every shortfall
+    # only warns.
     $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
     $config = Join-Path $RepoRoot 'config/payloads.tsv'
     if (-not [IO.File]::Exists($config)) { return New-DoctorResult warn payloads ai "no readable $config" $step }
@@ -203,12 +203,28 @@ function Get-DoctorPayloadResult {
     }
     $items = if ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) { @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ }) }
     else { @('kit', 'pymol', 'skills') }
+    $state = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'dotfiles/payload' } else { Join-Path $HOME '.local/state/dotfiles/payload' }
     $short = @()
     $found = @()
-    $person = @()
-    $state = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'dotfiles/payload' } else { $null }
+    $issues = @()
     foreach ($item in $items) {
-        if ($state -and [IO.File]::Exists((Join-Path $state "$item.attention"))) { $person += $item }
+        $failure = Join-Path $state "$item.failed"
+        if ([IO.File]::Exists($failure)) {
+            # Strict mode: a malformed record must not index past its fields.
+            $fields = @([IO.File]::ReadAllText($failure).Trim() -split '\s+')
+            $code = if ($fields.Count -gt 1) { $fields[1] } else { '?' }
+            $person = $rows["$item`tperson-status"]
+            if ($person -and $code -ceq $person) { $issues += "$item stopped for a person (exit $code, see $failure): run sync-payloads $item and do what it asks" }
+            else { $issues += "$item failed its last run (exit $code, see $failure): run sync-payloads $item" }
+        }
+        $words = @("$($rows["$item`tstow-links"])".Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
+        foreach ($path in @($words | Select-Object -Skip 1)) {
+            $link = Get-Item -LiteralPath (Join-Path $HOME $path) -Force -ErrorAction SilentlyContinue
+            if ($link -and $link.LinkType -and "$(@($link.Target)[0])".Replace('\', '/') -like "*common/$($words[0])/*") {
+                $issues += "$item waits for stow-all: ~/$path is still a link the retired $($words[0]) Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads $item"
+                break
+            }
+        }
         $probe = $rows["$item`twindows-probe"]
         $installed = $false
         if ($probe) { try { $installed = [bool](& ([scriptblock]::Create($probe))) } catch { } }
@@ -220,20 +236,17 @@ function Get-DoctorPayloadResult {
             if ($item -ceq 'kit') {
                 foreach ($helper in @('statusline.cjs', 'notify.cjs', 'check-git-hooks.cjs')) {
                     if (-not [IO.File]::Exists([IO.Path]::Combine($HOME, '.claude', 'coding-agent-kit', $helper))) {
-                        $short += "~\.claude\coding-agent-kit\$helper (Claude's status line and hooks fail)"
+                        $short += "~\.claude\coding-agent-kit\$helper"
                     }
                 }
             }
         }
     }
-    if ($person.Count) {
-        $detail = "stopped for a person: $($person -join ', ') (run sync-payloads ITEM and do what its installer asks)"
-        if ($short.Count) { $detail += "; not installed: $($short -join ', ')" }
-        return New-DoctorResult warn payloads ai $detail $step
-    }
     if ($short.Count) {
-        return New-DoctorResult warn payloads ai "not installed: $($short -join ', '); the next interactive PowerShell installs them, or run sync-payloads now" $step
+        $issues += "not installed: $($short -join ', '): the next interactive PowerShell installs them, or run sync-payloads ITEM now"
+        if ("$short" -like '*kit*') { $issues += "until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" }
     }
+    if ($issues.Count) { return New-DoctorResult warn payloads ai ($issues -join '; ') $step }
     if ($found.Count) { return New-DoctorResult ok payloads ai "installed: $($found -join ', ')" $step }
     return New-DoctorResult ok payloads ai 'DOTFILES_PAYLOAD_ITEMS selects no payload' $step
 }

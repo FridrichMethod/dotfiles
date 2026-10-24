@@ -7,6 +7,7 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
@@ -420,10 +421,17 @@ expect_log "$MIGRATION/unguarded.login1.log" '[dotfiles] [warn] Checkout changed
 expect_log "$MIGRATION/unguarded.login2.log" \
     "[dotfiles] [warn] Local changes in $MIGRATION/unguarded/home/dotfiles; automatic pull and stow skipped."
 [[ -n "$(git -C "$MIGRATION/unguarded/home/dotfiles" status --porcelain --untracked-files=normal)" ]]
-# Without the restow the old links stay, so the kit's installer refuses them
-# and records nothing.
-expect_log "$MIGRATION/unguarded.login1.log" 'fake kit: refusing'
-[[ ! -e "$MIGRATION/unguarded/home/.local/state/dotfiles/payload/kit.stamp" ]]
+# Without the restow the old links stay, which the kit's installer would
+# refuse: the hook says to run stow-all instead of calling it and records
+# nothing.
+expect_log "$MIGRATION/unguarded.login1.log" \
+    "[dotfiles] [warn] kit: ~/.local/bin/claude-as is still a link the retired Stow package made, which its installer refuses; run $MIGRATION/unguarded/home/dotfiles/stow-all.sh with this host first"
+if grep -Fq 'fake kit:' "$MIGRATION/unguarded.login1.log"; then
+    echo 'ERROR: the hook ran the kit installer past the old links' >&2
+    exit 1
+fi
+[[ ! -e "$MIGRATION/unguarded/home/.local/state/dotfiles/payload/kit.stamp" &&
+    ! -e "$MIGRATION/unguarded/home/.local/state/dotfiles/payload/kit.failed" ]]
 
 # A real initialized Sherlock gitlink is then removed by a remote update.
 # Its checkout and module store survive, while the next login retires delivery.

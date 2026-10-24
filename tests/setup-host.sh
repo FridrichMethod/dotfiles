@@ -14,6 +14,7 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
@@ -887,14 +888,21 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
 
 # The payload line runs the payload hook even in a provisioning shell, which
-# exports DOTFILES_PAYLOAD_AUTO_UPDATE=0 (curl is the stub; it logs each URL).
+# exports DOTFILES_PAYLOAD_AUTO_UPDATE=0 (curl is the stub; it logs each URL
+# and serves each repo a do-nothing installer), with bounded downloads.
 : >"$EVENT_LOG"
+: >"$CURL_ARGS_LOG"
+printf 'exit 0\n' >"$TEST_TMP/payload-installer.sh"
+for repo in coding-agent-kit PyMOLScripts awesome-skills; do
+    printf 'https://raw.githubusercontent.com/FridrichMethod/%s/main/install.sh\t%s\n' "$repo" "$TEST_TMP/payload-installer.sh"
+done >"$TEST_TMP/payload-url-map.tsv"
 env -i HOME="$TEST_TMP/payload-home" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
-    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$URL_MAP" DOTFILES_PAYLOAD_AUTO_UPDATE=0 \
+    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$TEST_TMP/payload-url-map.tsv" DOTFILES_PAYLOAD_AUTO_UPDATE=0 \
     sh -c "$PAYLOAD_LINE" >/dev/null 2>&1 || true
 for repo in coding-agent-kit PyMOLScripts awesome-skills; do
     expect_event "curl:https://raw.githubusercontent.com/FridrichMethod/$repo/main/install.sh"
 done
+grep -Fq -- '--connect-timeout 10 --max-time 60' "$CURL_ARGS_LOG" || fail 'the payload downloads are not bounded'
 
 # --- debian apply: every step, in phase order --------------------------------
 

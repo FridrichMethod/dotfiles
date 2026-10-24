@@ -894,32 +894,43 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $all = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true }
         Assert-Exit $all 1 'desktop gap under -Tier all'
         Assert-True (@($all.Lines | Where-Object { $_ -cmatch "^missing`twezterm`tdesktop`tmissing: .+`tdocs/bootstrap.md W1-winget$" }).Count -eq 1) 'wezterm TSV row'
-        # The payload repos: a shortfall warns (the next interactive
-        # PowerShell installs it), never fails; the kit's helpers count only
-        # for an installed kit.
+        # The payload repos: a shortfall warns with what to run (the next
+        # interactive PowerShell installs it) and, for the kit, what fails
+        # until then, never fails; the kit's helpers count only for an
+        # installed kit.
         $helper = [IO.Path]::Combine($fixture.Home, '.claude', 'coding-agent-kit', 'notify.cjs')
         $pymolPy = Join-Path $fixture.Home '.pymolrc.py'
         # -Force: off Windows a dot file is hidden to PowerShell.
         Remove-Item -LiteralPath $helper, $pymolPy -Force
+        $short = "not installed: ~\.claude\coding-agent-kit\notify.cjs, pymol: the next interactive PowerShell installs them, or run sync-payloads ITEM now; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'a payload shortfall only warns'
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: ~\.claude\coding-agent-kit\notify.cjs (Claude's status line and hooks fail), pymol; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$short`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "selected payloads row: $($run.Stdout)"
-        # An item whose last run stopped for a person (the hook's
-        # ITEM.attention) warns first, and only for a selected item.
-        $attention = Join-Path $fixture.LocalAppData 'dotfiles/payload/skills.attention'
-        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $attention))
-        [IO.File]::WriteAllText($attention, "1700000000 3`n")
+        # The hook's failure records (ITEM.failed), worded by person-status,
+        # and a kit path still linked into the retired package, which waits
+        # for stow-all, come first with what to run; only for selected items.
+        $state = Join-Path $fixture.LocalAppData 'dotfiles/payload'
+        [void][IO.Directory]::CreateDirectory($state)
+        [IO.File]::WriteAllText((Join-Path $state 'skills.failed'), "1700000000 3`n[dotfiles] [error] skills: stopped for a person`n")
+        [IO.File]::WriteAllText((Join-Path $state 'kit.failed'), "1700000000 1`n")
+        $legacy = Join-Path $fixture.Home '.local/bin/codex-as'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $legacy))
+        if ($IsWindows) { New-Item -ItemType SymbolicLink -Path $legacy -Value (Join-Path $fixture.Root 'dotfiles\common\coding-agent-kit\.local\bin\codex-as') | Out-Null }
+        else { & ln -s '../../dotfiles/common/coding-agent-kit/.local/bin/codex-as' $legacy }
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
-        Assert-Exit $run 0 'a payload stopped for a person only warns'
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tstopped for a person: skills (run sync-payloads ITEM and do what its installer asks); not installed: ~\.claude\coding-agent-kit\notify.cjs (Claude's status line and hooks fail), pymol`tdocs/bootstrap.md H7-payloads") "attention row: $($run.Stdout)"
+        Assert-Exit $run 0 'payload failures only warn'
+        $expected = "kit failed its last run (exit 1, see $(Join-Path $state 'kit.failed')): run sync-payloads kit; " +
+            'kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads kit; ' +
+            "skills stopped for a person (exit 3, see $(Join-Path $state 'skills.failed')): run sync-payloads skills and do what it asks; $short"
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$expected`tdocs/bootstrap.md H7-payloads") "records row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'pymol' }
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: pymol; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "unselected attention row: $($run.Stdout)"
-        Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles') -Recurse -Force
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: pymol: the next interactive PowerShell installs them, or run sync-payloads ITEM now`tdocs/bootstrap.md H7-payloads") "unselected records row: $($run.Stdout)"
+        Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles'), (Join-Path $fixture.Home '.local') -Recurse -Force
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'coding-agent-kit') -Recurse -Force
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: kit; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "absent kit row: $($run.Stdout)"
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: kit: the next interactive PowerShell installs them, or run sync-payloads ITEM now; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking`tdocs/bootstrap.md H7-payloads") "absent kit row: $($run.Stdout)"
         [IO.File]::WriteAllText($helper, '')
         [IO.File]::WriteAllText($pymolPy, '')
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture.LocalAppData 'coding-agent-kit'))

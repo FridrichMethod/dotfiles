@@ -7,6 +7,7 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
@@ -18,12 +19,9 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-payload-update.XXXXXX")"
 TEST_TMP=$(cd -P -- "$TEST_TMP" && pwd -P)
 cleanup() {
-    local result=$? pid
+    local result=$?
     trap - EXIT HUP INT TERM
-    for pid in $(cut -d' ' -f1 "$TEST_TMP"/home*/.local/state/dotfiles/payload/worker.pid 2>/dev/null); do
-        kill "$pid" 2>/dev/null || :
-    done
-    [[ -z "${SLEEPER:-}" ]] || kill "$SLEEPER" 2>/dev/null || :
+    [[ -z "${STALL:-}" ]] || kill "$STALL" 2>/dev/null || :
     rm -rf "$TEST_TMP"
     exit "$result"
 }
@@ -60,10 +58,11 @@ fi
 
 cat >"$TEST_TMP/bin/curl" <<'SH'
 #!/bin/sh
-# Only file:// URLs: a test that would reach the network fails instead.
+# Only file:// URLs and the stalled 127.0.0.1 port: a test that would reach
+# the network fails instead.
 for argument do
     case $argument in
-        file://*) ;;
+        file://* | http://127.0.0.1:*) ;;
         *://*)
             printf 'network refused: %s\n' "$argument" >&2
             exit 97
@@ -81,7 +80,8 @@ printf 'kit-install [%s] stdin=[%s]\n' "$*" "$(cat)" >>"$EVENTS"
 [ "${FAKE_KIT_STATUS:-0}" = 0 ] || exit "$FAKE_KIT_STATUS"
 root=${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit
 mkdir -p "$root/current" "$HOME/.claude/coding-agent-kit"
-printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
+printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'echo "kit-update: fake output" >&2' \
+    'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
 for helper in statusline notify check-git-hooks; do
     : >"$HOME/.claude/coding-agent-kit/$helper.cjs"
 done
@@ -156,15 +156,14 @@ expect_text() {
 stamp_age() {
     printf '%s\n' "$(($(date +%s) - $2))" >"$STATE/$1.stamp"
 }
-# wait_worker: the background run of the last case finished.
-wait_worker() {
-    local pid attempt
-    read -r pid _ 2>/dev/null <"$STATE/worker.pid" || fail 'no background run was started'
+# wait_for COMMAND...: COMMAND succeeds within ten seconds (a background run).
+wait_for() {
+    local attempt
     for ((attempt = 0; attempt < 200; attempt++)); do
-        kill -0 "$pid" 2>/dev/null || return 0
+        "$@" 2>/dev/null && return 0
         sleep 0.05
     done
-    fail "the background run $pid did not finish"
+    fail "timed out waiting for: $*"
 }
 
 # A fresh home: the first interactive shell installs every item in the
@@ -186,7 +185,7 @@ skills-install [] bash=yes"
     for item in kit pymol skills; do
         [[ -s "$STATE/$item.stamp" ]] || fail "$shell: no $item stamp after its install"
     done
-    [[ ! -e "$STATE/worker.pid" ]] || fail "$shell: a first install started a background run"
+    [[ ! -e "$STATE/payload.log" ]] || fail "$shell: a first install started a background run"
     [[ -z "$(find "$TEST_TMP" -maxdepth 1 -name 'dotfiles-payload.*')" ]] || fail 'a download was left behind'
 done
 
@@ -194,7 +193,7 @@ done
 : >"$EVENTS"
 source_hook bash
 expect_events ''
-[[ ! -e "$STATE/worker.pid" ]] || fail 'a fresh install started a background run'
+[[ ! -e "$STATE/payload.log" ]] || fail 'a fresh install started a background run'
 
 # Once per session, opt-out, non-interactive: nothing runs.
 new_home
@@ -228,7 +227,7 @@ expect_text "$ERR" "unknown item 'nope'"
 
 # An installed item whose interval passed is refreshed in one detached
 # background run, with the update command (the kit's installed
-# current/install.sh --update, the others' install command), and the log.
+# current/install.sh --update, the others' install command), into the log.
 new_home
 source_hook bash
 : >"$EVENTS"
@@ -236,59 +235,59 @@ stamp_age kit 86400
 stamp_age pymol 3600
 stamp_age skills $((6 * 86400))
 source_hook bash
-wait_worker
+wait_for grep -q 'kit: update done' "$STATE/payload.log"
 expect_events 'kit-update [--update --channel 0.6]'
-expect_text "$STATE/payload.log" '[dotfiles] [ok] kit: update done'
 [[ ! -s "$OUT" || "$(cat "$OUT")" == marker=1 ]] || fail 'a background refresh printed in the shell'
 stamp_age skills $((7 * 86400))
 stamp_age pymol 86400
 : >"$EVENTS"
 source_hook bash
-wait_worker
+wait_for grep -q 'skills: update done' "$STATE/payload.log"
 expect_events 'pymol-install []
 skills-install [] bash=yes'
 
-# A live background run keeps a second one from starting.
-sleep 30 &
-SLEEPER=$!
-printf '%s\n' "$SLEEPER" >"$STATE/worker.pid"
-stamp_age kit 86400
-: >"$EVENTS"
-source_hook bash
-expect_events ''
-# A live PID recorded over a day ago is a reused one, not a run.
-printf '%s %s\n' "$SLEEPER" "$(($(date +%s) - 2 * 86400))" >"$STATE/worker.pid"
-source_hook bash
-wait_worker
-expect_events 'kit-update [--update --channel 0.6]'
-kill "$SLEEPER"
-wait "$SLEEPER" 2>/dev/null || :
-SLEEPER=
-stamp_age kit 86400
-: >"$EVENTS"
-source_hook bash
-wait_worker
-expect_events 'kit-update [--update --channel 0.6]'
-
-# A failed first install records nothing, says how to retry and never fails
-# the shell; the next session retries it in the foreground. Exit 75 (another
-# run holds the repo's lock) is neither.
+# A failed first install writes no stamp but ITEM.failed (time and exit
+# status), says how to retry and never fails the shell. Every later session
+# prints one line about it and does not retry it in the foreground; six
+# hours after the failure it is retried in the background, and a success
+# removes the record. Exit 75 (another run holds the repo's lock) is
+# neither.
 new_home
 source_hook bash FAKE_KIT_STATUS=1
 expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 1); retry with: sync-payloads kit'
 expect_text "$OUT" 'marker=1'
 [[ ! -e "$STATE/kit.stamp" && -e "$STATE/pymol.stamp" ]] || fail 'a failed install was stamped'
+read -r _ code <"$STATE/kit.failed"
+[[ "$code" == 1 ]] || fail 'the failure record lacks the exit status'
 : >"$EVENTS"
 source_hook bash
+expect_events ''
+expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 1, see $STATE/kit.failed); run sync-payloads kit"
+[[ ! -e "$STATE/payload.log" ]] || fail 'a fresh failure was retried'
+printf '%s 1\n' "$(($(date +%s) - 21600))" >"$STATE/kit.failed"
+source_hook bash
+wait_for grep -q 'kit: install done' "$STATE/payload.log"
 expect_events 'kit-install [--channel 0.6] stdin=[]'
+[[ ! -e "$STATE/kit.failed" && -e "$STATE/kit.stamp" ]] || fail 'a success kept the failure record'
+# A failed background run keeps the end of its output in the record, which
+# the next session reports.
+stamp_age kit 86400
+source_hook bash FAKE_KIT_STATUS=4
+wait_for grep -q 'kit-update: fake output' "$STATE/kit.failed"
+read -r _ code <"$STATE/kit.failed"
+[[ "$code" == 4 ]] || fail 'a background failure recorded the wrong status'
+expect_text "$STATE/kit.failed" '[dotfiles] [error] kit: update failed (exit 4); retry with: sync-payloads kit'
+source_hook bash
+expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 4, see $STATE/kit.failed)"
 stamp_age pymol 86400
 : >"$EVENTS"
 FAKE_PYMOL_STATUS=75 now pymol
 [[ "$STATUS" == 0 ]] || fail '--now failed on exit 75'
 expect_text "$OUT" 'pymol: another run holds its lock'
-[[ "$(cat "$STATE/pymol.stamp")" -lt "$(($(date +%s) - 3600))" ]] || fail 'exit 75 was stamped'
+[[ "$(cat "$STATE/pymol.stamp")" -lt "$(($(date +%s) - 3600))" && ! -e "$STATE/pymol.failed" ]] ||
+    fail 'exit 75 was stamped or recorded'
 
-# --now runs the named items whatever their intervals and ignores the
+# --now runs the named items whatever their intervals, records and the
 # opt-out; it fails for a failed item and an unknown one.
 new_home
 DOTFILES_PAYLOAD_AUTO_UPDATE=0 now kit
@@ -304,25 +303,87 @@ now nope
 expect_text "$ERR" "unknown item 'nope'"
 
 # An exit with the item's person-status row (awesome-skills' 3: an
-# interrupted update it cannot undo alone) is a failure that waits for a
-# person: no stamp, a skills.attention record that every later automatic run
-# warns about, cleared by the next success. The same exit from an item
+# interrupted update it cannot undo alone) is worded as one that waits for a
+# person, in the run and in every later session; the same exit from an item
 # without that row is an ordinary failure.
 new_home
 FAKE_SKILLS_STATUS=3 now skills
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for an exit that waits for a person'
 expect_text "$ERR" '[dotfiles] [error] skills: stopped for a person (exit 3): do what its message says, then run sync-payloads skills'
-[[ -s "$STATE/skills.attention" && ! -e "$STATE/skills.stamp" ]] || fail 'exit 3 was not recorded for a person'
+[[ -s "$STATE/skills.failed" && ! -e "$STATE/skills.stamp" ]] || fail 'exit 3 was not recorded'
 FAKE_KIT_STATUS=3 now kit
 expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 3); retry with: sync-payloads kit'
-[[ ! -e "$STATE/kit.attention" ]] || fail 'exit 3 of an item without a person-status row was recorded'
-source_hook bash DOTFILES_PAYLOAD_ITEMS=skills FAKE_SKILLS_STATUS=3
-expect_text "$ERR" "[dotfiles] [warn] skills: its last run stopped for a person; run sync-payloads skills to see what it asks (background runs log to $STATE/payload.log)"
+source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit'
+expect_text "$ERR" "[dotfiles] [warn] skills: its last run stopped for a person (exit 3, see $STATE/skills.failed); run sync-payloads skills and do what it asks"
+expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 3, see $STATE/kit.failed); run sync-payloads kit"
 now skills
-[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.attention" ]] || fail 'a success kept the attention record'
-: >"$ERR"
-source_hook bash DOTFILES_PAYLOAD_ITEMS=skills
-if grep -q 'stopped for a person' "$ERR"; then fail 'a cleared attention record still warns'; fi
+[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.failed" ]] || fail 'a success kept the failure record'
+
+# A legacy link the retired coding-agent-kit Stow package made at a kit
+# path: until stow-all removes it, the kit's installer would refuse it, so
+# the hook says to run stow-all instead of calling it, and records nothing.
+# PyMOL's installer replaces its own old links, so it still runs.
+new_home
+mkdir -p "$HOME_DIR/.local/bin"
+ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$HOME_DIR/.local/bin/codex-as"
+source_hook bash DOTFILES_PAYLOAD_ITEMS='kit pymol'
+expect_events 'pymol-install []'
+expect_text "$ERR" "[dotfiles] [warn] kit: ~/.local/bin/codex-as is still a link the retired Stow package made, which its installer refuses; run $FIXTURE/stow-all.sh with this host first (the next login's automatic stow does), then sync-payloads kit"
+[[ ! -e "$STATE/kit.failed" ]] || fail 'a refusal for stow-all was recorded as a failure'
+now kit
+[[ "$STATUS" == 1 ]] || fail '--now ran the kit past a legacy link'
+expect_events 'pymol-install []'
+rm "$HOME_DIR/.local/bin/codex-as"
+ln -s "$HOME_DIR/elsewhere/codex-as" "$HOME_DIR/.local/bin/codex-as"
+now kit
+expect_events 'pymol-install []
+kit-install [--channel 0.6] stdin=[]'
+
+# AWESOME_SKILLS_AUTO_UPDATE=0, the old hook's opt-out, still leaves skills
+# out of the automatic runs, with one notice, until 2027-01-31; a manual
+# run and a selection without skills ignore it.
+new_home
+source_hook bash AWESOME_SKILLS_AUTO_UPDATE=0
+expect_events 'kit-install [--channel 0.6] stdin=[]
+pymol-install []'
+expect_text "$ERR" '[dotfiles] [warn] AWESOME_SKILLS_AUTO_UPDATE=0 leaves skills out until 2027-01-31, when it stops working; set DOTFILES_PAYLOAD_ITEMS="kit pymol" instead'
+source_hook bash AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='kit pymol'
+if grep -q AWESOME_SKILLS_AUTO_UPDATE "$ERR"; then fail 'the notice came without skills selected'; fi
+: >"$EVENTS"
+AWESOME_SKILLS_AUTO_UPDATE=0 now skills
+expect_events 'skills-install [] bash=yes'
+
+# A download that stalls (a 127.0.0.1 port that accepts and never answers)
+# ends within DOTFILES_PAYLOAD_TIMEOUT, and the run tries no other download,
+# so a login waits once; the next session backs off without a download.
+python3 -I -c 'import socket, time
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(16)
+print(s.getsockname()[1], flush=True)
+time.sleep(300)' >"$TEST_TMP/port" &
+STALL=$!
+wait_for test -s "$TEST_TMP/port"
+STALLED=$TEST_TMP/stalled
+cp -R "$FIXTURE" "$STALLED"
+sed "s#file://$REMOTE/#http://127.0.0.1:$(cat "$TEST_TMP/port")/#g" "$FIXTURE/config/payloads.tsv" >"$STALLED/config/payloads.tsv"
+new_home
+started=$(date +%s)
+source_hook bash DOTFILES_DIR="$STALLED" DOTFILES_PAYLOAD_TIMEOUT=3
+elapsed=$(($(date +%s) - started))
+[[ "$elapsed" -lt 7 ]] || fail "a stalled download held the shell for ${elapsed}s"
+expect_text "$ERR" "cannot download http://127.0.0.1:$(cat "$TEST_TMP/port")/coding-agent-kit/main/install.sh (within 3s)"
+expect_text "$ERR" "skipped http://127.0.0.1:$(cat "$TEST_TMP/port")/PyMOLScripts/main/install.sh: a download already failed in this run"
+[[ "$(grep -c '^curl$' "$EVENTS")" == 1 ]] || fail 'the run tried a second download'
+for item in kit pymol skills; do
+    [[ -e "$STATE/$item.failed" ]] || fail "no failure record for $item"
+done
+: >"$EVENTS"
+source_hook bash DOTFILES_DIR="$STALLED" DOTFILES_PAYLOAD_TIMEOUT=3
+[[ ! -s "$EVENTS" && ! -e "$STATE/payload.log" ]] || fail 'the next session did not back off'
+kill "$STALL"
+wait "$STALL" 2>/dev/null || :
+STALL=
 
 # A download that fails runs nothing and leaves no temporary file.
 new_home

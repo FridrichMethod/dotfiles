@@ -15,7 +15,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-ps-' + [Guid]::NewGuid().ToString('N'))
 $names = @('LOCALAPPDATA', 'DOTFILES_TEST_PAYLOAD_HOME', 'PAYLOAD_EVENTS', 'FAKE_KIT_STATUS', 'FAKE_PYMOL_STATUS', 'FAKE_SKILLS_STATUS',
-    'DOTFILES_PAYLOAD_AUTO_UPDATE', 'DOTFILES_PAYLOAD_ITEMS', '_DOTFILES_PAYLOAD_CHECKED', 'TEMP', 'TMP', 'TMPDIR')
+    'DOTFILES_PAYLOAD_AUTO_UPDATE', 'DOTFILES_PAYLOAD_ITEMS', '_DOTFILES_PAYLOAD_CHECKED', 'DOTFILES_PAYLOAD_TIMEOUT',
+    'TEMP', 'TMP', 'TMPDIR', 'HOME')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name) }
 $script:Passed = 0
@@ -69,6 +70,7 @@ $root = Join-Path $env:LOCALAPPDATA 'coding-agent-kit'
 [IO.File]::WriteAllText((Join-Path $root 'install.ps1'), @"
 param([switch]`$Update, [string]`$Channel)
 Add-Content -LiteralPath `$env:PAYLOAD_EVENTS -Value "kit-update [-Update `$Update -Channel `$Channel]"
+Write-Output 'kit-update: fake output'
 if (`$env:FAKE_KIT_STATUS -and `$env:FAKE_KIT_STATUS -ne '0') { exit ([int]`$env:FAKE_KIT_STATUS) }
 "@)
 $helpers = Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME '.claude/coding-agent-kit'
@@ -99,15 +101,17 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         return $case
     }
     # Run the hook in a child pwsh with the case's environment; Environment
-    # adds or ($null) removes variables.
-    function Invoke-Hook($Case, [string[]]$Arguments, [hashtable]$Environment = @{}) {
+    # adds or ($null) removes variables. Off Windows HOME is the case's home
+    # too (PowerShell's $HOME follows it there, not on Windows).
+    function Invoke-Hook($Case, [string[]]$Arguments, [hashtable]$Environment = @{}, [string]$Hook = $hook) {
         $values = @{ LOCALAPPDATA = $Case.Data; DOTFILES_TEST_PAYLOAD_HOME = $Case.Home; PAYLOAD_EVENTS = $Case.Events
             TEMP = Join-Path $Case.Root 'tmp'; TMP = Join-Path $Case.Root 'tmp'; TMPDIR = Join-Path $Case.Root 'tmp'
             FAKE_KIT_STATUS = $null; FAKE_PYMOL_STATUS = $null; FAKE_SKILLS_STATUS = $null; DOTFILES_PAYLOAD_AUTO_UPDATE = $null
-            DOTFILES_PAYLOAD_ITEMS = $null; _DOTFILES_PAYLOAD_CHECKED = $null }
+            DOTFILES_PAYLOAD_ITEMS = $null; _DOTFILES_PAYLOAD_CHECKED = $null; DOTFILES_PAYLOAD_TIMEOUT = $null }
+        if (-not $IsWindows) { $values['HOME'] = $Case.Home }
         foreach ($key in $Environment.Keys) { $values[$key] = $Environment[$key] }
         foreach ($key in $values.Keys) { Set-TestVariable $key $values[$key] }
-        $output = & $pwsh -NoProfile -NonInteractive -File $hook @Arguments 2>&1 | ForEach-Object { "$_" }
+        $output = & $pwsh -NoProfile -NonInteractive -File $Hook @Arguments 2>&1 | ForEach-Object { "$_" }
         return [pscustomobject]@{ Code = $LASTEXITCODE; Text = ($output -join "`n") }
     }
     function Get-Events($Case) { @([IO.File]::ReadAllLines($Case.Events)) -join "`n" }
@@ -116,11 +120,17 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         [void][IO.Directory]::CreateDirectory($Case.State)
         [IO.File]::WriteAllText((Join-Path $Case.State "$Name.stamp"), "$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $Seconds)`n")
     }
-    function Wait-Worker($Case) {
-        $pidFile = Join-Path $Case.State 'worker.pid'
-        Assert-True (Test-Path -LiteralPath $pidFile) 'no background run was started'
-        $process = Get-Process -Id ([int](([IO.File]::ReadAllText($pidFile).Trim() -split '\s+')[0])) -ErrorAction SilentlyContinue
-        if ($process) { Assert-True ($process.WaitForExit(20000)) 'the background run did not finish' }
+    # The background run is detached: wait for what it leaves.
+    function Wait-Until([scriptblock]$Condition, [string]$Message) {
+        $deadline = [DateTime]::UtcNow.AddSeconds(30)
+        while (-not (& $Condition)) {
+            if ([DateTime]::UtcNow -gt $deadline) { throw "timed out waiting for $Message" }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    function Get-Record($Case, [string]$Name) {
+        $path = Join-Path $Case.State "$Name.failed"
+        if ([IO.File]::Exists($path)) { [IO.File]::ReadAllText($path) } else { '' }
     }
     $installAll = "kit-install [-Channel 0.6]`npymol-install []`nskills-install []"
 
@@ -138,33 +148,35 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq 'kit-update [-Update True -Channel 0.6]') "update: $(Get-Events $case); output: $($run.Text)"
         Assert-True (-not @(Get-ChildItem -LiteralPath (Join-Path $case.Root 'tmp') -Filter 'dotfiles-payload-*').Count) 'a download was left behind'
     }
-    Test-Case '-Now fails for a failed or unknown item, records nothing for it and calls exit 75 neither' {
+    Test-Case '-Now fails for a failed or unknown item and records the failure; exit 75 is neither' {
         $case = New-Case
         $run = Invoke-Hook $case @('-Now', 'pymol', 'kit') @{ FAKE_KIT_STATUS = '3' }
         Assert-True ($run.Code -eq 1) "exit $($run.Code): $($run.Text)"
         Assert-True ($run.Text.Contains('kit: install failed (exit 3); retry with: sync-payloads kit')) $run.Text
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'kit.stamp')) -and (Test-Path -LiteralPath (Join-Path $case.State 'pymol.stamp'))) 'wrong stamps'
+        Assert-True ((Get-Record $case kit) -match '^\d+ 3\n') "kit record: $(Get-Record $case kit)"
         $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '75' }
         Assert-True ($run.Code -eq 0 -and $run.Text.Contains('pymol: another run holds its lock')) "exit 75: $($run.Text)"
+        Assert-True ((Get-Record $case pymol) -ceq '') 'exit 75 was recorded'
         $run = Invoke-Hook $case @('-Now', 'nope')
         Assert-True ($run.Code -eq 1 -and $run.Text.Contains("unknown item 'nope'")) $run.Text
     }
-    Test-Case 'an exit with the person-status row waits for a person until the next success' {
+    Test-Case 'a failure is reported by every later session, worded by person-status, until a success' {
         $case = New-Case
-        $attention = Join-Path $case.State 'skills.attention'
         $run = Invoke-Hook $case @('-Now', 'skills') @{ FAKE_SKILLS_STATUS = '3' }
         Assert-True ($run.Code -eq 1) "exit $($run.Code): $($run.Text)"
         Assert-True ($run.Text.Contains('skills: stopped for a person (exit 3): do what its message says, then run sync-payloads skills')) $run.Text
-        Assert-True ((Test-Path -LiteralPath $attention) -and -not (Test-Path -LiteralPath (Join-Path $case.State 'skills.stamp'))) 'exit 3 was not recorded for a person'
-        $run = Invoke-Hook $case @('-Now', 'kit') @{ FAKE_KIT_STATUS = '3' }
-        Assert-True ($run.Text.Contains('kit: install failed (exit 3); retry with: sync-payloads kit')) $run.Text
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'kit.attention'))) 'exit 3 of an item without a person-status row was recorded'
-        $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'skills'; FAKE_SKILLS_STATUS = '3' }
-        Assert-True ($run.Text.Contains('skills: its last run stopped for a person; run sync-payloads skills to see what it asks')) $run.Text
+        [void](Invoke-Hook $case @('-Now', 'kit') @{ FAKE_KIT_STATUS = '3' })
+        Clear-Events $case
+        $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'skills kit' }
+        $records = Join-Path $case.State 'skills.failed'
+        Assert-True ($run.Text.Contains("skills: its last run stopped for a person (exit 3, see $records); run sync-payloads skills and do what it asks")) $run.Text
+        Assert-True ($run.Text.Contains('kit: its last run failed (exit 3, see ')) $run.Text
+        Assert-True ((Get-Events $case) -ceq '') "a fresh failure was retried: $(Get-Events $case)"
         $run = Invoke-Hook $case @('-Now', 'skills')
-        Assert-True ($run.Code -eq 0 -and -not (Test-Path -LiteralPath $attention)) "a success kept the attention record: $($run.Text)"
+        Assert-True ($run.Code -eq 0 -and (Get-Record $case skills) -ceq '') "a success kept the record: $($run.Text)"
     }
-    Test-Case 'a download that fails runs nothing' {
+    Test-Case 'a download that fails runs nothing and is recorded' {
         $case = New-Case
         $source = Join-Path $remote 'PyMOLScripts/main/install.ps1'
         Move-Item -LiteralPath $source -Destination "$source.hidden"
@@ -172,7 +184,30 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         finally { Move-Item -LiteralPath "$source.hidden" -Destination $source }
         Assert-True ($run.Code -eq 1 -and $run.Text.Contains('cannot run')) $run.Text
         Assert-True ((Get-Events $case) -ceq '') "events: $(Get-Events $case); output: $($run.Text)"
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'pymol.stamp'))) 'a failed download was stamped'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'pymol.stamp')) -and (Get-Record $case pymol)) 'a failed download was stamped or not recorded'
+    }
+    Test-Case 'a stalled download ends within the timeout and the run tries no other; the next session backs off' {
+        # A loopback port that accepts connections and never answers.
+        $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+        $listener.Start()
+        try {
+            $stalled = Join-Path $testRoot 'stalled'
+            $port = $listener.LocalEndpoint.Port
+            Write-Fixture (Join-Path $stalled 'config/payloads.tsv') ([IO.File]::ReadAllText((Join-Path $fixture 'config/payloads.tsv')).Replace($base, "http://127.0.0.1:$port/"))
+            Write-Fixture (Join-Path $stalled 'scripts/payload-update.ps1') ([IO.File]::ReadAllText($hook))
+            Write-Fixture (Join-Path $stalled 'lib/terminal.ps1') ([IO.File]::ReadAllText((Join-Path $fixture 'lib/terminal.ps1')))
+            $case = New-Case
+            $clock = [Diagnostics.Stopwatch]::StartNew()
+            $run = Invoke-Hook $case @('-Now') @{ DOTFILES_PAYLOAD_TIMEOUT = '3' } (Join-Path $stalled 'scripts/payload-update.ps1')
+            $clock.Stop()
+            Assert-True ($clock.Elapsed.TotalSeconds -lt 9) "a stalled download held the run for $($clock.Elapsed.TotalSeconds)s"
+            Assert-True ($run.Code -eq 1 -and $run.Text.Contains("cannot run http://127.0.0.1:$port/coding-agent-kit/main/install.ps1")) $run.Text
+            Assert-True ($run.Text.Contains("cannot run http://127.0.0.1:$port/PyMOLScripts/main/install.ps1: skipped: a download already failed in this run")) $run.Text
+            foreach ($name in 'kit', 'pymol', 'skills') { Assert-True (Get-Record $case $name) "no $name record" }
+            $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_TIMEOUT = '3' } (Join-Path $stalled 'scripts/payload-update.ps1')
+            Assert-True (-not $run.Text.Contains('cannot run') -and $run.Text.Contains('kit: its last run failed (exit 1, see ')) "no back-off: $($run.Text)"
+        }
+        finally { $listener.Stop() }
     }
     Test-Case 'the profile call needs a console, runs once per session and obeys the opt-out' {
         $case = New-Case
@@ -182,6 +217,18 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "redirected call ran: $(Get-Events $case)"
         $run = Invoke-Hook $case @('-Now') @{ DOTFILES_PAYLOAD_AUTO_UPDATE = '0' }
         Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq $installAll) "-Now must ignore the opt-out: $(Get-Events $case); output: $($run.Text)"
+    }
+    if ($IsWindows) { Write-Output 'SKIP: a legacy kit link (PowerShell $HOME cannot be redirected on Windows)' }
+    else {
+        Test-Case 'a legacy link at a kit path waits for stow-all without running the installer' {
+            $case = New-Case
+            [void][IO.Directory]::CreateDirectory((Join-Path $case.Home '.local/bin'))
+            # Dangling, as the pull leaves it; ln makes one on every Unix.
+            & ln -s '../../dotfiles/common/coding-agent-kit/.local/bin/codex-as' (Join-Path $case.Home '.local/bin/codex-as')
+            $run = Invoke-Hook $case @('-Now', 'kit', 'pymol')
+            Assert-True ($run.Code -eq 1 -and $run.Text.Contains('kit: ~/.local/bin/codex-as is still a link the retired Stow package made, which its installer refuses; run stow-all.ps1')) $run.Text
+            Assert-True ((Get-Events $case) -ceq 'pymol-install []' -and (Get-Record $case kit) -ceq '') "events: $(Get-Events $case)"
+        }
     }
     if ($elevated) {
         Test-Case 'an elevated automatic run installs nothing and says where to install' {
@@ -201,7 +248,7 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
             Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "a blank selection ran: $(Get-Events $case); output: $($run.Text)"
             $run = Invoke-Hook $case @('-Auto')
             Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq $installAll) "events: $(Get-Events $case); output: $($run.Text)"
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'worker.pid'))) 'a first install started a background run'
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'payload.log'))) 'a first install started a background run'
             Clear-Events $case
             $run = Invoke-Hook $case @('-Auto')
             Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "a fresh install ran again: $(Get-Events $case); output: $($run.Text)"
@@ -215,39 +262,32 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
             Set-StampAge $case skills (6 * 86400)
             $run = Invoke-Hook $case @('-Auto')
             Assert-True ($run.Code -eq 0 -and -not $run.Text.Contains('[dotfiles]')) "a background refresh printed: $($run.Text)"
-            Wait-Worker $case
+            $log = Join-Path $case.State 'payload.log'
+            Wait-Until { [IO.File]::Exists($log) -and [IO.File]::ReadAllText($log).Contains('kit: update done') } 'the background refresh'
             Assert-True ((Get-Events $case) -ceq 'kit-update [-Update True -Channel 0.6]') "events: $(Get-Events $case); output: $($run.Text)"
-            $log = [IO.File]::ReadAllText((Join-Path $case.State 'payload.log'))
-            Assert-True ($log.Contains('kit: update done')) "log: $log"
-            # A live background run keeps a second one from starting.
-            $sleeper = Start-Process -FilePath $pwsh -ArgumentList '-NoProfile', '-Command', 'Start-Sleep -Seconds 30' -PassThru
-            try {
-                [IO.File]::WriteAllText((Join-Path $case.State 'worker.pid'), "$($sleeper.Id)`n")
-                Set-StampAge $case kit 86400
-                Clear-Events $case
-                [void](Invoke-Hook $case @('-Auto'))
-                Start-Sleep -Seconds 2
-                Assert-True ((Get-Events $case) -ceq '') "a second background run started: $(Get-Events $case)"
-            }
-            finally { Stop-Process -Id $sleeper.Id -Force -ErrorAction SilentlyContinue }
         }
-        Test-Case 'a failed first install writes no stamp, so the next session retries it' {
+        Test-Case 'a failure backs off for six hours, then retries in the background; a background failure keeps its output' {
             $case = New-Case
             $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'kit'; FAKE_KIT_STATUS = '1' }
             Assert-True ($run.Code -eq 0 -and $run.Text.Contains('kit: install failed (exit 1)')) $run.Text
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'kit.stamp'))) 'a failed install was stamped'
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'kit.stamp')) -and (Get-Record $case kit)) 'a failed install was stamped or not recorded'
             Clear-Events $case
+            $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
+            Assert-True ((Get-Events $case) -ceq '' -and $run.Text.Contains('kit: its last run failed (exit 1, see ')) "no back-off: $(Get-Events $case) $($run.Text)"
+            [IO.File]::WriteAllText((Join-Path $case.State 'kit.failed'), "$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 21600) 1`n")
             [void](Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'kit' })
-            Assert-True ((Get-Events $case) -ceq 'kit-install [-Channel 0.6]') "no retry: $(Get-Events $case)"
+            Wait-Until { Test-Path -LiteralPath (Join-Path $case.State 'kit.stamp') } 'the background retry'
+            Wait-Until { (Get-Record $case kit) -ceq '' } 'the cleared record'
+            Assert-True ((Get-Events $case) -ceq 'kit-install [-Channel 0.6]') "retry: $(Get-Events $case)"
+            Set-StampAge $case kit 86400
+            [void](Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'kit'; FAKE_KIT_STATUS = '4' })
+            Wait-Until { (Get-Record $case kit).Contains('kit-update: fake output') } 'the failure record with its output'
+            Assert-True ((Get-Record $case kit) -match '^\d+ 4\n' -and (Get-Record $case kit).Contains('kit: update failed (exit 4)')) "record: $(Get-Record $case kit)"
         }
     }
     Write-Output "payload-update-ps=PASS ($script:Passed cases)"
 }
 finally {
     foreach ($name in $names) { Set-TestVariable $name $saved[$name] }
-    Get-ChildItem -LiteralPath $testRoot -Recurse -Filter 'worker.pid' -ErrorAction SilentlyContinue | ForEach-Object {
-        $id = 0
-        if ([int]::TryParse(([IO.File]::ReadAllText($_.FullName).Trim() -split '\s+')[0], [ref]$id)) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
-    }
     Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
