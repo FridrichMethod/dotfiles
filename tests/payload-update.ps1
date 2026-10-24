@@ -203,7 +203,7 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
             Assert-True ($clock.Elapsed.TotalSeconds -lt 9) "a stalled download held the run for $($clock.Elapsed.TotalSeconds)s"
             Assert-True ($run.Code -eq 1 -and $run.Text.Contains("cannot run http://127.0.0.1:$port/coding-agent-kit/main/install.ps1")) $run.Text
             Assert-True ($run.Text.Contains("cannot run http://127.0.0.1:$port/PyMOLScripts/main/install.ps1: skipped: a download already failed in this run")) $run.Text
-            foreach ($name in 'kit', 'pymol', 'skills') { Assert-True (Get-Record $case $name) "no $name record" }
+            foreach ($name in 'kit', 'pymol', 'skills') { Assert-True ([bool](Get-Record $case $name)) "no $name record" }
             $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_TIMEOUT = '3' } (Join-Path $stalled 'scripts/payload-update.ps1')
             Assert-True (-not $run.Text.Contains('cannot run') -and $run.Text.Contains('kit: its last run failed (exit 1, see ')) "no back-off: $($run.Text)"
         }
