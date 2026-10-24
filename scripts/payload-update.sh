@@ -31,7 +31,9 @@
 # payload.log (the
 # output of the last background run). The repos' installers lock themselves
 # and exit 75 while another run holds the lock; that is neither a success
-# nor a failure here.
+# nor a failure here. An item whose installer exits with its person-status
+# row has stopped for a person: ITEM.attention records it, every later
+# automatic run warns about it, and the next success removes it.
 
 case ${1-} in
     --auto | --now) ;;
@@ -164,6 +166,8 @@ run() {
     field kit channel
     # shellcheck disable=SC2034 # for the evaluated command
     channel=$value
+    person=
+    ! field "$1" person-status || person=$value
     status=1
     if ! field "$1" "unix-$action" && ! field "$1" unix-install; then
         dotfiles_log error "$1: config/payloads.tsv has no unix-install row"
@@ -179,7 +183,7 @@ run() {
     case $status in
         0)
             if (umask 077 && mkdir -p "$state" && date +%s >"$state/$1.stamp.tmp" &&
-                mv -f "$state/$1.stamp.tmp" "$state/$1.stamp"); then
+                mv -f "$state/$1.stamp.tmp" "$state/$1.stamp" && rm -f "$state/$1.attention"); then
                 dotfiles_log ok "$1: ${action} done"
             else
                 dotfiles_log error "$1: cannot record the success in $state"
@@ -187,6 +191,11 @@ run() {
             fi
             ;;
         75) dotfiles_log info "$1: another run holds its lock; the next session tries again" ;;
+        "$person")
+            dotfiles_log error "$1: stopped for a person (exit $status): do what its message says, then run sync-payloads $1"
+            (umask 077 && mkdir -p "$state" && printf '%s %s\n' "$(date +%s)" "$status" >"$state/$1.attention") ||
+                dotfiles_log error "$1: cannot record that in $state"
+            ;;
         *) dotfiles_log error "$1: $action failed (exit $status); retry with: sync-payloads $1" ;;
     esac
     return "$status"
@@ -228,6 +237,9 @@ fi
 now=$(date +%s)
 later=
 for item in "$@"; do
+    if [ -f "$state/$item.attention" ]; then
+        dotfiles_log warn "$item: its last run stopped for a person; run sync-payloads $item to see what it asks (background runs log to $state/payload.log)"
+    fi
     if ! installed "$item"; then
         run "$item" || :
     elif due "$item"; then

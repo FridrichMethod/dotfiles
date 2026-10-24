@@ -47,6 +47,7 @@ comments, and the first row of an item and field wins.
 | `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, in the foreground |
 | `unix-install`, `windows-install` | the first-install command |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
+| `person-status` | an exit status with which the repo stops for a person (awesome-skills' `3`: an interrupted update it cannot undo alone because a file it would restore was edited since; its message names the `--restore` command to run) |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
 by the hook with the channel in `$channel` (`$Channel`) and with one helper:
@@ -90,8 +91,14 @@ the next session tries again (an item still absent installs in the
 foreground again), and prints the line to retry it with, for example
 `sync-payloads kit`. Exit 75, the code the kit's and awesome-skills'
 installers return while another run holds their lock (PyMOLScripts takes
-none), is neither: one info line, no stamp. An automatic run never fails the
-shell that started it.
+none), is neither: one info line, no stamp. An exit equal to the item's
+`person-status` row is a failure that waits for a person: besides the error
+line it writes `ITEM.attention`, every later automatic run warns about the
+item (its installer's own message is in the foreground output, or in
+`payload.log` for a background run, and `sync-payloads ITEM` prints it again),
+and so does the doctor, until a run of the item succeeds and removes the file.
+The same status from an item without that row is an ordinary failure. An
+automatic run never fails the shell that started it.
 
 By hand, in the foreground and whatever the intervals or
 `DOTFILES_PAYLOAD_AUTO_UPDATE` say:
@@ -114,7 +121,8 @@ script run, `-Command`, `-NonInteractive` or piped stdin never reaches it; the
 script itself also returns when stdout is redirected. It keeps the Unix
 contract: once per session through `$env:_DOTFILES_PAYLOAD_CHECKED`,
 `DOTFILES_PAYLOAD_AUTO_UPDATE=0`, `DOTFILES_PAYLOAD_ITEMS`, absent items
-installed in the foreground, stamps on success only, exit 75 neither. Its
+installed in the foreground, stamps on success only, exit 75 neither,
+`person-status` recorded in `ITEM.attention` and warned about. Its
 background run is a hidden, detached
 `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File scripts/payload-update.ps1 -Worker ITEM...`
 started with `Start-Process`, whose output goes `*>` into `payload.log`, so the
@@ -166,6 +174,7 @@ In `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (created with umask
 | File | Content |
 | --- | --- |
 | `ITEM.stamp` | the time of the item's last success, in seconds since the epoch; remove it to make the next session refresh the item |
+| `ITEM.attention` | the time and exit status of the item's last run that stopped for a person (its `person-status` row); the next success removes it |
 | `worker.pid` | the PID of the background run and when it started; while that run lives, for a day at most (an older PID is a reused one), no second one starts. The hook's only lock |
 | `payload.log` | the output of the last background run, replaced by the next one |
 
@@ -188,7 +197,9 @@ PyMOLScripts keeps no state and takes no lock: concurrent runs converge.
   item's probe and, once the kit's passes, checks that the three helpers are
   in `~/.claude/coding-agent-kit/`. A shortfall is `warn`, never `missing`:
   the next interactive shell installs what is missing, and `sync-payloads`
-  does it now. The probes only test paths, so the doctor stays read-only.
+  does it now. A selected item with an `ITEM.attention` file warns first, as
+  stopped for a person. The probes and that check only test paths, so the
+  doctor stays read-only.
 - The doctor's `submodule` row (tier `core`, step P0-preflight) is `ok` while
   the checkout has no `.gitmodules` and no [leftover checkout](#leftover-checkouts),
   and warns otherwise.

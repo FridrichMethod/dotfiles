@@ -920,6 +920,17 @@ run_doctor payloads-none DOTFILES_PAYLOAD_ITEMS= -- --host lab-ubuntu --tsv
 assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
 run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
 assert_row payloads warn 'not installed: kit; the next interactive shell installs them'
+# An item whose last run stopped for a person (the hook's ITEM.attention)
+# warns first, whatever else is short, and only for a selected item.
+mkdir -p "$TEST_HOME/.local/state/dotfiles/payload"
+printf '1700000000 3\n' >"$TEST_HOME/.local/state/dotfiles/payload/skills.attention"
+run_doctor payloads-person -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row payloads warn "stopped for a person: skills (run sync-payloads ITEM and do what its installer asks); not installed: ~/.claude/coding-agent-kit/notify.cjs (Claude's status line and hooks fail), pymol" \
+    'docs/bootstrap.md H7-payloads'
+run_doctor payloads-person-unselected DOTFILES_PAYLOAD_ITEMS=kit -- --host lab-ubuntu --tsv
+assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs"
+rm -r "$TEST_HOME/.local/state/dotfiles"
 mv "$TEST_TMP/notify.hidden" "$TEST_HOME/.claude/coding-agent-kit/notify.cjs"
 printf '# fixture\n' >"$TEST_HOME/.pymolrc.py"
 mv "$FIXTURE/config/payloads.tsv" "$TEST_TMP/payloads.hidden"

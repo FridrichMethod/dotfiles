@@ -34,6 +34,9 @@
     one from starting while it lives, for a day at most) and payload.log (the output of the last
     background run). The repos' installers lock themselves and exit 75 while
     another run holds the lock; that is neither a success nor a failure here.
+    An item whose installer exits with its person-status row has stopped for
+    a person: ITEM.attention records it, every later automatic run warns
+    about it, and the next success removes it.
 #>
 [CmdletBinding()]
 param(
@@ -148,6 +151,7 @@ $PayloadFailed = & { try {
         if ($action -eq 'install') { Write-DotfilesLog step "$($Name): installing (later updates run in the background)" }
         else { Write-DotfilesLog step "$($Name): updating" }
         $Channel = Get-PayloadField 'kit' 'channel'
+        $person = Get-PayloadField $Name 'person-status'
         # The command's last output is the exit status of the script it ran.
         $status = 1
         try {
@@ -162,6 +166,7 @@ $PayloadFailed = & { try {
                 $temporary = "$stamp.$([Guid]::NewGuid().ToString('N')).tmp"
                 [IO.File]::WriteAllText($temporary, "$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())`n")
                 [IO.File]::Move($temporary, $stamp, $true)
+                [IO.File]::Delete((Join-Path $state "$Name.attention"))
                 Write-DotfilesLog ok "$($Name): $action done"
             }
             catch {
@@ -170,6 +175,14 @@ $PayloadFailed = & { try {
             }
         }
         elseif ($status -eq 75) { Write-DotfilesLog info "$($Name): another run holds its lock; the next session tries again" }
+        elseif ($person -and "$status" -ceq $person) {
+            Write-DotfilesLog error "$($Name): stopped for a person (exit $status): do what its message says, then run sync-payloads $Name"
+            try {
+                [void][IO.Directory]::CreateDirectory($state)
+                [IO.File]::WriteAllText((Join-Path $state "$Name.attention"), "$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) $status`n")
+            }
+            catch { Write-DotfilesLog error "$($Name): cannot record that in $($state): $($_.Exception.Message)" }
+        }
         else { Write-DotfilesLog error "$($Name): $action failed (exit $status); retry with: sync-payloads $Name" }
         return $status
     }
@@ -203,6 +216,9 @@ $PayloadFailed = & { try {
 
     $later = [Collections.Generic.List[string]]::new()
     foreach ($name in $names) {
+        if ([IO.File]::Exists((Join-Path $state "$name.attention"))) {
+            Write-DotfilesLog warn "$($name): its last run stopped for a person; run sync-payloads $name to see what it asks (background runs log to $(Join-Path $state 'payload.log'))"
+        }
         if (-not (Test-PayloadInstalled $name)) {
             if ($elevated) {
                 Write-DotfilesLog info "$($name) is not installed; an unelevated PowerShell installs it (or run sync-payloads $name there)."

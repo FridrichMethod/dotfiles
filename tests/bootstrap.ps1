@@ -905,6 +905,17 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: ~\.claude\coding-agent-kit\notify.cjs (Claude's status line and hooks fail), pymol; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "selected payloads row: $($run.Stdout)"
+        # An item whose last run stopped for a person (the hook's
+        # ITEM.attention) warns first, and only for a selected item.
+        $attention = Join-Path $fixture.LocalAppData 'dotfiles/payload/skills.attention'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $attention))
+        [IO.File]::WriteAllText($attention, "1700000000 3`n")
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
+        Assert-Exit $run 0 'a payload stopped for a person only warns'
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tstopped for a person: skills (run sync-payloads ITEM and do what its installer asks); not installed: ~\.claude\coding-agent-kit\notify.cjs (Claude's status line and hooks fail), pymol`tdocs/bootstrap.md H7-payloads") "attention row: $($run.Stdout)"
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'pymol' }
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: pymol; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "unselected attention row: $($run.Stdout)"
+        Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles') -Recurse -Force
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'coding-agent-kit') -Recurse -Force
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: kit; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "absent kit row: $($run.Stdout)"

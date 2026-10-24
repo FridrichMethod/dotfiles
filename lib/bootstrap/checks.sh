@@ -469,11 +469,13 @@ BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 
 # bootstrap_check_payloads ROOT: each item of DOTFILES_PAYLOAD_ITEMS (default
 # kit pymol skills) passes its unix-probe row of ROOT/config/payloads.tsv, and
-# the kit's Claude helpers are there. A shortfall only warns: the first
-# interactive shell after the stow installs what is missing
+# the kit's Claude helpers are there, and none has stopped for a person (an
+# ITEM.attention the hook left in its state directory). A shortfall only
+# warns: the first interactive shell after the stow installs what is missing
 # (scripts/payload-update.sh), and sync-payloads does it now.
 bootstrap_check_payloads() {
-    local config=$1/config/payloads.tsv items item line probe helper short='' found=''
+    local config=$1/config/payloads.tsv items item line probe helper short='' found='' person=''
+    local state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
         return 0
@@ -484,6 +486,7 @@ bootstrap_check_payloads() {
         item=${items%% *}
         items=${items#* }
         [ -n "$item" ] || continue
+        [ ! -f "$state/$item.attention" ] || person="$person, $item"
         probe=
         while IFS= read -r line || [ -n "$line" ]; do
             case $line in
@@ -505,7 +508,13 @@ bootstrap_check_payloads() {
             fi
         fi
     done
-    if [ -n "$short" ]; then
+    if [ -n "$person" ]; then
+        person="stopped for a person: ${person#, } (run sync-payloads ITEM and do what its installer asks)"
+        if [ -n "$short" ]; then
+            person="$person; not installed: ${short#, }"
+        fi
+        bootstrap_check_result warn "$person"
+    elif [ -n "$short" ]; then
         bootstrap_check_result warn "not installed: ${short#, }; the next interactive shell installs them, or run sync-payloads now"
     elif [ -n "$found" ]; then
         bootstrap_check_result ok "installed: ${found#, }"

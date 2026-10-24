@@ -303,6 +303,27 @@ now nope
 [[ "$STATUS" == 1 ]] || fail '--now accepted an unknown item'
 expect_text "$ERR" "unknown item 'nope'"
 
+# An exit with the item's person-status row (awesome-skills' 3: an
+# interrupted update it cannot undo alone) is a failure that waits for a
+# person: no stamp, a skills.attention record that every later automatic run
+# warns about, cleared by the next success. The same exit from an item
+# without that row is an ordinary failure.
+new_home
+FAKE_SKILLS_STATUS=3 now skills
+[[ "$STATUS" == 1 ]] || fail '--now did not fail for an exit that waits for a person'
+expect_text "$ERR" '[dotfiles] [error] skills: stopped for a person (exit 3): do what its message says, then run sync-payloads skills'
+[[ -s "$STATE/skills.attention" && ! -e "$STATE/skills.stamp" ]] || fail 'exit 3 was not recorded for a person'
+FAKE_KIT_STATUS=3 now kit
+expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 3); retry with: sync-payloads kit'
+[[ ! -e "$STATE/kit.attention" ]] || fail 'exit 3 of an item without a person-status row was recorded'
+source_hook bash DOTFILES_PAYLOAD_ITEMS=skills FAKE_SKILLS_STATUS=3
+expect_text "$ERR" "[dotfiles] [warn] skills: its last run stopped for a person; run sync-payloads skills to see what it asks (background runs log to $STATE/payload.log)"
+now skills
+[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.attention" ]] || fail 'a success kept the attention record'
+: >"$ERR"
+source_hook bash DOTFILES_PAYLOAD_ITEMS=skills
+if grep -q 'stopped for a person' "$ERR"; then fail 'a cleared attention record still warns'; fi
+
 # A download that fails runs nothing and leaves no temporary file.
 new_home
 mv "$REMOTE/PyMOLScripts/main/install.sh" "$TEST_TMP/pymol-install.sh"

@@ -14,7 +14,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-ps-' + [Guid]::NewGuid().ToString('N'))
-$names = @('LOCALAPPDATA', 'DOTFILES_TEST_PAYLOAD_HOME', 'PAYLOAD_EVENTS', 'FAKE_KIT_STATUS', 'FAKE_PYMOL_STATUS',
+$names = @('LOCALAPPDATA', 'DOTFILES_TEST_PAYLOAD_HOME', 'PAYLOAD_EVENTS', 'FAKE_KIT_STATUS', 'FAKE_PYMOL_STATUS', 'FAKE_SKILLS_STATUS',
     'DOTFILES_PAYLOAD_AUTO_UPDATE', 'DOTFILES_PAYLOAD_ITEMS', '_DOTFILES_PAYLOAD_CHECKED', 'TEMP', 'TMP', 'TMPDIR')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name) }
@@ -82,6 +82,7 @@ foreach ($name in '.pymolrc', '.pymolrc.py') { [IO.File]::WriteAllText((Join-Pat
 '@
     Write-Fixture (Join-Path $remote 'awesome-skills/main/install.ps1') @'
 Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
+if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$env:FAKE_SKILLS_STATUS) }
 [void][IO.Directory]::CreateDirectory((Join-Path $env:LOCALAPPDATA 'awesome-skills/library'))
 '@
     $elevated = $IsWindows -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -102,7 +103,7 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
     function Invoke-Hook($Case, [string[]]$Arguments, [hashtable]$Environment = @{}) {
         $values = @{ LOCALAPPDATA = $Case.Data; DOTFILES_TEST_PAYLOAD_HOME = $Case.Home; PAYLOAD_EVENTS = $Case.Events
             TEMP = Join-Path $Case.Root 'tmp'; TMP = Join-Path $Case.Root 'tmp'; TMPDIR = Join-Path $Case.Root 'tmp'
-            FAKE_KIT_STATUS = $null; FAKE_PYMOL_STATUS = $null; DOTFILES_PAYLOAD_AUTO_UPDATE = $null
+            FAKE_KIT_STATUS = $null; FAKE_PYMOL_STATUS = $null; FAKE_SKILLS_STATUS = $null; DOTFILES_PAYLOAD_AUTO_UPDATE = $null
             DOTFILES_PAYLOAD_ITEMS = $null; _DOTFILES_PAYLOAD_CHECKED = $null }
         foreach ($key in $Environment.Keys) { $values[$key] = $Environment[$key] }
         foreach ($key in $values.Keys) { Set-TestVariable $key $values[$key] }
@@ -147,6 +148,21 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
         Assert-True ($run.Code -eq 0 -and $run.Text.Contains('pymol: another run holds its lock')) "exit 75: $($run.Text)"
         $run = Invoke-Hook $case @('-Now', 'nope')
         Assert-True ($run.Code -eq 1 -and $run.Text.Contains("unknown item 'nope'")) $run.Text
+    }
+    Test-Case 'an exit with the person-status row waits for a person until the next success' {
+        $case = New-Case
+        $attention = Join-Path $case.State 'skills.attention'
+        $run = Invoke-Hook $case @('-Now', 'skills') @{ FAKE_SKILLS_STATUS = '3' }
+        Assert-True ($run.Code -eq 1) "exit $($run.Code): $($run.Text)"
+        Assert-True ($run.Text.Contains('skills: stopped for a person (exit 3): do what its message says, then run sync-payloads skills')) $run.Text
+        Assert-True ((Test-Path -LiteralPath $attention) -and -not (Test-Path -LiteralPath (Join-Path $case.State 'skills.stamp'))) 'exit 3 was not recorded for a person'
+        $run = Invoke-Hook $case @('-Now', 'kit') @{ FAKE_KIT_STATUS = '3' }
+        Assert-True ($run.Text.Contains('kit: install failed (exit 3); retry with: sync-payloads kit')) $run.Text
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'kit.attention'))) 'exit 3 of an item without a person-status row was recorded'
+        $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'skills'; FAKE_SKILLS_STATUS = '3' }
+        Assert-True ($run.Text.Contains('skills: its last run stopped for a person; run sync-payloads skills to see what it asks')) $run.Text
+        $run = Invoke-Hook $case @('-Now', 'skills')
+        Assert-True ($run.Code -eq 0 -and -not (Test-Path -LiteralPath $attention)) "a success kept the attention record: $($run.Text)"
     }
     Test-Case 'a download that fails runs nothing' {
         $case = New-Case

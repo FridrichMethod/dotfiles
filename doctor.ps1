@@ -187,9 +187,10 @@ function Get-DoctorStructuralResults {
 function Get-DoctorPayloadResult {
     # Each item of DOTFILES_PAYLOAD_ITEMS (default kit pymol skills) passes
     # its windows-probe row of config/payloads.tsv, and an installed kit left
-    # the Claude helpers that settings.json runs. A shortfall only warns: the
-    # next interactive PowerShell installs what is missing
-    # (scripts/payload-update.ps1), and sync-payloads does it now.
+    # the Claude helpers that settings.json runs, and none has stopped for a
+    # person (an ITEM.attention the hook left in its state directory). A
+    # shortfall only warns: the next interactive PowerShell installs what is
+    # missing (scripts/payload-update.ps1), and sync-payloads does it now.
     $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
     $config = Join-Path $RepoRoot 'config/payloads.tsv'
     if (-not [IO.File]::Exists($config)) { return New-DoctorResult warn payloads ai "no readable $config" $step }
@@ -204,7 +205,10 @@ function Get-DoctorPayloadResult {
     else { @('kit', 'pymol', 'skills') }
     $short = @()
     $found = @()
+    $person = @()
+    $state = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'dotfiles/payload' } else { $null }
     foreach ($item in $items) {
+        if ($state -and [IO.File]::Exists((Join-Path $state "$item.attention"))) { $person += $item }
         $probe = $rows["$item`twindows-probe"]
         $installed = $false
         if ($probe) { try { $installed = [bool](& ([scriptblock]::Create($probe))) } catch { } }
@@ -221,6 +225,11 @@ function Get-DoctorPayloadResult {
                 }
             }
         }
+    }
+    if ($person.Count) {
+        $detail = "stopped for a person: $($person -join ', ') (run sync-payloads ITEM and do what its installer asks)"
+        if ($short.Count) { $detail += "; not installed: $($short -join ', ')" }
+        return New-DoctorResult warn payloads ai $detail $step
     }
     if ($short.Count) {
         return New-DoctorResult warn payloads ai "not installed: $($short -join ', '); the next interactive PowerShell installs them, or run sync-payloads now" $step

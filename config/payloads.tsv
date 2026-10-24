@@ -16,6 +16,12 @@
 #   windows-update   is also the update for PyMOLScripts and awesome-skills);
 #                    the kit's names the channel, so a reviewed change of the
 #                    channel row moves every installed host to that channel
+#   person-status    an exit status with which the repo stops for a person:
+#                    the hook records it in ITEM.attention, warns about it in
+#                    every later session and the doctor, and clears it on the
+#                    next success (awesome-skills' 3: an interrupted update
+#                    it cannot undo alone; its message names the --restore
+#                    command to run)
 # The probes test the paths each installer documents as an install: the kit's
 # managed root (a current/install.sh on Unix; on Windows install.ps1, the
 # entry point of later runs, and the current file), PyMOL's two rc files, and
@@ -42,6 +48,7 @@ pymol	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichM
 pymol	windows-probe	(Test-Path -LiteralPath (Join-Path $HOME '.pymolrc') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $HOME '.pymolrc.py') -PathType Leaf)
 pymol	windows-install	Invoke-DotfilesPayloadScript 'https://raw.githubusercontent.com/FridrichMethod/PyMOLScripts/main/install.ps1'
 skills	days	7
+skills	person-status	3
 skills	unix-probe	test -f "$HOME/.local/share/awesome-skills/claude.json" || test -f "$HOME/.local/share/awesome-skills/codex.json" || test -d "${XDG_DATA_HOME:-$HOME/.local/share}/awesome-skills/library"
 skills	unix-install	payload_script bash https://raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh
 skills	windows-probe	(Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'awesome-skills/claude.json')) -or (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'awesome-skills/codex.json')) -or (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'awesome-skills/library'))
