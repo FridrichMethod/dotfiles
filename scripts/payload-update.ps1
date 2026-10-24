@@ -55,7 +55,7 @@ if ($Automatic -and -not $Auto) {
     if ($env:DOTFILES_PAYLOAD_AUTO_UPDATE -eq '0') { return }
 }
 
-$PayloadFailed = & {
+$PayloadFailed = & { try {
     $ErrorActionPreference = 'Continue'
     $PSNativeCommandUseErrorActionPreference = $false
     function Write-DotfilesLog {
@@ -240,5 +240,10 @@ $PayloadFailed = & {
     catch { Write-DotfilesLog warn "payload-update: cannot start the background refresh: $($_.Exception.Message)" }
     return $false
 }
+catch {
+    # Never a stack trace in a person's console: one line, with where it broke.
+    Write-Host "[dotfiles] [error] payload-update: $($_.Exception.Message) (scripts/payload-update.ps1 line $($_.InvocationInfo.ScriptLineNumber))"
+    return $true
+} }
 
 if (-not $Automatic -and [bool](@($PayloadFailed)[-1])) { exit 1 }
