@@ -11,8 +11,10 @@ need no root, and prints everything that needs a person (sudo, a browser login,
 a GUI dialog, a Slurm allocation, a login-shell change, a judgment call) as a
 HUMAN block instead of running it. Profiles, `./stow-all.sh` and the login
 update hooks never install a tool; only these entry points do, and only when
-you run them. (The skill-library hook fetches skills, not tools, and is on by
-default once stowed; see [H7-sync-skills](#h7-sync-skills-skill-library-sync).)
+you run them. (The payload hook, which the stowed profiles call, installs and
+updates only this repository's three first-party payload repos, through their
+own installers, and is on by default once stowed; see
+[H7-payloads](#h7-payloads-payload-repos).)
 
 [`config/bootstrap/`](../config/bootstrap/) is the single source for
 everything they install: [`tools.tsv`](../config/bootstrap/tools.tsv) (what the
@@ -32,7 +34,7 @@ one `### <step-id>:` heading per step, and checks that
 ## Quick start
 
 Every platform runs the same sequence: get git (and, if you want an agent to
-drive the rest, one agent CLI), clone with submodules to `~/dotfiles`, diagnose,
+drive the rest, one agent CLI), clone to `~/dotfiles`, diagnose,
 preview, apply, handle the HUMAN blocks, stow, start a login shell, and finish
 with the smoke test. Pick the host overlay yourself (`mac`, `wsl-ubuntu`,
 `lab-ubuntu`, `sherlock`, `marlowe`, `win`); nothing guesses it.
@@ -60,35 +62,35 @@ run before the stow line. Never use `stow --adopt`, which would overwrite the
 tracked copies with them.
 
 Keep the login hooks quiet while provisioning, in every shell you use for it:
-`export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0`. Otherwise the
-first interactive shell pulls the checkout and starts the unpinned skill sync
-in the middle of the bootstrap. The export reaches only the shells that inherit
-it: once you have stowed, a new terminal, a new login or an `ssh sherlock` from
-a workstation starts without it and runs the skill sync, so decide on
-[H7-sync-skills](#h7-sync-skills-skill-library-sync) before you open one.
+`export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`. Otherwise the
+first interactive shell pulls the checkout and starts the unpinned installers
+of the payload repos in the middle of the bootstrap. The export reaches only
+the shells that inherit it: once you have stowed, a new terminal, a new login
+or an `ssh sherlock` from a workstation starts without it and installs them,
+so decide on [H7-payloads](#h7-payloads-payload-repos) before you open one.
 
 `./setup-host.sh` exits 3 while work remains: a blocking HUMAN step is pending,
 or automatic steps are still to apply. [H7-stow](#h7-stow-stow-the-dotfiles)
 blocks, so re-run it after each block until H7-stow is the only one still
 blocking, stow with the line its block prints, and run it once more; then it
-exits 0 and reprints only the non-blocking blocks (login shell, sign-in, skill
-sync, the final doctor run). `--check` exits 3 whenever a step is still to do,
+exits 0 and reprints only the non-blocking blocks (login shell, sign-in, the
+payload repos, the final doctor run). `--check` exits 3 whenever a step is still to do,
 so a `--check` that exits 0 has nothing left to apply.
 
 ### macOS
 
 ```sh
 xcode-select --install          # H1-xcode-clt: git comes with the Command Line Tools (GUI dialog)
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./doctor.sh --host mac
 ./setup-host.sh --host mac --check
 ./setup-host.sh --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
 ./setup-host.sh --host mac      # again after each block, until only H7-stow still blocks
 PATH="/opt/homebrew/bin:$PATH" ./stow-all.sh mac    # H7-stow (Intel: PATH="/usr/local/bin:$PATH")
 ./setup-host.sh --host mac      # exits 0 now
-# H7-sync-skills: decide before you open a new terminal
+# H7-payloads: decide before you open a new terminal
 exec zsh -l
 ./doctor.sh --host mac --smoke
 ```
@@ -108,9 +110,9 @@ name `Ubuntu` ([HW-wsl](#hw-wsl-wsl-distribution), which also covers the
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./doctor.sh --host wsl-ubuntu                 # or lab-ubuntu
 ./setup-host.sh --host wsl-ubuntu --check
 ./setup-host.sh --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
@@ -120,7 +122,7 @@ export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
 PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu   # H7-stow
 ./setup-host.sh --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
-# H7-sync-skills: decide before you open a new terminal
+# H7-payloads: decide before you open a new terminal
 exec zsh -l
 ./doctor.sh --host wsl-ubuntu --smoke
 ```
@@ -141,21 +143,21 @@ zsh and fails until [S2-login-env](#s2-login-env-hpc-login-environment) exists.
 
 ```sh
 cat /etc/os-release; ldd --version | head -n 1     # P0-preflight: record OS and glibc
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./doctor.sh --host sherlock                        # or marlowe
 ./setup-host.sh --host sherlock --check
 ./setup-host.sh --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                  # H2-alloc; Marlowe: an interactive Slurm job
-cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
 ./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-stow
 exit                                               # back to the login node
 # H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.bash_profile), then:
 PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock   # H7-stow
 ./setup-host.sh --host sherlock                    # exits 0 now
-# H7-sync-skills: decide before the next login or `ssh sherlock`
+# H7-payloads: decide before the next login or `ssh sherlock`
 exec "$HOME/micromamba/envs/login/bin/zsh" -l
 ./doctor.sh --host sherlock --smoke
 ```
@@ -174,18 +176,18 @@ long-running agent on a login node.
 Clone onto NTFS, not into WSL. In Windows PowerShell or Terminal:
 
 ```powershell
-# Settings > System > For developers > Developer Mode: On (HW-clone)
 winget install --id Git.Git -e
 winget install --id Microsoft.PowerShell -e --source winget --installer-type wix   # the MSI (HW-clone)
 # open a new PowerShell 7 (pwsh) window, then:
-git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
-$env:DOTFILES_AUTO_UPDATE = '0'; $env:AWESOME_SKILLS_AUTO_UPDATE = '0'
+$env:DOTFILES_AUTO_UPDATE = '0'; $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
 .\doctor.ps1 -Host win
 .\setup-host.ps1 -Host win -Check
 .\setup-host.ps1 -Host win      # exit 3 until HW-stow is done
 # in an elevated PowerShell 7 (Run as administrator), from $HOME\dotfiles:
 .\stow-all.ps1 win
+# H7-payloads: decide before you open a new terminal; its first ordinary PowerShell installs the payload repos
 # open a new terminal, then from $HOME\dotfiles:
 .\setup-host.ps1 -Host win      # exits 0 now; prints the non-blocking HW blocks
 .\doctor.ps1 -Host win
@@ -208,9 +210,9 @@ into your shell first:
 ```sh
 # with your package manager: git zsh curl rsync tar file tmux man ssh, python3 >= 3.11, GNU Stow >= 2.3.1,
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./doctor.sh --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
     clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first
@@ -221,7 +223,7 @@ mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 ./setup-sync.sh                                                    # S4-setup-sync
 # H7-stow: move aside each file Stow reports (mv -n ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt
 ./stow-all.sh                              # H7-stow without a host argument: common only
-# H7-sync-skills: decide before you open a new terminal
+# H7-payloads: decide before you open a new terminal
 exec zsh -l
 ./doctor.sh --platform other --smoke
 ```
@@ -254,7 +256,7 @@ and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
 | `--quiet` | Only rows that are neither `ok` nor `skip`, then the summary |
 | `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in. The probes may write the tools' own state in your home (claude rewrites `~/.claude.json` and keeps backups of it; some codex releases create `~/.codex/tmp`); the doctor itself still writes nothing |
-| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 zsh -ic true` and fails when its stdout or stderr has a line starting `[oh-my-zsh]` (oh-my-zsh echoes `plugin 'x' not found`, `theme 'x' not found` and `zoxide not found` on stdout), or matching `plugin .* not found`, `plugin: .* not found`, `plugin: Cannot find`, `command not found`, `no such file` or `Permission denied` (all case-insensitive); `stty:` noise passes. It may write zsh's own caches |
+| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 zsh -ic true` and fails when its stdout or stderr has a line starting `[oh-my-zsh]` (oh-my-zsh echoes `plugin 'x' not found`, `theme 'x' not found` and `zoxide not found` on stdout), or matching `plugin .* not found`, `plugin: .* not found`, `plugin: Cannot find`, `command not found`, `no such file` or `Permission denied` (all case-insensitive); `stty:` noise passes. It may write zsh's own caches |
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
@@ -264,10 +266,13 @@ the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
 `tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
 `submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order`,
-and `nvm-homebrew`. `submodule` reads `.gitmodules` and requires each
-submodule's sentinel files (the targets of stowed links; the `.git` of one it
-has none for). Retired Sherlock and pre-move coding-agent-kit checkouts are
-warnings with manual removal advice; missing current submodules take precedence.
+`nvm-homebrew` and `payloads`. Dotfiles has no submodules: `submodule` warns
+while a `.gitmodules` exists or a retired submodule checkout is still in the
+clone, naming for each how to check that it holds no work and the `rm -rf`
+that removes it ([leftover checkouts](payloads.md#leftover-checkouts)); it
+never deletes anything. `payloads` warns, never fails, while an item of
+`DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
+installed kit lacks a Claude helper ([H7-payloads](#h7-payloads-payload-repos)).
 The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
@@ -305,7 +310,7 @@ at HW-clone).
 
 Every step runs check, plan, apply, verify; a satisfied step is skipped, so a
 second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
-AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
+DOTFILES_PAYLOAD_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
 `Brewfile.lock.json` into the checkout), and in every mode
@@ -352,7 +357,7 @@ Linuxbrew) likewise shows as `human`, not `todo`, and prints a blocking `sudo`
 block for the prefix's owner instead of running brew. A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
 dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
 `--tier` or `--only` leaves out does not. Non-blocking blocks (locale, fcitx5,
-site modules, `chsh`, sign-in, skill sync, the final doctor run) are printed
+site modules, `chsh`, sign-in, the payload repos, the final doctor run) are printed
 but leave the exit code alone. Since H7-stow blocks, every run before the
 first stow exits 3.
 
@@ -363,7 +368,7 @@ The Windows twins take the same ideas as PowerShell parameters:
 themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `venv-sync`, `submodule` and
-`core-symlinks`, and `-Online` reports a signed-out tool as `warn`, as on Unix
+`payloads`, and `-Online` reports a signed-out tool as `warn`, as on Unix
 (its auth probes, too, may write the tools' own state).
 `.\setup-host.ps1` exits 3 while HW-clone or HW-stow is pending; the other HW
 blocks are printed but leave the exit code alone. Its `-Check` prints only
@@ -412,11 +417,11 @@ The first line names the step and the kind. Every other line up to
 | --- | --- | --- |
 | `sudo` | On macOS and Linux, the person, or an agent after the person approves the block in chat. On Windows always the person: the block needs an elevated shell, and agents never elevate | Needs root or another account: system packages, the system locale, `/home/linuxbrew`, a shared Homebrew prefix its owner installs into; on Windows, services |
 | `auth` | The person | Browser or device-code login, passwords, keys, Kerberos tickets |
-| `gui` | The person | A dialog, a Settings toggle or a relogin (Xcode CLT, Developer Mode, the fcitx5 session) |
+| `gui` | The person | A dialog, a Settings toggle or a relogin (Xcode CLT, the fcitx5 session) |
 | `alloc` | The person | A Slurm allocation; heavy work on hpc runs only inside one |
 | `chsh` | The person | Changes the login shell and asks for the password |
 | `inspect` | The person reads, then runs | A vendor script that cannot be pinned by digest: read it before it runs |
-| `judgment` | The person decides | A choice with tradeoffs: stowing, the skill sync, site modules, the final doctor run, execution policy, WSL |
+| `judgment` | The person decides | A choice with tradeoffs: stowing, the payload repos, site modules, the final doctor run, execution policy, WSL, a checkout that is not a git clone |
 
 Any block whose note says it needs an elevated PowerShell (stow, the automatic
 stow task, WSL, the ssh-agent service) is the person's to run, whatever its
@@ -552,9 +557,9 @@ short and send the agent here. The rules they follow:
   `--platform other`, and the setup steps are the manual ones in
   [X-other-linux](#x-other-linux-other-linux-distributions).
 - **Quiet hooks.** Every command runs with
-  `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0`. The person's own new
+  `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`. The person's own new
   terminals do not inherit that; the agent raises
-  [H7-sync-skills](#h7-sync-skills-skill-library-sync) before the stow.
+  [H7-payloads](#h7-payloads-payload-repos) before the stow.
 - **Plan first.** `./doctor.sh --host H --tsv` and
   `./setup-host.sh --host H --check`, shown to the person, before any apply.
   The apply is `./setup-host.sh --host H --yes`, because an agent's shell has
@@ -612,7 +617,7 @@ Paste this into Claude Code or Codex when the session does not start inside
 ```text
 Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfiles.
 1. If ~/dotfiles does not exist, clone it with
-   git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+   git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
    (native Windows: follow HW-clone in docs/bootstrap.md first). Work only inside ~/dotfiles.
 2. Read ~/dotfiles/docs/bootstrap.md completely. It is the contract; follow it over your defaults.
 3. Ask me which host this is: mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win,
@@ -620,7 +625,7 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    PowerShell twins in every step below: .\doctor.ps1 -Host win -Tsv,
    .\setup-host.ps1 -Host win -Check, then -Yes; the stow is the HW-stow block
    (an elevated shell, so mine to run), and the finish is .\doctor.ps1 -Host win.
-4. Run every command with DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0.
+4. Run every command with DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0.
 5. Run ./doctor.sh --host H --tsv and ./setup-host.sh --host H --check and show me the plan.
 6. After I agree, run ./setup-host.sh --host H --yes. For each HUMAN block
    (lines starting with "# " are notes for me; every other line is one
@@ -635,7 +640,7 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    judgment: explain the choice and let me decide.
 7. Exit 3 means work remains (a blocking HUMAN step, or steps still to apply).
    Re-run setup-host after each block until H7-stow is the only one left. Ask
-   me about H7-sync-skills, then run the H7-stow block's lines exactly as printed
+   me about H7-payloads, then run the H7-stow block's lines exactly as printed
    (any mv -n lines, then PATH prefix and stow-all.sh H; never stow --adopt),
    each only as its own visible command after I approve it. Re-run setup-host;
    it should exit 0.
@@ -657,22 +662,22 @@ Applies to every host. Record what the machine is before installing anything:
 OS release, architecture, glibc (conda-forge packages and vendor binaries each
 have a minimum), the overlay the person chose, and a complete checkout.
 
-- **Check:** `uname -sm; cat /etc/os-release 2>/dev/null || sw_vers; ldd --version 2>/dev/null | head -n 1; git -C ~/dotfiles submodule status`
-- **Install:** clone to `~/dotfiles` with `--recurse-submodules` (the login
-  hooks default to `DOTFILES_DIR=$HOME/dotfiles`); for an existing clone without
-  submodules, `git -C ~/dotfiles submodule update --init --recursive`.
-- **Verify:** no submodule line starts with `-`, and
-  `ls -L ~/dotfiles/common/pymol/.pymolrc` and
-  `ls -L ~/dotfiles/common/coding-agent-kit/.local/bin/codex-as` (coding-agent-kit)
-  resolve; the doctor's
-  `submodule` check is `ok`. setup-host's P0-preflight line records the OS, architecture,
-  glibc and detected platform, and warns about a missing submodule, a
-  `DOTFILES_DIR` that names another checkout, or uncommitted changes in the
-  checkout ([X-rc-protection](#x-rc-protection-rc-file-protection)). A
-  `submodule` warning that names `common/codex/coding-agent-kit` is the
-  checkout the pull across the kit's move into its own package left behind:
-  run the `rm -rf` it prints, and keep `.git/modules/common/codex/coding-agent-kit`,
-  the repository of the current checkout ([coding-agent-kit](coding-agent-kit.md)).
+- **Check:** `uname -sm; cat /etc/os-release 2>/dev/null || sw_vers; ldd --version 2>/dev/null | head -n 1; git -C ~/dotfiles status --porcelain`
+- **Install:** `git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles`
+  (the login hooks default to `DOTFILES_DIR=$HOME/dotfiles`). The checkout has
+  no submodules; the payload repos install later, through their own
+  installers ([H7-payloads](#h7-payloads-payload-repos)).
+- **Verify:** the status is empty and the doctor's `submodule` check is `ok`.
+  setup-host's P0-preflight line records the OS, architecture, glibc and
+  detected platform, and warns about a `DOTFILES_DIR` that names another
+  checkout or uncommitted changes in the checkout
+  ([X-rc-protection](#x-rc-protection-rc-file-protection)). On an older clone
+  a `submodule` warning names a retired submodule checkout that a pull left
+  behind (`common/codex/coding-agent-kit`,
+  `common/coding-agent-kit/coding-agent-kit`, `common/pymol/PyMOLScripts`,
+  `common/sherlock-kit/sherlock-kit`): it is harmless, and once it holds no
+  work of yours, run the `rm -rf` the warning prints
+  ([leftover checkouts](payloads.md#leftover-checkouts)).
 - **Human:** yes (judgment: the person names the host overlay, and a clone
   outside `~/dotfiles` also needs `DOTFILES_DIR` exported; setup-host prints no
   block for this step)
@@ -1458,10 +1463,10 @@ S4-setup-sync. `./stow-all.sh H` runs the Claude and Codex sync helpers (writing
 `~/.claude/settings.json`, `~/.codex/config.toml` and
 `~/.codex/rules/portable.rules`), links `common/` and then the overlay into
 `$HOME`, tightens `~/.ssh` modes and records the host for the doctor and the
-login updater. While the coding-agent-kit submodule is not checked out, it
-warns once that the kit's links dangle, still syncs and stows, and records no
-applied revision, so the login updater retries
-([coding-agent-kit](coding-agent-kit.md#uninitialized-submodule)). Stow
+login updater. It installs no payload repo; on a home stowed before they
+became installed repos, it first removes the links Stow made from their two
+retired packages, each only while its text is exactly the one Stow wrote
+([migration](payloads.md#migration)). Stow
 refuses to replace regular files, and Ubuntu's `/etc/skel` creates
 `~/.bashrc` and `~/.profile` (RHEL-family homes, such as Sherlock's, also
 `~/.bash_profile`). `./stow-all.sh` runs a Stow dry run of every package
@@ -1556,35 +1561,54 @@ interactive `claude` or `codex`.
 - **Human:** yes (auth: browser or device-code logins, passwords and key
   passphrases)
 
-### H7-sync-skills: Skill library sync
+### H7-payloads: Payload repos
 
-Applies to every Unix host. Once stowed, every interactive shell (zsh through
-`.zshrc`, bash and sh login shells through `.profile`) sources
-`scripts/awesome-skills-update.sh`, which downloads the unpinned `main`
-`install.sh` of FridrichMethod/awesome-skills and runs it in the background;
-the first run fills `~/.claude/skills` and `~/.codex/skills`, later runs
-refresh weekly. It needs bash, curl, tar and rsync.
+Applies to every host. Once stowed, every interactive shell (zsh through
+`.zshrc`, bash and sh login shells through `.profile`; on native Windows the
+PowerShell 7 profile, in ordinary unelevated sessions) runs the payload hook,
+`scripts/payload-update.sh` (`scripts/payload-update.ps1`), once per session.
+It installs coding-agent-kit (the account launchers and the Claude helpers
+that `settings.json` runs; on Windows the helpers only), PyMOLScripts
+(`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills (`~/.claude/skills`,
+`~/.codex/skills`) through each repository's own installer, named in
+[`config/payloads.tsv`](../config/payloads.tsv): an absent one in the
+foreground, so you see the first install, and later refreshes in one detached
+background run (the kit and PyMOL daily, the skills weekly). Each install
+downloads its repository's unpinned `main` install script; the kit's installs
+the newest patch release of the channel the file declares.
+[payloads.md](payloads.md) is the contract.
 
-It is **on by default**: it runs unless `AWESOME_SKILLS_AUTO_UPDATE=0` is in that
-shell's environment. The quick start's export reaches only shells that inherit
-it, so after the stow a new terminal, a new login, or the first `ssh sherlock`
-or `ssh marlowe` from a workstation runs it. It is the one download near the
-bootstrap that is not pinned, so decide before the first new shell after the
-stow. Every rc file in this repository is tracked, so there is no local file to
-turn it off in: to keep it off, export `AWESOME_SKILLS_AUTO_UPDATE=0` in the
-environment that the terminal or the ssh session starts with.
+It is **on by default**: it runs unless `DOTFILES_PAYLOAD_AUTO_UPDATE=0` is in
+that shell's environment. The quick start's export reaches only shells that
+inherit it, so after the stow a new terminal, a new login, or the first
+`ssh sherlock` or `ssh marlowe` from a workstation runs it. Its downloads are
+the ones near the bootstrap that are not pinned, so decide before the first
+new shell after the stow. Every rc file in this repository is tracked, so
+there is no local file to turn it off in: to keep it off, export
+`DOTFILES_PAYLOAD_AUTO_UPDATE=0` in the environment that the terminal or the
+ssh session starts with, or narrow it with `DOTFILES_PAYLOAD_ITEMS` (for
+example `kit pymol`). setup-host prints this as a non-blocking judgment block
+until the doctor's `payloads` row is `ok`; `setup-host.ps1` prints no block,
+and `doctor.ps1`'s `payloads` row points here.
 
-- **Check:** `ls ~/.claude/skills ~/.codex/skills 2>/dev/null | head; ls -l "${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last-sync"`
+- **Check:** the doctor's `payloads` row (`./doctor.sh --host H`,
+  `.\doctor.ps1 -Host win`): each selected item passes its probe, and an
+  installed kit has its three helpers in `~/.claude/coding-agent-kit/`.
 - **Install:** opt-out, as above; nothing to do to keep it on. To run it once
-  now, in the foreground: the line the setup-host block prints, which works
+  now, in the foreground, use the line the setup-host block prints, which works
   before the stow too and also in a shell that exports
-  `AWESOME_SKILLS_AUTO_UPDATE=0`, which even `AWESOME_SKILLS_FORCE=1` obeys:
-  `AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh ~/dotfiles/scripts/awesome-skills-update.sh`.
-  In a stowed shell without that export, `sync-skills` does the same.
-- **Verify:** `ls ~/.claude/skills | wc -l` is non-zero; the log is
-  `${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last.log`.
-- **Human:** yes (judgment: it is on by default once stowed and runs an unpinned
-  script from a branch head; decide before the first new shell after the stow)
+  `DOTFILES_PAYLOAD_AUTO_UPDATE=0`: `sh ~/dotfiles/scripts/payload-update.sh --now`
+  (Windows, from an ordinary PowerShell 7:
+  `& $HOME\dotfiles\scripts\payload-update.ps1 -Now`). In a stowed shell,
+  `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
+  skills. It needs `sh` and curl or wget (Windows: PowerShell 7), plus what
+  each installer needs, which its README lists (Git for the kit and the
+  skills).
+- **Verify:** the `payloads` row is `ok`; the last background refresh is in
+  `${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/payload.log`
+  (Windows `%LOCALAPPDATA%\dotfiles\payload\payload.log`).
+- **Human:** yes (judgment: it is on by default once stowed and runs unpinned
+  scripts from branch heads; decide before the first new shell after the stow)
 
 ### H7-doctor: Final doctor run
 
@@ -1602,19 +1626,18 @@ Applies to every host. This is the completion gate.
 The Windows steps, in the order you run them. Agents never elevate; every
 elevated command is the person's.
 
-### HW-clone: Clone with symlinks enabled
+### HW-clone: Clone the repository
 
-The checkout contains symlinks (`common/pymol/.pymolrc*`, and the
-coding-agent-kit links in `common/coding-agent-kit`) that Git for
-Windows only creates when `core.symlinks` is true and the process may create
-symlinks.
+The checkout tracks no symlink, so Git for Windows needs neither
+`core.symlinks` nor Developer Mode; the links in your home are what the
+elevated HW-stow creates. The login updater pulls the checkout, so it must be
+a git clone, not an extracted archive.
 
-- **Check:** `git -C $HOME\dotfiles config core.symlinks; (Get-Item $HOME\dotfiles\common\pymol\.pymolrc).LinkType`
-- **Install:** turn on Developer Mode (Settings > System > For developers), then
-  `winget install --id Git.Git -e`,
+- **Check:** `Test-Path $HOME\dotfiles\.git; git -C $HOME\dotfiles status --porcelain`
+- **Install:** `winget install --id Git.Git -e`,
   `winget install --id Microsoft.PowerShell -e --source winget --installer-type wix`,
   and in a new `pwsh` window
-  `git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles`.
+  `git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles`.
   `--installer-type wix` selects the MSI, in `Program Files\PowerShell\7`.
   Since PowerShell 7.6.0 winget installs the MSIX package by default, whose
   `$PSHOME` under `Program Files\WindowsApps` is named for its version and
@@ -1624,14 +1647,14 @@ symlinks.
   ships only the MSIX package; 7.6 is the LTS release. Once 7.7 is the newest
   release, add `--version` with the newest 7.6 one
   (`winget show --id Microsoft.PowerShell -e --versions` lists them).
-  Clone onto NTFS, never into a WSL distribution. An existing clone made
-  without symlinks: `git -C $HOME\dotfiles config core.symlinks true`, then
-  `git -C $HOME\dotfiles checkout -- common/pymol common/coding-agent-kit`
-  (only the packages with tracked links: settings you edited in `.claude/` and
-  `.codex/` stay).
-- **Verify:** `core.symlinks` prints `true`, `LinkType` prints `SymbolicLink`,
-  and `git -C $HOME\dotfiles status --porcelain` is empty.
-- **Human:** yes (gui: Developer Mode is a Settings toggle)
+  Clone onto NTFS, never into a WSL distribution. An older clone made with
+  `core.symlinks` and `--recurse-submodules` needs nothing: its leftover
+  submodule checkouts are harmless, and the doctor's `submodule` row prints
+  how to remove them ([leftover checkouts](payloads.md#leftover-checkouts)).
+- **Verify:** `Test-Path` prints `True` and the status is empty.
+- **Human:** yes (judgment: the person installs Git and PowerShell 7 and
+  clones before `setup-host.ps1` can run from the clone; it blocks on this
+  step only in a checkout that is not a git clone)
 
 ### W1-winget: winget import
 
@@ -2022,11 +2045,10 @@ fail-closed behavior beyond what is stated.
 - **rc-pollution guard granularity.** The guard
   ([X-rc-protection](#x-rc-protection-rc-file-protection)) fingerprints each
   top-level `git status --porcelain` entry of the checkout: a file's content,
-  a link's target. A submodule is one entry and a nested repository that git
-  does not track is one `?? dir/` entry, so an installer that edits a file
-  inside the PyMOL submodule after it is already dirty, or inside a nested
-  untracked repository, goes unnoticed. Nothing the bootstrap runs writes
-  there.
+  a link's target. A nested repository that git does not track is one
+  `?? dir/` entry, so an installer that edits a file inside a nested
+  untracked repository after it is already dirty goes unnoticed. Nothing the
+  bootstrap runs writes there.
 - **Execution policy set only through `EnableScripts`.**
   [HW-execution-policy](#hw-execution-policy-execution-policy) reads the
   `ExecutionPolicy` values (the policy keys, then CurrentUser and Windows

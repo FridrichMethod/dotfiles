@@ -27,7 +27,7 @@ Powered by [GNU Stow](https://www.gnu.org/software/stow/). Layered like CSS. Bor
 
 ```bash
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
-cd ~/dotfiles && git submodule update --init --recursive
+cd ~/dotfiles
 # new machine: ./setup-host.sh --host mac instead of the next two lines; rerun it after
 # each HUMAN block, then run the H7-stow line it prints (docs/bootstrap.md Quick start)
 ./setup-sync.sh           # once per clone; Python 3.11+ and venv required
@@ -49,7 +49,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 - **Cross-host AI defaults**: global Claude Code and Codex instructions, curated permissions, guarded exec policies, reasoning effort, and portable plugin declarations live in `common/`.
 - **No templating, no conditionals** - Stow symlinks the right files into `$HOME`.
 - **Self-healing**: a shell hook checks for upstream changes once per login session and fast-forwards behind branches.
-- **Skill sync**: a weekly background hook keeps `~/.claude/skills/` and `~/.codex/skills/` aligned with [awesome-skills](https://github.com/FridrichMethod/awesome-skills) (~1,668 skills).
+- **Payload repos**: [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit), [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) and [awesome-skills](https://github.com/FridrichMethod/awesome-skills) are installed and kept current by their own installers, from a session-once hook on Unix and Windows; no submodules.
 - **CI-checked**: Ubuntu, macOS and native Windows run behavioral tests; Ubuntu also runs `shellcheck`, `shfmt`, `stylua`, and hygiene hooks - same as the local pre-commit.
 - **HPC-aware**: Stanford Sherlock and Marlowe overlays handle login-node quirks, module systems, and SLURM-friendly defaults.
 
@@ -74,6 +74,7 @@ cd ~/dotfiles && git submodule update --init --recursive
 </td><td>
 
 - [AI Assistant Configuration](#ai-assistant-configuration)
+- [Payload Repos](#payload-repos)
 - [Adding a New Package](#adding-a-new-package)
 - [Conventions](#conventions)
 - [License](#license)
@@ -117,10 +118,10 @@ tools yourself and stow `common/` only with `./stow-all.sh` (no host).
 [docs/bootstrap.md](docs/bootstrap.md) is the full playbook: per-platform
 quick starts, every step and the recovery recipes.
 
-**1.** Clone with submodules:
+**1.** Clone:
 
 ```bash
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 ```
 
@@ -148,6 +149,9 @@ packaging options](docs/dependencies.md) for the runtime/test split and tradeoff
 exec $SHELL -l
 ```
 
+The first interactive shell after the stow installs the [payload repos](#payload-repos)
+in the foreground, unless `DOTFILES_PAYLOAD_AUTO_UPDATE=0` is in its environment.
+
 > `.stowrc` sets `--target=~` so every package links into `$HOME`. Stow runs with `--restow --no-folding`, so re-running the installer is safe and idempotent.
 
 ### Bootstrapping with Claude Code or Codex
@@ -163,10 +167,10 @@ For an agent started outside the clone, paste the [prompt in docs/bootstrap.md](
 
 ### On Windows
 
-GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead - same layering, same `.stowrc` ignores, same idempotency. Turn on Developer Mode first (Settings > System > For developers), so Git can create the tracked symlinks, then clone with `core.symlinks` and run `stow-all.ps1` from an **elevated** PowerShell 7+:
+GNU Stow needs Perl and POSIX symlink semantics, so native Windows uses `stow-all.ps1` instead - same layering, same `.stowrc` ignores, same idempotency. The repository tracks no symlink, so a plain clone works without Developer Mode or `core.symlinks`; run `stow-all.ps1` from an **elevated** PowerShell 7+:
 
 ```powershell
-git clone -c core.symlinks=true --recurse-submodules https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
+git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
 .\doctor.ps1 -Host win        # read-only: what is missing or outdated
 .\setup-host.ps1 -Host win    # a new machine: winget tools the doctor does not already find, modules, font, bat theme and .venv-sync; prints the HW-* blocks
@@ -183,9 +187,10 @@ Clone onto an NTFS drive, not into a WSL distro: a Windows symlink cannot point 
 
 Like `stow-all.sh`, the Windows installer validates all selected AI inputs and the parser runtime with the shared helpers' read-only `--check`, synchronizes the portable Claude/Codex baselines into the live `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/rules/portable.rules` (via the same helpers, run through Git Bash), then stows. A later filesystem failure can still produce a partial install, but must not acknowledge the revision; retry after fixing it. Windows-only differences from the POSIX installer:
 
-- **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `pymol`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
+- **`common/` is an allowlist, not a glob.** Only `claude`, `codex`, `conda`, `git`, `ssh`, and `wezterm` are stowed; extend `$CommonPackages` in the script for anything else. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so linking the Linux shell packages into a Windows `$HOME` would break it.
 - **Pre-existing files are adopted, not clobbered.** A byte-identical file, or valid UTF-8 differing only by CRLF, is replaced by its link; case-only and binary differences are backed up to `<name>.stow-backup-<timestamp>-<unique-id>` first.
-- **Link trust is checked in a separate process.** The probe enables RedirectionGuard before opening source and destination links, without changing the calling shell. Elevated runs rebuild rejected links, retaining relative targets for repository-side links. An unavailable or failed trust probe stops installation; other unreadable links and unelevated repairs are reported as incomplete.
+- **Link trust is checked in a separate process.** The probe enables RedirectionGuard before opening the links in your home, without changing the calling shell. Elevated runs rebuild rejected links. An unavailable or failed trust probe stops installation; other unreadable links and unelevated repairs are reported as incomplete.
+- **Packages hold files only.** A symlink found in a package is skipped with a warning, which leaves the install incomplete. The links an older install made from the retired `coding-agent-kit` and `pymol` packages are removed while their target is exactly the path it wrote.
 - **Confirmation covers a complete file operation.** `-Confirm` accepts or declines backup/removal and link creation together. Declined changes prevent recording the revision as applied and cause `-Strict` to fail.
 
 Use `-Verbose` for per-link details. Normal output shows stages, backups, warnings
@@ -193,7 +198,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 
 #### PowerShell profile and prompt
 
-`win/powershell/Documents/PowerShell/profile.ps1` is the PowerShell 7 profile for all hosts. It installs nothing. The optional tools in [docs/dependencies.md](docs/dependencies.md) are used only when they are installed.
+`win/powershell/Documents/PowerShell/profile.ps1` is the PowerShell 7 profile for all hosts. It installs nothing itself; its tail runs the update hook and then the [payload hook](#payload-repos), which installs the payload repos through their own installers. The optional tools in [docs/dependencies.md](docs/dependencies.md) are used only when they are installed.
 
 - **Interactive sessions only.** PSReadLine options, key bindings, predictors, encoding, oh-my-posh and zoxide load only in a session that will read input: stdin and stdout are a console, PSReadLine is loaded (so not `-File`/`-Command` scripts, `-NonInteractive` or commands piped to `pwsh`), and the shell is not a Cursor or Gemini agent session (the same test as `_is_agent_session` in zsh). Scripts and `pwsh -Command ...` therefore load the profile in about 0.02 s instead of stalling for about 30 s on `Microsoft.WinGet.CommandNotFound`, and never touch the console code page.
 - **Keys.** Tab cycles completions (`MenuComplete`). RightArrow at the end of the line, or selecting an entry in the list view, accepts a prediction, and F2 switches between inline and list view. Up/Down search history by prefix. With fzf and PSFzf installed, Ctrl+R searches history, Ctrl+T inserts paths and Alt+C changes directory.
@@ -202,6 +207,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 - **`ll` / `la`** use eza and expand wildcards the way a POSIX shell would (`ll *.pdb`), including hidden items; option values such as `-I '*.pyc'` (also after a value-optional flag like `-F`) and existing literal names such as `[draft].md` pass through unchanged; `~\` and drive-qualified patterns expand to full paths.
 - **conda loads lazily.** A `conda` stub removes itself and runs `conda.exe shell.powershell hook` on first use, which saves about 0.8 s per start, and comes back if that hook fails or is interrupted; Tab completes subcommands (also mid-line) and environment names. When oh-my-posh owns the prompt, `CONDA_CHANGEPS1=false` leaves the env indicator to the theme; other sessions keep conda's `(env)` prefix, except child shells of an oh-my-posh session, which inherit the setting. Do not run `conda init powershell`, because it writes an eager, absolute-path block back into the profile.
 - **Prompt.** oh-my-posh loads the tracked theme `~/.config/oh-my-posh/prompt.omp.json` (from `win/oh-my-posh`), falling back to the builtin `catppuccin` until stow links it. The theme emits OSC 133 prompt marks, reports the working directory (OSC 9;9 in Windows Terminal, OSC 7 in WezTerm), and collapses earlier prompts with a transient prompt. The theme never asks to upgrade, but the MSIX package can update itself through App Installer; after an upgrade, move the theme's `$schema` pin to the new release. Preview edits with `oh-my-posh debug --config <file>` (inside an initialized pwsh, `print primary` renders the session's cached theme) and open a new shell to apply them. After zoxide wraps the prompt, a final wrapper keeps `$LASTEXITCODE` intact across directory changes.
+- **`sync-payloads` / `sync-skills`** install or update the payload repos now, in the foreground (`sync-payloads [kit] [pymol] [skills]`, all by default); run them from an ordinary, unelevated PowerShell.
 - **Windows PowerShell 5.1** gets only the lazy conda stub and the same conda completer. Keep that file ASCII and 5.1 syntax; it runs only if the 5.1 execution policy allows scripts.
 - **Leave `Documents\PowerShell\Microsoft.PowerShell_profile.ps1` empty.** It runs after the tracked profile, and installers that follow the `notepad $PROFILE` advice append to it, outside the guard and the tests.
 
@@ -230,7 +236,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
-| **Submodules** | [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) - auto-updated daily by GitHub Actions; [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling) - patch releases bumped daily by GitHub Actions, a new minor release only through a reviewed change |
+| **Payload repos** | [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling, newest patch of channel `0.6`), [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`awesome-skills`](https://github.com/FridrichMethod/awesome-skills), installed by their own installers through [`config/payloads.tsv`](config/payloads.tsv); no submodules |
 | **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
@@ -270,11 +276,9 @@ dotfiles/
 |   +-- bash/                     .bashrc, .bash_aliases, .bash_profile
 |   +-- claude/                   ~/.claude/CLAUDE.md + portable settings/permissions
 |   +-- codex/                    ~/.codex/AGENTS.md + portable config/exec rules
-|   +-- coding-agent-kit/         coding-agent-kit/ submodule - codex-as, claude-as, Claude helpers
 |   +-- conda/                    .condarc
 |   +-- git/                      .gitconfig (with [include] ~/.gitconfig_local)
 |   +-- kitty/                    Kitty terminal
-|   +-- pymol/PyMOLScripts/       submodule - daily auto-update via Actions
 |   +-- sh/                       POSIX .profile + .aliases (sourced by bash/zsh)
 |   +-- ssh/                      minimal ~/.ssh/config + Include config.d/*.conf
 |   +-- tcsh/                     .tcshrc
@@ -291,11 +295,12 @@ dotfiles/
 +-- marlowe/                      Marlowe HPC
 +-- win/                          Windows (PowerShell profiles, oh-my-posh theme, Terminal, WSL)
 |
-+-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in) + a daily sync per submodule (coding-agent-kit only within its pinned minor release)
++-- .github/workflows/            ci.yml + bootstrap-e2e.yml (opt-in)
 +-- .gitattributes                LF everywhere (Windows clones set autocrlf)
 +-- .pre-commit-config.yaml       shellcheck | shfmt | stylua | hygiene
 +-- .stowrc                       Stow defaults (--target=~, ignores)
 +-- config/bootstrap/             day-zero manifests (tools, Brewfiles, apt, clones, pinned installers)
++-- config/payloads.tsv           the payload repos' URLs, install and update commands, kit channel
 +-- docs/                         contracts and playbooks (bootstrap, testing, sync, updates)
 +-- lib/                          sourced helpers (terminal output, config sync, bootstrap steps)
 +-- doctor.sh                     read-only day-zero check (POSIX)
@@ -308,7 +313,9 @@ dotfiles/
 |   +-- dotfiles-update.sh        session-once auto-pull on shell login
 |   +-- dotfiles-update.ps1       the same hook, for PowerShell on Windows
 |   +-- dotfiles-auto-stow.ps1    elevated restow worker (Windows task)
-|   +-- awesome-skills-update.sh  weekly Claude/Codex skill sync
+|   +-- payload-update.sh         session-once install and refresh of the payload repos
+|   +-- payload-update.ps1        the same hook, for PowerShell on Windows
+|   +-- awesome-skills-update.sh  transition shim that runs payload-update.sh
 +-- AGENTS.md                     repository guide for every agent
 +-- CLAUDE.md                     @AGENTS.md import stub for Claude Code
 ```
@@ -323,7 +330,7 @@ dotfiles/
 | **Terminal** | Kitty, WezTerm, Windows Terminal |
 | **Editor** | Vim |
 | **Version Control** | Git, SSH |
-| **Science** | Conda (`.condarc`), PyMOL scripts (submodule) |
+| **Science** | Conda (`.condarc`), PyMOL configs (PyMOLScripts, a payload repo) |
 | **HPC** | Cluster shell profiles and version-free Sherlock guidance; toolkit installed by consumer projects |
 | **AI Assistants** | Claude Code (`CLAUDE.md`, `settings.json`), OpenAI Codex (`AGENTS.md`, `config.toml`, `portable.rules`) |
 | **Utilities** | Aria2 |
@@ -339,7 +346,7 @@ dotfiles/
 | [`sherlock/`](sherlock/) | Stanford HPC | `bash`, `sh`, `terminfo`, `zsh` | 5 |
 | [`marlowe/`](marlowe/) | Marlowe HPC | `bash`, `git`, `sh`, `zsh` | 5 |
 | [`win/`](win/) | Windows | `git`, `oh-my-posh`, `powershell`, `ssh`, `terminal`, `wsl` | 9 |
-| [`common/`](common/) | _shared baseline_ | 17 packages | 66 |
+| [`common/`](common/) | _shared baseline_ | 15 packages | 48 |
 
 Other Linux distributions have no overlay: stow `common/` alone with `./stow-all.sh` (no host) and install the tools by hand; `./doctor.sh --platform other` checks them (see [docs/bootstrap.md](docs/bootstrap.md#x-other-linux-other-linux-distributions)).
 
@@ -360,7 +367,7 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 5. After read-only preflight, retire exact dangling links from removed Sherlock packages before Stow dry runs. After successful Stow, remove only an override with the exact retired generator marker; preserve foreign files with an actionable warning. See [migration](docs/sherlock-kit.md).
-6. While a tracked link in `common/coding-agent-kit` dangles (its `coding-agent-kit` submodule is not checked out), `stow-all.sh` and `stow-all.ps1` warn once `coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)`, still run every Claude and Codex sync and stow, and record no applied revision, so the login updater retries. With `-Strict`, `stow-all.ps1` stops before any change.
+6. Before the Stow dry runs, remove the links Stow made from the two retired packages `common/coding-agent-kit` and `common/pymol`, each only while its text is exactly what Stow wrote, dangling or not; their payload repos now install themselves ([migration](docs/payloads.md#migration)). Stow never installs a payload repo.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1, and Stow 2.4 drops a lone backslash, so a literal dot is written `[.]`.
 
@@ -377,12 +384,12 @@ preserves existing search paths without duplicating the entry.
 
 ## Auto-update Hooks
 
-Two small hooks run on each interactive shell login, and the pull hook has a PowerShell twin for Windows. All are session-throttled, so subshells and tmux panes never re-run them.
+Two small hooks run on each interactive shell login, in this order, and each has a PowerShell twin for Windows. Both are session-throttled, so subshells and tmux panes never re-run them.
 
 <details open>
 <summary><strong><code>scripts/dotfiles-update.sh</code></strong> - pulls this repo when behind</summary>
 
-Fetches the remote, fast-forwards if behind, updates submodules, and automatically re-stows the selected host. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells). Automatic updates skip working trees with local file changes, including submodule changes; they never stash, reset, or discard work.
+Fetches the remote, fast-forwards if behind, and automatically re-stows the selected host. Sourced from `common/zsh/.zshrc` (zsh) and `common/sh/.profile` (bash/POSIX login shells). Automatic updates skip working trees with local file changes; they never stash, reset, or discard work.
 
 First run the installer once on each Unix checkout to remember its host (Linux, macOS, WSL, and cluster overlays use the same flow):
 
@@ -412,15 +419,15 @@ keeps color there, so login-hook messages are not plain just because the prompt
 buffered them. Automatic stow still writes the installer's own output to a log
 file, so those lines stay plain and only surface when stow fails.
 `TERM=dumb` and nonempty `NO_COLOR` disable color even with `DOTFILES_COLOR=always`.
-`codex-as` and `claude-as` do not read `DOTFILES_COLOR`: they come from the
-coding-agent-kit submodule and take the same values from
+`codex-as` and `claude-as` do not read `DOTFILES_COLOR`: they come from
+coding-agent-kit and take the same values from
 `CODING_AGENT_KIT_COLOR`, with the same `NO_COLOR` and `TERM=dumb` rules.
 Shared helpers are quiet during installation, but validation and write errors
 remain visible. This does not change your prompt, terminal theme, fonts or PATH.
 PowerShell's native warning/error/`WhatIf` rendering remains PowerShell-controlled;
 these color switches govern the shared dotfiles status logger.
 
-Set these variables before the update hook runs. A failed stow does not advance the applied commit: later fresh sessions retry even if there are no new remote commits or fetch is offline. A lock serializes automatic update/stow operations across shells; callers' shell traps are preserved. State remains in Git metadata and is not committed. Interrupted submodule updates are retried only when a pending marker matches HEAD; user-selected submodule revisions are otherwise preserved.
+Set these variables before the update hook runs. A failed stow does not advance the applied commit: later fresh sessions retry even if there are no new remote commits or fetch is offline. A lock serializes automatic update/stow operations across shells; callers' shell traps are preserved. State remains in Git metadata and is not committed.
 
 Session marker: `_DOTFILES_CHECKED` is exported so nested shells skip; a fresh login with a clean environment checks again. Successful stow updates files on disk; start a new shell/application to load the settings. Windows Terminal needs a restart.
 
@@ -432,7 +439,7 @@ cd "$HOME\dotfiles"
 .\scripts\dotfiles-auto-stow.ps1 -Register
 ```
 
-The on-demand task runs as that user with `Interactive` logon and `Highest` privileges, using `pwsh -NoProfile -NonInteractive -WindowStyle Hidden`. It starts the registering pwsh by path, so register from the MSI PowerShell that [HW-clone](docs/bootstrap.md#hw-clone-clone-with-symlinks-enabled) installs: `-Register` refuses a pwsh whose folder is named for its version, such as the MSIX package winget installs by default, and the login hook refuses to start a task whose pwsh is gone. Registration explicitly authorizes the checkout's updated installer scripts to run with administrator privileges. It stores no password, uses the user's home, allows battery operation, and ignores overlapping task starts. Task names include a checkout/user hash. No UAC prompt is launched from the login hook; ordinary shells enqueue work, while elevated shells can apply directly. The interactive task requires that user to be logged on to Windows.
+The on-demand task runs as that user with `Interactive` logon and `Highest` privileges, using `pwsh -NoProfile -NonInteractive -WindowStyle Hidden`. It starts the registering pwsh by path, so register from the MSI PowerShell that [HW-clone](docs/bootstrap.md#hw-clone-clone-the-repository) installs: `-Register` refuses a pwsh whose folder is named for its version, such as the MSIX package winget installs by default, and the login hook refuses to start a task whose pwsh is gone. Registration explicitly authorizes the checkout's updated installer scripts to run with administrator privileges. It stores no password, uses the user's home, allows battery operation, and ignores overlapping task starts. Task names include a checkout/user hash. No UAC prompt is launched from the login hook; ordinary shells enqueue work, while elevated shells can apply directly. The interactive task requires that user to be logged on to Windows.
 
 The worker verifies the requested revision, home, host and clean working tree again under the update lock before running `stow-all.ps1 -Strict`. Any installer warning or failed portable sync prevents marking the revision as applied. A queued task is not reported as a completed stow. Inspect its result and last-run log with:
 
@@ -452,58 +459,30 @@ Unregister-ScheduledTask -TaskName (Get-DotfilesTaskName $PWD.Path)
 </details>
 
 <details>
-<summary><strong><code>scripts/awesome-skills-update.sh</code></strong> - weekly Claude/Codex skill sync</summary>
+<summary><strong><code>scripts/payload-update.sh</code></strong> - installs and refreshes the payload repos</summary>
 
-Keeps `~/.claude/skills/` and `~/.codex/skills/` in sync with [`FridrichMethod/awesome-skills`](https://github.com/FridrichMethod/awesome-skills) - a curated collection of ~1,668 Claude Code / Codex skills for AI4Protein, bioinformatics, AI development, and academic writing.
+Keeps the three [payload repos](#payload-repos) installed and current by running each repository's own documented install or update command, which [`config/payloads.tsv`](config/payloads.tsv) names. Sourced from the tail of `common/zsh/.zshrc` and `common/sh/.profile`, right after the pull hook, so the same login that pulls a change also installs what it needs.
 
-**Behavior**
-
-| Aspect | Default |
+| Aspect | Behavior |
 |---|---|
-| First-time install | Foreground (you see the curl progress) |
-| Refresh interval | Every **7 days** |
-| Subsequent refreshes | **Background** - never blocks shell startup |
-| Lock directory | `${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/in-progress.lock` |
-| Log | `$XDG_CACHE_HOME/awesome-skills/last.log` |
-| Failure handling | Stamp not advanced -> retries next shell session |
-| Manual trigger | `sync-skills` alias |
-
-**Requirements** - `bash`, `curl`, `tar`, `rsync`. The hook silently no-ops if `curl` is missing; the installer errors clearly if `tar`/`rsync` are missing. All four are pre-installed on macOS and most Linux desktop distros. Minimal Linux boxes usually just need `rsync`:
-
-| Platform | Install command |
-|---|---|
-| Debian / Ubuntu / WSL Ubuntu | `sudo apt-get install -y curl tar rsync` |
-| Fedora / RHEL | `sudo dnf install -y curl tar rsync` |
-| Arch | `sudo pacman -S --needed curl tar rsync` |
-| macOS (Homebrew) | `brew install rsync` (curl/tar/bash are built-in) |
-| Stanford Sherlock | verify on host: `module load system rsync` may not exist (`ml spider rsync`); the `login` env from `./setup-host.sh` includes rsync |
-| Conda envs | `conda install -c conda-forge rsync curl tar` |
-
-**Env knobs**
+| First install | Foreground, so you see it, for each item whose probe fails |
+| Refresh interval | `kit` and `pymol` daily, `skills` weekly (the `days` rows) |
+| Refreshes | One detached background run for every due item; never blocks shell startup |
+| Concurrency | `worker.pid` keeps a second background run from starting; each installer locks itself (exit 75: busy, retried next session) |
+| State and log | `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (`ITEM.stamp`, `worker.pid`, `payload.log`); `%LOCALAPPDATA%\dotfiles\payload\` on Windows |
+| Failure handling | No stamp, so the next session retries; the error line names the `sync-payloads ITEM` that retries now |
+| Manual trigger | `sync-payloads [kit] [pymol] [skills]` (all by default) and `sync-skills`, in the foreground, whatever the intervals |
 
 | Variable | Default | Effect |
 |---|---|---|
-| `AWESOME_SKILLS_AUTO_UPDATE` | `1` | set to `0` to disable entirely |
-| `AWESOME_SKILLS_REFRESH_DAYS` | `7` | change the throttle window |
-| `AWESOME_SKILLS_FORCE` | `0` | set to `1` to bypass interactive/session/time throttles once; active locks and `AUTO_UPDATE=0` still apply |
-| `AWESOME_SKILLS_BG` | `1` | set to `0` to run synchronously |
-| `AWESOME_SKILLS_INSTALLER_URL` | upstream `install.sh` | point at a fork or branch |
+| `DOTFILES_PAYLOAD_AUTO_UPDATE` | `1` | `0` disables the automatic runs; `sync-payloads` still works |
+| `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` | the items it manages; set but empty manages none |
 
-The lock belongs to the independent worker, so closing the shell that launched
-it does not allow a second installer to run concurrently. The directory remains
-after completion: `pid` is `0` when idle, and a dead worker can be replaced under
-a short recovery lock. An active legacy `in-progress.pid` is also respected.
-An interrupted PID publication or abandoned `recover` directory is left in
-place and reported, rather than risking simultaneous writes. If this occurs,
-first check that no sync is running, then remove the exact residual lock named
-in the diagnostic and run `sync-skills` again. Background diagnostics go to
-`last.log`.
+**Requirements** - POSIX `sh` and curl or wget (PowerShell 7 on Windows), then what each repository's installer needs, which its README lists (Git for the kit and the skills; Python 3.11+ for the launchers, and with PyYAML for the skill installer). A download goes to a temporary file first and is never piped into a shell.
 
-Force a sync, including after this shell's automatic startup check:
+**On Windows** - `scripts/payload-update.ps1` runs at the end of the PowerShell 7 profile, right after `scripts/dotfiles-update.ps1`, in interactive consoles only, and starts its refreshes in a hidden, detached `pwsh -NoProfile`. It never runs automatically from an elevated session, whose installs would leave Administrators-owned git clones; open an ordinary PowerShell after an elevated stow.
 
-```bash
-sync-skills
-```
+The old `AWESOME_SKILLS_*` variables are read by nothing any more; a host that kept the skill sync off with `AWESOME_SKILLS_AUTO_UPDATE=0` sets `DOTFILES_PAYLOAD_AUTO_UPDATE=0` (or `DOTFILES_PAYLOAD_ITEMS='kit pymol'`) instead. [docs/payloads.md](docs/payloads.md) is the full contract, including the migration from the submodules.
 
 </details>
 
@@ -527,7 +506,7 @@ pre-commit run --all-files
 | **hygiene** | trailing whitespace, EOF, merge conflicts, YAML/JSON/TOML, large files |
 | **english-documentation** | This repository's documentation, including agent guides and skills; a native `pygrep` hook rejects non-ASCII characters and control characters except tabs and line breaks |
 | **gitleaks** | secrets in the staged changes, so it guards commits only in a clone where `pre-commit install` ran; CI also scans every commit on every ref with the manual-stage `gitleaks-history` hook (`pre-commit run --hook-stage manual gitleaks-history` locally). [`.gitleaks.toml`](.gitleaks.toml) adds Claude Code OAuth tokens and any file under a `.secrets/` directory to the default rules |
-| **behavior** | test entry points and hook file patterns, structured config merges, coding-agent-kit delivery, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
+| **behavior** | test entry points and hook file patterns, structured config merges, the payload hook, safe writes, installers, updates, day-zero bootstrap manifests, doctor and installer, PowerShell profile and prompt-theme contract, Claude hooks and dependency checks |
 
 CI uses `ubuntu-24.04`, `macos-15` (system Bash/BSD utilities), and native
 `windows-2025`. `ci.yml` runs on pull requests, on pushes to `main`, and on
@@ -536,7 +515,12 @@ three, then fast-forward `main` to the green commit. Unix runs
 `./tests/run.sh --ci`; Windows runs
 `pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI`. Each platform's
 assigned suites are mandatory, including native Windows installer fixtures;
-missing dependencies fail CI instead of silently skipping tests. A second,
+missing dependencies fail CI instead of silently skipping tests. Each job
+first installs the real coding-agent-kit of the declared channel with the
+payload hook's own command into a home that no test writes (on Windows the
+runner's profile) and points `DOTFILES_TEST_KIT_HOME` at it, for the cases that run the kit; without that
+variable, as in a local run, those cases skip (until kit v0.6.0 is released, a
+failed install there only warns). A second,
 opt-in workflow, `bootstrap-e2e.yml`, runs the day-zero bootstrap for real on
 every host (fresh containers for the Linux hosts, the macOS and Windows
 runners natively) on demand, weekly and on `e2e-ci/**` branches; it is never
@@ -549,8 +533,7 @@ Write all documentation in English with ASCII punctuation and diagrams. Chinese,
 emoji and decorative Unicode characters are rejected. The documentation hook
 uses native `pygrep` configured entirely in YAML. It checks staged documents on
 commit and tracked documents with `--all-files`, within this repository only.
-Submodule repositories manage their own checks; coding-agent-kit
-have independent documentation hooks.
+The payload repos have independent documentation hooks.
 
 ## AI Assistant Configuration
 
@@ -569,19 +552,24 @@ have independent documentation hooks.
 |---|---|---|
 | [`common/claude/.claude/CLAUDE.md`](common/claude/.claude/CLAUDE.md) | `~/.claude/CLAUDE.md` | Personal instructions across Claude Code projects |
 | [`common/claude/.claude/settings.json`](common/claude/.claude/settings.json) | merged into `~/.claude/settings.json` | Default `auto` mode with shell classification, `xhigh`, status line, notifications, fullscreen TUI, disabled attribution, hooks, voice, portable plugins |
-| [`common/coding-agent-kit/.claude/dotfiles/`](common/coding-agent-kit/.claude/dotfiles/) | `~/.claude/dotfiles/` | Local Node.js helpers for the status line, notifications, and Git hook checks |
-| [`common/coding-agent-kit/.local/bin/claude-as`](common/coding-agent-kit/.local/bin/claude-as) | `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
-| [`common/coding-agent-kit/.local/bin/codex-as`](common/coding-agent-kit/.local/bin/codex-as) | `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases; Python stdlib modules in the kit's `lib/codex-as/` |
 | [`common/codex/.codex/AGENTS.md`](common/codex/.codex/AGENTS.md) | `~/.codex/AGENTS.md` | Personal instructions across Codex projects |
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
 
-The coding-agent-kit package installs executable `codex-as` and `claude-as` on PATH; no shell sourcing is needed.
-Both come from the [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) submodule (see [Codex and Claude tooling](#codex-and-claude-tooling-submodule)); its README describes account views, login, completion, concurrency, takeover and resume.
+Not tracked here, but installed on every host by the [payload hook](#payload-repos) from [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit):
+
+| Installed path | What it is |
+|---|---|
+| `~/.claude/coding-agent-kit/{statusline,notify,check-git-hooks}.cjs` | Local Node.js helpers for the status line, notifications, and Git hook checks, which `settings.json` runs (copies on Windows) |
+| `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` (Unix only) |
+| `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases (Unix only) |
+
+`codex-as` and `claude-as` are executables on PATH; no shell sourcing is needed.
+The kit's README describes account views, login, completion, concurrency, takeover and resume.
 Existing accounts launch immediately; a missing account asks before a native login. Both need Python 3.11+, and `codex-as` needs Codex CLI 0.161.0 or newer.
 `codex-as` never reads or changes the root `~/.codex/auth.json`, so root login/logout and desktop clients keep their own token chain.
 The `~/.codex` and `~/.secrets` roots and the `codex` and `claude` executables are the kit's defaults; its optional configuration file can change them, and dotfiles ships none.
-In this checkout, `common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md` covers account layout, new accounts, completion and safety boundaries, and `common/coding-agent-kit/coding-agent-kit/docs/codex-as.md` Codex source verification (on GitHub: [account launchers](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md), [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md)). Installing does not start login or switch real accounts.
+The kit's [account launchers](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/account-launchers.md) document covers account layout, new accounts, completion and safety boundaries, and its [Codex source verification](https://github.com/FridrichMethod/coding-agent-kit/blob/main/docs/codex-as.md) the rest. Installing does not start login or switch real accounts.
 
 The Git-stored versions of these files are safe to share across macOS, Linux, and WSL because they contain no credentials or machine-specific absolute paths. Some settings remain **capability-dependent**:
 
@@ -602,11 +590,11 @@ Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permi
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
-`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/dotfiles/*.cjs`, which link to the coding-agent-kit submodule's `helpers/`. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's README (`common/coding-agent-kit/coding-agent-kit/README.md`, [on GitHub](https://github.com/FridrichMethod/coding-agent-kit)) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
+`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/coding-agent-kit/*.cjs`, which coding-agent-kit's install puts there. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's [README](https://github.com/FridrichMethod/coding-agent-kit) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
 
 - **Plugin hooks:** the enabled Everything Claude Code plugin owns its SessionStart, Stop, and SessionEnd hooks. Empty portable arrays remove the old copied registrations during sync; disabling the plugin disables those lifecycle features. This prevents stale copies after plugin updates, rather than assuming a speedup from copies Claude may already deduplicate.
 
-Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to link the helpers and sync these defaults, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
+Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to sync these defaults, and `sync-payloads kit` if the helpers are not installed yet, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
 
 Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. With native ancestor loading enabled, no extra `AGENTS.md` should exist in any ancestor directory on a host, including `~/.claude/AGENTS.md`: Claude Code treats that file as the home directory's `.claude/AGENTS.md` and can inject it into descendant projects.
 
@@ -632,73 +620,55 @@ Codex applies the most restrictive matching rule across active files. The portab
 
 The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, third-party copies under `~/.claude/rules/`, Codex-generated `~/.codex/rules/default.rules`, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
 
-Third-party skills are also not stored in this repository. [`scripts/awesome-skills-update.sh`](scripts/awesome-skills-update.sh) installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
+Third-party skills are also not stored in this repository. awesome-skills' own installer, which the [payload hook](#payload-repos) runs, installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
 
 After cloning on a new machine:
 
 ```bash
 ./setup-host.sh --host <host>   # day-zero tools and .venv-sync; rerun after each HUMAN block (docs/bootstrap.md)
 # then run the line its H7-stow block prints: the PATH= prefix for stow, then ~/dotfiles/stow-all.sh <host>
-# H7-sync-skills: the skill sync starts in the first new shell after the stow unless AWESOME_SKILLS_AUTO_UPDATE=0
+# H7-payloads: the first new interactive shell after the stow installs the payload repos unless DOTFILES_PAYLOAD_AUTO_UPDATE=0
 # then authenticate GitHub, Claude Code and Codex on this host (H7-auth)
 ```
 
-## Codex and Claude tooling (submodule)
+## Payload repos
 
-[coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) is the submodule
-`common/coding-agent-kit/coding-agent-kit`, a standalone project laid out as
-`bin/`, `lib/`, `completions/` and `helpers/`. It holds `codex-as`,
-`claude-as`, their Bash and zsh completions and the Claude status line,
-notification and Git hook check helpers; the settings and the AI config sync
-engine `lib/config_sync.py` stay in this repository. The checkout sits at the
-root of its own Stow package, `common/coding-agent-kit`, laid out like
-other tool packages: the package's `.stow-local-ignore` (`^/coding-agent-kit$`
-and `^/coding-agent-kit/`) keeps it out of `$HOME`, and 14 relative links link
-its files one by one, for example
-`common/coding-agent-kit/.local/bin/codex-as -> ../../coding-agent-kit/bin/codex-as`.
-The `$HOME` paths are the ones these files always had; their link texts
-changed once, when the kit moved out of the `codex` package. The submodule
-kept its first name, `common/codex/coding-agent-kit`, so every host reuses its
-module directory. On a host that had it checked out, the pull across that move
-leaves the old checkout at `common/codex/coding-agent-kit`: `.gitignore` keeps
-it out of `git status`, the `.stowrc` line `--ignore=^coding-agent-kit(/|$)`
-keeps it out of `$HOME`, and `./doctor.sh` warns, naming the `rm -rf` that
-removes it, until it is gone. The launchers follow their links to the checkout, and
-`--help` names its
-`common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md`. Stow does
-the installing here; the kit's own `install.sh` is for hosts without dotfiles.
+Three first-party repositories are installed on every host, by their own
+installers, instead of living in this one:
 
-From v0.3.0 `codex-as --account-info NAME` and `claude-as --account-info NAME`
-print an account's last-seen email or label and usage, offline; the zsh
-completions describe each account with it and the fzf-tab preview shows it
-(see [docs/coding-agent-kit.md](docs/coding-agent-kit.md#account-details-in-completion)).
+| Item | Repository | Installs (Unix) | Native Windows |
+|---|---|---|---|
+| `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | the newest patch release of channel `0.6`: `codex-as`, `claude-as`, their Bash and zsh completions, the three Claude helpers | the three helpers only |
+| `pymol` | [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) | `~/.pymolrc`, `~/.pymolrc.py` | the same |
+| `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | the skill library of `~/.claude/skills/` and `~/.codex/skills/` | the same |
 
-The kit reads an optional
+[`config/payloads.tsv`](config/payloads.tsv) is the one place that names
+their download URLs, the paths that show an install, each repository's own
+documented install and update command, and the kit channel. There are no
+submodules, no bump workflows and no pins on this side: changing the channel,
+or a command when a repository changes its interface, is a reviewed change of
+that one file. The [payload hook](#auto-update-hooks) runs those commands;
+`./stow-all.sh`, `stow-all.ps1` and `./setup-host.sh` never do.
+
+`.zshrc` puts the kit's zsh completion directory,
+`~/.local/share/zsh/site-functions`, on `fpath` before oh-my-zsh runs
+`compinit`. The kit reads an optional
 `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml` for the `codex`
-and `claude` executables and the `~/.codex` and `~/.secrets` roots. Dotfiles
-ships none, so the defaults apply; `codex-as --show-config` prints the
-effective values, and `common/coding-agent-kit/coding-agent-kit/docs/configuration.md`
-gives the rules.
+and `claude` executables and the `~/.codex` and `~/.secrets` roots; dotfiles
+ships none, so the defaults apply (`codex-as --show-config` prints them).
+`codex-as --account-info NAME` and `claude-as --account-info NAME` print an
+account's last-seen email or label and usage, offline; the zsh completions
+and the fzf-tab preview show them.
 
-While the submodule is not checked out, the installers warn once that its
-links dangle, still sync and stow, and record no applied revision.
-`update-coding-agent-kit-submodule.yml` runs daily at 05:17 UTC and on
-dispatch from `main`. It moves the gitlink only to the newest `vX.Y.Z` tag
-with the pinned `X.Y`, and only when that release is on the kit's `main` and
-descends from the pin, every GitHub Actions run of the kit's three CI jobs on
-it passed, `tests/coding-agent-kit-delivery.sh --real` and `--ci` pass at the
-staged gitlink with GNU Stow and zsh installed, and `tests/ai-integration.sh`
-runs the commands of the real `settings.json` on the release's helpers. Its
-checkout keeps no credential, and no step that runs the release's code gets
-the token. It then commits
-`chore(deps): update coding-agent-kit submodule to vX.Y.Z` and pushes `main`;
-that push starts no `ci.yml` run, and when another push reached `main` first
-it fails and the next run retries. A new minor release (breaking while the kit
-is 0.x), an untagged pin or a failed gate goes through a reviewed pull
-request instead, and the job summary names a newer release line when one
-exists. The login updater then updates submodules and restows. `./doctor.sh`
-reports the `submodule` row. Develop the tooling in a separate clone, never
-inside this checkout. See [docs/coding-agent-kit.md](docs/coding-agent-kit.md).
+Hosts that had the two submodules converge in one login: the pull leaves
+their checkouts, which `.gitignore` and `.stowrc` keep harmless and the
+doctor's `submodule` row offers to remove (it never deletes them), the restow
+removes the links Stow made from the retired `common/coding-agent-kit` and
+`common/pymol` packages, and the payload hook installs the replacements.
+`./doctor.sh` and `.\doctor.ps1` report the `payloads` row. See
+[docs/payloads.md](docs/payloads.md) for the contract, the migration, the
+leftover checkouts and how to change the channel. Develop the payload repos in
+clones of their own, never inside this checkout or an install.
 
 ## Sherlock toolkit migration
 

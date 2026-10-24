@@ -18,7 +18,7 @@ from this checkout, stop and say so.
    `lab-ubuntu`, `sherlock`, `marlowe`, `win`). Never guess an overlay from the
    OS. A machine without one is other Linux: `./doctor.sh --platform other` plus
    the manual steps of X-other-linux, because setup-host takes only `--host`.
-2. Run every command with `DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0`.
+2. Run every command with `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`.
 3. Diagnose: `./doctor.sh --host H --tsv`.
 4. Plan: `./setup-host.sh --host H --check` writes nothing and makes no network
    calls; exit 0 means nothing is left to apply. Show the plan and wait for the
@@ -38,7 +38,7 @@ from this checkout, stop and say so.
 7. Exit 3 means work remains: a blocking HUMAN block is pending, or steps are
    still to apply. Re-run step 5 after each block until H7-stow is the only one
    left.
-8. Ask the person about H7-sync-skills (on by default once stowed). Then run
+8. Ask the person about H7-payloads (on by default once stowed). Then run
    the H7-stow block's lines exactly as printed: any `mv -n` lines first (they
    move aside home files Stow would refuse, such as a fresh `~/.bashrc`; never
    `stow --adopt`), then the stow line (the `PATH=` prefix for this host and

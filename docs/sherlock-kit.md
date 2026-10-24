@@ -34,6 +34,6 @@ removed. `.gitignore` and `.stowrc` keep it harmless even without its package
 ignore file. The doctor warns with an exact manual removal command. Inspect
 local branches and files before removing that checkout; retain and inspect
 `.git/modules/common/sherlock-kit/sherlock-kit` until local work is recovered.
-Neither is removed automatically. The pre-move coding-agent-kit checkout is
-also reported, and its module store must stay because the current submodule
-still uses it. See [coding-agent-kit.md](coding-agent-kit.md).
+Neither is removed automatically. The retired coding-agent-kit and
+PyMOLScripts checkouts are reported the same way; see
+[payloads.md](payloads.md#leftover-checkouts).

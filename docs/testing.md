@@ -11,9 +11,23 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; only the coding-agent-kit submodule, whose pinned commit must be on its `main`; pre-commit installs its pinned hooks |
-| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; only the coding-agent-kit submodule; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
-| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; a local `core.symlinks` re-checkout of `common/coding-agent-kit`, then only the coding-agent-kit submodule, required to be LF with resolving links into it; Git and PowerShell come from the runner and are checked explicitly |
+| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
+| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
+| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; the real coding-agent-kit's helpers, installed into the runner's profile; Git and PowerShell come from the runner and are checked explicitly |
+
+Each job first installs the real coding-agent-kit of the channel that
+`config/payloads.tsv` declares, with the payload hook's own command:
+`HOME=$RUNNER_TEMP/kit-home sh scripts/payload-update.sh --now kit` on Unix,
+`pwsh -NoProfile -File scripts/payload-update.ps1 -Now kit` on Windows (whose
+`$HOME` is the account's profile whatever `USERPROFILE` says, and which no
+test writes). It then exports that home as `DOTFILES_TEST_KIT_HOME`, which the
+cases that need an installed kit read; without it they skip. The network is
+used in that step only, never in a test. Until coding-agent-kit v0.6.0, the
+first release of channel `0.6`, is published, a failed install only warns and
+those cases skip; the workflow marks that tolerance as temporary. To run them
+locally, install the kit into a scratch home the same way, with
+`XDG_DATA_HOME`, `XDG_STATE_HOME` and `BASH_COMPLETION_USER_DIR` unset so
+nothing reaches your own, and set `DOTFILES_TEST_KIT_HOME` to it.
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
@@ -31,31 +45,32 @@ plain-text documentation and README-style files in this repository. It checks
 staged files on commit and tracked files with `--all-files`. Only printable
 ASCII, tabs, carriage returns and newlines are allowed; other characters fail
 with a file and line. The hook enforces the character set; English wording is
-also a documentation policy and review requirement. Submodule contents are
-outside this hook's scope; coding-agent-kit has its own
-independent hooks.
+also a documentation policy and review requirement. The payload repos have
+their own independent hooks.
 
 Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
 knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
 `DOTFILES_AUTO_STOW`, `DOTFILES_HOST`, `DOTFILES_DIR`, `DOTFILES_COLOR`,
-`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, the `AWESOME_SKILLS_*` controls, both
-session markers, and the coding-agent-kit launchers' `CODING_AGENT_KIT_CONFIG`
-and `CODING_AGENT_KIT_COLOR`. The bootstrap playbook tells people to export
-`DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0` while provisioning, and a
-test or `pre-commit run` started from such a shell must behave as in CI; each
-case sets the knobs it exercises. `tests/test-entrypoints.sh` checks that every
-entry point carries the same list, that it covers every `DOTFILES_*` and
-`AWESOME_SKILLS_*` name in a tracked file outside `tests/`, `docs/`,
+`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, `DOTFILES_PAYLOAD_AUTO_UPDATE`,
+`DOTFILES_PAYLOAD_ITEMS`, both session markers, `XDG_STATE_HOME`,
+`XDG_DATA_HOME`, and an explicit list of the coding-agent-kit variables
+(`CODING_AGENT_KIT_CONFIG`, `CODING_AGENT_KIT_COLOR`,
+`CODING_AGENT_KIT_REPO_URL` and the rest). The bootstrap playbook tells people
+to export `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` while
+provisioning, and a test or `pre-commit run` started from such a shell must
+behave as in CI; each case sets the knobs it exercises.
+`tests/test-entrypoints.sh` checks that every entry point carries the same
+list, that it covers every `DOTFILES_*`, `AWESOME_SKILLS_*` and
+`CODING_AGENT_KIT_*` name in a tracked file outside `tests/`, `docs/`,
 `.github/` and Markdown, whatever reads it (shell, PowerShell or Python;
-`DOTFILES_SYNC_PYTHON` excepted, since `tests/run.sh` provisions it), that,
-with the submodule checked out, it covers every `CODING_AGENT_KIT_*` (or
-`_CODING_AGENT_KIT_*`) name in the kit's code at the recorded gitlink outside
-the kit's own `tests/`, `docs/`, `.github/` and Markdown (through
-`check_kit_knobs` of `tests/coding-agent-kit-delivery.sh`, which the bump
-workflow's gate 3 runs too), and that a suite passes under those exports. The
-suites that run a
-launcher also drop `XDG_CONFIG_HOME`, so no kit configuration file of the
-caller is in reach.
+`DOTFILES_SYNC_PYTHON`, which `tests/run.sh` provisions, and the suites'
+`DOTFILES_TEST_*` inputs excepted), that, when `DOTFILES_TEST_KIT_HOME` names
+a home with an installed kit, it covers every `CODING_AGENT_KIT_*` (or
+`_CODING_AGENT_KIT_*`) name in that release's code outside the kit's own
+`tests/`, `docs/`, `.github/` and Markdown, so a kit release that reads a new
+knob fails CI until the list has it, and that a suite passes under those
+exports. The suites that run a launcher also drop `XDG_CONFIG_HOME`, so no kit
+configuration file of the caller is in reach.
 
 A commit hook in a linked worktree exports an absolute `GIT_DIR` and
 `GIT_INDEX_FILE`, which `git -C` does not override, so fixture Git would
@@ -71,9 +86,9 @@ when pwsh is present, the installer controls under the `GIT_DIR` and
 its index, `HEAD` and `core.bare`. It also reads `.pre-commit-config.yaml`
 the way pre-commit selects files: the engine hooks must run on
 `lib/config_sync.py` and `lib/sync-runtime.sh` (`structured-config-sync` and
-`codex-config-sync` on the real Codex `config.toml` too), the delivery hook
-on `tests/run.sh`, the bump workflow and its reviewed copy, and its own
-`test-entrypoints` hook, which runs on any test entry point, on
+`codex-config-sync` on the real Codex `config.toml` too), the `payload-update`
+hook on the payload hook, its transition shim, `config/payloads.tsv`, the rc
+files that source it and the logger, and its own `test-entrypoints` hook, which runs on any test entry point, on
 `.pre-commit-config.yaml` itself. That hook runs the test without
 `tests/run.sh` in front of it, so a failed check prints the run it captured
 (a clone without `.venv-sync` sees `run ./setup-sync.sh`), and any other
@@ -184,65 +199,37 @@ behavior. Native Windows coverage requires the Windows CI job.
 The launcher, configuration and Claude helper suites live in
 coding-agent-kit, whose CI runs them on its own fixtures.
 `tests/ai-integration.sh` runs `tests/test_ai_integration.py`, the
-dotfiles-content cases, which reach the kit only through its package links:
-`codex-as` linked to its package link as Stow links it, so it finds the kit
-checkout and names its docs, and the real `settings.json`, whose status line
-and hook commands must load exactly the Claude helpers the package delivers
-and, run through `sh` in a temporary home with those helpers linked as Stow
-links them, must run them. It fails without `node`, which those command cases
-need. `tests/run.ps1` runs the same file natively on Windows, where only the
-wiring case runs.
+dotfiles-content cases: the fzf-tab account preview, the alias files and the
+real `settings.json`, whose status line and hook commands must load exactly
+the three helpers that `~/.claude/coding-agent-kit/` holds, each at the event
+it serves. The cases that run the kit reach it only through its installed
+paths, in the home that `DOTFILES_TEST_KIT_HOME` names (launchers in
+`.local/bin`, zsh completions in `.local/share/zsh/site-functions`, helpers in
+`.claude/coding-agent-kit`), and skip without it: `codex-as` through the alias
+files in Bash and zsh, and each command of `settings.json` run through `sh`
+in a temporary home with those helpers, which must exit as Claude Code
+expects. The command cases fail without `node`. `tests/run.ps1` runs the same
+file natively on Windows, where only the wiring cases run, and
+`tests/claude-customizations.cjs` runs the commands without a shell there and
+on Unix, on the same installed helpers, skipping without them.
 
-`tests/coding-agent-kit-delivery.sh` checks
-with git, bash and coreutils only: the `.gitmodules` entry, the package's
-path-anchored `.stow-local-ignore` and the `.stowrc` and `.gitignore` lines
-that keep a pre-move checkout harmless; the 14 links against its map from
-package path to kit path, with their exact relative texts; the coding-agent-kit sentinels of `lib/bootstrap/checks.sh`,
-each a kit path of the map; the three `*-sync` launchers as regular files; the
-Windows package allowlist; and the bump workflow. That workflow check requires
-a daily schedule at a minute of its own plus dispatch, one run at a time on
-`main` under `bash` in a concurrency group keyed on the ref (so a skipped run
-of another branch cannot displace a pending `main` run), the job only for
-`refs/heads/main` (a dispatch runs the workflow file of the branch it names),
-a checkout without persisted credentials, the token named only in gate 2 and
-the push step, the pick of the newest tag with the pinned MAJOR.MINOR,
-`actions/setup-node` before the release is staged (of the job's own git
-commands only the push gets the token; `actions/checkout` used it for its
-fetch without persisting it, and `actions/setup-node` takes it by default,
-both before the release is staged), the lines of the four gates (release on
-the kit's `main` and descending from the pin; every GitHub Actions run of the
-kit's three CI jobs completed with success;
-GNU Stow, zsh and `.venv-sync` provisioned, then `--real` and `--ci` at the
-staged gitlink; `tests/ai-integration.sh`) in that order before the commit,
-every step after the pick guarded by it, no `continue-on-error`, exactly one
-push, to `main`, with no review branch and no rebase or pull; and last the
-whole file byte for byte against its reviewed copy
-`tests/fixtures/update-coding-agent-kit-submodule.yml`, both regular files
-tracked as 100644, so an edit to an env mapping, a step output, a `shell:`
-or an inserted line fails until that copy changes in the same commit; a
-fixture whose reviewed copy is a link to the workflow, which would compare
-the workflow with itself, is refused. With the submodule initialized,
-the test also checks that each link resolves to its kit file, tracked with
-its mode at the gitlink; that the kit's code at the gitlink reads no
-`CODING_AGENT_KIT_*` or `_CODING_AGENT_KIT_*` name missing from the unset list
-of `tests/run.sh`; that the kit tracks no symlink, nested submodule or
-`.gitmodules` and still has its `.gitattributes` line and a fixed list of
-`.gitignore` patterns; and that `codex-as --help` and
-`claude-as --help` name a docs file of the kit at the gitlink. Fixture
-superprojects with a clone of the kit then show those checks passing the
-gitlink commit and refusing it with a nested gitlink, a tracked symlink, a
-`.gitmodules` or an unlisted knob added. It then stows copies into temporary
-homes with the checkout full, emptied (one dangling-link warning, the live AI
-files still written, no applied revision) and restored. `--ci` fails instead
-of skipping without GNU Stow, and `--real` stops after the submodule checks at
-the staged gitlink, as the bump workflow's gate 3 runs it before `--ci`.
-
-The tests of the delivered launchers and helpers need the coding-agent-kit
-submodule initialized: `tests/claude-customizations.cjs`,
-`tests/ai-integration.sh` and `tests/test_ai_integration.py` stop at once with
-an error that names `git submodule update --init --recursive`, and
-`tests/coding-agent-kit-delivery.sh --ci` fails. Initialize it first, as CI
-does: `git submodule update --init -- common/coding-agent-kit/coding-agent-kit`.
+`tests/payload-update.sh` drives `scripts/payload-update.sh` against fake
+installers served from `file://` URLs: the real `config/payloads.tsv` with its
+`https://raw.githubusercontent.com/FridrichMethod/` prefix pointed at a local
+directory (a URL anywhere else fails the suite) and a curl that refuses every
+other scheme. It covers the first interactive shell installing every item in
+the foreground, in order and on the declared channel, with stdin closed; a
+fresh session doing nothing; the session marker, the opt-out and
+non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
+each item's update command and the log; a live worker blocking a second one;
+a failed first install recording nothing and the next session retrying it;
+exit 75; `--now`, the aliases, a failed download, the wget fallback; and the
+rc files and the transition shim sourcing the hook. `tests/unix-installer.sh`
+also runs the [migration](payloads.md#migration) of a host stowed with both
+submodules through the real login updater, Git and Stow: the leftover
+checkouts stay ignored, the restow removes the 16 retired links, the payload
+hook installs the kit and PyMOL in that login, and the next login changes
+nothing.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
@@ -441,7 +428,7 @@ with the person's approvals scripted, keyed on the block's step id and kind.
 | `S5-claude` (`inspect`) | only the digest-gate line, `printf '%s  %s\n' <sha256> <path> \| sha256sum -c --status - && bash <path>` |
 | `H7-stow` (`judgment`) | only its `mv -n` lines and the single `PATH=... stow-all.sh <host>` line; any other command line in that block fails the run |
 | `H2-alloc` (`alloc`) | never run: recorded, and the fake allocation variables are exported for the rest of the run |
-| `S2-modules`, `H7-sync-skills`, `H7-doctor` (`judgment`); `H7-auth` (`auth`); `H1-fcitx5` (`gui`); `H7-chsh` (`chsh`) | skipped and recorded as `skip`: non-blocking, and a person's to do |
+| `S2-modules`, `H7-payloads`, `H7-doctor` (`judgment`); `H7-auth` (`auth`); `H1-fcitx5` (`gui`); `H7-chsh` (`chsh`) | skipped and recorded as `skip`: non-blocking, and a person's to do |
 | `H1-xcode-clt`; any `S2-brew-bundle` block (the conflict judgment or the shared-prefix `sudo`); `S4-nvm`; `X-recovery`; any other id or kind | **fail**, with the block's text in the detail |
 
 A blocking block the harness refuses is a finding, not something to work
@@ -457,7 +444,7 @@ same `<id>:<kind>`:
 | Block | Action |
 | --- | --- |
 | `HW-stow` (`judgment`) | only its single `& '<clone>\stow-all.ps1' win` line, run by a child `pwsh -NoProfile -NonInteractive` from `$HOME` under the runner's elevated token; a block with any other command line, or naming a path other than the clone's `stow-all.ps1`, fails the run. The step passes only when `stow-all.ps1` recorded its applied state and printed no `WARNING:` line |
-| `HW-clone` (`gui`) | **fail**: it blocks the flow (setup-host has not accepted the clone), and only the person can turn on Developer Mode |
+| `HW-clone` (any kind) | **fail**: it blocks the flow, and the harness made and checked the clone itself, so a pending HW-clone means setup-host has not accepted it |
 | `HW-execution-policy`, `HW-auto-stow-task`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, grants a task standing elevation, installs WSL, starts a service nor signs in |
 | any other id or kind | **fail**, with the block's text in the detail |
 
@@ -524,9 +511,9 @@ exits 0 and warns common-only, and `./setup-host.sh` without `--host` exits 2).
 Harness variables use the `E2E_` prefix only (`E2E_HOST`, `E2E_REV`,
 `E2E_SRC`, `E2E_OUT`, `E2E_PHASE`, `E2E_NATIVE`, `E2E_SANDBOX_HOME`,
 `E2E_ALLOW_DIRTY`, `E2E_KEEP`, `E2E_CACHE_DIR` and the keys of
-`tests/e2e/hosts/<host>.env`); never a new `DOTFILES_*` or `AWESOME_SKILLS_*`
-name, which `tests/test-entrypoints.sh` would require every test entry point
-to unset. Every `*.sh` under `tests/` and `tests/e2e/` must run under Bash 3.2
+`tests/e2e/hosts/<host>.env`); never a new `DOTFILES_*`, `AWESOME_SKILLS_*` or
+`CODING_AGENT_KIT_*` name, which `tests/test-entrypoints.sh` would require
+every test entry point to unset. Every `*.sh` under `tests/` and `tests/e2e/` must run under Bash 3.2
 (`/bin/bash` on the macOS runner): no associative arrays, `mapfile`, `${x,,}`,
 `declare -n`, `|&` or `&>>`. What runs natively on that runner (`inside.sh`,
 `tests/e2e/lib/*.sh`, the wrappers) also uses no here-documents or process
@@ -572,15 +559,15 @@ the RemoteCommand (`ssh sherlock-plain`, `ssh marlowe-plain`), then:
 
 ```sh
 uname -a; cat /etc/os-release; ldd --version | head -n 1   # record these with the run
-git clone --recurse-submodules https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
-cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
+cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./doctor.sh --host sherlock --tsv                           # or marlowe; exit 1 is expected now
 marker=$(mktemp) && sleep 1
 ./setup-host.sh --host sherlock --check                     # exit 3
 find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # must print nothing
 ./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
-cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0
+cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the stow
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
 # Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet

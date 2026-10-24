@@ -35,14 +35,21 @@ provide a trustworthy remembered host: rerun `stow-all.sh [host-dir]`, or set
 `DOTFILES_HOST` explicitly, before automatic installation can resume.
 
 `DOTFILES_AUTO_UPDATE=0` disables the entire hook. `DOTFILES_AUTO_STOW=0` allows
-pulls and submodule updates but does not install or acknowledge the new HEAD.
+pulls but does not install or acknowledge the new HEAD.
 An explicitly empty Unix `DOTFILES_HOST` means common-only installation;
 other Unix host overlays are never guessed.
+
+Neither updater runs a submodule command (dotfiles has none) or installs a
+payload repo. The payload hooks (`scripts/payload-update.sh`,
+`scripts/payload-update.ps1`) run after the update hook in the same login,
+never pull or stow, keep their own state outside Git metadata and are switched
+off separately with `DOTFILES_PAYLOAD_AUTO_UPDATE=0`; see
+[payloads.md](payloads.md).
 
 ## Lock scope and remaining boundary
 
 - Unix holds the checkout's metadata-directory lock across fetch, pull,
-  submodule synchronization, installation, and acknowledgement verification.
+  installation, and acknowledgement verification.
 - PowerShell update and apply workers use the same exclusive file lock. Task
   dispatch hands off to the apply worker, which rechecks its request and
   acquires that lock before changing configuration.

@@ -32,14 +32,23 @@ backup/removal and replacement share a single confirmation, so declining backup
 cannot fall through to an unbacked replacement. `-WhatIf` remains a preview.
 
 A separate, read-only PowerShell process enables RedirectionGuard and checks
-source and destination symlinks. This catches links that are readable in an
+the destination symlinks. This catches links that are readable in an
 ordinary local PowerShell but rejected by protected processes. The caller's
 process mitigation settings are not changed. Missing or unsupported enforcement,
 failed probes and malformed probe output stop installation before live sync.
-Elevated runs rebuild links rejected with Win32 error 448 and verify the result;
-repository-side links retain their original relative targets. Missing targets
-and other read errors are reported as incomplete, rather than treated as trust
-failures that rewriting a link would fix.
+Elevated runs rebuild links rejected with Win32 error 448 and verify the result.
+Missing targets and other read errors are reported as incomplete, rather than
+treated as trust failures that rewriting a link would fix.
+
+Packages hold regular files only, so a clone needs neither `core.symlinks` nor
+Developer Mode. A symlink found in a package is skipped with the warning
+`package symlink skipped: PKG/PATH (packages hold files only)`, which leaves
+the installation incomplete and fails `-Strict`. The installer also removes
+the links it made from the two packages that the payload repos replaced
+(`common/coding-agent-kit`, `common/pymol`), each only while its target text is
+exactly the path it wrote, dangling or not, and the four directories only
+those packages filled once they are empty; it installs no payload repo
+([payloads.md](payloads.md#migration)).
 
 `tests/windows-installer.ps1` requires native Windows, Git for Windows, the
 provisioned parser runtime and an elevated PowerShell process. It copies a

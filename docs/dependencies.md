@@ -14,7 +14,7 @@ backend is deliberately small; no general application framework is involved.
 | Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
 | Default parser setup | Python's `venv` and pip support; downloads the pinned wheel unless pre-provisioned offline |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
-| Optional skill downloads | Bash, curl, tar, rsync |
+| Payload repos ([payloads.md](payloads.md)) | The hook: POSIX `sh` and curl or wget on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install and for awesome-skills) |
 | Contributor checks | pre-commit, Node, Python/parser runtime; pinned lint tools; Stow integration; PowerShell required on Windows CI; Docker for the opt-in end-to-end bootstrap suite (`tests/e2e/run.sh`, see [testing.md](testing.md#end-to-end-bootstrap-opt-in)) |
 | Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
@@ -105,8 +105,8 @@ prints) appear at the start of the When absent cell.
 | `bash` | unix | manual (OS) | manual (OS) | manual (OS) | - | doctor.sh, setup-host.sh and stow-all.sh cannot run |
 | `zsh` | unix | manual (OS) | apt `zsh` | login env `zsh` | - | no interactive shell for the stowed .zshrc |
 | `git-lfs` | unix | brew `git-lfs` | apt `git-lfs` | login env `git-lfs` | - | the required lfs filter in .gitconfig fails on LFS repositories |
-| `curl` | unix | manual (OS) | apt `curl` | login env `curl` | - | setup-host downloads and the awesome-skills sync fail |
-| `rsync` | unix | manual (OS) | apt `rsync` | login env `rsync` | - | upload and the awesome-skills sync fail |
+| `curl` | unix | manual (OS) | apt `curl` | login env `curl` | - | setup-host downloads fail, and the payload hook needs wget instead |
+| `rsync` | unix | manual (OS) | apt `rsync` | login env `rsync` | - | upload fails |
 | `tar` | unix | manual (OS) | apt `tar` | manual (OS) | - | archive installs and the targz aliases fail |
 | `file` | unix | manual (OS) | apt `file` | login env `file` | - | fzf previews cannot detect file types |
 | `col` | unix | manual (OS) | apt `bsdextrautils` | manual (OS) | - | fzf-tab man page previews fail |
@@ -225,8 +225,8 @@ executables are probed on `PATH`, PSFzf by looking for a `PSFzf` directory in
 each `PSModulePath` entry, and CompletionPredictor and
 Microsoft.WinGet.CommandNotFound are imported on the first idle tick (a missing
 module is silent; one that is installed but fails to import warns once).
-`setup-host.ps1` installs them explicitly; profiles, stow and automatic updates
-never install them. Where the Windows profile degrades differently from the
+`setup-host.ps1` installs them explicitly; profiles, stow, automatic updates
+and the payload hook never install them. Where the Windows profile degrades differently from the
 Unix rows above: without eza, `ll` and `la` fall back to `Get-ChildItem`;
 without bat, `BAT_THEME` is not set; the profile does not use fd; without
 oh-my-posh the prompt is the default `PS>`.
