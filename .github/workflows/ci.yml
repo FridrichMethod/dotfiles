@@ -118,7 +118,10 @@ jobs:
         run: |
           & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File scripts/payload-update.ps1 -Now kit
           if ($LASTEXITCODE -eq 0) { "DOTFILES_TEST_KIT_HOME=$HOME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
-          else { Write-Output "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip" }
+          else {
+            Write-Output "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip"
+            exit 0
+          }
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
