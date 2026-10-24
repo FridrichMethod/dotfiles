@@ -392,18 +392,19 @@ Invoke-PortableSync @sync
         # No package holds a symlink: Git checks one out untrusted, or as a
         # text file without core.symlinks, so the installer fails closed.
         foreach ($sourceError in @(0, 448)) {
+            # The link is the package's only file; its target lies outside it.
             $fixture = New-ControlFixture
             Remove-Item -LiteralPath $fixture.Source -Force
-            $underlying = Join-Path $fixture.Package 'underlying'
-            [IO.File]::WriteAllText($underlying, 'source content')
-            New-Item -ItemType SymbolicLink -Path $fixture.Source -Value './underlying' | Out-Null
+            [IO.File]::WriteAllText((Join-Path $fixture.Root 'underlying'), 'source content')
+            $text = ('..', '..', 'underlying') -join [IO.Path]::DirectorySeparatorChar
+            New-Item -ItemType SymbolicLink -Path $fixture.Source -Value $text | Out-Null
             $result = Invoke-Control $fixture -SourceError $sourceError
             Assert-True (-not $result.Failed) $result.Errors
             $warnings = @($result.Values[-1].Warnings | ForEach-Object { [string]$_ })
             Assert-True (@($warnings -ceq 'package symlink skipped: git/.fixture (packages hold files only)').Count -eq 1) ($warnings -join '; ')
             Assert-True ($result.Prompts.Count -eq 0) 'A package symlink was repaired.'
             Assert-True ($result.Values[-1].Repaired -eq 0) 'A package symlink counted as repaired.'
-            Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq './underlying') 'The package symlink changed.'
+            Assert-True (@((Get-Item -LiteralPath $fixture.Source -Force).Target)[0] -ceq $text) 'The package symlink changed.'
             Assert-True (-not (Get-Item -LiteralPath $fixture.Destination -Force -ErrorAction SilentlyContinue)) 'A package symlink was installed.'
             Assert-True (-not (Test-Path -LiteralPath $fixture.State)) 'A skipped package symlink advanced state.'
         }
