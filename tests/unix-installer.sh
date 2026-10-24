@@ -209,6 +209,7 @@ file_git() {
 # expect_log FILE TEXT: FILE holds TEXT, or the test fails showing FILE.
 expect_log() {
     if ! grep -Fq -- "$2" "$1"; then
+        printf 'ERROR: %s lacks: %s\n--- %s\n' "${1##*/}" "$2" "${1##*/}" >&2
         cat "$1" >&2
         exit 1
     fi
@@ -424,8 +425,11 @@ expect_log "$MIGRATION/unguarded.login2.log" \
 # Without the restow the old links stay, which the kit's installer would
 # refuse: the hook says to run stow-all instead of calling it and records
 # nothing.
+# The hook names its checkout as pwd prints it: macOS's TMPDIR ends in a
+# slash, which TEST_TMP keeps doubled.
+UNGUARDED_REPO=$(cd "$MIGRATION/unguarded/home/dotfiles" && pwd)
 expect_log "$MIGRATION/unguarded.login1.log" \
-    "[dotfiles] [warn] kit: ~/.local/bin/claude-as is still a link the retired Stow package made, which its installer refuses; run $MIGRATION/unguarded/home/dotfiles/stow-all.sh with this host first"
+    "[dotfiles] [warn] kit: ~/.local/bin/claude-as is still a link the retired Stow package made, which its installer refuses; run $UNGUARDED_REPO/stow-all.sh with this host first"
 if grep -Fq 'fake kit:' "$MIGRATION/unguarded.login1.log"; then
     echo 'ERROR: the hook ran the kit installer past the old links' >&2
     exit 1
