@@ -963,7 +963,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         [IO.File]::WriteAllText((Join-Path $fixture.Repo '.gitmodules'), '')
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
         Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^warn`tsubmodule`tcore`t.+\.gitmodules exists, but dotfiles has no submodules \(git rm \.gitmodules\)`t" }).Count -eq 1) "gitmodules row: $($run.Stdout)"
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.gitmodules')
+        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.gitmodules') -Force
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
         Assert-True ($run.Lines -contains "ok`tsubmodule`tcore`tno submodule and no retired submodule checkout`t-") "submodule row without leftovers: $($run.Stdout)"
 
