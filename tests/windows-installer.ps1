@@ -259,6 +259,7 @@ public static class DotfilesCallerMitigation {
         $source = Join-Path $fixture.Repo 'common/git/.linked'
         Write-FixtureFile (Join-Path $fixture.Repo 'common/git/scripts/init.txt') 'linked fixture'
         New-Item -ItemType SymbolicLink -Path $source -Value './scripts/init.txt' | Out-Null
+        $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
         Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
         Invoke-FixtureGit -C $fixture.Repo add common/git
         Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'symlink fixture'
@@ -267,7 +268,7 @@ public static class DotfilesCallerMitigation {
         Assert-Success $result
         Assert-True ($result.Output.Contains('package symlink skipped: git/.linked (packages hold files only)')) $result.Output
         Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target '.linked') -Force -ErrorAction SilentlyContinue)) 'The package symlink was linked.'
-        Assert-Equal './scripts/init.txt' (@((Get-Item -LiteralPath $source -Force).Target)[0] -replace '\\', '/') 'The package symlink changed.'
+        Assert-Equal $originalTarget @((Get-Item -LiteralPath $source -Force).Target)[0] 'The package symlink changed.'
         Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'The install dirtied the checkout.'
     }
 

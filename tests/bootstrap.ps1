@@ -899,7 +899,8 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         # for an installed kit.
         $helper = [IO.Path]::Combine($fixture.Home, '.claude', 'coding-agent-kit', 'notify.cjs')
         $pymolPy = Join-Path $fixture.Home '.pymolrc.py'
-        Remove-Item -LiteralPath $helper, $pymolPy
+        # -Force: off Windows a dot file is hidden to PowerShell.
+        Remove-Item -LiteralPath $helper, $pymolPy -Force
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'a payload shortfall only warns'
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: ~\.claude\coding-agent-kit\notify.cjs (Claude's status line and hooks fail), pymol; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
@@ -947,7 +948,8 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
                 @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
                 @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
                 @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
-            $checkout = [IO.Path]::Combine($fixture.Repo, $retired[0])
+            # Native separators, as the doctor prints the path.
+            $checkout = [IO.Path]::Combine($fixture.Repo, $retired[0].Replace('/', [IO.Path]::DirectorySeparatorChar))
             [void][IO.Directory]::CreateDirectory($checkout)
             [IO.File]::WriteAllText((Join-Path $checkout '.git'), 'gitdir: elsewhere')
             $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
