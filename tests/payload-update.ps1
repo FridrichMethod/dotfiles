@@ -38,8 +38,10 @@ try {
     [void][IO.Directory]::CreateDirectory($testRoot)
     $remote = Join-Path $testRoot 'remote'
     $fixture = Join-Path $testRoot 'repo'
-    $base = ([Uri](Join-Path $remote 'x')).AbsoluteUri
-    $base = $base.Substring(0, $base.Length - 1)
+    # file:///C:/... or file:///tmp/..., with a trailing slash. Built by hand:
+    # a [Uri] cast reads a Unix path as a relative URI.
+    $slashed = $remote.Replace('\', '/')
+    $base = 'file://' + $(if ($slashed.StartsWith('/')) { '' } else { '/' }) + $slashed + '/'
     $config = [IO.File]::ReadAllText((Join-Path $repoRoot 'config/payloads.tsv'))
     Assert-True ($config.Contains('https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.ps1')) 'config/payloads.tsv no longer downloads the kit from raw.githubusercontent.com/FridrichMethod'
     $config = $config.Replace('https://raw.githubusercontent.com/FridrichMethod/', $base).Replace('Join-Path $HOME ', 'Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME ')
@@ -118,14 +120,14 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
         $case = New-Case
         $run = Invoke-Hook $case @('-Now')
         Assert-True ($run.Code -eq 0) $run.Text
-        Assert-True ((Get-Events $case) -ceq $installAll) "events: $(Get-Events $case)"
+        Assert-True ((Get-Events $case) -ceq $installAll) "events: $(Get-Events $case); output: $($run.Text)"
         foreach ($name in 'kit', 'pymol', 'skills') {
             Assert-True (Test-Path -LiteralPath (Join-Path $case.State "$name.stamp")) "no $name stamp"
         }
         Assert-True ($run.Text.Contains('[dotfiles] [step] kit: installing (later updates run in the background)')) $run.Text
         Clear-Events $case
         $run = Invoke-Hook $case @('-Now', 'kit')
-        Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq 'kit-update [-Update True -Channel 0.6]') "update: $(Get-Events $case) $($run.Text)"
+        Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq 'kit-update [-Update True -Channel 0.6]') "update: $(Get-Events $case); output: $($run.Text)"
         Assert-True (-not @(Get-ChildItem -LiteralPath (Join-Path $case.Root 'tmp') -Filter 'dotfiles-payload-*').Count) 'a download was left behind'
     }
     Test-Case '-Now fails for a failed or unknown item, records nothing for it and calls exit 75 neither' {
@@ -146,7 +148,7 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
         try { $run = Invoke-Hook $case @('-Now', 'pymol') }
         finally { Move-Item -LiteralPath "$source.hidden" -Destination $source }
         Assert-True ($run.Code -eq 1 -and $run.Text.Contains('cannot run')) $run.Text
-        Assert-True ((Get-Events $case) -ceq '') "events: $(Get-Events $case)"
+        Assert-True ((Get-Events $case) -ceq '') "events: $(Get-Events $case); output: $($run.Text)"
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'pymol.stamp'))) 'a failed download was stamped'
     }
     Test-Case 'the profile call needs a console, runs once per session and obeys the opt-out' {
@@ -156,7 +158,7 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
         $run = Invoke-Hook $case @()
         Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "redirected call ran: $(Get-Events $case)"
         $run = Invoke-Hook $case @('-Now') @{ DOTFILES_PAYLOAD_AUTO_UPDATE = '0' }
-        Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq $installAll) '-Now must ignore the opt-out'
+        Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq $installAll) "-Now must ignore the opt-out: $(Get-Events $case); output: $($run.Text)"
     }
     if ($elevated) {
         Test-Case 'an elevated automatic run installs nothing and says where to install' {
@@ -170,14 +172,16 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
     else {
         Test-Case 'an automatic run installs absent items in the foreground and starts no background run' {
             $case = New-Case
+            # A blank selection manages nothing (an environment variable
+            # cannot be empty on Windows, so a space stands for it).
+            $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = ' ' }
+            Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "a blank selection ran: $(Get-Events $case); output: $($run.Text)"
             $run = Invoke-Hook $case @('-Auto')
-            Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq $installAll) "events: $(Get-Events $case) $($run.Text)"
+            Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq $installAll) "events: $(Get-Events $case); output: $($run.Text)"
             Assert-True (-not (Test-Path -LiteralPath (Join-Path $case.State 'worker.pid'))) 'a first install started a background run'
             Clear-Events $case
             $run = Invoke-Hook $case @('-Auto')
-            Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "a fresh install ran again: $(Get-Events $case)"
-            $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = '' }
-            Assert-True ((Get-Events $case) -ceq '') 'an empty selection ran an item'
+            Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq '') "a fresh install ran again: $(Get-Events $case); output: $($run.Text)"
         }
         Test-Case 'due items refresh in one detached background run that writes the log' {
             $case = New-Case
@@ -189,7 +193,7 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
             $run = Invoke-Hook $case @('-Auto')
             Assert-True ($run.Code -eq 0 -and -not $run.Text.Contains('[dotfiles]')) "a background refresh printed: $($run.Text)"
             Wait-Worker $case
-            Assert-True ((Get-Events $case) -ceq 'kit-update [-Update True -Channel 0.6]') "events: $(Get-Events $case)"
+            Assert-True ((Get-Events $case) -ceq 'kit-update [-Update True -Channel 0.6]') "events: $(Get-Events $case); output: $($run.Text)"
             $log = [IO.File]::ReadAllText((Join-Path $case.State 'payload.log'))
             Assert-True ($log.Contains('kit: update done')) "log: $log"
             # A live background run keeps a second one from starting.
