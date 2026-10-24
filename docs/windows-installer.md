@@ -43,11 +43,13 @@ treated as trust failures that rewriting a link would fix.
 Packages hold regular files only, so a clone needs neither `core.symlinks` nor
 Developer Mode. A symlink found in a package is skipped with the warning
 `package symlink skipped: PKG/PATH (packages hold files only)`, which leaves
-the installation incomplete and fails `-Strict`. The installer also removes
-the links it made from the two packages that the payload repos replaced
+the installation incomplete and fails `-Strict`. Once every package is
+stowed, the installer also removes the links it made from the two packages
+that the payload repos replaced
 (`common/coding-agent-kit`, `common/pymol`), each only while its target text is
 exactly the path it wrote, dangling or not, and the four directories only
-those packages filled once they are empty; it installs no payload repo
+those packages filled once they are empty (a declined removal is a warning,
+so the revision is not acknowledged); it installs no payload repo
 ([payloads.md](payloads.md#migration)).
 
 `tests/windows-installer.ps1` requires native Windows, Git for Windows, the

@@ -47,7 +47,8 @@ comments, and the first row of an item and field wins.
 | `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, in the foreground |
 | `unix-install`, `windows-install` | the first-install command |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
-| `person-status` | an exit status with which the repo stops for a person (awesome-skills' `3`: an interrupted update it cannot undo alone because a file it would restore was edited since; its message names the `--restore` command to run) |
+| `person-status` | an exit status with which the repo stops for a person (awesome-skills' `3`: an interrupted update it cannot undo alone because a file it would restore was edited since; its message names the `--restore` command to run); the hook and the doctor word such a failure as one that waits for a person |
+| `stow-links` | `PACKAGE PATH...`: home paths that the installer refuses while they are links into the retired dotfiles package `common/PACKAGE` (the kit's launchers and Bash completions); while one is, the hook does not call the installer and says to run `stow-all` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
 by the hook with the channel in `$channel` (`$Channel`) and with one helper:
@@ -58,7 +59,11 @@ by the hook with the channel in `$channel` (`$Channel`) and with one helper:
   run SOURCE with ARG and return its exit status. A URL is downloaded first
   (curl, else wget; `Invoke-WebRequest`) into a temporary file, never piped
   into a shell, so a failed or empty download runs nothing; the file is
-  removed afterwards. A path must be an existing file. On Unix the
+  removed afterwards. Each download is bounded by `DOTFILES_PAYLOAD_TIMEOUT`
+  seconds (default 60: curl `--connect-timeout 10 --max-time 60`, wget
+  `-T 60 -t 1`, `Invoke-WebRequest -TimeoutSec 60`), and once one download of
+  a run failed, the run tries no other, so a network that is down or stalls
+  holds a login once. A path must be an existing file. On Unix the
   installer's stdin is closed.
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
@@ -78,27 +83,48 @@ it runs `sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh" --auto`,
 so its logic never depends on the calling shell's dialect. The automatic run,
 for each item of `DOTFILES_PAYLOAD_ITEMS` in order:
 
+- for an item with a failure record (`ITEM.failed`), prints one line, for
+  example `kit: its last run failed (exit 1, see .../kit.failed); run
+  sync-payloads kit`, and queues it once the failure is six hours old;
 - installs an item whose probe fails in the foreground, so a person sees the
   first install;
 - queues an installed item whose stamp is at least `days` old, or missing;
 - starts the queued items in one detached background run,
-  `sh scripts/payload-update.sh --now ITEM...` with its stdin closed and its
-  output in `payload.log`, unless the run recorded in `worker.pid` is still
-  alive. The run never enters the shell's job table and outlives the shell.
+  `sh scripts/payload-update.sh --worker ITEM...` with its stdin closed and
+  its output in `payload.log`. The run never enters the shell's job table and
+  outlives the shell. Nothing keeps two sessions from starting one each at
+  the same moment; the kit's and awesome-skills' installers lock themselves
+  (exit 75) and PyMOLScripts' runs converge.
 
-An item's command exiting 0 writes its stamp. Any other status writes none, so
-the next session tries again (an item still absent installs in the
-foreground again), and prints the line to retry it with, for example
-`sync-payloads kit`. Exit 75, the code the kit's and awesome-skills'
-installers return while another run holds their lock (PyMOLScripts takes
-none), is neither: one info line, no stamp. An exit equal to the item's
-`person-status` row is a failure that waits for a person: besides the error
-line it writes `ITEM.attention`, every later automatic run warns about the
-item (its installer's own message is in the foreground output, or in
-`payload.log` for a background run, and `sync-payloads ITEM` prints it again),
-and so does the doctor, until a run of the item succeeds and removes the file.
-The same status from an item without that row is an ordinary failure. An
-automatic run never fails the shell that started it.
+An item's command exiting 0 writes its stamp and removes its failure record.
+Exit 75, the code the kit's and awesome-skills' installers return while
+another run holds their lock (PyMOLScripts takes none), is neither: one info
+line, no stamp, no record. Any other status writes `ITEM.failed`: the time
+and exit status and, for a background run, the last 20 lines of that item's
+output, kept apart from `payload.log`, which the next background run
+replaces. It also prints the line to retry with, for example
+`sync-payloads kit`. A failed item is never retried in the foreground: every
+later session prints one line about it, the doctor reports it, and it is
+retried in the background six hours after the failure, until a run succeeds.
+An exit equal to the item's `person-status` row is worded as one that waits
+for a person (`stopped for a person (exit 3)`, and `run sync-payloads skills
+and do what it asks`), since its installer's message, which `sync-payloads
+ITEM` prints again, names what to do. An automatic run never fails the shell
+that started it.
+
+An item with a [`stow-links`](#configpayloadstsv) path still linked into its
+retired package, which happens while `stow-all` has not run since the pull
+(a dirty tree, an unrecorded host, `DOTFILES_AUTO_STOW=0`, a failed stow), is
+not handed to its installer, which would refuse the link: the hook prints
+`kit: ~/.local/bin/codex-as is still a link the retired Stow package made,
+which its installer refuses; run <clone>/stow-all.sh with this host first`
+and records nothing, so the first session after the stow installs it.
+PyMOLScripts' installer replaces its old links itself, so it runs.
+
+The automatic runs still honor `AWESOME_SKILLS_AUTO_UPDATE=0`, the old skill
+hook's opt-out, by leaving `skills` out, with one notice per session, until
+2027-01-31; a change after that date removes it. `--now` ignores it, as it
+ignores `DOTFILES_PAYLOAD_AUTO_UPDATE`.
 
 By hand, in the foreground and whatever the intervals or
 `DOTFILES_PAYLOAD_AUTO_UPDATE` say:
@@ -109,8 +135,9 @@ sync-payloads [kit] [pymol] [skills]                      # the alias in common/
 sync-skills                                               # sync-payloads skills
 ```
 
-It exits 1 when an item failed or is unknown, and 0 otherwise (exit 75
-included).
+It runs the items whatever their intervals and failure records, and exits 1
+when an item failed, is unknown or waits for `stow-all`, and 0 otherwise
+(exit 75 included).
 
 ### Native Windows
 
@@ -120,13 +147,16 @@ included).
 script run, `-Command`, `-NonInteractive` or piped stdin never reaches it; the
 script itself also returns when stdout is redirected. It keeps the Unix
 contract: once per session through `$env:_DOTFILES_PAYLOAD_CHECKED`,
-`DOTFILES_PAYLOAD_AUTO_UPDATE=0`, `DOTFILES_PAYLOAD_ITEMS`, absent items
-installed in the foreground, stamps on success only, exit 75 neither,
-`person-status` recorded in `ITEM.attention` and warned about. Its
+`DOTFILES_PAYLOAD_AUTO_UPDATE=0`, `DOTFILES_PAYLOAD_ITEMS`,
+`DOTFILES_PAYLOAD_TIMEOUT`, absent items installed in the foreground, stamps
+on success only, exit 75 neither, failure records with the six-hour
+background retry, the `stow-links` check and the `person-status` wording (the
+old skill opt-out does not apply: that hook never ran on Windows). Its
 background run is a hidden, detached
 `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File scripts/payload-update.ps1 -Worker ITEM...`
-started with `Start-Process`, whose output goes `*>` into `payload.log`, so the
-prompt never waits for a download.
+started with `Start-Process`, which writes each item's output into
+`payload.log` and the end of a failed one into its record, so the prompt
+never waits for a download.
 
 It never runs automatically from an elevated session: an installer run there
 would leave its git clone owned by Administrators, which Git then refuses to
@@ -147,6 +177,8 @@ sync-skills
 | --- | --- | --- |
 | `DOTFILES_PAYLOAD_AUTO_UPDATE` | `1` | `0` disables the automatic runs; `--now`, `-Now` and the aliases still run |
 | `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` | the items the hook and the doctor's `payloads` row manage, separated by spaces; set but empty manages none |
+| `DOTFILES_PAYLOAD_TIMEOUT` | `60` | the bound, in seconds, of each download of an installer script |
+| `AWESOME_SKILLS_AUTO_UPDATE` | unset | Unix, until 2027-01-31: `0` leaves `skills` out of the automatic runs and the doctor's row, with a notice; set `DOTFILES_PAYLOAD_ITEMS='kit pymol'` instead |
 | `DOTFILES_DIR` | `~/dotfiles` | the checkout the rc files source the hook from |
 | `_DOTFILES_PAYLOAD_CHECKED` | unset | the exported session marker; a fresh login with a clean environment checks again |
 
@@ -157,12 +189,13 @@ no local file to set them in. The repositories' own variables (for example
 reach their installers unchanged, and on Unix `XDG_DATA_HOME` moves the kit's
 managed root, which its probe follows.
 
-The old skill hook's variables (`AWESOME_SKILLS_AUTO_UPDATE`,
-`AWESOME_SKILLS_FORCE`, `AWESOME_SKILLS_BG`, `AWESOME_SKILLS_INSTALLER_URL`,
+The old skill hook's other variables (`AWESOME_SKILLS_FORCE`,
+`AWESOME_SKILLS_BG`, `AWESOME_SKILLS_INSTALLER_URL`,
 `AWESOME_SKILLS_REFRESH_DAYS`, `_AWESOME_SKILLS_CHECKED`) are read by nothing
-any more. A host that exported `AWESOME_SKILLS_AUTO_UPDATE=0` exports
-`DOTFILES_PAYLOAD_AUTO_UPDATE=0` instead, or `DOTFILES_PAYLOAD_ITEMS='kit pymol'`
-to keep only the skills off. The provisioning shells of
+any more. A host that exported `AWESOME_SKILLS_AUTO_UPDATE=0` keeps its
+skills off until 2027-01-31; before then it exports
+`DOTFILES_PAYLOAD_ITEMS='kit pymol'` (or `DOTFILES_PAYLOAD_AUTO_UPDATE=0` for
+no automatic runs at all). The provisioning shells of
 [docs/bootstrap.md](bootstrap.md#quick-start) export
 `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`.
 
@@ -174,8 +207,7 @@ In `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (created with umask
 | File | Content |
 | --- | --- |
 | `ITEM.stamp` | the time of the item's last success, in seconds since the epoch; remove it to make the next session refresh the item |
-| `ITEM.attention` | the time and exit status of the item's last run that stopped for a person (its `person-status` row); the next success removes it |
-| `worker.pid` | the PID of the background run and when it started; while that run lives, for a day at most (an older PID is a reused one), no second one starts. The hook's only lock |
+| `ITEM.failed` | the item's last failure: a line with its time and exit status, then for a background run the last 20 lines of its output; the next success removes it, and removing it by hand lets the next session try the item at once |
 | `payload.log` | the output of the last background run, replaced by the next one |
 
 The repositories keep their own state: the kit's managed root in
@@ -195,11 +227,15 @@ PyMOLScripts keeps no state and takes no lock: concurrent runs converge.
 - The doctor's `payloads` row (tier `ai`, step
   [H7-payloads](bootstrap.md#h7-payloads-payload-repos)) runs each selected
   item's probe and, once the kit's passes, checks that the three helpers are
-  in `~/.claude/coding-agent-kit/`. A shortfall is `warn`, never `missing`:
-  the next interactive shell installs what is missing, and `sync-payloads`
-  does it now. A selected item with an `ITEM.attention` file warns first, as
-  stopped for a person. The probes and that check only test paths, so the
-  doctor stays read-only.
+  in `~/.claude/coding-agent-kit/`. Before those it names each selected item
+  with a failure record (`kit failed its last run (exit 1, see ...): run
+  sync-payloads kit`, worded by `person-status`) and each one that waits for
+  `stow-all` (`... run <clone>/stow-all.sh <host>, then sync-payloads kit`).
+  A missing item ends with the command that installs it now
+  (`sh <clone>/scripts/payload-update.sh --now ITEM`) and, when it is the kit
+  or one of its helpers, with what fails until then. All of it is `warn`,
+  never `missing`. It only reads paths and files, so the doctor stays
+  read-only.
 - The doctor's `submodule` row (tier `core`, step P0-preflight) is `ok` while
   the checkout has no `.gitmodules` and no [leftover checkout](#leftover-checkouts),
   and warns otherwise.
@@ -286,37 +322,51 @@ holds files, so the two checkouts stay as [leftovers](#leftover-checkouts).
    `scripts/dotfiles-update.sh` fetches and fast-forwards; the leftover
    checkouts are ignored, so the tree is clean, and it runs the new
    `./stow-all.sh` for the remembered host.
-2. `./stow-all.sh` removes the 16 links Stow made from the two retired
-   packages, each only while it is a symlink whose text is exactly the one
-   Stow wrote from this checkout, dangling or not: the 14 of
+2. `./stow-all.sh` runs its dry run, syncs the new `settings.json` and
+   stows; only then does it remove the 16 links Stow made from the two
+   retired packages, each only while it is a symlink whose text is exactly
+   the one Stow wrote from this checkout, dangling or not: the 14 of
    `common/coding-agent-kit` (the helpers in `~/.claude/dotfiles/`, the
    launchers in `~/.local/bin/`, the modules in `~/.local/lib/codex-as/` and
    `~/.local/lib/claude-as/`, and the Bash and zsh completions) and the two
    of `common/pymol` (`~/.pymolrc`, `~/.pymolrc.py`). A file, a directory or
    any other link stays. It then removes `~/.claude/dotfiles`,
    `~/.local/lib/claude-as`, `~/.local/lib/codex-as` and
-   `~/.oh-my-zsh/custom/completions` if they are empty, stows, syncs the new
-   `settings.json` and records the applied revision. A failed removal stops
-   it before anything is recorded, so the next login retries.
+   `~/.oh-my-zsh/custom/completions` if they are empty, and the login
+   updater records the applied revision. A refused dry run or a failed stow
+   leaves the links in place, and a failed removal stops it before anything
+   is recorded, so the next login retries.
 3. The same rc files then source `scripts/awesome-skills-update.sh`, the old
    hook's path, which is now a transition shim that sources
    `scripts/payload-update.sh`. In that shell the hook installs the kit and
    PyMOL in the foreground (their probes fail), and refreshes awesome-skills
    in the background: its existing install already passes the probe, and it
    has no stamp yet.
-4. A failed install writes no stamp; the next interactive shell installs it
-   again in the foreground, or run `sync-payloads ITEM`. Until the kit is
-   installed, Claude's status line and hooks fail, and the doctor's `payloads`
-   row says so.
+4. A failed install writes a failure record instead of a stamp: every later
+   session says so, the doctor reports it, and it is retried in the
+   background six hours later, or at once with `sync-payloads ITEM`.
+
+The window between the pull and the kit's install is the one in which
+Claude Code runs without the kit: `settings.json` already names
+`~/.claude/coding-agent-kit/`, so the status line command fails and Claude
+shows no status line, and the notification and Git hook check helpers exit 1,
+which Claude Code reports as a non-blocking hook error (only exit 2 blocks):
+tool calls and prompts go on. On a host whose login updater stows, it lasts
+until the end of that one login, unless the install fails; then the doctor's
+`payloads` row and every new shell name the item and what to run.
 
 `tests/unix-installer.sh` runs this login end to end with real Git and Stow.
 
-On a host with `DOTFILES_AUTO_STOW=0` (or `DOTFILES_AUTO_UPDATE=0`, after a
-pull by hand), nothing removes the old links: the kit's installer refuses a
-link it does not own, Stow's included, so its install fails until you run
-`./stow-all.sh <host>` and then `sync-payloads`. A host that kept the skill
-sync off with `AWESOME_SKILLS_AUTO_UPDATE=0` must export one of the
-[knobs](#knobs) above before that login, or the shim installs all three.
+On a host where the login does not stow (`DOTFILES_AUTO_STOW=0`, a dirty
+tree, an unrecorded host, a failed stow, or `DOTFILES_AUTO_UPDATE=0` after a
+pull by hand), nothing removes the old links, which the kit's installer
+refuses: every session then prints the line that says to run
+`./stow-all.sh <host>`, and so does the doctor, until it has run; the next
+interactive shell, or `sync-payloads kit`, then installs the kit. The links
+stay in place whenever `./stow-all.sh` stops: it removes them only after both
+stows succeeded, so a refused dry run or a failed stow leaves the home as it
+was. A host that kept the skill sync off with `AWESOME_SKILLS_AUTO_UPDATE=0`
+keeps it off (see [the hook](#unix)).
 
 ### Native Windows
 
@@ -325,11 +375,12 @@ sync off with `AWESOME_SKILLS_AUTO_UPDATE=0` must export one of the
    ignored) and queues the elevated restow, which the `Dotfiles-Restow-*` task
    ([HW-auto-stow-task](bootstrap.md#hw-auto-stow-task-automatic-stow-task))
    or the next elevated `.\stow-all.ps1 win` runs.
-2. The new `stow-all.ps1` removes the links it made from the two retired
-   packages, each only while it is a symlink whose text is exactly the path it
-   wrote, `<clone>\common\<package>\<path>`, dangling or not, then the same
-   four directories once empty, and stows. It installs nothing: an installer
-   run elevated would leave Administrators-owned clones.
+2. The new `stow-all.ps1` stows, then removes the links it made from the two
+   retired packages, each only while it is a symlink whose text is exactly
+   the path it wrote, `<clone>\common\<package>\<path>`, dangling or not,
+   then the same four directories once empty. A declined removal is a
+   warning, so the revision is not acknowledged. It installs nothing: an
+   installer run elevated would leave Administrators-owned clones.
 3. From the next ordinary interactive PowerShell 7 on, the new profile's
    payload hook installs every absent item in the foreground; on most hosts
    that is all three, since the old skill hook ran only on Unix. Until the
@@ -413,6 +464,7 @@ ls ~/.claude/coding-agent-kit/                  # check-git-hooks.cjs notify.cjs
 readlink ~/.local/bin/codex-as                  # a path in the kit's managed root, .../current/bin/codex-as
 ls -l ~/.pymolrc ~/.pymolrc.py                  # regular files
 cat "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/payload.log"   # the last background refresh
+ls "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/"*.failed        # none once every item succeeded
 ```
 
 On Windows: `sync-payloads`, `.\doctor.ps1`, and

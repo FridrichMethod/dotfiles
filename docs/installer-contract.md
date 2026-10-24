@@ -8,10 +8,11 @@ target, it invokes every selected helper with `--check`. The checks validate
 the parser runtime and portable/live documents without creating directories,
 materializing files, or modifying the tracked baseline.
 
-Before the Stow dry runs it removes the links Stow made from the two packages
-that the payload repos replaced (`common/coding-agent-kit`, `common/pymol`),
-each only while it is a symlink whose text is exactly the one Stow wrote,
-dangling or not; a failed removal stops it before the applied revision is
+After both stows succeeded it removes the links Stow made from the two
+packages that the payload repos replaced (`common/coding-agent-kit`,
+`common/pymol`), each only while it is a symlink whose text is exactly the one
+Stow wrote, dangling or not, so a refused dry run or a failed stow leaves
+them in place; a failed removal stops it before the applied revision is
 recorded. It never runs a payload repo's installer
 ([payloads.md](payloads.md#migration)).
 

@@ -120,7 +120,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 ## Payload repos
 
 - coding-agent-kit, PyMOLScripts and awesome-skills own their installation, update, selection and locking. Dotfiles calls them only through the commands in `config/payloads.tsv`, the one place naming their URLs, paths, commands and the kit channel (`0.6`); a channel or command change is a reviewed change of that file (`docs/payloads.md`). No submodules, bump workflows or consumer-side pins.
-- `scripts/payload-update.sh` and `.ps1` keep one contract: interactive, once per session, absent items in the foreground, refreshes in one detached background run, stamps only on success, exit 75 neither, a `person-status` exit recorded and warned about until the next success, downloads never piped into a shell, no lock beyond the worker pid file. `tests/payload-update.sh` covers it.
+- `scripts/payload-update.sh` and `.ps1` keep one contract: interactive, once per session, absent items in the foreground, refreshes in one detached background run, stamps only on success, exit 75 neither, any other failure recorded in `ITEM.failed` (reported by later sessions and the doctor, retried only in the background six hours later), downloads bounded by `DOTFILES_PAYLOAD_TIMEOUT` and never piped into a shell, one failed download ending the run's downloads, the installer not called while a `stow-links` path still links into its retired package, no lock of their own. `tests/payload-update.sh` covers it.
 
 ## Stow and update scripts
 

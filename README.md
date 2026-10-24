@@ -367,7 +367,7 @@ Other Linux distributions have no overlay: stow `common/` alone with `./stow-all
 3. `stow --no-folding` symlinks **individual files**, not whole directories, so the two layers compose cleanly.
 4. SSH permissions are re-asserted on every run (`700` on `~/.ssh`, `600` on `config` files). Dangling optional snippets are skipped without preventing successful state recording.
 5. After read-only preflight, retire exact dangling links from removed Sherlock packages before Stow dry runs. After successful Stow, remove only an override with the exact retired generator marker; preserve foreign files with an actionable warning. See [migration](docs/sherlock-kit.md).
-6. Before the Stow dry runs, remove the links Stow made from the two retired packages `common/coding-agent-kit` and `common/pymol`, each only while its text is exactly what Stow wrote, dangling or not; their payload repos now install themselves ([migration](docs/payloads.md#migration)). Stow never installs a payload repo.
+6. After both stows succeeded, remove the links Stow made from the two retired packages `common/coding-agent-kit` and `common/pymol`, each only while its text is exactly what Stow wrote, dangling or not, so a refused dry run or a failed stow leaves them in place; their payload repos now install themselves ([migration](docs/payloads.md#migration)). Stow never installs a payload repo.
 
 `.stowrc` is parsed directly by GNU Stow rather than by a shell, so its `--ignore=` regexes are intentionally unquoted. Literal shell quote characters prevent those exclusions from matching on GNU Stow 2.3.1, and Stow 2.4 drops a lone backslash, so a literal dot is written `[.]`.
 
@@ -468,9 +468,11 @@ Keeps the three [payload repos](#payload-repos) installed and current by running
 | First install | Foreground, so you see it, for each item whose probe fails |
 | Refresh interval | `kit` and `pymol` daily, `skills` weekly (the `days` rows) |
 | Refreshes | One detached background run for every due item; never blocks shell startup |
-| Concurrency | `worker.pid` keeps a second background run from starting; each installer locks itself (exit 75: busy, retried next session) |
-| State and log | `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (`ITEM.stamp`, `worker.pid`, `payload.log`); `%LOCALAPPDATA%\dotfiles\payload\` on Windows |
-| Failure handling | No stamp, so the next session retries; the error line names the `sync-payloads ITEM` that retries now |
+| Downloads | Each bounded by `DOTFILES_PAYLOAD_TIMEOUT` seconds (default 60); after one fails, the run tries no other |
+| Concurrency | Each installer locks itself (exit 75: busy, retried next session); the hook adds no lock |
+| State and log | `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (`ITEM.stamp`, `ITEM.failed`, `payload.log`); `%LOCALAPPDATA%\dotfiles\payload\` on Windows |
+| Failure handling | `ITEM.failed` (time, exit status, the end of a background run's output); every later session prints one line about it and the doctor reports it; retried in the background six hours later, or now with `sync-payloads ITEM` |
+| Before stow-all ran | A kit path still linked into the retired package: the hook says to run `stow-all` instead of calling the kit's installer |
 | Manual trigger | `sync-payloads [kit] [pymol] [skills]` (all by default) and `sync-skills`, in the foreground, whatever the intervals |
 
 | Variable | Default | Effect |
@@ -482,7 +484,7 @@ Keeps the three [payload repos](#payload-repos) installed and current by running
 
 **On Windows** - `scripts/payload-update.ps1` runs at the end of the PowerShell 7 profile, right after `scripts/dotfiles-update.ps1`, in interactive consoles only, and starts its refreshes in a hidden, detached `pwsh -NoProfile`. It never runs automatically from an elevated session, whose installs would leave Administrators-owned git clones; open an ordinary PowerShell after an elevated stow.
 
-The old `AWESOME_SKILLS_*` variables are read by nothing any more; a host that kept the skill sync off with `AWESOME_SKILLS_AUTO_UPDATE=0` sets `DOTFILES_PAYLOAD_AUTO_UPDATE=0` (or `DOTFILES_PAYLOAD_ITEMS='kit pymol'`) instead. [docs/payloads.md](docs/payloads.md) is the full contract, including the migration from the submodules.
+The old `AWESOME_SKILLS_*` variables are read by nothing any more, except that `AWESOME_SKILLS_AUTO_UPDATE=0` still leaves skills out of the automatic runs, with a notice, until 2027-01-31; such a host sets `DOTFILES_PAYLOAD_ITEMS='kit pymol'` (or `DOTFILES_PAYLOAD_AUTO_UPDATE=0`) instead. [docs/payloads.md](docs/payloads.md) is the full contract, including the migration from the submodules.
 
 </details>
 
