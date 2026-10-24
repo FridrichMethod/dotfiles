@@ -21,6 +21,13 @@ foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariabl
 $script:Passed = 0
 $script:Case = 0
 
+# Set a process variable, or remove it for $null: PowerShell passes $null to
+# a .NET string parameter as '', so SetEnvironmentVariable would leave an
+# empty variable, which the hook reads as a selection of no items.
+function Set-TestVariable([string]$Name, $Value) {
+    if ($null -eq $Value) { Remove-Item -LiteralPath "Env:$Name" -ErrorAction Ignore }
+    else { [Environment]::SetEnvironmentVariable($Name, [string]$Value) }
+}
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
@@ -98,7 +105,7 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
             FAKE_KIT_STATUS = $null; FAKE_PYMOL_STATUS = $null; DOTFILES_PAYLOAD_AUTO_UPDATE = $null
             DOTFILES_PAYLOAD_ITEMS = $null; _DOTFILES_PAYLOAD_CHECKED = $null }
         foreach ($key in $Environment.Keys) { $values[$key] = $Environment[$key] }
-        foreach ($key in $values.Keys) { [Environment]::SetEnvironmentVariable($key, $values[$key]) }
+        foreach ($key in $values.Keys) { Set-TestVariable $key $values[$key] }
         $output = & $pwsh -NoProfile -NonInteractive -File $hook @Arguments 2>&1 | ForEach-Object { "$_" }
         return [pscustomobject]@{ Code = $LASTEXITCODE; Text = ($output -join "`n") }
     }
@@ -221,7 +228,7 @@ Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
     Write-Output "payload-update-ps=PASS ($script:Passed cases)"
 }
 finally {
-    foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+    foreach ($name in $names) { Set-TestVariable $name $saved[$name] }
     Get-ChildItem -LiteralPath $testRoot -Recurse -Filter 'worker.pid' -ErrorAction SilentlyContinue | ForEach-Object {
         $id = 0
         if ([int]::TryParse(([IO.File]::ReadAllText($_.FullName).Trim() -split '\s+')[0], [ref]$id)) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
