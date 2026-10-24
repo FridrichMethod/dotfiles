@@ -65,13 +65,12 @@ function New-Fixture {
             'lib/config_sync.py', 'lib/sync-runtime.sh', 'lib/terminal.ps1', 'lib/windows-link-trust.ps1',
             'common/claude/.local/bin/claude-settings-sync', 'common/claude/.claude/settings.json',
             'common/codex/.local/bin/codex-config-sync', 'common/codex/.local/bin/codex-rules-sync',
-            'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules',
-            'common/coding-agent-kit/.stow-local-ignore')) {
+            'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules')) {
         $destination = Join-Path $repo $relative
         [void][IO.Directory]::CreateDirectory((Split-Path $destination -Parent))
         Copy-Item -LiteralPath (Join-Path $sourceRoot $relative) -Destination $destination
     }
-    foreach ($package in @('claude', 'codex', 'coding-agent-kit', 'conda', 'git', 'pymol', 'ssh', 'wezterm')) {
+    foreach ($package in @('claude', 'codex', 'conda', 'git', 'ssh', 'wezterm')) {
         Write-FixtureFile (Join-Path $repo "common/$package/.fixture-$package") "$package`n"
     }
     Write-FixtureFile (Join-Path $repo 'common/git/.gitconfig') "[user]`n    name = common fixture`n"
@@ -91,12 +90,13 @@ function New-Fixture {
     Write-FixtureFile (Join-Path $repo 'common/sh/.profile') 'POSIX package must not be installed'
     Write-FixtureFile (Join-Path $repo 'win/git/.gitconfig') "[user]`n    name = host fixture`n"
     Write-FixtureFile (Join-Path $repo 'win/terminal/AppData/Local/terminal/settings.json') '{"theme":"host"}'
-    # A file in the coding-agent-kit checkout, which its package's
-    # .stow-local-ignore (and the copied .stowrc line) keeps unstowed, and one
-    # in the pre-move checkout that a fast-forward leaves in the codex package,
-    # which only the .stowrc line keeps unstowed.
-    Write-FixtureFile (Join-Path $repo 'common/coding-agent-kit/coding-agent-kit/lib/x.py') "# fixture`n"
+    # The retired submodule checkouts a fast-forward leaves: the pre-move kit
+    # checkout in the codex package, which the copied .stowrc line keeps
+    # unstowed, and the last kit and PyMOL ones, each alone in an old package
+    # directory the allowlist no longer names.
     Write-FixtureFile (Join-Path $repo 'common/codex/coding-agent-kit/lib/x.py') "# fixture`n"
+    Write-FixtureFile (Join-Path $repo 'common/coding-agent-kit/coding-agent-kit/lib/x.py') "# fixture`n"
+    Write-FixtureFile (Join-Path $repo 'common/pymol/PyMOLScripts/configs/.pymolrc') "# fixture`n"
     Invoke-FixtureGit init --quiet --initial-branch=main $repo
     Invoke-FixtureGit -C $repo config user.name 'Dotfiles tests'
     Invoke-FixtureGit -C $repo config user.email 'dotfiles-tests@example.invalid'
@@ -253,73 +253,45 @@ public static class DotfilesCallerMitigation {
         Assert-Equal $before ([DotfilesCallerMitigation]::Read()) 'Probe changed the caller mitigation policy.'
     }
 
-    Test-Case 'source symlinks keep their exact relative Git payload across install and rerun' {
+    Test-Case 'a package symlink is skipped unchanged and fails Strict' {
+        # No package holds a symlink any more; one is never linked or repaired.
         $fixture = New-Fixture
-        $source = Join-Path $fixture.Repo 'common/pymol/.pymolrc'
-        Write-FixtureFile (Join-Path $fixture.Repo 'common/pymol/scripts/init.pml') 'pymol fixture'
-        New-Item -ItemType SymbolicLink -Path $source -Value './scripts/init.pml' | Out-Null
-        $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
-        Assert-True (-not [IO.Path]::IsPathRooted($originalTarget)) 'Fixture source target is not relative.'
+        $source = Join-Path $fixture.Repo 'common/git/.linked'
+        Write-FixtureFile (Join-Path $fixture.Repo 'common/git/scripts/init.txt') 'linked fixture'
+        New-Item -ItemType SymbolicLink -Path $source -Value './scripts/init.txt' | Out-Null
         Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
-        Invoke-FixtureGit -C $fixture.Repo add common/pymol
-        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'relative symlink fixture'
-        $before = & $gitExecutable -C $fixture.Repo show HEAD:common/pymol/.pymolrc
-        Assert-Success (Invoke-Install $fixture)
-        Assert-Success (Invoke-Install $fixture)
-        Assert-Equal $originalTarget @((Get-Item -LiteralPath $source -Force).Target)[0] 'Relative source symlink text changed.'
-        Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/pymol/.pymolrc) 'Git source symlink payload changed.'
-        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Source symlink install dirtied the checkout.'
-        Assert-Link (Join-Path $fixture.Target '.pymolrc') $source
-    }
-
-    Test-Case 'source symlinks into the submodule stay trusted and resolve from the target' {
-        # The coding-agent-kit links climb to their package root and enter the
-        # submodule checkout there.
-        $fixture = New-Fixture
-        Write-FixtureFile (Join-Path $fixture.Repo 'common/coding-agent-kit/coding-agent-kit/helpers/fixture.cjs') 'kit fixture'
-        $source = Join-Path $fixture.Repo 'common/coding-agent-kit/.claude/dotfiles/fixture.cjs'
-        [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
-        New-Item -ItemType SymbolicLink -Path $source -Value '../../coding-agent-kit/helpers/fixture.cjs' | Out-Null
-        $originalTarget = @((Get-Item -LiteralPath $source -Force).Target)[0]
-        Assert-True (-not [IO.Path]::IsPathRooted($originalTarget)) 'Fixture source target is not relative.'
-        Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
-        Invoke-FixtureGit -C $fixture.Repo add common
-        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'submodule symlink fixture'
-        $before = & $gitExecutable -C $fixture.Repo show HEAD:common/coding-agent-kit/.claude/dotfiles/fixture.cjs
-        Assert-Success (Invoke-Install $fixture)
-        Assert-Success (Invoke-Install $fixture)
-        Assert-Equal $originalTarget @((Get-Item -LiteralPath $source -Force).Target)[0] 'Source symlink text changed.'
-        Assert-Equal $before (& $gitExecutable -C $fixture.Repo show HEAD:common/coding-agent-kit/.claude/dotfiles/fixture.cjs) `
-            'Git source symlink payload changed.'
-        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'Source install dirtied the checkout.'
-        $installed = Join-Path $fixture.Target '.claude/dotfiles/fixture.cjs'
-        Assert-Link $installed $source
-        . (Join-Path $sourceRoot 'lib/windows-link-trust.ps1')
-        $errors = Get-DotfilesLinkReadErrors -Paths @($source, $installed)
-        Assert-Equal 0 $errors[$source] 'Guarded process rejected the source link into the submodule.'
-        Assert-Equal 0 $errors[$installed] 'Guarded process rejected the target link to it.'
-        Assert-Equal 'kit fixture' ([IO.File]::ReadAllText($installed)) 'The target link does not resolve into the submodule.'
+        Invoke-FixtureGit -C $fixture.Repo add common/git
+        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'symlink fixture'
+        Assert-Failure (Invoke-Install $fixture) 'package symlink skipped'
+        $result = Invoke-Install $fixture -StrictMode $false
+        Assert-Success $result
+        Assert-True ($result.Output.Contains('package symlink skipped: git/.linked (packages hold files only)')) $result.Output
+        Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target '.linked') -Force -ErrorAction SilentlyContinue)) 'The package symlink was linked.'
+        Assert-Equal './scripts/init.txt' (@((Get-Item -LiteralPath $source -Force).Target)[0] -replace '\\', '/') 'The package symlink changed.'
+        Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'The install dirtied the checkout.'
     }
 
     Test-Case 'a submodule checkout inside an allowlisted package is never linked' {
         $fixture = New-Fixture
         # Written after the fixture commit, as a submodule checkout's gitfile is:
-        # Git never tracks or reports a .git path component. The pre-move
-        # checkout keeps its gitfile too.
-        $checkouts = @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit')
+        # Git never tracks or reports a .git path component. The retired
+        # checkouts keep their gitfiles.
+        $checkouts = @('common/codex/coding-agent-kit', 'common/coding-agent-kit/coding-agent-kit', 'common/pymol/PyMOLScripts')
         foreach ($checkout in $checkouts) {
             Write-FixtureFile (Join-Path $fixture.Repo "$checkout/.git") 'gitdir: ../../../.git/modules/x'
         }
         Assert-Success (Invoke-Install $fixture)
-        Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target 'coding-agent-kit') -Force -ErrorAction SilentlyContinue)) `
-            'The submodule checkout was installed.'
+        foreach ($name in @('coding-agent-kit', 'PyMOLScripts', 'configs', 'lib', '.pymolrc')) {
+            Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target $name) -Force -ErrorAction SilentlyContinue)) `
+                "A retired submodule checkout was installed: $name"
+        }
         $prefixes = @($checkouts | ForEach-Object {
                 [IO.Path]::GetFullPath((Join-Path $fixture.Repo $_)) + [IO.Path]::DirectorySeparatorChar })
         $checkoutLinks = @(Get-ChildItem -LiteralPath $fixture.Target -Recurse -Force | Where-Object {
                 $text = if ($_.LinkType) { [string]@($_.Target)[0] } else { '' }
                 $text -and @($prefixes | Where-Object { $text.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count })
         Assert-Equal 0 $checkoutLinks.Count "Links into a submodule checkout: $(($checkoutLinks | ForEach-Object FullName) -join ', ')"
-        Assert-Link (Join-Path $fixture.Target '.fixture-coding-agent-kit') (Join-Path $fixture.Repo 'common/coding-agent-kit/.fixture-coding-agent-kit')
+        Assert-Link (Join-Path $fixture.Target '.fixture-codex') (Join-Path $fixture.Repo 'common/codex/.fixture-codex')
         Assert-True (-not (& $gitExecutable -C $fixture.Repo status --porcelain)) 'The submodule gitfile dirtied the checkout.'
     }
 
@@ -364,7 +336,7 @@ public static class DotfilesCallerMitigation {
         $fixture = New-Fixture
         Write-FixtureFile (Join-Path $fixture.Target '.fixture-conda') "conda`r`n"
         Write-FixtureFile (Join-Path $fixture.Target '.fixture-ssh') 'keep this conflict'
-        Write-FixtureFile (Join-Path $fixture.Target '.fixture-pymol/nested.txt') 'keep this directory conflict'
+        Write-FixtureFile (Join-Path $fixture.Target '.fixture-git/nested.txt') 'keep this directory conflict'
         $stale = Join-Path $fixture.Root 'old-wezterm'
         Write-FixtureFile $stale 'stale target remains'
         New-Item -ItemType SymbolicLink -Path (Join-Path $fixture.Target '.fixture-wezterm') -Value $stale | Out-Null
@@ -374,7 +346,7 @@ public static class DotfilesCallerMitigation {
         $backups = @(Get-ChildItem -LiteralPath $fixture.Target -Force -Filter '.fixture-ssh.stow-backup-*')
         Assert-Equal 1 $backups.Count 'Conflict must have one backup.'
         Assert-Equal 'keep this conflict' ([IO.File]::ReadAllText($backups[0].FullName)) 'Backup bytes changed.'
-        $directoryBackups = @(Get-ChildItem -LiteralPath $fixture.Target -Force -Directory -Filter '.fixture-pymol.stow-backup-*')
+        $directoryBackups = @(Get-ChildItem -LiteralPath $fixture.Target -Force -Directory -Filter '.fixture-git.stow-backup-*')
         Assert-Equal 1 $directoryBackups.Count 'Directory conflict must have one backup.'
         Assert-Equal 'keep this directory conflict' ([IO.File]::ReadAllText((Join-Path $directoryBackups[0].FullName 'nested.txt'))) `
             'Directory backup contents changed.'
@@ -470,35 +442,41 @@ public static class DotfilesCallerMitigation {
         Assert-NoState $fixture
     }
 
-    Test-Case 'a dangling coding-agent-kit link still syncs, with one preflight warning' {
+    Test-Case 'links made from the retired packages go by exact text; foreign entries and full directories stay' {
         $fixture = New-Fixture
-        $kitFile = Join-Path $fixture.Repo 'common/coding-agent-kit/coding-agent-kit/helpers/fixture.cjs'
-        Write-FixtureFile $kitFile 'kit fixture'
-        $source = Join-Path $fixture.Repo 'common/coding-agent-kit/.claude/dotfiles/fixture.cjs'
-        [void][IO.Directory]::CreateDirectory((Split-Path $source -Parent))
-        New-Item -ItemType SymbolicLink -Path $source -Value '../../coding-agent-kit/helpers/fixture.cjs' | Out-Null
-        Invoke-FixtureGit -C $fixture.Repo config core.symlinks true
-        Invoke-FixtureGit -C $fixture.Repo add common/coding-agent-kit/.claude
-        Invoke-FixtureGit -C $fixture.Repo commit --quiet -m 'submodule link fixture'
-        # The tracked link dangles, as after a clone without --recurse-submodules.
-        Remove-Item -LiteralPath $kitFile
-        $warning = 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
-        $result = Invoke-Install $fixture -StrictMode $false
-        Assert-Success $result
-        Assert-Equal 1 ([regex]::Matches($result.Output, [regex]::Escape($warning)).Count) "Expected one kit warning: $($result.Output)"
-        Assert-True ($result.Output.Contains('Synchronizing portable Codex and Claude settings')) 'The sync step did not run.'
-        foreach ($relative in @('.codex/config.toml', '.codex/rules/portable.rules', '.claude/settings.json')) {
-            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Target $relative) -PathType Leaf) "AI live file not written: $relative"
+        $retired = @('.claude/dotfiles/check-git-hooks.cjs', '.claude/dotfiles/notify.cjs', '.claude/dotfiles/statusline.cjs',
+            '.local/bin/claude-as', '.local/bin/codex-as', '.local/lib/claude-as/launch.py', '.local/lib/codex-as/check.py',
+            '.local/lib/codex-as/handoff.py', '.local/lib/codex-as/launch.py', '.local/lib/codex-as/layout.py',
+            '.local/share/bash-completion/completions/claude-as', '.local/share/bash-completion/completions/codex-as',
+            '.oh-my-zsh/custom/completions/_claude-as', '.oh-my-zsh/custom/completions/_codex-as')
+        # The links an older installer made: each to its full path in
+        # common\PACKAGE, which the pull deleted.
+        $links = [Collections.Generic.List[object]]::new()
+        foreach ($path in $retired) { $links.Add(@('coding-agent-kit', $path)) }
+        $links.Add(@('pymol', '.pymolrc'))
+        $links.Add(@('pymol', '.pymolrc.py'))
+        foreach ($entry in $links) {
+            $native = $entry[1].Replace('/', '\')
+            $link = Join-Path $fixture.Target $native
+            [void][IO.Directory]::CreateDirectory((Split-Path $link -Parent))
+            New-Item -ItemType SymbolicLink -Path $link -Value (Join-Path (Join-Path (Join-Path $fixture.Repo 'common') $entry[0]) $native) | Out-Null
         }
-        Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target '.claude/dotfiles/fixture.cjs') -Force -ErrorAction SilentlyContinue)) `
-            'The dangling source was linked.'
-        Assert-Link (Join-Path $fixture.Target '.gitconfig') (Join-Path $fixture.Repo 'win/git/.gitconfig')
-        Assert-NoState $fixture
-        $strictTarget = Join-Path $fixture.Root 'strict target'
-        # The error view wraps the long message; match only its start.
-        Assert-Failure (Invoke-Install $fixture -TargetOverride $strictTarget) 'Stow preflight failed: coding-agent-kit links'
-        Assert-True (-not (Test-Path -LiteralPath $strictTarget)) 'Strict dangling-link warning caused a partial install.'
-        Assert-NoState $fixture
+        # Not theirs: another checkout's link and a completion of the user's.
+        $foreign = Join-Path $fixture.Target '.local\bin\other-tool'
+        New-Item -ItemType SymbolicLink -Path $foreign -Value (Join-Path $fixture.Root 'other\common\coding-agent-kit\.local\bin\codex-as') | Out-Null
+        Write-FixtureFile (Join-Path $fixture.Target '.oh-my-zsh\custom\completions\_mine') '#compdef mine'
+        $result = Invoke-Install $fixture
+        Assert-Success $result
+        foreach ($entry in $links) {
+            Assert-True (-not (Get-Item -LiteralPath (Join-Path $fixture.Target $entry[1].Replace('/', '\')) -Force -ErrorAction SilentlyContinue)) `
+                "The link made from $($entry[0]) for $($entry[1]) survived."
+        }
+        foreach ($directory in @('.claude\dotfiles', '.local\lib\claude-as', '.local\lib\codex-as')) {
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $directory))) "The emptied $directory survived."
+        }
+        Assert-True ((Get-Item -LiteralPath $foreign -Force).LinkType -eq 'SymbolicLink') 'A foreign link was removed.'
+        Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Target '.oh-my-zsh\custom\completions\_mine') -PathType Leaf) 'A user file was removed.'
+        Assert-Success (Invoke-Install $fixture)
     }
 
     Test-Case 'invalid host and missing win overlay are rejected before mutation' {
@@ -512,7 +490,7 @@ public static class DotfilesCallerMitigation {
 
     Test-Case 'Strict missing-package warnings fail before mutation and do not acknowledge' {
         $fixture = New-Fixture
-        Move-Item -LiteralPath (Join-Path $fixture.Repo 'common/pymol') -Destination (Join-Path $fixture.Root 'saved-pymol')
+        Move-Item -LiteralPath (Join-Path $fixture.Repo 'common/wezterm') -Destination (Join-Path $fixture.Root 'saved-wezterm')
         Assert-Failure (Invoke-Install $fixture) 'Stow preflight failed.*common package not found'
         Assert-True (-not (Test-Path -LiteralPath $fixture.Target)) 'Strict preflight warning caused a partial install.'
         Assert-NoState $fixture

@@ -11,10 +11,10 @@ $PSNativeCommandUseErrorActionPreference = $false
 # caller; each case sets what it needs. The same list as tests/*.sh.
 foreach ($knob in @('DOTFILES_AUTO_UPDATE', 'DOTFILES_AUTO_STOW', 'DOTFILES_HOST', 'DOTFILES_DIR',
         '_DOTFILES_CHECKED', 'DOTFILES_STOW_WITHOUT_OH_MY_ZSH', 'DOTFILES_COLOR',
-        'AWESOME_SKILLS_AUTO_UPDATE', 'AWESOME_SKILLS_FORCE', 'AWESOME_SKILLS_BG',
-        'AWESOME_SKILLS_INSTALLER_URL', 'AWESOME_SKILLS_REFRESH_DAYS', '_AWESOME_SKILLS_CHECKED',
+        'DOTFILES_PAYLOAD_AUTO_UPDATE', 'DOTFILES_PAYLOAD_ITEMS', '_DOTFILES_PAYLOAD_CHECKED',
         'CODING_AGENT_KIT_CONFIG', 'CODING_AGENT_KIT_COLOR', 'CODING_AGENT_KIT_USAGE_FILE',
-        'CODING_AGENT_KIT_TOKEN_ID', 'CODING_AGENT_KIT_CLAUDE_PID', 'XDG_STATE_HOME')) {
+        'CODING_AGENT_KIT_TOKEN_ID', 'CODING_AGENT_KIT_CLAUDE_PID', 'CODING_AGENT_KIT_REPO_URL',
+        'XDG_STATE_HOME', 'XDG_DATA_HOME')) {
     Remove-Item -LiteralPath "Env:$knob" -ErrorAction Ignore
 }
 
@@ -80,6 +80,10 @@ Write-Output '==> update-hooks.ps1'
 # Use a child process so fixtures cannot leak mock functions or global state.
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'update-hooks.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell update-hook tests failed.' }
+
+Write-Output '==> payload-update.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'payload-update.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'PowerShell payload hook tests failed.' }
 
 Write-Output '==> powershell-profile.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'powershell-profile.ps1')

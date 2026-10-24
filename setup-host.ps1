@@ -330,12 +330,10 @@ function Test-SetupHumanDone {
     # that need Windows APIs report not done elsewhere.
     param([Parameter(Mandatory)][string]$Id)
     switch -CaseSensitive ($Id) {
-        'HW-clone' {
-            $git = Find-BootstrapCommand 'git'
-            if (-not $git) { return $false }
-            $value = @(& $git --no-optional-locks -C $RepoRoot config --get core.symlinks 2>$null) -join ''
-            return $value -ceq 'true'
-        }
+        # A git clone (a .git directory, or a worktree's .git file), so the
+        # login updater can pull it. No tracked file is a symlink, so Git
+        # needs neither core.symlinks nor Developer Mode.
+        'HW-clone' { return Test-Path -LiteralPath (Join-Path $RepoRoot '.git') }
         'HW-stow' { return Test-SetupStowed }
         'HW-auto-stow-task' {
             $autoStow = Join-Path $RepoRoot 'scripts/dotfiles-auto-stow.ps1'
@@ -381,11 +379,12 @@ function Get-SetupHumanBlock {
     $repo = ConvertTo-SetupQuoted $RepoRoot
     switch -CaseSensitive ($Id) {
         'HW-clone' {
-            return @{ Kind = 'gui'; Lines = @(
-                    '# Turn on Developer Mode (Settings > System > For developers) so Git can create symlinks.'
-                    '# A fresh clone: git clone -c core.symlinks=true --recurse-submodules <repository URL>'
-                    "git -C $repo config core.symlinks true"
-                    "git -C $repo checkout -- common/pymol common/coding-agent-kit"
+            return @{ Kind = 'judgment'; Lines = @(
+                    '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.'
+                    '# Git, and PowerShell 7 as the MSI in Program Files\PowerShell\7, which HW-auto-stow-task starts by path:'
+                    'winget install --id Git.Git -e --source winget'
+                    'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix'
+                    'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
                 ) }
         }
         'HW-stow' {
@@ -619,12 +618,12 @@ function Invoke-BootstrapSetup {
     # credentials. Process environment outlives this script in an
     # interactive session, so every change is restored at the end.
     $saved = @{}
-    foreach ($name in @('DOTFILES_AUTO_UPDATE', 'AWESOME_SKILLS_AUTO_UPDATE', 'GIT_TERMINAL_PROMPT', 'PATH')) {
+    foreach ($name in @('DOTFILES_AUTO_UPDATE', 'DOTFILES_PAYLOAD_AUTO_UPDATE', 'GIT_TERMINAL_PROMPT', 'PATH')) {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
     }
     try {
         $env:DOTFILES_AUTO_UPDATE = '0'
-        $env:AWESOME_SKILLS_AUTO_UPDATE = '0'
+        $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
         $env:GIT_TERMINAL_PROMPT = '0'
         $applied = @(Invoke-SetupApply)
         if ($applied.Count -ne 1 -or $applied[0] -isnot [bool]) {

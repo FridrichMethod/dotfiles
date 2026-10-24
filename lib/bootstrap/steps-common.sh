@@ -373,25 +373,10 @@ steps_platform_mismatch() {
 }
 
 step_P0_preflight_check() {
-    local glibc platform detail paths lines line path dirty missing=''
+    local glibc platform detail dirty
     glibc=$(bootstrap_glibc_version)
     platform=$(bootstrap_detect_platform)
     detail="host $STEPS_HOST, profile $STEPS_PROFILE, $(bootstrap_os) $STEPS_ARCH${glibc:+, glibc $glibc}, detected $platform, checkout $STEPS_ROOT"
-    if [ -f "$STEPS_ROOT/.gitmodules" ]; then
-        paths=$(git config -f "$STEPS_ROOT/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null </dev/null) || paths=
-        lines=$paths$BOOTSTRAP_NL
-        while [ -n "$lines" ]; do
-            line=${lines%%"$BOOTSTRAP_NL"*}
-            lines=${lines#*"$BOOTSTRAP_NL"}
-            bootstrap_split ' ' "$line" _ path
-            [ -n "$path" ] || continue
-            [ -e "$STEPS_ROOT/$path/.git" ] || missing="$missing${missing:+ }$path"
-        done
-    fi
-    if [ -n "$missing" ]; then
-        dotfiles_log warn "submodule not checked out ($missing): run git submodule update --init --recursive in $STEPS_ROOT"
-        detail="$detail; submodule missing: $missing"
-    fi
     if [ -n "${DOTFILES_DIR:-}" ] && [ "$DOTFILES_DIR" != "$STEPS_ROOT" ]; then
         dotfiles_log warn "DOTFILES_DIR is $DOTFILES_DIR, but this checkout is $STEPS_ROOT"
     fi

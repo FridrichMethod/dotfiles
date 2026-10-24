@@ -25,8 +25,11 @@
     it contains an untrusted mount point" even when a local console can read
     the same link. A separate read-only process enables RedirectionGuard to
     check links even from a local console. An elevated run repairs rejected
-    source and destination links, preserving source links' relative targets.
-    Unsupported or failed trust checks stop the installation before syncing.
+    destination links. Packages hold files only; a symlink in one is skipped
+    with a warning. Unsupported or failed trust checks stop the installation
+    before syncing. The links it made from the two packages the payload repos
+    replaced are removed while their text is exactly the one it wrote
+    (scripts/payload-update.ps1 installs those repos).
     Declining any change leaves the installation partial; Strict reports a
     failure and the login updater never records that revision as applied.
 
@@ -120,7 +123,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve starting dotfiles HEAD.' }
 # allowlist instead of every package: Git Bash sources ~/.bashrc and
 # ~/.bash_profile, so linking the Linux shell packages in would break it.
 # Terminal/editor packages are listed only where the tool runs natively.
-$CommonPackages = @('claude', 'codex', 'coding-agent-kit', 'conda', 'git', 'pymol', 'ssh', 'wezterm')
+$CommonPackages = @('claude', 'codex', 'conda', 'git', 'ssh', 'wezterm')
 
 $script:Linked = 0
 $script:Repaired = 0
@@ -165,6 +168,49 @@ function Remove-RetiredLink {
         if ($resolved -ne $expected -or [IO.File]::Exists($resolved) -or [IO.Directory]::Exists($resolved)) { return }
     } catch { return } # A foreign or unresolvable target is never ours to remove.
     if (Test-StowShouldProcess $link 'Remove retired dotfiles symlink') {
+        if ($item.PSIsContainer) { [IO.Directory]::Delete($link) }
+        else { [IO.File]::Delete($link) }
+    }
+}
+
+# Every link this installer made from the two packages that the payload
+# repos replaced (common/coding-agent-kit, common/pymol), by package. Their
+# installers (scripts/payload-update.ps1) now own the PyMOL paths, and
+# ~/.claude/dotfiles, the old home of the Claude helpers, is no longer read.
+$RetiredPackageLinks = @(
+    foreach ($path in @('.claude/dotfiles/check-git-hooks.cjs', '.claude/dotfiles/notify.cjs',
+            '.claude/dotfiles/statusline.cjs', '.local/bin/claude-as', '.local/bin/codex-as',
+            '.local/lib/claude-as/launch.py', '.local/lib/codex-as/check.py', '.local/lib/codex-as/handoff.py',
+            '.local/lib/codex-as/launch.py', '.local/lib/codex-as/layout.py',
+            '.local/share/bash-completion/completions/claude-as', '.local/share/bash-completion/completions/codex-as',
+            '.oh-my-zsh/custom/completions/_claude-as', '.oh-my-zsh/custom/completions/_codex-as')) {
+        @{ Package = 'coding-agent-kit'; RelativePath = $path }
+    }
+    @{ Package = 'pymol'; RelativePath = '.pymolrc' }
+    @{ Package = 'pymol'; RelativePath = '.pymolrc.py' }
+)
+
+function Remove-RetiredPackageLink {
+    <#
+    .SYNOPSIS
+        Removes one link made from a retired package, only while its text is
+        exactly the one this installer wrote.
+    .DESCRIPTION
+        Invoke-StowPackage linked each file to its full path in this
+        checkout's common\PACKAGE, so the text is that path, dangling or not.
+        A file, a directory or any other link stays.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Package,
+        [Parameter(Mandatory)][string]$RelativePath
+    )
+    $native = $RelativePath.Replace('/', [IO.Path]::DirectorySeparatorChar)
+    $link = Join-Path $Target $native
+    $item = Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue
+    if (-not $item -or $item.LinkType -ne 'SymbolicLink') { return }
+    $expected = Join-Path (Join-Path $commonRoot $Package) $native
+    if (-not [string]::Equals(@($item.Target)[0], $expected, [StringComparison]::OrdinalIgnoreCase)) { return }
+    if (Test-StowShouldProcess $link "Remove the link made from the retired $Package package") {
         if ($item.PSIsContainer) { [IO.Directory]::Delete($link) }
         else { [IO.File]::Delete($link) }
     }
@@ -318,39 +364,6 @@ function Test-ContentEquivalent {
     return [string]::Equals($textA, $textB, [StringComparison]::Ordinal)
 }
 
-function Test-DotfilesLinkDangles {
-    <#
-    .SYNOPSIS
-        True when a symlink's own target is missing.
-    .DESCRIPTION
-        Resolves the link's raw target text against its directory and never
-        asks RedirectionGuard: the guarded probe rejects an untrusted link with
-        Win32 448 whether or not its target exists. This process does not
-        enforce the mitigation.
-    #>
-    param([Parameter(Mandatory)][string]$Path)
-
-    $link = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-    if (-not $link -or $link.LinkType -ne 'SymbolicLink') { return $false }
-    $resolved = [IO.Path]::GetFullPath(@($link.Target)[0], (Split-Path -Parent $link.FullName))
-    return -not ([IO.File]::Exists($resolved) -or [IO.Directory]::Exists($resolved))
-}
-
-function Get-DotfilesDanglingKitLink {
-    <#
-    .SYNOPSIS
-        Lists the tracked links of the coding-agent-kit package that dangle.
-    .DESCRIPTION
-        They are the launchers and Claude helpers in the package's submodule,
-        so they dangle while it is not checked out at its gitlink, whatever
-        the kit layout, and however trusted each link is.
-    #>
-    @(git -C $RepoRoot ls-files -s -- common/coding-agent-kit 2>$null |
-            Where-Object { $_.StartsWith('120000 ') } |
-            ForEach-Object { [IO.Path]::GetFullPath((Join-Path $RepoRoot ($_ -split "`t", 2)[1])) } |
-            Where-Object { Test-DotfilesLinkDangles -Path $_ })
-}
-
 function Invoke-StowPackage {
     param(
         [Parameter(Mandatory)][string]$PackageRoot,
@@ -376,43 +389,11 @@ function Invoke-StowPackage {
             continue
         }
 
-        # A source can itself be a symlink (for example .pymolrc into a
-        # submodule). Check it before its destination so repairing the outer
-        # link cannot hide an untrusted source in the chain.
-        $sourceRepaired = $false
+        # No package holds a symlink. One would be a link Git checks out
+        # untrusted without core.symlinks, or a plain text file, so fail closed.
         if ($item.LinkType -eq 'SymbolicLink') {
-            $sourceError = $script:LinkReadErrors[$item.FullName]
-            $danglingWarning = "dangling source skipped: $PackageName/$relativeUnix " +
-                '(run: git submodule update --init --recursive)'
-            if ($sourceError -in @(2, 3)) {
-                $script:Warnings.Add($danglingWarning)
-                continue
-            }
-            if ($sourceError -eq 448) {
-                if (-not $script:IsElevated) {
-                    $script:Warnings.Add("untrusted source symlink left in place: $PackageName/$relativeUnix (re-run elevated)")
-                    continue
-                }
-                if (-not (Test-StowShouldProcess $item.FullName 'Repair untrusted source symlink')) { continue }
-                # Use the raw target, never a resolved absolute path: Git
-                # tracks relative symlink text, including submodule links.
-                New-Item -ItemType SymbolicLink -Path $item.FullName `
-                    -Value @($item.Target)[0] -Force -Confirm:$false | Out-Null
-                $sourceError = (Get-DotfilesLinkReadErrors -Paths @($item.FullName))[$item.FullName]
-                $script:LinkReadErrors[$item.FullName] = $sourceError
-                $script:Repaired++
-                $sourceRepaired = $true
-                # Trusted now, the link reaches its target, which may be missing:
-                # an untrusted link that dangles probes as 448, not as 2 or 3.
-                if ($sourceError -in @(2, 3) -and (Test-DotfilesLinkDangles -Path $item.FullName)) {
-                    $script:Warnings.Add($danglingWarning)
-                    continue
-                }
-            }
-            if ($sourceError -ne 0) {
-                $script:Warnings.Add("source unreadable under RedirectionGuard, skipped: $PackageName/$relativeUnix (Win32 $sourceError)")
-                continue
-            }
+            $script:Warnings.Add("package symlink skipped: $PackageName/$relativeUnix (packages hold files only)")
+            continue
         }
 
         $destination = Join-Path $Target $relative
@@ -425,9 +406,7 @@ function Invoke-StowPackage {
         if ($existing) {
             if ($existing.LinkType -eq 'SymbolicLink') {
                 if (@($existing.Target)[0] -eq $item.FullName) {
-                    $linkError = if ($sourceRepaired) {
-                        (Get-DotfilesLinkReadErrors -Paths @($destination))[$destination]
-                    } else { $script:LinkReadErrors[$destination] }
+                    $linkError = $script:LinkReadErrors[$destination]
                     if ($linkError -eq 0) {
                         Write-Verbose "ok        $relativeUnix"
                         $script:Unchanged++
@@ -505,8 +484,9 @@ $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 # the portable merge source wholesale.
 $codexPortable = Join-Path $commonRoot 'codex\.codex\config.toml'
 $codexRulesPortable = Join-Path $commonRoot 'codex\.codex\rules\portable.rules'
-# The coding-agent-kit package links Claude's local hooks/status line; Node.js
-# 22+ must be on PATH when Claude runs those helpers.
+# Claude's hooks and status line run coding-agent-kit's Node helpers from
+# ~/.claude/coding-agent-kit/ (scripts/payload-update.ps1 installs them);
+# Node.js 22+ must be on PATH when Claude runs them.
 $claudePortable = Join-Path $commonRoot 'claude\.claude\settings.json'
 if ($HostDir) {
     $codexHost = Join-Path $RepoRoot "$HostDir\codex\.codex\config.toml"
@@ -548,7 +528,6 @@ foreach ($rootAndPackages in @(
             $relative = $item.FullName.Substring($packagePath.Length).TrimStart('\', '/')
             if ($relative -eq '.stow-local-ignore' -or
                 (Test-StowIgnored -RelativePath ($relative -replace '\\', '/') -Patterns $patterns)) { continue }
-            if ($item.LinkType -eq 'SymbolicLink') { $probePaths.Add($item.FullName) }
             $destination = Join-Path $Target $relative
             $existing = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
             if ($existing -and $existing.LinkType -eq 'SymbolicLink' -and
@@ -564,18 +543,19 @@ $script:LinkReadErrors = Get-DotfilesLinkReadErrors -Paths $probePaths.ToArray()
 if ($script:LinkReadErrors[$PSCommandPath] -ne 0) {
     throw 'The installer checkout is not readable under RedirectionGuard; repair its parent path first.'
 }
-# Tracked links of the coding-agent-kit package, the launchers and Claude
-# helpers in the coding-agent-kit submodule, dangle while it is not checked
-# out, trusted or not. Mirroring stow-all.sh, the syncs still run; one warning
-# keeps the revision unacknowledged and fails -Strict before any change.
-if (@(Get-DotfilesDanglingKitLink).Count) {
-    $script:Warnings.Add('coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)')
-}
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow preflight failed: $($script:Warnings -join '; ')"
 }
 Remove-RetiredLink '.local/bin/shk' 'common/codex/.local/bin/shk'
 Remove-RetiredLink '.local/bin/codex-instructions-sync' 'common/codex/.local/bin/codex-instructions-sync'
+foreach ($retired in $RetiredPackageLinks) { Remove-RetiredPackageLink @retired }
+# The directories only those packages filled go too, once empty.
+foreach ($directory in @('.claude/dotfiles', '.local/lib/claude-as', '.local/lib/codex-as', '.oh-my-zsh/custom/completions')) {
+    $path = Join-Path $Target $directory.Replace('/', [IO.Path]::DirectorySeparatorChar)
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    if (-not $WhatIfPreference -and $item -and $item.PSIsContainer -and -not $item.LinkType -and
+        -not @(Get-ChildItem -LiteralPath $path -Force).Count) { [IO.Directory]::Delete($path) }
+}
 if ($Strict -and $script:Warnings.Count -gt 0) {
     throw "Stow retirement failed: $($script:Warnings -join '; ')"
 }

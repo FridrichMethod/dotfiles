@@ -70,11 +70,16 @@ coverage.xml
 # End-to-end bootstrap runs (tests/e2e/run.sh)
 /tests/e2e/out/
 
-# The coding-agent-kit checkout that a fast-forward across the kit's move to
-# common/coding-agent-kit leaves on a host where the submodule was checked out
-# (git cannot remove a submodule checkout that holds files). Keep this line:
-# without it a host that pulls the move stops updating (docs/coding-agent-kit.md).
+# Retired submodule checkouts that a fast-forward leaves on a host where they
+# were checked out (git cannot remove a submodule checkout that holds files):
+# coding-agent-kit from before its move to its own package, then both
+# submodules from before the payload repos became installed ones. Keep these
+# lines: without them such a host stops updating, at "Checkout changed during
+# update" and then "Local changes" (docs/payloads.md, Migration). The doctor
+# prints the rm that removes each.
 /common/codex/coding-agent-kit/
+/common/coding-agent-kit/coding-agent-kit/
+/common/pymol/PyMOLScripts/
 
 # Retired submodule checkout retained on existing hosts.
 /common/sherlock-kit/sherlock-kit/

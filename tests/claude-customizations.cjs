@@ -23,10 +23,13 @@ process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_TEMPLATE_DIR = path.join(gitEnvironment, 'empty-template');
 fs.mkdirSync(process.env.GIT_TEMPLATE_DIR);
 
-// The helpers are links of the coding-agent-kit package into its submodule.
-const scripts = path.resolve(__dirname, '../common/coding-agent-kit/.claude/dotfiles');
-if (!fs.statSync(path.join(scripts, 'statusline.cjs'), { throwIfNoEntry: false })?.isFile()) {
-  throw new Error('coding-agent-kit submodule not initialized; run git submodule update --init --recursive.');
+// The helpers come from an installed coding-agent-kit: DOTFILES_TEST_KIT_HOME
+// names a home it is installed in (CI installs the real kit there, through
+// scripts/payload-update.sh); without one, the helper case skips.
+const kitHome = process.env.DOTFILES_TEST_KIT_HOME;
+const scripts = kitHome ? path.join(kitHome, '.claude', 'coding-agent-kit') : '';
+if (kitHome && !fs.statSync(path.join(scripts, 'statusline.cjs'), { throwIfNoEntry: false })?.isFile()) {
+  throw new Error(`DOTFILES_TEST_KIT_HOME=${kitHome} has no installed coding-agent-kit helpers in ${scripts}.`);
 }
 const settings = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../common/claude/.claude/settings.json'), 'utf8'));
 
@@ -37,10 +40,11 @@ test('Git fixtures use ordinary empty config and template paths', () => {
   assert.deepEqual(fs.readdirSync(process.env.GIT_TEMPLATE_DIR), []);
 });
 
-test('portable launchers resolve stowed helpers through a home path containing spaces', () => {
+test('portable commands run the installed helpers through a home path containing spaces',
+  { skip: kitHome ? false : 'no installed coding-agent-kit (DOTFILES_TEST_KIT_HOME)' }, () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude home '));
   try {
-    const target = path.join(temporary, '.claude', 'dotfiles');
+    const target = path.join(temporary, '.claude', 'coding-agent-kit');
     fs.mkdirSync(target, { recursive: true });
     for (const name of fs.readdirSync(scripts)) fs.copyFileSync(path.join(scripts, name), path.join(target, name));
     const execute = (command, input) => {

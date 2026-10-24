@@ -13,9 +13,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURES="$REPO_ROOT/tests/fixtures/bootstrap"
@@ -355,7 +355,7 @@ case "${1:-} ${2:-}" in
     'bundle --no-upgrade')
         printf 'brew:bundle %s\n' "$name" >>"$EVENT_LOG"
         printf '%s\n' "$brewfile" | sed -nE "s/^(tap|brew|cask) /brew-line:$name &/p" >>"$EVENT_LOG"
-        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} AWESOME_SKILLS_AUTO_UPDATE=${AWESOME_SKILLS_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
+        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} DOTFILES_PAYLOAD_AUTO_UPDATE=${DOTFILES_PAYLOAD_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
         [ "${BREW_FAIL:-0}" != 1 ] || exit 1
         if [ -n "${BREW_POLLUTE:-}" ]; then
             printf '%s\n' '# appended by a brew installer' >>"$BREW_POLLUTE"
@@ -675,7 +675,8 @@ printf '%s\n' '# fixture bashrc' >"$FIXTURE/common/bash/.bashrc"
 printf '%s\n' '{}' >"$FIXTURE/common/claude/.claude/settings.json"
 cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
 mkdir -p "$FIXTURE/scripts"
-cp "$REPO_ROOT/scripts/awesome-skills-update.sh" "$FIXTURE/scripts/awesome-skills-update.sh"
+cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/payload-update.sh"
+cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
 printf '%s\n' '/.venv-sync/' >"$FIXTURE/.gitignore"
 cat >"$FIXTURE/stow-all.sh" <<'SH'
 #!/bin/sh
@@ -871,11 +872,11 @@ expect_no_text check-fresh out "&& bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_text check-fresh out 'H1-locale done'
 expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
-expect_line check-fresh 'HUMAN-BEGIN H7-sync-skills judgment'
-expect_text check-fresh out 'unpinned curl of awesome-skills main'
-expect_text check-fresh out '# on by default once stowed: every new interactive shell runs it unless AWESOME_SKILLS_AUTO_UPDATE=0'
-SKILLS_LINE="AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh $FIXTURE/scripts/awesome-skills-update.sh"
-expect_line check-fresh "$SKILLS_LINE"
+expect_line check-fresh 'HUMAN-BEGIN H7-payloads judgment'
+expect_text check-fresh out "# on by default once stowed: the first interactive shell installs coding-agent-kit, PyMOLScripts and awesome-skills through their own installers (config/payloads.tsv), unless DOTFILES_PAYLOAD_AUTO_UPDATE=0 is in that shell's environment"
+expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.6'
+PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
+expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
 expect_no_events check-fresh
 snapshot >"$TEST_TMP/after"
@@ -885,13 +886,15 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
 }
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
 
-# The skill-sync line runs the sync even in a provisioning shell, which
-# exports AWESOME_SKILLS_AUTO_UPDATE=0 (curl is the stub; it logs the URL).
+# The payload line runs the payload hook even in a provisioning shell, which
+# exports DOTFILES_PAYLOAD_AUTO_UPDATE=0 (curl is the stub; it logs each URL).
 : >"$EVENT_LOG"
-env -i HOME="$TEST_TMP/skills-home" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
-    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$URL_MAP" AWESOME_SKILLS_AUTO_UPDATE=0 \
-    sh -c "$SKILLS_LINE" >/dev/null 2>&1 || true
-expect_event 'curl:https://raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh'
+env -i HOME="$TEST_TMP/payload-home" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
+    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$URL_MAP" DOTFILES_PAYLOAD_AUTO_UPDATE=0 \
+    sh -c "$PAYLOAD_LINE" >/dev/null 2>&1 || true
+for repo in coding-agent-kit PyMOLScripts awesome-skills; do
+    expect_event "curl:https://raw.githubusercontent.com/FridrichMethod/$repo/main/install.sh"
+done
 
 # --- debian apply: every step, in phase order --------------------------------
 
@@ -903,7 +906,7 @@ expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
     "curl:$URL_THEME" 'bat:cache --build' \
     "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
     'setup-sync:' "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
-expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
+expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
 expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
 # Linux takes python3 from apt (H1-apt-core): the core Brewfile's python is
 # macOS-only.

@@ -172,45 +172,10 @@ function Get-DotfilesHead {
 }
 
 function Test-DotfilesClean {
-    param([string]$Repo, [switch]$AllowGitlinkChanges)
-    $arguments = @('-C', $Repo, 'status', '--porcelain', '--untracked-files=normal')
-    $arguments += if ($AllowGitlinkChanges) { '--ignore-submodules=all' } else { '--ignore-submodules=none' }
-    $changes = git @arguments 2>$null
+    param([string]$Repo)
+    $changes = git -C $Repo status --porcelain --untracked-files=normal 2>$null
     if ($LASTEXITCODE -ne 0) { throw 'Cannot check dotfiles working tree.' }
-    if ($changes) { return $false }
-    if ($AllowGitlinkChanges) {
-        # A failed submodule download may leave a stale gitlink. Preserve real
-        # submodule edits, but allow retrying the checkout of the recorded SHA.
-        git -C $Repo submodule foreach --quiet --recursive 'status=$(git status --porcelain --untracked-files=normal --ignore-submodules=all) && test -z "$status"' 2>$null
-        if ($LASTEXITCODE -ne 0) { return $false }
-    }
-    return $true
-}
-
-
-function Test-DotfilesUpdateClean {
-    param([string]$Repo, [string]$Directory)
-    $pending = Read-DotfilesState $Directory 'submodules.json'
-    $allowGitlinks = $null -ne $pending -and $pending.head -eq (Get-DotfilesHead $Repo)
-    return Test-DotfilesClean $Repo -AllowGitlinkChanges:$allowGitlinks
-}
-
-function Set-DotfilesSubmodulePending {
-    param([string]$Repo, [string]$Directory)
-    Write-DotfilesState $Directory 'submodules.json' @{
-        home = [Environment]::GetFolderPath('UserProfile')
-        head = Get-DotfilesHead $Repo
-    }
-}
-
-function Invoke-DotfilesSubmoduleSync {
-    param([string]$Repo, [string]$Directory)
-    if (-not (Test-DotfilesUpdateClean $Repo $Directory)) { throw 'Local changes present; submodule update skipped.' }
-    Set-DotfilesSubmodulePending $Repo $Directory
-    git -C $Repo submodule update --init --recursive --quiet 2>$null
-    if ($LASTEXITCODE -ne 0) { throw 'Submodule update failed; restow remains pending.' }
-    if (-not (Test-DotfilesClean $Repo)) { throw 'Working tree changed during update; stow skipped.' }
-    Remove-Item -LiteralPath (Join-Path $Directory 'submodules.json') -ErrorAction Stop
+    return -not $changes
 }
 
 function Save-DotfilesStowState {
@@ -259,10 +224,9 @@ function Invoke-DotfilesApply {
         if ($null -eq $request) { return }
         $request.host = ConvertTo-DotfilesWindowsHost $request.host
         if ($request.head -ne (Get-DotfilesHead $Repo)) { throw 'HEAD changed; a new login will request the current revision.' }
-        if (-not (Test-DotfilesUpdateClean $Repo $directory)) { throw 'Working tree has local changes; restow remains pending.' }
+        if (-not (Test-DotfilesClean $Repo)) { throw 'Working tree has local changes; restow remains pending.' }
         $state = Read-DotfilesState $directory
         if ($null -ne $state -and $state.appliedHead -eq $request.head -and $state.host -eq $request.host) { return }
-        Invoke-DotfilesSubmoduleSync $Repo $directory
         # Child scope isolates installer preference variables and helper names.
         & (Join-Path $Repo 'stow-all.ps1') -HostDir $request.host -Strict
         $state = Read-DotfilesState $directory
@@ -284,11 +248,10 @@ function Invoke-DotfilesUpdate {
     $lock = Open-DotfilesLock $directory
     if ($null -eq $lock) { return }
     $dispatch = $false
-    $pulled = $false
     $savedPrompt = $env:GIT_TERMINAL_PROMPT
     $env:GIT_TERMINAL_PROMPT = '0'
     try {
-        if (-not (Test-DotfilesUpdateClean $Repo $directory)) {
+        if (-not (Test-DotfilesClean $Repo)) {
             Write-DotfilesLog warn 'Local changes present; automatic pull/stow skipped.'
             return
         }
@@ -299,18 +262,12 @@ function Invoke-DotfilesUpdate {
                 Write-DotfilesLog step "$behind new commit(s) available - pulling..."
                 git -C $Repo pull --ff-only --quiet 2>$null
                 if ($LASTEXITCODE -ne 0) { throw "Fast-forward pull failed. Resolve manually in $Repo." }
-                Set-DotfilesSubmodulePending $Repo $directory
-                $pulled = $true
                 Write-DotfilesLog ok 'Pulled successfully.'
             }
         }
         # Also retries failed stows after a previous pull or while offline.
         $dispatch = Request-DotfilesRestow $Repo $directory
-        $pending = Read-DotfilesState $directory 'submodules.json'
-        $retrySubmodules = $null -ne $pending -and $pending.head -eq (Get-DotfilesHead $Repo)
-        if ($dispatch -or $pulled -or $retrySubmodules) {
-            Invoke-DotfilesSubmoduleSync $Repo $directory
-        }
+        if ($dispatch -and -not (Test-DotfilesClean $Repo)) { throw 'Working tree changed during update; stow skipped.' }
     }
     finally {
         $lock.Dispose()

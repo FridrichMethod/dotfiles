@@ -1,5 +1,0 @@
-# The submodule checkout; the links in this package point into it.
-# Path-anchored: Stow matches a pattern with a slash against "/PATH", so only
-# the package-root checkout is ignored, not a .config/coding-agent-kit.
-^/coding-agent-kit$
-^/coding-agent-kit/

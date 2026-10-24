@@ -473,30 +473,46 @@ step_H7_auth_plan() {
     steps_block_end
 }
 
-# --- H7-sync-skills (judgment, reminder) -----------------------------------
+# --- H7-payloads (judgment, reminder) --------------------------------------
 
-step_H7_sync_skills_check() {
-    if [ -f "${XDG_CACHE_HOME:-$HOME/.cache}/awesome-skills/last-sync" ]; then
-        STEP_DETAIL='awesome-skills has synced on this host'
-        return 0
-    fi
-    STEP_DETAIL='optional skill library sync has not run'
-    return 1
+# Done once the doctor's payloads check passes: every selected payload repo
+# installed, with the kit's Claude helpers.
+step_H7_payloads_check() {
+    local result
+    result=$(bootstrap_check_payloads "$STEPS_ROOT")
+    STEP_DETAIL=${result#*"$BOOTSTRAP_TAB"}
+    [ "${result%%"$BOOTSTRAP_TAB"*}" = ok ]
 }
 
 # The hook is on by default once stowed, and the provisioning shells export
-# AWESOME_SKILLS_AUTO_UPDATE=0, which even AWESOME_SKILLS_FORCE=1 obeys: the
-# run line sets it back to 1 for itself.
-step_H7_sync_skills_plan() {
-    steps_block_begin H7-sync-skills judgment
+# DOTFILES_PAYLOAD_AUTO_UPDATE=0, which the --now run line ignores.
+step_H7_payloads_plan() {
+    steps_block_begin H7-payloads judgment
     printf '%s\n' \
-        "# on by default once stowed: every new interactive shell runs it unless AWESOME_SKILLS_AUTO_UPDATE=0 is in that shell's environment" \
-        '# it is an unpinned curl of awesome-skills main (raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh)' \
-        '# that installs into ~/.claude/skills and ~/.codex/skills; to keep it off, export AWESOME_SKILLS_AUTO_UPDATE=0' \
-        '# in the environment your terminals and ssh sessions start with. To run it once now, in the foreground:'
-    printf 'AWESOME_SKILLS_AUTO_UPDATE=1 AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh %s\n' \
-        "$(steps_quote "$STEPS_ROOT/scripts/awesome-skills-update.sh")"
+        "# on by default once stowed: the first interactive shell installs coding-agent-kit, PyMOLScripts and awesome-skills through their own installers (config/payloads.tsv), unless DOTFILES_PAYLOAD_AUTO_UPDATE=0 is in that shell's environment" \
+        "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)" \
+        '# later shells refresh them in the background; to keep them off, export DOTFILES_PAYLOAD_AUTO_UPDATE=0' \
+        '# in the environment your terminals and ssh sessions start with. To run them once now, in the foreground:'
+    printf 'sh %s --now\n' "$(steps_quote "$STEPS_ROOT/scripts/payload-update.sh")"
     steps_block_end
+}
+
+# steps_payload_channel: the kit channel row of config/payloads.tsv.
+steps_payload_channel() {
+    local line
+    if [ ! -r "$STEPS_ROOT/config/payloads.tsv" ]; then
+        printf '%s\n' '?'
+        return 0
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in
+            "kit${BOOTSTRAP_TAB}channel$BOOTSTRAP_TAB"*)
+                printf '%s\n' "${line#"kit${BOOTSTRAP_TAB}channel$BOOTSTRAP_TAB"}"
+                return 0
+                ;;
+        esac
+    done <"$STEPS_ROOT/config/payloads.tsv"
+    printf '%s\n' '?'
 }
 
 # --- H7-doctor (judgment, reminder) ----------------------------------------

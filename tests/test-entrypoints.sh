@@ -6,9 +6,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-entrypoints.XXXXXX")"
@@ -68,12 +68,14 @@ else
 fi
 
 # Every entry point drops the same dotfiles knobs, tests/run.ps1 too, and the
-# list names every DOTFILES_* and AWESOME_SKILLS_* variable the code can read
-# (but DOTFILES_SYNC_PYTHON, which tests/run.sh provisions), so a shell that
-# exports DOTFILES_AUTO_UPDATE=0 while provisioning cannot fail a suite. It
-# also names every CODING_AGENT_KIT_* variable that the coding-agent-kit
-# launchers the suites run can read (check_kit_knobs of
-# tests/coding-agent-kit-delivery.sh).
+# list names every DOTFILES_* variable the code can read (but
+# DOTFILES_SYNC_PYTHON, which tests/run.sh provisions, and the DOTFILES_TEST_*
+# inputs of the suites), so a shell that exports DOTFILES_AUTO_UPDATE=0 while
+# provisioning cannot fail a suite. It also names every CODING_AGENT_KIT_*
+# variable of the installed coding-agent-kit that the AI integration suites
+# run: the list in tests/run.sh is explicit, and with DOTFILES_TEST_KIT_HOME
+# naming a home the kit is installed in (CI installs the real kit there) the
+# kit's own code is checked against it below.
 REPO_ROOT="$(cd -- "$TEST_DIR/.." && pwd)"
 # knob_list FILE: the names of FILE's "unset DOTFILES_AUTO_UPDATE ..." statement.
 knob_list() {
@@ -102,9 +104,9 @@ fi
 # Env:NAME and GetEnvironmentVariable('NAME') in PowerShell, os.environ in
 # Python. A name embedded in a longer identifier does not count.
 if ! KNOB_NAMES=$(git -C "$REPO_ROOT" -c grep.lineNumber=false -c grep.column=false \
-    grep -I -h -o --no-color -E '(^|[^A-Za-z0-9_])_?(DOTFILES|AWESOME_SKILLS)_[A-Z_]+' \
+    grep -I -h -o --no-color -E '(^|[^A-Za-z0-9_])_?(DOTFILES|AWESOME_SKILLS|CODING_AGENT_KIT)_[A-Z_]+' \
     -- ':!tests' ':!docs' ':!.github' ':!*.md'); then
-    printf 'ERROR: git grep found no DOTFILES_* or AWESOME_SKILLS_* name in %s.\n' "$REPO_ROOT" >&2
+    printf 'ERROR: git grep found no DOTFILES_* name in %s.\n' "$REPO_ROOT" >&2
     exit 1
 fi
 READ_KNOBS=$(printf '%s\n' "$KNOB_NAMES" | sed -E 's/^[^A-Z_]//' | LC_ALL=C sort -u)
@@ -117,16 +119,29 @@ for knob in $READ_KNOBS; do
         exit 1
     fi
 done
-# The same for the kit's knobs, from its code at the recorded gitlink outside
-# its own tests and docs, when the submodule is checked out. The delivery
-# test owns that check, so the bump Action's gate 3 runs it on every release.
-if [[ -e "$REPO_ROOT/common/coding-agent-kit/coding-agent-kit/.git" ]]; then
-    (
-        set --
-        # shellcheck source=tests/coding-agent-kit-delivery.sh
-        source "$TEST_DIR/coding-agent-kit-delivery.sh"
-        check_kit_knobs "$REPO_ROOT"
-    )
+# The same for the kit's knobs, from the code of the release installed in
+# DOTFILES_TEST_KIT_HOME (its launcher's directory, outside the kit's own
+# tests, docs and Markdown), when one is: a new kit release that reads a new
+# knob fails CI until the knob is on the list.
+if [[ -n "${DOTFILES_TEST_KIT_HOME:-}" ]]; then
+    KIT_LAUNCHER=$DOTFILES_TEST_KIT_HOME/.local/bin/codex-as
+    KIT_RELEASE=$(python3 -I -B -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' \
+        "$KIT_LAUNCHER")
+    [[ -f "$KIT_RELEASE/bin/codex-as" ]] || {
+        printf 'ERROR: DOTFILES_TEST_KIT_HOME=%s has no installed coding-agent-kit launcher.\n' "$DOTFILES_TEST_KIT_HOME" >&2
+        exit 1
+    }
+    KIT_NAMES=$(grep -r -I -h -o --exclude-dir=tests --exclude-dir=docs --exclude-dir=.github --exclude='*.md' \
+        -E '(^|[^A-Za-z0-9_])_?CODING_AGENT_KIT_[A-Z_]+' "$KIT_RELEASE" | sed -E 's/^[^A-Z_]//' | LC_ALL=C sort -u) || {
+        printf 'ERROR: found no CODING_AGENT_KIT_* name in the kit release %s.\n' "$KIT_RELEASE" >&2
+        exit 1
+    }
+    for knob in $KIT_NAMES; do
+        grep -Fxq -- "$knob" <<<"$KNOBS" || {
+            printf 'ERROR: coding-agent-kit %s reads %s, which the test entry points do not unset.\n' "$KIT_RELEASE" "$knob" >&2
+            exit 1
+        }
+    done
 fi
 # Commit hooks export a relative index path. The manifest suite creates a
 # linked worktree whose .git is a file, so fixture Git must clear this path.
@@ -196,9 +211,9 @@ fi
 
 # Each hook named below runs its suite when a file the suite depends on
 # changes: the engine suites on the engine and the real Codex config.toml,
-# the delivery test on the knob list of tests/run.sh and on the bump
-# workflow and its reviewed copy, and this test on itself, the entry points
-# it reads and the hook configuration. Files are selected as pre-commit
+# the payload hook suite on the hook, its config, the rc files that source it
+# and the logger, and this test on itself, the entry points it reads and the
+# hook configuration. Files are selected as pre-commit
 # selects them: re.search of the hook's files, then of its exclude and the
 # top-level one.
 python3 -I - "$REPO_ROOT/.pre-commit-config.yaml" <<'PY'
@@ -226,8 +241,9 @@ need = {
     'structured-config-sync': engine + ['common/codex/.codex/config.toml'],
     'ai-config-sync': engine,
     'codex-config-sync': engine + ['common/codex/.codex/config.toml'],
-    'coding-agent-kit-delivery': ['tests/run.sh', '.github/workflows/update-coding-agent-kit-submodule.yml',
-                                  'tests/fixtures/update-coding-agent-kit-submodule.yml'],
+    'payload-update': ['scripts/payload-update.sh', 'scripts/awesome-skills-update.sh', 'config/payloads.tsv',
+                       'common/sh/.aliases', 'common/sh/.profile', 'common/zsh/.zshrc', 'lib/terminal.sh',
+                       'tests/payload-update.sh'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
                          'tests/windows-installer-controls.ps1'],
 }
@@ -244,14 +260,14 @@ if missed:
 PY
 
 # The provisioning exports in the caller's shell change nothing.
-if ! env DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_HOST= _DOTFILES_CHECKED=1 \
-    AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=1 _AWESOME_SKILLS_CHECKED=1 \
-    /bin/bash "$TEST_DIR/awesome-skills-update.sh" >"$TEST_TMP/hermetic.stdout" 2>"$TEST_TMP/hermetic.stderr"; then
+if ! env DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 DOTFILES_HOST= _DOTFILES_CHECKED=1 \
+    DOTFILES_PAYLOAD_ITEMS= _DOTFILES_PAYLOAD_CHECKED=1 XDG_DATA_HOME="$TEST_TMP/data" \
+    /bin/bash "$TEST_DIR/payload-update.sh" >"$TEST_TMP/hermetic.stdout" 2>"$TEST_TMP/hermetic.stderr"; then
     cat "$TEST_TMP/hermetic.stdout" "$TEST_TMP/hermetic.stderr" >&2
-    printf 'ERROR: tests/awesome-skills-update.sh fails under the provisioning exports.\n' >&2
+    printf 'ERROR: tests/payload-update.sh fails under the provisioning exports.\n' >&2
     exit 1
 fi
-grep -Fxq 'awesome-skills-update=PASS' "$TEST_TMP/hermetic.stdout" ||
-    fail_run hermetic 'tests/awesome-skills-update.sh did not print awesome-skills-update=PASS.'
+grep -Fxq 'payload-update=PASS' "$TEST_TMP/hermetic.stdout" ||
+    fail_run hermetic 'tests/payload-update.sh did not print payload-update=PASS.'
 
 printf 'test-entrypoints=PASS\n'

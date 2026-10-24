@@ -6,9 +6,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 # Exercise both login implementations with isolated homes, fake failures,
 # real local Git remotes, and independent-process lock contention.
@@ -29,7 +29,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-for token in _DOTFILES_CHECKED DOTFILES_AUTO_UPDATE DOTFILES_DIR DOTFILES_AUTO_STOW --ff-only 'submodule update'; do
+for token in _DOTFILES_CHECKED DOTFILES_AUTO_UPDATE DOTFILES_DIR DOTFILES_AUTO_STOW --ff-only; do
     for f in "$SH_UPDATER" "$PS_UPDATER"; do
         if grep -Fq -e "$token" "$f"; then continue; fi
         if [ "$f" = "$PS_UPDATER" ] && grep -Fq -e "$token" "$PS_HELPER"; then continue; fi
@@ -40,6 +40,13 @@ for token in _DOTFILES_CHECKED DOTFILES_AUTO_UPDATE DOTFILES_DIR DOTFILES_AUTO_S
     done
 done
 grep -Fq '[Console]::IsOutputRedirected' "$PS_UPDATER"
+# Dotfiles has no submodules, so neither updater runs a submodule command.
+for f in "$SH_UPDATER" "$PS_UPDATER" "$PS_HELPER"; do
+    if grep -Fq 'submodule' "$f"; then
+        echo "ERROR: $(basename "$f") still runs a submodule step" >&2
+        exit 1
+    fi
+done
 grep -Fq 'scripts/dotfiles-update.ps1' "$PS_PROFILE"
 grep -Fq 'PSNativeCommandUseErrorActionPreference = $false' "$PS_UPDATER"
 
@@ -71,9 +78,6 @@ case ${1:-} in
         printf '%s\n' "$((count + 1))" >"$PWD/meta/status-count"
         if [ "$count" -eq 0 ]; then
             printf '%s' "${FAKE_DIRTY:-}"
-            case "$*" in
-                *--ignore-submodules=none*) printf '%s' "${FAKE_GITLINK_DIRTY:-}" ;;
-            esac
         else
             printf '%s' "${FAKE_POST_DIRTY:-}"
         fi
@@ -86,10 +90,6 @@ case ${1:-} in
     pull)
         [ "${FAKE_PULL_RC:-0}" -eq 0 ] || exit "$FAKE_PULL_RC"
         printf 'new\n' >"$PWD/meta/head"
-        ;;
-    submodule)
-        if [ "${2:-}" = foreach ]; then exit "${FAKE_SUBMODULE_DIRTY:-0}"; fi
-        exit "${FAKE_SUBMODULE_RC:-0}"
         ;;
     *) exit 90 ;;
 esac
@@ -203,36 +203,19 @@ grep -Fq '[dotfiles] [error] Fast-forward pull failed' "$LAST_STDERR"
 run_interactive success FAKE_BEHIND=3
 applied_host host-a
 grep -Fq '[pull][--ff-only][--quiet]' "$GIT_LOG"
-grep -Fq '[submodule][update][--init][--recursive][--quiet]' "$GIT_LOG"
 grep -Fq 'Stow completed' "$LAST_STDOUT"
 [ "$(tail -n 1 "$FAKE_REPO/meta/dotfiles-sync-unix")" = new ]
-
-run_interactive submodule-failure FAKE_BEHIND=1 FAKE_SUBMODULE_RC=20
-no_stow
-grep -Fq '[dotfiles] [error] Submodule update failed' "$LAST_STDERR"
-[ "$(cat "$FAKE_REPO/meta/dotfiles-sync-unix.submodules-pending")" = new ]
-run_interactive user-gitlink FAKE_GITLINK_DIRTY=' M submodule' FAKE_APPLIED=older
-no_fetch
-no_stow
-run_interactive marked-submodule-retry FAKE_GITLINK_DIRTY=' M submodule' FAKE_PENDING=old FAKE_APPLIED=older FAKE_FETCH_RC=1
+# The submodule marker an older updater left is ignored.
+run_interactive old-submodule-marker FAKE_BEHIND=1 FAKE_PENDING=old
 applied_host host-a
-[ ! -e "$FAKE_REPO/meta/dotfiles-sync-unix.submodules-pending" ]
-run_interactive wrong-head-marker FAKE_GITLINK_DIRTY=' M submodule' FAKE_PENDING=another-head FAKE_APPLIED=older
-no_fetch
-no_stow
-run_interactive marked-dirty-submodule FAKE_PENDING=old FAKE_SUBMODULE_DIRTY=1 FAKE_APPLIED=older
-no_fetch
-no_stow
+[ "$(tail -n 1 "$FAKE_REPO/meta/dotfiles-sync-unix")" = new ]
 run_interactive disabled-stow FAKE_BEHIND=1 DOTFILES_AUTO_STOW=0
 no_stow
-grep -Fq '[submodule][update]' "$GIT_LOG"
+grep -Fq '[pull][--ff-only][--quiet]' "$GIT_LOG"
 run_interactive dirty FAKE_DIRTY=' M common/config'
 no_fetch
 no_stow
 run_interactive status-failure FAKE_STATUS_RC=21
-no_fetch
-no_stow
-run_interactive dirty-submodule FAKE_SUBMODULE_DIRTY=1
 no_fetch
 no_stow
 run_interactive concurrent-edit FAKE_BEHIND=1 FAKE_POST_DIRTY='?? new-config'

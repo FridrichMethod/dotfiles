@@ -205,10 +205,11 @@ function Get-BlockLines {
     $repo = ConvertTo-Quoted $Clone
     $body = switch -CaseSensitive ($Id) {
         'HW-clone' {
-            'gui', '# Turn on Developer Mode (Settings > System > For developers) so Git can create symlinks.',
-            '# A fresh clone: git clone -c core.symlinks=true --recurse-submodules <repository URL>',
-            "git -C $repo config core.symlinks true",
-            "git -C $repo checkout -- common/pymol common/coding-agent-kit"
+            'judgment', '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.',
+            '# Git, and PowerShell 7 as the MSI in Program Files\PowerShell\7, which HW-auto-stow-task starts by path:',
+            'winget install --id Git.Git -e --source winget',
+            'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix',
+            'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
         }
         'HW-stow' {
             'judgment', '# From an elevated PowerShell 7 (Run as administrator); it writes ~\.claude, ~\.codex and ~\.ssh.',
@@ -519,7 +520,7 @@ try {
             -WorkingDirectory $case
         Assert-Equal $code 0 "setup-host.ps1 -PrintManual exit code: $([IO.File]::ReadAllText($E2E['StepErr']))"
         $blocks = @(ConvertFrom-E2EBlocks -Output @(Get-E2ELines $E2E['StepOut']) -Directory (Join-Path $case 'manual.blocks'))
-        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-clone(gui) HW-stow(judgment) $ReminderSummary" 'the blocks setup-host.ps1 prints'
+        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-clone(judgment) HW-stow(judgment) $ReminderSummary" 'the blocks setup-host.ps1 prints'
         Assert-Equal (@($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind }) -join ' ') 'fail run-stow skip skip skip skip skip' 'their policies'
         $selected = Get-E2EStowLine -Lines @($blocks[1].Lines) -Clone $sourceRoot
         Assert-Equal $selected['Error'] '' 'the printed HW-stow line was refused'
@@ -949,10 +950,10 @@ try {
             Assert-True (-not (Invoke-ApplyLoop)) "$($order -join ', '): the apply loop passed"
             $rows = @(Get-SummaryRows)
             Assert-Equal (Get-RowShape $rows) 'apply-1:pass HW-clone:fail' "$($order -join ', '): the rows"
-            $kinds = @{ 'HW-clone' = 'gui'; 'HW-stow' = 'judgment' }
+            $kinds = @{ 'HW-clone' = 'judgment'; 'HW-stow' = 'judgment' }
             Assert-Equal $rows[0].Detail "exit 3; blocks: $($order[0])($($kinds[$order[0]])) $($order[1])($($kinds[$order[1]])) $ReminderSummary; pending: HW-clone HW-stow" `
                 "$($order -join ', '): apply-1"
-            Assert-True $rows[1].Detail.StartsWith('gui block the harness must not run: # Turn on Developer Mode (Settings > System > For developers)') `
+            Assert-True $rows[1].Detail.StartsWith('judgment block the harness must not run: # This checkout has no .git') `
                 "$($order -join ', '): $($rows[1].Detail)"
             Assert-Equal "$($E2E['Broken']) $($script:ProcessCalls.Count) $($script:PwshCalls.Count)" 'HW-clone 0 1' "$($order -join ', '): Broken, stow runs, setup-host runs"
         }

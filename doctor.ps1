@@ -5,8 +5,8 @@
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
-    three structural checks (venv-sync, submodule, core-symlinks), prints
-    one line per check and then a summary:
+    three structural checks (venv-sync, submodule, payloads), prints one
+    line per check and then a summary:
 
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
 
@@ -93,10 +93,10 @@ function New-DoctorResult {
 
 $FailingStatuses = @('missing', 'outdated', 'human')
 # Ids the doctors report besides tools.tsv rows (doctor.sh's structural
-# checks, core-symlinks, the -Online and --smoke rows); tools.tsv never uses
-# them (tests/test_bootstrap_manifest.py RESERVED_IDS).
+# checks, the -Online and --smoke rows); tools.tsv never uses them
+# (tests/test_bootstrap_manifest.py RESERVED_IDS).
 $ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
-    'nvm-homebrew', 'core-symlinks', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke')
+    'nvm-homebrew', 'payloads', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.
@@ -159,45 +159,74 @@ function Get-DoctorSyncRuntimeResult {
 function Get-DoctorStructuralResults {
     Get-DoctorSyncRuntimeResult
 
-    $paths = @()
-    $modules = Join-Path $RepoRoot '.gitmodules'
-    if ([IO.File]::Exists($modules)) {
-        $paths = @([IO.File]::ReadAllLines($modules) | ForEach-Object {
-                if ($_ -match '^\s*path\s*=\s*(.+?)\s*$') { $Matches[1] }
-            })
-    }
-    $absent = @($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path (Join-Path $RepoRoot $_) '.git')) })
-    # The checkout that the pull across coding-agent-kit's move into its own
-    # package leaves behind; its module directory is the current checkout's.
-    $leftover = [IO.Path]::Combine($RepoRoot, 'common', 'codex', 'coding-agent-kit')
+    # Dotfiles has no submodules. The checkouts that a pull across a retired
+    # one leaves on a host where it was checked out, each with its
+    # repository under .git\modules: .gitignore and .stowrc keep them
+    # harmless, and only their owner removes them (docs/payloads.md).
     $advice = @()
-    if ($paths -notcontains 'common/codex/coding-agent-kit' -and (Get-Item -LiteralPath $leftover -Force -ErrorAction SilentlyContinue)) {
-        $advice += "remove the pre-move coding-agent-kit checkout: Remove-Item -LiteralPath '$($leftover -replace "'", "''")' -Recurse -Force (keep .git\modules\common\codex\coding-agent-kit, the repository of common\coding-agent-kit\coding-agent-kit)"
+    if ([IO.File]::Exists((Join-Path $RepoRoot '.gitmodules'))) {
+        $advice += "$(Join-Path $RepoRoot '.gitmodules') exists, but dotfiles has no submodules (git rm .gitmodules)"
     }
-    $retired = Join-Path $RepoRoot 'common/sherlock-kit/sherlock-kit'
-    if ($paths -notcontains 'common/sherlock-kit/sherlock-kit' -and (Get-Item -LiteralPath $retired -Force -ErrorAction SilentlyContinue)) {
-        $advice += "inspect and remove the retired sherlock-kit checkout manually: Remove-Item -LiteralPath '$($retired -replace "'", "''")' -Recurse -Force (inspect and retain .git/modules/common/sherlock-kit/sherlock-kit until any local work is recovered)"
-    }
-    if ($absent.Count) {
-        New-DoctorResult missing submodule core "not initialized: $($absent -join ', '); run git submodule update --init --recursive" P0-preflight
-    }
-    elseif ($advice.Count) {
-        New-DoctorResult warn submodule core "$($paths.Count) initialized; $($advice -join '; ')" P0-preflight
-    }
-    else { New-DoctorResult ok submodule core "$($paths.Count) initialized" P0-preflight }
-
-    $git = Find-BootstrapCommand 'git'
-    if (-not $git) {
-        New-DoctorResult skip core-symlinks core 'git is not on PATH' HW-clone
-    }
-    else {
-        $value = @(& $git --no-optional-locks -C $RepoRoot config --get core.symlinks 2>$null) -join ''
-        if ($value -ceq 'true') { New-DoctorResult ok core-symlinks core 'core.symlinks is true' HW-clone }
-        else {
-            $shown = if ($value) { $value } else { 'unset' }
-            New-DoctorResult missing core-symlinks core "core.symlinks is $shown in this clone; tracked symlinks are plain files" HW-clone
+    foreach ($retired in @(
+            @('common/codex/coding-agent-kit', 'common/codex/coding-agent-kit'),
+            @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
+            @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
+            @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
+        $checkout = [IO.Path]::Combine($RepoRoot, $retired[0].Replace('/', [IO.Path]::DirectorySeparatorChar))
+        if (Get-Item -LiteralPath $checkout -Force -ErrorAction SilentlyContinue) {
+            $quoted = $checkout -replace "'", "''"
+            $advice += "retired submodule checkout $($retired[0]): once it holds no work of yours (git -C '$quoted' status; git -C '$quoted' log --branches --not --remotes), Remove-Item -LiteralPath '$quoted' -Recurse -Force (its repository, .git/modules/$($retired[1]), can go the same way once no other leftover uses it)"
         }
     }
+    if ($advice.Count) { New-DoctorResult warn submodule core ($advice -join '; ') P0-preflight }
+    else { New-DoctorResult ok submodule core 'no submodule and no retired submodule checkout' P0-preflight }
+
+    Get-DoctorPayloadResult
+}
+
+function Get-DoctorPayloadResult {
+    # Each item of DOTFILES_PAYLOAD_ITEMS (default kit pymol skills) passes
+    # its windows-probe row of config/payloads.tsv, and an installed kit left
+    # the Claude helpers that settings.json runs. A shortfall only warns: the
+    # next interactive PowerShell installs what is missing
+    # (scripts/payload-update.ps1), and sync-payloads does it now.
+    $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
+    $config = Join-Path $RepoRoot 'config/payloads.tsv'
+    if (-not [IO.File]::Exists($config)) { return New-DoctorResult warn payloads ai "no readable $config" $step }
+    $rows = @{}
+    foreach ($line in [IO.File]::ReadAllLines($config)) {
+        $parts = $line.Split("`t", 3)
+        if (-not $line.StartsWith('#') -and $parts.Count -eq 3 -and -not $rows.ContainsKey("$($parts[0])`t$($parts[1])")) {
+            $rows["$($parts[0])`t$($parts[1])"] = $parts[2]
+        }
+    }
+    $items = if ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) { @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ }) }
+    else { @('kit', 'pymol', 'skills') }
+    $short = @()
+    $found = @()
+    foreach ($item in $items) {
+        $probe = $rows["$item`twindows-probe"]
+        $installed = $false
+        if ($probe) { try { $installed = [bool](& ([scriptblock]::Create($probe))) } catch { } }
+        if (-not $probe) { $short += "$item (no windows-probe row)" }
+        elseif (-not $installed) { $short += $item }
+        else {
+            $found += $item
+            # An installed kit must have left the helpers settings.json runs.
+            if ($item -ceq 'kit') {
+                foreach ($helper in @('statusline.cjs', 'notify.cjs', 'check-git-hooks.cjs')) {
+                    if (-not [IO.File]::Exists([IO.Path]::Combine($HOME, '.claude', 'coding-agent-kit', $helper))) {
+                        $short += "~\.claude\coding-agent-kit\$helper (Claude's status line and hooks fail)"
+                    }
+                }
+            }
+        }
+    }
+    if ($short.Count) {
+        return New-DoctorResult warn payloads ai "not installed: $($short -join ', '); the next interactive PowerShell installs them, or run sync-payloads now" $step
+    }
+    if ($found.Count) { return New-DoctorResult ok payloads ai "installed: $($found -join ', ')" $step }
+    return New-DoctorResult ok payloads ai 'DOTFILES_PAYLOAD_ITEMS selects no payload' $step
 }
 
 function Get-DoctorOnlineResults {

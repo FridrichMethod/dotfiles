@@ -7,19 +7,19 @@ set -euo pipefail
 # If no host-dir is provided, only stow common.
 # Successful setup remembers this home/platform/host for automatic login stow.
 # DOTFILES_AUTO_STOW=0 disables automatic stow in the login updater.
-# The coding-agent-kit package links Claude's local Node helpers and the claude
-# package syncs its defaults; Node.js 22+ must be on PATH when Claude runs the
-# hooks and status line.
+# The claude package syncs Claude's defaults, whose hooks and status line run
+# coding-agent-kit's Node helpers from ~/.claude/coding-agent-kit/ (Node.js 22+
+# must be on PATH when Claude runs them).
 # Day-zero prerequisites come from ./setup-host.sh and are checked by ./doctor.sh.
 # It refuses to stow the zsh package before oh-my-zsh is cloned, since Stow
 # would create a real ~/.oh-my-zsh/custom that blocks the clone
 # (DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1 stows anyway), and stops before the AI
 # sync helpers write anything when a Stow dry run finds a conflicting file.
 # Run ./setup-sync.sh once per clone to provision the AI configuration parser.
-# The common coding-agent-kit package links codex-as and claude-as into
-# ~/.local/bin (no source). Account launchers confirm new-account enrollment
-# on first use; installation never logs in or switches credentials. See
-# common/coding-agent-kit/coding-agent-kit/docs/account-launchers.md.
+# The payload repos (coding-agent-kit, PyMOLScripts, awesome-skills) are not
+# stowed: scripts/payload-update.sh installs them through their own
+# installers. This script removes the links Stow made from their two former
+# packages, each only while its text is exactly what Stow wrote.
 # Retired Sherlock links and generated Codex overrides are removed only when
 # their exact historical ownership is established; foreign files are preserved.
 
@@ -147,21 +147,6 @@ if [[ -d "$COMMON_DIR/claude" || (-n "$HOST" && -d "$HOST_DIR/claude") ]]; then
     require_sync "$CLAUDE_SYNC" "$CLAUDE_PORTABLE"
     SYNC_CLAUDE=1
 fi
-# A clone without --recurse-submodules, a local merge or a failed submodule
-# update leaves the launcher and helper links of the coding-agent-kit package
-# dangling. Any tracked link there that does not resolve counts, whatever the
-# kit layout. Stow and every sync still run, but the install is incomplete, so
-# HEAD is not recorded below and the login updater retries the update.
-KIT_LINKS_DANGLING=0
-while IFS= read -r -d '' kit_entry; do
-    kit_link=${kit_entry#*$'\t'}
-    if [[ "$kit_entry" == '120000 '* && -L "$kit_link" && ! -e "$kit_link" ]]; then
-        KIT_LINKS_DANGLING=1
-    fi
-done < <(git ls-files -s -z -- common/coding-agent-kit 2>/dev/null || true)
-if [[ "$KIT_LINKS_DANGLING" == 1 ]]; then
-    dotfiles_log warn 'coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)'
-fi
 SYNC_FCITX5=0
 if [[ -n "$HOST" && -d "$HOST_DIR/fcitx5" ]]; then
     FCITX5_SYNC="$HOST_DIR/fcitx5/.local/bin/fcitx5-profile-sync"
@@ -223,6 +208,49 @@ for retired_host in lab-ubuntu wsl-ubuntu sherlock; do
     for retired_path in .claude/rules/sherlock-kit.md .claude/skills/sherlock-kit .agents/skills/sherlock-kit .local/bin/shk; do
         remove_retired_link "$retired_path" "$retired_host/sherlock-kit/$retired_path"
     done
+done
+
+# Every link Stow made from the two packages that the payload repos replaced,
+# by package: their own installers now own these paths (the kit's refuses a
+# foreign link at its launcher and completion paths), and ~/.claude/dotfiles,
+# the old home of the Claude helpers, is no longer read. A path is removed only
+# while it is a symlink whose text is exactly the one Stow wrote for it from
+# this checkout's common/, dangling or not: Stow links to the physical stow
+# directory, relative to the physical target, through one ../ per directory
+# below it. A file, a directory or any other link stays, and so does each
+# parent directory but the four that only these packages filled, which go
+# once empty. Before any write: a failed removal stops the install unrecorded.
+RETIRED_PACKAGE_LINKS='coding-agent-kit .claude/dotfiles/check-git-hooks.cjs
+coding-agent-kit .claude/dotfiles/notify.cjs
+coding-agent-kit .claude/dotfiles/statusline.cjs
+coding-agent-kit .local/bin/claude-as
+coding-agent-kit .local/bin/codex-as
+coding-agent-kit .local/lib/claude-as/launch.py
+coding-agent-kit .local/lib/codex-as/check.py
+coding-agent-kit .local/lib/codex-as/handoff.py
+coding-agent-kit .local/lib/codex-as/launch.py
+coding-agent-kit .local/lib/codex-as/layout.py
+coding-agent-kit .local/share/bash-completion/completions/claude-as
+coding-agent-kit .local/share/bash-completion/completions/codex-as
+coding-agent-kit .oh-my-zsh/custom/completions/_claude-as
+coding-agent-kit .oh-my-zsh/custom/completions/_codex-as
+pymol .pymolrc
+pymol .pymolrc.py'
+STOW_PATH=$(python3 -I -B -c 'import os, sys; print(os.path.relpath(*map(os.path.realpath, sys.argv[1:])))' \
+    "$COMMON_DIR" "$HOME")
+while read -r retired_package retired_path; do
+    retired_link=$HOME/$retired_path
+    [[ -L "$retired_link" ]] || continue
+    retired_up=${retired_path//[!\/]/}
+    retired_text="${retired_up//\//../}$STOW_PATH/$retired_package/$retired_path"
+    [[ "$(readlink -- "$retired_link")" == "$retired_text" ]] || continue
+    rm -f -- "$retired_link"
+    dotfiles_log info "Removed $retired_link, a link Stow made from the retired $retired_package package"
+done <<<"$RETIRED_PACKAGE_LINKS"
+for retired_dir in .claude/dotfiles .local/lib/claude-as .local/lib/codex-as .oh-my-zsh/custom/completions; do
+    if [[ -d "$HOME/$retired_dir" && ! -L "$HOME/$retired_dir" ]]; then
+        rmdir -- "$HOME/$retired_dir" 2>/dev/null || true
+    fi
 done
 
 # Stow never replaces a regular file (a fresh home's ~/.bashrc and ~/.profile
@@ -358,15 +386,13 @@ except OSError as exc:
 PYTHON
 
 # Record only complete installs. A dirty manual setup still remembers the host,
-# but cannot claim that the committed HEAD was applied without local changes.
-# Neither can a dangling coding-agent-kit link: an uninitialized submodule looks clean to git status, and an empty HEAD
-# makes the login updater run git submodule update --init --recursive and
-# restow at the next login.
+# but cannot claim that the committed HEAD was applied without local changes,
+# and an empty HEAD makes the login updater restow at the next login.
 # Git resolves this outside the tracked tree and supports linked worktrees.
 if SYNC_STATE=$(git rev-parse --git-path dotfiles-sync-unix 2>/dev/null); then
     APPLIED_HEAD=$(git rev-parse HEAD)
-    SYNC_STATUS=$(git status --porcelain --untracked-files=normal --ignore-submodules=none)
-    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" || "$KIT_LINKS_DANGLING" == 1 ]]; then
+    SYNC_STATUS=$(git status --porcelain --untracked-files=normal)
+    if [[ -n "$SYNC_STATUS" || "$APPLIED_HEAD" != "$START_HEAD" ]]; then
         APPLIED_HEAD=
     fi
     (

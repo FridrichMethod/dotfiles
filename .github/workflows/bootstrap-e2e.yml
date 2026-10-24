@@ -88,8 +88,6 @@ jobs:
         host: ${{ fromJSON(needs.plan.outputs.linux) }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          submodules: true
       # The cache directory lives under the runner's temp, apart from
       # tests/e2e/out, and no later run sees it; acceptance runs leave the
       # input off so every run installs what a fresh machine would.
@@ -124,8 +122,6 @@ jobs:
         shell: /bin/bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v6
-        with:
-          submodules: true
       # A login shell on macOS runs path_helper from /etc/profile and
       # /etc/zprofile, which rebuilds PATH from /etc/paths (/usr/local/bin
       # first, then /usr/bin, /bin, /usr/sbin, /sbin) and appends what PATH
@@ -168,8 +164,6 @@ jobs:
         shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
     steps:
       - uses: actions/checkout@v6
-        with:
-          submodules: true
       - name: Run the bootstrap natively as the runner user
         run: ./tests/e2e/run.ps1
       - uses: actions/upload-artifact@v7

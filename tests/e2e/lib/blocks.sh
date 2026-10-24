@@ -173,7 +173,7 @@ e2e_block_policy() {
         S5-claude:inspect) printf 'run-gate\n' ;;
         H7-stow:judgment) printf 'run-stow\n' ;;
         H2-alloc:alloc) printf 'alloc\n' ;;
-        S2-modules:judgment | H7-sync-skills:judgment | H7-doctor:judgment | H7-auth:auth | \
+        S2-modules:judgment | H7-payloads:judgment | H7-doctor:judgment | H7-auth:auth | \
             H1-fcitx5:gui | H7-chsh:chsh) printf 'skip\n' ;;
         H1-xcode-clt:* | S2-brew-bundle:* | S4-nvm:* | X-recovery:* | *) printf 'fail\n' ;;
     esac

@@ -1,8 +1,0 @@
-[submodule "common/pymol/PyMOLScripts"]
-	path = common/pymol/PyMOLScripts
-	url = https://github.com/FridrichMethod/PyMOLScripts.git
-	branch = main
-[submodule "common/codex/coding-agent-kit"]
-	path = common/coding-agent-kit/coding-agent-kit
-	url = https://github.com/FridrichMethod/coding-agent-kit.git
-	branch = main

@@ -6,8 +6,9 @@ set -euo pipefail
 #                    [--tsv] [--quiet] [--online] [--smoke] [--list]
 # Example: ./doctor.sh --host lab-ubuntu
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
-# has, plus structural checks (locale, .venv-sync, submodule, stow links, PATH
-# order, rc-file pollution, oh-my-zsh order and Homebrew nvm). Read-only and
+# has, plus structural checks (locale, .venv-sync, retired submodule
+# checkouts, stow links, PATH order, rc-file pollution, oh-my-zsh order,
+# Homebrew nvm and the payload repos of config/payloads.tsv). Read-only and
 # offline: it installs nothing, writes nothing and uses no network unless
 # --online (auth status probes) or --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
@@ -71,7 +72,7 @@ usage() {
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
         'and of the structural setup (locale, venv-sync, submodule, stow-links,' \
-        'path-order, rc-pollution, omz-order, nvm-homebrew).' \
+        'path-order, rc-pollution, omz-order, nvm-homebrew, payloads).' \
         '' \
         'Host selection (default: DOTFILES_HOST, else the host ./stow-all.sh recorded):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \
@@ -244,10 +245,10 @@ header=$(awk '/^#/ { next } /^[ \t\r]*$/ { next } { print; exit }' "$TOOLS_TSV")
 [[ "$header" == "$TOOLS_HEADER" ]] || invalid_manifest 'the header is not: id tier hosts probe version_flag floor absent doc'
 ALL_ROWS=$(bootstrap_rows "$TOOLS_TSV") || invalid_manifest 'unreadable'
 [[ -n "$ALL_ROWS" ]] || invalid_manifest 'no data rows'
-# Ids that tools.tsv must not use: the --online and --smoke rows, doctor.ps1's
-# core-symlinks and the structural checks (tests/test_bootstrap_manifest.py
-# RESERVED_IDS is the same list).
-RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke core-symlinks '
+# Ids that tools.tsv must not use: the --online and --smoke rows and the
+# structural checks (tests/test_bootstrap_manifest.py RESERVED_IDS is the
+# same list).
+RESERVED_IDS=' gh-auth claude-auth codex-auth zsh-smoke '
 lines=$BOOTSTRAP_STRUCTURAL_CHECKS$BOOTSTRAP_NL
 while [[ -n "$lines" ]]; do
     line=${lines%%"$BOOTSTRAP_NL"*}

@@ -83,11 +83,10 @@ function New-Shim {
 }
 function New-ToolShim {
     # Prints Text for a version flag; auth/login status exits FAKE_AUTH_EXIT.
-    # git answers core.symlinks from FAKE_GIT_SYMLINKS; oh-my-posh "font
-    # install" drops a font file into the per-user Windows font directory.
+    # oh-my-posh "font install" drops a font file into the per-user Windows
+    # font directory.
     param([string]$Directory, [string]$Name, [string]$Text = $ToolText[$Name])
     $special = @{
-        'git' = 'if ($args -contains ''core.symlinks'') { if ($env:FAKE_GIT_SYMLINKS) { $env:FAKE_GIT_SYMLINKS; exit 0 }; exit 1 }'
         'oh-my-posh' = 'if ("$args" -like ''font install *'') { $f = Join-Path $env:LOCALAPPDATA ''Microsoft/Windows/Fonts''; ' +
             '[void][IO.Directory]::CreateDirectory($f); [IO.File]::WriteAllText((Join-Path $f ''CaskaydiaMonoNerdFont-Regular.ttf''), ''f''); exit 0 }'
         'bat' = @'
@@ -163,12 +162,14 @@ function New-Fixture {
             $fixture.State, $fixture.Temp, $fixture.PwshState)) {
         [void][IO.Directory]::CreateDirectory($directory)
     }
-    foreach ($file in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'lib/terminal.ps1', '.gitmodules',
+    foreach ($file in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'lib/terminal.ps1', 'config/payloads.tsv',
             'config/bootstrap/tools.tsv', 'config/bootstrap/installers.tsv', 'config/bootstrap/winget.json')) {
         $target = Join-Path $fixture.Repo $file
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $target))
         [IO.File]::Copy((Join-Path $sourceRoot $file), $target)
     }
+    # A clone, as HW-clone requires (only the git shim ever reads it).
+    [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Repo '.git'))
     # Stand-in runtime check for the Windows venv; FAKE_RUNTIME_EXIT fails it.
     [IO.File]::WriteAllText((Join-Path $fixture.Repo 'lib/config_sync.py'), @'
 import os, sys
@@ -211,8 +212,15 @@ function Set-FixtureHealthy {
         (Join-Path $Fixture.LocalAppData $FontFile) = 'font'
         (Join-Path $Fixture.AppData $ThemeFile) = 'fixture Catppuccin Mocha theme'
         $Fixture.BatCache = 'Catppuccin Mocha'
-        (Join-Path $Fixture.Repo 'common/pymol/PyMOLScripts/.git') = 'gitdir: ../../../.git/modules/PyMOLScripts'
-        (Join-Path $Fixture.Repo 'common/coding-agent-kit/coding-agent-kit/.git') = 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit'
+        # The payload repos as their installers leave them (config/payloads.tsv).
+        (Join-Path $Fixture.LocalAppData 'coding-agent-kit/install.ps1') = ''
+        (Join-Path $Fixture.LocalAppData 'coding-agent-kit/current') = 'v0.6.0'
+        (Join-Path $Fixture.Home '.claude/coding-agent-kit/statusline.cjs') = ''
+        (Join-Path $Fixture.Home '.claude/coding-agent-kit/notify.cjs') = ''
+        (Join-Path $Fixture.Home '.claude/coding-agent-kit/check-git-hooks.cjs') = ''
+        (Join-Path $Fixture.Home '.pymolrc') = ''
+        (Join-Path $Fixture.Home '.pymolrc.py') = ''
+        (Join-Path $Fixture.LocalAppData 'awesome-skills/claude.json') = '{}'
         (Join-Path $Fixture.Home 'miniconda3/Scripts/conda.exe') = ''
     }
     foreach ($path in $files.Keys) {
@@ -270,7 +278,7 @@ exit $LASTEXITCODE
         BOOTSTRAP_TEST_EVENTS = $Fixture.Events; FIXTURE_HOME = $Fixture.Home; FIXTURE_MODULES = $Fixture.Modules
         BOOTSTRAP_TEST_BAT_CACHE = $Fixture.BatCache
         FIXTURE_SCRIPT = Join-Path $Fixture.Repo $Script; FIXTURE_PARAMETERS = ($Parameters | ConvertTo-Json -Compress)
-        FAKE_GIT_SYMLINKS = 'true'; FAKE_WINGET_PACKAGES = $Fixture.Packages; FAKE_DOWNLOAD = $Fixture.Download
+        FAKE_WINGET_PACKAGES = $Fixture.Packages; FAKE_DOWNLOAD = $Fixture.Download
         FAKE_WINGET_ECHO = '1'; FIXTURE_NEW_VENV = $NewVenvScript
     }
     if ($script:VenvTemplate) { $values['FIXTURE_VENV_TEMPLATE'] = $script:VenvTemplate }
@@ -854,7 +862,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             Assert-Equal $cells[4] '-' "fix in '$line'"
             $cells[1]
         }
-        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('venv-sync', 'submodule', 'core-symlinks')) -join ',') 'doctor ids'
+        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('venv-sync', 'submodule', 'payloads')) -join ',') 'doctor ids'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'doctor wrote files'
         $events = Get-FixtureEvents $fixture
         Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version') 'version probes did not run'
@@ -886,11 +894,25 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $all = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true }
         Assert-Exit $all 1 'desktop gap under -Tier all'
         Assert-True (@($all.Lines | Where-Object { $_ -cmatch "^missing`twezterm`tdesktop`tmissing: .+`tdocs/bootstrap.md W1-winget$" }).Count -eq 1) 'wezterm TSV row'
-        foreach ($case in @(@('false', 'false'), @('', 'unset'))) {
-            $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ FAKE_GIT_SYMLINKS = $case[0] }
-            Assert-Exit $run 1 "core.symlinks $($case[1])"
-            Assert-True ($run.Lines -contains "missing`tcore-symlinks`tcore`tcore.symlinks is $($case[1]) in this clone; tracked symlinks are plain files`tdocs/bootstrap.md HW-clone") "core-symlinks row: $($run.Stdout)"
-        }
+        # The payload repos: a shortfall warns (the next interactive
+        # PowerShell installs it), never fails; the kit's helpers count only
+        # for an installed kit.
+        $helper = [IO.Path]::Combine($fixture.Home, '.claude', 'coding-agent-kit', 'notify.cjs')
+        $pymolPy = Join-Path $fixture.Home '.pymolrc.py'
+        Remove-Item -LiteralPath $helper, $pymolPy
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
+        Assert-Exit $run 0 'a payload shortfall only warns'
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: ~\.claude\coding-agent-kit\notify.cjs (Claude's status line and hooks fail), pymol; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
+        Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "selected payloads row: $($run.Stdout)"
+        Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'coding-agent-kit') -Recurse -Force
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: kit; the next interactive PowerShell installs them, or run sync-payloads now`tdocs/bootstrap.md H7-payloads") "absent kit row: $($run.Stdout)"
+        [IO.File]::WriteAllText($helper, '')
+        [IO.File]::WriteAllText($pymolPy, '')
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.LocalAppData 'coding-agent-kit'))
+        [IO.File]::WriteAllText((Join-Path $fixture.LocalAppData 'coding-agent-kit/install.ps1'), '')
+        [IO.File]::WriteAllText((Join-Path $fixture.LocalAppData 'coding-agent-kit/current'), 'v0.6.0')
 
         # venv-sync follows lib/sync-runtime.sh: DOTFILES_SYNC_PYTHON when set, and readiness is the runtime check.
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ FAKE_RUNTIME_EXIT = '1' }
@@ -908,33 +930,33 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Exit $run 0 'working DOTFILES_SYNC_PYTHON without .venv-sync'
         Assert-True ($run.Lines -contains "ok`tvenv-sync`tcore`tDOTFILES_SYNC_PYTHON=$alternatePython passes the runtime check`t-") "override ok row: $($run.Stdout)"
 
-        # The checkout the pull across coding-agent-kit's move leaves at the old
-        # path: a warning naming the one removal and the module directory to keep.
-        $leftover = [IO.Path]::Combine($fixture.Repo, 'common', 'codex', 'coding-agent-kit')
-        [void][IO.Directory]::CreateDirectory((Join-Path $leftover 'bin'))
-        [IO.File]::WriteAllText((Join-Path $leftover '.git'), 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit')
+        # The retired submodule checkouts a pull leaves: a warning naming how
+        # to check each and the Remove-Item that removes it; nothing deleted.
+        foreach ($retired in @(@('common/codex/coding-agent-kit', 'common/codex/coding-agent-kit'),
+                @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
+                @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
+                @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
+            $checkout = [IO.Path]::Combine($fixture.Repo, $retired[0])
+            [void][IO.Directory]::CreateDirectory($checkout)
+            [IO.File]::WriteAllText((Join-Path $checkout '.git'), 'gitdir: elsewhere')
+            $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
+            Assert-Exit $run 0 "the retired checkout $($retired[0]) only warns"
+            $quoted = $checkout -replace "'", "''"
+            $expected = "warn`tsubmodule`tcore`tretired submodule checkout $($retired[0]): once it holds no work of yours (git -C '$quoted' status; git -C '$quoted' log --branches --not --remotes), Remove-Item -LiteralPath '$quoted' -Recurse -Force (its repository, .git/modules/$($retired[1]), can go the same way once no other leftover uses it)`tdocs/bootstrap.md P0-preflight"
+            Assert-True ($run.Lines -contains $expected) "leftover row: $($run.Stdout)"
+            Assert-True (Test-Path -LiteralPath (Join-Path $checkout '.git')) 'doctor deleted the retired checkout'
+            Remove-Item -LiteralPath $checkout -Recurse -Force
+        }
+        [IO.File]::WriteAllText((Join-Path $fixture.Repo '.gitmodules'), '')
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-Exit $run 0 'a leftover pre-move checkout only warns'
-        $expected = "warn`tsubmodule`tcore`t2 initialized; remove the pre-move coding-agent-kit checkout: Remove-Item -LiteralPath '$leftover' -Recurse -Force (keep .git\modules\common\codex\coding-agent-kit, the repository of common\coding-agent-kit\coding-agent-kit)`tdocs/bootstrap.md P0-preflight"
-        Assert-True ($run.Lines -contains $expected) "leftover row: $($run.Stdout)"
-        $retired = Join-Path $fixture.Repo 'common/sherlock-kit/sherlock-kit'
-        [void][IO.Directory]::CreateDirectory($retired)
+        Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^warn`tsubmodule`tcore`t.+\.gitmodules exists, but dotfiles has no submodules \(git rm \.gitmodules\)`t" }).Count -eq 1) "gitmodules row: $($run.Stdout)"
+        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.gitmodules')
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-Exit $run 0 'both retired checkouts only warn'
-        Assert-True (@($run.Lines | Where-Object { $_ -like '*pre-move coding-agent-kit*retired sherlock-kit*' }).Count -eq 1) 'doctor omitted one leftover'
-        Assert-True (Test-Path -LiteralPath $retired) 'doctor deleted the retired checkout'
-        Remove-Item -LiteralPath $leftover -Recurse -Force
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-True (@($run.Lines | Where-Object { $_ -like '*retired sherlock-kit*' }).Count -eq 1) 'doctor omitted the Sherlock leftover'
-        Remove-Item -LiteralPath $retired -Recurse -Force
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-True ($run.Lines -contains "ok`tsubmodule`tcore`t2 initialized`t-") "submodule row without the leftover: $($run.Stdout)"
+        Assert-True ($run.Lines -contains "ok`tsubmodule`tcore`tno submodule and no retired submodule checkout`t-") "submodule row without leftovers: $($run.Stdout)"
 
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo 'common/pymol/PyMOLScripts/.git') -Force
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 1 'structural failures'
         Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^missing`tvenv-sync`tcore`tno .+; setup-sync.ps1 has not run.+`tdocs/bootstrap.md W1-setup-sync$" }).Count -eq 1) 'venv-sync row'
-        Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^missing`tsubmodule`tcore`tnot initialized: common/pymol/PyMOLScripts.+`tdocs/bootstrap.md P0-preflight$" }).Count -eq 1) 'submodule row'
     }
 
     Test-Case 'doctor statuses match doctor.sh: human fails in selected tiers, ok and skip have no fix' {
@@ -989,7 +1011,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
         Add-Content -LiteralPath $tools -Value "bad`tcore`twin`turl:x`t-`t-`tbroken`tW1-winget"
         Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{}) 2 'unknown probe kind'
-        foreach ($case in @(@('core-symlinks', 'is reserved for a doctor check'), @('git', 'repeats id'))) {
+        foreach ($case in @(@('payloads', 'is reserved for a doctor check'), @('git', 'repeats id'))) {
             [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
             Add-Content -LiteralPath $tools -Value "$($case[0])`tcore`twin`tgit`t-`t-`tbroken`tHW-clone"
             $run = Invoke-Fixture $fixture doctor.ps1 @{}
@@ -1082,12 +1104,13 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Exit $run 0 'print manual'
         $blocks = Get-HumanBlocks $run.Lines
         Assert-Equal (($blocks | ForEach-Object Id) -join ',') ($HumanSteps -join ',') 'HUMAN ids'
-        Assert-Equal (($blocks | ForEach-Object Kind) -join ',') 'gui,judgment,judgment,judgment,sudo,judgment,auth' 'HUMAN kinds'
+        Assert-Equal (($blocks | ForEach-Object Kind) -join ',') 'judgment,judgment,judgment,judgment,sudo,judgment,auth' 'HUMAN kinds'
         Assert-Equal @($run.Lines | Where-Object { $_ -notmatch '^HUMAN-' }).Count (@($blocks | ForEach-Object { $_.Lines.Count }) | Measure-Object -Sum).Sum 'text outside blocks'
         $text = $run.Stdout
         foreach ($expected in @("stow-all.ps1' win", "dotfiles-auto-stow.ps1' -Register",
                 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser', 'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser',
-                'wsl --install -d Ubuntu', 'named exactly Ubuntu', 'Developer Mode', 'core.symlinks true',
+                'wsl --install -d Ubuntu', 'named exactly Ubuntu', 'git clone https://github.com/FridrichMethod/dotfiles.git',
+                'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix',
                 'Set-Service -Name ssh-agent -StartupType Automatic', 'gh auth login --git-protocol ssh', 'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519')) {
             Assert-True ($text.Contains($expected)) "HUMAN blocks lack '$expected'"
         }
@@ -1169,7 +1192,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $blocks = Get-HumanBlocks $run.Lines
         $ids = @($blocks | ForEach-Object Id)
         Assert-True ($ids -contains 'HW-stow' -and $ids -contains 'HW-auth') "HUMAN blocks: $($ids -join ',')"
-        Assert-True ($ids -notcontains 'HW-clone') 'HW-clone printed although core.symlinks is true'
+        Assert-True ($ids -notcontains 'HW-clone') 'HW-clone printed although the checkout is a clone'
         Assert-Equal $run.Lines[-1] '[dotfiles] [warn] HUMAN steps pending: HW-stow; run the HUMAN blocks above, then rerun .\setup-host.ps1' 'pending summary'
         Assert-Equal @(Get-ChildItem -LiteralPath $fixture.Temp -Filter 'dotfiles-bootstrap-*').Count 0 'scratch left behind'
         $count = @(Get-FixtureEvents $fixture).Count

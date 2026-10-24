@@ -30,12 +30,15 @@
 
 --ignore=(^|/)[.]Trash(-[0-9]+)?(/.*)?$
 
-# The pre-move coding-agent-kit checkout that a fast-forward leaves in the
-# codex package on a host where the submodule was checked out (.gitignore keeps
-# it out of git status); without this line Stow would link its whole tree.
-# common/coding-agent-kit/.stow-local-ignore ignores the current checkout.
-# Drop this line only after no host has the leftover (docs/coding-agent-kit.md).
+# The retired submodule checkouts that a fast-forward leaves on a host where
+# they were checked out (.gitignore keeps them out of git status): the
+# pre-move coding-agent-kit checkout in the codex package, and the last ones,
+# each the only content of its old package directory, common/coding-agent-kit
+# and common/pymol, which stow-all.sh still stows as packages. Without these
+# lines Stow would link their whole trees. Drop them only after no host has
+# the leftovers (docs/payloads.md, Migration).
 --ignore=^coding-agent-kit(/|$)
+--ignore=^PyMOLScripts(/|$)
 
 # Retired Sherlock checkout may remain without its package ignore file.
 --ignore=^sherlock-kit(/|$)

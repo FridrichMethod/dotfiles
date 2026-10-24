@@ -30,14 +30,14 @@ STEP_IDS = (
     "P0-preflight", "H1-xcode-clt", "H1-homebrew", "H1-apt-core", "H1-locale", "H1-linuxbrew",
     "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env", "S2-modules",
     "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S5-claude", "S5-codex",
-    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-sync-skills", "H7-doctor",
+    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
     "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync", "HW-clone",
     "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
     "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
-# checks, doctor.ps1's core-symlinks, and the --online/--smoke rows.
+# checks and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
-                "omz-order", "nvm-homebrew", "core-symlinks", "gh-auth", "claude-auth", "codex-auth",
+                "omz-order", "nvm-homebrew", "payloads", "gh-auth", "claude-auth", "codex-auth",
                 "zsh-smoke")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
@@ -701,7 +701,7 @@ class RejectionTests(unittest.TestCase):
             ("reserved-id", "locale", self.tools("fzf", "id", "locale")),
             ("reserved-id", "online row", self.tools("fzf", "id", "gh-auth")),
             ("reserved-id", "smoke row", self.tools("fzf", "id", "zsh-smoke")),
-            ("reserved-id", "windows check", self.tools("pwsh", "id", "core-symlinks")),
+            ("reserved-id", "windows check", self.tools("pwsh", "id", "payloads")),
         ])
 
     def test_probes_versions_and_floors(self):

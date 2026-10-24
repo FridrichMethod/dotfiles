@@ -6,9 +6,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 # GitHub's runners start jobs with SIGPIPE ignored, so a writer into a pipe
 # whose reader stopped early prints "write error: Broken pipe" there instead
@@ -85,7 +85,7 @@ tests=(
     stow-ignores.sh
     update-hooks.sh
     powershell-profile.sh
-    awesome-skills-update.sh
+    payload-update.sh
     windows-installer.sh
     bootstrap-manifest.sh
     doctor.sh
@@ -104,13 +104,6 @@ done
 if command -v stow >/dev/null 2>&1; then
     printf '==> unix-installer.sh\n'
     "$TEST_DIR/unix-installer.sh"
-fi
-
-printf '==> coding-agent-kit-delivery.sh\n'
-if [[ "$require_ci" == 1 ]]; then
-    "$TEST_DIR/coding-agent-kit-delivery.sh" --ci
-else
-    "$TEST_DIR/coding-agent-kit-delivery.sh"
 fi
 
 echo "test-suite=PASS"

@@ -14,15 +14,14 @@ $script:E2EAppliedRe = '\[step\] [A-Za-z0-9-]+: |: (installed|present|skipped): 
 
 function Invoke-E2EStepClone {
     # The clone a person makes (HW-clone): from the read-only source checkout
-    # at E2E_REV, with core.symlinks on and the submodules, its origin pointed
-    # at GitHub as a real clone has it. Everything after it runs with the
-    # login hooks off, as docs/bootstrap.md asks of every provisioning shell.
+    # at E2E_REV, its origin pointed at GitHub as a real clone has it.
+    # Everything after it runs with the login and payload hooks off, as
+    # docs/bootstrap.md asks of every provisioning shell.
     Start-E2EStep clone setup:clone
     $clone = $E2E['Clone']
     $runs = @(
-        @{ Label = 'clone'; Arguments = @('clone', '-c', 'core.symlinks=true', '--recurse-submodules', $E2E['Src'], $clone) }
+        @{ Label = 'clone'; Arguments = @('clone', $E2E['Src'], $clone) }
         @{ Label = 'checkout'; Arguments = @('-C', $clone, '-c', 'advice.detachedHead=false', 'checkout', '--detach', $E2E['Rev']) }
-        @{ Label = 'submodule update'; Arguments = @('-C', $clone, 'submodule', 'update', '--init', '--recursive') }
         @{ Label = 'remote set-url'; Arguments = @('-C', $clone, 'remote', 'set-url', 'origin', $script:E2EUpstream) }
     )
     foreach ($run in $runs) {
@@ -35,19 +34,17 @@ function Invoke-E2EStepClone {
         }
     }
     $env:DOTFILES_AUTO_UPDATE = '0'
-    $env:AWESOME_SKILLS_AUTO_UPDATE = '0'
+    $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
     $env:GIT_TERMINAL_PROMPT = '0'
-    # HW-clone's verify: core.symlinks is true and the tracked links are links.
-    $symlinks = (Get-E2EGitOutput @('-C', $clone, 'config', '--get', 'core.symlinks')).Text
-    $pymolrc = Get-Item -LiteralPath (Join-Path $clone 'common/pymol/.pymolrc') -Force -ErrorAction SilentlyContinue
-    $linkType = if ($null -ne $pymolrc) { [string]$pymolrc.LinkType } else { 'missing' }
+    # HW-clone's verify: a clone of E2E_REV whose tree tracks no symlink.
     $short = (Get-E2EGitOutput @('-C', $clone, 'rev-parse', '--short', 'HEAD')).Text
-    if ($symlinks -cne 'true' -or $linkType -cne 'SymbolicLink') {
+    $links = @((Get-E2EGitOutput @('-C', $clone, 'ls-files', '-s')).Text -split "`n" | Where-Object { $_ -like '120000 *' })
+    if (-not $short -or $links.Count) {
         $E2E['Broken'] = 'clone'
-        Complete-E2EStep fail "core.symlinks is '$symlinks' and common/pymol/.pymolrc is '$linkType' in the clone"
+        Complete-E2EStep fail "the clone at $clone has HEAD '$short' and tracks $($links.Count) symlink(s)"
         return
     }
-    Complete-E2EStep pass "$short at $clone; core.symlinks true, .pymolrc is a SymbolicLink"
+    Complete-E2EStep pass "$short at $clone; no tracked symlink"
 }
 
 function Get-E2EWingetVersion {

@@ -185,7 +185,7 @@ e2e_nowrite_end() {
 # a sudo from an rc file is logged under this phase and fails the audit.
 e2e_login_env() {
     E2E_LOGIN_ENV=(env -i "HOME=$HOME" "USER=$E2E_RUN_USER" "LOGNAME=$E2E_RUN_USER" TERM=xterm-256color
-        "PATH=$E2E_SYS_PATH" DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GITSTATUS_AUTO_INSTALL=0
+        "PATH=$E2E_SYS_PATH" DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 GITSTATUS_AUTO_INSTALL=0
         "E2E_OUT=$E2E_OUT" "E2E_PHASE=${E2E_PHASE:--}")
 }
 
@@ -234,7 +234,7 @@ e2e_login_shell_check() {
     e2e_login_run "$out" "$err" exit || rc=$?
     text=$(e2e_login_text "$out")
     noise=$(e2e_login_noise "$err")
-    findings=$(grep -E '^\[(oh-my-zsh|dotfiles|awesome-skills)\]|not found|[Pp]ermission denied|\[error\]' \
+    findings=$(grep -E '^\[(oh-my-zsh|dotfiles)\]|not found|[Pp]ermission denied|\[error\]' \
         "$out" "$err" 2>/dev/null) || true
     E2E_LOGIN_DETAIL="exit $rc"
     [ -z "$findings" ] || E2E_LOGIN_DETAIL="$E2E_LOGIN_DETAIL; findings: $(e2e_one_line "$findings" 300)"

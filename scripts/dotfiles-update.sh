@@ -59,17 +59,8 @@ _dotfiles_update_check() (
     trap 'rm -f "$_df_lock/pid" "$_df_lock/stow.log"; rmdir "$_df_lock" 2>/dev/null || true' 0
     trap 'exit 0' HUP INT TERM
 
-    # Only a marker from our own successful pull permits a gitlink mismatch.
-    # Otherwise a clean submodule at a user-selected commit is user work too.
-    _df_head=$(git rev-parse HEAD 2>/dev/null) || return 0
-    _df_pending=$(cat "$_df_state.submodules-pending" 2>/dev/null) || _df_pending=
-    _df_ignore=none
-    if [ "$_df_pending" = "$_df_head" ]; then
-        _df_ignore=all
-    fi
-    _df_dirty=$(git status --porcelain --untracked-files=normal --ignore-submodules="$_df_ignore" 2>/dev/null) || return 0
-    if [ -n "$_df_dirty" ] || ! git submodule foreach --quiet --recursive \
-        'status=$(git status --porcelain --untracked-files=normal --ignore-submodules=all) && test -z "$status"' >/dev/null 2>&1; then
+    _df_dirty=$(git status --porcelain --untracked-files=normal 2>/dev/null) || return 0
+    if [ -n "$_df_dirty" ]; then
         dotfiles_log warn "Local changes in $_df_dir; automatic pull and stow skipped."
         return 0
     fi
@@ -77,7 +68,6 @@ _dotfiles_update_check() (
     # Never let a credential prompt block shell startup.
     GIT_TERMINAL_PROMPT=0
     export GIT_TERMINAL_PROMPT
-    _df_pulled=0
     if git fetch --quiet 2>/dev/null; then
         # shellcheck disable=SC1083
         _df_behind=$(git rev-list --count "HEAD..@{upstream}" 2>/dev/null) || _df_behind=0
@@ -88,24 +78,7 @@ _dotfiles_update_check() (
                 return 0
             fi
             dotfiles_log ok 'Pulled successfully.'
-            _df_head=$(git rev-parse HEAD 2>/dev/null) || return 0
-            printf '%s\n' "$_df_head" >"$_df_state.submodules-pending" || return 0
-            if ! git submodule update --init --recursive --quiet 2>/dev/null; then
-                dotfiles_log error 'Submodule update failed; automatic stow will retry next login.'
-                return 0
-            fi
-            rm -f "$_df_state.submodules-pending"
-            _df_pulled=1
         fi
-    fi
-
-    if [ "$_df_pulled" != 1 ] && [ "$_df_pending" = "$_df_head" ]; then
-        if ! git submodule update --init --recursive --quiet 2>/dev/null; then
-            dotfiles_log error 'Submodule update failed; automatic stow will retry next login.'
-            return 0
-        fi
-        rm -f "$_df_state.submodules-pending"
-        _df_pulled=1
     fi
 
     [ "${DOTFILES_AUTO_STOW:-1}" != "0" ] || return 0
@@ -148,11 +121,7 @@ _dotfiles_update_check() (
     fi
     _df_head=$(git rev-parse HEAD 2>/dev/null) || return 0
     [ "$_df_head" != "$_df_applied" ] || return 0
-    if [ "$_df_pulled" != 1 ] && ! git submodule update --init --recursive --quiet 2>/dev/null; then
-        dotfiles_log error 'Submodule update failed; automatic stow will retry next login.'
-        return 0
-    fi
-    _df_dirty=$(git status --porcelain --untracked-files=normal --ignore-submodules=none 2>/dev/null) || return 0
+    _df_dirty=$(git status --porcelain --untracked-files=normal 2>/dev/null) || return 0
     if [ -n "$_df_dirty" ]; then
         dotfiles_log warn 'Checkout changed during update; automatic stow skipped.'
         return 0

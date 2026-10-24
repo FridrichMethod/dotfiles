@@ -6,9 +6,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO_ROOT/stow-all.sh"
@@ -118,16 +118,6 @@ case ${1:-} in
         printf '%s' "${INSTALL_DIRTY:-}"
         exit 0
         ;;
-    ls-files)
-        # The fixture tracks one link, codex-as into the coding-agent-kit
-        # checkout, listed only for a pathspec that names its package.
-        for argument do
-            if [ "$argument" = common/coding-agent-kit ]; then
-                printf '120000 %s 0\tcommon/coding-agent-kit/.local/bin/codex-as\0' 0000000000000000000000000000000000000000
-            fi
-        done
-        exit 0
-        ;;
 esac
 {
     printf 'git:'
@@ -160,12 +150,6 @@ mkdir -p \
     "$FIXTURE/host-a/fcitx5/.local/bin" \
     "$FIXTURE/host-a/fcitx5/.config/fcitx5" \
     "$FIXTURE/rules-fixture"
-# The codex-as launcher is a link of the coding-agent-kit package into its
-# checkout, with the tracked link's text, which the installer only warns about
-# while that link dangles.
-mkdir -p "$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin" "$FIXTURE/common/coding-agent-kit/.local/bin"
-printf '%s\n' '#!/bin/sh' >"$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin/codex-as"
-ln -s ../../coding-agent-kit/bin/codex-as "$FIXTURE/common/coding-agent-kit/.local/bin/codex-as"
 
 printf '%s\n' 'common-claude' >"$FIXTURE/common/claude/.claude/settings.json"
 printf '%s\n' 'common-codex' >"$FIXTURE/common/codex/.codex/config.toml"
@@ -287,12 +271,12 @@ printf '%s\n' \
     >"$TEST_TMP/expected-checks"
 cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
 assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]" \
     "sync:codex-rules-sync:[$FIXTURE/common/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]" \
     "sync:claude-settings-sync:[$FIXTURE/common/claude/.claude/settings.json][$TEST_HOME/.claude/settings.json]" \
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
 grep -Fq "Stowing from $FIXTURE" "$TEST_TMP/common-only.stdout"
 grep -Fq 'Stowing common packages:' "$TEST_TMP/common-only.stdout"
 grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/common-only.stdout"
@@ -336,7 +320,7 @@ printf '%s\n' \
     >"$TEST_TMP/expected-checks"
 cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
 HOST_BEFORE=(
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
     "stow:[-n][--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5]"
     "sync:codex-config-sync:[$FIXTURE/host-a/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
     "sync:codex-rules-sync:[$FIXTURE/host-a/codex/.codex/rules/portable.rules][$TEST_HOME/.codex/rules/portable.rules]"
@@ -346,7 +330,7 @@ HOST_REST=(
     "sync:fcitx5-profile-sync:[$FIXTURE/host-a/fcitx5/.config/fcitx5/profile][$TEST_HOME/.config/fcitx5/profile]"
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]'
     'git:[config][--local][--remove-section][filter.codex-portable]'
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
     "stow:[--restow][--no-folding][-d][$FIXTURE/host-a][beta][claude][codex][fcitx5]"
 )
 assert_events "${HOST_BEFORE[@]}" "${HOST_REST[@]}"
@@ -354,46 +338,6 @@ grep -Fq 'Stowing host-specific packages:' "$TEST_TMP/host.stdout"
 refute_grep 'sherlock-kit submodule not initialized' "$TEST_TMP/host.stderr"
 
 printf '%s\n' "$TEST_HOME" "$(uname -s)" 'host-a' 'test-head' >"$TEST_TMP/expected-state"
-cmp "$STATE" "$TEST_TMP/expected-state"
-
-# An uninitialized coding-agent-kit submodule (as after a clone without
-# --recurse-submodules or a plain local merge) leaves the tracked codex-as
-# link dangling. Every sync, preflight included, both dry runs and both stows
-# still run, with one warning. The install is incomplete, so the host is
-# remembered without an applied HEAD.
-mv "$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin/codex-as" "$TEST_TMP/kit-codex-as.saved"
-: >"$EVENT_LOG"
-: >"$CHECK_LOG"
-env \
-    HOME="$TEST_HOME" \
-    PATH="$FAKE_BIN:/usr/bin:/bin" \
-    EVENT_LOG="$EVENT_LOG" \
-    FILTER_PRESENT=1 \
-    LC_ALL=C \
-    bash "$FIXTURE/stow-all.sh" host-a \
-    >"$TEST_TMP/kit-dangling.stdout" 2>"$TEST_TMP/kit-dangling.stderr"
-cmp "$CHECK_LOG" "$TEST_TMP/expected-checks"
-assert_events "${HOST_BEFORE[@]}" "${HOST_REST[@]}"
-printf '%s\n' '[dotfiles] [warn] coding-agent-kit links dangle; codex-as, claude-as and the Claude helpers are unavailable until the submodule is checked out (git submodule update --init --recursive)' \
-    >"$TEST_TMP/expected-kit-dangling.stderr"
-cmp "$TEST_TMP/kit-dangling.stderr" "$TEST_TMP/expected-kit-dangling.stderr"
-grep -Fq '[dotfiles] [ok] Stow completed (host-a)' "$TEST_TMP/kit-dangling.stdout"
-printf '%s\n' "$TEST_HOME" "$(uname -s)" host-a '' >"$TEST_TMP/expected-skipped-state"
-cmp "$STATE" "$TEST_TMP/expected-skipped-state"
-mv "$TEST_TMP/kit-codex-as.saved" "$FIXTURE/common/coding-agent-kit/coding-agent-kit/bin/codex-as"
-# Once the link resolves again, the next stow is complete and records HEAD.
-: >"$EVENT_LOG"
-: >"$CHECK_LOG"
-env \
-    HOME="$TEST_HOME" \
-    PATH="$FAKE_BIN:/usr/bin:/bin" \
-    EVENT_LOG="$EVENT_LOG" \
-    FILTER_PRESENT=1 \
-    LC_ALL=C \
-    bash "$FIXTURE/stow-all.sh" host-a \
-    >"$TEST_TMP/kit-restored.stdout" 2>"$TEST_TMP/kit-restored.stderr"
-assert_events "${HOST_BEFORE[@]}" "${HOST_REST[@]}"
-[[ ! -s "$TEST_TMP/kit-restored.stderr" ]]
 cmp "$STATE" "$TEST_TMP/expected-state"
 
 # Git can report a clean checkout with core.filemode=false even when a helper
@@ -457,7 +401,7 @@ if env \
     exit 1
 fi
 assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]" \
     "sync:codex-config-sync:[$FIXTURE/common/codex/.codex/config.toml][$TEST_HOME/.codex/config.toml]"
 
 cmp "$STATE" "$TEST_TMP/expected-state"
@@ -467,7 +411,7 @@ if run_fixture dry-conflict STOW_DRY_RC=1; then
     echo "ERROR: installer ignored a Stow dry-run conflict" >&2
     exit 1
 fi
-assert_events "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit]"
+assert_events "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
 grep -Fq 'WARNING! stowing would cause conflicts' "$TEST_TMP/dry-conflict.stderr"
 grep -Fq 'Stow would conflict with the files listed above, so nothing was changed' "$TEST_TMP/dry-conflict.stderr"
 grep -Fq 'never stow --adopt' "$TEST_TMP/dry-conflict.stderr"
@@ -495,10 +439,10 @@ fi
 assert_events
 grep -Fq 'X-recovery' "$TEST_TMP/omz-recovery.stderr"
 run_fixture omz-override DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1
-grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit][zsh]" "$EVENT_LOG"
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][zsh]" "$EVENT_LOG"
 printf '%s\n' '# fixture oh-my-zsh' >"$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
 run_fixture omz-cloned
-grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][coding-agent-kit][zsh]" "$EVENT_LOG"
+grep -Fq "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex][zsh]" "$EVENT_LOG"
 rm -rf "$FIXTURE/common/zsh" "$TEST_HOME/.oh-my-zsh"
 cp "$TEST_TMP/state.saved" "$STATE"
 
@@ -523,9 +467,9 @@ mv "$FIXTURE/common/codex" "$TEST_TMP/saved-codex"
 mv "$FIXTURE/common/claude" "$TEST_TMP/saved-claude"
 run_fixture absent-packages
 assert_events \
-    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][coding-agent-kit]" \
+    "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha]" \
     'git:[config][--local][--get-regexp][^filter\.codex-portable\.]' \
-    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha][coding-agent-kit]"
+    "stow:[--restow][--no-folding][-d][$FIXTURE/common][alpha]"
 mv "$TEST_TMP/saved-codex" "$FIXTURE/common/codex"
 mv "$TEST_TMP/saved-claude" "$FIXTURE/common/claude"
 
@@ -651,6 +595,124 @@ ln -s shk "$TEST_HOME/.local/bin/shk"
 run_fixture retired-loop
 assert_link "$TEST_HOME/.local/bin/shk" shk
 rm "$TEST_HOME/.local/bin/shk"
+
+# A home stowed from the two packages that the payload repos replaced
+# (common/coding-agent-kit, common/pymol) keeps their 16 links, dangling once
+# the pull deletes the package files. Exactly those links go, dangling or
+# not, while their text is the one Stow wrote (one ../ per directory below
+# HOME, then the stow directory relative to HOME, both physical); any other
+# link, file or directory at those paths stays, and so do parents that hold
+# anything else. Removal happens after the read-only preflight, and a failed
+# one stops the install without recording it.
+RETIRED_PATHS='coding-agent-kit .claude/dotfiles/check-git-hooks.cjs
+coding-agent-kit .claude/dotfiles/notify.cjs
+coding-agent-kit .claude/dotfiles/statusline.cjs
+coding-agent-kit .local/bin/claude-as
+coding-agent-kit .local/bin/codex-as
+coding-agent-kit .local/lib/claude-as/launch.py
+coding-agent-kit .local/lib/codex-as/check.py
+coding-agent-kit .local/lib/codex-as/handoff.py
+coding-agent-kit .local/lib/codex-as/launch.py
+coding-agent-kit .local/lib/codex-as/layout.py
+coding-agent-kit .local/share/bash-completion/completions/claude-as
+coding-agent-kit .local/share/bash-completion/completions/codex-as
+coding-agent-kit .oh-my-zsh/custom/completions/_claude-as
+coding-agent-kit .oh-my-zsh/custom/completions/_codex-as
+pymol .pymolrc
+pymol .pymolrc.py'
+# stow_text PACKAGE PATH: the text Stow wrote for HOME/PATH from this fixture.
+stow_text() {
+    local up=${2//[!\/]/}
+    printf '%s../fixture/common/%s/%s\n' "${up//\//../}" "$1" "$2"
+}
+# old_layout: every link of the old packages, as Stow made them.
+old_layout() {
+    local package path
+    while read -r package path; do
+        mkdir -p "$TEST_HOME/$(dirname "$path")"
+        ln -s "$(stow_text "$package" "$path")" "$TEST_HOME/$path"
+    done <<<"$RETIRED_PATHS"
+}
+old_layout
+if run_fixture package-links-preflight FAIL_CHECK=claude-settings-sync; then
+    echo 'ERROR: installer ignored a configuration preflight failure' >&2
+    exit 1
+fi
+assert_link "$TEST_HOME/.pymolrc" "$(stow_text pymol .pymolrc)"
+# One link still resolves: a package file the pull left behind.
+mkdir -p "$FIXTURE/common/pymol"
+printf '%s\n' 'pymolrc' >"$FIXTURE/common/pymol/.pymolrc"
+run_fixture package-links
+while read -r package path; do
+    if [[ -e "$TEST_HOME/$path" || -L "$TEST_HOME/$path" ]]; then
+        echo "ERROR: kept the link Stow made for ~/$path" >&2
+        exit 1
+    fi
+    grep -Fxq "[dotfiles] [info] Removed $TEST_HOME/$path, a link Stow made from the retired $package package" \
+        "$TEST_TMP/package-links.stdout"
+done <<<"$RETIRED_PATHS"
+for dir in .claude/dotfiles .local/lib/claude-as .local/lib/codex-as .oh-my-zsh/custom/completions; do
+    [[ ! -e "$TEST_HOME/$dir" ]] || {
+        echo "ERROR: kept the emptied directory ~/$dir" >&2
+        exit 1
+    }
+done
+[[ -d "$TEST_HOME/.local/bin" && -d "$TEST_HOME/.local/share/bash-completion/completions" ]]
+grep -Fq '[dotfiles] [ok] Stow completed (common-only)' "$TEST_TMP/package-links.stdout"
+cmp "$STATE" "$TEST_TMP/expected-state"
+run_fixture package-links-again
+refute_grep 'a link Stow made from the retired' "$TEST_TMP/package-links-again.stdout"
+rm -r "$FIXTURE/common/pymol"
+
+# Anything else at those paths stays: another checkout's link, the kit's own
+# absolute link, another spelling of the same target, a file, a directory;
+# a directory that holds anything else stays too.
+old_layout
+rm "$TEST_HOME/.local/bin/codex-as" "$TEST_HOME/.local/bin/claude-as" "$TEST_HOME/.pymolrc" \
+    "$TEST_HOME/.pymolrc.py" "$TEST_HOME/.claude/dotfiles/notify.cjs"
+ln -s ../../../other/common/coding-agent-kit/.local/bin/codex-as "$TEST_HOME/.local/bin/codex-as"
+ln -s "$TEST_TMP/kit/current/bin/claude-as" "$TEST_HOME/.local/bin/claude-as"
+ln -s ./../fixture/common/pymol/.pymolrc "$TEST_HOME/.pymolrc"
+printf '%s\n' 'my own pymolrc.py' >"$TEST_HOME/.pymolrc.py"
+mkdir "$TEST_HOME/.claude/dotfiles/notify.cjs"
+printf '%s\n' '#compdef mine' >"$TEST_HOME/.oh-my-zsh/custom/completions/_mine"
+run_fixture package-links-foreign
+assert_link "$TEST_HOME/.local/bin/codex-as" ../../../other/common/coding-agent-kit/.local/bin/codex-as
+assert_link "$TEST_HOME/.local/bin/claude-as" "$TEST_TMP/kit/current/bin/claude-as"
+assert_link "$TEST_HOME/.pymolrc" ./../fixture/common/pymol/.pymolrc
+grep -Fxq 'my own pymolrc.py' "$TEST_HOME/.pymolrc.py"
+[[ -d "$TEST_HOME/.claude/dotfiles/notify.cjs" && -f "$TEST_HOME/.oh-my-zsh/custom/completions/_mine" ]]
+[[ ! -L "$TEST_HOME/.oh-my-zsh/custom/completions/_codex-as" && ! -L "$TEST_HOME/.claude/dotfiles/statusline.cjs" ]]
+refute_grep 'Removed .*/\.pymolrc' "$TEST_TMP/package-links-foreign.stdout"
+rm -r "$TEST_HOME/.local" "$TEST_HOME/.claude/dotfiles" "$TEST_HOME/.oh-my-zsh" "$TEST_HOME/.pymolrc" "$TEST_HOME/.pymolrc.py"
+
+# A home reached through a symlink: Stow wrote the texts from the physical
+# directories, so they are matched from there.
+mkdir -p "$TEST_TMP/deep/er"
+ln -s ../../home "$TEST_TMP/deep/er/home-alias"
+old_layout
+run_fixture package-links-alias HOME="$TEST_TMP/deep/er/home-alias"
+[[ ! -L "$TEST_HOME/.local/bin/codex-as" && ! -L "$TEST_HOME/.pymolrc" ]]
+rm -r "$TEST_TMP/deep" "$TEST_HOME/.local"
+
+# A removal that fails stops the install unrecorded.
+if [[ $(id -u) != 0 ]]; then
+    old_layout
+    cp "$STATE" "$TEST_TMP/before-package-links-state"
+    chmod 500 "$TEST_HOME/.local/bin"
+    if run_fixture package-links-unwritable; then
+        chmod 700 "$TEST_HOME/.local/bin"
+        echo 'ERROR: acknowledged a failed link removal' >&2
+        exit 1
+    fi
+    chmod 700 "$TEST_HOME/.local/bin"
+    [[ -L "$TEST_HOME/.local/bin/codex-as" ]]
+    cmp "$STATE" "$TEST_TMP/before-package-links-state"
+    run_fixture package-links-retry
+    [[ ! -L "$TEST_HOME/.local/bin/codex-as" ]]
+    cmp "$STATE" "$TEST_TMP/expected-state"
+    rm -r "$TEST_HOME/.local"
+fi
 
 OVERRIDE="$TEST_HOME/.codex/AGENTS.override.md"
 MARKER="<!-- Generated by dotfiles codex-instructions-sync. Edit common/codex/.codex/AGENTS.md or the host's sherlock-kit rules, then rerun stow-all.sh. -->"

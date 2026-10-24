@@ -7,7 +7,7 @@
     Plays the person who bootstraps a fresh Windows machine from
     docs/bootstrap.md "Native Windows", the way "Running it with an agent"
     says an agent drives it: clones the source checkout at E2E_REV into
-    $HOME\dotfiles with core.symlinks on (HW-clone), checks winget answers
+    $HOME\dotfiles (HW-clone), checks winget answers
     (W1-winget needs it; a missing one is bootstrapped through
     Microsoft.WinGet.Client and recorded as a deviation), runs doctor.ps1
     -Host win -Tsv and setup-host.ps1 -Host win -Check and requires that

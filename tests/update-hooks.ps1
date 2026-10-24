@@ -128,8 +128,7 @@ try {
     . $helperPath
     function git {
         $global:DotfilesTestGitCalls.Add(($args -join ' '))
-        if ($args.Count -ge 3 -and ($args[2] -eq $global:DotfilesTestFailGitCommand -or
-                ($global:DotfilesTestFailGitCommand -eq 'submodule-update' -and $args[2] -eq 'submodule' -and $args[3] -eq 'update'))) {
+        if ($args.Count -ge 3 -and $args[2] -eq $global:DotfilesTestFailGitCommand) {
             $global:LASTEXITCODE = 17
             return
         }
@@ -207,13 +206,6 @@ try {
         Assert-True ($null -ne $lock) 'Failed pull leaked lock.'
         $lock.Dispose()
     }
-    Test-Case 'submodule failure does not install or acknowledge' {
-        $fixture = New-Fixture
-        $global:DotfilesTestFailGitCommand = 'submodule-update'
-        Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'Submodule update failed'
-        Assert-Equal '' (Get-AppliedHead $fixture) 'Submodule failure acknowledged HEAD.'
-        Assert-Equal 0 (Get-InstallCount $fixture) 'Submodule failure ran installer.'
-    }
     Test-Case 'successful exit without installer acknowledgement stays pending' {
         $fixture = New-Fixture
         $env:DOTFILES_TEST_STOW_NO_ACK = '1'
@@ -231,160 +223,61 @@ try {
         Invoke-DotfilesUpdate $fixture.Repo
         Assert-Equal 0 (Get-InstallCount $fixture) 'Untracked local file ignored.'
     }
-    Test-Case 'dirty nested submodule is preserved despite ignored submodule status' {
+    Test-Case 'a submodule marker left by an older updater is ignored' {
         $fixture = New-Fixture
-        $outer = New-Fixture
-        $inner = New-Fixture
-        Invoke-TestGit -C $outer.Seed -c protocol.file.allow=always submodule add --quiet $inner.Remote nested
-        Invoke-TestGit -C $outer.Seed commit --quiet -am 'add nested submodule'
-        Invoke-TestGit -C $outer.Seed push --quiet
-        Invoke-TestGit -C $fixture.Repo -c protocol.file.allow=always submodule add --quiet $outer.Remote modules/outer
-        Invoke-TestGit -C $fixture.Repo -c protocol.file.allow=always submodule update --init --recursive --quiet
-        Invoke-TestGit -C $fixture.Repo commit --quiet -am 'add outer submodule'
-        Invoke-TestGit -C $fixture.Repo config diff.ignoreSubmodules all
-        [IO.File]::AppendAllText((Join-Path $fixture.Repo 'modules/outer/nested/settings.txt'), 'nested edit')
-        Assert-True (-not (Test-DotfilesClean $fixture.Repo)) 'Normal check ignored nested edits.'
-        Assert-True (-not (Test-DotfilesClean $fixture.Repo -AllowGitlinkChanges)) 'Retry check ignored nested edits.'
-        Invoke-DotfilesUpdate $fixture.Repo
-        Assert-Equal 0 (Get-InstallCount $fixture) 'Dirty nested submodule installed.'
-        Assert-True (-not ($global:DotfilesTestGitCalls | Where-Object { $_ -match ' fetch ' })) 'Nested edits did not skip fetch.'
-        $nested = Join-Path $fixture.Repo 'modules/outer/nested'
-        Invoke-TestGit -C $nested checkout -- settings.txt
-        Invoke-TestGit -C $nested -c user.name=Tests -c user.email=tests@example.invalid commit --quiet --allow-empty -m 'user selected revision'
-        $userHead = Get-DotfilesHead $nested
-        Invoke-DotfilesUpdate $fixture.Repo
-        Assert-Equal $userHead (Get-DotfilesHead $nested) 'Clean user-selected submodule commit was reset.'
-        Assert-Equal 0 (Get-InstallCount $fixture) 'Unrecorded gitlink change was installed.'
         $directory = Get-DotfilesStateDirectory $fixture.Repo
-        Write-DotfilesState $directory 'submodules.json' @{ home = [Environment]::GetFolderPath('UserProfile'); head = 'stale-head' }
+        Write-DotfilesState $directory 'submodules.json' @{ home = [Environment]::GetFolderPath('UserProfile'); head = (Get-DotfilesHead $fixture.Repo) }
+        Add-RemoteCommit $fixture
         Invoke-DotfilesUpdate $fixture.Repo
-        Assert-Equal $userHead (Get-DotfilesHead $nested) 'Stale pending marker allowed reset.'
-        Set-DotfilesSubmodulePending $fixture.Repo $directory
-        Invoke-DotfilesUpdate $fixture.Repo
-        Assert-True ((Get-DotfilesHead $nested) -ne $userHead) 'Matching retry marker did not synchronize nested gitlink.'
-        Assert-Equal 1 (Get-InstallCount $fixture) 'Matching retry marker did not permit apply.'
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $directory 'submodules.json'))) 'Successful sync left pending marker.'
-    }
-    Test-Case 'pull that adds a submodule and links a tracked file into it' {
-        # The coding-agent-kit migration: one fast-forward registers a
-        # submodule and turns a tracked regular file into a relative link that
-        # resolves only once the updater has checked the submodule out.
-        $fixture = New-Fixture
-        $kit = New-Fixture
-        Invoke-TestGit -C $fixture.Seed config core.symlinks true
-        Invoke-TestGit -C $fixture.Repo config core.symlinks true
-        [void][IO.Directory]::CreateDirectory((Join-Path $kit.Seed 'bin'))
-        [IO.File]::WriteAllText((Join-Path $kit.Seed 'bin/tool'), 'tool content' + [Environment]::NewLine)
-        Invoke-TestGit -C $kit.Seed add bin/tool
-        Invoke-TestGit -C $kit.Seed commit --quiet -m 'add tool'
-        Invoke-TestGit -C $kit.Seed push --quiet
-        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Seed 'pkg'))
-        [IO.File]::WriteAllText((Join-Path $fixture.Seed 'pkg/tool'), 'tool content' + [Environment]::NewLine)
-        Invoke-TestGit -C $fixture.Seed add pkg/tool
-        Invoke-TestGit -C $fixture.Seed commit --quiet -m 'track the tool'
-        Invoke-TestGit -C $fixture.Seed push --quiet
-        Invoke-TestGit -C $fixture.Repo pull --ff-only --quiet
-        Save-DotfilesStowState $fixture.Repo 'win'
-        $previous = Get-AppliedHead $fixture
-        Assert-Equal (Get-DotfilesHead $fixture.Repo) $previous 'Baseline was not acknowledged.'
-        # The seed commit: add the submodule and stage the link entry directly
-        # in place of the tracked file, so the seed needs no link privilege.
-        Invoke-TestGit -C $fixture.Seed -c protocol.file.allow=always submodule add --quiet $kit.Remote kit
-        $linkText = Join-Path $fixture.Root 'link-text'
-        [IO.File]::WriteAllText($linkText, '../kit/bin/tool')
-        $blob = & $global:DotfilesTestGitExecutable -C $fixture.Seed hash-object -w --no-filters $linkText
-        if ($LASTEXITCODE -ne 0) { throw 'Could not store the link text.' }
-        Invoke-TestGit -C $fixture.Seed update-index --cacheinfo "120000,$blob,pkg/tool"
-        Invoke-TestGit -C $fixture.Seed commit --quiet -m 'link the tool from the submodule'
-        Invoke-TestGit -C $fixture.Seed push --quiet
-        # The updater's own submodule update clones a file:// URL; allow that
-        # in this run's temporary global config only.
-        [IO.File]::AppendAllText($env:GIT_CONFIG_GLOBAL, "[protocol `"file`"]`n`tallow = always`n")
-        try { Invoke-DotfilesUpdate $fixture.Repo }
-        finally { [IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '') }
-        $head = Get-DotfilesHead $fixture.Repo
-        Assert-True ($head -ne $previous) 'HEAD did not fast-forward.'
-        Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'kit/bin/tool') -PathType Leaf) 'Submodule was not checked out.'
-        $link = Get-Item -LiteralPath (Join-Path $fixture.Repo 'pkg/tool') -Force
-        Assert-Equal 'SymbolicLink' $link.LinkType 'Tracked file did not become a symbolic link.'
-        Assert-Equal '../kit/bin/tool' (@($link.Target)[0] -replace '\\', '/') 'Link target text changed.'
-        Assert-Equal ('tool content' + [Environment]::NewLine) ([IO.File]::ReadAllText($link.FullName)) 'Link does not resolve into the submodule.'
+        Assert-Equal (Get-DotfilesHead $fixture.Repo) (Get-AppliedHead $fixture) 'Update not acknowledged.'
         Assert-Equal 1 (Get-InstallCount $fixture) 'Installer must run once.'
-        Assert-Equal $head (Get-AppliedHead $fixture) 'Success not acknowledged.'
-        $directory = Get-DotfilesStateDirectory $fixture.Repo
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $directory 'submodules.json'))) 'Successful sync left pending marker.'
-        $status = & $global:DotfilesTestGitExecutable -C $fixture.Repo status --porcelain --ignore-submodules=none
-        Assert-Equal 0 $LASTEXITCODE 'Cannot read the checkout status.'
-        Assert-Equal '' (@($status) -join "`n") 'Checkout is not clean after the update.'
+        Assert-True (-not ($global:DotfilesTestGitCalls | Where-Object { $_ -match ' submodule ' })) 'The updater ran a submodule command.'
     }
-    Test-Case 'pull that moves a checked-out submodule leaves its old checkout ignored' {
-        # The coding-agent-kit move into its own package: one fast-forward
-        # moves the gitlink (the submodule keeps its name) and relinks the
-        # tracked file. The pull cannot remove the old checkout, which holds
-        # files; a .gitignore line keeps it out of the status, so the
-        # submodule update fills the new path and the restow is acknowledged.
-        # Without that line the update stops with local changes.
+    Test-Case 'pull that removes a checked-out submodule leaves its checkout ignored' {
+        # The payload repos' change: one fast-forward deletes a gitlink whose
+        # checkout holds files, which the pull cannot remove. A .gitignore line
+        # keeps it out of the status, so the restow runs and is acknowledged
+        # in that update; without the line the update stops before the stow.
         foreach ($guarded in @($true, $false)) {
             $fixture = New-Fixture
             $kit = New-Fixture
-            Invoke-TestGit -C $fixture.Seed config core.symlinks true
-            Invoke-TestGit -C $fixture.Repo config core.symlinks true
             [void][IO.Directory]::CreateDirectory((Join-Path $kit.Seed 'bin'))
             [IO.File]::WriteAllText((Join-Path $kit.Seed 'bin/tool'), 'tool content' + [Environment]::NewLine)
             Invoke-TestGit -C $kit.Seed add bin/tool
             Invoke-TestGit -C $kit.Seed commit --quiet -m 'add tool'
             Invoke-TestGit -C $kit.Seed push --quiet
-            # Stage the link entries directly, so the seed needs no link privilege.
-            $linkText = Join-Path $fixture.Root 'link-text'
             Invoke-TestGit -C $fixture.Seed -c protocol.file.allow=always submodule add --quiet $kit.Remote old/kit
-            [IO.File]::WriteAllText($linkText, '../old/kit/bin/tool')
-            $blob = & $global:DotfilesTestGitExecutable -C $fixture.Seed hash-object -w --no-filters $linkText
-            if ($LASTEXITCODE -ne 0) { throw 'Could not store the link text.' }
-            Invoke-TestGit -C $fixture.Seed update-index --add --cacheinfo "120000,$blob,pkg/tool"
-            Invoke-TestGit -C $fixture.Seed commit --quiet -m 'link the tool from the submodule'
+            Invoke-TestGit -C $fixture.Seed commit --quiet -m 'add the submodule'
             Invoke-TestGit -C $fixture.Seed push --quiet
             Invoke-TestGit -C $fixture.Repo pull --ff-only --quiet
             Invoke-TestGit -C $fixture.Repo -c protocol.file.allow=always submodule update --init --quiet
-            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'old/kit/bin/tool') -PathType Leaf) 'Old checkout missing.'
+            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'old/kit/bin/tool') -PathType Leaf) 'Checkout missing.'
             Save-DotfilesStowState $fixture.Repo 'win'
             $previous = Get-AppliedHead $fixture
             Assert-Equal (Get-DotfilesHead $fixture.Repo) $previous 'Baseline was not acknowledged.'
-            [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Seed 'new'))
-            Invoke-TestGit -C $fixture.Seed mv old/kit new/kit
-            [IO.File]::WriteAllText($linkText, '../new/kit/bin/tool')
-            $blob = & $global:DotfilesTestGitExecutable -C $fixture.Seed hash-object -w --no-filters $linkText
-            if ($LASTEXITCODE -ne 0) { throw 'Could not store the link text.' }
-            Invoke-TestGit -C $fixture.Seed update-index --cacheinfo "120000,$blob,pkg/tool"
+            Invoke-TestGit -C $fixture.Seed rm --quiet old/kit
             if ($guarded) {
                 [IO.File]::WriteAllText((Join-Path $fixture.Seed '.gitignore'), '/old/kit/' + [Environment]::NewLine)
                 Invoke-TestGit -C $fixture.Seed add .gitignore
             }
-            Invoke-TestGit -C $fixture.Seed commit --quiet -m 'move the submodule'
+            Invoke-TestGit -C $fixture.Seed commit --quiet -m 'remove the submodule'
             Invoke-TestGit -C $fixture.Seed push --quiet
-            [IO.File]::AppendAllText($env:GIT_CONFIG_GLOBAL, "[protocol `"file`"]`n`tallow = always`n")
-            try {
-                if ($guarded) { Invoke-DotfilesUpdate $fixture.Repo }
-                else {
-                    Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'Local changes present; submodule update skipped'
-                }
-            }
-            finally { [IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '') }
+            if ($guarded) { Invoke-DotfilesUpdate $fixture.Repo }
+            else { Assert-Throws { Invoke-DotfilesUpdate $fixture.Repo } 'Working tree changed during update' }
             $head = Get-DotfilesHead $fixture.Repo
             Assert-True ($head -ne $previous) 'HEAD did not fast-forward.'
-            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'old/kit/bin/tool') -PathType Leaf) 'The pull removed the old checkout.'
+            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'old/kit/bin/tool') -PathType Leaf) 'The update removed the checkout.'
+            Assert-True (-not ($global:DotfilesTestGitCalls | Where-Object { $_ -match ' submodule ' })) 'The updater ran a submodule command.'
             if (-not $guarded) {
-                Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo 'new/kit/bin/tool'))) 'Submodule updated despite the untracked old checkout.'
-                Assert-Equal 0 (Get-InstallCount $fixture) 'Installer ran despite the untracked old checkout.'
-                Assert-Equal $previous (Get-AppliedHead $fixture) 'Applied state advanced despite the untracked old checkout.'
+                Assert-Equal 0 (Get-InstallCount $fixture) 'Installer ran despite the untracked checkout.'
+                Assert-Equal $previous (Get-AppliedHead $fixture) 'Applied state advanced despite the untracked checkout.'
+                Invoke-DotfilesUpdate $fixture.Repo
+                Assert-Equal 0 (Get-InstallCount $fixture) 'Installer ran despite the local changes.'
                 continue
             }
-            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Repo 'new/kit/bin/tool') -PathType Leaf) 'Submodule was not checked out at its new path.'
-            $link = Get-Item -LiteralPath (Join-Path $fixture.Repo 'pkg/tool') -Force
-            Assert-Equal '../new/kit/bin/tool' (@($link.Target)[0] -replace '\\', '/') 'Link target text changed.'
-            Assert-Equal ('tool content' + [Environment]::NewLine) ([IO.File]::ReadAllText($link.FullName)) 'Link does not resolve into the moved submodule.'
             Assert-Equal 1 (Get-InstallCount $fixture) 'Installer must run once.'
             Assert-Equal $head (Get-AppliedHead $fixture) 'Success not acknowledged.'
-            $status = & $global:DotfilesTestGitExecutable -C $fixture.Repo status --porcelain --untracked-files=normal --ignore-submodules=none
+            $status = & $global:DotfilesTestGitExecutable -C $fixture.Repo status --porcelain --untracked-files=normal
             Assert-Equal 0 $LASTEXITCODE 'Cannot read the checkout status.'
             Assert-Equal '' (@($status) -join "`n") 'Checkout is not clean after the update.'
             Invoke-DotfilesUpdate $fixture.Repo

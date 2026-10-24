@@ -20,14 +20,20 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      # Only this submodule: the tests expect PyMOLScripts
-      # to be absent, as they are without a recursive checkout.
-      - name: Check out the coding-agent-kit submodule only
-        run: git submodule update --init -- common/coding-agent-kit/coding-agent-kit
-      - name: Require the pinned coding-agent-kit commit on its main
+      # The real coding-agent-kit release of the channel config/payloads.tsv
+      # declares, installed by the payload hook's own command into a home of
+      # its own, for the AI integration cases that need an installed kit
+      # (DOTFILES_TEST_KIT_HOME; they skip without it). The network is fine in
+      # this step, never in a test.
+      # TEMPORARY until coding-agent-kit v0.6.0 is released: a failed install
+      # only warns, and those cases skip. Drop the else branch then.
+      - name: Install the real coding-agent-kit
         run: |
-          git -C common/coding-agent-kit/coding-agent-kit fetch --quiet origin main
-          git -C common/coding-agent-kit/coding-agent-kit merge-base --is-ancestor HEAD FETCH_HEAD
+          if HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit; then
+            echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
+          else
+            echo "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip"
+          fi
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -65,8 +71,15 @@ jobs:
         shell: /bin/bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v6
-      - name: Check out the coding-agent-kit submodule only
-        run: git submodule update --init -- common/coding-agent-kit/coding-agent-kit
+      # As in the Linux job (TEMPORARY tolerance until coding-agent-kit
+      # v0.6.0 is released).
+      - name: Install the real coding-agent-kit
+        run: |
+          if HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit; then
+            echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
+          else
+            echo "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip"
+          fi
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -97,27 +110,15 @@ jobs:
         shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
     steps:
       - uses: actions/checkout@v6
-      # A local core.symlinks, then a fresh checkout of this package only, so
-      # its links into the coding-agent-kit submodule become real symlinks;
-      # the other tracked links stay text files, as without it.
-      - name: Re-check out the coding-agent-kit package with symlinks
+      # As in the Linux job, through the PowerShell twin of the payload hook.
+      # PowerShell's $HOME is the account's profile whatever USERPROFILE says,
+      # so the kit goes into the runner's own profile, which no test writes.
+      # TEMPORARY tolerance until coding-agent-kit v0.6.0 is released.
+      - name: Install the real coding-agent-kit
         run: |
-          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
-          git config core.symlinks true
-          git checkout -- common/coding-agent-kit
-      - name: Check out the coding-agent-kit submodule only
-        run: git submodule update --init -- common/coding-agent-kit/coding-agent-kit
-      - name: Require LF line endings in the submodule checkout
-        run: |
-          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
-          $crlf = @(git -C common/coding-agent-kit/coding-agent-kit ls-files --eol | Select-String -SimpleMatch 'w/crlf')
-          if ($crlf.Count) { throw "CRLF in coding-agent-kit: $($crlf -join '; ')" }
-      - name: Require tracked symlinks into the submodule
-        run: |
-          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
-          $link = Get-Item -LiteralPath common/coding-agent-kit/.claude/dotfiles/statusline.cjs -Force
-          if ($link.LinkType -ne 'SymbolicLink') { throw "statusline.cjs is a $($link.GetType().Name), not a symlink" }
-          if (-not (Test-Path -LiteralPath $link.FullName -PathType Leaf)) { throw 'statusline.cjs does not resolve' }
+          & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File scripts/payload-update.ps1 -Now kit
+          if ($LASTEXITCODE -eq 0) { "DOTFILES_TEST_KIT_HOME=$HOME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+          else { Write-Output "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip" }
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"

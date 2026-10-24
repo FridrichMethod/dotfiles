@@ -6,9 +6,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 # Unix contract checks supplement tests/windows-installer.ps1, which exercises
 # actual links and helper processes in the native Windows CI job. A normal
@@ -22,15 +22,22 @@ INSTALLER="$REPO_ROOT/stow-all.ps1"
 # the installer must consume its native errors for sources and destinations.
 grep -Fq 'Get-DotfilesLinkReadErrors -Paths $probePaths.ToArray()' "$INSTALLER"
 grep -Fq '$linkError -ne 448' "$INSTALLER"
-grep -Fq '$sourceError -eq 448' "$INSTALLER"
-grep -Fq -- '-Value @($item.Target)[0] -Force -Confirm:$false' "$INSTALLER"
 grep -Fq 'SetProcessMitigationPolicy(16, ref flags' "$REPO_ROOT/lib/windows-link-trust.ps1"
 grep -Fq '$start.RedirectStandardInput = $true' "$REPO_ROOT/lib/windows-link-trust.ps1"
-# The probe rejects an untrusted link with 448 whatever its target, so a
-# coding-agent-kit link dangles by its own target text, in the preflight and
-# after a source repair (windows-installer-controls.ps1 runs both).
-grep -Fq 'if (@(Get-DotfilesDanglingKitLink).Count) {' "$INSTALLER"
-grep -Fq '(Test-DotfilesLinkDangles -Path $item.FullName)' "$INSTALLER"
+# No package holds a symlink any more (the payload repos are installed, not
+# submodules): one is skipped with a warning instead of being repaired, and
+# the allowlist names neither retired package.
+grep -Fq 'package symlink skipped: $PackageName/$relativeUnix (packages hold files only)' "$INSTALLER"
+if grep -Fq 'Repair untrusted source symlink' "$INSTALLER"; then
+    echo "ERROR: installer still repairs repo-side source symlinks" >&2
+    exit 1
+fi
+grep -Fxq "\$CommonPackages = @('claude', 'codex', 'conda', 'git', 'ssh', 'wezterm')" "$INSTALLER"
+# The links it made from the two retired packages go only while their text
+# is exactly its own, before the syncs (windows-installer.ps1 runs it).
+grep -Fq '$expected = Join-Path (Join-Path $commonRoot $Package) $native' "$INSTALLER"
+grep -Fq "foreach (\$retired in \$RetiredPackageLinks) { Remove-RetiredPackageLink @retired }" "$INSTALLER"
+[[ "$(grep -c "@{ Package = '\(coding-agent-kit\|pymol\)'" "$INSTALLER")" == 3 ]]
 
 if ! grep -Fq 'Repair untrusted symlink' "$INSTALLER"; then
     echo "ERROR: installer must repair untrusted symlinks, not skip them" >&2
@@ -117,7 +124,9 @@ if command -v pwsh >/dev/null 2>&1; then
     for ps_file in "$INSTALLER" "$REPO_ROOT/tests/windows-installer.ps1" \
         "$REPO_ROOT/setup-sync.ps1" "$REPO_ROOT/tests/run.ps1" \
         "$REPO_ROOT/lib/terminal.ps1" "$REPO_ROOT/tests/terminal.ps1" \
-        "$REPO_ROOT/lib/windows-link-trust.ps1" "$REPO_ROOT/tests/windows-installer-controls.ps1"; do
+        "$REPO_ROOT/lib/windows-link-trust.ps1" "$REPO_ROOT/tests/windows-installer-controls.ps1" \
+        "$REPO_ROOT/scripts/payload-update.ps1" "$REPO_ROOT/scripts/dotfiles-auto-stow.ps1" \
+        "$REPO_ROOT/doctor.ps1" "$REPO_ROOT/setup-host.ps1"; do
         INSTALLER_PATH="$ps_file" pwsh -NoProfile -NonInteractive -Command '
         $path = $env:INSTALLER_PATH
         if (-not (Test-Path -LiteralPath $path)) {

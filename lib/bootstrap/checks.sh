@@ -35,7 +35,8 @@ stow-links core H7-stow
 path-order core H7-stow
 rc-pollution core X-rc-protection
 omz-order core X-recovery
-nvm-homebrew ai S4-nvm'
+nvm-homebrew ai S4-nvm
+payloads ai H7-payloads'
 
 # Files under common/ that third-party installers append to through the stow
 # symlinks in $HOME.
@@ -426,99 +427,90 @@ bootstrap_check_venv_sync() {
     fi
 }
 
-# The files each submodule must provide, by its .gitmodules path, relative to
-# it: what the stowed links point at (PyMOL's .pymolrc and
-# coding-agent-kit's launchers and Claude
-# helpers). A submodule not listed here needs only its .git.
-BOOTSTRAP_SUBMODULE_SENTINELS='common/pymol/PyMOLScripts configs/.pymolrc
-common/coding-agent-kit/coding-agent-kit bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
+# The checkouts that a pull across a retired submodule leaves on a host where
+# it was checked out, each with its repository under .git/modules: the
+# pre-move coding-agent-kit checkout, the last coding-agent-kit and PyMOL
+# checkouts (the payload repos are installed now, docs/payloads.md) and the
+# sherlock-kit one. .gitignore and .stowrc keep them harmless; only their
+# owner removes them, so the doctor prints the rm and deletes nothing.
+BOOTSTRAP_RETIRED_CHECKOUTS='common/codex/coding-agent-kit common/codex/coding-agent-kit
+common/coding-agent-kit/coding-agent-kit common/codex/coding-agent-kit
+common/pymol/PyMOLScripts common/pymol/PyMOLScripts
+common/sherlock-kit/sherlock-kit common/sherlock-kit/sherlock-kit'
 
-# The coding-agent-kit checkout that the pull across the kit's move into its
-# own package leaves on a host where it was checked out. .gitignore and
-# .stowrc keep it harmless; only its owner removes it. Its module directory,
-# .git/modules/common/codex/coding-agent-kit, is the repository of the
-# current checkout and must stay.
-BOOTSTRAP_KIT_LEFTOVER=common/codex/coding-agent-kit
-
-# bootstrap_submodule_paths ROOT: the path of every submodule in
-# ROOT/.gitmodules, one per line (its `path =` lines, as doctor.ps1 reads them).
-bootstrap_submodule_paths() {
-    awk '
-        /^[ \t]*path[ \t]*=/ {
-            sub(/^[ \t]*path[ \t]*=[ \t]*/, "")
-            sub(/[ \t\r]+$/, "")
-            if ($0 != "") print
-        }
-    ' "$1/.gitmodules"
-}
-
-# bootstrap_submodule_missing ROOT PATH: print ", PATH/FILE" for each sentinel
-# file of the submodule at PATH that is absent (", PATH/.git" when it has no
-# sentinels and is not checked out); nothing when it is complete.
-bootstrap_submodule_missing() {
-    local lines=$BOOTSTRAP_SUBMODULE_SENTINELS$BOOTSTRAP_NL line rest=.git sentinel
+# bootstrap_check_submodule ROOT: dotfiles has no submodules; a .gitmodules
+# names one anyway, or a retired submodule checkout is still there, is a
+# warning with what removes it.
+bootstrap_check_submodule() {
+    local lines line path module advice=''
+    if [ -f "$1/.gitmodules" ]; then
+        advice="$1/.gitmodules exists, but dotfiles has no submodules (git rm .gitmodules)"
+    fi
+    lines=$BOOTSTRAP_RETIRED_CHECKOUTS$BOOTSTRAP_NL
     while [ -n "$lines" ]; do
         line=${lines%%"$BOOTSTRAP_NL"*}
         lines=${lines#*"$BOOTSTRAP_NL"}
-        case $line in
-            "$2 "*)
-                rest=${line#"$2 "}
-                break
-                ;;
-        esac
-    done
-    rest="$rest "
-    while [ -n "$rest" ]; do
-        sentinel=${rest%% *}
-        rest=${rest#* }
-        if [ "$sentinel" = .git ]; then
-            [ -e "$1/$2/.git" ] || printf ', %s/.git' "$2"
-        elif [ -n "$sentinel" ] && [ ! -f "$1/$2/$sentinel" ]; then
-            printf ', %s/%s' "$2" "$sentinel"
+        bootstrap_split ' ' "$line" path module
+        [ -n "$path" ] || continue
+        if [ -e "$1/$path" ] || [ -L "$1/$path" ]; then
+            advice="${advice:+$advice; }retired submodule checkout $path: once it holds no work of yours (git -C \"$1/$path\" status; git -C \"$1/$path\" log --branches --not --remotes), rm -rf \"$1/$path\" (its repository, .git/modules/$module, can go the same way once no other leftover uses it)"
         fi
     done
+    if [ -n "$advice" ]; then
+        bootstrap_check_result warn "$advice"
+    else
+        bootstrap_check_result ok "no submodule and no retired submodule checkout"
+    fi
 }
 
-# bootstrap_check_submodule ROOT: every submodule in ROOT/.gitmodules is
-# checked out, judged by its sentinel files (or its .git without sentinels),
-# so the stowed links into it resolve; a pre-move coding-agent-kit checkout
-# that no .gitmodules path names is a warning with the rm that removes it.
-bootstrap_check_submodule() {
-    local lines path missing='' found='' leftover=$1/$BOOTSTRAP_KIT_LEFTOVER advice=''
-    local sherlock_leftover=$1/common/sherlock-kit/sherlock-kit
-    if [ ! -f "$1/.gitmodules" ]; then
-        bootstrap_check_result ok "no .gitmodules, so no submodule to check"
+# The Claude helpers that common/claude/.claude/settings.json runs, which
+# coding-agent-kit installs.
+BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
+
+# bootstrap_check_payloads ROOT: each item of DOTFILES_PAYLOAD_ITEMS (default
+# kit pymol skills) passes its unix-probe row of ROOT/config/payloads.tsv, and
+# the kit's Claude helpers are there. A shortfall only warns: the first
+# interactive shell after the stow installs what is missing
+# (scripts/payload-update.sh), and sync-payloads does it now.
+bootstrap_check_payloads() {
+    local config=$1/config/payloads.tsv items item line probe helper short='' found=''
+    if [ ! -r "$config" ]; then
+        bootstrap_check_result warn "no readable $config"
         return 0
     fi
-    lines=$(bootstrap_submodule_paths "$1") || lines=
-    lines=$lines$BOOTSTRAP_NL
-    while [ -n "$lines" ]; do
-        path=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        [ -n "$path" ] || continue
-        found="$found, $path"
-        missing="$missing$(bootstrap_submodule_missing "$1" "$path")"
+    items=${DOTFILES_PAYLOAD_ITEMS-kit pymol skills}
+    items="$items "
+    while [ -n "$items" ]; do
+        item=${items%% *}
+        items=${items#* }
+        [ -n "$item" ] || continue
+        probe=
+        while IFS= read -r line || [ -n "$line" ]; do
+            case $line in
+                "$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"*) probe=${line#"$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"} ;;
+            esac
+        done <"$config"
+        if [ -z "$probe" ]; then
+            short="$short, $item (no unix-probe row)"
+        elif ! (eval "$probe") >/dev/null 2>&1; then
+            short="$short, $item"
+        else
+            found="$found, $item"
+            # An installed kit must have left the helpers settings.json runs.
+            if [ "$item" = kit ]; then
+                for helper in $BOOTSTRAP_KIT_HELPERS; do
+                    [ -f "$HOME/.claude/coding-agent-kit/$helper" ] ||
+                        short="$short, ~/.claude/coding-agent-kit/$helper (Claude's status line and hooks fail)"
+                done
+            fi
+        fi
     done
-    case "$found, " in
-        *", $BOOTSTRAP_KIT_LEFTOVER, "*) leftover='' ;;
-    esac
-    if [ -n "$leftover" ] && { [ -e "$leftover" ] || [ -L "$leftover" ]; }; then
-        advice="remove the pre-move coding-agent-kit checkout: rm -rf \"$leftover\" (keep .git/modules/$BOOTSTRAP_KIT_LEFTOVER, the repository of common/coding-agent-kit/coding-agent-kit)"
-    fi
-    case "$found, " in
-        *", common/sherlock-kit/sherlock-kit, "*) sherlock_leftover='' ;;
-    esac
-    if [ -n "$sherlock_leftover" ] && { [ -e "$sherlock_leftover" ] || [ -L "$sherlock_leftover" ]; }; then
-        advice="${advice:+$advice; }inspect and remove the retired sherlock-kit checkout manually: rm -rf \"$sherlock_leftover\" (inspect and retain .git/modules/common/sherlock-kit/sherlock-kit until any local work is recovered)"
-    fi
-    if [ -n "$missing" ]; then
-        bootstrap_check_result missing "no ${missing#, }; the stowed links dangle (git submodule update --init --recursive)"
-    elif [ -n "$advice" ]; then
-        bootstrap_check_result warn "submodules checked out: ${found#, }; $advice"
+    if [ -n "$short" ]; then
+        bootstrap_check_result warn "not installed: ${short#, }; the next interactive shell installs them, or run sync-payloads now"
     elif [ -n "$found" ]; then
-        bootstrap_check_result ok "submodules checked out: ${found#, }"
+        bootstrap_check_result ok "installed: ${found#, }"
     else
-        bootstrap_check_result ok "no submodule in .gitmodules"
+        bootstrap_check_result ok "DOTFILES_PAYLOAD_ITEMS selects no payload"
     fi
 }
 
@@ -723,6 +715,7 @@ bootstrap_check_structural() {
         rc-pollution) bootstrap_check_rc_pollution "$2" ;;
         omz-order) bootstrap_check_omz_order ;;
         nvm-homebrew) bootstrap_check_nvm_homebrew ;;
+        payloads) bootstrap_check_payloads "$2" ;;
         *) bootstrap_check_result warn "unknown structural check $1" ;;
     esac
 }
@@ -787,7 +780,7 @@ bootstrap_check_smoke() {
     if [ -n "$timeout_bin" ]; then
         set -- "$timeout_bin" 60 "$@"
     fi
-    if output=$(PATH=$path_value DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 "$@" </dev/null 2>&1); then
+    if output=$(PATH=$path_value DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 "$@" </dev/null 2>&1); then
         rc=0
     else
         rc=$?

@@ -122,11 +122,11 @@ if [ -z "${ZSH_VERSION:-}" ]; then
     fi
     unset _df_update
 
-    # Awesome-skills weekly sync (bash/sh only; zsh sources from .zshrc tail)
-    _as_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/awesome-skills-update.sh"
-    if [ -r "$_as_update" ]; then
+    # Payload repos (bash/sh only; zsh sources it from the .zshrc tail)
+    _df_payload="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh"
+    if [ -r "$_df_payload" ]; then
         # shellcheck source=/dev/null
-        . "$_as_update"
+        . "$_df_payload"
     fi
-    unset _as_update
+    unset _df_payload
 fi

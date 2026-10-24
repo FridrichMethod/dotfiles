@@ -53,7 +53,7 @@ S6-kitty auto desktop - lab-ubuntu
 H7-stow judgment - yes macos,debian,hpc
 H7-chsh chsh - no macos,debian
 H7-auth auth - no macos,debian,hpc
-H7-sync-skills judgment - no macos,debian,hpc
+H7-payloads judgment - no macos,debian,hpc
 H7-doctor judgment - no macos,debian,hpc'
 
 # Run state shared by the step files; steps_run resets the lists.

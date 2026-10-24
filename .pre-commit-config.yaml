@@ -41,7 +41,7 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=warning]
-        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|/\.local/bin/(codex|claude)-as$|/bash-completion/completions/.*$)
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$)
         types: [file]
 
   - repo: https://github.com/scop/pre-commit-shfmt
@@ -49,15 +49,15 @@ repos:
     hooks:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
-        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|/\.local/bin/codex-as$|/bash-completion/completions/.*$)
-        exclude: ^(scripts/(dotfiles-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
+        exclude: ^(scripts/(dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/([^/]+-sync|claude-as)$|^(scripts/(dotfiles-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
-        files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$|/custom/completions/_[^/]+$)
+        files: ((^|/)\.(zshrc|zshenv|zprofile|zsh_aliases)$|\.zsh$)
         # The upstream hook selects the shell type, which identify does not
         # give .zsh_aliases; every file the pattern names is checked instead.
         types: [file]
@@ -101,23 +101,23 @@ repos:
         pass_filenames: false
         # test_config_sync.py also reads and asserts the real Codex config.toml.
         files: ^(lib/.*|requirements-sync\.txt|setup-sync\.(sh|ps1)|tests/(test_config_sync\.py|config-sync\.sh)|common/codex/\.codex/config\.toml|common/(claude|codex)/\.local/bin/.*)$
-        # identify tags a tracked link `symlink` and the coding-agent-kit
-        # gitlink `directory`; the default `types: [file]` would skip a link
-        # change or a bump, so every hook whose files can name either clears it.
+        # identify tags a tracked link `symlink`; the default `types: [file]`
+        # would skip a link change, so every hook whose files can name one
+        # clears it.
         types: []
       - id: ai-config-sync
         name: ai config and rules sync
         entry: tests/ai-config-sync.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex|coding-agent-kit)/.*|lib/(config_sync\.py|sync-runtime\.sh)|setup-sync\.(sh|ps1)|requirements-sync\.txt|tests/ai-config-sync\.sh)$
+        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|lib/(config_sync\.py|sync-runtime\.sh)|setup-sync\.(sh|ps1)|requirements-sync\.txt|tests/ai-config-sync\.sh)$
         types: []
       - id: claude-customizations
         name: Claude status line, notifications and Git hook guard
         entry: node --test tests/claude-customizations.cjs
         language: system
         pass_filenames: false
-        files: (^|/)(common/claude/.*|common/coding-agent-kit/.*|tests/claude-customizations\.cjs)$
+        files: (^|/)(common/claude/.*|tests/claude-customizations\.cjs)$
         types: []
       - id: codex-config-sync
         name: codex config sync behavior
@@ -131,14 +131,14 @@ repos:
         entry: tests/ai-integration.sh
         language: script
         pass_filenames: false
-        files: ^(\.stowrc|common/(codex|claude|coding-agent-kit)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|tests/(ai-integration\.sh|test_ai_integration\.py))$
+        files: ^(\.stowrc|common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|tests/(ai-integration\.sh|test_ai_integration\.py))$
         types: []
       - id: stow-installer
         name: POSIX stow installer behavior
         entry: tests/stow-all.sh
         language: script
         pass_filenames: false
-        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|\.stowrc|tests/stow-all\.sh)$
+        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|\.stowrc|tests/stow-all\.sh)$
         types: []
       - id: stow-ignores
         name: Stow ignores what git ignores and links every tracked file
@@ -146,19 +146,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.stowrc|\.gitignore|stow-all\.ps1|tests/(stow-ignores\.sh|test_stow_ignores\.py))$
-      - id: coding-agent-kit-delivery
-        name: coding-agent-kit submodule delivery and links
-        entry: tests/coding-agent-kit-delivery.sh
-        language: script
-        pass_filenames: false
-        files: ^(\.gitmodules|\.gitignore|\.stowrc|stow-all\.(sh|ps1)|common/(claude|codex|coding-agent-kit)/.*|lib/bootstrap/checks\.sh|\.github/workflows/update-coding-agent-kit-submodule\.yml|tests/(coding-agent-kit-delivery\.sh|run\.sh|fixtures/update-coding-agent-kit-submodule\.yml))$
-        types: []
       - id: unix-installer-integration
         name: real Git and Stow integration
         entry: tests/unix-installer.sh
         language: script
         pass_filenames: false
-        files: ^(stow-all\.sh|scripts/dotfiles-update\.sh|\.stowrc|\.gitignore|lib/.*|common/(claude|codex|coding-agent-kit)/.*|tests/(unix-installer|coding-agent-kit-delivery)\.sh)$
+        files: ^(stow-all\.sh|scripts/(dotfiles|payload)-update\.sh|\.stowrc|\.gitignore|lib/.*|common/(claude|codex)/.*|tests/unix-installer\.sh)$
         types: []
       - id: fcitx5-profile-sync
         name: fcitx5 profile sync behavior
@@ -166,12 +159,12 @@ repos:
         language: script
         pass_filenames: false
         files: (^|/)(stow-all\.sh|\.stowrc|lab-ubuntu/fcitx5/.*|tests/fcitx5-profile-sync\.sh)$
-      - id: awesome-skills-update
-        name: awesome skills updater behavior
-        entry: tests/awesome-skills-update.sh
+      - id: payload-update
+        name: payload repo hook behavior
+        entry: tests/payload-update.sh
         language: script
         pass_filenames: false
-        files: (^|/)(awesome-skills-update\.sh|common/(sh/\.(profile|aliases)|zsh/\.zshrc)|tests/awesome-skills-update\.sh)$
+        files: ^(scripts/(payload-update\.(sh|ps1)|awesome-skills-update\.sh)|config/payloads\.tsv|lib/terminal\.(sh|ps1)|common/(sh/\.(profile|aliases)|zsh/\.zshrc)|tests/payload-update\.(sh|ps1))$
       - id: windows-installer
         name: windows installer symlink trust
         entry: tests/windows-installer.sh
@@ -201,20 +194,20 @@ repos:
         entry: tests/doctor.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|lib/config_sync\.py|common/coding-agent-kit/.*|lib/sync-runtime\.sh|docs/bootstrap\.md|tests/doctor\.sh)$
+        files: ^(doctor\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|docs/bootstrap\.md|tests/doctor\.sh)$
         types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks
         entry: tests/setup-host.sh
         language: script
         pass_filenames: false
-        files: ^(setup-host\.sh|lib/bootstrap/.*|config/bootstrap/.*|lib/terminal\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$
+        files: ^(setup-host\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/terminal\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$
       - id: bootstrap-windows
         name: Windows doctor and installer twins
         entry: tests/bootstrap-windows.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.ps1|setup-host\.ps1|lib/bootstrap\.ps1|lib/terminal\.ps1|config/bootstrap/.*|tests/bootstrap(-windows\.sh|\.ps1))$
+        files: ^(doctor\.ps1|setup-host\.ps1|lib/bootstrap\.ps1|lib/terminal\.ps1|config/(bootstrap/.*|payloads\.tsv)|tests/bootstrap(-windows\.sh|\.ps1))$
       - id: host-overlays
         name: silent Linuxbrew guard in the Ubuntu overlays
         entry: tests/host-overlays.sh

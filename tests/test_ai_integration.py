@@ -1,11 +1,15 @@
 """Dotfiles-content halves of the coding-agent-kit suites, on the real files.
 
-The launcher and helper suites live in the coding-agent-kit submodule and run
-there on the kit's own fixtures. These cases read what only dotfiles owns: the
-fzf-tab preview, the alias files, the Stow ignores, the package links that
-deliver codex-as and the Claude helpers, and the settings.json commands that
-run those helpers. The fixtures are the parts of the launcher suites' setUp
-they read; they reach the kit only through its package links.
+The launcher and helper suites live in coding-agent-kit and run there on the
+kit's own fixtures. These cases read what only dotfiles owns: the fzf-tab
+preview, the alias files and the settings.json commands that run the kit's
+Claude helpers. The cases that run the kit need an installed one:
+DOTFILES_TEST_KIT_HOME names a home it is installed in, as its installer lays
+it out (launchers in .local/bin, zsh completions in
+.local/share/zsh/site-functions, helpers in .claude/coding-agent-kit); CI
+installs the real kit there through scripts/payload-update.sh. Without it
+those cases skip. The fixtures are the parts of the launcher suites' setUp
+they read; they reach the kit only through its installed paths.
 """
 
 import json
@@ -22,8 +26,11 @@ import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "common/coding-agent-kit/.local"
-KIT = ROOT / "common/coding-agent-kit/coding-agent-kit"
+KIT_HOME = Path(os.environ["DOTFILES_TEST_KIT_HOME"]) if os.environ.get("DOTFILES_TEST_KIT_HOME") else None
+SOURCE = KIT_HOME / ".local" if KIT_HOME else None
+# The installed release, whose bin/ the launcher links point into.
+KIT = SOURCE and (SOURCE / "bin/codex-as").resolve().parents[1]
+needs_kit = unittest.skipUnless(KIT_HOME, "no installed coding-agent-kit (DOTFILES_TEST_KIT_HOME)")
 SHELLS = [shutil.which(name) for name in ("bash", "zsh") if shutil.which(name)]
 ENV_CONFLICTS = (
     "CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY",
@@ -36,9 +43,8 @@ ENV_CONFLICTS = (
 
 
 def setUpModule():
-    # codex-as is a link into the coding-agent-kit submodule.
-    if not (SOURCE / "bin/codex-as").is_file():
-        raise RuntimeError("coding-agent-kit submodule not initialized; run git submodule update --init --recursive.")
+    if KIT_HOME and not (SOURCE / "bin/codex-as").is_file():
+        raise RuntimeError(f"DOTFILES_TEST_KIT_HOME={KIT_HOME} has no installed coding-agent-kit launcher.")
 
 
 class IsolatedHome(unittest.TestCase):
@@ -59,9 +65,10 @@ class IsolatedHome(unittest.TestCase):
         credential.chmod(0o600)
         self.command_bin = self.home / ".local/bin"
         self.command_bin.mkdir(parents=True)
-        # Linked as Stow links it: the launcher finds its kit, and so its lib/,
-        # through the package link; a copy would stand alone.
-        (self.command_bin / "codex-as").symlink_to(SOURCE / "bin/codex-as")
+        # Linked as the kit's installer links it: the launcher finds its
+        # release, and so its lib/, through the link; a copy would stand alone.
+        if KIT_HOME:
+            (self.command_bin / "codex-as").symlink_to(SOURCE / "bin/codex-as")
         self.cwd = self.base / "current working directory"
         self.cwd.mkdir()
         self.env = os.environ.copy()
@@ -75,6 +82,7 @@ class IsolatedHome(unittest.TestCase):
 
 
 class CodexAs(IsolatedHome):
+    @needs_kit
     @unittest.skipIf(os.name == "nt", "POSIX shells and alias files")
     def test_real_alias_files_run_codex_as(self):
         (self.home / ".aliases").write_text("")
@@ -85,7 +93,7 @@ class CodexAs(IsolatedHome):
             result = subprocess.run(command, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Concurrent accounts", result.stdout)
-            self.assertIn(f"Details and manual repair: {KIT.resolve()}/docs/account-launchers.md\n", result.stdout)
+            self.assertIn("Details and manual repair: ", result.stdout)
 
 
 PREVIEW = ROOT / "common/zsh/.oh-my-zsh/custom/fzf-tab.zsh"
@@ -123,6 +131,7 @@ class Enrollment(IsolatedHome):
             (state / name).chmod(0o600)
         (self.command_bin / "claude-as").symlink_to(SOURCE / "bin/claude-as")
 
+    @needs_kit
     @unittest.skipIf(os.name == "nt", "zsh and fzf-tab")
     def test_account_preview_shows_account_info_and_never_reads_a_secret(self):
         zsh = shutil.which("zsh")
@@ -146,6 +155,7 @@ class Enrollment(IsolatedHome):
                                         cwd=self.cwd, env=self.env, text=True, capture_output=True)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected, ""))
 
+    @needs_kit
     @unittest.skipIf(os.name == "nt", "zsh and fzf-tab")
     def test_real_fzf_tab_previews_accounts_through_the_kit(self):
         # Real fzf-tab (FZF_TAB_TEST_DIR names a checkout; the bootstrap clones
@@ -176,7 +186,7 @@ class Enrollment(IsolatedHome):
         rc = self.base / "zdotdir"
         rc.mkdir()
         (rc / ".zshrc").write_text(
-            f"fpath=({ROOT}/common/coding-agent-kit/.oh-my-zsh/custom/completions $fpath)\n"
+            f"fpath=({KIT_HOME}/.local/share/zsh/site-functions $fpath)\n"
             f"autoload -Uz compinit && compinit -u -d '{self.base}/zcompdump'\n"
             f"source '{plugin}/fzf-tab.plugin.zsh'\nsource '{PREVIEW}'\n"
             f"zstyle ':fzf-tab:*' fzf-command '{fake}'\nzstyle ':fzf-tab:*' fzf-flags --ansi\nPS1='READY> '\n")
@@ -224,33 +234,11 @@ class Enrollment(IsolatedHome):
                 self.assertTrue(log.exists(), "fzf-tab never ran the fake fzf; the terminal showed:\n" + shown)
                 self.assertEqual(log.read_text().splitlines(), expected, shown)
 
-    @unittest.skipIf(os.name == "nt", "GNU Stow")
-    def test_real_stow_installs_underscore_completions_and_ignores_appledouble(self):
-        stow = shutil.which('stow')
-        if not stow:
-            self.skipTest('GNU Stow not installed')
-        packages = self.base / 'packages'
-        target = self.base / 'stowed home'
-        target.mkdir(mode=0o700)
-        shutil.copytree(ROOT / 'common/coding-agent-kit', packages / 'coding-agent-kit')
-        apple = packages / 'coding-agent-kit/.local/bin/._fake-appledouble'
-        apple.write_text('fixture')
-        result = subprocess.run([stow, f'--dir={packages}', f'--target={target}', '--no-folding', 'coding-agent-kit'],
-                                cwd=ROOT, env=self.env | {'HOME': str(target)}, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for tool in ('codex', 'claude'):
-            self.assertTrue((target / f'.oh-my-zsh/custom/completions/_{tool}-as').is_symlink(), 'Stow dropped zsh completion')
-        self.assertFalse((target / '.local/bin/._fake-appledouble').exists())
-        # The package's own ignore file (and, while it stays, the .stowrc line
-        # read from cwd) keeps its submodule checkout unstowed.
-        self.assertFalse((target / 'coding-agent-kit').exists())
-
 
 SETTINGS = ROOT / "common/claude/.claude/settings.json"
-# The Claude helpers of the coding-agent-kit package, which Stow links to
-# ~/.claude/dotfiles/: links into the submodule.
-HELPERS = ROOT / "common/coding-agent-kit/.claude/dotfiles"
-HELPER_PATH = re.compile(r"/\.claude/dotfiles/([^/'\"\s]+)")
+# The Claude helpers the kit's installer puts in ~/.claude/coding-agent-kit/.
+HELPERS = KIT_HOME / ".claude/coding-agent-kit" if KIT_HOME else None
+HELPER_PATH = re.compile(r"/\.claude/coding-agent-kit/([^/'\"\s]+)")
 
 
 def bash_tool(command):
@@ -271,7 +259,7 @@ HELPER_RUNS = {
 
 
 def wired_helpers():
-    """(event, command, helper) for the status line and each hook command loading a helper from ~/.claude/dotfiles/."""
+    """(event, command, helper) for the status line and each hook command loading a helper from ~/.claude/coding-agent-kit/."""
     settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
     commands = [("statusLine", settings.get("statusLine", {}).get("command", ""))]
     commands += [(event, hook.get("command", "")) for event, groups in settings.get("hooks", {}).items()
@@ -280,24 +268,26 @@ def wired_helpers():
 
 
 class ClaudeHelperWiring(unittest.TestCase):
-    def test_settings_wire_exactly_the_delivered_helpers(self):
-        kit = KIT.resolve()
-        delivered = sorted(path.name for path in HELPERS.iterdir())
-        for name in delivered:
-            target = (HELPERS / name).resolve()
-            self.assertTrue((HELPERS / name).is_symlink() and target.is_file() and target.is_relative_to(kit),
-                            f"{HELPERS / name} is not a link to a file of the submodule")
+    def test_settings_wire_each_helper_where_its_runs_say(self):
         wired = wired_helpers()
-        self.assertEqual(sorted({name for _, _, name in wired}), delivered,
-                         "settings.json must load exactly the helpers the coding-agent-kit package delivers")
-        self.assertEqual(sorted(HELPER_RUNS), delivered, "each delivered helper needs its runs in HELPER_RUNS")
+        self.assertEqual(sorted({name for _, _, name in wired}), sorted(HELPER_RUNS),
+                         "settings.json must load exactly the helpers of HELPER_RUNS from ~/.claude/coding-agent-kit/")
         for event, command, name in wired:
             self.assertEqual(event, HELPER_RUNS[name][0], command)
 
+    @needs_kit
+    def test_settings_wire_exactly_the_installed_helpers(self):
+        delivered = sorted(path.name for path in HELPERS.iterdir())
+        for name in delivered:
+            self.assertTrue((HELPERS / name).is_file(), f"{HELPERS / name} is not a file")
+        self.assertEqual(sorted({name for _, _, name in wired_helpers()}), delivered,
+                         "settings.json must load exactly the helpers the installed coding-agent-kit delivers")
+
 
 class ClaudeHelperCommands(IsolatedHome):
+    @needs_kit
     @unittest.skipIf(os.name == "nt", "a POSIX shell runs the commands; tests/claude-customizations.cjs covers Windows")
-    def test_settings_commands_run_the_stowed_helpers_through_a_shell(self):
+    def test_settings_commands_run_the_installed_helpers_through_a_shell(self):
         if not shutil.which("node", path=self.env["PATH"]):
             self.skipTest("node not installed")
         # A pre-commit run exports the GIT_DIR of the commit in progress; the
@@ -311,19 +301,19 @@ class ClaudeHelperCommands(IsolatedHome):
                                   capture_output=True, text=True, timeout=60)
 
         wired = wired_helpers()
-        self.assertTrue(wired, "settings.json loads no helper from ~/.claude/dotfiles/")
-        installed = self.home / ".claude/dotfiles"
-        # Before the stow, each command looks for its helper under the spaced
-        # HOME and finds none.
+        self.assertTrue(wired, "settings.json loads no helper from ~/.claude/coding-agent-kit/")
+        installed = self.home / ".claude/coding-agent-kit"
+        # Before the install, each command looks for its helper under the
+        # spaced HOME and finds none.
         for _, command, name in wired:
-            self.assertIn(name, HELPER_RUNS, f"{command} loads no helper the coding-agent-kit package delivers")
+            self.assertIn(name, HELPER_RUNS, f"{command} loads no helper the coding-agent-kit delivers")
             first_stdin = HELPER_RUNS[name][1][0][0]
             result = run(command, first_stdin)
             self.assertEqual((result.returncode, result.stdout), (1, ""), command)
             self.assertIn(str(installed / name), result.stderr)
         installed.mkdir(parents=True)
         for path in HELPERS.iterdir():
-            (installed / path.name).symlink_to(path)  # as Stow links them, to the package links
+            shutil.copyfile(path, installed / path.name)  # as the kit's installer copies them
         for _, command, name in wired:
             for stdin, status, stream in HELPER_RUNS[name][1]:
                 with self.subTest(helper=name, stdin=stdin):

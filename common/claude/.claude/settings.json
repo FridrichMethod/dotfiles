@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"require(require('os').homedir() + '/.claude/dotfiles/check-git-hooks.cjs').main()\"",
+            "command": "node -e \"require(require('os').homedir() + '/.claude/coding-agent-kit/check-git-hooks.cjs').main()\"",
             "timeout": 5
           }
         ]
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"require(require('os').homedir() + '/.claude/dotfiles/notify.cjs').main()\"",
+            "command": "node -e \"require(require('os').homedir() + '/.claude/coding-agent-kit/notify.cjs').main()\"",
             "timeout": 5
           }
         ]
@@ -172,7 +172,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node -e \"require(require('os').homedir() + '/.claude/dotfiles/statusline.cjs').main()\"",
+    "command": "node -e \"require(require('os').homedir() + '/.claude/coding-agent-kit/statusline.cjs').main()\"",
     "padding": 0
   }
 }

@@ -14,8 +14,11 @@ alias ssh='TERM=xterm-256color ssh'
 # starts one background krenew (kstart) when installed
 alias kstanford='kinit -l 25h -r 7d zyli2002@stanford.edu && { ! command -v krenew >/dev/null 2>&1 || pgrep -u "$USER" -x krenew >/dev/null || krenew -K 60 -b; }'
 
-# Force a manual awesome-skills sync (bypasses session and 7-day throttles)
-alias sync-skills='AWESOME_SKILLS_FORCE=1 AWESOME_SKILLS_BG=0 sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/awesome-skills-update.sh"'
+# Install or update the payload repos now, in the foreground, whatever their
+# refresh intervals: sync-payloads [kit] [pymol] [skills] (default: all);
+# sync-skills is sync-payloads skills
+alias sync-payloads='sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh" --now'
+alias sync-skills='sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh" --now skills'
 
 # Load host-specific alias additions (if any)
 if [ -r "$HOME/.config/sh/.aliases" ]; then

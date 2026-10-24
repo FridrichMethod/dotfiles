@@ -1,1 +1,0 @@
-../../../coding-agent-kit/lib/codex-as/check.py

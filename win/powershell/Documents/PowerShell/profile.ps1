@@ -234,6 +234,15 @@ if ($IsInteractive -and -not $IsAgentSession) {
         function global:la { Get-ChildItem -Force @args }
     }
 
+    # Install or update the payload repos now, in the foreground, whatever
+    # their refresh intervals (scripts/payload-update.ps1): sync-payloads
+    # [kit] [pymol] [skills], all by default; sync-skills is sync-payloads skills.
+    function global:sync-payloads {
+        $dotfiles = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
+        & (Join-Path $dotfiles 'scripts/payload-update.ps1') -Now @args
+    }
+    function global:sync-skills { sync-payloads skills }
+
     # --- oh-my-posh prompt ----------------------------------------------------
     # Tracked theme (win/oh-my-posh), stowed to ~/.config/oh-my-posh. The
     # builtin name is only a fallback until stow links it, because it is
@@ -272,16 +281,20 @@ if ($IsInteractive -and -not $IsAgentSession) {
 }
 Remove-Variable IsAgentSession
 
-# --- Dotfiles auto-update check ---------------------------------------
+# --- Dotfiles auto-update check and payload repos ----------------------
 # Last, mirroring the tail of common/zsh/.zshrc, so the prompt and modules
-# above are ready first. Like zsh, which returns before it for non-interactive
-# shells, a script run in a console or piped in never fetches or stows. The
-# session-once and no-console guards live in scripts/dotfiles-update.ps1 so
-# both updaters keep one contract.
+# above are ready first. Like zsh, which returns before them for
+# non-interactive shells, a script run in a console or piped in never
+# fetches, stows or installs. The session-once and no-console guards live in
+# scripts/dotfiles-update.ps1 and scripts/payload-update.ps1 so each keeps one
+# contract with its Unix twin; the payload hook starts its refreshes in a
+# hidden, detached pwsh, so the prompt never waits for them.
 if ($IsInteractive) {
     $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
     $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
     if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
-    Remove-Variable DotfilesDir, DotfilesUpdate
+    $DotfilesPayload = Join-Path $DotfilesDir 'scripts/payload-update.ps1'
+    if (Test-Path -LiteralPath $DotfilesPayload) { & $DotfilesPayload }
+    Remove-Variable DotfilesDir, DotfilesUpdate, DotfilesPayload
 }
 Remove-Variable IsInteractive

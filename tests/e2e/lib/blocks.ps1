@@ -8,8 +8,8 @@
 # PowerShell for HW-stow (the runner is elevated) and leaves every other
 # non-blocking Windows block to the person, since it can neither decide a
 # security setting, grant a task standing elevation, start a service, install
-# WSL nor sign in. HW-clone it performed and verified itself (the clone step,
-# core.symlinks on), so that block pending means setup-host.ps1 did not
+# WSL nor sign in. HW-clone it performed and verified itself (the clone
+# step), so that block pending means setup-host.ps1 did not
 # accept the clone: a finding to fail on, never something to work around.
 
 function ConvertFrom-E2EBlocks {

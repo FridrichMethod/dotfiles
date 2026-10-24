@@ -24,8 +24,8 @@ git	core	all	git	--version	-	cannot clone, update or stow the dotfiles	P0-prefli
 bash	core	unix	bash	--version	-	doctor.sh, setup-host.sh and stow-all.sh cannot run	P0-preflight
 zsh	core	unix	zsh	--version	-	no interactive shell for the stowed .zshrc	H1-apt-core
 git-lfs	core	unix	git-lfs	--version	-	the required lfs filter in .gitconfig fails on LFS repositories	H1-apt-core
-curl	core	unix	curl	--version	-	setup-host downloads and the awesome-skills sync fail	H1-apt-core
-rsync	core	unix	rsync	--version	-	upload and the awesome-skills sync fail	H1-apt-core
+curl	core	unix	curl	--version	-	setup-host downloads fail, and the payload hook needs wget instead	H1-apt-core
+rsync	core	unix	rsync	--version	-	upload fails	H1-apt-core
 tar	core	unix	tar	--version	-	archive installs and the targz aliases fail	H1-apt-core
 file	core	unix	file	--version	-	fzf previews cannot detect file types	H1-apt-core
 col	core	unix	col	-	-	fzf-tab man page previews fail	H1-apt-core

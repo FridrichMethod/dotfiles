@@ -180,6 +180,12 @@ unset _omz_plugin_options
 # See https://github.com/zsh-users/zsh-completions/blob/master/README.md
 fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/plugins/zsh-completions/src
 
+# The zsh completions of coding-agent-kit's launchers (codex-as, claude-as),
+# which its install.sh puts in PREFIX/share/zsh/site-functions (default
+# ~/.local); oh-my-zsh runs compinit, so this comes before it. Appended, as
+# above: a nested shell keeps the order of the FPATH it inherited.
+fpath+=$HOME/.local/share/zsh/site-functions
+
 # nvm: the host rc has prepended Homebrew's and conda's bins, which can hold
 # another node or tree-sitter, ahead of the default node's bin that
 # ~/.profile added. Move that bin back to the front, where `nvm use` puts it,
@@ -253,7 +259,8 @@ _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/dotfiles-update.sh"
 [[ -r "$_df_update" ]] && source "$_df_update"
 unset _df_update
 
-# Awesome-skills weekly sync (Claude Code / Codex skill library); see scripts/awesome-skills-update.sh
-_as_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/awesome-skills-update.sh"
-[[ -r "$_as_update" ]] && source "$_as_update"
-unset _as_update
+# Payload repos (coding-agent-kit, PyMOLScripts, awesome-skills): installed
+# and refreshed through their own installers; see scripts/payload-update.sh
+_df_payload="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh"
+[[ -r "$_df_payload" ]] && source "$_df_payload"
+unset _df_payload

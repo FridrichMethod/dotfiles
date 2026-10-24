@@ -11,17 +11,16 @@ E2E_UPSTREAM=https://github.com/FridrichMethod/dotfiles.git
 E2E_APPLY1_OUT='' E2E_APPLY1_RC=''
 
 # e2e_step_clone: the clone a person makes, from the read-only source
-# checkout at E2E_REV (with its submodules), its origin pointed at GitHub as
-# a real clone has it. Everything after it runs with the login hooks off, as
+# checkout at E2E_REV, its origin pointed at GitHub as a real clone has it.
+# Everything after it runs with the login and payload hooks off, as
 # docs/bootstrap.md asks of every provisioning shell.
 e2e_step_clone() {
     local rc=0 o e
     e2e_step_begin clone setup:clone
     o=$E2E_STEP_OUT e=$E2E_STEP_ERR
-    e2e_run "$o" "$e" "$E2E_TIMEOUT_CHECK" "$HOME" git clone --recurse-submodules "$E2E_SRC" "$E2E_CLONE" &&
+    e2e_run "$o" "$e" "$E2E_TIMEOUT_CHECK" "$HOME" git clone "$E2E_SRC" "$E2E_CLONE" &&
         e2e_run "$o" "$e" "$E2E_TIMEOUT_CHECK" "$HOME" git -C "$E2E_CLONE" -c advice.detachedHead=false \
             checkout --detach "$E2E_REV" &&
-        e2e_run "$o" "$e" "$E2E_TIMEOUT_CHECK" "$HOME" git -C "$E2E_CLONE" submodule update --init --recursive &&
         e2e_run "$o" "$e" "$E2E_TIMEOUT_CHECK" "$HOME" git -C "$E2E_CLONE" remote set-url origin "$E2E_UPSTREAM" ||
         rc=$?
     if [ "$rc" != 0 ]; then
@@ -29,7 +28,7 @@ e2e_step_clone() {
         e2e_step_end fail "git exited $rc: $(e2e_last_line "$e")"
         return 1
     fi
-    export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0
+    export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0
     e2e_step_end pass "$(git -C "$E2E_CLONE" rev-parse --short HEAD) at $E2E_CLONE"
 }
 

@@ -1,1 +1,0 @@
-PyMOLScripts/configs/.pymolrc.py

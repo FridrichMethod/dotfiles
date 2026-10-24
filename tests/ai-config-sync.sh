@@ -6,9 +6,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-ai-sync.XXXXXX")"
@@ -414,7 +414,7 @@ if command -v stow >/dev/null 2>&1; then
             --no-folding \
             --target="$STOW_TARGET" \
             -d "$REPO_ROOT/common" \
-            claude codex coding-agent-kit
+            claude codex
     )
 
     [[ ! -L "$STOW_TARGET/.claude/settings.json" ]]
@@ -424,20 +424,12 @@ if command -v stow >/dev/null 2>&1; then
     grep -Fxq 'codex-live-sentinel' "$STOW_TARGET/.codex/config.toml"
     grep -Fxq 'rules-live-sentinel' "$STOW_TARGET/.codex/rules/portable.rules"
     [[ -L "$STOW_TARGET/.claude/CLAUDE.md" && -e "$STOW_TARGET/.claude/CLAUDE.md" ]]
-    # The launchers, libraries, completions and helpers resolve through the
-    # coding-agent-kit package's links into its checkout.
-    for kit_link in .claude/dotfiles/statusline.cjs .claude/dotfiles/notify.cjs \
-        .claude/dotfiles/check-git-hooks.cjs .local/bin/codex-as .local/bin/claude-as \
-        .local/lib/codex-as/launch.py .local/lib/codex-as/check.py .local/lib/codex-as/layout.py \
-        .local/lib/codex-as/handoff.py .local/lib/claude-as/launch.py \
-        .local/share/bash-completion/completions/codex-as .local/share/bash-completion/completions/claude-as \
-        .oh-my-zsh/custom/completions/_codex-as .oh-my-zsh/custom/completions/_claude-as; do
-        [[ -L "$STOW_TARGET/$kit_link" && -f "$STOW_TARGET/$kit_link" ]]
-    done
     [[ -L "$STOW_TARGET/.codex/AGENTS.md" && -e "$STOW_TARGET/.codex/AGENTS.md" ]]
-    # The package's .stow-local-ignore (and, while it stays, the .stowrc line)
-    # keeps the checkout itself unstowed.
-    [[ ! -e "$STOW_TARGET/coding-agent-kit" && ! -L "$STOW_TARGET/coding-agent-kit" ]]
+    # The payload repos install the launchers and the Claude helpers; no
+    # package links them any more.
+    for kit_link in .claude/dotfiles .claude/coding-agent-kit .local/bin/codex-as .local/bin/claude-as; do
+        [[ ! -e "$STOW_TARGET/$kit_link" && ! -L "$STOW_TARGET/$kit_link" ]]
+    done
 fi
 
 if command -v codex >/dev/null 2>&1; then

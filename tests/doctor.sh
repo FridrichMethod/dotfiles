@@ -13,9 +13,9 @@ set -euo pipefail
 # docs/bootstrap.md) and other dotfiles knobs never reach the code under
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR AWESOME_SKILLS_AUTO_UPDATE AWESOME_SKILLS_FORCE \
-    AWESOME_SKILLS_BG AWESOME_SKILLS_INSTALLER_URL AWESOME_SKILLS_REFRESH_DAYS _AWESOME_SKILLS_CHECKED \
-    CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID XDG_STATE_HOME
+    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
+    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 REAL_GIT=$(command -v git) || {
@@ -57,6 +57,8 @@ cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 # The real step headings: every doc step a manifest row cites must have one.
 cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
+# The real payload probes, which the payloads check runs.
+cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
 chmod +x "$FIXTURE/doctor.sh"
 : >"$EVENT_LOG"
 ESC=$(printf '\033')
@@ -106,8 +108,8 @@ if [ "${1:-}" = --version ]; then
     printf 'zsh 5.9 (fake)\n'
     exit 0
 fi
-printf 'zsh %s DOTFILES_AUTO_UPDATE=%s AWESOME_SKILLS_AUTO_UPDATE=%s PATH=%s\n' \
-    "$*" "${DOTFILES_AUTO_UPDATE-unset}" "${AWESOME_SKILLS_AUTO_UPDATE-unset}" \
+printf 'zsh %s DOTFILES_AUTO_UPDATE=%s DOTFILES_PAYLOAD_AUTO_UPDATE=%s PATH=%s\n' \
+    "$*" "${DOTFILES_AUTO_UPDATE-unset}" "${DOTFILES_PAYLOAD_AUTO_UPDATE-unset}" \
     "$PATH" >>"$EVENT_LOG"
 [ -z "${SMOKE_STDOUT:-}" ] || printf '%s\n' "$SMOKE_STDOUT"
 [ -z "${SMOKE_STDERR:-}" ] || printf '%s\n' "$SMOKE_STDERR" >&2
@@ -240,30 +242,12 @@ row() {
 
 # --- fixture checkout and home -------------------------------------------
 
-# The PyMOL fixture is a plain tree (CI checks out coding-agent-kit only),
-# holding the sentinel files the doctor's
-# submodule check requires.
+# A checkout without submodules, as dotfiles is.
 mkdir -p "$FIXTURE/common/zsh" "$FIXTURE/common/sh" "$FIXTURE/common/git" \
-    "$FIXTURE/common/bash" "$FIXTURE/common/pymol/PyMOLScripts/configs" \
-    "$FIXTURE/common/codex/.codex" "$FIXTURE/common/codex/.local/bin" "$FIXTURE/.venv-sync/bin"
+    "$FIXTURE/common/bash" "$FIXTURE/common/codex/.codex" "$FIXTURE/common/codex/.local/bin" "$FIXTURE/.venv-sync/bin"
 for file in zsh/.zshrc sh/.profile git/.gitconfig bash/.bashrc; do
     printf '# fixture %s\n' "$file" >"$FIXTURE/common/$file"
 done
-printf '# fixture pymolrc\n' >"$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc"
-# A coding-agent-kit tree with its seven sentinel files (what the package
-# links point at), for the cases with a third .gitmodules entry.
-CAK_TREE="$FIXTURE/common/coding-agent-kit/coding-agent-kit"
-CAK_SENTINELS='bin/codex-as bin/claude-as lib/codex-as/launch.py lib/claude-as/launch.py
-helpers/statusline.cjs helpers/notify.cjs helpers/check-git-hooks.cjs'
-for sentinel in $CAK_SENTINELS; do
-    mkdir -p "$CAK_TREE/${sentinel%/*}"
-    [ -f "$CAK_TREE/$sentinel" ] || printf '# fixture %s\n' "$sentinel" >"$CAK_TREE/$sentinel"
-done
-GITMODULES_BOTH='[submodule "common/pymol/PyMOLScripts"]
-	path = common/pymol/PyMOLScripts
-	url = https://github.com/FridrichMethod/PyMOLScripts.git
-	branch = main'
-printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
 # Portable instructions remain ordinary Stow files.
 printf '# Global Working Preferences\n\nFixture portable Codex instructions.\n' \
     >"$FIXTURE/common/codex/.codex/AGENTS.md"
@@ -271,13 +255,25 @@ cp "$FAKE_BIN/sync-python" "$FIXTURE/.venv-sync/bin/python"
 printf '.venv-sync/\n' >"$FIXTURE/.gitignore"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 "$REAL_GIT" -C "$FIXTURE" init -q
-"$REAL_GIT" -C "$FIXTURE" add .gitignore .gitmodules common
+"$REAL_GIT" -C "$FIXTURE" add .gitignore common
 "$REAL_GIT" -C "$FIXTURE" -c user.name=fixture -c user.email=fixture@example.invalid \
     commit -q -m fixture
 STATE_FILE="$FIXTURE/.git/dotfiles-sync-unix"
 
 mkdir -p "$TEST_HOME/.oh-my-zsh/custom/plugins/demo/src" \
     "$TEST_HOME/.config/bat/themes" "$TEST_HOME/.local/bin"
+# The payload repos as their installers leave them (config/payloads.tsv
+# probes): the kit's managed root and Claude helpers, PyMOL's rc files and
+# the skills data directory.
+mkdir -p "$TEST_HOME/.local/share/coding-agent-kit/current" "$TEST_HOME/.claude/coding-agent-kit" \
+    "$TEST_HOME/.local/share/awesome-skills"
+printf '#!/bin/sh\n' >"$TEST_HOME/.local/share/coding-agent-kit/current/install.sh"
+printf '{}\n' >"$TEST_HOME/.local/share/awesome-skills/claude.json"
+for helper in statusline notify check-git-hooks; do
+    printf '// fixture\n' >"$TEST_HOME/.claude/coding-agent-kit/$helper.cjs"
+done
+printf '# fixture\n' >"$TEST_HOME/.pymolrc"
+printf '# fixture\n' >"$TEST_HOME/.pymolrc.py"
 printf '# fixture oh-my-zsh\n' >"$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
 # What setup-host links into ~/.local/bin (codex, claude, kitty, micromamba).
 write_fake "$TEST_HOME/.local/bin/doctor-local" <<'SH'
@@ -519,7 +515,7 @@ assert_tsv_shape
 [ ! -s "$OUT/$CASE.err" ] ||
     case_fail "--tsv wrote to stderr"
 for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr claude codex \
-    locale venv-sync submodule stow-links path-order rc-pollution omz-order nvm-homebrew; do
+    locale venv-sync submodule stow-links path-order rc-pollution omz-order nvm-homebrew payloads; do
     assert_row "$id" ok '' -
 done
 assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
@@ -531,7 +527,8 @@ assert_row desk-tool warn 'not found; no terminal' 'docs/bootstrap.md S6-kitty'
 assert_row nerd-font warn
 assert_row host-tool warn
 assert_row psfzf skip '' -
-assert_row submodule ok 'common/pymol/PyMOLScripts' -
+assert_row submodule ok 'no submodule and no retired submodule checkout' -
+assert_row payloads ok 'installed: kit, pymol, skills' -
 for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-auth zsh-smoke; do
     assert_no_row "$id"
 done
@@ -784,7 +781,7 @@ mv "$TEST_TMP/codex.hidden" "$FAKE_BIN/codex"
 run_doctor smoke -- --host lab-ubuntu --smoke --tsv
 assert_rc 0
 assert_row zsh-smoke ok
-assert_event "zsh -ic true DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 PATH=$BASE_PATH"
+assert_event "zsh -ic true DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 PATH=$BASE_PATH"
 assert_no_event NETWORK
 run_doctor smoke-plugin "SMOKE_STDERR=[oh-my-zsh] plugin 'fzf-tab' not found" -- \
     --host lab-ubuntu --smoke --tsv
@@ -868,125 +865,68 @@ run_doctor venv-broken SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
 assert_rc 1
 assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
 
-mv "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc" "$TEST_TMP/pymolrc.hidden"
-run_doctor submodule-missing -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row submodule missing \
-    'no common/pymol/PyMOLScripts/configs/.pymolrc; the stowed links dangle (git submodule update --init --recursive)' \
+# Dotfiles has no submodules: a .gitmodules is a warning, and so is each
+# retired submodule checkout a pull leaves behind, with how to check it and
+# the rm that removes it, alone or together; the doctor deletes nothing.
+printf '[submodule "x"]\n\tpath = x\n' >"$FIXTURE/.gitmodules"
+run_doctor gitmodules -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row submodule warn "$FIXTURE/.gitmodules exists, but dotfiles has no submodules (git rm .gitmodules)" \
     'docs/bootstrap.md P0-preflight'
-mv "$TEST_TMP/pymolrc.hidden" "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc"
-
-# The check follows .gitmodules: without the sherlock-kit entry its absent
-# tree is no alarm, a submodule it has no sentinels for needs its .git, and
-# a checkout without .gitmodules has nothing to check.
-printf '%s\n' '[submodule "common/pymol/PyMOLScripts"]' '	path = common/pymol/PyMOLScripts' \
-    '[submodule "common/demo/Demo"]' '    path   =   common/demo/Demo  ' >"$FIXTURE/.gitmodules"
-mkdir -p "$FIXTURE/common/demo/Demo"
-run_doctor submodule-unknown -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row submodule missing 'no common/demo/Demo/.git; the stowed links dangle'
-: >"$FIXTURE/common/demo/Demo/.git"
-run_doctor submodule-unknown-ok -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule ok 'common/pymol/PyMOLScripts, common/demo/Demo'
-rm -rf "$FIXTURE/common/demo"
 rm "$FIXTURE/.gitmodules"
-run_doctor submodule-no-gitmodules -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule ok 'no .gitmodules'
-printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
-run_doctor submodule-restored -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule ok
-
-# With coding-agent-kit as the third entry (still named after its first
-# path), its seven sentinels are checked in .gitmodules order after the other
-# two, each one on its own, and an uninitialized checkout lists all of them.
-printf '%s\n' "$GITMODULES_BOTH" '[submodule "common/codex/coding-agent-kit"]' \
-    '	path = common/coding-agent-kit/coding-agent-kit' '	url = https://github.com/FridrichMethod/coding-agent-kit.git' \
-    '	branch = main' >"$FIXTURE/.gitmodules"
-run_doctor submodule-coding-agent-kit -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule ok 'common/pymol/PyMOLScripts, common/coding-agent-kit/coding-agent-kit' -
-number=0
-cak_missing=
-for sentinel in $CAK_SENTINELS; do
-    number=$((number + 1))
-    cak_missing="$cak_missing, common/coding-agent-kit/coding-agent-kit/$sentinel"
-    mv "$CAK_TREE/$sentinel" "$TEST_TMP/sentinel.hidden"
-    run_doctor "submodule-coding-agent-kit-$number" -- --host lab-ubuntu --tsv
-    assert_rc 1
-    assert_row submodule missing \
-        "no common/coding-agent-kit/coding-agent-kit/$sentinel; the stowed links dangle (git submodule update --init --recursive)" \
+RETIRED='common/codex/coding-agent-kit:common/codex/coding-agent-kit
+common/coding-agent-kit/coding-agent-kit:common/codex/coding-agent-kit
+common/pymol/PyMOLScripts:common/pymol/PyMOLScripts
+common/sherlock-kit/sherlock-kit:common/sherlock-kit/sherlock-kit'
+while IFS=: read -r checkout module; do
+    mkdir -p "$FIXTURE/$checkout"
+    printf 'gitdir: elsewhere\n' >"$FIXTURE/$checkout/.git"
+    run_doctor "retired-${checkout//\//-}" -- --host lab-ubuntu --tsv
+    assert_rc 0
+    assert_row submodule warn "retired submodule checkout $checkout: once it holds no work of yours (git -C \"$FIXTURE/$checkout\" status; git -C \"$FIXTURE/$checkout\" log --branches --not --remotes), rm -rf \"$FIXTURE/$checkout\" (its repository, .git/modules/$module, can go the same way once no other leftover uses it)" \
         'docs/bootstrap.md P0-preflight'
     case $(tsv_field submodule 4) in
-        *', '*) case_fail 'submodule detail names more than the hidden sentinel' ;;
+        *'retired submodule checkout'*'retired submodule checkout'*)
+            case_fail 'submodule detail names more than the one leftover'
+            ;;
     esac
-    mv "$TEST_TMP/sentinel.hidden" "$CAK_TREE/$sentinel"
-done
-mv "$CAK_TREE" "$TEST_TMP/coding-agent-kit.hidden"
-mkdir "$CAK_TREE"
-run_doctor submodule-coding-agent-kit-empty -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row submodule missing "no ${cak_missing#, }; the stowed links dangle (git submodule update --init --recursive)"
-rmdir "$CAK_TREE"
-mv "$TEST_TMP/coding-agent-kit.hidden" "$CAK_TREE"
+    [[ -f "$FIXTURE/$checkout/.git" ]] || case_fail "the doctor removed $checkout"
+    rm -rf "${FIXTURE:?}/$checkout"
+done <<<"$RETIRED"
+while IFS=: read -r checkout _; do
+    mkdir -p "$FIXTURE/$checkout"
+done <<<"$RETIRED"
+run_doctor retired-all -- --host lab-ubuntu --tsv
+assert_rc 0
+while IFS=: read -r checkout _; do
+    assert_row submodule warn "rm -rf \"$FIXTURE/$checkout\""
+    [[ -d "$FIXTURE/$checkout" ]] || case_fail "the doctor removed $checkout"
+done <<<"$RETIRED"
+rm -rf "${FIXTURE:?}/common/coding-agent-kit" "${FIXTURE:?}/common/pymol" "${FIXTURE:?}/common/sherlock-kit" \
+    "${FIXTURE:?}/common/codex/coding-agent-kit"
 
-# The checkout that the pull across coding-agent-kit's move into its own
-# package leaves at the old path: a warning that names the one rm to run and
-# the module directory to keep, after the check of every submodule; absent,
-# or still the submodule's .gitmodules path, it is not reported.
-LEFTOVER_TREE="$FIXTURE/common/codex/coding-agent-kit"
-mkdir -p "$LEFTOVER_TREE/bin"
-printf 'gitdir: ../../../.git/modules/common/codex/coding-agent-kit\n' >"$LEFTOVER_TREE/.git"
-printf '# fixture leftover\n' >"$LEFTOVER_TREE/bin/codex-as"
-run_doctor submodule-coding-agent-kit-leftover -- --host lab-ubuntu --tsv
+# The payload repos: each selected item passes its unix-probe row, and the
+# kit's Claude helpers are there; a shortfall warns (the next interactive
+# shell installs it), never fails.
+mv "$TEST_HOME/.claude/coding-agent-kit/notify.cjs" "$TEST_TMP/notify.hidden"
+rm "$TEST_HOME/.pymolrc.py"
+run_doctor payloads-short -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row submodule warn \
-    "submodules checked out: common/pymol/PyMOLScripts, common/coding-agent-kit/coding-agent-kit; remove the pre-move coding-agent-kit checkout: rm -rf \"$FIXTURE/common/codex/coding-agent-kit\" (keep .git/modules/common/codex/coding-agent-kit, the repository of common/coding-agent-kit/coding-agent-kit)" \
-    'docs/bootstrap.md P0-preflight'
-run_doctor submodule-coding-agent-kit-leftover-text -- --host lab-ubuntu
+assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs (Claude's status line and hooks fail), pymol; the next interactive shell installs them, or run sync-payloads now" \
+    'docs/bootstrap.md H7-payloads'
+run_doctor payloads-selected DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
+assert_row payloads ok 'installed: skills' -
+run_doctor payloads-none DOTFILES_PAYLOAD_ITEMS= -- --host lab-ubuntu --tsv
+assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
+run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
+assert_row payloads warn 'not installed: kit; the next interactive shell installs them'
+mv "$TEST_TMP/notify.hidden" "$TEST_HOME/.claude/coding-agent-kit/notify.cjs"
+printf '# fixture\n' >"$TEST_HOME/.pymolrc.py"
+mv "$FIXTURE/config/payloads.tsv" "$TEST_TMP/payloads.hidden"
+run_doctor payloads-no-config -- --host lab-ubuntu --tsv
 assert_rc 0
-# Missing sentinels still take precedence over the leftover.
-mv "$CAK_TREE/bin/codex-as" "$TEST_TMP/sentinel.hidden"
-run_doctor submodule-coding-agent-kit-leftover-missing -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row submodule missing "no common/coding-agent-kit/coding-agent-kit/bin/codex-as; the stowed links dangle"
-mv "$TEST_TMP/sentinel.hidden" "$CAK_TREE/bin/codex-as"
-# A .gitmodules that still names the old path (as before the move) is no leftover.
-printf '%s\n' "$GITMODULES_BOTH" '[submodule "common/codex/coding-agent-kit"]' \
-    '	path = common/codex/coding-agent-kit' '	url = https://github.com/FridrichMethod/coding-agent-kit.git' \
-    '	branch = main' >"$FIXTURE/.gitmodules"
-for sentinel in $CAK_SENTINELS; do
-    mkdir -p "$LEFTOVER_TREE/${sentinel%/*}"
-    [ -f "$LEFTOVER_TREE/$sentinel" ] || printf '# fixture %s\n' "$sentinel" >"$LEFTOVER_TREE/$sentinel"
-done
-run_doctor submodule-coding-agent-kit-old-path -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule ok 'common/pymol/PyMOLScripts, common/codex/coding-agent-kit' -
-rm -rf "$LEFTOVER_TREE"
-printf '%s\n' "$GITMODULES_BOTH" >"$FIXTURE/.gitmodules"
-run_doctor submodule-coding-agent-kit-restored -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule ok 'common/pymol/PyMOLScripts' -
-
-# Retired checkouts are reported separately or together, but never deleted.
-mkdir -p "$FIXTURE/common/sherlock-kit/sherlock-kit"
-run_doctor retired-sherlock -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule warn 'inspect and remove the retired sherlock-kit checkout manually:'
-assert_row submodule warn "rm -rf \"$FIXTURE/common/sherlock-kit/sherlock-kit\""
-[[ -d "$FIXTURE/common/sherlock-kit/sherlock-kit" ]]
-mkdir -p "$FIXTURE/common/codex/coding-agent-kit"
-run_doctor retired-both -- --host lab-ubuntu --tsv
-assert_row submodule warn 'pre-move coding-agent-kit'
-assert_row submodule warn 'retired sherlock-kit'
-mv "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc" "$TEST_TMP/pymolrc.hidden"
-run_doctor retired-missing-first -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row submodule missing 'no common/pymol/PyMOLScripts/configs/.pymolrc'
-mv "$TEST_TMP/pymolrc.hidden" "$FIXTURE/common/pymol/PyMOLScripts/configs/.pymolrc"
-rmdir "$FIXTURE/common/codex/coding-agent-kit" "$FIXTURE/common/sherlock-kit/sherlock-kit" "$FIXTURE/common/sherlock-kit"
+assert_row payloads warn "no readable $FIXTURE/config/payloads.tsv"
+mv "$TEST_TMP/payloads.hidden" "$FIXTURE/config/payloads.tsv"
 
 rm "$TEST_HOME/.profile"
 run_doctor stow-absent -- --host lab-ubuntu --tsv
@@ -1166,8 +1106,8 @@ row git core all,fedora git --version - x P0-preflight |
     row git cli all git --version - x P0-preflight
 } | bad_manifest duplicate 'duplicate id git'
 row locale core all locale - - x H1-locale | bad_manifest reserved 'id locale is reserved for a doctor check'
-row core-symlinks core all git - - x P0-preflight |
-    bad_manifest reserved-windows 'id core-symlinks is reserved for a doctor check'
+row payloads core all git - - x P0-preflight |
+    bad_manifest reserved-payloads 'id payloads is reserved for a doctor check'
 row zsh-smoke core all zsh - - x P0-preflight | bad_manifest reserved-smoke 'id zsh-smoke is reserved for a doctor check'
 row git core all git --version 1.x x P0-preflight | bad_manifest floor "invalid floor '1.x'"
 # shellcheck disable=SC2016 # manifest tokens are literal
