@@ -210,49 +210,6 @@ for retired_host in lab-ubuntu wsl-ubuntu sherlock; do
     done
 done
 
-# Every link Stow made from the two packages that the payload repos replaced,
-# by package: their own installers now own these paths (the kit's refuses a
-# foreign link at its launcher and completion paths), and ~/.claude/dotfiles,
-# the old home of the Claude helpers, is no longer read. A path is removed only
-# while it is a symlink whose text is exactly the one Stow wrote for it from
-# this checkout's common/, dangling or not: Stow links to the physical stow
-# directory, relative to the physical target, through one ../ per directory
-# below it. A file, a directory or any other link stays, and so does each
-# parent directory but the four that only these packages filled, which go
-# once empty. Before any write: a failed removal stops the install unrecorded.
-RETIRED_PACKAGE_LINKS='coding-agent-kit .claude/dotfiles/check-git-hooks.cjs
-coding-agent-kit .claude/dotfiles/notify.cjs
-coding-agent-kit .claude/dotfiles/statusline.cjs
-coding-agent-kit .local/bin/claude-as
-coding-agent-kit .local/bin/codex-as
-coding-agent-kit .local/lib/claude-as/launch.py
-coding-agent-kit .local/lib/codex-as/check.py
-coding-agent-kit .local/lib/codex-as/handoff.py
-coding-agent-kit .local/lib/codex-as/launch.py
-coding-agent-kit .local/lib/codex-as/layout.py
-coding-agent-kit .local/share/bash-completion/completions/claude-as
-coding-agent-kit .local/share/bash-completion/completions/codex-as
-coding-agent-kit .oh-my-zsh/custom/completions/_claude-as
-coding-agent-kit .oh-my-zsh/custom/completions/_codex-as
-pymol .pymolrc
-pymol .pymolrc.py'
-STOW_PATH=$(python3 -I -B -c 'import os, sys; print(os.path.relpath(*map(os.path.realpath, sys.argv[1:])))' \
-    "$COMMON_DIR" "$HOME")
-while read -r retired_package retired_path; do
-    retired_link=$HOME/$retired_path
-    [[ -L "$retired_link" ]] || continue
-    retired_up=${retired_path//[!\/]/}
-    retired_text="${retired_up//\//../}$STOW_PATH/$retired_package/$retired_path"
-    [[ "$(readlink -- "$retired_link")" == "$retired_text" ]] || continue
-    rm -f -- "$retired_link"
-    dotfiles_log info "Removed $retired_link, a link Stow made from the retired $retired_package package"
-done <<<"$RETIRED_PACKAGE_LINKS"
-for retired_dir in .claude/dotfiles .local/lib/claude-as .local/lib/codex-as .oh-my-zsh/custom/completions; do
-    if [[ -d "$HOME/$retired_dir" && ! -L "$HOME/$retired_dir" ]]; then
-        rmdir -- "$HOME/$retired_dir" 2>/dev/null || true
-    fi
-done
-
 # Stow never replaces a regular file (a fresh home's ~/.bashrc and ~/.profile
 # from /etc/skel, for one). A dry run of both stows finds every conflict
 # before the sync helpers write ~/.claude and ~/.codex. Its simulation notice
@@ -309,6 +266,51 @@ if [[ -n "$HOST" ]]; then
         stow --restow --no-folding -d "$HOST_DIR" $HOST_PKGS
     fi
 fi
+
+# Every link Stow made from the two packages that the payload repos replaced,
+# by package: their own installers now own these paths (the kit's refuses a
+# foreign link at its launcher and completion paths), and ~/.claude/dotfiles,
+# the old home of the Claude helpers, is no longer read. A path is removed only
+# while it is a symlink whose text is exactly the one Stow wrote for it from
+# this checkout's common/, dangling or not: Stow links to the physical stow
+# directory, relative to the physical target, through one ../ per directory
+# below it. A file, a directory or any other link stays, and so does each
+# parent directory but the four that only these packages filled, which go
+# once empty. This runs only after both stows succeeded, so a refused dry run
+# or a failed stow leaves them in place; a failed removal stops the install
+# unrecorded.
+RETIRED_PACKAGE_LINKS='coding-agent-kit .claude/dotfiles/check-git-hooks.cjs
+coding-agent-kit .claude/dotfiles/notify.cjs
+coding-agent-kit .claude/dotfiles/statusline.cjs
+coding-agent-kit .local/bin/claude-as
+coding-agent-kit .local/bin/codex-as
+coding-agent-kit .local/lib/claude-as/launch.py
+coding-agent-kit .local/lib/codex-as/check.py
+coding-agent-kit .local/lib/codex-as/handoff.py
+coding-agent-kit .local/lib/codex-as/launch.py
+coding-agent-kit .local/lib/codex-as/layout.py
+coding-agent-kit .local/share/bash-completion/completions/claude-as
+coding-agent-kit .local/share/bash-completion/completions/codex-as
+coding-agent-kit .oh-my-zsh/custom/completions/_claude-as
+coding-agent-kit .oh-my-zsh/custom/completions/_codex-as
+pymol .pymolrc
+pymol .pymolrc.py'
+STOW_PATH=$(python3 -I -B -c 'import os, sys; print(os.path.relpath(*map(os.path.realpath, sys.argv[1:])))' \
+    "$COMMON_DIR" "$HOME")
+while read -r retired_package retired_path; do
+    retired_link=$HOME/$retired_path
+    [[ -L "$retired_link" ]] || continue
+    retired_up=${retired_path//[!\/]/}
+    retired_text="${retired_up//\//../}$STOW_PATH/$retired_package/$retired_path"
+    [[ "$(readlink -- "$retired_link")" == "$retired_text" ]] || continue
+    rm -f -- "$retired_link"
+    dotfiles_log info "Removed $retired_link, a link Stow made from the retired $retired_package package"
+done <<<"$RETIRED_PACKAGE_LINKS"
+for retired_dir in .claude/dotfiles .local/lib/claude-as .local/lib/codex-as .oh-my-zsh/custom/completions; do
+    if [[ -d "$HOME/$retired_dir" && ! -L "$HOME/$retired_dir" ]]; then
+        rmdir -- "$HOME/$retired_dir" 2>/dev/null || true
+    fi
+done
 
 # Lock down SSH config permissions
 # sshd requires 600 on config files and 700 on ~/.ssh; stow preserves repo

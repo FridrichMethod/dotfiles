@@ -7,6 +7,7 @@ set -euo pipefail
 # test from the caller; each case sets what it needs.
 unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
     DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
+    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
@@ -602,8 +603,8 @@ rm "$TEST_HOME/.local/bin/shk"
 # not, while their text is the one Stow wrote (one ../ per directory below
 # HOME, then the stow directory relative to HOME, both physical); any other
 # link, file or directory at those paths stays, and so do parents that hold
-# anything else. Removal happens after the read-only preflight, and a failed
-# one stops the install without recording it.
+# anything else. Removal happens after both stows, and a failed one stops the
+# install without recording it.
 RETIRED_PATHS='coding-agent-kit .claude/dotfiles/check-git-hooks.cjs
 coding-agent-kit .claude/dotfiles/notify.cjs
 coding-agent-kit .claude/dotfiles/statusline.cjs
@@ -639,6 +640,24 @@ if run_fixture package-links-preflight FAIL_CHECK=claude-settings-sync; then
     exit 1
 fi
 assert_link "$TEST_HOME/.pymolrc" "$(stow_text pymol .pymolrc)"
+# They go only once both stows succeeded: a refused dry run, a failed common
+# stow and a failed host stow each leave every one of them in place.
+for failure in 'package-links-dry-conflict STOW_DRY_RC=1' 'package-links-stow-failure STOW_RC=1'; do
+    # shellcheck disable=SC2086 # a case name and one assignment
+    if run_fixture $failure; then
+        echo "ERROR: installer ignored a Stow failure (${failure#* })" >&2
+        exit 1
+    fi
+    refute_grep 'a link Stow made from the retired' "$TEST_TMP/${failure%% *}.stdout"
+done
+if env HOME="$TEST_HOME" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" STOW_FAIL_HOST=1 \
+    bash "$FIXTURE/stow-all.sh" host-a >"$TEST_TMP/package-links-host-failure.stdout" 2>&1; then
+    echo 'ERROR: ignored a host Stow failure' >&2
+    exit 1
+fi
+while read -r package path; do
+    assert_link "$TEST_HOME/$path" "$(stow_text "$package" "$path")"
+done <<<"$RETIRED_PATHS"
 # One link still resolves: a package file the pull left behind.
 mkdir -p "$FIXTURE/common/pymol"
 printf '%s\n' 'pymolrc' >"$FIXTURE/common/pymol/.pymolrc"

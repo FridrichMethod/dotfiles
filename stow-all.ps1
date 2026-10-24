@@ -548,17 +548,6 @@ if ($Strict -and $script:Warnings.Count -gt 0) {
 }
 Remove-RetiredLink '.local/bin/shk' 'common/codex/.local/bin/shk'
 Remove-RetiredLink '.local/bin/codex-instructions-sync' 'common/codex/.local/bin/codex-instructions-sync'
-foreach ($retired in $RetiredPackageLinks) { Remove-RetiredPackageLink @retired }
-# The directories only those packages filled go too, once empty.
-foreach ($directory in @('.claude/dotfiles', '.local/lib/claude-as', '.local/lib/codex-as', '.oh-my-zsh/custom/completions')) {
-    $path = Join-Path $Target $directory.Replace('/', [IO.Path]::DirectorySeparatorChar)
-    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-    if (-not $WhatIfPreference -and $item -and $item.PSIsContainer -and -not $item.LinkType -and
-        -not @(Get-ChildItem -LiteralPath $path -Force).Count) { [IO.Directory]::Delete($path) }
-}
-if ($Strict -and $script:Warnings.Count -gt 0) {
-    throw "Stow retirement failed: $($script:Warnings -join '; ')"
-}
 if (-not $WhatIfPreference) { Write-DotfilesLog step 'Synchronizing portable Codex and Claude settings' }
 foreach ($sync in $syncPlan) { Invoke-PortableSync @sync }
 
@@ -577,6 +566,17 @@ if ($HostDir) {
         Invoke-StowPackage -PackageRoot $hostRoot -PackageName $package `
             -GlobalIgnores $globalIgnores
     }
+}
+
+# Only once every package is stowed: the links Stow made from the retired
+# packages, then the directories only those packages filled, once empty. A
+# declined removal is a warning, so the revision is not acknowledged.
+foreach ($retired in $RetiredPackageLinks) { Remove-RetiredPackageLink @retired }
+foreach ($directory in @('.claude/dotfiles', '.local/lib/claude-as', '.local/lib/codex-as', '.oh-my-zsh/custom/completions')) {
+    $path = Join-Path $Target $directory.Replace('/', [IO.Path]::DirectorySeparatorChar)
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    if (-not $WhatIfPreference -and $item -and $item.PSIsContainer -and -not $item.LinkType -and
+        -not @(Get-ChildItem -LiteralPath $path -Force).Count) { [IO.Directory]::Delete($path) }
 }
 
 # Validate final destinations in one guarded process, including newly created
