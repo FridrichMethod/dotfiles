@@ -521,8 +521,8 @@ missing dependencies fail CI instead of silently skipping tests. Each job
 first installs the real coding-agent-kit of the declared channel with the
 payload hook's own command into a home that no test writes (on Windows the
 runner's profile) and points `DOTFILES_TEST_KIT_HOME` at it, for the cases that run the kit; without that
-variable, as in a local run, those cases skip (until kit v0.6.0 is released, a
-failed install there only warns). A second,
+variable, as in a local run, those cases skip; a failed install fails the
+job. A second,
 opt-in workflow, `bootstrap-e2e.yml`, runs the day-zero bootstrap for real on
 every host (fresh containers for the Linux hosts, the macOS and Windows
 runners natively) on demand, weekly and on `e2e-ci/**` branches; it is never

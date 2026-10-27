@@ -24,16 +24,11 @@ jobs:
       # declares, installed by the payload hook's own command into a home of
       # its own, for the AI integration cases that need an installed kit
       # (DOTFILES_TEST_KIT_HOME; they skip without it). The network is fine in
-      # this step, never in a test.
-      # TEMPORARY until coding-agent-kit v0.6.0 is released: a failed install
-      # only warns, and those cases skip. Drop the else branch then.
+      # this step, never in a test. A failed install fails the job.
       - name: Install the real coding-agent-kit
         run: |
-          if HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit; then
-            echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
-          else
-            echo "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip"
-          fi
+          HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit
+          echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -71,15 +66,11 @@ jobs:
         shell: /bin/bash --noprofile --norc -eo pipefail {0}
     steps:
       - uses: actions/checkout@v6
-      # As in the Linux job (TEMPORARY tolerance until coding-agent-kit
-      # v0.6.0 is released).
+      # As in the Linux job.
       - name: Install the real coding-agent-kit
         run: |
-          if HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit; then
-            echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
-          else
-            echo "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip"
-          fi
+          HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit
+          echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -113,15 +104,11 @@ jobs:
       # As in the Linux job, through the PowerShell twin of the payload hook.
       # PowerShell's $HOME is the account's profile whatever USERPROFILE says,
       # so the kit goes into the runner's own profile, which no test writes.
-      # TEMPORARY tolerance until coding-agent-kit v0.6.0 is released.
       - name: Install the real coding-agent-kit
         run: |
           & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File scripts/payload-update.ps1 -Now kit
-          if ($LASTEXITCODE -eq 0) { "DOTFILES_TEST_KIT_HOME=$HOME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
-          else {
-            Write-Output "::warning::the coding-agent-kit channel in config/payloads.tsv is not installable yet; the installed-kit cases skip"
-            exit 0
-          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "DOTFILES_TEST_KIT_HOME=$HOME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
