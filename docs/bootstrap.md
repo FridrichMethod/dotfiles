@@ -438,10 +438,11 @@ kind.
   them around each probe and restore yours): recent gh releases otherwise write
   `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
   send telemetry for other commands). They also export
-  `TLDR_AUTO_UPDATE_DISABLED=1`: the tldr C client (Homebrew's `tldr`
-  formula) checks its page cache before it handles `--version`, and once
-  `~/.tldrc/date` is two weeks old it otherwise downloads the tldr-pages
-  archive into `~/.tldrc` first (tlrc, the Windows client, and tealdeer ignore
+  `TLDR_AUTO_UPDATE_DISABLED=1`: the tldr C client (the `tldr` formula
+  Homebrew removed in 2026-10, still on hosts that installed it) checks its
+  page cache before it handles `--version`, and once `~/.tldrc/date` is two
+  weeks old it otherwise downloads the tldr-pages archive into `~/.tldrc`
+  first (tlrc, which the cli Brewfile and winget install, and tealdeer ignore
   the variable and never update on `--version`). Not even a temporary file:
   the Unix scripts use no here-documents or here-strings, which macOS's Bash
   3.2 backs with files in the system temporary directory.
@@ -827,7 +828,7 @@ that Ubuntu gets from apt point here too: python3, git-lfs and tmux come from
 the core Brewfile, and the rest (zsh, curl, rsync, tar, file, col, man) are
 macOS baseline. One Brewfile per tier in
 [`brew/`](../config/bootstrap/brew/): `core` (stow, fzf, zoxide, eza, fd, bat;
-on macOS also python, git-lfs and tmux), `cli` (ripgrep, git-delta, tldr,
+on macOS also python, git-lfs and tmux), `cli` (ripgrep, git-delta, tlrc,
 chafa, jq, neovim, aria2, uv, gh), `ai` and `desktop` (macOS casks only:
 claude-code and codex; kitty, wezterm and the CaskaydiaMono Nerd Font) and
 `contributor`. `--no-upgrade` never upgrades what is already installed, so an
@@ -906,7 +907,9 @@ of, taken from each entry's `conflicts_with` on formulae.brew.sh when it was
 pinned, in `# conflicts: FORMULA OTHER...` lines and, for casks,
 `# conflicts: cask TOKEN OTHER...` lines (validated by
 `tests/bootstrap-manifest.sh`). Today they are `core`'s `fd fdclone` (both
-install `fd`), `cli`'s `tldr tlrc tealdeer` (all three install `tldr`), and the
+install `fd`), `cli`'s `tlrc tldr tealdeer` (all three install `tldr`: tlrc
+`conflicts_with` tealdeer, and `tldr` is the C client, whose formula Homebrew
+removed in 2026-10 but whose keg stays on a host that installed it), and the
 macOS casks `claude-code` (`ai`, against `claude-code@latest`), `kitty` and
 `wezterm` (`desktop`, each against its `@nightly` cask). Before it runs brew at
 all, in `--check` and apply alike, S2-brew-bundle looks for each OTHER that is
@@ -916,10 +919,12 @@ has neither a keg nor an `opt/` link, or a cask's `Caskroom/OTHER` while
 `Caskroom/TOKEN` is absent. A pair whose Brewfile entry brew bundle skips on
 this platform (the casks are `if OS.mac?`) is never judged, and neither is
 one whose entry is satisfied another way (above), even by OTHER itself: a
-linked tlrc or tealdeer puts a `tldr` in the prefix's `bin` that the doctor
-accepts, so brew bundle never gets the `tldr` entry, nothing conflicts, and
-OTHER stays. What remains is OTHER installed while the doctor does not accept
-the entry's tool, as with an unlinked keg. When it finds one,
+linked C client or tealdeer puts a `tldr` in the prefix's `bin` that the
+doctor accepts, so brew bundle never gets the `tlrc` entry, nothing
+conflicts, and OTHER stays. A host that installed the C client before
+Homebrew removed it is such a host: it bundles no tlrc and keeps its `tldr`.
+What remains is OTHER installed while the doctor does not accept the entry's
+tool, as with an unlinked keg. When it finds one,
 the step is `human` and blocking (exit 3), and setup-host prints a judgment
 block whose command line uninstalls it (`--formula` or `--cask`) with the brew
 it found, by full path:
@@ -927,9 +932,9 @@ it found, by full path:
 ```text
 HUMAN-BEGIN S2-brew-bundle judgment
 # docs/bootstrap.md S2-brew-bundle
-# Homebrew does not install tldr (cli.Brewfile) while the tlrc formula is installed (conflicts_with), so brew bundle would fail
+# Homebrew does not install tlrc (cli.Brewfile) while the tealdeer formula is installed (conflicts_with), so brew bundle would fail
 # uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one
-/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc
+/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tealdeer
 HUMAN-END
 ```
 
@@ -939,17 +944,23 @@ conflicting formula or cask below as the owner; the next ./setup-host.sh run
 then prints the owner's lines that install the Brewfile one", since that run
 stops again at the owner's `sudo` block rather than bundling.
 
-The `tldr` command comes back from the `tldr` formula on the next run (a cask
-such as `wezterm@nightly` likewise gives way to `wezterm`). That formula is
-the C client (tldr-c-client), whose `-C`/`--color` takes no argument; the
-fzf-tab previews try `tldr --color always` (tlrc, tealdeer) and then
-`tldr -C`, so they color with every client, and run both with
-`TLDR_AUTO_UPDATE_DISABLED=1`, so the C client answers from its local cache
-and never fetches a missing page or a stale archive while you tab-complete.
-The conflict holds back the whole step, every selected Brewfile, so keeping
-the other package instead means making its tool the one the doctor finds
-(`brew link tlrc`, as the prefix's owner on a shared one), which satisfies
-the entry, or leaving its tier out (for tldr, `--tier core,ai`).
+A leftover keg of the C client prints the same block with `tldr` in place of
+`tealdeer` (its formula declared `conflicts_with` tlrc until Homebrew removed
+it); Homebrew still uninstalls, and links, a keg whose formula it removed.
+The `tldr` command comes back from the `tlrc` formula on the next run (a cask
+such as `wezterm@nightly` likewise gives way to `wezterm`).
+tlrc's `--color` takes a value; the C client (tldr-c-client), the `tldr`
+formula Homebrew removed in 2026-10 and still on hosts that installed it,
+takes a bare `-C`. The fzf-tab previews try `tldr --color always` (tlrc,
+tealdeer) and then `tldr -C`, so they color with every client, and run both
+with `TLDR_AUTO_UPDATE_DISABLED=1`, so the C client answers from its local
+cache and never fetches a missing page or a stale archive while you
+tab-complete. The conflict holds back the whole step, every selected
+Brewfile, so keeping the other package instead means making its tool the one
+the doctor finds (`brew link tealdeer`, or `brew link tldr` for the C client,
+as the prefix's owner on a shared one), which satisfies the entry, or leaving
+its tier out (for tlrc, `--tier core,ai`). The C client gets no fixes or
+rebuilds from Homebrew any more, so uninstalling its keg is the better fix.
 `--print-manual` prints the block for every declared pair that applies on
 this platform. A conflict Homebrew adds later is not judged until a Brewfile
 line names it ([Known limitations](#known-limitations)). See also
@@ -996,7 +1007,7 @@ HUMAN-BEGIN S2-brew-bundle sudo
 # each line installs by name the missing entries of one Brewfile, from /tmp: brew never opens the Brewfile or your home, which lab may not be able to read
 # an entry is missing when the prefix lacks it and the doctor does not find its tool installed another way (apt, conda, the OS): no second copy in the shared prefix
 # HOMEBREW_NO_INSTALL_UPGRADE=1 leaves an installed formula or cask alone, as brew bundle --no-upgrade does
-(cd /tmp && sudo -u lab -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_INSTALL_UPGRADE=1 /home/linuxbrew/.linuxbrew/bin/brew install --formula gh tldr)
+(cd /tmp && sudo -u lab -H env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_INSTALL_UPGRADE=1 /home/linuxbrew/.linuxbrew/bin/brew install --formula gh tlrc)
 HUMAN-END
 ```
 
@@ -1966,17 +1977,18 @@ dirty `~/dotfiles` checkout after an installer is
 [X-rc-protection](#x-rc-protection-rc-file-protection).
 
 **Conflicting Homebrew formula or cask.** S2-brew-bundle is `human` with "the
-installed tlrc formula conflicts with tldr (cli.Brewfile)" (or, on macOS, for
-example "the installed wezterm@nightly cask conflicts with wezterm
-(desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tldr
+installed tldr formula conflicts with tlrc (cli.Brewfile)" (a keg of the C
+client, whose formula Homebrew removed in 2026-10; or, on macOS, for example
+"the installed wezterm@nightly cask conflicts with wezterm
+(desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tlrc
 because conflicting formulae are installed" or a cask conflict. Check with
 `ls "$(brew --prefix)/Cellar" "$(brew --prefix)/Caskroom"`, then uninstall the
 other package by the path setup-host printed, for example
-`/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tlrc` (tealdeer the
+`/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr` (tealdeer the
 same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
 `./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
 takes its place. To keep the other package instead, link it
-(`brew link tlrc`): a `tldr` the doctor finds satisfies the entry, so the
+(`brew link tldr`): a `tldr` the doctor finds satisfies the entry, so the
 pair is no longer judged. If brew refuses because another formula depends on
 it, keep it and leave its tier out instead
 ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). A failure that names a
@@ -2048,7 +2060,9 @@ fail-closed behavior beyond what is stated.
   linking it is still the fix.
 - **Only declared conflicts are judged.** The `# conflicts:` lines record the
   `conflicts_with` data that formulae.brew.sh listed for each Brewfile entry
-  when its Brewfile was pinned (the `# pinned` date at its top). A conflict
+  when its Brewfile was pinned (the `# pinned` date at its top), plus `cli`'s
+  `tldr`, the C client that Homebrew removed in 2026-10 and so no longer
+  lists, whose leftover keg installs the same `tldr` as tlrc. A conflict
   Homebrew adds later fails `brew bundle` with "brew bundle failed for <file>"
   until a Brewfile line names it ([X-recovery](#x-recovery-recovery-recipes)).
 - **A Homebrew prefix owned by another account.** H1-linuxbrew is `done` once
