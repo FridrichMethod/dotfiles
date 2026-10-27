@@ -194,12 +194,17 @@ function Invoke-E2EStepPayloads {
     # The Windows run line of docs/bootstrap.md H7-payloads,
     # scripts\payload-update.ps1 -Now, with the PATH a new terminal reads:
     # every payload repo of config/payloads.tsv installs from the network
-    # through its own install.ps1. It passes when that exits 0 and the
-    # payloads row of doctor.ps1 -Host win -Tsv is then ok.
+    # through its own install.ps1, under the block limit, since three
+    # installs run in a row. It passes when that exits 0 and the payloads row
+    # of doctor.ps1 -Host win -Tsv is then ok and names what it found
+    # installed.
     Update-E2EPath
     Start-E2EStep payloads setup:payloads
-    $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Check']
-    if ($code -ne 0) { Complete-E2EStep fail "exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"; return }
+    $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Block']
+    if ($code -ne 0) {
+        Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Block'])s timeout): $(Get-E2ELastLine $E2E['StepErr'])"
+        return
+    }
     [void](Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check'])
     $row = $null
     foreach ($line in @(Get-E2ELines $E2E['StepOut'])) {
@@ -207,7 +212,9 @@ function Invoke-E2EStepPayloads {
         if ($cells.Count -ge 4 -and $cells[1] -ceq 'payloads') { $row = $cells; break }
     }
     if ($null -eq $row) { Complete-E2EStep fail "exit 0, but the doctor's payloads row is missing" }
-    elseif ($row[0] -ceq 'ok') { Complete-E2EStep pass "exit 0; doctor payloads ok: $($row[3])" }
+    elseif ($row[0] -ceq 'ok' -and $row[3].StartsWith('installed: ', [StringComparison]::Ordinal)) {
+        Complete-E2EStep pass "exit 0; doctor payloads ok: $($row[3])"
+    }
     else { Complete-E2EStep fail "exit 0, but the doctor's payloads row is $($row[0]): $($row[3])" }
 }
 

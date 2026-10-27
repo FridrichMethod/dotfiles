@@ -194,13 +194,14 @@ e2e_login_zsh() {
     e2e_expand "${E2E_LOGIN_ZSH:-zsh}"
 }
 
-# e2e_login_run OUT ERR COMMAND: bash -l, then the host's zsh as an
-# interactive login shell running COMMAND, from that environment.
+# e2e_login_run OUT ERR COMMAND [LIMIT]: bash -l, then the host's zsh as an
+# interactive login shell running COMMAND, from that environment, under
+# LIMIT seconds (default E2E_TIMEOUT_CHECK).
 e2e_login_run() {
     local cmd
     cmd="exec $(e2e_quote "$(e2e_login_zsh)") -il -c $(e2e_quote "$3")"
     e2e_login_env
-    e2e_run "$1" "$2" "$E2E_TIMEOUT_CHECK" "$HOME" "${E2E_LOGIN_ENV[@]}" bash -lc "$cmd"
+    e2e_run "$1" "$2" "${4:-$E2E_TIMEOUT_CHECK}" "$HOME" "${E2E_LOGIN_ENV[@]}" bash -lc "$cmd"
 }
 
 # e2e_login_noise ERR: the stderr of the login shell minus what only the

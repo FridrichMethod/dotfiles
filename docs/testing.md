@@ -22,9 +22,8 @@ Each job first installs the real coding-agent-kit of the channel that
 `$HOME` is the account's profile whatever `USERPROFILE` says, and which no
 test writes). It then exports that home as `DOTFILES_TEST_KIT_HOME`, which the
 cases that need an installed kit read; without it they skip. The network is
-used in that step only, never in a test. Until coding-agent-kit v0.6.0, the
-first release of channel `0.6`, is published, a failed install only warns and
-those cases skip; the workflow marks that tolerance as temporary. To run them
+used in that step only, never in a test, and a failed install fails the
+job. To run them
 locally, install the kit into a scratch home the same way, with
 `XDG_DATA_HOME`, `XDG_STATE_HOME` and `BASH_COMPLETION_USER_DIR` unset so
 nothing reaches your own, and set `DOTFILES_TEST_KIT_HOME` to it.
@@ -502,14 +501,15 @@ step in `summary.tsv`:
 7. **The payload repos install for real.** After the login-shell check, the
    `payloads` step (`setup:payloads`) runs the H7-payloads run line from the
    login environment, `sh ~/dotfiles/scripts/payload-update.sh --now`
-   (`scripts\payload-update.ps1 -Now` on `win`), while the H7-payloads block
-   itself stays a skipped reminder (`setup-host.ps1` prints none):
-   coding-agent-kit, PyMOLScripts and awesome-skills install from GitHub
-   through each repo's own installer, the kit at the newest patch of the
-   channel `config/payloads.tsv` declares. It must exit 0, and the doctor's
-   `payloads` row (`--tsv`) must then be `ok`. On Unix it is a setup phase,
-   so criterion 5 covers it: an installer that runs sudo or stow, or changes
-   an rc file, fails the audits.
+   (`scripts\payload-update.ps1 -Now` on `win`), on every host, whether or
+   not its profile prints the H7-payloads block, which stays a skipped
+   reminder where it does: coding-agent-kit, PyMOLScripts and awesome-skills
+   install from GitHub through each repo's own installer, the kit at the
+   newest patch of the channel `config/payloads.tsv` declares, within the
+   45-minute block limit. It must exit 0, and the doctor's `payloads` row
+   (`--tsv`) must then be `ok` and name what it found installed. On Unix it
+   is a setup phase, so criterion 5 covers it: an installer that runs sudo or
+   stow, or changes an rc file, fails the audits.
 
 Each host also runs its negative cases as separate steps (`negative:<token>`):
 the platform refusals (`--host wsl-ubuntu --check` in the lab container and

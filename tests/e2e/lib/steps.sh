@@ -83,21 +83,23 @@ e2e_step_doctor_smoke() { e2e_doctor_from_login doctor-smoke ' --smoke'; }
 # ~/dotfiles/scripts/payload-update.sh --now`, from the stowed login
 # environment, as a person runs it who keeps the hook on: every payload repo
 # of config/payloads.tsv installs from the network through its own
-# installer. It passes when that exits 0 and the doctor's payloads row is
-# then ok. A setup phase, so an installer that edits an rc file, stows or
-# runs sudo fails the audits.
+# installer, under the block limit, since three installs run in a row. It
+# passes when that exits 0 and the doctor's payloads row is then ok and names
+# what it found installed. A setup phase, so an installer that edits an rc
+# file, stows or runs sudo fails the audits.
 e2e_step_payloads() {
     local rc=0 row
     e2e_step_begin payloads setup:payloads
-    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" 'sh ~/dotfiles/scripts/payload-update.sh --now' || rc=$?
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" 'sh ~/dotfiles/scripts/payload-update.sh --now' \
+        "$E2E_TIMEOUT_BLOCK" || rc=$?
     if [ "$rc" != 0 ]; then
-        e2e_step_end fail "exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end fail "exit $rc (124 is the ${E2E_TIMEOUT_BLOCK}s timeout): $(e2e_last_line "$E2E_STEP_ERR")"
         return 0
     fi
     e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~/dotfiles && ./doctor.sh $E2E_DOCTOR_ARGS --tsv" || :
     row=$(awk -F '\t' '$2 == "payloads" { print $1 ": " $4 }' "$E2E_STEP_OUT" 2>/dev/null | sed -n 1p)
     case $row in
-        'ok: '*) e2e_step_end pass "exit 0; doctor payloads $row" ;;
+        'ok: installed: '*) e2e_step_end pass "exit 0; doctor payloads $row" ;;
         *) e2e_step_end fail "exit 0, but the doctor's payloads row is ${row:-missing}" ;;
     esac
 }

@@ -1080,7 +1080,7 @@ try {
         Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-", "ok`tpayloads`tai`tinstalled: kit, pymol, skills`t-")
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
-            'scripts/payload-update.ps1 -Now 900; doctor.ps1 -Host win -Tsv 900' 'the -Now run, then the doctor'
+            'scripts/payload-update.ps1 -Now 2700; doctor.ps1 -Host win -Tsv 900' 'the -Now run, then the doctor'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             'pass exit 0; doctor payloads ok: installed: kit, pymol, skills' 'every payload installed'
 
@@ -1091,12 +1091,20 @@ try {
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             "fail exit 0, but the doctor's payloads row is warn: not installed: skills" 'a payload still missing'
 
+        # An ok row that names nothing installed (no item selected) passes nothing.
+        [void](New-DryRun)
+        Add-Run 0 @()
+        Add-Run 0 @($header, "ok`tpayloads`tai`tDOTFILES_PAYLOAD_ITEMS selects no payload`t-")
+        Use-DryRun { Invoke-E2EStepPayloads }
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
+            "fail exit 0, but the doctor's payloads row is ok: DOTFILES_PAYLOAD_ITEMS selects no payload" 'an empty selection'
+
         [void](New-DryRun)
         Add-Run 1 @() @('[dotfiles] [error] payload-update: skills failed (exit 1)')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal $script:PwshCalls.Count 1 'no doctor run after a failed -Now'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
-            'fail exit 1: [dotfiles] [error] payload-update: skills failed (exit 1)' 'a failed -Now'
+            'fail exit 1 (124 is the 2700s timeout): [dotfiles] [error] payload-update: skills failed (exit 1)' 'a failed -Now'
     }
 
     Test-Case 'Invoke-E2EFlowWin runs the steps in order and, once one breaks the flow, skips what depends on it' {
