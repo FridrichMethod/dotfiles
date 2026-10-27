@@ -1,10 +1,11 @@
 # shellcheck shell=bash
 # The steps both flows of tests/e2e/inside.sh share: the clone, the initial
-# read-only doctor run, the login-shell check, the final doctor runs from
-# the login environment, the negatives and the closing audits. Each step
-# function opens its step, runs, and closes it with a verdict; a step the
-# rest depends on sets E2E_BROKEN when it fails, and the flows then skip
-# what cannot run. Sourced after assert.sh; same portability rules.
+# read-only doctor run, the login-shell check, the payload repos' install,
+# the final doctor runs from the login environment, the negatives and the
+# closing audits. Each step function opens its step, runs, and closes it
+# with a verdict; a step the rest depends on sets E2E_BROKEN when it fails,
+# and the flows then skip what cannot run. Sourced after assert.sh; same
+# portability rules.
 
 E2E_UPSTREAM=https://github.com/FridrichMethod/dotfiles.git
 # The first apply run, which the alloc-first negative judges afterwards.
@@ -77,6 +78,29 @@ e2e_doctor_from_login() {
 
 e2e_step_doctor_final() { e2e_doctor_from_login doctor-final ''; }
 e2e_step_doctor_smoke() { e2e_doctor_from_login doctor-smoke ' --smoke'; }
+
+# e2e_step_payloads: the run line of the H7-payloads block, `sh
+# ~/dotfiles/scripts/payload-update.sh --now`, from the stowed login
+# environment, as a person runs it who keeps the hook on: every payload repo
+# of config/payloads.tsv installs from the network through its own
+# installer. It passes when that exits 0 and the doctor's payloads row is
+# then ok. A setup phase, so an installer that edits an rc file, stows or
+# runs sudo fails the audits.
+e2e_step_payloads() {
+    local rc=0 row
+    e2e_step_begin payloads setup:payloads
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" 'sh ~/dotfiles/scripts/payload-update.sh --now' || rc=$?
+    if [ "$rc" != 0 ]; then
+        e2e_step_end fail "exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
+        return 0
+    fi
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~/dotfiles && ./doctor.sh $E2E_DOCTOR_ARGS --tsv" || :
+    row=$(awk -F '\t' '$2 == "payloads" { print $1 ": " $4 }' "$E2E_STEP_OUT" 2>/dev/null | sed -n 1p)
+    case $row in
+        'ok: '*) e2e_step_end pass "exit 0; doctor payloads $row" ;;
+        *) e2e_step_end fail "exit 0, but the doctor's payloads row is ${row:-missing}" ;;
+    esac
+}
 
 # --- negatives ---------------------------------------------------------------
 

@@ -1073,6 +1073,32 @@ try {
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'fail TEMP not empty: CascadiaMono.zip' 'a TEMP leftover'
     }
 
+    Test-Case 'Invoke-E2EStepPayloads: payload-update.ps1 -Now, then the payloads row of doctor.ps1 -Tsv decides' {
+        $header = "status`tid`ttier`tdetail`tfix"
+        [void](New-DryRun)
+        Add-Run 0 @('coding-agent-kit: v0.6.0 (channel 0.6)')
+        Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-", "ok`tpayloads`tai`tinstalled: kit, pymol, skills`t-")
+        Use-DryRun { Invoke-E2EStepPayloads }
+        Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
+            'scripts/payload-update.ps1 -Now 900; doctor.ps1 -Host win -Tsv 900' 'the -Now run, then the doctor'
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
+            'pass exit 0; doctor payloads ok: installed: kit, pymol, skills' 'every payload installed'
+
+        [void](New-DryRun)
+        Add-Run 0 @()
+        Add-Run 1 @($header, "warn`tpayloads`tai`tnot installed: skills`tdocs/bootstrap.md H7-payloads")
+        Use-DryRun { Invoke-E2EStepPayloads }
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
+            "fail exit 0, but the doctor's payloads row is warn: not installed: skills" 'a payload still missing'
+
+        [void](New-DryRun)
+        Add-Run 1 @() @('[dotfiles] [error] payload-update: skills failed (exit 1)')
+        Use-DryRun { Invoke-E2EStepPayloads }
+        Assert-Equal $script:PwshCalls.Count 1 'no doctor run after a failed -Now'
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
+            'fail exit 1: [dotfiles] [error] payload-update: skills failed (exit 1)' 'a failed -Now'
+    }
+
     Test-Case 'Invoke-E2EFlowWin runs the steps in order and, once one breaks the flow, skips what depends on it' {
         $script:FlowCalls = [Collections.Generic.List[string]]::new()
         $script:BreakAt = ''
@@ -1089,8 +1115,9 @@ try {
         function Invoke-E2EApplyLoop { Complete-FlowStub apply-1; return ($script:BreakAt -cne 'apply-1') }
         function Invoke-E2EStepSecondApply { Complete-FlowStub second-apply }
         function Invoke-E2EStepLoginShell { Complete-FlowStub login-shell }
+        function Invoke-E2EStepPayloads { Complete-FlowStub payloads }
         function Invoke-E2EStepDoctorFinal { Complete-FlowStub doctor-final }
-        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'second-apply', 'login-shell', 'doctor-final')
+        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'second-apply', 'login-shell', 'payloads', 'doctor-final')
         foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1')) {
             [void](Reset-RunState)
             $script:FlowCalls.Clear()

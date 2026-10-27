@@ -1,9 +1,10 @@
 #Requires -Version 7.0
 # The flow of tests/e2e/run.ps1: the setup-host.ps1 -Yes loop with its HUMAN
 # blocks, and the whole sequence: clone, winget, doctor-initial, the no-write
-# -Check, the apply loop, the second apply, the profile load and the final
-# doctor: docs/bootstrap.md "Native Windows", driven the way "Running it with
-# an agent" says an agent drives it. Dot-source only, after steps.ps1.
+# -Check, the apply loop, the second apply, the profile load, the payload
+# repos and the final doctor: docs/bootstrap.md "Native Windows", driven the
+# way "Running it with an agent" says an agent drives it. Dot-source only,
+# after steps.ps1.
 
 # The child command for a block line: the line reaches it through the
 # environment, so no quoting of the harness changes what runs, and
@@ -180,5 +181,6 @@ function Invoke-E2EFlowWin {
     else { [void](Invoke-E2EApplyLoop) }
     Invoke-E2EOrSkip second-apply { Invoke-E2EStepSecondApply }
     Invoke-E2EOrSkip login-shell { Invoke-E2EStepLoginShell }
+    Invoke-E2EOrSkip payloads { Invoke-E2EStepPayloads }
     Invoke-E2EOrSkip doctor-final { Invoke-E2EStepDoctorFinal }
 }

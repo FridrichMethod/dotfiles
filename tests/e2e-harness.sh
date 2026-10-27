@@ -760,7 +760,8 @@ exit 0
 SH
 
 # doctor.sh: exit 1 until the stow and the gated installer happened, 0
-# after; --tsv prints the five-column report; --smoke exits like a run.
+# after; --tsv prints the five-column report, with a payloads row that is
+# ok once the payload-update.sh stub ran; --smoke exits like a run.
 cat >"$SRC/doctor.sh" <<'SH'
 #!/bin/bash
 # e2e-harness fixture: a doctor.sh stand-in (see tests/e2e-harness.sh).
@@ -783,6 +784,11 @@ if [ "$tsv" = 1 ]; then
     printf 'ok\tgit\tcore\t2.43.0\t-\n'
     printf '%s\tclaude\tai\t%s\tdocs/bootstrap.md S5-claude\n' "$claude" "$HOME/.local/bin/claude"
     printf '%s\tstow-links\tcore\t%s/.zshrc\tdocs/bootstrap.md H7-stow\n' "$stow" "$HOME"
+    if [ -f "$HOME/.local/share/e2e-payloads" ]; then
+        printf 'ok\tpayloads\tai\tinstalled: kit, pymol, skills\t-\n'
+    else
+        printf 'warn\tpayloads\tai\tnot installed: kit, pymol, skills\tdocs/bootstrap.md H7-payloads\n'
+    fi
 else
     printf '[dotfiles] [ok] core git: 2.43.0\n'
     [ "$claude" = ok ] || printf '[dotfiles] [error] ai claude: missing (docs/bootstrap.md S5-claude)\n'
@@ -792,6 +798,17 @@ fi
 exit "$rc"
 SH
 sed -i.bak '/summary/d' "$SRC/doctor.sh" && rm -f "$SRC/doctor.sh.bak"
+
+# scripts/payload-update.sh: --now leaves the file the doctor stub's
+# payloads row looks for, as the real installers leave their installs.
+mkdir -p "$SRC/scripts"
+cat >"$SRC/scripts/payload-update.sh" <<'SH'
+#!/bin/sh
+# e2e-harness fixture: a scripts/payload-update.sh stand-in (see tests/e2e-harness.sh).
+[ "$*" = --now ] || { printf '[dotfiles] [error] payload-update: unknown arguments: %s\n' "$*" >&2; exit 2; }
+mkdir -p "$HOME/.local/share" && : >"$HOME/.local/share/e2e-payloads" || exit 1
+printf '%s\n' 'payload-update: installed kit, pymol, skills'
+SH
 
 # stow-all.sh: refuses a regular ~/.bashrc or ~/.profile like Stow would,
 # calls stow (the wrapper logs it), links ~/.zshrc into the clone and
@@ -820,7 +837,7 @@ printf 'HOST=%s\n' "$host" >"$state" || exit 1
 printf '[dotfiles] [ok] stowed common%s\n' "${host:+ and $host}"
 exit 0
 SH
-chmod +x "$SRC/setup-host.sh" "$SRC/doctor.sh" "$SRC/stow-all.sh"
+chmod +x "$SRC/setup-host.sh" "$SRC/doctor.sh" "$SRC/stow-all.sh" "$SRC/scripts/payload-update.sh"
 git -C "$SRC" init -q
 git -C "$SRC" add -A
 git -C "$SRC" commit -q -m 'stubs'
@@ -957,6 +974,7 @@ expect_step clean H7-stow pass '3 line(s) run as printed (run-stow)'
 expect_step clean apply-4 pass 'exit 0 after 4 run(s)'
 expect_step clean second-apply pass 'exit 0, nothing applied, HOME untouched'
 expect_step clean login-shell pass 'exit 0; silent'
+expect_step clean payloads pass 'exit 0; doctor payloads ok: installed: kit, pymol, skills'
 expect_step clean doctor-final pass 'exit 0 from the login shell'
 expect_step clean doctor-smoke pass 'exit 0 from the login shell'
 expect_step clean negative-wsl-refused pass 'exit 2: '

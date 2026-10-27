@@ -5,8 +5,8 @@
 # person does them: the distribution's packages, the fetch_pinned and
 # clone_listed helpers taken from the clone's own docs, the clone loop, the
 # bat theme, the vim dirs, setup-sync, the host-less stow, then the login
-# shell, the doctor, the common-only negatives and the audits. Sourced after
-# steps.sh; same portability rules.
+# shell, the payload repos, the doctor, the common-only negatives and the
+# audits. Sourced after steps.sh; same portability rules.
 
 E2E_HELPERS='' # the helper functions extracted from docs/bootstrap.md
 
@@ -178,6 +178,7 @@ e2e_flow_other() {
     e2e_or_skip setup-sync e2e_step_setup_sync
     e2e_or_skip H7-stow e2e_step_stow_other
     e2e_or_skip login-shell e2e_step_login_shell
+    e2e_or_skip payloads e2e_step_payloads
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives

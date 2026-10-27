@@ -2150,6 +2150,9 @@ platform, and passes when all of these hold:
 - A second `./setup-host.sh --host H` installs nothing and exits 0.
 - `git -C ~/dotfiles status --porcelain` is empty after every step.
 - No step ran sudo, `chsh`, stow or an rc edit outside a HUMAN block.
+- The H7-payloads run line (`sh ~/dotfiles/scripts/payload-update.sh --now`,
+  Windows `scripts\payload-update.ps1 -Now`) exits 0, and the doctor's
+  `payloads` row is then `ok`.
 
 | Run | Date | Result | Notes |
 | --- | --- | --- | --- |

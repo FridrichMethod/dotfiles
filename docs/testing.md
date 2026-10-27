@@ -397,9 +397,10 @@ the clone itself, then follows the Other Linux quick start to a host-less
   an elevated oh-my-posh puts them, and the non-elevated untrusted-link
   warn-or-repair path of `stow-all.ps1` is never exercised. A winget that
   needs `Repair-WinGetPackageManager` first is recorded as a deviation.
-  `run.ps1` asserts criteria 1 to 4 and 6 (the doctor, the no-write `-Tsv` and
-  `-Check` runs, a second `-Yes` that applies nothing, a clean clone after
-  every step, a silent load of the stowed profile); criterion 5's four audits
+  `run.ps1` asserts criteria 1 to 4, 6 and 7 (the doctor, the no-write `-Tsv`
+  and `-Check` runs, a second `-Yes` that applies nothing, a clean clone after
+  every step, a silent load of the stowed profile, the payload repos);
+  criterion 5's four audits
   have no Windows counterpart, since there are no wrappers and no sudo log
   there, and `HW-stow` is judged by its own evidence instead (below). The
   home snapshots note, rather than fail, a change under
@@ -449,13 +450,14 @@ same `<id>:<kind>`:
 | any other id or kind | **fail**, with the block's text in the detail |
 
 The Windows login-shell step then loads the stowed profile in a child `pwsh`
-started without `-NoProfile`, which must exit 0 and print nothing, and
+started without `-NoProfile`, which must exit 0 and print nothing, the
+payloads step runs `scripts\payload-update.ps1 -Now` (criterion 7), and
 `E2E_SNAPSHOT_PRUNE` is `;`-separated there, since Windows paths hold drive
 letters and colons.
 
 ### Acceptance criteria
 
-The six criteria, and how `inside.sh` asserts each; every failure names its
+The seven criteria, and how `inside.sh` asserts each; every failure names its
 step in `summary.tsv`:
 
 1. **The doctor passes.** From a login environment (`bash -lc 'exec zsh -il
@@ -497,6 +499,17 @@ step in `summary.tsv`:
    (`(eval):1: can't change option: zle`), both silent in a real terminal;
    any `[oh-my-zsh]`, `[dotfiles]`, `[awesome-skills]`, `not found`,
    `permission denied` or `[error]` line is reported verbatim.
+7. **The payload repos install for real.** After the login-shell check, the
+   `payloads` step (`setup:payloads`) runs the H7-payloads run line from the
+   login environment, `sh ~/dotfiles/scripts/payload-update.sh --now`
+   (`scripts\payload-update.ps1 -Now` on `win`), while the H7-payloads block
+   itself stays a skipped reminder (`setup-host.ps1` prints none):
+   coding-agent-kit, PyMOLScripts and awesome-skills install from GitHub
+   through each repo's own installer, the kit at the newest patch of the
+   channel `config/payloads.tsv` declares. It must exit 0, and the doctor's
+   `payloads` row (`--tsv`) must then be `ok`. On Unix it is a setup phase,
+   so criterion 5 covers it: an installer that runs sudo or stow, or changes
+   an rc file, fails the audits.
 
 Each host also runs its negative cases as separate steps (`negative:<token>`):
 the platform refusals (`--host wsl-ubuntu --check` in the lab container and

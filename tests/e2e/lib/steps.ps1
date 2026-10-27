@@ -1,10 +1,10 @@
 #Requires -Version 7.0
 # The steps of tests/e2e/run.ps1 besides the apply loop (flow-win.ps1): the
 # clone, the winget probe, the read-only doctor and -Check runs, the second
-# apply, the profile load and the final doctor. Each opens its step, runs and
-# closes it with a verdict; a step the rest depends on sets Broken when it
-# fails, and the flow then skips what cannot run. Dot-source only, after
-# common.ps1, snapshot.ps1 and blocks.ps1.
+# apply, the profile load, the payload repos and the final doctor. Each opens
+# its step, runs and closes it with a verdict; a step the rest depends on sets
+# Broken when it fails, and the flow then skips what cannot run. Dot-source
+# only, after common.ps1, snapshot.ps1 and blocks.ps1.
 
 $script:E2EUpstream = 'https://github.com/FridrichMethod/dotfiles.git'
 # Lines of a setup-host.ps1 -Yes run that show a step was applied: the
@@ -188,6 +188,27 @@ function Invoke-E2EStepLoginShell {
     elseif ($printed.Count) { Complete-E2EStep fail "the profile load printed: $(ConvertTo-E2EOneLine ($printed -join "`n") 300)" }
     elseif ($linkType -cne 'SymbolicLink') { Complete-E2EStep fail "$profilePath is '$linkType', not a symlink the stow made" }
     else { Complete-E2EStep pass "exit 0, silent; $profilePath is a SymbolicLink" }
+}
+
+function Invoke-E2EStepPayloads {
+    # The Windows run line of docs/bootstrap.md H7-payloads,
+    # scripts\payload-update.ps1 -Now, with the PATH a new terminal reads:
+    # every payload repo of config/payloads.tsv installs from the network
+    # through its own install.ps1. It passes when that exits 0 and the
+    # payloads row of doctor.ps1 -Host win -Tsv is then ok.
+    Update-E2EPath
+    Start-E2EStep payloads setup:payloads
+    $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Check']
+    if ($code -ne 0) { Complete-E2EStep fail "exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"; return }
+    [void](Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check'])
+    $row = $null
+    foreach ($line in @(Get-E2ELines $E2E['StepOut'])) {
+        $cells = $line.Split("`t")
+        if ($cells.Count -ge 4 -and $cells[1] -ceq 'payloads') { $row = $cells; break }
+    }
+    if ($null -eq $row) { Complete-E2EStep fail "exit 0, but the doctor's payloads row is missing" }
+    elseif ($row[0] -ceq 'ok') { Complete-E2EStep pass "exit 0; doctor payloads ok: $($row[3])" }
+    else { Complete-E2EStep fail "exit 0, but the doctor's payloads row is $($row[0]): $($row[3])" }
 }
 
 function Invoke-E2EStepDoctorFinal {

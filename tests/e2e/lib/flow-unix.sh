@@ -2,9 +2,10 @@
 # shellcheck disable=SC2034 # E2E_APPLY1_OUT and E2E_APPLY1_RC are read by steps.sh (alloc-first)
 # The unix flow of tests/e2e/inside.sh: clone, doctor-initial, the no-write
 # --check, the setup-host apply loop with its HUMAN blocks, the second apply,
-# the login shell, the final doctor runs, the negatives and the audits: the
-# docs/bootstrap.md quick start, driven the way "Running it with an agent"
-# says an agent drives it. Sourced after steps.sh; same portability rules.
+# the login shell, the payload repos, the final doctor runs, the negatives
+# and the audits: the docs/bootstrap.md quick start, driven the way
+# "Running it with an agent" says an agent drives it. Sourced after
+# steps.sh; same portability rules.
 
 E2E_SKIPPED_BLOCKS=' ' # block ids already recorded as skip
 E2E_ALLOC_DONE=0
@@ -237,6 +238,7 @@ e2e_flow_unix() {
     fi
     e2e_or_skip second-apply e2e_step_second_apply
     e2e_or_skip login-shell e2e_step_login_shell
+    e2e_or_skip payloads e2e_step_payloads
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
