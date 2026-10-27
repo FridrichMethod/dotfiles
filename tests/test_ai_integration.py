@@ -6,7 +6,8 @@ preview, the alias files and the settings.json commands that run the kit's
 Claude helpers. The cases that run the kit need an installed one:
 DOTFILES_TEST_KIT_HOME names a home it is installed in, as its installer lays
 it out (launchers in .local/bin, zsh completions in
-.local/share/zsh/site-functions, helpers in .claude/coding-agent-kit); CI
+.local/share/zsh/site-functions, helpers in .claude/coding-agent-kit; on
+native Windows, the helpers only); CI
 installs the real kit there through scripts/payload-update.sh. Without it
 those cases skip. The fixtures are the parts of the launcher suites' setUp
 they read; they reach the kit only through its installed paths.
@@ -43,7 +44,13 @@ ENV_CONFLICTS = (
 
 
 def setUpModule():
-    if KIT_HOME and not (SOURCE / "bin/codex-as").is_file():
+    # The kit's install.ps1 installs only the Claude helpers on native Windows.
+    if not KIT_HOME:
+        return
+    if os.name == "nt":
+        if not (KIT_HOME / ".claude/coding-agent-kit/statusline.cjs").is_file():
+            raise RuntimeError(f"DOTFILES_TEST_KIT_HOME={KIT_HOME} has no installed coding-agent-kit helpers.")
+    elif not (SOURCE / "bin/codex-as").is_file():
         raise RuntimeError(f"DOTFILES_TEST_KIT_HOME={KIT_HOME} has no installed coding-agent-kit launcher.")
 
 
