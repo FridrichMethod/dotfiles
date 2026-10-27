@@ -872,6 +872,7 @@ class RejectionTests(unittest.TestCase):
             ("coverage", "manual removed", lambda: self.replace("tools.tsv", "# manual: col macos,hpc\n", "")),
             ("coverage", "brew entry removed", lambda: self.replace("brew/cli.Brewfile", 'brew "jq"\n', "")),
             ("coverage", "login node removed", lambda: self.replace("tools.tsv", "# alias: node nodejs\n", "")),
+            ("coverage", "tlrc alias removed", lambda: self.replace("tools.tsv", "# alias: tldr tlrc\n", "")),
             ("declaration", "malformed", lambda: self.append("tools.tsv", "# alias: fzf\n")),
             ("declaration", "unknown id", lambda: self.append("tools.tsv", "# alias: fzz junegunn.fzf\n")),
             ("declaration", "unknown scope", lambda: self.append("tools.tsv", "# manual: claude cluster\n")),
