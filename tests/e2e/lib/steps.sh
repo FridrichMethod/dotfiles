@@ -88,12 +88,15 @@ e2e_step_doctor_smoke() { e2e_doctor_from_login doctor-smoke ' --smoke'; }
 # what it found installed. A setup phase, so an installer that edits an rc
 # file, stows or runs sudo fails the audits.
 e2e_step_payloads() {
-    local rc=0 row
+    local rc=0 row detail
     e2e_step_begin payloads setup:payloads
     e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" 'sh ~/dotfiles/scripts/payload-update.sh --now' \
         "$E2E_TIMEOUT_BLOCK" || rc=$?
     if [ "$rc" != 0 ]; then
-        e2e_step_end fail "exit $rc (124 is the ${E2E_TIMEOUT_BLOCK}s timeout): $(e2e_last_line "$E2E_STEP_ERR")"
+        # The hook logs one [error] line per failed item and goes on.
+        detail=$(grep -h -F '[error]' "$E2E_STEP_ERR" "$E2E_STEP_OUT" 2>/dev/null | sed -n 1p)
+        [ -n "$detail" ] || detail=$(e2e_last_line "$E2E_STEP_ERR")
+        e2e_step_end fail "exit $rc (124 is the ${E2E_TIMEOUT_BLOCK}s timeout): $detail"
         return 0
     fi
     e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~/dotfiles && ./doctor.sh $E2E_DOCTOR_ARGS --tsv" || :

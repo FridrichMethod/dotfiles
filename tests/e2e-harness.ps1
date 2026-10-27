@@ -1100,6 +1100,12 @@ try {
             "fail exit 0, but the doctor's payloads row is ok: DOTFILES_PAYLOAD_ITEMS selects no payload" 'an empty selection'
 
         [void](New-DryRun)
+        Add-Run 1 @('[dotfiles] [step] skills: installing', '[dotfiles] [error] skills: install failed (exit 1)', 'the next item') @()
+        Use-DryRun { Invoke-E2EStepPayloads }
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
+            'fail exit 1 (124 is the 2700s timeout): [dotfiles] [error] skills: install failed (exit 1)' 'the error line from stdout'
+
+        [void](New-DryRun)
         Add-Run 1 @() @('[dotfiles] [error] payload-update: skills failed (exit 1)')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal $script:PwshCalls.Count 1 'no doctor run after a failed -Now'

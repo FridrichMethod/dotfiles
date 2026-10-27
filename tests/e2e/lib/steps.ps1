@@ -202,7 +202,11 @@ function Invoke-E2EStepPayloads {
     Start-E2EStep payloads setup:payloads
     $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Block']
     if ($code -ne 0) {
-        Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Block'])s timeout): $(Get-E2ELastLine $E2E['StepErr'])"
+        # The hook logs one [error] line per failed item, on stdout here, and goes on.
+        $detail = @(@(Get-E2ELines $E2E['StepErr']) + @(Get-E2ELines $E2E['StepOut']) |
+                Where-Object { $_.Contains('[error]') }) | Select-Object -First 1
+        if (-not $detail) { $detail = Get-E2ELastLine $E2E['StepErr'] }
+        Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Block'])s timeout): $detail"
         return
     }
     [void](Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check'])
