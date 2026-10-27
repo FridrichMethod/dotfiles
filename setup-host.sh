@@ -311,10 +311,10 @@ fi
 # version flag of its tools.tsv row (gh --version, tldr --version), and a
 # tool a step starts may run them too: recent gh releases answer any
 # command, --version included, by writing ~/.local/state/gh/device-id unless
-# GH_TELEMETRY=0, and the tldr C client (Homebrew's tldr formula), once its
-# page cache is two weeks old, answers any command but --update by
-# downloading the tldr-pages archive into ~/.tldrc unless
-# TLDR_AUTO_UPDATE_DISABLED is set.
+# GH_TELEMETRY=0, and the tldr C client (the tldr formula Homebrew removed in
+# 2026-10, still on hosts that installed it), once its page cache is two
+# weeks old, answers any command but --update by downloading the tldr-pages
+# archive into ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set.
 export DOTFILES_AUTO_UPDATE=0 AWESOME_SKILLS_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
     HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1

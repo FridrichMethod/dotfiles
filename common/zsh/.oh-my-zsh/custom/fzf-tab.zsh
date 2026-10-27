@@ -96,9 +96,10 @@ zstyle ':fzf-tab:complete:git-checkout:*' fzf-preview \
 # brew
 zstyle ':fzf-tab:complete:brew-(install|uninstall|search|info):*-argument-rest' fzf-preview 'HOMEBREW_COLOR=1 brew info $word'
 
-# tldr: tlrc and tealdeer take `--color always`; the C client (Homebrew's tldr
-# formula) takes a bare -C and reads `--color always WORD` as a page named
-# "always-WORD". A client that fails prints nothing, so the next one runs.
+# tldr: tlrc and tealdeer take `--color always`; the C client (the tldr
+# formula Homebrew removed in 2026-10, still on hosts that installed it) takes
+# a bare -C and reads `--color always WORD` as a page named "always-WORD". A
+# client that fails prints nothing, so the next one runs.
 # Each call sets TLDR_AUTO_UPDATE_DISABLED (tlrc and tealdeer ignore it):
 # without it the C client fetches a page its cache lacks from GitHub, and
 # downloads the whole tldr-pages archive once its cache is two weeks old, so

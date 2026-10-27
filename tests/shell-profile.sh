@@ -301,14 +301,14 @@ fi
 
 # common/zsh/.oh-my-zsh/custom/fzf-tab.zsh: both tldr previews color the page
 # with every tldr client. tlrc and tealdeer take `--color always`; the C
-# client (Homebrew's tldr formula) takes a bare -C and, given
-# `--color always ls`, looks up a page named "always-ls", prints "This page
-# doesn't exist yet!" and exits 1. Each fake prints the colored page only for
-# the arguments its client accepts, and that error for any other. The C
-# client goes online (a page its cache lacks, a cache two weeks old) unless
-# TLDR_AUTO_UPDATE_DISABLED is set, so its fake logs every call made without
-# it, and no preview may make one. The previews are evaluated as fzf-tab
-# does, in zsh with $word and $desc set.
+# client (the tldr formula Homebrew removed, still on hosts that installed
+# it) takes a bare -C and, given `--color always ls`, looks up a page named
+# "always-ls", prints "This page doesn't exist yet!" and exits 1. Each fake
+# prints the colored page only for the arguments its client accepts, and that
+# error for any other. The C client goes online (a page its cache lacks, a
+# cache two weeks old) unless TLDR_AUTO_UPDATE_DISABLED is set, so its fake
+# logs every call made without it, and no preview may make one. The previews
+# are evaluated as fzf-tab does, in zsh with $word and $desc set.
 preview_failures=0
 TLDR_ONLINE_LOG=$TEST_TMP/tldr-online.log
 if command -v zsh >/dev/null 2>&1; then

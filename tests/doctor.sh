@@ -138,10 +138,11 @@ printf 'NETWORK $tool %s\n' "\$*" >>"\$EVENT_LOG"
 [ "\${AUTH_OK:-0}" = 1 ]
 SH
 done
-# The tldr C client (Homebrew's tldr formula) checks the age of its page
-# cache before it handles --version and, once ~/.tldrc/date is two weeks old,
-# first downloads the tldr-pages archive into ~/.tldrc, unless
-# TLDR_AUTO_UPDATE_DISABLED is set. The fake takes its cache to be stale.
+# The tldr C client (the tldr formula Homebrew removed, still on hosts that
+# installed it) checks the age of its page cache before it handles --version
+# and, once ~/.tldrc/date is two weeks old, first downloads the tldr-pages
+# archive into ~/.tldrc, unless TLDR_AUTO_UPDATE_DISABLED is set. The fake
+# takes its cache to be stale.
 write_fake "$FAKE_BIN/tldr" <<'SH'
 #!/bin/sh
 if [ -z "${TLDR_AUTO_UPDATE_DISABLED+set}" ]; then
