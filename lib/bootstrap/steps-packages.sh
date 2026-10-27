@@ -245,7 +245,7 @@ steps_brew_pending_offline() {
     done
 }
 
-# steps_brew_missing_detail PREFIX FILES: "core: fzf; cli: jq tldr", the
+# steps_brew_missing_detail PREFIX FILES: "core: fzf; cli: jq tlrc", the
 # missing entries (steps_brewfile_missing) of each of FILES (Brewfile paths,
 # one per line); a Brewfile with none named stands alone.
 steps_brew_missing_detail() {
@@ -356,7 +356,7 @@ steps_brew_installed() {
 # (neither a keg nor an opt/ link, or no Caskroom/ dir) and NAME's tool is
 # not provided otherwise (steps_brew_entry_provided). brew bundle never gets
 # a provided entry (steps_brewfile_filtered), so nothing conflicts then, even
-# when OTHER is what provides it (tlrc's tldr).
+# when OTHER is what provides it (the tldr of a C client keg).
 steps_brew_conflicts() {
     local lines line kind name other
     lines=$(steps_brew_declared_conflicts)$BOOTSTRAP_NL || true
