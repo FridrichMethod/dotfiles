@@ -223,7 +223,10 @@ the foreground, in order and on the declared channel, with stdin closed; a
 fresh session doing nothing; the session marker, the opt-out and
 non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
 each item's update command and the log; a live worker blocking a second one;
-a failed first install recording nothing and the next session retrying it;
+a failed first install writing `ITEM.failed` instead of a stamp, later
+sessions reporting it without a foreground retry and the background retrying
+it six hours later, and an item's `person-status` worded as stopping for a
+person;
 exit 75; `--now`, the aliases, a failed download, the wget fallback, each
 download staged alone in a fresh private directory, every installer starting
 in `/`, outside the caller's working directory, where git finds no planted

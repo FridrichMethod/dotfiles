@@ -25,7 +25,7 @@ own state are in its README; this file covers only how dotfiles calls them.
 | --- | --- | --- | --- | --- |
 | `kit` | coding-agent-kit | a managed install of channel `0.7`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows), and its launchers never ran natively | daily |
 | `pymol` | PyMOLScripts | `~/.pymolrc` and `~/.pymolrc.py` | the same two files in `$HOME` | daily |
-| `skills` | awesome-skills | the library and the selections of `~/.claude/skills/` and `~/.codex/skills/` | the same, through its `install.ps1` | weekly |
+| `skills` | awesome-skills | the library and every skill in `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/`, only the selected ones visible to the model | the same, through its `install.ps1` | weekly |
 
 `common/claude/.claude/settings.json` runs the helpers by their home-relative
 path, for example
@@ -53,7 +53,7 @@ comments, and the first row of an item and field wins.
 | `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, in the foreground |
 | `unix-install`, `windows-install` | the first-install command; an item without a `windows-install` row (the kit) is not available on native Windows: it is no default item there, and a run that names it says so (exit 0, no record) |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
-| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook and the doctor word such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills at an interrupted update it cannot undo alone because a file it would restore was edited since (its message names the `--restore` command to run) |
+| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook and the doctor word such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills where it will not go on alone: an interrupted update it cannot undo because a file it would restore was edited since, an update that would remove many installed skills at once, a Codex skill folder that would pass 1,990 entries, or a Codex folder layout it cannot use; its message names the command to run, such as `--restore` |
 | `stow-links` | `PACKAGE PATH...`: home paths that the installer refuses while they are links into the retired dotfiles package `common/PACKAGE` (the kit's launchers and Bash completions); while one is, the hook does not call the installer and says to run `stow-all` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated

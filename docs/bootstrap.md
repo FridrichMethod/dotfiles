@@ -1581,7 +1581,7 @@ PowerShell 7 profile, in ordinary unelevated sessions) runs the payload hook,
 It installs coding-agent-kit (the account launchers and the Claude helpers
 that `settings.json` runs; Unix only, nothing on native Windows), PyMOLScripts
 (`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills (`~/.claude/skills`,
-`~/.codex/skills`) through each repository's own installer, named in
+`~/.codex/skills`, `~/.agents/skills`) through each repository's own installer, named in
 [`config/payloads.tsv`](../config/payloads.tsv): an absent one in the
 foreground, so you see the first install, and later refreshes in one detached
 background run (the kit and PyMOL daily, the skills weekly). Each install

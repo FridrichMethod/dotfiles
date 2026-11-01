@@ -115,7 +115,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - Keep structured merges in `lib/config_sync.py`; only TOML sync and the full runtime check require pinned `tomlkit`, while JSON/rules use the Python standard library. Do not reintroduce AWK/regex TOML parsing or a second JSON engine. Normal sync never rewrites the portable source; baseline cleanup is an explicit migration. Never broaden existing regular-file Unix permissions.
 - Installers must run every selected AI helper with read-only `--check` before any apply; `--quiet` suppresses successful helper chatter, never errors. Provision `.venv-sync` or an explicitly selected interpreter in advance; profiles, automatic updates and the payload hooks must never install these dependencies.
 - Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
-- Keep third-party skill payloads out of dotfiles; awesome-skills' own installer, which the payload hook runs, owns `~/.claude/skills/` and `~/.codex/skills/` on each host.
+- Keep third-party skill payloads out of dotfiles; awesome-skills' own installer, which the payload hook runs, owns the skill folders it installs in `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/` (Codex reads both) on each host.
 
 ## Payload repos
 

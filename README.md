@@ -623,7 +623,7 @@ Codex applies the most restrictive matching rule across active files. The portab
 
 The following state is intentionally **not synchronized**: credentials and OAuth tokens, `~/.claude.json`, sessions and histories, project trust, caches, downloaded plugins, third-party copies under `~/.claude/rules/`, Codex-generated `~/.codex/rules/default.rules`, Codex databases, Desktop UI state, per-project absolute paths, MCP commands containing host paths, marketplace runtime paths, and generated memories. Authenticate separately on every host.
 
-Third-party skills are also not stored in this repository. awesome-skills' own installer, which the [payload hook](#payload-repos) runs, installs and refreshes `~/.claude/skills/` and `~/.codex/skills/` independently on each host.
+Third-party skills are also not stored in this repository. awesome-skills' own installer, which the [payload hook](#payload-repos) runs, installs and refreshes its skill folders in `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/` independently on each host.
 
 After cloning on a new machine:
 
@@ -643,7 +643,7 @@ on every Unix one), by their own installers, instead of living in this one:
 |---|---|---|---|
 | `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | the newest patch release of channel `0.7`: `codex-as`, `claude-as`, their Bash and zsh completions, the three Claude helpers | nothing: the kit runs on Linux, macOS and WSL only |
 | `pymol` | [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) | `~/.pymolrc`, `~/.pymolrc.py` | the same |
-| `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | the skill library of `~/.claude/skills/` and `~/.codex/skills/` | the same |
+| `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | the skill library in `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/` | the same |
 
 [`config/payloads.tsv`](config/payloads.tsv) is the one place that names
 their download URLs, the paths that show an install, each repository's own
