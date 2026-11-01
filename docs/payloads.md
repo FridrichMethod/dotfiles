@@ -78,11 +78,14 @@ helper:
   `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
   failed, the run tries no other, so a network that is down or stalls holds
   a login once. A path must be an existing file. On Unix the installer's
-  stdin is closed, and it runs in its download directory, an installed
-  script in `/`, never in the caller's working directory: that may be a
-  shared one too (a shell started in `/tmp`), and awesome-skills' remote
-  bootstrap runs `python3 -c`, which imports modules from its working
-  directory first.
+  stdin is closed. It runs in its download directory, an installed script
+  in `/` (PowerShell: in `$PSHOME`, which only whoever could replace that
+  pwsh can write), never in the caller's working directory: that may be a
+  shared one too (a shell started in `/tmp`) or an untrusted checkout (a
+  VS Code terminal starts in its workspace), and awesome-skills' remote
+  bootstrap runs `python3 -c` on Unix, which imports modules from its
+  working directory first, and on Windows finds git with Python's
+  `shutil.which`, which searches the working directory first.
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
 `tests/payload-update.sh` points that prefix at `file://` fakes and fails on
@@ -189,7 +192,8 @@ background retry, the `stow-links` check and the `person-status` wording (the
 old skill opt-out does not apply: that hook never ran on Windows). Its
 background run is a hidden, detached
 `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File scripts/payload-update.ps1 -Worker ITEM...`
-started with `Start-Process`, which writes each item's output into
+started with `Start-Process` in `$PSHOME` (never in the caller's directory,
+which it would hold open while it runs). It writes each item's output into
 `payload.log` and the end of a failed one into its record, so the prompt
 never waits for a download.
 

@@ -86,12 +86,18 @@ $PayloadFailed = & { try {
         # fresh directory of its own, removed afterwards: PyMOLScripts' and
         # awesome-skills' installers read files beside themselves as a
         # checkout's, which another user could plant in a shared temporary
-        # directory. After one failed download a run tries no other. A simple
-        # function, so -Update and the like reach the script instead of
-        # binding here.
+        # directory. The script runs in that directory, an installed one in
+        # $PSHOME (which only whoever could replace this pwsh can write),
+        # never in the caller's, which may be an untrusted checkout (a VS Code
+        # terminal starts in its workspace): awesome-skills' installer finds
+        # git with Python's shutil.which, which on Windows searches the
+        # working directory first. After one failed download a run tries no
+        # other. A simple function, so -Update and the like reach the script
+        # instead of binding here.
         $source = [string]$args[0]
         $rest = @($args | Select-Object -Skip 1 | ForEach-Object { [string]$_ })
         $staging = $null
+        $pushed = $false
         try {
             $file = $source
             if ($source -match '^[A-Za-z][A-Za-z0-9+.-]*://') {
@@ -116,6 +122,11 @@ $PayloadFailed = & { try {
                 if ((Get-Item -LiteralPath $file).Length -eq 0) { throw "$source downloaded empty" }
             }
             elseif (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "$source is missing" }
+            # Absolute before the move: a relative TMPDIR or source path is
+            # relative to the caller's directory. A failed move runs nothing.
+            $file = (Get-Item -LiteralPath $file -Force -ErrorAction Stop).FullName
+            Push-Location -LiteralPath $(if ($staging) { Split-Path -Parent $file } else { $PSHOME }) -ErrorAction Stop
+            $pushed = $true
             & $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file @rest 2>&1 | ForEach-Object { Write-Host "$_" }
             return $LASTEXITCODE
         }
@@ -123,7 +134,10 @@ $PayloadFailed = & { try {
             Write-DotfilesLog error "cannot run $($source): $($_.Exception.Message)"
             return 1
         }
-        finally { if ($staging) { Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction Ignore } }
+        finally {
+            if ($pushed) { Pop-Location }
+            if ($staging) { Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction Ignore }
+        }
     }
 
     function Test-PayloadInstalled([string]$Name) {
@@ -249,10 +263,12 @@ $PayloadFailed = & { try {
     }
     if ($elevated -or -not $later.Count) { return $false }
     try {
-        # One quoted argument string: Start-Process joins a list unquoted.
+        # One quoted argument string: Start-Process joins a list unquoted. In
+        # $PSHOME, not the caller's directory, which the detached run would
+        # otherwise hold open (Windows) for as long as it runs.
         $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass ' + $(if ($IsWindows) { '-WindowStyle Hidden ' } else { '' }) +
             "-File `"$PSCommandPath`" -Worker $($later -join ' ')"
-        $start = @{ FilePath = $pwsh; ArgumentList = $arguments }
+        $start = @{ FilePath = $pwsh; ArgumentList = $arguments; WorkingDirectory = $PSHOME }
         if ($IsWindows) { $start.WindowStyle = 'Hidden' }
         Start-Process @start
     }
