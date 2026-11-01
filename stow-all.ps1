@@ -568,16 +568,11 @@ if ($HostDir) {
     }
 }
 
-# Only once every package is stowed: the links Stow made from the retired
-# packages, then the directories only those packages filled, once empty. A
-# declined removal is a warning, so the revision is not acknowledged.
+# Only once every package is stowed: remove the exact links made by the
+# retired packages. A declined removal prevents revision acknowledgement.
+# Leave harmless empty legacy directories; removing them must not bypass
+# the installer's ShouldProcess/Confirm contract.
 foreach ($retired in $RetiredPackageLinks) { Remove-RetiredPackageLink @retired }
-foreach ($directory in @('.claude/dotfiles', '.local/lib/claude-as', '.local/lib/codex-as', '.oh-my-zsh/custom/completions')) {
-    $path = Join-Path $Target $directory.Replace('/', [IO.Path]::DirectorySeparatorChar)
-    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-    if (-not $WhatIfPreference -and $item -and $item.PSIsContainer -and -not $item.LinkType -and
-        -not @(Get-ChildItem -LiteralPath $path -Force).Count) { [IO.Directory]::Delete($path) }
-}
 
 # Validate final destinations in one guarded process, including newly created
 # links and host overrides. A trusted file link inside an untrusted directory

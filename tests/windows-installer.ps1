@@ -473,11 +473,13 @@ public static class DotfilesCallerMitigation {
                 "The link made from $($entry[0]) for $($entry[1]) survived."
         }
         foreach ($directory in @('.claude\dotfiles', '.local\lib\claude-as', '.local\lib\codex-as')) {
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Target $directory))) "The emptied $directory survived."
+            Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Target $directory) -PathType Container) "The harmless empty $directory was removed."
         }
         Assert-True ((Get-Item -LiteralPath $foreign -Force).LinkType -eq 'SymbolicLink') 'A foreign link was removed.'
         Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Target '.oh-my-zsh\custom\completions\_mine') -PathType Leaf) 'A user file was removed.'
+        [IO.File]::Delete((Join-Path $fixture.Target '.oh-my-zsh\custom\completions\_mine'))
         Assert-Success (Invoke-Install $fixture)
+        Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Target '.oh-my-zsh\custom\completions') -PathType Container) 'The harmless empty completions directory was removed.'
     }
 
     Test-Case 'invalid host and missing win overlay are rejected before mutation' {
