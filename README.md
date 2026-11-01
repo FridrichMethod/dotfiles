@@ -472,6 +472,7 @@ Keeps the three [payload repos](#payload-repos) installed and current by running
 | Concurrency | Each installer locks itself (exit 75: busy, retried next session); the hook adds no lock |
 | State and log | `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (`ITEM.stamp`, `ITEM.failed`, `payload.log`); `%LOCALAPPDATA%\dotfiles\payload\` on Windows |
 | Failure handling | `ITEM.failed` (time, exit status, the end of a background run's output); every later session prints one line about it and the doctor reports it; retried in the background six hours later, or now with `sync-payloads ITEM` |
+| Stopped for a person | Exit 3 (the `person-status` rows): PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone, and awesome-skills at an interrupted update; worded as waiting for you, until you do what the installer's message says |
 | Before stow-all ran | A kit path still linked into the retired package: the hook says to run `stow-all` instead of calling the kit's installer |
 | Manual trigger | `sync-payloads [kit] [pymol] [skills]` (all by default) and `sync-skills`, in the foreground, whatever the intervals |
 

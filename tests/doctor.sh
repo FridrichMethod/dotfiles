@@ -938,8 +938,11 @@ run_doctor payloads-records -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row payloads warn "kit failed its last run (exit 1, see $PAYLOAD_STATE/kit.failed): run sync-payloads kit; kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit; skills stopped for a person (exit 3, see $PAYLOAD_STATE/skills.failed): run sync-payloads skills and do what it asks; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol" \
     'docs/bootstrap.md H7-payloads'
+# PyMOLScripts stops with 3 at a locally edited rc file, as awesome-skills
+# does at an interrupted update.
+printf '1700000000 3\n' >"$PAYLOAD_STATE/pymol.failed"
 run_doctor payloads-records-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
-assert_row payloads warn "not installed: pymol: the next interactive shell"
+assert_row payloads warn "pymol stopped for a person (exit 3, see $PAYLOAD_STATE/pymol.failed): run sync-payloads pymol and do what it asks; not installed: pymol: the next interactive shell"
 case $(tsv_field payloads 4) in
     *kit* | *skills*) case_fail 'the payloads row named an unselected item' ;;
 esac

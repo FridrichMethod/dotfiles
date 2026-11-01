@@ -47,7 +47,7 @@ comments, and the first row of an item and field wins.
 | `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, in the foreground |
 | `unix-install`, `windows-install` | the first-install command |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
-| `person-status` | an exit status with which the repo stops for a person (awesome-skills' `3`: an interrupted update it cannot undo alone because a file it would restore was edited since; its message names the `--restore` command to run); the hook and the doctor word such a failure as one that waits for a person |
+| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook and the doctor word such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills at an interrupted update it cannot undo alone because a file it would restore was edited since (its message names the `--restore` command to run) |
 | `stow-links` | `PACKAGE PATH...`: home paths that the installer refuses while they are links into the retired dotfiles package `common/PACKAGE` (the kit's launchers and Bash completions); while one is, the hook does not call the installer and says to run `stow-all` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
@@ -118,6 +118,18 @@ for a person (`stopped for a person (exit 3)`, and `run sync-payloads skills
 and do what it asks`), since its installer's message, which `sync-payloads
 ITEM` prints again, names what to do. An automatic run never fails the shell
 that started it.
+
+PyMOLScripts exits 3 when `~/.pymolrc` or `~/.pymolrc.py` was edited locally
+since it last installed them: it writes nothing and its message names the
+file, how to see the edit and the command that overrides it. A local edit
+therefore stops the `pymol` refresh: every later session prints the
+`pymol: its last run stopped for a person (exit 3, ...)` line again, the
+doctor reports it, and the background retry six hours later stops the same
+way, until the edit is committed upstream, reverted, moved to
+`~/.pymolrc.local.pml` (which PyMOL runs after both files and the installer
+never touches), or forced with that command (its `--force`, `-Force` on
+Windows, which keeps the edited file as `NAME.local-<timestamp>`); the next
+run then succeeds and clears the record.
 
 An item with a [`stow-links`](#configpayloadstsv) path still linked into its
 retired package, which happens while `stow-all` has not run since the pull
@@ -227,7 +239,11 @@ and ownership manifests (`claude.json`, `codex.json`) and its lock in
 `%LOCALAPPDATA%\awesome-skills\`). The `skills` probe passes on a manifest or
 the library clone, as awesome-skills documents an install, so an install of
 its older tarball installer, whose manifests have the same names, counts too.
-PyMOLScripts keeps no state and takes no lock: concurrent runs converge.
+PyMOLScripts keeps a copy of the rc files it last installed, which tells a
+local edit from an older upstream version (in
+`${XDG_STATE_HOME:-~/.local/state}/pymolscripts/`, Windows
+`%LOCALAPPDATA%\pymolscripts\`; its README has the details), and takes no
+lock: concurrent runs converge.
 
 ## Doctor and setup-host
 

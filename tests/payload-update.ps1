@@ -182,6 +182,11 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         Assert-True ($run.Text.Contains("skills: its last run stopped for a person (exit 3, see $records); run sync-payloads skills and do what it asks")) $run.Text
         Assert-True ($run.Text.Contains('kit: its last run failed (exit 3, see ')) $run.Text
         Assert-True ((Get-Events $case) -ceq '') "a fresh failure was retried: $(Get-Events $case)"
+        # PyMOLScripts' 3: a locally edited rc file it leaves alone.
+        $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '3' }
+        Assert-True ($run.Code -eq 1 -and $run.Text.Contains('pymol: stopped for a person (exit 3): do what its message says, then run sync-payloads pymol')) $run.Text
+        $run = Invoke-Hook $case @('-Auto') @{ DOTFILES_PAYLOAD_ITEMS = 'pymol' }
+        Assert-True ($run.Text.Contains('pymol: its last run stopped for a person (exit 3, see ')) $run.Text
         $run = Invoke-Hook $case @('-Now', 'skills')
         Assert-True ($run.Code -eq 0 -and (Get-Record $case skills) -ceq '') "a success kept the record: $($run.Text)"
     }

@@ -17,9 +17,10 @@
 #                    the kit's names the channel, so a reviewed change of the
 #                    channel row moves every installed host to that channel
 #   person-status    an exit status with which the repo stops for a person,
-#                    which the hook and the doctor word as such (awesome-
-#                    skills' 3: an interrupted update it cannot undo alone;
-#                    its message names the --restore command to run)
+#                    which the hook and the doctor word as such; its message
+#                    names what to do (3 for both: PyMOLScripts at a locally
+#                    edited rc file, which it leaves alone; awesome-skills at
+#                    an interrupted update it cannot undo alone)
 #   stow-links       PACKAGE PATH...: HOME paths the installer refuses while
 #                    they are links into the retired dotfiles package
 #                    common/PACKAGE, which stow-all removes; until it has run
@@ -48,6 +49,7 @@ kit	windows-probe	(Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'coding-a
 kit	windows-install	Invoke-DotfilesPayloadScript 'https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.ps1' -Channel $Channel
 kit	windows-update	Invoke-DotfilesPayloadScript (Join-Path $env:LOCALAPPDATA 'coding-agent-kit/install.ps1') -Update -Channel $Channel
 pymol	days	1
+pymol	person-status	3
 pymol	unix-probe	test -f "$HOME/.pymolrc" && test -f "$HOME/.pymolrc.py"
 pymol	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/PyMOLScripts/main/install.sh
 pymol	windows-probe	(Test-Path -LiteralPath (Join-Path $HOME '.pymolrc') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $HOME '.pymolrc.py') -PathType Leaf)

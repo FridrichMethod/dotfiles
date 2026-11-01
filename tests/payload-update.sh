@@ -310,9 +310,10 @@ now nope
 expect_text "$ERR" "unknown item 'nope'"
 
 # An exit with the item's person-status row (awesome-skills' 3: an
-# interrupted update it cannot undo alone) is worded as one that waits for a
-# person, in the run and in every later session; the same exit from an item
-# without that row is an ordinary failure.
+# interrupted update it cannot undo alone; PyMOLScripts' 3: a locally edited
+# rc file it will not overwrite) is worded as one that waits for a person, in
+# the run and in every later session; the same exit from an item without that
+# row is an ordinary failure.
 new_home
 FAKE_SKILLS_STATUS=3 now skills
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for an exit that waits for a person'
@@ -320,11 +321,19 @@ expect_text "$ERR" '[dotfiles] [error] skills: stopped for a person (exit 3): do
 [[ -s "$STATE/skills.failed" && ! -e "$STATE/skills.stamp" ]] || fail 'exit 3 was not recorded'
 FAKE_KIT_STATUS=3 now kit
 expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 3); retry with: sync-payloads kit'
-source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit'
+FAKE_PYMOL_STATUS=3 now pymol
+[[ "$STATUS" == 1 && -s "$STATE/pymol.failed" ]] || fail 'a PyMOL exit 3 was not a recorded failure'
+expect_text "$ERR" '[dotfiles] [error] pymol: stopped for a person (exit 3): do what its message says, then run sync-payloads pymol'
+source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit pymol'
 expect_text "$ERR" "[dotfiles] [warn] skills: its last run stopped for a person (exit 3, see $STATE/skills.failed); run sync-payloads skills and do what it asks"
 expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 3, see $STATE/kit.failed); run sync-payloads kit"
-now skills
-[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.failed" ]] || fail 'a success kept the failure record'
+expect_text "$ERR" "[dotfiles] [warn] pymol: its last run stopped for a person (exit 3, see $STATE/pymol.failed); run sync-payloads pymol and do what it asks"
+# Every later session says so again, until a run succeeds.
+source_hook bash DOTFILES_PAYLOAD_ITEMS=pymol
+expect_text "$ERR" "[dotfiles] [warn] pymol: its last run stopped for a person (exit 3, see $STATE/pymol.failed)"
+now skills pymol
+[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.failed" && ! -e "$STATE/pymol.failed" ]] ||
+    fail 'a success kept the failure record'
 
 # A legacy link the retired coding-agent-kit Stow package made at a kit
 # path: until stow-all removes it, the kit's installer would refuse it, so
