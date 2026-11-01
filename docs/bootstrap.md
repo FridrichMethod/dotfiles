@@ -2101,8 +2101,9 @@ fail-closed behavior beyond what is stated.
   and the `/apps/miniconda3` mamba hook present prints
   `compinit: initialization aborted` and `command not found: compdef`. This
   predates the bootstrap; interactive shells are fine, and
-  `tests/host-overlays.sh` points the conda and mamba prefixes at missing
-  paths to test only the Linuxbrew guard.
+  `tests/host-overlays.sh` keeps real conda and mamba setup out of the
+  Linuxbrew guard checks. Isolated fakes also cover portable tool discovery,
+  HOME paths and fallback commands.
 - **A conflicting formula is judged by its keg.** S2-brew-bundle stops when
   `Cellar/<formula>` of a declared conflict exists, linked or not (a cask, when
   its `Caskroom/<token>` exists), unless the doctor finds the Brewfile entry's
