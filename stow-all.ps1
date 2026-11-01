@@ -27,9 +27,11 @@
     check links even from a local console. An elevated run repairs rejected
     destination links. Packages hold files only; a symlink in one is skipped
     with a warning. Unsupported or failed trust checks stop the installation
-    before syncing. The links it made from the two packages the payload repos
-    replaced are removed while their text is exactly the one it wrote
-    (scripts/payload-update.ps1 installs those repos).
+    before syncing. The links it made from the two retired packages,
+    common/coding-agent-kit and common/pymol, are removed while their text is
+    exactly the one it wrote. On native Windows scripts/payload-update.ps1
+    installs PyMOLScripts in their place; coding-agent-kit installs nothing
+    here.
     Declining any change leaves the installation partial; Strict reports a
     failure and the login updater never records that revision as applied.
 
@@ -173,10 +175,11 @@ function Remove-RetiredLink {
     }
 }
 
-# Every link this installer made from the two packages that the payload
-# repos replaced (common/coding-agent-kit, common/pymol), by package. Their
-# installers (scripts/payload-update.ps1) now own the PyMOL paths, and
-# ~/.claude/dotfiles, the old home of the Claude helpers, is no longer read.
+# Every link this installer made from the two retired packages
+# (common/coding-agent-kit, common/pymol), by package. PyMOLScripts'
+# installer, which scripts/payload-update.ps1 runs, now owns the PyMOL paths;
+# coding-agent-kit installs nothing on native Windows, and ~/.claude/dotfiles,
+# the old home of the Claude helpers, is no longer read.
 $RetiredPackageLinks = @(
     foreach ($path in @('.claude/dotfiles/check-git-hooks.cjs', '.claude/dotfiles/notify.cjs',
             '.claude/dotfiles/statusline.cjs', '.local/bin/claude-as', '.local/bin/codex-as',
