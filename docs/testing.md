@@ -225,11 +225,12 @@ non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
 each item's update command and the log; a live worker blocking a second one;
 a failed first install recording nothing and the next session retrying it;
 exit 75; `--now`, the aliases, a failed download, the wget fallback, each
-download staged alone in a fresh private directory, every installer running
-in `/`, outside the caller's working directory and out of reach of a planted
-`TMPDIR/.git`, the background run starting in `/` with every path it uses
-absolute, a relative `XDG_STATE_HOME` ignored; and the rc files and the
-transition shim sourcing the hook.
+download staged alone in a fresh private directory, every installer starting
+in `/`, outside the caller's working directory, where git finds no planted
+`TMPDIR/.git` (dotfiles chooses only the directory an installer starts in;
+git it runs from elsewhere is its own), the background run starting in `/`
+with every path it uses absolute, a relative `XDG_STATE_HOME` ignored; and
+the rc files and the transition shim sourcing the hook.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
 run naming the kit says it is not available there and records nothing, every

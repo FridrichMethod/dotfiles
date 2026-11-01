@@ -79,7 +79,7 @@ helper:
   failed, the run tries no other, so a network that is down or stalls holds
   a login once. A path must be an existing file. On Unix the installer's
   stdin is closed. Every installer, a download or an installed script,
-  runs in `/` (PowerShell: in `$PSHOME`, which only whoever could replace
+  starts in `/` (PowerShell: in `$PSHOME`, which only whoever could replace
   that pwsh can write) and finds its own files through its path. It never
   runs in the caller's working directory, which may be a shared one too (a
   shell started in `/tmp`) or an untrusted checkout (a VS Code terminal
@@ -91,7 +91,13 @@ helper:
   its working directory upwards, so the kit's `git ls-remote`, run outside
   any repository, would read a `/tmp/.git` another user made wherever
   `safe.directory = *` turns git's ownership check off (lab-ubuntu's
-  `.gitconfig_local` does).
+  `.gitconfig_local` does). On Unix `/` ends that walk, since only root can
+  create `/.git`. On Windows no directory does: from any path on `C:`,
+  `$PSHOME` included, git reaches `C:\.git`, which any authenticated user
+  can create (CVE-2022-24765), so there only git's own ownership check
+  refuses such a repository. Dotfiles chooses only the directory each
+  installer starts in; git that an installer runs from another directory is
+  that repository's to guard.
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
 `tests/payload-update.sh` points that prefix at `file://` fakes and fails on

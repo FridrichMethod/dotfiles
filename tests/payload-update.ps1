@@ -259,8 +259,9 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         # terminal starts in its workspace, holding a git.cmd here), and
         # awesome-skills' installer finds git with Python's shutil.which,
         # which on Windows searches the working directory first. A download's
-        # own directory lies in the temporary directory, which may be shared,
-        # and git looks for a repository from its working directory upwards.
+        # own directory lies in the temporary directory, which may be shared
+        # (git looks for a repository from its working directory upwards,
+        # though on Windows it reaches C:\.git from $PSHOME too).
         $case = New-Case
         $caller = Join-Path $case.Root 'caller'
         Write-Fixture (Join-Path $caller 'git.cmd') '@echo planted'

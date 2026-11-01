@@ -91,11 +91,14 @@ $PayloadFailed = & { try {
         # may be an untrusted checkout (a VS Code terminal starts in its
         # workspace: awesome-skills' installer finds git with Python's
         # shutil.which, which on Windows searches the working directory
-        # first), nor in the download's, whose parent may be shared: git
-        # looks for a repository from its working directory upwards. The
-        # installers find their own files through their path. After one
-        # failed download a run tries no other. A simple function, so -Update
-        # and the like reach the script instead of binding here.
+        # first), nor in the download's, whose parent may be shared. Unlike /
+        # on Unix, $PSHOME does not keep git from a planted repository: git
+        # looks for one from its working directory upwards, from any path on
+        # C: up to C:\.git, which any authenticated user can create; only
+        # git's own ownership check (safe.directory) refuses one another user
+        # owns. The installers find their own files through their path.
+        # After one failed download a run tries no other. A simple function,
+        # so -Update and the like reach the script instead of binding here.
         $source = [string]$args[0]
         $rest = @($args | Select-Object -Skip 1 | ForEach-Object { [string]$_ })
         $staging = $null
