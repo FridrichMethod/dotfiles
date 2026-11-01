@@ -1,5 +1,5 @@
 #!/bin/sh
-# claude-settings-sync [--check] [--hooks EVENTS.json] PORTABLE LIVE
+# claude-settings-sync [--check] PORTABLE LIVE
 # Resolve Stow links without GNU readlink -f; paths may contain spaces.
 set -eu
 
@@ -26,6 +26,8 @@ while [ -L "$sync_script" ]; do
     esac
 done
 sync_root=$(CDPATH='' cd -P -- "$(dirname -- "$sync_script")/../../../.." && pwd)
+# Consumed by the sourced runtime, also when linting this wrapper alone.
+# shellcheck disable=SC2034
 sync_kind=claude-settings-sync
 # shellcheck source=lib/sync-runtime.sh
 . "$sync_root/lib/sync-runtime.sh"
