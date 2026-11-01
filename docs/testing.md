@@ -13,17 +13,15 @@ macOS and Windows runners' homes.)
 | --- | --- | --- |
 | `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
 | `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
-| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; the real coding-agent-kit's helpers, installed into the runner's profile; Git and PowerShell come from the runner and are checked explicitly |
+| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
 
-Each job first installs the real coding-agent-kit of the channel that
-`config/payloads.tsv` declares, with the payload hook's own command:
-`HOME=$RUNNER_TEMP/kit-home sh scripts/payload-update.sh --now kit` on Unix,
-`pwsh -NoProfile -File scripts/payload-update.ps1 -Now kit` on Windows (whose
-`$HOME` is the account's profile whatever `USERPROFILE` says, and which no
-test writes). It then exports that home as `DOTFILES_TEST_KIT_HOME`, which the
-cases that need an installed kit read; without it they skip. The network is
-used in that step only, never in a test, and a failed install fails the
-job. To run them
+Each Unix job first installs the real coding-agent-kit of the channel that
+`config/payloads.tsv` declares, with the payload hook's own command,
+`HOME=$RUNNER_TEMP/kit-home sh scripts/payload-update.sh --now kit`. It then
+exports that home as `DOTFILES_TEST_KIT_HOME`, which the cases that need an
+installed kit read; without it, as in the Windows job (the kit installs
+nothing on native Windows), they skip. The network is used in that step
+only, never in a test, and a failed install fails the job. To run them
 locally, install the kit into a scratch home the same way, with
 `XDG_DATA_HOME`, `XDG_STATE_HOME` and `BASH_COMPLETION_USER_DIR` unset so
 nothing reaches your own, and set `DOTFILES_TEST_KIT_HOME` to it.
@@ -211,7 +209,10 @@ in a temporary home with those helpers, which must exit as Claude Code
 expects. The command cases fail without `node`. `tests/run.ps1` runs the same
 file natively on Windows, where only the wiring cases run, and
 `tests/claude-customizations.cjs` runs the commands without a shell there and
-on Unix, on the same installed helpers, skipping without them.
+on Unix: with `process.platform` forced to `win32` and to Unix values, against
+stand-in helpers, a missing helper exits 0 silently only on `win32` and 1
+with its path elsewhere, and a present one runs with its exit status kept on
+every platform; and on the installed helpers, skipping without them.
 
 `tests/payload-update.sh` drives `scripts/payload-update.sh` against fake
 installers served from `file://` URLs: the real `config/payloads.tsv` with its
@@ -223,8 +224,13 @@ fresh session doing nothing; the session marker, the opt-out and
 non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
 each item's update command and the log; a live worker blocking a second one;
 a failed first install recording nothing and the next session retrying it;
-exit 75; `--now`, the aliases, a failed download, the wget fallback; and the
-rc files and the transition shim sourcing the hook. `tests/unix-installer.sh`
+exit 75; `--now`, the aliases, a failed download, the wget fallback, each
+download staged alone in a fresh private directory; and the rc files and the
+transition shim sourcing the hook. `tests/payload-update.ps1` covers the
+PowerShell twin the same way, with the items that have a `windows-install`
+row (PyMOLScripts and awesome-skills): a run naming the kit says it is not
+available there and records nothing, and fixture-only rows keep the
+`windows-update` and `stow-links` fields covered. `tests/unix-installer.sh`
 also runs the [migration](payloads.md#migration) of a host stowed with both
 submodules through the real login updater, Git and Stow: the leftover
 checkouts stay ignored, the restow removes the 16 retired links, the payload
@@ -504,9 +510,10 @@ step in `summary.tsv`:
    login environment, `sh ~/dotfiles/scripts/payload-update.sh --now`
    (`scripts\payload-update.ps1 -Now` on `win`), on every host, whether or
    not its profile prints the H7-payloads block, which stays a skipped
-   reminder where it does: coding-agent-kit, PyMOLScripts and awesome-skills
-   install from GitHub through each repo's own installer, the kit at the
-   newest patch of the channel `config/payloads.tsv` declares, within the
+   reminder where it does: coding-agent-kit (not on `win`, where it installs
+   nothing), PyMOLScripts and awesome-skills install from GitHub through each
+   repo's own installer, the kit at the newest patch of the channel
+   `config/payloads.tsv` declares, within the
    45-minute block limit. It must exit 0, and the doctor's `payloads` row
    (`--tsv`) must then be `ok` and name what it found installed. On Unix it
    is a setup phase, so criterion 5 covers it: an installer that runs sudo or

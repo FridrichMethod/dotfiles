@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"require(require('os').homedir() + '/.claude/coding-agent-kit/check-git-hooks.cjs').main()\"",
+            "command": "node -e \"const f=require('os').homedir()+'/.claude/coding-agent-kit/check-git-hooks.cjs';if(process.platform!=='win32'||require('fs').existsSync(f))require(f).main()\"",
             "timeout": 5
           }
         ]
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"require(require('os').homedir() + '/.claude/coding-agent-kit/notify.cjs').main()\"",
+            "command": "node -e \"const f=require('os').homedir()+'/.claude/coding-agent-kit/notify.cjs';if(process.platform!=='win32'||require('fs').existsSync(f))require(f).main()\"",
             "timeout": 5
           }
         ]
@@ -172,7 +172,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node -e \"require(require('os').homedir() + '/.claude/coding-agent-kit/statusline.cjs').main()\"",
+    "command": "node -e \"const f=require('os').homedir()+'/.claude/coding-agent-kit/statusline.cjs';if(process.platform!=='win32'||require('fs').existsSync(f))require(f).main()\"",
     "padding": 0
   }
 }

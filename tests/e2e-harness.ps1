@@ -1076,13 +1076,13 @@ try {
     Test-Case 'Invoke-E2EStepPayloads: payload-update.ps1 -Now, then the payloads row of doctor.ps1 -Tsv decides' {
         $header = "status`tid`ttier`tdetail`tfix"
         [void](New-DryRun)
-        Add-Run 0 @('coding-agent-kit: v0.6.0 (channel 0.6)')
-        Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-", "ok`tpayloads`tai`tinstalled: kit, pymol, skills`t-")
+        Add-Run 0 @('[dotfiles] [ok] pymol: install done', '[dotfiles] [ok] skills: install done')
+        Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-", "ok`tpayloads`tai`tinstalled: pymol, skills`t-")
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
             'scripts/payload-update.ps1 -Now 2700; doctor.ps1 -Host win -Tsv 900' 'the -Now run, then the doctor'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
-            'pass exit 0; doctor payloads ok: installed: kit, pymol, skills' 'every payload installed'
+            'pass exit 0; doctor payloads ok: installed: pymol, skills' 'every payload installed'
 
         [void](New-DryRun)
         Add-Run 0 @()

@@ -6,9 +6,9 @@ preview, the alias files and the settings.json commands that run the kit's
 Claude helpers. The cases that run the kit need an installed one:
 DOTFILES_TEST_KIT_HOME names a home it is installed in, as its installer lays
 it out (launchers in .local/bin, zsh completions in
-.local/share/zsh/site-functions, helpers in .claude/coding-agent-kit; on
-native Windows, the helpers only); CI
-installs the real kit there through scripts/payload-update.sh. Without it
+.local/share/zsh/site-functions, helpers in .claude/coding-agent-kit); CI's
+Unix jobs install the real kit there through scripts/payload-update.sh. The
+kit does not install on native Windows, so there, as anywhere without it,
 those cases skip. The fixtures are the parts of the launcher suites' setUp
 they read; they reach the kit only through its installed paths.
 """
@@ -44,13 +44,7 @@ ENV_CONFLICTS = (
 
 
 def setUpModule():
-    # The kit's install.ps1 installs only the Claude helpers on native Windows.
-    if not KIT_HOME:
-        return
-    if os.name == "nt":
-        if not (KIT_HOME / ".claude/coding-agent-kit/statusline.cjs").is_file():
-            raise RuntimeError(f"DOTFILES_TEST_KIT_HOME={KIT_HOME} has no installed coding-agent-kit helpers.")
-    elif not (SOURCE / "bin/codex-as").is_file():
+    if KIT_HOME and not (SOURCE / "bin/codex-as").is_file():
         raise RuntimeError(f"DOTFILES_TEST_KIT_HOME={KIT_HOME} has no installed coding-agent-kit launcher.")
 
 
@@ -255,7 +249,8 @@ def bash_tool(command):
 # Where settings.json wires each delivered helper, and for each run the JSON
 # Claude Code writes to its stdin there (inputs as in the kit's own suite),
 # the exit status, and the stream that must carry output (None: neither may).
-# A command that cannot load its helper exits 1 instead.
+# A command that cannot load its helper exits 1 instead, except on native
+# Windows, where the kit installs none (tests/claude-customizations.cjs).
 HELPER_RUNS = {
     "statusline.cjs": ("statusLine", [({"model": {"display_name": "Opus"}}, 0, "stdout")]),
     "notify.cjs": ("Notification", [({"hook_event_name": "Notification", "notification_type": "idle_prompt"},

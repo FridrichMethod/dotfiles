@@ -40,6 +40,63 @@ test('Git fixtures use ordinary empty config and template paths', () => {
   assert.deepEqual(fs.readdirSync(process.env.GIT_TEMPLATE_DIR), []);
 });
 
+// Each settings.json command with the platform it sees forced: coding-agent-kit
+// installs no helpers on native Windows (0.7 and later), so there a missing
+// helper is silent, while a v0.6 copy left there still runs; elsewhere a
+// missing helper stays visible.
+const helperCommands = () => [
+  ['statusline.cjs', settings.statusLine.command],
+  ['notify.cjs', settings.hooks.Notification[0].hooks[0].command],
+  ['check-git-hooks.cjs', settings.hooks.PreToolUse[0].hooks[0].command],
+];
+const runAs = (platform, home, command) => {
+  const match = command.match(/^node -e "([^"]+)"$/);
+  assert.ok(match, command);
+  return spawnSync(process.execPath, ['-e',
+    `Object.defineProperty(process, 'platform', { value: '${platform}' }); ` +
+    'require("os").homedir = () => process.env.CLAUDE_DOTFILES_TEST_HOME; ' + match[1]], {
+    env: { ...process.env, CLAUDE_DOTFILES_TEST_HOME: home }, input: '{}', encoding: 'utf8', timeout: 5000,
+  });
+};
+
+test('a missing helper is silent only on native Windows', () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude home '));
+  try {
+    for (const [name, command] of helperCommands()) {
+      assert.ok(command.includes(`/.claude/coding-agent-kit/${name}`), command);
+      const windows = runAs('win32', temporary, command);
+      assert.deepEqual([windows.status, windows.stdout, windows.stderr], [0, '', ''], command);
+      const unix = runAs('linux', temporary, command);
+      assert.equal(unix.status, 1, command);
+      assert.equal(unix.stdout, '');
+      assert.ok(unix.stderr.includes(path.join(temporary, '.claude', 'coding-agent-kit', name)) ||
+        unix.stderr.includes(`${temporary}/.claude/coding-agent-kit/${name}`), unix.stderr);
+    }
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test('a present helper runs on every platform, its exit status kept', () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude home '));
+  try {
+    const target = path.join(temporary, '.claude', 'coding-agent-kit');
+    fs.mkdirSync(target, { recursive: true });
+    for (const [name] of helperCommands()) {
+      fs.writeFileSync(path.join(target, name),
+        `exports.main = () => { process.stdout.write('${name} ran'); process.exitCode = 2; };\n`);
+    }
+    for (const platform of ['win32', 'linux', 'darwin']) {
+      for (const [name, command] of helperCommands()) {
+        const result = runAs(platform, temporary, command);
+        assert.deepEqual([result.status, result.stdout], [2, `${name} ran`], `${platform}: ${command}: ${result.stderr}`);
+      }
+    }
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test('portable commands run the installed helpers through a home path containing spaces',
   { skip: kitHome ? false : 'no installed coding-agent-kit (DOTFILES_TEST_KIT_HOME)' }, () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude home '));

@@ -485,8 +485,10 @@ $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 $codexPortable = Join-Path $commonRoot 'codex\.codex\config.toml'
 $codexRulesPortable = Join-Path $commonRoot 'codex\.codex\rules\portable.rules'
 # Claude's hooks and status line run coding-agent-kit's Node helpers from
-# ~/.claude/coding-agent-kit/ (scripts/payload-update.ps1 installs them);
-# Node.js 22+ must be on PATH when Claude runs them.
+# ~/.claude/coding-agent-kit/, which the kit installs on Unix only; on native
+# Windows the commands exit 0 silently while a helper is missing (a v0.6
+# copy left there still runs). Node.js 22+ must be on PATH when Claude runs
+# them.
 $claudePortable = Join-Path $commonRoot 'claude\.claude\settings.json'
 if ($HostDir) {
     $codexHost = Join-Path $RepoRoot "$HostDir\codex\.codex\config.toml"
