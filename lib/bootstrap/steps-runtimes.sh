@@ -212,13 +212,13 @@ step_S4_nvm_apply() {
 # --- S4-setup-sync (unix) --------------------------------------------------
 
 step_S4_setup_sync_check() {
-    local venv=$STEPS_ROOT/.venv-sync
-    if [ -f "$venv/pyvenv.cfg" ] && [ -x "$venv/bin/python" ] &&
-        "$venv/bin/python" -I -B -X utf8 "$STEPS_ROOT/lib/config_sync.py" --runtime-check >/dev/null 2>&1 </dev/null; then
-        STEP_DETAIL="AI-sync runtime ready in $venv"
-        return 0
-    fi
-    STEP_DETAIL="no working AI-sync runtime in $venv"
+    local result status
+    result=$(bootstrap_check_venv_sync "$STEPS_ROOT")
+    bootstrap_split "$BOOTSTRAP_TAB" "$result" status STEP_DETAIL
+    [ "$status" != ok ] || return 0
+    # A selected interpreter belongs to the caller. Provisioning the default
+    # would not repair it, because the helpers would still use the override.
+    [ "${DOTFILES_SYNC_PYTHON+x}" != x ] || return 1
     if [ "$STEPS_PROFILE" = hpc ] && ! bootstrap_in_allocation; then
         STEP_DETAIL="H2-alloc: building the AI-sync env needs a Slurm allocation (SLURM_JOB_ID is unset)"
         return 4
@@ -242,12 +242,20 @@ steps_setup_sync_python() {
 
 step_S4_setup_sync_plan() {
     local python
+    if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
+        printf '%s\n' '# Repair DOTFILES_SYNC_PYTHON or unset it to provision the default runtime.'
+        return
+    fi
     python=$(steps_setup_sync_python)
     printf './setup-sync.sh%s\n' "${python:+ --python $python}"
 }
 
 step_S4_setup_sync_apply() {
     local python where
+    if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
+        dotfiles_log error "DOTFILES_SYNC_PYTHON='$DOTFILES_SYNC_PYTHON' fails the runtime check; repair or unset it before provisioning the default runtime"
+        return 1
+    fi
     if [ "$STEPS_PROFILE" = hpc ]; then
         if ! bootstrap_in_allocation; then
             dotfiles_log error 'refusing to build the AI-sync env outside a Slurm allocation (H2-alloc)'

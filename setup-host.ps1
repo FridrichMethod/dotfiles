@@ -17,7 +17,7 @@
       W1-setup-sync   .\setup-sync.ps1 -Python <the first python3 or python on
                       PATH that reports 3.11 or newer; a Microsoft Store
                       alias does not count> (the only write inside this
-                      checkout); done when .venv-sync passes
+                      checkout); done when the selected sync interpreter passes
                       lib/config_sync.py --runtime-check
 
     A step runs when a selected tier needs it: tools.tsv rows whose Windows
@@ -224,7 +224,7 @@ function Get-SetupSyncPythonSpec {
 function Test-SetupVenvReady {
     # Ready means runnable with the pinned dependency, not merely present: a
     # failed first setup-sync.ps1 leaves a venv without tomlkit.
-    return Test-BootstrapSyncRuntime -Python (Get-BootstrapVenvPython $RepoRoot) -RepoRoot $RepoRoot
+    return Test-BootstrapSyncRuntime -Python ((Get-BootstrapSyncPython $RepoRoot).Path) -RepoRoot $RepoRoot
 }
 
 function Get-SetupStepState {
@@ -276,7 +276,11 @@ function Get-SetupStepState {
         }
         'W1-setup-sync' {
             if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }
-            if (Test-SetupVenvReady) { return New-SetupState $Id done '.venv-sync passes the runtime check' }
+            $runtime = Get-BootstrapSyncPython $RepoRoot
+            if (Test-SetupVenvReady) { return New-SetupState $Id done "$($runtime.Source) passes the runtime check" }
+            if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
+                return New-SetupState $Id todo "DOTFILES_SYNC_PYTHON='$($runtime.Path)' fails lib/config_sync.py --runtime-check; repair or unset it before provisioning the default runtime"
+            }
             $spec = Get-SetupSyncPythonSpec
             $python = Select-BootstrapCommand @spec
             if ($python.Path) { return New-SetupState $Id todo "run .\setup-sync.ps1 -Python $($python.Path)" }
@@ -514,6 +518,10 @@ function Invoke-SetupStep {
             return $result
         }
         'W1-setup-sync' {
+            $runtime = Get-BootstrapSyncPython $RepoRoot
+            if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
+                return New-BootstrapResult failed "DOTFILES_SYNC_PYTHON='$($runtime.Path)' fails lib/config_sync.py --runtime-check; repair or unset it before provisioning the default runtime"
+            }
             # setup-sync.ps1 defaults to "python", which can resolve to the
             # Store alias even after winget installed a real one; pass a
             # probed interpreter instead.

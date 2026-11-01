@@ -1388,6 +1388,34 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true } $environment) 3 'ready venv, HW-stow pending'
     }
 
+    Test-Case 'setup-host uses the explicitly selected sync runtime without provisioning a default' {
+        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for an explicit sync runtime; override not checked.'; return }
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture
+        $explicitRoot = Join-Path $fixture.Home 'selected-runtime'
+        [void][IO.Directory]::CreateDirectory($explicitRoot)
+        New-FixtureVenv $explicitRoot
+        $python = Get-BootstrapVenvPython $explicitRoot
+        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.venv-sync') -Recurse -Force
+        $before = Get-Snapshot (Get-FixtureRoots $fixture)
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true } @{ DOTFILES_SYNC_PYTHON = $python }
+        Assert-True ($check.Lines -contains 'W1-setup-sync done DOTFILES_SYNC_PYTHON passes the runtime check') "explicit runtime: $($check.Stdout)"
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'explicit check wrote files'
+        $count = @(Get-InstallEvents $fixture).Count
+        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true } @{ DOTFILES_SYNC_PYTHON = $python }) 3 'explicit runtime, HW-stow pending'
+        Assert-Equal @(Get-InstallEvents $fixture).Count $count 'explicit runtime provisioned the unused default'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo '.venv-sync'))) 'explicit runtime created a default'
+
+        foreach ($environment in @(@{ DOTFILES_SYNC_PYTHON = (Join-Path $fixture.Home 'missing-python') },
+                @{ DOTFILES_SYNC_PYTHON = $python; FAKE_RUNTIME_EXIT = '1' })) {
+            $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true } $environment
+            Assert-True (@($check.Lines -like "W1-setup-sync todo DOTFILES_SYNC_PYTHON=*fails lib/config_sync.py --runtime-check*").Count -eq 1) "invalid override: $($check.Stdout)"
+            Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true } $environment) 1 'invalid explicit runtime'
+            Assert-Equal @(Get-InstallEvents $fixture).Count $count 'invalid override provisioned an unused default'
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo '.venv-sync'))) 'invalid override created a default'
+        }
+    }
+
     Test-Case 'setup-host -WhatIf previews without installing' {
         $fixture = New-Fixture
         foreach ($name in $ToolText.Keys) { if ($name -ne 'git') { New-ToolShim $fixture.Packages $name } }

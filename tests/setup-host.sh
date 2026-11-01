@@ -852,6 +852,46 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
 }
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
 
+# Explicit sync runtimes are the helpers' runtime, even without a local venv.
+new_home sync-override
+SYNC_EXPLICIT="$CASE_HOME/provisioned-python"
+printf '#!/bin/sh\nexit 0\n' >"$SYNC_EXPLICIT"
+chmod 755 "$SYNC_EXPLICIT"
+snapshot >"$TEST_TMP/sync-before"
+run_case sync-explicit DOTFILES_SYNC_PYTHON="$SYNC_EXPLICIT" -- --host lab-ubuntu --check --only S4-setup-sync
+expect_rc sync-explicit 0
+expect_text sync-explicit out 'S4-setup-sync done'
+expect_no_events sync-explicit
+snapshot >"$TEST_TMP/sync-after"
+cmp "$TEST_TMP/sync-before" "$TEST_TMP/sync-after" || fail 'explicit runtime check wrote files'
+[ ! -e "$FIXTURE/.venv-sync" ] || fail 'explicit runtime created an unused default'
+SYNC_BROKEN="$CASE_HOME/broken-python"
+printf '#!/bin/sh\nexit 1\n' >"$SYNC_BROKEN"
+chmod 755 "$SYNC_BROKEN"
+for override in '' "$CASE_HOME/missing-python" "$SYNC_BROKEN"; do
+    run_case sync-invalid "DOTFILES_SYNC_PYTHON=$override" -- --host lab-ubuntu --yes --only S4-setup-sync
+    expect_rc sync-invalid 1
+    expect_text sync-invalid err 'DOTFILES_SYNC_PYTHON'
+    expect_no_event 'setup-sync:'
+    [ ! -e "$FIXTURE/.venv-sync" ] || fail 'invalid explicit runtime provisioned an unused default'
+done
+run_case sync-missing -- --host lab-ubuntu --check --only S4-setup-sync
+expect_rc sync-missing 3
+expect_text sync-missing out 'S4-setup-sync todo'
+expect_no_events sync-missing
+mkdir -p "$FIXTURE/.venv-sync/bin"
+cp "$SYNC_EXPLICIT" "$FIXTURE/.venv-sync/bin/python"
+run_case sync-default -- --host lab-ubuntu --check --only S4-setup-sync
+expect_rc sync-default 0
+expect_text sync-default out 'S4-setup-sync done'
+expect_no_events sync-default
+# A broken override must still fail when a valid default exists.
+run_case sync-invalid-default DOTFILES_SYNC_PYTHON="$CASE_HOME/missing-python" -- --host lab-ubuntu --yes --only S4-setup-sync
+expect_rc sync-invalid-default 1
+expect_no_event 'setup-sync:'
+rm -f "$FIXTURE/.venv-sync/bin/python"
+rmdir "$FIXTURE/.venv-sync/bin" "$FIXTURE/.venv-sync"
+
 # --- debian --check: apt done, Homebrew present, nothing else ----------------
 
 new_home debian

@@ -1312,7 +1312,11 @@ before the first interactive `claude`.
 Applies to every Unix host (Windows: W1-setup-sync). `./setup-sync.sh` creates
 the checkout-local `.venv-sync` with the hash-pinned `tomlkit` that
 `./stow-all.sh` needs; it is the only write setup-host causes inside the clone.
-It needs Python 3.11 or newer.
+It needs Python 3.11 or newer. Setup, doctor and the sync wrappers use
+`DOTFILES_SYNC_PYTHON` whenever it is set, otherwise the checkout-local
+interpreter. A valid explicitly selected runtime completes this step without
+creating `.venv-sync`. An invalid or empty override stays visibly pending and
+fails apply; repair it or unset it before provisioning the default runtime.
 
 On `sherlock` and `marlowe`, create or repair `.venv-sync` only inside a Slurm
 allocation (H2-alloc), even when the login env already exists. Keep the
@@ -1320,7 +1324,7 @@ checkout outside `$SCRATCH` and `$GROUP_SCRATCH`: setup-host refuses to build
 the sync env there, including through a symlink. A working env can be checked
 and used on a login node without rebuilding it.
 
-- **Check:** `~/dotfiles/.venv-sync/bin/python -I -B ~/dotfiles/lib/config_sync.py --runtime-check`
+- **Check:** `./setup-host.sh --host <host> --check --only S4-setup-sync` (offline and write-free).
 - **Install:** automatic via setup-host.sh. By hand, by platform:
   macOS `./setup-sync.sh --python /opt/homebrew/bin/python3` (Intel:
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
@@ -1757,7 +1761,13 @@ config directory.
 
 ### W1-setup-sync: AI-sync runtime on Windows
 
-- **Check:** `& .\.venv-sync\Scripts\python.exe -I -B lib\config_sync.py --runtime-check`
+Setup, doctor and the sync wrappers honor `DOTFILES_SYNC_PYTHON` when it is
+set. A passing selected runtime completes the step without provisioning a
+checkout-local environment. An invalid override fails apply; repair or unset
+it rather than installing an unused default.
+
+- **Check:** `.\setup-host.ps1 -Check` checks the selected interpreter with
+  `lib/config_sync.py --runtime-check`, alongside the other setup steps.
 - **Install:** automatic via setup-host.ps1:
   `.\setup-sync.ps1 -Python <path>`, with the first `python3` or `python` on
   PATH that reports 3.11 or newer; a Microsoft Store alias does not count. When
