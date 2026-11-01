@@ -2,14 +2,9 @@
 
 set -euo pipefail
 
-# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
-# docs/bootstrap.md) and other dotfiles knobs never reach the code under
-# test from the caller; each case sets what it needs.
-unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
-    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
-    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
-    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
+# Isolate inherited configuration while preserving explicit test inputs.
+# shellcheck source=tests/lib/environment.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib/environment.sh"
 
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-entrypoints.XXXXXX")"
@@ -68,147 +63,33 @@ else
     [[ "$?" == 2 ]]
 fi
 
-# Every entry point drops the same dotfiles knobs, tests/run.ps1 too, and the
-# list names every DOTFILES_* variable the code can read (but
-# DOTFILES_SYNC_PYTHON, which tests/run.sh provisions, and the DOTFILES_TEST_*
-# inputs of the suites), so a shell that exports DOTFILES_AUTO_UPDATE=0 while
-# provisioning cannot fail a suite. It also names every CODING_AGENT_KIT_*
-# variable of the installed coding-agent-kit that the AI integration suites
-# run: the list in tests/run.sh is explicit, and with DOTFILES_TEST_KIT_HOME
-# naming a home the kit is installed in (CI installs the real kit there) the
-# kit's own code is checked against it below.
+# Every standalone shell entrypoint uses the same test-only boundary.
 REPO_ROOT="$(cd -- "$TEST_DIR/.." && pwd)"
-# knob_list FILE: the names of FILE's "unset DOTFILES_AUTO_UPDATE ..." statement.
-knob_list() {
-    sed -n '/^unset DOTFILES_AUTO_UPDATE /,/[^\\]$/p' "$1" | tr -d '\\' | tr -s ' ' '\n' |
-        grep -v -e '^unset$' -e '^$' | LC_ALL=C sort
-}
-KNOBS=$(knob_list "$TEST_DIR/run.sh")
-[[ -n "$KNOBS" ]] || {
-    printf 'ERROR: tests/run.sh has no unset statement for the dotfiles knobs.\n' >&2
-    exit 1
-}
 for test_file in "$TEST_DIR"/*.sh; do
-    if [[ "$(knob_list "$test_file")" != "$KNOBS" ]]; then
-        printf 'ERROR: %s does not unset the dotfiles knobs that tests/run.sh does.\n' "${test_file#"$REPO_ROOT"/}" >&2
-        exit 1
-    fi
-done
-PS_KNOBS=$(awk '/foreach \(\$knob in @\(/ { on = 1 } on { print } on && /\)\) \{/ { exit }' "$TEST_DIR/run.ps1" |
-    grep -oE "'[A-Z_]+'" | tr -d "'" | LC_ALL=C sort)
-if [[ "$PS_KNOBS" != "$KNOBS" ]]; then
-    printf 'ERROR: tests/run.ps1 does not remove the dotfiles knobs that tests/run.sh unsets.\n' >&2
-    exit 1
-fi
-# The names come from every tracked file outside tests/, docs/, .github/ and
-# Markdown, whatever reads them: $NAME and ${NAME in shell, $env:NAME,
-# Env:NAME and GetEnvironmentVariable('NAME') in PowerShell, os.environ in
-# Python. A name embedded in a longer identifier does not count.
-if ! KNOB_NAMES=$(git -C "$REPO_ROOT" -c grep.lineNumber=false -c grep.column=false \
-    grep -I -h -o --no-color -E '(^|[^A-Za-z0-9_])_?(DOTFILES|AWESOME_SKILLS|CODING_AGENT_KIT)_[A-Z_]+' \
-    -- ':!tests' ':!docs' ':!.github' ':!*.md'); then
-    printf 'ERROR: git grep found no DOTFILES_* name in %s.\n' "$REPO_ROOT" >&2
-    exit 1
-fi
-READ_KNOBS=$(printf '%s\n' "$KNOB_NAMES" | sed -E 's/^[^A-Z_]//' | LC_ALL=C sort -u)
-for knob in $READ_KNOBS; do
-    case $knob in
-        DOTFILES_SYNC_PYTHON | DOTFILES_TEST_*) continue ;;
-    esac
-    if ! grep -Fxq -- "$knob" <<<"$KNOBS"; then
-        printf 'ERROR: tracked code reads %s, which the test entry points do not unset.\n' "$knob" >&2
-        exit 1
-    fi
-done
-# The same for the kit's knobs, from the code of the release installed in
-# DOTFILES_TEST_KIT_HOME (its launcher's directory, outside the kit's own
-# tests, docs and Markdown), when one is: a new kit release that reads a new
-# knob fails CI until the knob is on the list.
-if [[ -n "${DOTFILES_TEST_KIT_HOME:-}" ]]; then
-    KIT_LAUNCHER=$DOTFILES_TEST_KIT_HOME/.local/bin/codex-as
-    KIT_RELEASE=$(python3 -I -B -c 'import os, sys; print(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))))' \
-        "$KIT_LAUNCHER")
-    [[ -f "$KIT_RELEASE/bin/codex-as" ]] || {
-        printf 'ERROR: DOTFILES_TEST_KIT_HOME=%s has no installed coding-agent-kit launcher.\n' "$DOTFILES_TEST_KIT_HOME" >&2
+    grep -Fq '/lib/environment.sh"' "$test_file" || {
+        printf 'ERROR: %s does not load test environment isolation.\n' "$test_file" >&2
         exit 1
     }
-    KIT_NAMES=$(grep -r -I -h -o --exclude-dir=tests --exclude-dir=docs --exclude-dir=.github --exclude='*.md' \
-        -E '(^|[^A-Za-z0-9_])_?CODING_AGENT_KIT_[A-Z_]+' "$KIT_RELEASE" | sed -E 's/^[^A-Z_]//' | LC_ALL=C sort -u) || {
-        printf 'ERROR: found no CODING_AGENT_KIT_* name in the kit release %s.\n' "$KIT_RELEASE" >&2
-        exit 1
-    }
-    for knob in $KIT_NAMES; do
-        grep -Fxq -- "$knob" <<<"$KNOBS" || {
-            printf 'ERROR: coding-agent-kit %s reads %s, which the test entry points do not unset.\n' "$KIT_RELEASE" "$knob" >&2
-            exit 1
-        }
-    done
-fi
-# Commit hooks export a relative index path. The manifest suite creates a
-# linked worktree whose .git is a file, so fixture Git must clear this path.
-if ! env GIT_INDEX_FILE=.git/index /bin/bash "$TEST_DIR/bootstrap-manifest.sh" \
-    >"$TEST_TMP/git-hook.stdout" 2>"$TEST_TMP/git-hook.stderr"; then
-    cat "$TEST_TMP/git-hook.stdout" "$TEST_TMP/git-hook.stderr" >&2
-    printf 'ERROR: bootstrap manifest fixtures inherited the commit index.\n' >&2
-    exit 1
-fi
-grep -Fxq 'bootstrap-manifest=PASS' "$TEST_TMP/git-hook.stdout" ||
-    fail_run git-hook 'tests/bootstrap-manifest.sh did not print bootstrap-manifest=PASS.'
-# A commit hook in a linked worktree exports an absolute GIT_DIR and
-# GIT_INDEX_FILE, which -C does not override: fixture Git would reinitialize,
-# stage and commit into that repository. Each suite that runs fixture Git in
-# its own body drops them before its first git command: the Bash suites with
-# this unset, the PowerShell ones by removing every GIT_* entry.
+done
 for suite in bootstrap-manifest.sh doctor.sh e2e-harness.sh payload-update.sh setup-host.sh unix-installer.sh; do
-    if ! grep -Eq '^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE ' "$TEST_DIR/$suite"; then
-        printf 'ERROR: tests/%s does not unset GIT_DIR and GIT_INDEX_FILE for its fixture Git.\n' "$suite" >&2
+    grep -Fxq 'dotfiles_test_clear_git_environment' "$TEST_DIR/$suite" || {
+        printf 'ERROR: tests/%s does not isolate fixture Git.\n' "$suite" >&2
         exit 1
-    fi
+    }
 done
 for suite in e2e-harness.ps1 windows-installer-controls.ps1; do
-    if ! grep -Fq "Where-Object Name -Like 'GIT_*'" "$TEST_DIR/$suite" ||
-        ! grep -Fq 'Remove-Item -LiteralPath "Env:$name"' "$TEST_DIR/$suite"; then
-        printf 'ERROR: tests/%s does not remove every GIT_* variable for its fixture Git.\n' "$suite" >&2
+    grep -Fxq 'Clear-DotfilesTestGitEnvironment' "$TEST_DIR/$suite" || {
+        printf 'ERROR: tests/%s does not isolate fixture Git.\n' "$suite" >&2
         exit 1
-    fi
+    }
 done
-# hook_git ARGS: git on the throwaway repository below, without the caller's
-# git environment or configuration.
-hook_git() {
-    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY \
-        -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_PREFIX GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
-        git -c user.name=fixture -c user.email=fixture@example.invalid -c init.defaultBranch=main "$@"
+grep -Fq "'lib/environment.ps1'" "$TEST_DIR/run.ps1" || {
+    printf 'ERROR: tests/run.ps1 does not load test environment isolation.\n' >&2
+    exit 1
 }
-# The installer controls, run as from such a hook of a throwaway repository's
-# linked worktree, leave that repository as it was.
-if command -v pwsh >/dev/null 2>&1; then
-    HOOK_REPO=$TEST_TMP/hook-repo
-    HOOK_WORKTREE=$TEST_TMP/hook-worktree
-    hook_git init -q "$HOOK_REPO"
-    printf 'fixture\n' >"$HOOK_REPO/tracked"
-    hook_git -C "$HOOK_REPO" add tracked
-    hook_git -C "$HOOK_REPO" commit -q -m fixture
-    hook_git -C "$HOOK_REPO" worktree add -q --detach "$HOOK_WORKTREE"
-    HOOK_GIT_DIR=$(hook_git -C "$HOOK_WORKTREE" rev-parse --absolute-git-dir)
-    HOOK_HEAD=$(hook_git -C "$HOOK_WORKTREE" rev-parse HEAD)
-    if ! (cd -- "$HOOK_WORKTREE" && env GIT_DIR="$HOOK_GIT_DIR" GIT_INDEX_FILE="$HOOK_GIT_DIR/index" \
-        pwsh -NoProfile -NonInteractive -File "$TEST_DIR/windows-installer-controls.ps1") \
-        >"$TEST_TMP/hook-controls.stdout" 2>"$TEST_TMP/hook-controls.stderr"; then
-        cat "$TEST_TMP/hook-controls.stdout" "$TEST_TMP/hook-controls.stderr" >&2
-        printf 'ERROR: tests/windows-installer-controls.ps1 fails under a commit hook GIT_DIR.\n' >&2
-        exit 1
-    fi
-    grep -Fq 'windows-installer-controls=PASS' "$TEST_TMP/hook-controls.stdout" ||
-        fail_run hook-controls 'tests/windows-installer-controls.ps1 did not print windows-installer-controls=PASS.'
-    if [[ "$(hook_git -C "$HOOK_REPO" config --get core.bare)" != false ]] ||
-        ! hook_git -C "$HOOK_WORKTREE" diff --cached --quiet ||
-        [[ "$(hook_git -C "$HOOK_WORKTREE" rev-parse HEAD)" != "$HOOK_HEAD" ]]; then
-        printf 'ERROR: tests/windows-installer-controls.ps1 wrote into the repository of a commit hook GIT_DIR.\n' >&2
-        exit 1
-    fi
-else
-    printf 'SKIP: installer controls under a commit hook GIT_DIR (pwsh unavailable).\n'
-fi
+# Exercise actual prefix and Git isolation with small subprocess fixtures,
+# including a hook's relative index and absolute linked-worktree Git dir.
+python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_environment.py' -v
 
 # Each hook named below runs its suite when a file the suite depends on
 # changes: the engine suites on the engine and the real Codex config.toml,
@@ -217,7 +98,7 @@ fi
 # hook configuration. Files are selected as pre-commit
 # selects them: re.search of the hook's files, then of its exclude and the
 # top-level one.
-python3 -I - "$REPO_ROOT/.pre-commit-config.yaml" <<'PY'
+python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" <<'PY'
 import re
 import sys
 
@@ -234,6 +115,10 @@ for line in open(sys.argv[1], encoding='utf-8'):
         hook = {}
         hooks.setdefault(match.group(1), []).append(hook)
         continue
+    match = re.match(r'\s+entry: (\S+)\s*$', line)
+    if match and hook is not None:
+        hook['entry'] = match.group(1)
+        continue
     match = re.match(r'\s+(files|exclude): (.+?)\s*$', line)
     if match and hook is not None:
         hook[match.group(1)] = re.compile(match.group(2).strip('\'"'))
@@ -244,9 +129,13 @@ need = {
     'codex-config-sync': engine + ['common/codex/.codex/config.toml'],
     'payload-update': ['scripts/payload-update.sh', 'scripts/awesome-skills-update.sh', 'config/payloads.tsv',
                        'common/sh/.aliases', 'common/sh/.profile', 'common/zsh/.zshrc', 'lib/terminal.sh',
-                       'tests/payload-update.sh'],
+                       'tests/payload-update.sh', 'tests/test_payload_download.py'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
-                         'tests/windows-installer-controls.ps1'],
+                         'tests/windows-installer-controls.ps1', 'tests/lib/environment.sh',
+                         'tests/lib/environment.ps1', 'tests/test_environment.py'],
+    'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh'],
+    'e2e-harness-windows': ['tests/e2e-harness-windows.sh', 'tests/e2e-harness.ps1',
+                            'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1'],
 }
 missed = []
 for name, paths in need.items():
@@ -256,19 +145,14 @@ for name, paths in need.items():
     for path in paths:
         if (files and not files.search(path)) or any(e and e.search(path) for e in (exclude, top_exclude)):
             missed.append(f'{name} does not run on {path}')
+runner = open(sys.argv[2], encoding='utf-8').read()
+runner_suites = re.search(r'tests=\(\n(.*?)\n\)', runner, re.S).group(1).split() + ['unix-installer.sh']
+entries = {hook.get('entry') for variants in hooks.values() for hook in variants}
+for suite in runner_suites:
+    if 'tests/' + suite not in entries:
+        missed.append(f'Linux pre-commit behavior pass omits {suite}')
 if missed:
     sys.exit('ERROR: ' + '; '.join(missed))
 PY
-
-# The provisioning exports in the caller's shell change nothing.
-if ! env DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 DOTFILES_HOST= _DOTFILES_CHECKED=1 \
-    DOTFILES_PAYLOAD_ITEMS= _DOTFILES_PAYLOAD_CHECKED=1 XDG_DATA_HOME="$TEST_TMP/data" \
-    /bin/bash "$TEST_DIR/payload-update.sh" >"$TEST_TMP/hermetic.stdout" 2>"$TEST_TMP/hermetic.stderr"; then
-    cat "$TEST_TMP/hermetic.stdout" "$TEST_TMP/hermetic.stderr" >&2
-    printf 'ERROR: tests/payload-update.sh fails under the provisioning exports.\n' >&2
-    exit 1
-fi
-grep -Fxq 'payload-update=PASS' "$TEST_TMP/hermetic.stdout" ||
-    fail_run hermetic 'tests/payload-update.sh did not print payload-update=PASS.'
 
 printf 'test-entrypoints=PASS\n'

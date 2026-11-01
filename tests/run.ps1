@@ -6,18 +6,7 @@ param([switch]$CI, [switch]$CheckPrerequisites)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
-# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
-# docs/bootstrap.md) and other dotfiles knobs never reach the suites from the
-# caller; each case sets what it needs. The same list as tests/*.sh.
-foreach ($knob in @('DOTFILES_AUTO_UPDATE', 'DOTFILES_AUTO_STOW', 'DOTFILES_HOST', 'DOTFILES_DIR',
-        '_DOTFILES_CHECKED', 'DOTFILES_STOW_WITHOUT_OH_MY_ZSH', 'DOTFILES_COLOR',
-        'DOTFILES_PAYLOAD_AUTO_UPDATE', 'DOTFILES_PAYLOAD_ITEMS', 'DOTFILES_PAYLOAD_TIMEOUT', 'AWESOME_SKILLS_AUTO_UPDATE',
-        '_DOTFILES_PAYLOAD_CHECKED',
-        'CODING_AGENT_KIT_CONFIG', 'CODING_AGENT_KIT_COLOR', 'CODING_AGENT_KIT_USAGE_FILE',
-        'CODING_AGENT_KIT_TOKEN_ID', 'CODING_AGENT_KIT_CLAUDE_PID', 'CODING_AGENT_KIT_REPO_URL',
-        'XDG_STATE_HOME', 'XDG_DATA_HOME')) {
-    Remove-Item -LiteralPath "Env:$knob" -ErrorAction Ignore
-}
+. (Join-Path $PSScriptRoot 'lib/environment.ps1')
 
 if ($CI -and -not $IsWindows) {
     throw 'The native Windows CI entrypoint requires Windows.'
@@ -46,6 +35,10 @@ if ($CheckPrerequisites) {
     Write-Output 'test-prerequisites=PASS'
     exit 0
 }
+
+Write-Output '==> test_environment.py'
+& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_environment.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Test environment isolation checks failed.' }
 
 Write-Output '==> test_config_sync.py'
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_config_sync.py') -PathType Leaf)) {
@@ -81,6 +74,10 @@ Write-Output '==> update-hooks.ps1'
 # Use a child process so fixtures cannot leak mock functions or global state.
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'update-hooks.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell update-hook tests failed.' }
+
+Write-Output '==> test_payload_download.py'
+& $syncPython -I -B (Join-Path $PSScriptRoot 'test_payload_download.py')
+if ($LASTEXITCODE -ne 0) { throw 'Payload loopback download tests failed.' }
 
 Write-Output '==> payload-update.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'payload-update.ps1')

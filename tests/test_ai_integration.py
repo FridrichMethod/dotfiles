@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 KIT_HOME = Path(os.environ["DOTFILES_TEST_KIT_HOME"]) if os.environ.get("DOTFILES_TEST_KIT_HOME") else None
@@ -72,7 +73,8 @@ class IsolatedHome(unittest.TestCase):
             (self.command_bin / "codex-as").symlink_to(SOURCE / "bin/codex-as")
         self.cwd = self.base / "current working directory"
         self.cwd.mkdir()
-        self.env = os.environ.copy()
+        self.env = {name: value for name, value in os.environ.items()
+                    if not name.startswith(("CODING_AGENT_KIT_", "_CODING_AGENT_KIT_"))}
         # No configuration of the caller's coding-agent-kit is in reach.
         for name in (*ENV_CONFLICTS, "CODEX_HOME", "CODEX_SQLITE_HOME", "PYTHONPATH", "BASH_ENV", "ENV", "ZDOTDIR",
                      "XDG_CONFIG_HOME", "XDG_STATE_HOME", "CODING_AGENT_KIT_CONFIG", "CODING_AGENT_KIT_COLOR",
@@ -80,6 +82,18 @@ class IsolatedHome(unittest.TestCase):
                      "CLAUDE_CODE_OAUTH_TOKEN"):
             self.env.pop(name, None)
         self.env.update(HOME=str(self.home), PATH=os.pathsep.join((str(self.command_bin), self.env["PATH"])))
+
+
+class IntegrationIsolation(unittest.TestCase):
+    def test_new_kit_variables_cannot_reach_fixture_launchers(self):
+        with mock.patch.dict(os.environ, {"CODING_AGENT_KIT_FUTURE_OPTION": "caller", "_CODING_AGENT_KIT_FUTURE_OPTION": "caller"}):
+            fixture = IsolatedHome()
+            try:
+                fixture.setUp()
+                self.assertNotIn("CODING_AGENT_KIT_FUTURE_OPTION", fixture.env)
+                self.assertNotIn("_CODING_AGENT_KIT_FUTURE_OPTION", fixture.env)
+            finally:
+                fixture.doCleanups()
 
 
 class CodexAs(IsolatedHome):
@@ -112,6 +126,8 @@ with open(os.environ["FAKE_FZF_LOG"], "a") as log:
                                 capture_output=True, text=True)
         shown = line.split("\0")[1] if "\0" in line else line
         log.write("=== " + shown + "\n" + result.stdout + result.stderr)
+# Closing the log publishes all buffered preview records before completion.
+open(os.environ["FAKE_FZF_LOG"] + ".done", "w").close()
 sys.exit(130)
 """
 
@@ -204,6 +220,8 @@ class Enrollment(IsolatedHome):
                                                   "label   Work: billing", "usage   not recorded yet"])):
             with self.subTest(line=line):
                 log.unlink(missing_ok=True)
+                complete = Path(str(log) + ".done")
+                complete.unlink(missing_ok=True)
                 pid, fd = pty.fork()
                 if pid == 0:
                     os.chdir(self.cwd)
@@ -215,11 +233,15 @@ class Enrollment(IsolatedHome):
                     while b"READY> " not in output and time.monotonic() < deadline:
                         if select.select([fd], [], [], 0.1)[0]:
                             output += os.read(fd, 4096)
+                    self.assertIn(b"READY> ", output, "zsh never became ready: " + output.decode(errors="replace"))
                     os.write(fd, line)
-                    while not log.exists() and time.monotonic() < deadline:
+                    deadline = time.monotonic() + 20
+                    while not complete.exists() and time.monotonic() < deadline:
                         if select.select([fd], [], [], 0.1)[0]:
                             output += os.read(fd, 4096)
-                    time.sleep(0.5)
+                    self.assertTrue(complete.exists(), "fake fzf did not finish its previews; terminal:\n" +
+                                    output.decode(errors="replace")[-2000:] + "\npartial previews:\n" +
+                                    (log.read_text() if log.exists() else "<no log>"))
                 finally:
                     # The session pty.fork started (its pid is the process group too): only
                     # the test's own zsh and what it ran. The terminal is closed before the
@@ -281,12 +303,21 @@ class ClaudeHelperWiring(unittest.TestCase):
             self.assertEqual(event, HELPER_RUNS[name][0], command)
 
     @needs_kit
-    def test_settings_wire_exactly_the_installed_helpers(self):
-        delivered = sorted(path.name for path in HELPERS.iterdir())
-        for name in delivered:
-            self.assertTrue((HELPERS / name).is_file(), f"{HELPERS / name} is not a file")
-        self.assertEqual(sorted({name for _, _, name in wired_helpers()}), delivered,
-                         "settings.json must load exactly the helpers the installed coding-agent-kit delivers")
+    def test_settings_required_helpers_are_installed(self):
+        for name in {name for _, _, name in wired_helpers()}:
+            self.assertTrue((HELPERS / name).is_file(), f"configured helper {HELPERS / name} is missing")
+
+
+    @needs_kit
+    def test_additional_installed_helpers_are_optional(self):
+        with tempfile.TemporaryDirectory() as directory:
+            helpers = Path(directory)
+            for name in {name for _, _, name in wired_helpers()}:
+                (helpers / name).write_text("fixture")
+            (helpers / "future-helper.cjs").write_text("optional")
+            (helpers / "future-assets").mkdir()
+            with mock.patch(__name__ + ".HELPERS", helpers):
+                self.test_settings_required_helpers_are_installed()
 
 
 class ClaudeHelperCommands(IsolatedHome):
@@ -317,8 +348,8 @@ class ClaudeHelperCommands(IsolatedHome):
             self.assertEqual((result.returncode, result.stdout), (1, ""), command)
             self.assertIn(str(installed / name), result.stderr)
         installed.mkdir(parents=True)
-        for path in HELPERS.iterdir():
-            shutil.copyfile(path, installed / path.name)  # as the kit's installer copies them
+        for name in {name for _, _, name in wired}:
+            shutil.copyfile(HELPERS / name, installed / name)  # only helpers these settings configure
         for _, command, name in wired:
             for stdin, status, stream in HELPER_RUNS[name][1]:
                 with self.subTest(helper=name, stdin=stdin):

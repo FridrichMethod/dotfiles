@@ -10,6 +10,7 @@
 param()
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+. (Join-Path $PSScriptRoot 'lib/environment.ps1')
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })

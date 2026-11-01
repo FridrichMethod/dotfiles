@@ -133,20 +133,33 @@ payload_script() {
             case ${source##*/} in
                 '' | .* | *[!A-Za-z0-9._-]*) download=$staging/install ;;
             esac
+            download_status=1
             if command -v curl >/dev/null 2>&1; then
-                curl -fsSL --connect-timeout "$connect" --max-time "$timeout" -o "$download" -- "$source" && offline=
+                curl -fsSL --connect-timeout "$connect" --max-time "$timeout" -o "$download" -- "$source" && download_status=0
             elif command -v wget >/dev/null 2>&1; then
-                wget -q -T "$timeout" -t 1 -O "$download" -- "$source" && offline=
+                # wget's -T bounds idle reads, not the whole response. Use
+                # an existing deadline tool; never run it without that bound.
+                if command -v timeout >/dev/null 2>&1; then
+                    deadline_command=timeout
+                elif command -v gtimeout >/dev/null 2>&1; then
+                    deadline_command=gtimeout
+                else
+                    unstage
+                    dotfiles_log error "wget requires timeout or gtimeout; install curl instead to download $source"
+                    return 1
+                fi
+                "$deadline_command" "$timeout" wget -q -T "$timeout" -t 1 -O "$download" -- "$source" && download_status=0
             else
                 unstage
                 dotfiles_log error "neither curl nor wget is installed; cannot download $source"
                 return 1
             fi
-            if [ -n "$offline" ] || [ ! -s "$download" ]; then
+            if [ "$download_status" != 0 ] || [ ! -s "$download" ]; then
                 unstage
                 dotfiles_log error "cannot download $source (within ${timeout}s)"
                 return 1
             fi
+            offline=
             set -- "$download" "$@"
             ;;
         *)
@@ -227,8 +240,13 @@ run() {
     eval "$value" || status=$?
     case $status in
         0)
-            if (umask 077 && date +%s >"$state/$1.stamp.tmp" && mv -f "$state/$1.stamp.tmp" "$state/$1.stamp" &&
-                rm -f "$state/$1.failed"); then
+            if (
+                umask 077
+                stamp_tmp=$(mktemp "$state/$1.stamp.tmp.XXXXXX") || exit 1
+                trap 'rm -f "$stamp_tmp"' 0
+                date +%s >"$stamp_tmp" && mv -f "$stamp_tmp" "$state/$1.stamp" &&
+                    rm -f "$state/$1.failed"
+            ); then
                 dotfiles_log ok "$1: $action done"
             else
                 dotfiles_log error "$1: cannot record the success in $state"
