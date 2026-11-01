@@ -1599,7 +1599,7 @@ Applies to every host. Once stowed, every interactive shell (zsh through
 PowerShell 7 profile, in ordinary unelevated sessions) runs the payload hook,
 `scripts/payload-update.sh` (`scripts/payload-update.ps1`), once per session.
 It installs coding-agent-kit (the account launchers and the Claude helpers
-that `settings.json` runs; on Windows the helpers only), PyMOLScripts
+that `settings.json` runs; Unix only, nothing on native Windows), PyMOLScripts
 (`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills (`~/.claude/skills`,
 `~/.codex/skills`) through each repository's own installer, named in
 [`config/payloads.tsv`](../config/payloads.tsv): an absent one in the
@@ -1623,8 +1623,9 @@ until the doctor's `payloads` row is `ok`; `setup-host.ps1` prints no block,
 and `doctor.ps1`'s `payloads` row points here.
 
 - **Check:** the doctor's `payloads` row (`./doctor.sh --host H`,
-  `.\doctor.ps1 -Host win`): each selected item passes its probe, and an
-  installed kit has its three helpers in `~/.claude/coding-agent-kit/`.
+  `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
+  Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
+  (`doctor.ps1` checks only PyMOLScripts and awesome-skills).
 - **Install:** opt-out, as above; nothing to do to keep it on. To run it once
   now, in the foreground, use the line the setup-host block prints, which works
   before the stow too and also in a shell that exports

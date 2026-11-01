@@ -185,24 +185,31 @@ function Get-DoctorStructuralResults {
 }
 
 function Get-DoctorPayloadResult {
-    # Each item of DOTFILES_PAYLOAD_ITEMS (default kit pymol skills) passes
-    # its windows-probe row of config/payloads.tsv and an installed kit left
-    # the Claude helpers; an item whose last run failed (the hook's
-    # ITEM.failed) or that waits for stow-all (a stow-links path still linked
-    # into the retired package) is named with what to run. Every shortfall
-    # only warns.
+    # Each item of DOTFILES_PAYLOAD_ITEMS (default: those with a
+    # windows-install row of config/payloads.tsv, pymol skills) that installs
+    # here passes its windows-probe row; an item whose last run failed (the
+    # hook's ITEM.failed) or that waits for stow-all (a stow-links path still
+    # linked into the retired package) is named with what to run. Every
+    # shortfall only warns. An item without a windows-install row (the kit,
+    # which installs nothing on native Windows) is not checked, as the hook
+    # does not run it.
     $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
     $config = Join-Path $RepoRoot 'config/payloads.tsv'
     if (-not [IO.File]::Exists($config)) { return New-DoctorResult warn payloads ai "no readable $config" $step }
     $rows = @{}
+    $available = [Collections.Generic.List[string]]::new()
     foreach ($line in [IO.File]::ReadAllLines($config)) {
         $parts = $line.Split("`t", 3)
         if (-not $line.StartsWith('#') -and $parts.Count -eq 3 -and -not $rows.ContainsKey("$($parts[0])`t$($parts[1])")) {
             $rows["$($parts[0])`t$($parts[1])"] = $parts[2]
+            if ($parts[1] -ceq 'windows-install') { $available.Add($parts[0]) }
         }
     }
-    $items = if ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) { @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ }) }
-    else { @('kit', 'pymol', 'skills') }
+    # A name config/payloads.tsv does not know stays, to be named below.
+    $items = if ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) {
+        @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ -and ($_ -in $available -or -not $rows.ContainsKey("$_`tdays")) })
+    }
+    else { @($available) }
     $state = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'dotfiles/payload' } else { Join-Path $HOME '.local/state/dotfiles/payload' }
     $short = @()
     $found = @()
@@ -230,21 +237,10 @@ function Get-DoctorPayloadResult {
         if ($probe) { try { $installed = [bool](& ([scriptblock]::Create($probe))) } catch { } }
         if (-not $probe) { $short += "$item (no windows-probe row)" }
         elseif (-not $installed) { $short += $item }
-        else {
-            $found += $item
-            # An installed kit must have left the helpers settings.json runs.
-            if ($item -ceq 'kit') {
-                foreach ($helper in @('statusline.cjs', 'notify.cjs', 'check-git-hooks.cjs')) {
-                    if (-not [IO.File]::Exists([IO.Path]::Combine($HOME, '.claude', 'coding-agent-kit', $helper))) {
-                        $short += "~\.claude\coding-agent-kit\$helper"
-                    }
-                }
-            }
-        }
+        else { $found += $item }
     }
     if ($short.Count) {
         $issues += "not installed: $($short -join ', '): the next interactive PowerShell installs them, or run sync-payloads ITEM now"
-        if ("$short" -like '*kit*') { $issues += "until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" }
     }
     if ($issues.Count) { return New-DoctorResult warn payloads ai ($issues -join '; ') $step }
     if ($found.Count) { return New-DoctorResult ok payloads ai "installed: $($found -join ', ')" $step }

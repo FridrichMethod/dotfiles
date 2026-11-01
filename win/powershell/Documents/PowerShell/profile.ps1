@@ -236,7 +236,8 @@ if ($IsInteractive -and -not $IsAgentSession) {
 
     # Install or update the payload repos now, in the foreground, whatever
     # their refresh intervals (scripts/payload-update.ps1): sync-payloads
-    # [kit] [pymol] [skills], all by default; sync-skills is sync-payloads skills.
+    # [pymol] [skills], both by default (coding-agent-kit installs nothing on
+    # native Windows); sync-skills is sync-payloads skills.
     function global:sync-payloads {
         $dotfiles = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
         & (Join-Path $dotfiles 'scripts/payload-update.ps1') -Now @args

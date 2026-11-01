@@ -159,7 +159,7 @@ grep -Fxq 'bootstrap-manifest=PASS' "$TEST_TMP/git-hook.stdout" ||
 # stage and commit into that repository. Each suite that runs fixture Git in
 # its own body drops them before its first git command: the Bash suites with
 # this unset, the PowerShell ones by removing every GIT_* entry.
-for suite in bootstrap-manifest.sh doctor.sh e2e-harness.sh setup-host.sh unix-installer.sh; do
+for suite in bootstrap-manifest.sh doctor.sh e2e-harness.sh payload-update.sh setup-host.sh unix-installer.sh; do
     if ! grep -Eq '^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE ' "$TEST_DIR/$suite"; then
         printf 'ERROR: tests/%s does not unset GIT_DIR and GIT_INDEX_FILE for its fixture Git.\n' "$suite" >&2
         exit 1

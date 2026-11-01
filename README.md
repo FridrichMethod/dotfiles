@@ -49,7 +49,7 @@ cd ~/dotfiles
 - **Cross-host AI defaults**: global Claude Code and Codex instructions, curated permissions, guarded exec policies, reasoning effort, and portable plugin declarations live in `common/`.
 - **No templating, no conditionals** - Stow symlinks the right files into `$HOME`.
 - **Self-healing**: a shell hook checks for upstream changes once per login session and fast-forwards behind branches.
-- **Payload repos**: [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit), [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) and [awesome-skills](https://github.com/FridrichMethod/awesome-skills) are installed and kept current by their own installers, from a session-once hook on Unix and Windows; no submodules.
+- **Payload repos**: [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit), [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) and [awesome-skills](https://github.com/FridrichMethod/awesome-skills) are installed and kept current by their own installers, from a session-once hook on Unix and Windows (the kit on Unix only); no submodules.
 - **CI-checked**: Ubuntu, macOS and native Windows run behavioral tests; Ubuntu also runs `shellcheck`, `shfmt`, `stylua`, and hygiene hooks - same as the local pre-commit.
 - **HPC-aware**: Stanford Sherlock and Marlowe overlays handle login-node quirks, module systems, and SLURM-friendly defaults.
 
@@ -207,7 +207,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 - **`ll` / `la`** use eza and expand wildcards the way a POSIX shell would (`ll *.pdb`), including hidden items; option values such as `-I '*.pyc'` (also after a value-optional flag like `-F`) and existing literal names such as `[draft].md` pass through unchanged; `~\` and drive-qualified patterns expand to full paths.
 - **conda loads lazily.** A `conda` stub removes itself and runs `conda.exe shell.powershell hook` on first use, which saves about 0.8 s per start, and comes back if that hook fails or is interrupted; Tab completes subcommands (also mid-line) and environment names. When oh-my-posh owns the prompt, `CONDA_CHANGEPS1=false` leaves the env indicator to the theme; other sessions keep conda's `(env)` prefix, except child shells of an oh-my-posh session, which inherit the setting. Do not run `conda init powershell`, because it writes an eager, absolute-path block back into the profile.
 - **Prompt.** oh-my-posh loads the tracked theme `~/.config/oh-my-posh/prompt.omp.json` (from `win/oh-my-posh`), falling back to the builtin `catppuccin` until stow links it. The theme emits OSC 133 prompt marks, reports the working directory (OSC 9;9 in Windows Terminal, OSC 7 in WezTerm), and collapses earlier prompts with a transient prompt. The theme never asks to upgrade, but the MSIX package can update itself through App Installer; after an upgrade, move the theme's `$schema` pin to the new release. Preview edits with `oh-my-posh debug --config <file>` (inside an initialized pwsh, `print primary` renders the session's cached theme) and open a new shell to apply them. After zoxide wraps the prompt, a final wrapper keeps `$LASTEXITCODE` intact across directory changes.
-- **`sync-payloads` / `sync-skills`** install or update the payload repos now, in the foreground (`sync-payloads [kit] [pymol] [skills]`, all by default); run them from an ordinary, unelevated PowerShell.
+- **`sync-payloads` / `sync-skills`** install or update the payload repos now, in the foreground (`sync-payloads [pymol] [skills]`, both by default; coding-agent-kit installs nothing on native Windows, and `sync-payloads kit` says so); run them from an ordinary, unelevated PowerShell.
 - **Windows PowerShell 5.1** gets only the lazy conda stub and the same conda completer. Keep that file ASCII and 5.1 syntax; it runs only if the 5.1 execution policy allows scripts.
 - **Leave `Documents\PowerShell\Microsoft.PowerShell_profile.ps1` empty.** It runs after the tracked profile, and installers that follow the `notepad $PROFILE` advice append to it, outside the guard and the tests.
 
@@ -472,6 +472,7 @@ Keeps the three [payload repos](#payload-repos) installed and current by running
 | Concurrency | Each installer locks itself (exit 75: busy, retried next session); the hook adds no lock |
 | State and log | `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (`ITEM.stamp`, `ITEM.failed`, `payload.log`); `%LOCALAPPDATA%\dotfiles\payload\` on Windows |
 | Failure handling | `ITEM.failed` (time, exit status, the end of a background run's output); every later session prints one line about it and the doctor reports it; retried in the background six hours later, or now with `sync-payloads ITEM` |
+| Stopped for a person | Exit 3 (the `person-status` rows): PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone, and awesome-skills at an interrupted update; worded as waiting for you, until you do what the installer's message says |
 | Before stow-all ran | A kit path still linked into the retired package: the hook says to run `stow-all` instead of calling the kit's installer |
 | Manual trigger | `sync-payloads [kit] [pymol] [skills]` (all by default) and `sync-skills`, in the foreground, whatever the intervals |
 
@@ -480,9 +481,9 @@ Keeps the three [payload repos](#payload-repos) installed and current by running
 | `DOTFILES_PAYLOAD_AUTO_UPDATE` | `1` | `0` disables the automatic runs; `sync-payloads` still works |
 | `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` | the items it manages; set but empty manages none |
 
-**Requirements** - POSIX `sh` and curl or wget (PowerShell 7 on Windows), then what each repository's installer needs, which its README lists (Git for the kit and the skills; Python 3.11+ for the launchers, and with PyYAML for the skill installer). A download goes to a temporary file first and is never piped into a shell.
+**Requirements** - POSIX `sh` and curl or wget (PowerShell 7 on Windows), then what each repository's installer needs, which its README lists (Git for the kit and the skills; Python 3.11+ for the launchers, and with PyYAML for the skill installer). A download goes first into a fresh private temporary directory of its own, removed afterwards, and is never piped into a shell.
 
-**On Windows** - `scripts/payload-update.ps1` runs at the end of the PowerShell 7 profile, right after `scripts/dotfiles-update.ps1`, in interactive consoles only, and starts its refreshes in a hidden, detached `pwsh -NoProfile`. It never runs automatically from an elevated session, whose installs would leave Administrators-owned git clones; open an ordinary PowerShell after an elevated stow.
+**On Windows** - `scripts/payload-update.ps1` runs at the end of the PowerShell 7 profile, right after `scripts/dotfiles-update.ps1`, in interactive consoles only, and starts its refreshes in a hidden, detached `pwsh -NoProfile`. It manages `pymol` and `skills`, the items with a `windows-install` row: coding-agent-kit installs nothing on native Windows (a 0.6 install stays frozen there; [docs/payloads.md](docs/payloads.md#the-kit-leaves-native-windows) has the command that removes it). It never runs automatically from an elevated session, whose installs would leave Administrators-owned git clones; open an ordinary PowerShell after an elevated stow.
 
 The old `AWESOME_SKILLS_*` variables are read by nothing any more, except that `AWESOME_SKILLS_AUTO_UPDATE=0` still leaves skills out of the automatic runs, with a notice, until 2027-01-31; such a host sets `DOTFILES_PAYLOAD_ITEMS='kit pymol'` (or `DOTFILES_PAYLOAD_AUTO_UPDATE=0`) instead. [docs/payloads.md](docs/payloads.md) is the full contract, including the migration from the submodules.
 
@@ -517,12 +518,12 @@ three, then fast-forward `main` to the green commit. Unix runs
 `./tests/run.sh --ci`; Windows runs
 `pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI`. Each platform's
 assigned suites are mandatory, including native Windows installer fixtures;
-missing dependencies fail CI instead of silently skipping tests. Each job
-first installs the real coding-agent-kit of the declared channel with the
-payload hook's own command into a home that no test writes (on Windows the
-runner's profile) and points `DOTFILES_TEST_KIT_HOME` at it, for the cases that run the kit; without that
-variable, as in a local run, those cases skip; a failed install fails the
-job. A second,
+missing dependencies fail CI instead of silently skipping tests. Each Unix
+job first installs the real coding-agent-kit of the declared channel with the
+payload hook's own command into a home that no test writes and points
+`DOTFILES_TEST_KIT_HOME` at it, for the cases that run the kit; without that
+variable, as in a local run and on Windows, where the kit installs nothing,
+those cases skip; a failed install fails the job. A second,
 opt-in workflow, `bootstrap-e2e.yml`, runs the day-zero bootstrap for real on
 every host (fresh containers for the Linux hosts, the macOS and Windows
 runners natively) on demand, weekly and on `e2e-ci/**` branches; it is never
@@ -558,13 +559,13 @@ The payload repos have independent documentation hooks.
 | [`common/codex/.codex/config.toml`](common/codex/.codex/config.toml) | merged into `~/.codex/config.toml` | `gpt-6-astra` with `xhigh`, `workspace-net` (`:workspace` + public network), `on-request` + `auto_review`, multi-agent, memories |
 | [`common/codex/.codex/rules/portable.rules`](common/codex/.codex/rules/portable.rules) | materialized as `~/.codex/rules/portable.rules` | Prompt-only guardrails for recursive deletion, destructive Git/disk operations, and privilege escalation |
 
-Not tracked here, but installed on every host by the [payload hook](#payload-repos) from [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit):
+Not tracked here, but installed on every Unix host by the [payload hook](#payload-repos) from [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit):
 
 | Installed path | What it is |
 |---|---|
-| `~/.claude/coding-agent-kit/{statusline,notify,check-git-hooks}.cjs` | Local Node.js helpers for the status line, notifications, and Git hook checks, which `settings.json` runs (copies on Windows) |
-| `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` (Unix only) |
-| `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases (Unix only) |
+| `~/.claude/coding-agent-kit/{statusline,notify,check-git-hooks}.cjs` | Local Node.js helpers for the status line, notifications, and Git hook checks, which `settings.json` runs (on native Windows, where none is installed, the commands exit 0 silently while a helper is missing) |
+| `~/.local/bin/claude-as` | `claude-as ACCOUNT [ARGS...]` runs Claude Code with the `claude setup-token` OAuth token kept untracked in `~/.secrets/claude-ACCOUNT` |
+| `~/.local/bin/codex-as` | `codex-as NAME [ARGS...]` uses a fixed `~/.codex/accounts/NAME` view, private credentials in untracked `~/.secrets/codex-NAME.json`, shared config/session/SQLite state and account maintenance leases |
 
 `codex-as` and `claude-as` are executables on PATH; no shell sourcing is needed.
 The kit's README describes account views, login, completion, concurrency, takeover and resume.
@@ -592,11 +593,11 @@ Claude Code rewrites `~/.claude/settings.json` at runtime (plugin toggles, permi
 
 The baseline sets [`autoMode.classifyAllShell = true`](https://code.claude.com/docs/en/auto-mode-config#route-all-shell-commands-through-the-classifier), so shell allow rules are suspended in auto mode and shell commands go through classifier review. This adds classifier latency; explicit ask/deny rules still apply. Other permission modes retain their existing allow rules. The setting requires Claude Code v2.1.193 or later.
 
-`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/coding-agent-kit/*.cjs`, which coding-agent-kit's install puts there. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's [README](https://github.com/FridrichMethod/coding-agent-kit) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
+`settings.json` wires the status line, notification and Git hook check helpers in `~/.claude/coding-agent-kit/*.cjs`, which coding-agent-kit's install puts there on Linux, macOS and WSL. A missing helper fails visibly there (exit 1: no status line, a non-blocking hook error); on native Windows, where the kit installs nothing, each command exits 0 silently while its helper is missing, and a copy a 0.6 install left still runs. They require Node.js 22 or newer on `PATH` (18 and 20 are end of life; Git is optional for the status line). The kit's [README](https://github.com/FridrichMethod/coding-agent-kit) describes what each helper shows, emits or blocks. The portable hook arrays also settle plugin ownership:
 
 - **Plugin hooks:** the enabled Everything Claude Code plugin owns its SessionStart, Stop, and SessionEnd hooks. Empty portable arrays remove the old copied registrations during sync; disabling the plugin disables those lifecycle features. This prevents stale copies after plugin updates, rather than assuming a speedup from copies Claude may already deduplicate.
 
-Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to sync these defaults, and `sync-payloads kit` if the helpers are not installed yet, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
+Run `./stow-all.sh <host>` (`.\stow-all.ps1 win` on Windows) to sync these defaults, and on Unix `sync-payloads kit` if the helpers are not installed yet, then start a new Claude session. `effortLevel` remains `xhigh`, and model selection remains machine-local. Run `node --test tests/claude-customizations.cjs` for focused checks; the same checks are included in pre-commit and `./tests/run.sh`.
 
 Third-party Markdown payloads copied into `~/.claude/rules/` are not vendored: Claude's plugin system does not load plugin-bundled rules automatically, and the audited `everything-claude-code` copies included conflicting global requirements such as automatic commit/push, unconditional parallel agents, and an 80% coverage floor. [`CLAUDE.md`](common/claude/.claude/CLAUDE.md) remains the reviewed cross-host instruction source. With native ancestor loading enabled, no extra `AGENTS.md` should exist in any ancestor directory on a host, including `~/.claude/AGENTS.md`: Claude Code treats that file as the home directory's `.claude/AGENTS.md` and can inject it into descendant projects.
 
@@ -635,12 +636,12 @@ After cloning on a new machine:
 
 ## Payload repos
 
-Three first-party repositories are installed on every host, by their own
-installers, instead of living in this one:
+Three first-party repositories are installed on every host (coding-agent-kit
+on every Unix one), by their own installers, instead of living in this one:
 
 | Item | Repository | Installs (Unix) | Native Windows |
 |---|---|---|---|
-| `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | the newest patch release of channel `0.6`: `codex-as`, `claude-as`, their Bash and zsh completions, the three Claude helpers | the three helpers only |
+| `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | the newest patch release of channel `0.6`: `codex-as`, `claude-as`, their Bash and zsh completions, the three Claude helpers | nothing: the kit runs on Linux, macOS and WSL only |
 | `pymol` | [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) | `~/.pymolrc`, `~/.pymolrc.py` | the same |
 | `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | the skill library of `~/.claude/skills/` and `~/.codex/skills/` | the same |
 
@@ -658,9 +659,15 @@ that one file. The [payload hook](#auto-update-hooks) runs those commands;
 `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml` for the `codex`
 and `claude` executables and the `~/.codex` and `~/.secrets` roots; dotfiles
 ships none, so the defaults apply (`codex-as --show-config` prints them).
-`codex-as --account-info NAME` and `claude-as --account-info NAME` print an
-account's last-seen email or label and usage, offline; the zsh completions
-and the fzf-tab preview show them.
+`codex-as --info NAME` and `claude-as --info NAME` (`-i`) print an account's
+last-seen email or label and usage, offline; the zsh completions and the
+fzf-tab preview show them. `--list` (`-l`) lists the accounts,
+`claude-as --label NAME LABEL` sets a Claude account's label, and
+`codex-as --version` (`-V`) prints the kit's version and install form. These
+are the kit 0.7 names; the 0.6 spellings (`--account-info`,
+`--list-accounts`, `--set-label`) stay accepted, and the fzf-tab preview
+still calls `--account-info`, so a host that runs 0.6 for a moment after a
+pull keeps working.
 
 Hosts that had the two submodules converge in one login: the pull leaves
 their checkouts, which `.gitignore` and `.stowrc` keep harmless and the

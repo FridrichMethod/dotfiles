@@ -193,11 +193,12 @@ function Invoke-E2EStepLoginShell {
 function Invoke-E2EStepPayloads {
     # The Windows run line of docs/bootstrap.md H7-payloads,
     # scripts\payload-update.ps1 -Now, with the PATH a new terminal reads:
-    # every payload repo of config/payloads.tsv installs from the network
-    # through its own install.ps1, under the block limit, since three
-    # installs run in a row. It passes when that exits 0 and the payloads row
-    # of doctor.ps1 -Host win -Tsv is then ok and names what it found
-    # installed.
+    # every payload repo of config/payloads.tsv with a windows-install row
+    # (PyMOLScripts and awesome-skills; coding-agent-kit installs nothing on
+    # native Windows) installs from the network through its own install.ps1,
+    # under the block limit, since the installs run in a row. It passes when
+    # that exits 0 and the payloads row of doctor.ps1 -Host win -Tsv is then
+    # ok and names what it found installed.
     Update-E2EPath
     Start-E2EStep payloads setup:payloads
     $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Block']

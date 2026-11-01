@@ -100,15 +100,9 @@ jobs:
       run:
         shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
     steps:
+      # No coding-agent-kit here: it installs nothing on native Windows, so
+      # the cases that need an installed kit skip (DOTFILES_TEST_KIT_HOME).
       - uses: actions/checkout@v6
-      # As in the Linux job, through the PowerShell twin of the payload hook.
-      # PowerShell's $HOME is the account's profile whatever USERPROFILE says,
-      # so the kit goes into the runner's own profile, which no test writes.
-      - name: Install the real coding-agent-kit
-        run: |
-          & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File scripts/payload-update.ps1 -Now kit
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "DOTFILES_TEST_KIT_HOME=$HOME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"

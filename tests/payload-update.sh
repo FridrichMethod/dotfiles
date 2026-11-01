@@ -11,6 +11,10 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
+# Keep fixture Git independent of a commit hook's repository and index.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 # scripts/payload-update.sh against fake installers served from file:// URLs:
 # the real config/payloads.tsv with its raw.githubusercontent.com prefix
 # pointed at a local directory, and a curl that refuses every other scheme.
@@ -72,23 +76,41 @@ done
 printf 'curl\n' >>"$EVENTS"
 exec "$REAL_CURL" "$@"
 SH
+# record-cwd NAME: a fake's working directory in EVENTS.NAME-cwd and, with
+# PROBE_GIT set, in EVENTS.NAME-git the repository git discovers from there
+# (empty when none), as the real installers' repository-less git calls would.
+cat >"$TEST_TMP/bin/record-cwd" <<'SH'
+#!/bin/sh
+pwd -P >"$EVENTS.$1-cwd"
+[ -n "${PROBE_GIT-}" ] || exit 0
+unset GIT_DIR GIT_WORK_TREE GIT_CEILING_DIRECTORIES
+git rev-parse --absolute-git-dir >"$EVENTS.$1-git" 2>/dev/null || :
+SH
 # The kit's bootstrap installs a managed root whose current/install.sh is the
-# update command, and the three Claude helpers.
+# update command, and the three Claude helpers. Every fake records its
+# working directory with record-cwd.
 cat >"$REMOTE/coding-agent-kit/main/install.sh" <<'SH'
 #!/bin/sh
 printf 'kit-install [%s] stdin=[%s]\n' "$*" "$(cat)" >>"$EVENTS"
+record-cwd kit
 [ "${FAKE_KIT_STATUS:-0}" = 0 ] || exit "$FAKE_KIT_STATUS"
 root=${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit
 mkdir -p "$root/current" "$HOME/.claude/coding-agent-kit"
-printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'echo "kit-update: fake output" >&2' \
-    'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
+printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'record-cwd kit' \
+    'echo "kit-update: fake output" >&2' 'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
 for helper in statusline notify check-git-hooks; do
     : >"$HOME/.claude/coding-agent-kit/$helper.cjs"
 done
 SH
+# PyMOLScripts' and awesome-skills' installers read a configs/ or scripts/
+# directory beside themselves as a checkout's, so their fakes record the
+# directory they run from: its path, mode and entries.
 cat >"$REMOTE/PyMOLScripts/main/install.sh" <<'SH'
 #!/bin/sh
 printf 'pymol-install [%s]\n' "$*" >>"$EVENTS"
+here=$(dirname -- "$0")
+printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.pymol-dir"
+record-cwd pymol
 [ "${FAKE_PYMOL_STATUS:-0}" = 0 ] || exit "$FAKE_PYMOL_STATUS"
 : >"$HOME/.pymolrc"
 : >"$HOME/.pymolrc.py"
@@ -96,11 +118,14 @@ SH
 cat >"$REMOTE/awesome-skills/main/install.sh" <<'SH'
 #!/bin/bash
 printf 'skills-install [%s] bash=%s\n' "$*" "${BASH_VERSION:+yes}" >>"$EVENTS"
+here=$(dirname -- "$0")
+printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.skills-dir"
+record-cwd skills
 [ "${FAKE_SKILLS_STATUS:-0}" = 0 ] || exit "$FAKE_SKILLS_STATUS"
 mkdir -p "$HOME/.local/share/awesome-skills"
 printf '{}\n' >"$HOME/.local/share/awesome-skills/claude.json"
 SH
-chmod +x "$TEST_TMP/bin/curl"
+chmod +x "$TEST_TMP/bin/curl" "$TEST_TMP/bin/record-cwd"
 
 CASE=0
 # new_home: a fresh HOME and event log for the next case.
@@ -303,9 +328,10 @@ now nope
 expect_text "$ERR" "unknown item 'nope'"
 
 # An exit with the item's person-status row (awesome-skills' 3: an
-# interrupted update it cannot undo alone) is worded as one that waits for a
-# person, in the run and in every later session; the same exit from an item
-# without that row is an ordinary failure.
+# interrupted update it cannot undo alone; PyMOLScripts' 3: a locally edited
+# rc file it will not overwrite) is worded as one that waits for a person, in
+# the run and in every later session; the same exit from an item without that
+# row is an ordinary failure.
 new_home
 FAKE_SKILLS_STATUS=3 now skills
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for an exit that waits for a person'
@@ -313,11 +339,19 @@ expect_text "$ERR" '[dotfiles] [error] skills: stopped for a person (exit 3): do
 [[ -s "$STATE/skills.failed" && ! -e "$STATE/skills.stamp" ]] || fail 'exit 3 was not recorded'
 FAKE_KIT_STATUS=3 now kit
 expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 3); retry with: sync-payloads kit'
-source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit'
+FAKE_PYMOL_STATUS=3 now pymol
+[[ "$STATUS" == 1 && -s "$STATE/pymol.failed" ]] || fail 'a PyMOL exit 3 was not a recorded failure'
+expect_text "$ERR" '[dotfiles] [error] pymol: stopped for a person (exit 3): do what its message says, then run sync-payloads pymol'
+source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit pymol'
 expect_text "$ERR" "[dotfiles] [warn] skills: its last run stopped for a person (exit 3, see $STATE/skills.failed); run sync-payloads skills and do what it asks"
 expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 3, see $STATE/kit.failed); run sync-payloads kit"
-now skills
-[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.failed" ]] || fail 'a success kept the failure record'
+expect_text "$ERR" "[dotfiles] [warn] pymol: its last run stopped for a person (exit 3, see $STATE/pymol.failed); run sync-payloads pymol and do what it asks"
+# Every later session says so again, until a run succeeds.
+source_hook bash DOTFILES_PAYLOAD_ITEMS=pymol
+expect_text "$ERR" "[dotfiles] [warn] pymol: its last run stopped for a person (exit 3, see $STATE/pymol.failed)"
+now skills pymol
+[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.failed" && ! -e "$STATE/pymol.failed" ]] ||
+    fail 'a success kept the failure record'
 
 # A legacy link the retired coding-agent-kit Stow package made at a kit
 # path: until stow-all removes it, the kit's installer would refuse it, so
@@ -384,6 +418,122 @@ source_hook bash DOTFILES_DIR="$STALLED" DOTFILES_PAYLOAD_TIMEOUT=3
 kill "$STALL"
 wait "$STALL" 2>/dev/null || :
 STALL=
+
+# A download runs alone in a fresh directory of TMPDIR that only this user can
+# enter, removed after the run: what another user planted in a shared TMPDIR
+# (a configs/.pymolrc.py, a scripts/install_skills.py) is never beside it.
+new_home
+mkdir "$TEST_TMP/configs" "$TEST_TMP/scripts"
+printf 'planted\n' >"$TEST_TMP/configs/.pymolrc.py"
+printf 'planted\n' >"$TEST_TMP/scripts/install_skills.py"
+now pymol skills
+[[ "$STATUS" == 0 ]] || fail 'the staged installers failed'
+for item in pymol skills; do
+    { read -r here && read -r mode && entries=$(cat); } <"$EVENTS.$item-dir" || fail "the $item fake left no record"
+    case $here in
+        "$TEST_TMP"/dotfiles-payload.*) ;;
+        *) fail "$item ran from $here, not from a fresh directory of TMPDIR" ;;
+    esac
+    [[ "$mode" == drwx------ ]] || fail "$item ran from a directory with mode $mode"
+    [[ "$entries" == install.sh ]] || fail "$item's directory held more than its script: $entries"
+    [[ ! -e "$here" ]] || fail "$item's staging directory was left behind"
+done
+rm -r "$TEST_TMP/configs" "$TEST_TMP/scripts"
+# A failed installer leaves its directory behind neither.
+new_home
+FAKE_PYMOL_STATUS=1 now pymol
+read -r here <"$EVENTS.pymol-dir"
+[[ "$STATUS" == 1 && -n "$here" && ! -e "$here" ]] || fail 'a failed installer left its staging directory behind'
+
+# Every installer runs in /, a download as well as an installed script (the
+# kit's update), never in the caller's working directory, which may be a
+# shared one (a shell started in /tmp) or hold a project's json.py:
+# awesome-skills' remote bootstrap runs python3 -c, which imports from its
+# working directory first.
+new_home
+mkdir "$TEST_TMP/caller"
+printf 'planted\n' >"$TEST_TMP/caller/json.py"
+pushd "$TEST_TMP/caller" >/dev/null
+now kit pymol skills
+popd >/dev/null
+[[ "$STATUS" == 0 ]] || fail 'the installs from a planted working directory failed'
+for item in kit pymol skills; do
+    read -r cwd <"$EVENTS.$item-cwd" || fail "the $item fake recorded no working directory"
+    [[ "$cwd" == / ]] || fail "$item's download ran in $cwd, not in /"
+done
+pushd "$TEST_TMP/caller" >/dev/null
+now kit
+popd >/dev/null
+[[ "$STATUS" == 0 && "$(cat "$EVENTS.kit-cwd")" == / ]] || fail "the kit's installed update ran in $(cat "$EVENTS.kit-cwd"), not in /"
+rm -r "$TEST_TMP/caller"
+# Nor in its staging directory: that lies in TMPDIR, where another user can
+# create TMPDIR/.git, and git looks for a repository by walking up from its
+# working directory, as the kit's installer's git ls-remote outside any
+# repository does. The plant has this user as owner here, which stands for a
+# host whose safe.directory is * (lab-ubuntu's .gitconfig_local).
+if PATH=/usr/bin:/bin git --version >/dev/null 2>&1; then
+    new_home
+    PATH=/usr/bin:/bin git -c init.defaultBranch=main init -q -- "$TEST_TMP/plant"
+    mv "$TEST_TMP/plant/.git" "$TEST_TMP/.git"
+    mkdir "$TEST_TMP/plant/probe"
+    found=$(cd "$TEST_TMP/plant/probe" && unset GIT_DIR GIT_WORK_TREE GIT_CEILING_DIRECTORIES &&
+        PATH=/usr/bin:/bin git rev-parse --absolute-git-dir 2>/dev/null) || :
+    [[ -n "$found" && "$found" -ef "$TEST_TMP/.git" ]] ||
+        fail "git does not find the planted $TEST_TMP/.git from below it (found [$found]); the check proves nothing"
+    PROBE_GIT=1 now kit pymol skills
+    [[ "$STATUS" == 0 ]] || fail 'the installs beside a planted TMPDIR/.git failed'
+    for item in kit pymol skills; do
+        found=$(cat "$EVENTS.$item-git") || fail "the $item fake did not probe git"
+        [[ -z "$found" || ! "$found" -ef "$TEST_TMP/.git" ]] ||
+            fail "git run by the $item installer found the planted $TEST_TMP/.git from $(cat "$EVENTS.$item-cwd")"
+    done
+    rm -rf "$TEST_TMP/.git" "$TEST_TMP/plant"
+else
+    printf 'SKIP: no git in /usr/bin or /bin; the planted TMPDIR/.git case did not run.\n' >&2
+fi
+
+# The background run itself starts in / too, never in the caller's working
+# directory, which it would otherwise hold for as long as it runs (a USB
+# stick or an NFS mount could not be unmounted meanwhile), and every path it
+# uses is absolute: a relative TMPDIR still names the caller's directory. A
+# fixture whose pymol probe appends where it runs: the automatic run probes
+# in the caller's directory, the background run in its own.
+CWDFIX=$TEST_TMP/cwd-fixture
+cp -R "$FIXTURE" "$CWDFIX"
+tab=$'\t'
+sed "s#^pymol${tab}unix-probe${tab}#&pwd -P >>\"\$EVENTS.probe-cwd\"; #" "$FIXTURE/config/payloads.tsv" \
+    >"$CWDFIX/config/payloads.tsv"
+grep -q 'probe-cwd' "$CWDFIX/config/payloads.tsv" || fail 'the probe fixture does not record its working directory'
+new_home
+now pymol
+stamp_age pymol 86400
+mkdir -p "$TEST_TMP/caller/tmp"
+pushd "$TEST_TMP/caller" >/dev/null
+source_hook bash DOTFILES_DIR="$CWDFIX" DOTFILES_PAYLOAD_ITEMS=pymol TMPDIR=tmp
+popd >/dev/null
+wait_for grep -q 'pymol: update done' "$STATE/payload.log"
+[[ "$(cat "$EVENTS.probe-cwd")" == "$TEST_TMP/caller"$'\n'/ ]] ||
+    fail "the background run did not start in / (probed in: $(tr '\n' ' ' <"$EVENTS.probe-cwd"))"
+read -r here <"$EVENTS.pymol-dir"
+case $here in
+    "$TEST_TMP"/caller/tmp/dotfiles-payload.*) ;;
+    *) fail "the background run staged pymol in $here, not in the caller's relative TMPDIR" ;;
+esac
+rm -r "$TEST_TMP/caller" "$CWDFIX"
+
+# A relative XDG_STATE_HOME is ignored, as the XDG spec says, so the records
+# are the same from every working directory; an absolute one is followed.
+new_home
+mkdir "$TEST_TMP/relative"
+pushd "$TEST_TMP/relative" >/dev/null
+XDG_STATE_HOME=state now pymol
+popd >/dev/null
+[[ "$STATUS" == 0 && -s "$STATE/pymol.stamp" && ! -e "$TEST_TMP/relative/state" ]] ||
+    fail 'a relative XDG_STATE_HOME was followed'
+rm -r "$TEST_TMP/relative"
+XDG_STATE_HOME=$HOME_DIR/xdg-state now pymol
+[[ "$STATUS" == 0 && -s "$HOME_DIR/xdg-state/dotfiles/payload/pymol.stamp" ]] ||
+    fail 'an absolute XDG_STATE_HOME was not followed'
 
 # A download that fails runs nothing and leaves no temporary file.
 new_home

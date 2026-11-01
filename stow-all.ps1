@@ -27,9 +27,11 @@
     check links even from a local console. An elevated run repairs rejected
     destination links. Packages hold files only; a symlink in one is skipped
     with a warning. Unsupported or failed trust checks stop the installation
-    before syncing. The links it made from the two packages the payload repos
-    replaced are removed while their text is exactly the one it wrote
-    (scripts/payload-update.ps1 installs those repos).
+    before syncing. The links it made from the two retired packages,
+    common/coding-agent-kit and common/pymol, are removed while their text is
+    exactly the one it wrote. On native Windows scripts/payload-update.ps1
+    installs PyMOLScripts in their place; coding-agent-kit installs nothing
+    here.
     Declining any change leaves the installation partial; Strict reports a
     failure and the login updater never records that revision as applied.
 
@@ -173,10 +175,11 @@ function Remove-RetiredLink {
     }
 }
 
-# Every link this installer made from the two packages that the payload
-# repos replaced (common/coding-agent-kit, common/pymol), by package. Their
-# installers (scripts/payload-update.ps1) now own the PyMOL paths, and
-# ~/.claude/dotfiles, the old home of the Claude helpers, is no longer read.
+# Every link this installer made from the two retired packages
+# (common/coding-agent-kit, common/pymol), by package. PyMOLScripts'
+# installer, which scripts/payload-update.ps1 runs, now owns the PyMOL paths;
+# coding-agent-kit installs nothing on native Windows, and ~/.claude/dotfiles,
+# the old home of the Claude helpers, is no longer read.
 $RetiredPackageLinks = @(
     foreach ($path in @('.claude/dotfiles/check-git-hooks.cjs', '.claude/dotfiles/notify.cjs',
             '.claude/dotfiles/statusline.cjs', '.local/bin/claude-as', '.local/bin/codex-as',
@@ -485,8 +488,10 @@ $globalIgnores = Get-StowIgnorePattern -Path (Join-Path $RepoRoot '.stowrc')
 $codexPortable = Join-Path $commonRoot 'codex\.codex\config.toml'
 $codexRulesPortable = Join-Path $commonRoot 'codex\.codex\rules\portable.rules'
 # Claude's hooks and status line run coding-agent-kit's Node helpers from
-# ~/.claude/coding-agent-kit/ (scripts/payload-update.ps1 installs them);
-# Node.js 22+ must be on PATH when Claude runs them.
+# ~/.claude/coding-agent-kit/, which the kit installs on Unix only; on native
+# Windows the commands exit 0 silently while a helper is missing (a v0.6
+# copy left there still runs). Node.js 22+ must be on PATH when Claude runs
+# them.
 $claudePortable = Join-Path $commonRoot 'claude\.claude\settings.json'
 if ($HostDir) {
     $codexHost = Join-Path $RepoRoot "$HostDir\codex\.codex\config.toml"

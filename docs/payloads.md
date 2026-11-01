@@ -3,7 +3,8 @@
 Three first-party repositories are installed on every host but are not part
 of this one: [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit)
 (the `codex-as` and `claude-as` account launchers, their completions and the
-Claude status line, notification and Git hook check helpers),
+Claude status line, notification and Git hook check helpers; Linux, macOS and
+WSL only, nothing on native Windows),
 [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) (the PyMOL
 start-up configuration) and
 [awesome-skills](https://github.com/FridrichMethod/awesome-skills) (the skill
@@ -22,14 +23,19 @@ own state are in its README; this file covers only how dotfiles calls them.
 
 | Item | Repository | Unix | Native Windows | Refresh |
 | --- | --- | --- | --- | --- |
-| `kit` | coding-agent-kit | a managed install of channel `0.6`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | the three helpers only, copied into `~\.claude\coding-agent-kit\` (the launchers do not run natively there) | daily |
+| `kit` | coding-agent-kit | a managed install of channel `0.6`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows), and its launchers never ran natively | daily |
 | `pymol` | PyMOLScripts | `~/.pymolrc` and `~/.pymolrc.py` | the same two files in `$HOME` | daily |
 | `skills` | awesome-skills | the library and the selections of `~/.claude/skills/` and `~/.codex/skills/` | the same, through its `install.ps1` | weekly |
 
 `common/claude/.claude/settings.json` runs the helpers by their home-relative
 path, for example
-`node -e "require(require('os').homedir() + '/.claude/coding-agent-kit/statusline.cjs').main()"`,
-so they need Node.js 22 or newer on PATH. `common/zsh/.zshrc` appends
+`node -e "const f=require('os').homedir()+'/.claude/coding-agent-kit/statusline.cjs';if(process.platform!=='win32'||require('fs').existsSync(f))require(f).main()"`,
+so they need Node.js 22 or newer on PATH. On Unix a missing helper stays
+visible: the command exits 1, so Claude Code shows no status line and a
+non-blocking hook error. On native Windows, where the kit installs nothing,
+the command exits 0 silently while the helper is missing (a blank status
+line, no hook), and a copy an older kit release (0.6) left in
+`~\.claude\coding-agent-kit\` still runs. `common/zsh/.zshrc` appends
 `~/.local/share/zsh/site-functions` to `fpath` before oh-my-zsh runs
 `compinit`, so the kit's zsh completions load.
 
@@ -45,26 +51,56 @@ comments, and the first row of an item and field wins.
 | `channel` | `kit` only: the coding-agent-kit `MAJOR.MINOR` channel this configuration is written for |
 | `days` | the refresh interval: an installed item is updated in the background once its last success is this many days old |
 | `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, in the foreground |
-| `unix-install`, `windows-install` | the first-install command |
+| `unix-install`, `windows-install` | the first-install command; an item without a `windows-install` row (the kit) is not available on native Windows: it is no default item there, and a run that names it says so (exit 0, no record) |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
-| `person-status` | an exit status with which the repo stops for a person (awesome-skills' `3`: an interrupted update it cannot undo alone because a file it would restore was edited since; its message names the `--restore` command to run); the hook and the doctor word such a failure as one that waits for a person |
+| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook and the doctor word such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills at an interrupted update it cannot undo alone because a file it would restore was edited since (its message names the `--restore` command to run) |
 | `stow-links` | `PACKAGE PATH...`: home paths that the installer refuses while they are links into the retired dotfiles package `common/PACKAGE` (the kit's launchers and Bash completions); while one is, the hook does not call the installer and says to run `stow-all` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
-by the hook with the channel in `$channel` (`$Channel`) and with one helper:
+by the hook (the sh one with the kit channel in `$channel`) and with one
+helper:
 
 - `payload_script INTERPRETER SOURCE [ARG...]` (sh) and
   `Invoke-DotfilesPayloadScript SOURCE [ARG...]` (PowerShell, which runs the
   script in a child `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File`)
   run SOURCE with ARG and return its exit status. A URL is downloaded first
-  (curl, else wget; `Invoke-WebRequest`) into a temporary file, never piped
-  into a shell, so a failed or empty download runs nothing; the file is
-  removed afterwards. Each download is bounded by `DOTFILES_PAYLOAD_TIMEOUT`
-  seconds (default 60: curl `--connect-timeout 10 --max-time 60`, wget
-  `-T 60 -t 1`, `Invoke-WebRequest -TimeoutSec 60`), and once one download of
-  a run failed, the run tries no other, so a network that is down or stalls
-  holds a login once. A path must be an existing file. On Unix the
-  installer's stdin is closed.
+  (curl, else wget; `Invoke-WebRequest`), never piped into a shell, so a
+  failed or empty download runs nothing. It goes, under the name it was
+  published with, into a fresh directory of the temporary directory that
+  holds nothing else and that only this user can enter (`mktemp -d` under
+  umask 077 in `${TMPDIR:-/tmp}`; on Windows a new subdirectory of `%TEMP%`
+  created in one step with an access list that grants this account alone,
+  not even SYSTEM, and inherits nothing from `%TEMP%`, so it stays private
+  where `TEMP` is a shared `C:\Temp`; when it cannot be made so, nothing
+  runs), and that directory is removed afterwards: PyMOLScripts' and
+  awesome-skills' installers read files beside themselves as a checkout's,
+  so a `configs/` or `scripts/` another user planted in a shared `/tmp`, or
+  added during the download, must never be there. Each download is bounded
+  by `DOTFILES_PAYLOAD_TIMEOUT` seconds (default 60: curl
+  `--connect-timeout 10 --max-time 60`, wget `-T 60 -t 1`,
+  `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
+  failed, the run tries no other, so a network that is down or stalls holds
+  a login once. A path must be an existing file. On Unix the installer's
+  stdin is closed. Every installer, a download or an installed script,
+  starts in `/` (PowerShell: in `$PSHOME`, which only whoever could replace
+  that pwsh can write) and finds its own files through its path. It never
+  runs in the caller's working directory, which may be a shared one too (a
+  shell started in `/tmp`) or an untrusted checkout (a VS Code terminal
+  starts in its workspace): awesome-skills' remote bootstrap runs
+  `python3 -c` on Unix, which imports modules from its working directory
+  first, and on Windows finds git with Python's `shutil.which`, which
+  searches the working directory first. Nor does it run in its download
+  directory, whose parent may be shared: git looks for a repository from
+  its working directory upwards, so the kit's `git ls-remote`, run outside
+  any repository, would read a `/tmp/.git` another user made wherever
+  `safe.directory = *` turns git's ownership check off (lab-ubuntu's
+  `.gitconfig_local` does). On Unix `/` ends that walk, since only root can
+  create `/.git`. On Windows no directory does: from any path on `C:`,
+  `$PSHOME` included, git reaches `C:\.git`, which any authenticated user
+  can create (CVE-2022-24765), so there only git's own ownership check
+  refuses such a repository. Dotfiles chooses only the directory each
+  installer starts in; git that an installer runs from another directory is
+  that repository's to guard.
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
 `tests/payload-update.sh` points that prefix at `file://` fakes and fails on
@@ -92,9 +128,13 @@ for each item of `DOTFILES_PAYLOAD_ITEMS` in order:
 - starts the queued items in one detached background run,
   `sh scripts/payload-update.sh --worker ITEM...` with its stdin closed and
   its output in `payload.log`. The run never enters the shell's job table and
-  outlives the shell. Nothing keeps two sessions from starting one each at
-  the same moment; the kit's and awesome-skills' installers lock themselves
-  (exit 75) and PyMOLScripts' runs converge.
+  outlives the shell. It starts in `/`, never in the caller's working
+  directory, which it would otherwise hold for as long as it runs (a USB
+  stick or an NFS mount could not be unmounted meanwhile), and every path it
+  uses is absolute: a relative `TMPDIR` is resolved against the caller's
+  directory before it starts. Nothing keeps two sessions from starting one
+  each at the same moment; the kit's and awesome-skills' installers lock
+  themselves (exit 75) and PyMOLScripts' runs converge.
 
 An item's command exiting 0 writes its stamp and removes its failure record.
 Exit 75, the code the kit's and awesome-skills' installers return while
@@ -111,6 +151,18 @@ for a person (`stopped for a person (exit 3)`, and `run sync-payloads skills
 and do what it asks`), since its installer's message, which `sync-payloads
 ITEM` prints again, names what to do. An automatic run never fails the shell
 that started it.
+
+PyMOLScripts exits 3 when `~/.pymolrc` or `~/.pymolrc.py` was edited locally
+since it last installed them: it writes nothing and its message names the
+file, how to see the edit and the command that overrides it. A local edit
+therefore stops the `pymol` refresh: every later session prints the
+`pymol: its last run stopped for a person (exit 3, ...)` line again, the
+doctor reports it, and the background retry six hours later stops the same
+way, until the edit is committed upstream, reverted, moved to
+`~/.pymolrc.local.pml` (which PyMOL runs after both files and the installer
+never touches), or forced with that command (its `--force`, `-Force` on
+Windows, which keeps the edited file as `NAME.local-<timestamp>`); the next
+run then succeeds and clears the record.
 
 An item with a [`stow-links`](#configpayloadstsv) path still linked into its
 retired package, which happens while `stow-all` has not run since the pull
@@ -145,7 +197,12 @@ when an item failed, is unknown or waits for `stow-all`, and 0 otherwise
 `scripts/payload-update.ps1` without arguments at its tail, right after
 `scripts/dotfiles-update.ps1`, in the same `if ($IsInteractive)` block, so a
 script run, `-Command`, `-NonInteractive` or piped stdin never reaches it; the
-script itself also returns when stdout is redirected. It keeps the Unix
+script itself also returns when stdout is redirected. Its items are those
+with a `windows-install` row, PyMOLScripts and awesome-skills: the kit has
+none, since it installs nothing on native Windows. The automatic run leaves
+the kit out without a word even when `DOTFILES_PAYLOAD_ITEMS` names it, and
+`sync-payloads kit` prints `kit: not available on native Windows ...` and
+exits 0 without a failure record. It keeps the Unix
 contract: once per session through `$env:_DOTFILES_PAYLOAD_CHECKED`,
 `DOTFILES_PAYLOAD_AUTO_UPDATE=0`, `DOTFILES_PAYLOAD_ITEMS`,
 `DOTFILES_PAYLOAD_TIMEOUT`, absent items installed in the foreground, stamps
@@ -154,7 +211,8 @@ background retry, the `stow-links` check and the `person-status` wording (the
 old skill opt-out does not apply: that hook never ran on Windows). Its
 background run is a hidden, detached
 `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File scripts/payload-update.ps1 -Worker ITEM...`
-started with `Start-Process`, which writes each item's output into
+started with `Start-Process` in `$PSHOME` (never in the caller's directory,
+which it would hold open while it runs). It writes each item's output into
 `payload.log` and the end of a failed one into its record, so the prompt
 never waits for a download.
 
@@ -167,7 +225,7 @@ but warn first.
 
 ```powershell
 & $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]
-sync-payloads [kit] [pymol] [skills]   # profile functions, defined in interactive non-agent sessions
+sync-payloads [pymol] [skills]   # profile functions, defined in interactive non-agent sessions
 sync-skills
 ```
 
@@ -176,7 +234,7 @@ sync-skills
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `DOTFILES_PAYLOAD_AUTO_UPDATE` | `1` | `0` disables the automatic runs; `--now`, `-Now` and the aliases still run |
-| `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` | the items the hook and the doctor's `payloads` row manage, separated by spaces; set but empty manages none |
+| `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` (native Windows: `pymol skills`, the items with a `windows-install` row) | the items the hook and the doctor's `payloads` row manage, separated by spaces; set but empty manages none; on native Windows a named item without a `windows-install` row (the kit) is left out |
 | `DOTFILES_PAYLOAD_TIMEOUT` | `60` | the bound, in seconds, of each download of an installer script |
 | `AWESOME_SKILLS_AUTO_UPDATE` | unset | Unix, until 2027-01-31: `0` leaves `skills` out of the automatic runs and the doctor's row, with a notice; set `DOTFILES_PAYLOAD_ITEMS='kit pymol'` instead |
 | `DOTFILES_DIR` | `~/dotfiles` | the checkout the rc files source the hook from |
@@ -202,7 +260,9 @@ no automatic runs at all). The provisioning shells of
 ## State
 
 In `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (created with umask
-077), on native Windows in `%LOCALAPPDATA%\dotfiles\payload\`:
+077; `XDG_STATE_HOME` counts only when it is an absolute path, as the XDG
+spec has it, for the hook and the doctor alike), on native Windows in
+`%LOCALAPPDATA%\dotfiles\payload\`:
 
 | File | Content |
 | --- | --- |
@@ -211,23 +271,29 @@ In `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (created with umask
 | `payload.log` | the output of the last background run, replaced by the next one |
 
 The repositories keep their own state: the kit's managed root in
-`${XDG_DATA_HOME:-~/.local/share}/coding-agent-kit/` (Windows
-`%LOCALAPPDATA%\coding-agent-kit\`, where `current` is a file and
-`install.ps1` the entry point of later runs), awesome-skills' library in
+`${XDG_DATA_HOME:-~/.local/share}/coding-agent-kit/` (Unix only; see
+[the kit leaving native Windows](#the-kit-leaves-native-windows) for what a
+0.6 install left there), awesome-skills' library in
 `${XDG_DATA_HOME:-~/.local/share}/awesome-skills/library` and its selections
 and ownership manifests (`claude.json`, `codex.json`) and its lock in
 `~/.local/share/awesome-skills/` (Windows both in
 `%LOCALAPPDATA%\awesome-skills\`). The `skills` probe passes on a manifest or
 the library clone, as awesome-skills documents an install, so an install of
 its older tarball installer, whose manifests have the same names, counts too.
-PyMOLScripts keeps no state and takes no lock: concurrent runs converge.
+PyMOLScripts keeps a copy of the rc files it last installed, which tells a
+local edit from an older upstream version (in
+`${XDG_STATE_HOME:-~/.local/state}/pymolscripts/`, Windows
+`%LOCALAPPDATA%\pymolscripts\`; its README has the details), and takes no
+lock: concurrent runs converge.
 
 ## Doctor and setup-host
 
 - The doctor's `payloads` row (tier `ai`, step
   [H7-payloads](bootstrap.md#h7-payloads-payload-repos)) runs each selected
   item's probe and, once the kit's passes, checks that the three helpers are
-  in `~/.claude/coding-agent-kit/`. Before those it names each selected item
+  in `~/.claude/coding-agent-kit/`; `.\doctor.ps1` checks only the items with
+  a `windows-install` row, so neither the kit nor its helpers, and names an
+  item the file does not know. Before those it names each selected item
   with a failure record (`kit failed its last run (exit 1, see ...): run
   sync-payloads kit`, worded by `person-status`) and each one that waits for
   `stow-all` (`... run <clone>/stow-all.sh <host>, then sync-payloads kit`).
@@ -255,7 +321,8 @@ installs and then runs the code of a release of the declared channel, and
 later updates run that release's own installer. A new kit patch release
 therefore reaches every host at its next daily refresh, checked only by the
 kit's own CI and release process. Dotfiles' `ci.yml` installs the real kit of
-the channel on every push and runs the cases that need it
+the channel in its Linux and macOS jobs on every push and runs the cases that
+need it
 ([testing.md](testing.md)), which shows a breaking patch only after it was
 released.
 
@@ -270,8 +337,8 @@ reviewed change, landed like any other (a `ci/**` branch, see AGENTS.md):
 1. Read the kit's CHANGELOG for the new line and adapt what it changed in this
    repository: `settings.json`, `.zshrc`, the unset list of `tests/run.sh`,
    every other test entry point and `tests/run.ps1`, and the `kit` rows.
-2. Change the `kit channel` row. The update rows pass it too
-   (`... --update --channel "$channel"`, `... -Update -Channel $Channel`): a
+2. Change the `kit channel` row. The update row passes it too
+   (`... --update --channel "$channel"`): a
    host's managed root remembers its channel and a plain `--update` keeps it,
    while a run that names another channel switches to that channel's newest
    release, so every installed host moves at its next refresh.
@@ -287,10 +354,9 @@ back to an older line is a channel change to that line.
 ## Adapting to the repositories' interfaces
 
 The rows were written against the interface the three repositories agreed on
-before they released it, and checked against their draft READMEs: the Windows
-data roots (`%LOCALAPPDATA%\coding-agent-kit`, `%LOCALAPPDATA%\awesome-skills`)
-and the kit's Windows entry point (`install.ps1` in its managed root) are the
-values to re-check first. When a repository documents
+before they released it, and checked against their draft READMEs:
+awesome-skills' Windows data root (`%LOCALAPPDATA%\awesome-skills`) is the
+value to re-check first. When a repository documents
 its final commands, or later changes them in a release, edit only
 `config/payloads.tsv`, in one reviewed change:
 
@@ -383,10 +449,32 @@ keeps it off (see [the hook](#unix)).
    installer run elevated would leave Administrators-owned clones.
 3. From the next ordinary interactive PowerShell 7 on, the new profile's
    payload hook installs every absent item in the foreground; on most hosts
-   that is all three, since the old skill hook ran only on Unix. Until the
+   that was all three then, since the old skill hook ran only on Unix (the
+   kit has since left native Windows, see below). Until the
    restow has synced the new `settings.json`, the live one still names
    `~\.claude\dotfiles\`, whose links dangle, so Claude's status line and
    hooks fail until then.
+
+### The kit leaves native Windows
+
+coding-agent-kit 0.7 installs nothing on native Windows (it never had
+account switching there, only the three helpers), and `config/payloads.tsv`
+has no `windows-*` rows for it, so from the pull on the PowerShell hook and
+`.\doctor.ps1` leave the kit out. What a 0.6 install left stays, frozen:
+`%LOCALAPPDATA%\coding-agent-kit\` and the three helper copies in
+`~\.claude\coding-agent-kit\`, which the `settings.json` commands keep
+running, and `kit.stamp` or `kit.failed` in `%LOCALAPPDATA%\dotfiles\payload\`,
+which nothing reads any more. To remove them, from an ordinary PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File "$env:LOCALAPPDATA\coding-agent-kit\install.ps1" -Uninstall -Purge
+Remove-Item -LiteralPath "$env:LOCALAPPDATA\dotfiles\payload\kit.stamp", "$env:LOCALAPPDATA\dotfiles\payload\kit.failed" -ErrorAction Ignore
+```
+
+Claude Code then shows no status line there and its notification and Git hook
+check commands do nothing, without an error, since on native Windows they
+exit 0 while a helper is missing. WSL, and an ssh session into a Unix host,
+keep the whole kit.
 
 ### The transition shim
 
@@ -446,10 +534,15 @@ dotfiles adds:
   ever needs one, let one package of that host's overlay own the whole file,
   never a common file plus a host copy, and set `codex_home` and `secrets_dir`
   before the first enrolment there, because account links are absolute.
-- The fzf-tab preview in `common/zsh/.oh-my-zsh/custom/fzf-tab.zsh` runs
-  `codex-as --account-info NAME` or `claude-as --account-info NAME` for an
-  account, offline and without opening a credential, so emails and labels
-  show in previews, screen shares and agent transcripts; no token is printed.
+- The fzf-tab preview in `common/zsh/.oh-my-zsh/custom/fzf-tab.zsh` shows
+  the kit's `--info NAME` for an account, offline and without opening a
+  credential, so emails and labels show in previews, screen shares and agent
+  transcripts; no token is printed. It calls the older spelling,
+  `codex-as --account-info NAME` or `claude-as --account-info NAME`, which
+  every release keeps accepting, so it works on a host that still runs 0.6
+  for a moment after a pull. By hand, use the kit 0.7 names: `--info`
+  (`-i`), `--list` (`-l`), `claude-as --label NAME LABEL` and `--version`
+  (`-V`).
 - The launchers color their messages by `CODING_AGENT_KIT_COLOR`, not
   `DOTFILES_COLOR`.
 - Develop the kit in a clone of its own. Never edit its managed root: its
@@ -462,10 +555,11 @@ sync-payloads                                   # each item: installed, updated 
 ./doctor.sh --host <host>                       # payloads ok; submodule ok once no leftover is left
 ls ~/.claude/coding-agent-kit/                  # check-git-hooks.cjs notify.cjs statusline.cjs
 readlink ~/.local/bin/codex-as                  # a path in the kit's managed root, .../current/bin/codex-as
+codex-as --version                              # kit 0.7 and later: coding-agent-kit X.Y.Z (managed vX.Y.Z, channel X.Y)
 ls -l ~/.pymolrc ~/.pymolrc.py                  # regular files
 cat "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/payload.log"   # the last background refresh
 ls "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/"*.failed        # none once every item succeeded
 ```
 
-On Windows: `sync-payloads`, `.\doctor.ps1`, and
-`Get-ChildItem $HOME\.claude\coding-agent-kit`.
+On Windows: `sync-payloads` (PyMOLScripts and awesome-skills) and
+`.\doctor.ps1`.

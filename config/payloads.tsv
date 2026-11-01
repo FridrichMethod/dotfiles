@@ -10,43 +10,44 @@
 #                    background once its last success is this many days old
 #   unix-probe       succeeds once the item is installed; until then the hook
 #   windows-probe    runs its install command in the foreground
-#   unix-install     the first-install command
-#   windows-install
+#   unix-install     the first-install command; an item without a
+#   windows-install  windows-install row is not available on native Windows
+#                    (the kit: coding-agent-kit runs on Linux, macOS and WSL)
 #   unix-update      the update command (default: the install command, which
 #   windows-update   is also the update for PyMOLScripts and awesome-skills);
 #                    the kit's names the channel, so a reviewed change of the
 #                    channel row moves every installed host to that channel
 #   person-status    an exit status with which the repo stops for a person,
-#                    which the hook and the doctor word as such (awesome-
-#                    skills' 3: an interrupted update it cannot undo alone;
-#                    its message names the --restore command to run)
+#                    which the hook and the doctor word as such; its message
+#                    names what to do (3 for both: PyMOLScripts at a locally
+#                    edited rc file, which it leaves alone; awesome-skills at
+#                    an interrupted update it cannot undo alone)
 #   stow-links       PACKAGE PATH...: HOME paths the installer refuses while
 #                    they are links into the retired dotfiles package
 #                    common/PACKAGE, which stow-all removes; until it has run
 #                    the hook does not call the installer and says so
 # The probes test the paths each installer documents as an install: the kit's
-# managed root (a current/install.sh on Unix; on Windows install.ps1, the
-# entry point of later runs, and the current file), PyMOL's two rc files, and
+# managed root (its current/install.sh), PyMOL's two rc files, and
 # awesome-skills' ownership manifests (claude.json, codex.json in its state
 # directory, as its older tarball installer left them too) or library clone.
 # Unix values are POSIX sh and Windows values PowerShell 7, evaluated by the
-# hook with the channel in $channel (sh) or $Channel (PowerShell) and with
+# hook, the sh one with the kit channel in $channel, and with
 #   payload_script INTERPRETER SOURCE [ARG...]       (sh)
 #   Invoke-DotfilesPayloadScript SOURCE [ARG...]     (PowerShell)
 # which download SOURCE when it is a URL (curl or wget; Invoke-WebRequest)
-# into a temporary file within DOTFILES_PAYLOAD_TIMEOUT seconds, never piping
-# it into a shell, run it with ARG and return its exit status (75: another
-# run holds that repo's lock).
+# within DOTFILES_PAYLOAD_TIMEOUT seconds into a fresh private temporary
+# directory that holds nothing else and is removed afterwards, never piping
+# it into a shell, run it with ARG in / (PowerShell: in $PSHOME; never in
+# the caller's directory or the download's) and return its exit status (75:
+# another run holds that repo's lock).
 kit	channel	0.6
 kit	days	1
 kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"
 kit	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.sh --channel "$channel"
 kit	unix-update	payload_script sh "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh" --update --channel "$channel"
-kit	windows-probe	(Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'coding-agent-kit/install.ps1') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'coding-agent-kit/current') -PathType Leaf)
-kit	windows-install	Invoke-DotfilesPayloadScript 'https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.ps1' -Channel $Channel
-kit	windows-update	Invoke-DotfilesPayloadScript (Join-Path $env:LOCALAPPDATA 'coding-agent-kit/install.ps1') -Update -Channel $Channel
 pymol	days	1
+pymol	person-status	3
 pymol	unix-probe	test -f "$HOME/.pymolrc" && test -f "$HOME/.pymolrc.py"
 pymol	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/PyMOLScripts/main/install.sh
 pymol	windows-probe	(Test-Path -LiteralPath (Join-Path $HOME '.pymolrc') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $HOME '.pymolrc.py') -PathType Leaf)

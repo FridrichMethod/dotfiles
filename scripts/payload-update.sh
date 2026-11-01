@@ -8,7 +8,8 @@
 # `sh scripts/payload-update.sh --auto`: an absent item installs in the
 # foreground; a refresh whose days row has passed, and any retry six hours
 # after a failure (ITEM.failed, reported by every later session and the
-# doctor), runs in one detached background run (--worker) into payload.log.
+# doctor), runs in one detached background run (--worker), started in /,
+# into payload.log.
 # `--now [ITEM...]` (the sync-payloads alias) runs items in the foreground
 # whatever their state and exits 1 when one failed. Knobs:
 # DOTFILES_PAYLOAD_AUTO_UPDATE=0 (no automatic runs), DOTFILES_PAYLOAD_ITEMS
@@ -57,7 +58,13 @@ case ${HOME-} in
 esac
 config=$repo/config/payloads.tsv
 [ -r "$config" ] || fail "payload-update: missing $config."
-state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload
+# XDG_STATE_HOME only when absolute, as the XDG spec says: a relative one would
+# name another directory from each working directory, the background run's /
+# included.
+case ${XDG_STATE_HOME-} in
+    /*) state=$XDG_STATE_HOME/dotfiles/payload ;;
+    *) state=$HOME/.local/state/dotfiles/payload ;;
+esac
 (umask 077 && mkdir -p "$state") || fail "payload-update: cannot create $state."
 tab=$(printf '\t')
 timeout=${DOTFILES_PAYLOAD_TIMEOUT:-60}
@@ -82,11 +89,26 @@ field() {
 }
 
 # payload_script INTERPRETER SOURCE [ARG...]: run SOURCE with ARG, stdin
-# closed, and return its status. A URL is first downloaded into a temporary
-# file, within the timeout; after one failed download a run tries no other.
-download='' offline=''
-trap '[ -z "$download" ] || rm -f "$download"' 0
+# closed, and return its status. A URL is first downloaded, within the
+# timeout, into a fresh directory that only this user can enter and that holds
+# nothing else, removed afterwards: PyMOLScripts' and awesome-skills'
+# installers read files beside themselves as a checkout's, which another user
+# could plant in a shared TMPDIR. Every script runs in /, which only root can
+# write, never in the caller's directory, which may be shared too
+# (awesome-skills' installer runs python3 -c, which imports modules from its
+# working directory first), nor in the download's, whose parent may be: git,
+# which the kit's installer runs outside any repository, looks for one from
+# its working directory upwards, so it would read a TMPDIR/.git another user
+# made (safe.directory = * turns its ownership check off). The installers
+# find their own files through their path. After one failed download a run
+# tries no other.
+staging='' offline=''
+trap '[ -z "$staging" ] || rm -rf "$staging"' 0
 trap 'exit 1' HUP INT TERM
+unstage() {
+    [ -z "$staging" ] || rm -rf "$staging"
+    staging=
+}
 payload_script() {
     interpreter=$1 source=$2
     shift 2
@@ -101,16 +123,27 @@ payload_script() {
                 return 1
             fi
             offline=1
-            download=$(mktemp "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
+            staging=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
+            case $staging in
+                /*) ;;
+                *) staging=${PWD%/}/$staging ;;
+            esac
+            # Named as published, so the installer's $0 reads as in its README.
+            download=$staging/${source##*/}
+            case ${source##*/} in
+                '' | .* | *[!A-Za-z0-9._-]*) download=$staging/install ;;
+            esac
             if command -v curl >/dev/null 2>&1; then
                 curl -fsSL --connect-timeout "$connect" --max-time "$timeout" -o "$download" -- "$source" && offline=
             elif command -v wget >/dev/null 2>&1; then
                 wget -q -T "$timeout" -t 1 -O "$download" -- "$source" && offline=
             else
+                unstage
                 dotfiles_log error "neither curl nor wget is installed; cannot download $source"
                 return 1
             fi
             if [ -n "$offline" ] || [ ! -s "$download" ]; then
+                unstage
                 dotfiles_log error "cannot download $source (within ${timeout}s)"
                 return 1
             fi
@@ -121,13 +154,16 @@ payload_script() {
                 dotfiles_log error "$source is missing"
                 return 1
             fi
+            case $source in
+                /*) ;;
+                *) source=${PWD%/}/$source ;;
+            esac
             set -- "$source" "$@"
             ;;
     esac
     script_status=0
-    "$interpreter" "$@" </dev/null || script_status=$?
-    [ -z "$download" ] || rm -f "$download"
-    download=
+    (cd / && exec "$interpreter" "$@" </dev/null) || script_status=$?
+    unstage
     return "$script_status"
 }
 
@@ -263,7 +299,15 @@ for item in "$@"; do
     fi
 done
 [ -n "$later" ] || exit 0
-# Started from here, the run never enters the shell's job table.
+# The run starts in /, never in the caller's directory, which it would hold
+# for as long as it runs (a USB stick or an NFS mount could not be unmounted
+# meanwhile); every path it uses is absolute ($repo, $state, a download's
+# directory), so a relative TMPDIR first becomes the caller's. Started from
+# here, it never enters the shell's job table.
+case ${TMPDIR:-/} in
+    /*) ;;
+    *) TMPDIR=${PWD%/}/$TMPDIR && export TMPDIR ;;
+esac
 # shellcheck disable=SC2086 # a word list
-sh "$repo/scripts/payload-update.sh" --worker $later </dev/null >"$state/payload.log" 2>&1 &
+(cd / && exec sh "$repo/scripts/payload-update.sh" --worker $later) </dev/null >"$state/payload.log" 2>&1 &
 exit 0

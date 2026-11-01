@@ -7,7 +7,9 @@
     The PowerShell 7 profile calls this script without arguments at its tail,
     after scripts/dotfiles-update.ps1, in an interactive console only. Once
     per session an absent item of config/payloads.tsv installs in the
-    foreground through the repo's own install.ps1; a refresh whose days row
+    foreground through the repo's own install.ps1 (only the items with a
+    windows-install row: coding-agent-kit has none, since it installs
+    nothing on native Windows); a refresh whose days row
     has passed, and any retry six hours after a failure (ITEM.failed, which
     every later session and the doctor report), runs in one hidden, detached
     pwsh -NoProfile -Worker into payload.log. An elevated session never runs
@@ -16,12 +18,14 @@
         & scripts/payload-update.ps1 -Now [ITEM...]
 
     runs the items (default: DOTFILES_PAYLOAD_ITEMS) in the foreground
-    whatever their state and exits 1 when one failed; the profile's
-    sync-payloads and sync-skills functions call it. -Auto is the automatic
-    run without the console, session and opt-out guards.
+    whatever their state and exits 1 when one failed; an item without a
+    windows-install row is not available here, which it says (exit 0). The
+    profile's sync-payloads and sync-skills functions call it. -Auto is the
+    automatic run without the console, session and opt-out guards.
 .NOTES
     DOTFILES_PAYLOAD_AUTO_UPDATE=0 disables the automatic runs (not -Now);
-    DOTFILES_PAYLOAD_ITEMS lists the items (default: kit pymol skills);
+    DOTFILES_PAYLOAD_ITEMS lists the items (default: those with a
+    windows-install row, pymol skills);
     DOTFILES_PAYLOAD_TIMEOUT bounds each download in seconds (default 60).
     State, in %LOCALAPPDATA%\dotfiles\payload: ITEM.stamp (last success),
     ITEM.failed (time and exit status of the last failure, then the end of a
@@ -57,10 +61,14 @@ $PayloadFailed = & { try {
     $timeout = 60
     if (-not [int]::TryParse("$env:DOTFILES_PAYLOAD_TIMEOUT", [ref]$timeout) -or $timeout -lt 1) { $timeout = 60 }
     $rows = @{}
+    # The items that install here: those with a windows-install row, in
+    # config order.
+    $available = [Collections.Generic.List[string]]::new()
     foreach ($line in [IO.File]::ReadAllLines((Join-Path $Repo 'config/payloads.tsv'))) {
         $parts = $line.Split("`t", 3)
         if (-not $line.StartsWith('#') -and $parts.Count -eq 3 -and -not $rows.ContainsKey("$($parts[0])`t$($parts[1])")) {
             $rows["$($parts[0])`t$($parts[1])"] = $parts[2]
+            if ($parts[1] -ceq 'windows-install') { $available.Add($parts[0]) }
         }
     }
     function Get-PayloadField([string]$Name, [string]$Field) { $rows["$Name`t$Field"] }
@@ -73,29 +81,69 @@ $PayloadFailed = & { try {
     $script:PayloadOffline = $false
     function Invoke-DotfilesPayloadScript {
         # SOURCE [ARG...], for the windows-* rows: run SOURCE, a URL first
-        # downloaded into a temporary .ps1 within the timeout or an installed
-        # script, in a child pwsh with ARG, and return its exit status. After
-        # one failed download a run tries no other. A simple function, so
-        # -Channel and the like reach the script instead of binding here.
+        # downloaded within the timeout or an installed script, in a child
+        # pwsh with ARG, and return its exit status. A download goes into a
+        # fresh directory of its own that only this account can enter,
+        # removed afterwards: PyMOLScripts' and awesome-skills' installers
+        # read files beside themselves as a checkout's, which another user
+        # could plant in a shared temporary directory. Every script runs in
+        # $PSHOME (which only whoever could replace this pwsh can write),
+        # never in the caller's directory, which may be an untrusted checkout
+        # (a VS Code terminal starts in its workspace: awesome-skills'
+        # installer finds git with Python's shutil.which, which on Windows
+        # searches the working directory first), nor in the download's, whose
+        # parent may be shared. Unlike / on Unix, $PSHOME does not keep git
+        # from a planted repository: git looks for one from its working
+        # directory upwards, from any path on C: up to C:\.git, which any
+        # authenticated user can create; only git's own ownership check
+        # (safe.directory) refuses one another user owns. The installers
+        # find their own files through their path. After one failed download
+        # a run tries no other. A simple function, so -Update and the like
+        # reach the script instead of binding here.
         $source = [string]$args[0]
         $rest = @($args | Select-Object -Skip 1 | ForEach-Object { [string]$_ })
-        $temporary = $null
+        $staging = $null
+        $pushed = $false
         try {
             $file = $source
             if ($source -match '^[A-Za-z][A-Za-z0-9+.-]*://') {
                 if ($script:PayloadOffline) { throw 'skipped: a download already failed in this run' }
                 $script:PayloadOffline = $true
-                $temporary = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-' + [Guid]::NewGuid().ToString('N') + '.ps1')
-                if ($source -like 'file:*') { Copy-Item -LiteralPath ([Uri]$source).LocalPath -Destination $temporary -ErrorAction Stop }
+                $staging = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-' + [Guid]::NewGuid().ToString('N'))
+                # Only this account may enter it. On Windows it is created in
+                # one step with an access list that grants this account alone
+                # and inherits nothing, since %TEMP% may be a shared C:\Temp
+                # whose list lets other users add files; elsewhere (the tests)
+                # mkdir -m 700, since .NET before 7 sets no mode. A directory
+                # that cannot be made so runs nothing.
+                if ($IsWindows) {
+                    try {
+                        $security = [Security.AccessControl.DirectorySecurity]::new()
+                        $security.SetSecurityDescriptorSddlForm("D:P(A;OICI;FA;;;$([Security.Principal.WindowsIdentity]::GetCurrent().User.Value))")
+                        [IO.FileSystemAclExtensions]::Create([IO.DirectoryInfo]::new($staging), $security)
+                    }
+                    catch { $staging = $null; throw "cannot create a private temporary directory: $($_.Exception.Message)" }
+                }
+                else {
+                    & (Get-Command -Name mkdir -CommandType Application -TotalCount 1).Source -m 700 $staging
+                    if ($LASTEXITCODE -ne 0) { $staging = $null; throw 'cannot create a temporary directory' }
+                }
+                # Named as published, so the installer's own path reads as in its README.
+                $file = Join-Path $staging $(if ($source -match '/([A-Za-z0-9_-][A-Za-z0-9._-]*\.ps1)$') { $Matches[1] } else { 'install.ps1' })
+                if ($source -like 'file:*') { Copy-Item -LiteralPath ([Uri]$source).LocalPath -Destination $file -ErrorAction Stop }
                 else {
                     $ProgressPreference = 'SilentlyContinue'
-                    Invoke-WebRequest -Uri $source -OutFile $temporary -TimeoutSec $timeout -ErrorAction Stop
+                    Invoke-WebRequest -Uri $source -OutFile $file -TimeoutSec $timeout -ErrorAction Stop
                 }
                 $script:PayloadOffline = $false
-                if ((Get-Item -LiteralPath $temporary).Length -eq 0) { throw "$source downloaded empty" }
-                $file = $temporary
+                if ((Get-Item -LiteralPath $file).Length -eq 0) { throw "$source downloaded empty" }
             }
             elseif (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "$source is missing" }
+            # Absolute before the move: a relative TMPDIR or source path is
+            # relative to the caller's directory. A failed move runs nothing.
+            $file = (Get-Item -LiteralPath $file -Force -ErrorAction Stop).FullName
+            Push-Location -LiteralPath $PSHOME -ErrorAction Stop
+            $pushed = $true
             & $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file @rest 2>&1 | ForEach-Object { Write-Host "$_" }
             return $LASTEXITCODE
         }
@@ -103,7 +151,10 @@ $PayloadFailed = & { try {
             Write-DotfilesLog error "cannot run $($source): $($_.Exception.Message)"
             return 1
         }
-        finally { if ($temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction Ignore } }
+        finally {
+            if ($pushed) { Pop-Location }
+            if ($staging) { Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction Ignore }
+        }
     }
 
     function Test-PayloadInstalled([string]$Name) {
@@ -129,7 +180,6 @@ $PayloadFailed = & { try {
         if (-not $command) { $command = Get-PayloadField $Name 'windows-install' }
         $doing = if ($action -eq 'install') { 'installing (later updates run in the background)' } else { 'updating' }
         Write-DotfilesLog step "$($Name): $doing"
-        $Channel = Get-PayloadField 'kit' 'channel'
         # The command's last output is the exit status of the script it ran.
         $status = 1
         try {
@@ -166,19 +216,28 @@ $PayloadFailed = & { try {
 
     $names = if ($Item) { @($Item) }
     elseif ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) { @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ }) }
-    else { @('kit', 'pymol', 'skills') }
+    else { @($available) }
     foreach ($name in $names) {
         if (-not $rows.ContainsKey("$name`tdays")) {
             Write-DotfilesLog error "payload-update: unknown item '$name'; config/payloads.tsv names kit, pymol and skills."
             return $true
         }
     }
+    # A known item without a windows-install row (the kit, which installs
+    # nothing on native Windows) is no failure: a run that names it says so,
+    # the automatic one leaves it out without a word, and neither records it.
+    foreach ($name in $names) {
+        if ($name -notin $available -and -not $Automatic) {
+            Write-DotfilesLog info "$($name): not available on native Windows (config/payloads.tsv has no windows-install row for it); nothing to do"
+        }
+    }
+    $names = @($names | Where-Object { $_ -in $available })
     $elevated = $IsWindows -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 
     if (-not $Automatic) {
         if ($Now -and $elevated) {
-            Write-DotfilesLog warn 'payload-update: this session is elevated, so what the installers create (the kit and skills clones) will be owned by Administrators, which an unelevated update then cannot use; prefer an unelevated PowerShell.'
+            Write-DotfilesLog warn 'payload-update: this session is elevated, so what the installers create (the skills clone) will be owned by Administrators, which an unelevated update then cannot use; prefer an unelevated PowerShell.'
         }
         if ($Worker) { [IO.File]::WriteAllText($log, '') }
         $failed = $false
@@ -221,10 +280,12 @@ $PayloadFailed = & { try {
     }
     if ($elevated -or -not $later.Count) { return $false }
     try {
-        # One quoted argument string: Start-Process joins a list unquoted.
+        # One quoted argument string: Start-Process joins a list unquoted. In
+        # $PSHOME, not the caller's directory, which the detached run would
+        # otherwise hold open (Windows) for as long as it runs.
         $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass ' + $(if ($IsWindows) { '-WindowStyle Hidden ' } else { '' }) +
             "-File `"$PSCommandPath`" -Worker $($later -join ' ')"
-        $start = @{ FilePath = $pwsh; ArgumentList = $arguments }
+        $start = @{ FilePath = $pwsh; ArgumentList = $arguments; WorkingDirectory = $PSHOME }
         if ($IsWindows) { $start.WindowStyle = 'Hidden' }
         Start-Process @start
     }
