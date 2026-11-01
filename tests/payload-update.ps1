@@ -59,10 +59,11 @@ try {
     # Rows only this fixture has, so the generic fields keep their coverage
     # now that no Windows item of the real file uses them: an update command
     # that runs an installed script (skills), and a stow-links row (pymol;
-    # the kit's on Unix).
+    # the kit's on Unix) at a path no real home has, since PowerShell's $HOME
+    # on Windows is the account's profile.
     $config = $config.TrimEnd() + "`n" +
         "skills`twindows-update`tInvoke-DotfilesPayloadScript (Join-Path `$env:LOCALAPPDATA 'awesome-skills/update.ps1') -Update`n" +
-        "pymol`tstow-links`tpymol .pymolrc`n"
+        "pymol`tstow-links`tpymol .dotfiles-test-legacy-pymolrc`n"
     Write-Fixture (Join-Path $fixture 'config/payloads.tsv') $config
     Write-Fixture (Join-Path $fixture 'scripts/payload-update.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'scripts/payload-update.ps1')))
     Write-Fixture (Join-Path $fixture 'lib/terminal.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'lib/terminal.ps1')))
@@ -287,9 +288,9 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         Test-Case 'a stow-links path still linked into its retired package waits for stow-all without running the installer' {
             $case = New-Case
             # Dangling, as the pull leaves it; ln makes one on every Unix.
-            & ln -s '../dotfiles/common/pymol/.pymolrc' (Join-Path $case.Home '.pymolrc')
+            & ln -s '../dotfiles/common/pymol/.pymolrc' (Join-Path $case.Home '.dotfiles-test-legacy-pymolrc')
             $run = Invoke-Hook $case @('-Now', 'pymol', 'skills')
-            Assert-True ($run.Code -eq 1 -and $run.Text.Contains('pymol: ~/.pymolrc is still a link the retired Stow package made, which its installer refuses; run stow-all.ps1')) $run.Text
+            Assert-True ($run.Code -eq 1 -and $run.Text.Contains('pymol: ~/.dotfiles-test-legacy-pymolrc is still a link the retired Stow package made, which its installer refuses; run stow-all.ps1')) $run.Text
             Assert-True ((Get-Events $case) -ceq 'skills-install []' -and (Get-Record $case pymol) -ceq '') "events: $(Get-Events $case)"
         }
     }
