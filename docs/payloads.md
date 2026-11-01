@@ -505,10 +505,15 @@ dotfiles adds:
   ever needs one, let one package of that host's overlay own the whole file,
   never a common file plus a host copy, and set `codex_home` and `secrets_dir`
   before the first enrolment there, because account links are absolute.
-- The fzf-tab preview in `common/zsh/.oh-my-zsh/custom/fzf-tab.zsh` runs
-  `codex-as --account-info NAME` or `claude-as --account-info NAME` for an
-  account, offline and without opening a credential, so emails and labels
-  show in previews, screen shares and agent transcripts; no token is printed.
+- The fzf-tab preview in `common/zsh/.oh-my-zsh/custom/fzf-tab.zsh` shows
+  the kit's `--info NAME` for an account, offline and without opening a
+  credential, so emails and labels show in previews, screen shares and agent
+  transcripts; no token is printed. It calls the older spelling,
+  `codex-as --account-info NAME` or `claude-as --account-info NAME`, which
+  every release keeps accepting, so it works on a host that still runs 0.6
+  for a moment after a pull. By hand, use the kit 0.7 names: `--info`
+  (`-i`), `--list` (`-l`), `claude-as --label NAME LABEL` and `--version`
+  (`-V`).
 - The launchers color their messages by `CODING_AGENT_KIT_COLOR`, not
   `DOTFILES_COLOR`.
 - Develop the kit in a clone of its own. Never edit its managed root: its
@@ -521,6 +526,7 @@ sync-payloads                                   # each item: installed, updated 
 ./doctor.sh --host <host>                       # payloads ok; submodule ok once no leftover is left
 ls ~/.claude/coding-agent-kit/                  # check-git-hooks.cjs notify.cjs statusline.cjs
 readlink ~/.local/bin/codex-as                  # a path in the kit's managed root, .../current/bin/codex-as
+codex-as --version                              # kit 0.7 and later: coding-agent-kit X.Y.Z (managed vX.Y.Z, channel X.Y)
 ls -l ~/.pymolrc ~/.pymolrc.py                  # regular files
 cat "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/payload.log"   # the last background refresh
 ls "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/"*.failed        # none once every item succeeded

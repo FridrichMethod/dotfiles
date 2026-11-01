@@ -659,9 +659,15 @@ that one file. The [payload hook](#auto-update-hooks) runs those commands;
 `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml` for the `codex`
 and `claude` executables and the `~/.codex` and `~/.secrets` roots; dotfiles
 ships none, so the defaults apply (`codex-as --show-config` prints them).
-`codex-as --account-info NAME` and `claude-as --account-info NAME` print an
-account's last-seen email or label and usage, offline; the zsh completions
-and the fzf-tab preview show them.
+`codex-as --info NAME` and `claude-as --info NAME` (`-i`) print an account's
+last-seen email or label and usage, offline; the zsh completions and the
+fzf-tab preview show them. `--list` (`-l`) lists the accounts,
+`claude-as --label NAME LABEL` sets a Claude account's label, and
+`codex-as --version` (`-V`) prints the kit's version and install form. These
+are the kit 0.7 names; the 0.6 spellings (`--account-info`,
+`--list-accounts`, `--set-label`) stay accepted, and the fzf-tab preview
+still calls `--account-info`, so a host that runs 0.6 for a moment after a
+pull keeps working.
 
 Hosts that had the two submodules converge in one login: the pull leaves
 their checkouts, which `.gitignore` and `.stowrc` keep harmless and the
