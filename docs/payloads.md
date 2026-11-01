@@ -68,12 +68,15 @@ helper:
   failed or empty download runs nothing. It goes, under the name it was
   published with, into a fresh directory of the temporary directory that
   holds nothing else and that only this user can enter (`mktemp -d` under
-  umask 077 in `${TMPDIR:-/tmp}`; on Windows a new subdirectory of the
-  account's own `%TEMP%`), and that directory is removed afterwards:
-  PyMOLScripts' and awesome-skills' installers read files beside themselves
-  as a checkout's, so a `configs/` or `scripts/` another user planted in a
-  shared `/tmp` must never be there. Each download is bounded by
-  `DOTFILES_PAYLOAD_TIMEOUT` seconds (default 60: curl
+  umask 077 in `${TMPDIR:-/tmp}`; on Windows a new subdirectory of `%TEMP%`
+  created in one step with an access list that grants this account alone,
+  not even SYSTEM, and inherits nothing from `%TEMP%`, so it stays private
+  where `TEMP` is a shared `C:\Temp`; when it cannot be made so, nothing
+  runs), and that directory is removed afterwards: PyMOLScripts' and
+  awesome-skills' installers read files beside themselves as a checkout's,
+  so a `configs/` or `scripts/` another user planted in a shared `/tmp`, or
+  added during the download, must never be there. Each download is bounded
+  by `DOTFILES_PAYLOAD_TIMEOUT` seconds (default 60: curl
   `--connect-timeout 10 --max-time 60`, wget `-T 60 -t 1`,
   `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
   failed, the run tries no other, so a network that is down or stalls holds

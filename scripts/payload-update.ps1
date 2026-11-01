@@ -83,22 +83,23 @@ $PayloadFailed = & { try {
         # SOURCE [ARG...], for the windows-* rows: run SOURCE, a URL first
         # downloaded within the timeout or an installed script, in a child
         # pwsh with ARG, and return its exit status. A download goes into a
-        # fresh directory of its own, removed afterwards: PyMOLScripts' and
-        # awesome-skills' installers read files beside themselves as a
-        # checkout's, which another user could plant in a shared temporary
-        # directory. Every script runs in $PSHOME (which only whoever could
-        # replace this pwsh can write), never in the caller's directory, which
-        # may be an untrusted checkout (a VS Code terminal starts in its
-        # workspace: awesome-skills' installer finds git with Python's
-        # shutil.which, which on Windows searches the working directory
-        # first), nor in the download's, whose parent may be shared. Unlike /
-        # on Unix, $PSHOME does not keep git from a planted repository: git
-        # looks for one from its working directory upwards, from any path on
-        # C: up to C:\.git, which any authenticated user can create; only
-        # git's own ownership check (safe.directory) refuses one another user
-        # owns. The installers find their own files through their path.
-        # After one failed download a run tries no other. A simple function,
-        # so -Update and the like reach the script instead of binding here.
+        # fresh directory of its own that only this account can enter,
+        # removed afterwards: PyMOLScripts' and awesome-skills' installers
+        # read files beside themselves as a checkout's, which another user
+        # could plant in a shared temporary directory. Every script runs in
+        # $PSHOME (which only whoever could replace this pwsh can write),
+        # never in the caller's directory, which may be an untrusted checkout
+        # (a VS Code terminal starts in its workspace: awesome-skills'
+        # installer finds git with Python's shutil.which, which on Windows
+        # searches the working directory first), nor in the download's, whose
+        # parent may be shared. Unlike / on Unix, $PSHOME does not keep git
+        # from a planted repository: git looks for one from its working
+        # directory upwards, from any path on C: up to C:\.git, which any
+        # authenticated user can create; only git's own ownership check
+        # (safe.directory) refuses one another user owns. The installers
+        # find their own files through their path. After one failed download
+        # a run tries no other. A simple function, so -Update and the like
+        # reach the script instead of binding here.
         $source = [string]$args[0]
         $rest = @($args | Select-Object -Skip 1 | ForEach-Object { [string]$_ })
         $staging = $null
@@ -109,9 +110,20 @@ $PayloadFailed = & { try {
                 if ($script:PayloadOffline) { throw 'skipped: a download already failed in this run' }
                 $script:PayloadOffline = $true
                 $staging = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-' + [Guid]::NewGuid().ToString('N'))
-                # Windows' temporary directory is the account's own; elsewhere
-                # (the tests) mkdir -m 700, since .NET before 7 sets no mode.
-                if ($IsWindows) { [void][IO.Directory]::CreateDirectory($staging) }
+                # Only this account may enter it. On Windows it is created in
+                # one step with an access list that grants this account alone
+                # and inherits nothing, since %TEMP% may be a shared C:\Temp
+                # whose list lets other users add files; elsewhere (the tests)
+                # mkdir -m 700, since .NET before 7 sets no mode. A directory
+                # that cannot be made so runs nothing.
+                if ($IsWindows) {
+                    try {
+                        $security = [Security.AccessControl.DirectorySecurity]::new()
+                        $security.SetSecurityDescriptorSddlForm("D:P(A;OICI;FA;;;$([Security.Principal.WindowsIdentity]::GetCurrent().User.Value))")
+                        [IO.FileSystemAclExtensions]::Create([IO.DirectoryInfo]::new($staging), $security)
+                    }
+                    catch { $staging = $null; throw "cannot create a private temporary directory: $($_.Exception.Message)" }
+                }
                 else {
                     & (Get-Command -Name mkdir -CommandType Application -TotalCount 1).Source -m 700 $staging
                     if ($LASTEXITCODE -ne 0) { $staging = $null; throw 'cannot create a temporary directory' }

@@ -233,15 +233,17 @@ with every path it uses absolute, a relative `XDG_STATE_HOME` ignored; and
 the rc files and the transition shim sourcing the hook.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
-run naming the kit says it is not available there and records nothing, every
-installer and the background run run in `$PSHOME`, out of the caller's
-working directory and the download's, and fixture-only rows keep the
-`windows-update` and `stow-links` fields covered. `tests/unix-installer.sh`
-also runs the [migration](payloads.md#migration) of a host stowed with both
-submodules through the real login updater, Git and Stow: the leftover
-checkouts stay ignored, the restow removes the 16 retired links, the payload
-hook installs the kit and PyMOL in that login, and the next login changes
-nothing.
+run naming the kit says it is not available there and records nothing, a
+download's directory is private (mode 0700; on Windows an access list that
+grants only this account and inherits nothing) and one that cannot be made
+runs nothing, every installer and the background run run in `$PSHOME`, out
+of the caller's working directory and the download's, and fixture-only rows
+keep the `windows-update` and `stow-links` fields covered.
+`tests/unix-installer.sh` also runs the [migration](payloads.md#migration) of
+a host stowed with both submodules through the real login updater, Git and
+Stow: the leftover checkouts stay ignored, the restow removes the 16 retired
+links, the payload hook installs the kit and PyMOL in that login, and the
+next login changes nothing.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 

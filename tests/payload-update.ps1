@@ -70,7 +70,8 @@ try {
     $hook = Join-Path $fixture 'scripts/payload-update.ps1'
     # PyMOLScripts' and awesome-skills' installers read a configs/ or scripts/
     # directory beside themselves as a checkout's, so their fakes record the
-    # directory they run from and its entries. Every fake also records the
+    # directory they run from, who may enter it (its mode; on Windows its
+    # access list) and its entries. Every fake also records the
     # working directory it runs in, as PowerShell and the process see it, and
     # where /proc shows it (Linux) its parent's, the hook's or the
     # background run's (EVENTS.NAME-cwd). The skills fake also leaves the
@@ -78,7 +79,12 @@ try {
     Write-Fixture (Join-Path $remote 'PyMOLScripts/main/install.ps1') @'
 Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "pymol-install [$args]"
 $here = Split-Path -Parent $PSCommandPath
-$mode = if ($IsWindows) { '-' } else { "$(& ls -ld $here)".Substring(0, 10) }
+$mode = if (-not $IsWindows) { "$(& ls -ld $here)".Substring(0, 10) }
+else {
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl([IO.DirectoryInfo]::new($here), 'Access')
+    "protected=$($acl.AreAccessRulesProtected) " + (@($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
+        ForEach-Object { "$($_.IdentityReference.Value):$($_.FileSystemRights):$($_.AccessControlType):inherited=$($_.IsInherited)" }) -join ' ')
+}
 [IO.File]::WriteAllLines("$env:PAYLOAD_EVENTS.pymol-dir", [string[]]@($here, $mode, ((Get-ChildItem -LiteralPath $here -Force -Name) -join ' ')))
 $parent = if (Test-Path -LiteralPath /proc/self/cwd) { [IO.FileInfo]::new("/proc/$((Get-Process -Id $PID).Parent.Id)/cwd").LinkTarget } else { '-' }
 [IO.File]::WriteAllLines("$env:PAYLOAD_EVENTS.pymol-cwd", [string[]]@((Get-Location).ProviderPath, [Environment]::CurrentDirectory, $parent))
@@ -88,7 +94,12 @@ foreach ($name in '.pymolrc', '.pymolrc.py') { [IO.File]::WriteAllText((Join-Pat
     Write-Fixture (Join-Path $remote 'awesome-skills/main/install.ps1') @'
 Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
 $here = Split-Path -Parent $PSCommandPath
-$mode = if ($IsWindows) { '-' } else { "$(& ls -ld $here)".Substring(0, 10) }
+$mode = if (-not $IsWindows) { "$(& ls -ld $here)".Substring(0, 10) }
+else {
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl([IO.DirectoryInfo]::new($here), 'Access')
+    "protected=$($acl.AreAccessRulesProtected) " + (@($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
+        ForEach-Object { "$($_.IdentityReference.Value):$($_.FileSystemRights):$($_.AccessControlType):inherited=$($_.IsInherited)" }) -join ' ')
+}
 [IO.File]::WriteAllLines("$env:PAYLOAD_EVENTS.skills-dir", [string[]]@($here, $mode, ((Get-ChildItem -LiteralPath $here -Force -Name) -join ' ')))
 $parent = if (Test-Path -LiteralPath /proc/self/cwd) { [IO.FileInfo]::new("/proc/$((Get-Process -Id $PID).Parent.Id)/cwd").LinkTarget } else { '-' }
 [IO.File]::WriteAllLines("$env:PAYLOAD_EVENTS.skills-cwd", [string[]]@((Get-Location).ProviderPath, [Environment]::CurrentDirectory, $parent))
@@ -233,7 +244,11 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
     }
     Test-Case 'a download runs alone in a fresh private directory, removed afterwards' {
         # What another user planted in a shared temporary directory is never
-        # beside the installer.
+        # beside the installer, and no other user can add anything there
+        # while it downloads: mode 0700, and on Windows (where %TEMP% may be
+        # a shared C:\Temp) an access list that grants only this account and
+        # inherits nothing from the temporary directory.
+        $private = if ($IsWindows) { "protected=True $([Security.Principal.WindowsIdentity]::GetCurrent().User.Value):FullControl:Allow:inherited=False" } else { 'drwx------' }
         $case = New-Case
         $temporary = Join-Path $case.Root 'tmp'
         Write-Fixture (Join-Path $temporary 'configs/.pymolrc.py') 'planted'
@@ -246,13 +261,21 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
             # the temporary path (a Windows short name) the run saw.
             Assert-True ((Split-Path -Leaf $record[0]) -like 'dotfiles-payload-*' -and
                 (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $record[0]) 'configs/.pymolrc.py'))) "$name ran from $($record[0])"
-            Assert-True ($IsWindows -or $record[1] -ceq 'drwx------') "$name ran from a directory with mode $($record[1])"
+            Assert-True ($record[1] -ceq $private) "$name ran from a directory that is not private: $($record[1]), not $private"
             Assert-True ($record[2] -ceq 'install.ps1') "$name's directory held more than its script: $($record[2])"
             Assert-True (-not (Test-Path -LiteralPath $record[0])) "$name's staging directory was left behind"
         }
         $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '1' }
         $here = @([IO.File]::ReadAllLines("$($case.Events).pymol-dir"))[0]
         Assert-True ($run.Code -eq 1 -and -not (Test-Path -LiteralPath $here)) 'a failed installer left its staging directory behind'
+        # A private directory that cannot be made (the temporary directory
+        # lies below a file) runs nothing and is a recorded failure.
+        Clear-Events $case
+        [IO.File]::Delete((Join-Path $case.State 'pymol.failed'))
+        $blocked = Join-Path $case.Events 'tmp'
+        $run = Invoke-Hook $case @('-Now', 'pymol') @{ TEMP = $blocked; TMP = $blocked; TMPDIR = $blocked }
+        Assert-True ($run.Code -eq 1 -and $run.Text.Contains('cannot run')) "exit $($run.Code): $($run.Text)"
+        Assert-True ((Get-Events $case) -ceq '' -and (Get-Record $case pymol) -match '^\d+ 1\n') "events: $(Get-Events $case); record: $(Get-Record $case pymol)"
     }
     Test-Case 'every installer, a download or an installed script, runs in $PSHOME, never in the caller''s working directory' {
         # The caller's directory may be an untrusted checkout (a VS Code
