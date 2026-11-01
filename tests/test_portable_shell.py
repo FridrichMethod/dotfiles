@@ -61,6 +61,27 @@ class PortableShellTests(unittest.TestCase):
                     got = self.run_shell(source, 'printf "%s:%s" "${CONDA_PORTABLE-no}" "${MAMBA_PORTABLE-no}"', shell)
                     self.assertEqual(got, "yes:yes")
 
+    def test_mamba_fallback_quotes_home_with_spaces(self):
+        bindir = self.home / "miniconda3/bin"
+        bindir.mkdir(parents=True)
+        localbin = self.home / ".local/bin"
+        localbin.mkdir(parents=True)
+        for target in [bindir / "mamba", localbin / "micromamba"]:
+            target.write_text("#!/bin/sh\n[ \"$1\" != shell ] || exit 1\nprintf '<%s>' \"$@\"\n")
+            target.chmod(0o755)
+        for host in ["mac", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"]:
+            for shell in ["bash", "zsh"]:
+                if not shutil.which(shell):
+                    continue
+                with self.subTest(host=host, shell=shell):
+                    source = (ROOT / host / shell / f".config/{shell}/.{shell}rc").read_text()
+                    source = source.replace("/home/linuxbrew/.linuxbrew", str(Path(self.temp.name) / "absent-brew"))
+                    source = source.replace("/apps/miniconda3", str(self.home / "miniconda3"))
+                    source = source.replace("/usr/share/lmod/lmod/init/zsh", str(Path(self.temp.name) / "absent-lmod"))
+                    command = "micromamba" if host in ["sherlock", "marlowe"] else "mamba"
+                    got = self.run_shell(source, "eval '" + command + " \"argument with spaces\"'", shell)
+                    self.assertEqual(got, "<argument with spaces>")
+
     def test_juliaup_home_path_is_idempotent(self):
         source = (ROOT / "wsl-ubuntu/sh/.config/sh/.profile").read_text()
         got = self.run_shell(source, '. "$1"; printf "%s" "$PATH"')

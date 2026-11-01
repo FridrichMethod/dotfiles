@@ -24,7 +24,7 @@ __mamba_setup="$("$MAMBA_EXE" shell hook --shell zsh --root-prefix "$MAMBA_ROOT_
 if [ $? -eq 0 ]; then
     eval "$__mamba_setup"
 else
-    alias mamba="$MAMBA_EXE" # Fallback on help from mamba activate
+    alias mamba='"$MAMBA_EXE"' # Fallback on help from mamba activate
 fi
 unset __mamba_setup
 # <<< mamba initialize <<<
