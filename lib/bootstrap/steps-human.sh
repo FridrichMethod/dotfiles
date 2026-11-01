@@ -278,22 +278,35 @@ step_S5_claude_plan() {
 
 # --- H7-stow (judgment, blocking) ------------------------------------------
 
-# steps_stowed: 0 when ~/.zshrc is a stow link into this checkout's common/.
+# Completion needs the installer's current receipt and its key startup links.
+# The receipt proves all packages completed; links catch partial home cleanup
+# without reproducing Stow's entire target graph.
 steps_stowed() {
-    local link=$HOME/.zshrc resolved
-    if [ ! -L "$link" ]; then
-        STEP_DETAIL="$link is not a stow link yet"
-        return 1
-    fi
-    resolved=$(steps_resolve "$link") || resolved=
-    case $resolved in
-        "$STEPS_ROOT/common/"*)
-            STEP_DETAIL="$link links into $STEPS_ROOT/common"
-            return 0
-            ;;
-    esac
-    STEP_DETAIL="$link points to ${resolved:-a missing file}, not into $STEPS_ROOT/common"
-    return 1
+    local state saved_home saved_os saved_host saved_head head relative source link resolved
+    STEP_DETAIL='no current complete stow installation recorded for this home and host'
+    state=$(bootstrap_state_file "$STEPS_ROOT") || return 1
+    {
+        IFS= read -r saved_home && IFS= read -r saved_os &&
+            IFS= read -r saved_host && IFS= read -r saved_head
+    } <"$state" || return 1
+    head=$(git -C "$STEPS_ROOT" rev-parse HEAD 2>/dev/null) || return 1
+    [ -n "$head" ] && [ "$saved_home" = "$HOME" ] &&
+        [ "$saved_os" = "$(bootstrap_os)" ] && [ "$saved_host" = "$STEPS_HOST" ] &&
+        [ "$saved_head" = "$head" ] || return 1
+    for relative in common/sh/.profile common/zsh/.zshrc \
+        "$STEPS_HOST/sh/.config/sh/.profile" "$STEPS_HOST/zsh/.config/zsh/.zshrc"; do
+        source=$STEPS_ROOT/$relative
+        # Hosts without a shell overlay use the common startup files only.
+        case $relative in common/*) ;; *) [ -f "$source" ] || continue ;; esac
+        link=$HOME/${relative#*/*/}
+        resolved=$(steps_resolve "$link") || resolved=
+        if [ ! -L "$link" ] || [ ! -f "$source" ] || [ "$resolved" != "$source" ]; then
+            STEP_DETAIL="$link is not linked to $source"
+            return 1
+        fi
+    done
+    STEP_DETAIL='current stow receipt and shell links match this home and host'
+    return 0
 }
 
 # steps_stow_conflicts: the home paths (relative to $HOME, one per line) that

@@ -1521,6 +1521,12 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
   checks are `ok` (path-order warns only when a command in
   `~/.local/bin` is shadowed by a second install earlier on PATH: remove the
   one you do not use).
+- **Readiness:** setup marks H7-stow done only when the installer's Git-local
+  receipt matches this home, kernel, selected host and current HEAD, and the
+  shared plus existing host shell startup links are intact. A lone `.zshrc`
+  link, a common-only receipt for a selected host, or a stale receipt is
+  incomplete. A dirty install remembers the host but leaves its applied
+  revision empty; rerun Stow once the checkout is clean.
 - **Human:** yes (judgment: it rewrites your home's dotfiles and AI settings;
   the person runs it, or approves it as one visible top-level agent command)
 
@@ -1785,8 +1791,11 @@ by processes that enforce RedirectionGuard, such as current Windows OpenSSH
   `$HOME\dotfiles`: `.\stow-all.ps1 win`. The HW-stow block prints it with the
   clone's full path, `& '<clone>\stow-all.ps1' win`, so it runs from any
   directory.
-- **Verify:** `(Get-Item $HOME\.gitconfig).LinkType` prints `SymbolicLink` and
-  `.\doctor.ps1 -Host win` passes.
+- **Verify:** `.\doctor.ps1 -Host win` passes. Setup marks HW-stow done only
+  when the installer's Windows receipt matches this home, the `win` host and
+  current HEAD, and `.gitconfig`, `.gitconfig_local` and both PowerShell
+  profile links point to this checkout. A single Git link is insufficient;
+  common-only, stale and dirty-install receipts remain pending.
 - **Human:** yes (judgment: it rewrites your Windows home's dotfiles and AI
   settings, from an elevated shell, which is always the person's)
 

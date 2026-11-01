@@ -89,6 +89,10 @@ function New-ToolShim {
     $special = @{
         'oh-my-posh' = 'if ("$args" -like ''font install *'') { $f = Join-Path $env:LOCALAPPDATA ''Microsoft/Windows/Fonts''; ' +
             '[void][IO.Directory]::CreateDirectory($f); [IO.File]::WriteAllText((Join-Path $f ''CaskaydiaMonoNerdFont-Regular.ttf''), ''f''); exit 0 }'
+        'git' = @'
+if ("$args" -like '* rev-parse --absolute-git-dir') { Join-Path $args[1] '.git'; exit 0 }
+if ("$args" -like '* rev-parse HEAD') { 'fixture-head'; exit 0 }
+'@
         'bat' = @'
 if ("$args" -eq 'cache --build') {
     $code = [int]"0$env:FAKE_BAT_CACHE_EXIT"
@@ -227,6 +231,24 @@ function Set-FixtureHealthy {
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $path))
         [IO.File]::WriteAllText($path, $files[$path])
     }
+}
+
+function Set-FixtureStowed($Fixture) {
+    foreach ($relative in @('common/git/.gitconfig', 'win/git/.gitconfig_local',
+            'win/powershell/Documents/PowerShell/profile.ps1', 'win/powershell/Documents/WindowsPowerShell/profile.ps1')) {
+        $source = Join-Path $Fixture.Repo $relative
+        $destination = Join-Path $Fixture.Home (($relative -split '/', 3)[2])
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $source))
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+        [IO.File]::WriteAllText($source, '')
+        if (-not (Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue)) {
+            [void](New-Item -ItemType SymbolicLink -Path $destination -Target $source)
+        }
+    }
+    $directory = Join-Path $Fixture.Repo '.git/dotfiles-sync-windows'
+    [void][IO.Directory]::CreateDirectory($directory)
+    @{ home = $Fixture.Home; host = 'win'; appliedHead = 'fixture-head' } |
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'configuration.json')
 }
 
 function Invoke-Fixture {
@@ -1064,9 +1086,8 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before '-Check wrote files'
         Assert-Equal @(Get-InstallEvents $fixture).Count 0 '-Check installed something'
         Assert-True (-not @(Get-FixtureEvents $fixture | Where-Object { $_ -match 'PSResource|Invoke-WebRequest' }).Count) '-Check queried the network or PSResourceGet'
-        # A ~/.gitconfig symlink into this checkout marks HW-stow done; with
-        # HW-clone done too nothing blocks, but todo steps still exit 3, as in
-        # setup-host.sh --check.
+        # A lone ~/.gitconfig link is an incomplete install, even though
+        # it points into the correct checkout.
         $gitconfig = Join-Path $fixture.Repo 'common/git/.gitconfig'
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $gitconfig)); [IO.File]::WriteAllText($gitconfig, '')
         try { [void](New-Item -ItemType SymbolicLink -Path (Join-Path $fixture.Home '.gitconfig') -Target $gitconfig) } catch { }
@@ -1075,13 +1096,52 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-True ($default.Lines -contains 'W1-font skip no selected tier needs the Nerd Font') 'font under default tiers'
         if (Test-Path -LiteralPath (Join-Path $fixture.Home '.gitconfig')) {
             Assert-Exit $default 3 'check with only non-blocking HUMAN steps and todo steps'
-            Assert-True ($default.Lines -contains 'HW-stow done already done') 'stowed .gitconfig'
+            Assert-True ($default.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'lone .gitconfig must not mark stow done'
             Assert-True (@($default.Lines -like 'W1-winget todo missing: python3, fzf, *').Count -eq 1) "winget todo: $($default.Stdout)"
         }
         else {
             Assert-Exit $default 3 'default-tier check without a stowed .gitconfig'
             Skip-Assertion 'cannot create a symlink here; the HW-stow done state and exit 0 are not checked.'
         }
+    }
+
+    Test-Case 'stow completion requires the current home and host receipt plus every startup link' {
+        $fixture = New-Fixture
+        try { Set-FixtureStowed $fixture } catch {
+            Skip-Assertion "cannot create symlinks here; receipt/link regressions not checked: $_"
+            return
+        }
+        $parameters = @{ Check = $true }
+        $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
+        Assert-Exit $run 3 'complete stow with automated steps still pending'
+        Assert-True ($run.Lines -contains 'HW-stow done already done') 'current install not done'
+        $receipt = Join-Path $fixture.Repo '.git/dotfiles-sync-windows/configuration.json'
+        $valid = [IO.File]::ReadAllText($receipt)
+        foreach ($case in @(@('home', ($fixture.Home + '/other')), @('host', ''), @('host', 'mac'),
+                @('appliedHead', 'stale'), @('appliedHead', ''))) {
+            $state = $valid | ConvertFrom-Json
+            $state.($case[0]) = $case[1]
+            $state | ConvertTo-Json | Set-Content -LiteralPath $receipt
+            $before = Get-Snapshot (Get-FixtureRoots $fixture)
+            $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
+            Assert-Exit $run 3 "invalid receipt $($case[0])=$($case[1])"
+            Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'invalid receipt marked done'
+            Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'readiness check wrote files'
+        }
+        [IO.File]::WriteAllText($receipt, $valid)
+        foreach ($relative in @('.gitconfig', '.gitconfig_local', 'Documents/PowerShell/profile.ps1', 'Documents/WindowsPowerShell/profile.ps1')) {
+            $path = Join-Path $fixture.Home $relative
+            $target = (Get-Item -LiteralPath $path -Force).LinkTarget
+            [IO.File]::Delete($path)
+            $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
+            Assert-Exit $run 3 "missing $relative"
+            Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') "missing $relative marked done"
+            [void](New-Item -ItemType SymbolicLink -Path $path -Target $target)
+        }
+        [IO.File]::Delete($receipt)
+        $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
+        Assert-Exit $run 3 'links without a receipt'
+        Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'missing receipt marked done'
     }
 
     Test-Case 'setup-host refuses a non-interactive run without -Yes, bad usage and invalid pins' {
@@ -1227,11 +1287,8 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         foreach ($id in @('W1-winget', 'W1-font', 'W1-bat-theme', 'W1-setup-sync')) { Assert-True (@($check.Lines -like "$id done *").Count -eq 1) "$id not done after apply" }
 
         # Once stowed, only non-blocking blocks remain: they print, and the run exits 0.
-        $gitconfig = Join-Path $fixture.Repo 'common/git/.gitconfig'
-        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $gitconfig)); [IO.File]::WriteAllText($gitconfig, '')
-        try { [void](New-Item -ItemType SymbolicLink -Path (Join-Path $fixture.Home '.gitconfig') -Target $gitconfig) } catch { }
-        if (-not (Test-Path -LiteralPath (Join-Path $fixture.Home '.gitconfig'))) {
-            Skip-Assertion 'cannot create a symlink here; the exit 0 apply after HW-stow is not checked.'
+        try { Set-FixtureStowed $fixture } catch {
+            Skip-Assertion "cannot create symlinks here; complete-stow apply not checked: $_"
             return
         }
         # FAKE_PSRESOURCE_INSTALLED has PSResourceGet report CompletionPredictor

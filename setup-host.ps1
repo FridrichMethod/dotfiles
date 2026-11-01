@@ -287,15 +287,31 @@ function Get-SetupStepState {
 }
 
 function Test-SetupStowed {
-    # HW-stow is done when ~/.gitconfig links to this checkout's common copy.
-    $link = Get-Item -LiteralPath (Join-Path $HOME '.gitconfig') -Force -ErrorAction SilentlyContinue
-    $property = if ($link) { $link.PSObject.Properties['LinkTarget'] } else { $null }
-    if ($null -eq $property -or -not $property.Value) { return $false }
-    $target = [string]$property.Value
-    if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path (Split-Path -Parent $link.FullName) $target }
-    $expected = [IO.Path]::GetFullPath((Join-Path $RepoRoot 'common/git/.gitconfig'))
-    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    return [IO.Path]::GetFullPath($target).Equals($expected, $comparison)
+    # Read the installer's receipt directly: Get-DotfilesStateDirectory creates
+    # directories, which is forbidden during -Check.
+    try {
+        $gitDir = git -C $RepoRoot rev-parse --absolute-git-dir 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $gitDir) { return $false }
+        $head = git -C $RepoRoot rev-parse HEAD 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $head) { return $false }
+        $receipt = Get-Content -LiteralPath (Join-Path ([string]$gitDir) 'dotfiles-sync-windows/configuration.json') -Raw -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if (-not ([string]$receipt.home).Equals($HOME, $comparison) -or
+            $receipt.host -cne 'win' -or $receipt.appliedHead -cne [string]$head) { return $false }
+        foreach ($relative in @('common/git/.gitconfig', 'win/git/.gitconfig_local',
+                'win/powershell/Documents/PowerShell/profile.ps1', 'win/powershell/Documents/WindowsPowerShell/profile.ps1')) {
+            $destination = ($relative -split '/', 3)[2]
+            $link = Get-Item -LiteralPath (Join-Path $HOME $destination) -Force -ErrorAction Stop
+            if ($link.LinkType -ne 'SymbolicLink' -or -not $link.LinkTarget) { return $false }
+            $target = [string]$link.LinkTarget
+            if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path (Split-Path -Parent $link.FullName) $target }
+            $expected = [IO.Path]::GetFullPath((Join-Path $RepoRoot $relative))
+            if (-not (Test-Path -LiteralPath $expected -PathType Leaf) -or
+                -not [IO.Path]::GetFullPath($target).Equals($expected, $comparison)) { return $false }
+        }
+        return $true
+    } catch { return $false }
 }
 
 function Get-SetupFirstPolicy {

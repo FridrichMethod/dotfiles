@@ -671,7 +671,10 @@ write_clones
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
-mkdir -p "$FIXTURE/common/bash" "$FIXTURE/common/claude/.claude"
+mkdir -p "$FIXTURE/common/bash" "$FIXTURE/common/claude/.claude" \
+    "$FIXTURE/common/sh" "$FIXTURE/lab-ubuntu/zsh/.config/zsh"
+printf '# fixture profile\n' >"$FIXTURE/common/sh/.profile"
+printf '# fixture host zshrc\n' >"$FIXTURE/lab-ubuntu/zsh/.config/zsh/.zshrc"
 printf '%s\n' '# fixture bashrc' >"$FIXTURE/common/bash/.bashrc"
 printf '%s\n' '{}' >"$FIXTURE/common/claude/.claude/settings.json"
 cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
@@ -994,7 +997,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 fi
 cp "$FIXTURES/artifacts/claude-install" "$CLAUDE_SCRATCH"
 
-# A second apply installs nothing; once ~/.zshrc is stowed nothing blocks.
+# A second apply installs nothing; a lone ~/.zshrc must still block.
 printf '#!/bin/sh\necho "2.0.0 (Claude Code)"\n' >"$CASE_HOME/.local/bin/claude"
 chmod 755 "$CASE_HOME/.local/bin/claude"
 run_case reapply -- --host lab-ubuntu --yes --tier all
@@ -1005,10 +1008,43 @@ expect_text reapply out 'S5-claude done claude at'
 expect_text reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_line reapply 'HUMAN-BEGIN H7-stow judgment'
 ln -s "$FIXTURE/common/zsh/.zshrc" "$CASE_HOME/.zshrc"
+run_case partial-stow -- --host lab-ubuntu --check --only H7-stow
+expect_rc partial-stow 3
+expect_text partial-stow out 'H7-stow human '
+expect_no_events partial-stow
+STOW_HEAD=$("$REAL_GIT" -C "$FIXTURE" rev-parse HEAD)
+mkdir -p "$CASE_HOME/.config/zsh"
+ln -s "$FIXTURE/common/sh/.profile" "$CASE_HOME/.profile"
+ln -s "$FIXTURE/lab-ubuntu/zsh/.config/zsh/.zshrc" "$CASE_HOME/.config/zsh/.zshrc"
+for invalid in home platform host common-only stale blank; do
+    receipt_home=$CASE_HOME receipt_os=Linux receipt_host=lab-ubuntu receipt_head=$STOW_HEAD
+    case $invalid in
+        home) receipt_home=$CASE_HOME/other ;;
+        platform) receipt_os=Darwin ;;
+        host) receipt_host=mac ;;
+        common-only) receipt_host= ;;
+        stale) receipt_head=stale-revision ;;
+        blank) receipt_head= ;;
+    esac
+    printf '%s\n' "$receipt_home" "$receipt_os" "$receipt_host" "$receipt_head" >"$FIXTURE/.git/dotfiles-sync-unix"
+    run_case "stow-$invalid" -- --host lab-ubuntu --check --only H7-stow
+    expect_rc "stow-$invalid" 3
+    expect_text "stow-$invalid" out 'H7-stow human '
+    expect_no_events "stow-$invalid"
+done
+printf '%s\n' "$CASE_HOME" Linux lab-ubuntu "$STOW_HEAD" >"$FIXTURE/.git/dotfiles-sync-unix"
+for missing in .profile .config/zsh/.zshrc; do
+    source=$(readlink "$CASE_HOME/$missing")
+    rm "$CASE_HOME/$missing"
+    run_case stow-missing -- --host lab-ubuntu --check --only H7-stow
+    expect_rc stow-missing 3
+    expect_no_events stow-missing
+    ln -s "$source" "$CASE_HOME/$missing"
+done
 run_case stowed -- --host lab-ubuntu --yes --tier all
 expect_rc stowed 0
 expect_no_installs stowed
-expect_text stowed out "H7-stow done $CASE_HOME/.zshrc links into $FIXTURE/common"
+expect_text stowed out 'H7-stow done current stow receipt and shell links match this home and host'
 expect_no_text stowed out 'HUMAN-BEGIN H7-stow'
 expect_line stowed 'HUMAN-BEGIN H7-auth auth'
 expect_text stowed out 'nothing blocking remains for lab-ubuntu'
