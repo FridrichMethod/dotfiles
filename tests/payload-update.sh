@@ -73,15 +73,17 @@ printf 'curl\n' >>"$EVENTS"
 exec "$REAL_CURL" "$@"
 SH
 # The kit's bootstrap installs a managed root whose current/install.sh is the
-# update command, and the three Claude helpers.
+# update command, and the three Claude helpers. Every fake records the
+# working directory it runs in (EVENTS.ITEM-cwd).
 cat >"$REMOTE/coding-agent-kit/main/install.sh" <<'SH'
 #!/bin/sh
 printf 'kit-install [%s] stdin=[%s]\n' "$*" "$(cat)" >>"$EVENTS"
+pwd -P >"$EVENTS.kit-cwd"
 [ "${FAKE_KIT_STATUS:-0}" = 0 ] || exit "$FAKE_KIT_STATUS"
 root=${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit
 mkdir -p "$root/current" "$HOME/.claude/coding-agent-kit"
-printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'echo "kit-update: fake output" >&2' \
-    'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
+printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'pwd -P >"$EVENTS.kit-cwd"' \
+    'echo "kit-update: fake output" >&2' 'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
 for helper in statusline notify check-git-hooks; do
     : >"$HOME/.claude/coding-agent-kit/$helper.cjs"
 done
@@ -94,6 +96,7 @@ cat >"$REMOTE/PyMOLScripts/main/install.sh" <<'SH'
 printf 'pymol-install [%s]\n' "$*" >>"$EVENTS"
 here=$(dirname -- "$0")
 printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.pymol-dir"
+pwd -P >"$EVENTS.pymol-cwd"
 [ "${FAKE_PYMOL_STATUS:-0}" = 0 ] || exit "$FAKE_PYMOL_STATUS"
 : >"$HOME/.pymolrc"
 : >"$HOME/.pymolrc.py"
@@ -103,6 +106,7 @@ cat >"$REMOTE/awesome-skills/main/install.sh" <<'SH'
 printf 'skills-install [%s] bash=%s\n' "$*" "${BASH_VERSION:+yes}" >>"$EVENTS"
 here=$(dirname -- "$0")
 printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.skills-dir"
+pwd -P >"$EVENTS.skills-cwd"
 [ "${FAKE_SKILLS_STATUS:-0}" = 0 ] || exit "$FAKE_SKILLS_STATUS"
 mkdir -p "$HOME/.local/share/awesome-skills"
 printf '{}\n' >"$HOME/.local/share/awesome-skills/claude.json"
@@ -426,6 +430,35 @@ new_home
 FAKE_PYMOL_STATUS=1 now pymol
 read -r here <"$EVENTS.pymol-dir"
 [[ "$STATUS" == 1 && -n "$here" && ! -e "$here" ]] || fail 'a failed installer left its staging directory behind'
+
+# No installer runs in the caller's working directory, which may be a shared
+# one (a shell started in /tmp) or hold a project's json.py: awesome-skills'
+# remote bootstrap runs python3 -c, which imports from its working directory
+# first. A download runs in its staging directory, an installed script (the
+# kit's update) in /.
+new_home
+mkdir "$TEST_TMP/caller"
+printf 'planted\n' >"$TEST_TMP/caller/json.py"
+pushd "$TEST_TMP/caller" >/dev/null
+now kit pymol skills
+popd >/dev/null
+[[ "$STATUS" == 0 ]] || fail 'the installs from a planted working directory failed'
+for item in kit pymol skills; do
+    read -r cwd <"$EVENTS.$item-cwd" || fail "the $item fake recorded no working directory"
+    case $cwd in
+        "$TEST_TMP"/dotfiles-payload.*) ;;
+        *) fail "$item's download ran in $cwd, not in its staging directory" ;;
+    esac
+done
+for item in pymol skills; do
+    read -r here <"$EVENTS.$item-dir"
+    [[ "$(cat "$EVENTS.$item-cwd")" == "$here" ]] || fail "$item ran outside the directory that holds it"
+done
+pushd "$TEST_TMP/caller" >/dev/null
+now kit
+popd >/dev/null
+[[ "$STATUS" == 0 && "$(cat "$EVENTS.kit-cwd")" == / ]] || fail "the kit's installed update ran in $(cat "$EVENTS.kit-cwd"), not in /"
+rm -r "$TEST_TMP/caller"
 
 # A download that fails runs nothing and leaves no temporary file.
 new_home

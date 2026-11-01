@@ -86,8 +86,10 @@ field() {
 # timeout, into a fresh directory that only this user can enter and that holds
 # nothing else, removed afterwards: PyMOLScripts' and awesome-skills'
 # installers read files beside themselves as a checkout's, which another user
-# could plant in a shared TMPDIR. After one failed download a run tries no
-# other.
+# could plant in a shared TMPDIR. The script runs in that directory, an
+# installed one in /, never in the caller's, which may be shared too:
+# awesome-skills' installer runs python3 -c, which imports modules from its
+# working directory first. After one failed download a run tries no other.
 staging='' offline=''
 trap '[ -z "$staging" ] || rm -rf "$staging"' 0
 trap 'exit 1' HUP INT TERM
@@ -110,6 +112,10 @@ payload_script() {
             fi
             offline=1
             staging=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
+            case $staging in
+                /*) ;;
+                *) staging=$PWD/$staging ;;
+            esac
             # Named as published, so the installer's $0 reads as in its README.
             download=$staging/${source##*/}
             case ${source##*/} in
@@ -136,11 +142,15 @@ payload_script() {
                 dotfiles_log error "$source is missing"
                 return 1
             fi
+            case $source in
+                /*) ;;
+                *) source=$PWD/$source ;;
+            esac
             set -- "$source" "$@"
             ;;
     esac
     script_status=0
-    "$interpreter" "$@" </dev/null || script_status=$?
+    (cd "${staging:-/}" && exec "$interpreter" "$@" </dev/null) || script_status=$?
     unstage
     return "$script_status"
 }

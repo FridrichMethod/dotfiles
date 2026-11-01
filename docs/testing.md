@@ -225,7 +225,8 @@ non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
 each item's update command and the log; a live worker blocking a second one;
 a failed first install recording nothing and the next session retrying it;
 exit 75; `--now`, the aliases, a failed download, the wget fallback, each
-download staged alone in a fresh private directory; and the rc files and the
+download staged alone in a fresh private directory, every installer running
+outside the caller's working directory; and the rc files and the
 transition shim sourcing the hook. `tests/payload-update.ps1` covers the
 PowerShell twin the same way, with the items that have a `windows-install`
 row (PyMOLScripts and awesome-skills): a run naming the kit says it is not

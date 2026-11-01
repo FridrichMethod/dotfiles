@@ -37,8 +37,9 @@
 # which download SOURCE when it is a URL (curl or wget; Invoke-WebRequest)
 # within DOTFILES_PAYLOAD_TIMEOUT seconds into a fresh private temporary
 # directory that holds nothing else and is removed afterwards, never piping
-# it into a shell, run it with ARG and return its exit status (75: another
-# run holds that repo's lock).
+# it into a shell, run it with ARG (sh: in that directory, an installed
+# SOURCE in /, never in the caller's) and return its exit status (75:
+# another run holds that repo's lock).
 kit	channel	0.6
 kit	days	1
 kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as

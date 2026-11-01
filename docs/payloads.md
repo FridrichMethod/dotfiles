@@ -78,7 +78,11 @@ helper:
   `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
   failed, the run tries no other, so a network that is down or stalls holds
   a login once. A path must be an existing file. On Unix the installer's
-  stdin is closed.
+  stdin is closed, and it runs in its download directory, an installed
+  script in `/`, never in the caller's working directory: that may be a
+  shared one too (a shell started in `/tmp`), and awesome-skills' remote
+  bootstrap runs `python3 -c`, which imports modules from its working
+  directory first.
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
 `tests/payload-update.sh` points that prefix at `file://` fakes and fails on
