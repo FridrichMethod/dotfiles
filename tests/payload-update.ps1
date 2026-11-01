@@ -110,21 +110,11 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
     try { $pshomeCwd = @(& $pwsh -NoProfile -NonInteractive -Command '(Get-Location).ProviderPath; [Environment]::CurrentDirectory') }
     finally { Pop-Location }
     Assert-True ($pshomeCwd.Count -eq 2) "cannot read the working directory of a pwsh started in $($PSHOME): $pshomeCwd"
-    # Assert that the fake NAME ran in the staging directory that held it
-    # (fresh and uniquely named, so its leaf name identifies it whatever
-    # spelling of the temporary path each process saw) or, for an installed
-    # script, in $PSHOME.
-    function Assert-RanIn($Case, [string]$Name, [string]$Where) {
+    # Assert that the fake NAME, a download or an installed script, ran in
+    # $PSHOME.
+    function Assert-RanInPSHome($Case, [string]$Name) {
         $cwd = @([IO.File]::ReadAllLines("$($Case.Events).$Name-cwd"))
-        if ($Where -eq 'staging') {
-            $here = @([IO.File]::ReadAllLines("$($Case.Events).$Name-dir"))[0]
-            foreach ($path in $cwd[0], $cwd[1]) {
-                Assert-True ((Split-Path -Leaf $path) -ceq (Split-Path -Leaf $here)) "$Name ran in $path, not in its staging directory $here"
-            }
-        }
-        else {
-            Assert-True ($cwd[0] -eq $pshomeCwd[0] -and $cwd[1] -eq $pshomeCwd[1]) "$Name ran in $($cwd[0]) ($($cwd[1])), not in $PSHOME"
-        }
+        Assert-True ($cwd[0] -eq $pshomeCwd[0] -and $cwd[1] -eq $pshomeCwd[1]) "$Name ran in $($cwd[0]) ($($cwd[1])), not in $PSHOME"
         return $cwd
     }
     $elevated = $IsWindows -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -264,11 +254,13 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         $here = @([IO.File]::ReadAllLines("$($case.Events).pymol-dir"))[0]
         Assert-True ($run.Code -eq 1 -and -not (Test-Path -LiteralPath $here)) 'a failed installer left its staging directory behind'
     }
-    Test-Case 'no installer runs in the caller''s working directory: a download runs in its own, an installed script in $PSHOME' {
+    Test-Case 'every installer, a download or an installed script, runs in $PSHOME, never in the caller''s working directory' {
         # The caller's directory may be an untrusted checkout (a VS Code
         # terminal starts in its workspace, holding a git.cmd here), and
         # awesome-skills' installer finds git with Python's shutil.which,
-        # which on Windows searches the working directory first.
+        # which on Windows searches the working directory first. A download's
+        # own directory lies in the temporary directory, which may be shared,
+        # and git looks for a repository from its working directory upwards.
         $case = New-Case
         $caller = Join-Path $case.Root 'caller'
         Write-Fixture (Join-Path $caller 'git.cmd') '@echo planted'
@@ -276,11 +268,11 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         try {
             $run = Invoke-Hook $case @('-Now', 'pymol', 'skills')
             Assert-True ($run.Code -eq 0) $run.Text
-            foreach ($name in 'pymol', 'skills') { [void](Assert-RanIn $case $name staging) }
+            foreach ($name in 'pymol', 'skills') { [void](Assert-RanInPSHome $case $name) }
             # skills is installed now, so its update row runs the installed script.
             $run = Invoke-Hook $case @('-Now', 'skills')
             Assert-True ($run.Code -eq 0 -and (Get-Events $case).EndsWith('skills-update [-Update True]')) "events: $(Get-Events $case); output: $($run.Text)"
-            [void](Assert-RanIn $case skills-update pshome)
+            [void](Assert-RanInPSHome $case skills-update)
         }
         finally { Pop-Location }
     }
@@ -402,8 +394,8 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
             $log = Join-Path $case.State 'payload.log'
             Wait-Until { [IO.File]::Exists($log) -and [IO.File]::ReadAllText($log).Contains('skills: update done') } 'the background refresh'
             Assert-True ((Get-Events $case) -ceq "pymol-install []`nskills-update [-Update True]") "events: $(Get-Events $case)"
-            $pymol = Assert-RanIn $case pymol staging
-            $skills = Assert-RanIn $case skills-update pshome
+            $pymol = Assert-RanInPSHome $case pymol
+            $skills = Assert-RanInPSHome $case skills-update
             # Where /proc shows it (Linux), the background run itself: in
             # $PSHOME, it holds no handle on the caller's directory either.
             foreach ($parent in $pymol[2], $skills[2]) {

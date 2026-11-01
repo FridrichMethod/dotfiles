@@ -72,17 +72,27 @@ done
 printf 'curl\n' >>"$EVENTS"
 exec "$REAL_CURL" "$@"
 SH
+# record-cwd NAME: a fake's working directory in EVENTS.NAME-cwd and, with
+# PROBE_GIT set, in EVENTS.NAME-git the repository git discovers from there
+# (empty when none), as the real installers' repository-less git calls would.
+cat >"$TEST_TMP/bin/record-cwd" <<'SH'
+#!/bin/sh
+pwd -P >"$EVENTS.$1-cwd"
+[ -n "${PROBE_GIT-}" ] || exit 0
+unset GIT_DIR GIT_WORK_TREE GIT_CEILING_DIRECTORIES
+git rev-parse --absolute-git-dir >"$EVENTS.$1-git" 2>/dev/null || :
+SH
 # The kit's bootstrap installs a managed root whose current/install.sh is the
-# update command, and the three Claude helpers. Every fake records the
-# working directory it runs in (EVENTS.ITEM-cwd).
+# update command, and the three Claude helpers. Every fake records its
+# working directory with record-cwd.
 cat >"$REMOTE/coding-agent-kit/main/install.sh" <<'SH'
 #!/bin/sh
 printf 'kit-install [%s] stdin=[%s]\n' "$*" "$(cat)" >>"$EVENTS"
-pwd -P >"$EVENTS.kit-cwd"
+record-cwd kit
 [ "${FAKE_KIT_STATUS:-0}" = 0 ] || exit "$FAKE_KIT_STATUS"
 root=${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit
 mkdir -p "$root/current" "$HOME/.claude/coding-agent-kit"
-printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'pwd -P >"$EVENTS.kit-cwd"' \
+printf '%s\n' '#!/bin/sh' 'printf "kit-update [%s]\n" "$*" >>"$EVENTS"' 'record-cwd kit' \
     'echo "kit-update: fake output" >&2' 'exit "${FAKE_KIT_STATUS:-0}"' >"$root/current/install.sh"
 for helper in statusline notify check-git-hooks; do
     : >"$HOME/.claude/coding-agent-kit/$helper.cjs"
@@ -96,7 +106,7 @@ cat >"$REMOTE/PyMOLScripts/main/install.sh" <<'SH'
 printf 'pymol-install [%s]\n' "$*" >>"$EVENTS"
 here=$(dirname -- "$0")
 printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.pymol-dir"
-pwd -P >"$EVENTS.pymol-cwd"
+record-cwd pymol
 [ "${FAKE_PYMOL_STATUS:-0}" = 0 ] || exit "$FAKE_PYMOL_STATUS"
 : >"$HOME/.pymolrc"
 : >"$HOME/.pymolrc.py"
@@ -106,12 +116,12 @@ cat >"$REMOTE/awesome-skills/main/install.sh" <<'SH'
 printf 'skills-install [%s] bash=%s\n' "$*" "${BASH_VERSION:+yes}" >>"$EVENTS"
 here=$(dirname -- "$0")
 printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.skills-dir"
-pwd -P >"$EVENTS.skills-cwd"
+record-cwd skills
 [ "${FAKE_SKILLS_STATUS:-0}" = 0 ] || exit "$FAKE_SKILLS_STATUS"
 mkdir -p "$HOME/.local/share/awesome-skills"
 printf '{}\n' >"$HOME/.local/share/awesome-skills/claude.json"
 SH
-chmod +x "$TEST_TMP/bin/curl"
+chmod +x "$TEST_TMP/bin/curl" "$TEST_TMP/bin/record-cwd"
 
 CASE=0
 # new_home: a fresh HOME and event log for the next case.
@@ -431,11 +441,11 @@ FAKE_PYMOL_STATUS=1 now pymol
 read -r here <"$EVENTS.pymol-dir"
 [[ "$STATUS" == 1 && -n "$here" && ! -e "$here" ]] || fail 'a failed installer left its staging directory behind'
 
-# No installer runs in the caller's working directory, which may be a shared
-# one (a shell started in /tmp) or hold a project's json.py: awesome-skills'
-# remote bootstrap runs python3 -c, which imports from its working directory
-# first. A download runs in its staging directory, an installed script (the
-# kit's update) in /.
+# Every installer runs in /, a download as well as an installed script (the
+# kit's update), never in the caller's working directory, which may be a
+# shared one (a shell started in /tmp) or hold a project's json.py:
+# awesome-skills' remote bootstrap runs python3 -c, which imports from its
+# working directory first.
 new_home
 mkdir "$TEST_TMP/caller"
 printf 'planted\n' >"$TEST_TMP/caller/json.py"
@@ -445,20 +455,38 @@ popd >/dev/null
 [[ "$STATUS" == 0 ]] || fail 'the installs from a planted working directory failed'
 for item in kit pymol skills; do
     read -r cwd <"$EVENTS.$item-cwd" || fail "the $item fake recorded no working directory"
-    case $cwd in
-        "$TEST_TMP"/dotfiles-payload.*) ;;
-        *) fail "$item's download ran in $cwd, not in its staging directory" ;;
-    esac
-done
-for item in pymol skills; do
-    read -r here <"$EVENTS.$item-dir"
-    [[ "$(cat "$EVENTS.$item-cwd")" == "$here" ]] || fail "$item ran outside the directory that holds it"
+    [[ "$cwd" == / ]] || fail "$item's download ran in $cwd, not in /"
 done
 pushd "$TEST_TMP/caller" >/dev/null
 now kit
 popd >/dev/null
 [[ "$STATUS" == 0 && "$(cat "$EVENTS.kit-cwd")" == / ]] || fail "the kit's installed update ran in $(cat "$EVENTS.kit-cwd"), not in /"
 rm -r "$TEST_TMP/caller"
+# Nor in its staging directory: that lies in TMPDIR, where another user can
+# create TMPDIR/.git, and git looks for a repository by walking up from its
+# working directory, as the kit's installer's git ls-remote outside any
+# repository does. The plant has this user as owner here, which stands for a
+# host whose safe.directory is * (lab-ubuntu's .gitconfig_local).
+if PATH=/usr/bin:/bin git --version >/dev/null 2>&1; then
+    new_home
+    PATH=/usr/bin:/bin git -c init.defaultBranch=main init -q -- "$TEST_TMP/plant"
+    mv "$TEST_TMP/plant/.git" "$TEST_TMP/.git"
+    mkdir "$TEST_TMP/plant/probe"
+    found=$(cd "$TEST_TMP/plant/probe" && unset GIT_DIR GIT_WORK_TREE GIT_CEILING_DIRECTORIES &&
+        PATH=/usr/bin:/bin git rev-parse --absolute-git-dir 2>/dev/null) || :
+    [[ -n "$found" && "$found" -ef "$TEST_TMP/.git" ]] ||
+        fail "git does not find the planted $TEST_TMP/.git from below it (found [$found]); the check proves nothing"
+    PROBE_GIT=1 now kit pymol skills
+    [[ "$STATUS" == 0 ]] || fail 'the installs beside a planted TMPDIR/.git failed'
+    for item in kit pymol skills; do
+        found=$(cat "$EVENTS.$item-git") || fail "the $item fake did not probe git"
+        [[ -z "$found" || ! "$found" -ef "$TEST_TMP/.git" ]] ||
+            fail "git run by the $item installer found the planted $TEST_TMP/.git from $(cat "$EVENTS.$item-cwd")"
+    done
+    rm -rf "$TEST_TMP/.git" "$TEST_TMP/plant"
+else
+    printf 'SKIP: no git in /usr/bin or /bin; the planted TMPDIR/.git case did not run.\n' >&2
+fi
 
 # A download that fails runs nothing and leaves no temporary file.
 new_home

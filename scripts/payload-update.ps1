@@ -86,14 +86,16 @@ $PayloadFailed = & { try {
         # fresh directory of its own, removed afterwards: PyMOLScripts' and
         # awesome-skills' installers read files beside themselves as a
         # checkout's, which another user could plant in a shared temporary
-        # directory. The script runs in that directory, an installed one in
-        # $PSHOME (which only whoever could replace this pwsh can write),
-        # never in the caller's, which may be an untrusted checkout (a VS Code
-        # terminal starts in its workspace): awesome-skills' installer finds
-        # git with Python's shutil.which, which on Windows searches the
-        # working directory first. After one failed download a run tries no
-        # other. A simple function, so -Update and the like reach the script
-        # instead of binding here.
+        # directory. Every script runs in $PSHOME (which only whoever could
+        # replace this pwsh can write), never in the caller's directory, which
+        # may be an untrusted checkout (a VS Code terminal starts in its
+        # workspace: awesome-skills' installer finds git with Python's
+        # shutil.which, which on Windows searches the working directory
+        # first), nor in the download's, whose parent may be shared: git
+        # looks for a repository from its working directory upwards. The
+        # installers find their own files through their path. After one
+        # failed download a run tries no other. A simple function, so -Update
+        # and the like reach the script instead of binding here.
         $source = [string]$args[0]
         $rest = @($args | Select-Object -Skip 1 | ForEach-Object { [string]$_ })
         $staging = $null
@@ -125,7 +127,7 @@ $PayloadFailed = & { try {
             # Absolute before the move: a relative TMPDIR or source path is
             # relative to the caller's directory. A failed move runs nothing.
             $file = (Get-Item -LiteralPath $file -Force -ErrorAction Stop).FullName
-            Push-Location -LiteralPath $(if ($staging) { Split-Path -Parent $file } else { $PSHOME }) -ErrorAction Stop
+            Push-Location -LiteralPath $PSHOME -ErrorAction Stop
             $pushed = $true
             & $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file @rest 2>&1 | ForEach-Object { Write-Host "$_" }
             return $LASTEXITCODE

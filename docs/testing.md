@@ -226,12 +226,13 @@ each item's update command and the log; a live worker blocking a second one;
 a failed first install recording nothing and the next session retrying it;
 exit 75; `--now`, the aliases, a failed download, the wget fallback, each
 download staged alone in a fresh private directory, every installer running
-outside the caller's working directory; and the rc files and the
-transition shim sourcing the hook. `tests/payload-update.ps1` covers the
-PowerShell twin the same way, with the items that have a `windows-install`
-row (PyMOLScripts and awesome-skills): a run naming the kit says it is not
-available there and records nothing, every installer and the background run
-stay out of the caller's working directory, and fixture-only rows keep the
+in `/`, outside the caller's working directory and out of reach of a planted
+`TMPDIR/.git`; and the rc files and the transition shim sourcing the hook.
+`tests/payload-update.ps1` covers the PowerShell twin the same way, with the
+items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
+run naming the kit says it is not available there and records nothing, every
+installer and the background run run in `$PSHOME`, out of the caller's
+working directory and the download's, and fixture-only rows keep the
 `windows-update` and `stow-links` fields covered. `tests/unix-installer.sh`
 also runs the [migration](payloads.md#migration) of a host stowed with both
 submodules through the real login updater, Git and Stow: the leftover

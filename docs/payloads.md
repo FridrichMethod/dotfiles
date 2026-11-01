@@ -78,14 +78,20 @@ helper:
   `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
   failed, the run tries no other, so a network that is down or stalls holds
   a login once. A path must be an existing file. On Unix the installer's
-  stdin is closed. It runs in its download directory, an installed script
-  in `/` (PowerShell: in `$PSHOME`, which only whoever could replace that
-  pwsh can write), never in the caller's working directory: that may be a
-  shared one too (a shell started in `/tmp`) or an untrusted checkout (a
-  VS Code terminal starts in its workspace), and awesome-skills' remote
-  bootstrap runs `python3 -c` on Unix, which imports modules from its
-  working directory first, and on Windows finds git with Python's
-  `shutil.which`, which searches the working directory first.
+  stdin is closed. Every installer, a download or an installed script,
+  runs in `/` (PowerShell: in `$PSHOME`, which only whoever could replace
+  that pwsh can write) and finds its own files through its path. It never
+  runs in the caller's working directory, which may be a shared one too (a
+  shell started in `/tmp`) or an untrusted checkout (a VS Code terminal
+  starts in its workspace): awesome-skills' remote bootstrap runs
+  `python3 -c` on Unix, which imports modules from its working directory
+  first, and on Windows finds git with Python's `shutil.which`, which
+  searches the working directory first. Nor does it run in its download
+  directory, whose parent may be shared: git looks for a repository from
+  its working directory upwards, so the kit's `git ls-remote`, run outside
+  any repository, would read a `/tmp/.git` another user made wherever
+  `safe.directory = *` turns git's ownership check off (lab-ubuntu's
+  `.gitconfig_local` does).
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
 `tests/payload-update.sh` points that prefix at `file://` fakes and fails on

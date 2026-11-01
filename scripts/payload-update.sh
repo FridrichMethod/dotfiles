@@ -86,10 +86,15 @@ field() {
 # timeout, into a fresh directory that only this user can enter and that holds
 # nothing else, removed afterwards: PyMOLScripts' and awesome-skills'
 # installers read files beside themselves as a checkout's, which another user
-# could plant in a shared TMPDIR. The script runs in that directory, an
-# installed one in /, never in the caller's, which may be shared too:
-# awesome-skills' installer runs python3 -c, which imports modules from its
-# working directory first. After one failed download a run tries no other.
+# could plant in a shared TMPDIR. Every script runs in /, which only root can
+# write, never in the caller's directory, which may be shared too
+# (awesome-skills' installer runs python3 -c, which imports modules from its
+# working directory first), nor in the download's, whose parent may be: git,
+# which the kit's installer runs outside any repository, looks for one from
+# its working directory upwards, so it would read a TMPDIR/.git another user
+# made (safe.directory = * turns its ownership check off). The installers
+# find their own files through their path. After one failed download a run
+# tries no other.
 staging='' offline=''
 trap '[ -z "$staging" ] || rm -rf "$staging"' 0
 trap 'exit 1' HUP INT TERM
@@ -150,7 +155,7 @@ payload_script() {
             ;;
     esac
     script_status=0
-    (cd "${staging:-/}" && exec "$interpreter" "$@" </dev/null) || script_status=$?
+    (cd / && exec "$interpreter" "$@" </dev/null) || script_status=$?
     unstage
     return "$script_status"
 }
