@@ -2,14 +2,9 @@
 
 set -euo pipefail
 
-# Hermetic: the provisioning exports (DOTFILES_AUTO_UPDATE=0 and the like,
-# docs/bootstrap.md) and other dotfiles knobs never reach the code under
-# test from the caller; each case sets what it needs.
-unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFILES_CHECKED \
-    DOTFILES_STOW_WITHOUT_OH_MY_ZSH DOTFILES_COLOR DOTFILES_PAYLOAD_AUTO_UPDATE DOTFILES_PAYLOAD_ITEMS \
-    DOTFILES_PAYLOAD_TIMEOUT AWESOME_SKILLS_AUTO_UPDATE \
-    _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
-    CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
+# Isolate inherited configuration while preserving explicit test inputs.
+# shellcheck source=tests/lib/environment.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib/environment.sh"
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-real-install.XXXXXX")"
@@ -20,8 +15,8 @@ SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
 export DOTFILES_SYNC_PYTHON="$SYNC_PYTHON"
 # An inherited Git override must never redirect fixture writes to a caller's
 # real index/object database or import hooks from a custom template directory.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
-    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG GIT_CONFIG_COUNT \
+dotfiles_test_clear_git_environment
+unset GIT_CONFIG GIT_CONFIG_COUNT \
     GIT_CONFIG_PARAMETERS GIT_SHALLOW_FILE GIT_REPLACE_REF_BASE
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_TEMPLATE_DIR="$TEST_TMP/empty-template"

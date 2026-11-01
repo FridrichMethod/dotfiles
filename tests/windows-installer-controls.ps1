@@ -83,9 +83,9 @@ $environmentNames = @(@('GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TEMPLAT
 $savedEnvironment = @{}
 foreach ($name in $environmentNames) {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
-    Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath "Env:$name") { throw "Environment override was not removed: $name" }
 }
+. (Join-Path $PSScriptRoot 'lib/environment.ps1')
+Clear-DotfilesTestGitEnvironment
 $env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'empty.gitconfig'
 [IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, '')
 $env:GIT_CONFIG_NOSYSTEM = '1'

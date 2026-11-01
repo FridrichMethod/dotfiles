@@ -39,9 +39,8 @@ $Utf8 = [Text.UTF8Encoding]::new($false)
 # hook in a linked worktree exports, absolute: New-TempClone would then
 # reinitialize and commit into the caller's repository. Remove every GIT_*
 # entry first.
-foreach ($name in @(Get-ChildItem Env: | Where-Object Name -Like 'GIT_*' | Select-Object -ExpandProperty Name)) {
-    Remove-Item -LiteralPath "Env:$name"
-}
+. (Join-Path $PSScriptRoot 'lib/environment.ps1')
+Clear-DotfilesTestGitEnvironment
 $env:GIT_CONFIG_NOSYSTEM = '1'
 $env:GIT_CONFIG_GLOBAL = Join-Path $testRoot 'gitconfig'
 $env:GIT_CEILING_DIRECTORIES = $testRoot

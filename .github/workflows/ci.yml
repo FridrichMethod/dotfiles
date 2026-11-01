@@ -42,8 +42,8 @@ jobs:
           sudo apt-get install --yes stow
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.sh
-      - name: Run behavior tests with required CI prerequisites
-        run: /bin/bash ./tests/run.sh --ci
+      - name: Check required CI prerequisites
+        run: /bin/bash ./tests/run.sh --ci --check-prerequisites
       # The same steps pre-commit/action@v3.0.1 runs, without its unmaintained
       # actions/cache@v4 pin (Node 20). Same cache path and key.
       - name: Install pre-commit
@@ -52,7 +52,9 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
-      - name: Run pre-commit
+      # All behavior suites are local hooks, so this is the Linux behavior
+      # pass too. macOS and Windows retain their native full-suite runners.
+      - name: Run behavior tests and pre-commit
         run: pre-commit run --show-diff-on-failure --color=always --all-files
       - name: Scan the full Git history for secrets
         run: pre-commit run --color=always --hook-stage manual gitleaks-history
