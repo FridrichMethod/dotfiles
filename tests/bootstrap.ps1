@@ -913,27 +913,31 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         # waits for stow-all, come first with what to run; only for selected
         # items that install here (a kit record a v0.6 install left is not
         # one). No Windows item of the real file has a stow-links row, so this
-        # fixture's copy gives pymol one.
+        # fixture's copy gives pymol one, at a path its windows-probe does not
+        # test: PowerShell 7.6's Test-Path -PathType Leaf counts a dangling
+        # link as a file, so a link at a probed rc file would read as
+        # installed and drop pymol from the not installed clause.
         $config = Join-Path $fixture.Repo 'config/payloads.tsv'
         $original = [IO.File]::ReadAllText($config)
-        [IO.File]::WriteAllText($config, $original.TrimEnd() + "`npymol`tstow-links`tpymol .pymolrc.py`n")
+        [IO.File]::WriteAllText($config, $original.TrimEnd() + "`npymol`tstow-links`tpymol .dotfiles-test-legacy-pymolrc`n")
         $state = Join-Path $fixture.LocalAppData 'dotfiles/payload'
         [void][IO.Directory]::CreateDirectory($state)
         [IO.File]::WriteAllText((Join-Path $state 'skills.failed'), "1700000000 3`n[dotfiles] [error] skills: stopped for a person`n")
         [IO.File]::WriteAllText((Join-Path $state 'pymol.failed'), "1700000000 1`n")
         [IO.File]::WriteAllText((Join-Path $state 'kit.failed'), "1700000000 1`n")
-        if ($IsWindows) { New-Item -ItemType SymbolicLink -Path $pymolPy -Value (Join-Path $fixture.Root 'dotfiles\common\pymol\.pymolrc.py') | Out-Null }
-        else { & ln -s '../dotfiles/common/pymol/.pymolrc.py' $pymolPy }
+        $legacy = Join-Path $fixture.Home '.dotfiles-test-legacy-pymolrc'
+        if ($IsWindows) { New-Item -ItemType SymbolicLink -Path $legacy -Value (Join-Path $fixture.Root 'dotfiles\common\pymol\.pymolrc.py') | Out-Null }
+        else { & ln -s '../dotfiles/common/pymol/.pymolrc.py' $legacy }
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'payload failures only warn'
         $expected = "pymol failed its last run (exit 1, see $(Join-Path $state 'pymol.failed')): run sync-payloads pymol; " +
-            'pymol waits for stow-all: ~/.pymolrc.py is still a link the retired pymol Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads pymol; ' +
+            'pymol waits for stow-all: ~/.dotfiles-test-legacy-pymolrc is still a link the retired pymol Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads pymol; ' +
             "skills stopped for a person (exit 3, see $(Join-Path $state 'skills.failed')): run sync-payloads skills and do what it asks; $short"
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$expected`tdocs/bootstrap.md H7-payloads") "records row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tskills stopped for a person (exit 3, see $(Join-Path $state 'skills.failed')): run sync-payloads skills and do what it asks`tdocs/bootstrap.md H7-payloads") "unselected records row: $($run.Stdout)"
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles') -Recurse -Force
-        [IO.File]::Delete($pymolPy)
+        [IO.File]::Delete($legacy)
         [IO.File]::WriteAllText($config, $original)
         [IO.File]::WriteAllText($pymolPy, '')
 
