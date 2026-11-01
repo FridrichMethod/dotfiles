@@ -1242,9 +1242,12 @@ Applies to `mac`, `wsl-ubuntu` and `lab-ubuntu` (hpc: S2-modules; Windows:
 winget's `OpenJS.NodeJS.LTS`). Node.js is required by the Claude Code hooks and
 status line; its floor in `tools.tsv` is 22 (18 and 20 are end of life).
 `common/sh/.profile` resolves nvm's `default` alias without sourcing `nvm.sh`,
-so the alias must exist.
+so the alias must exist. Setup and doctor use the same discovery order:
+a nonempty `NVM_DIR`, then an existing `~/.nvm`, then an existing
+`${XDG_CONFIG_HOME:-$HOME/.config}/nvm`. With no installation, setup targets
+`~/.nvm`; it does not create a second copy beside an existing XDG install.
 
-- **Check:** `test -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" && cat "${NVM_DIR:-$HOME/.nvm}/alias/default" && node --version`
+- **Check:** `./setup-host.sh --host <host> --check --only S4-nvm` (offline; does not source `nvm.sh`).
 - **Install:** automatic via setup-host.sh with the commit-pinned `nvm` row:
   `NVM_INSTALL_VERSION=<commit> PROFILE=/dev/null bash install.sh`, where
   `<commit>` is the commit in the row's URL. The installer would otherwise
@@ -1258,9 +1261,16 @@ so the alias must exist.
   first):
 
   ```sh
+  if [ -z "${NVM_DIR:-}" ]; then
+      NVM_DIR=$HOME/.nvm
+      if [ ! -d "$NVM_DIR" ] && [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/nvm" ]; then
+          NVM_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/nvm
+      fi
+      export NVM_DIR
+  fi
   (
       set -eu
-      d=${NVM_DIR:-$HOME/.nvm}
+      d=$NVM_DIR
       c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' \
           "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
       case $c in
@@ -1278,10 +1288,10 @@ so the alias must exist.
           echo "$d is at $head (or has local changes), not the pinned nvm commit $c; not sourced" >&2
           exit 1
       fi
-  ) && . "${NVM_DIR:-$HOME/.nvm}/nvm.sh" && nvm install --lts && nvm alias default 'lts/*'
+  ) && . "$NVM_DIR/nvm.sh" && nvm install --lts && nvm alias default 'lts/*'
   ```
 
-- **Verify:** in a new shell, `command -v node` is under `~/.nvm/versions` and
+- **Verify:** in a new shell, `command -v node` is under the selected nvm directory's `versions/` and
   `node --version` meets the floor.
 - **Human:** no, unless an existing nvm is not the pinned checkout (judgment,
   below)

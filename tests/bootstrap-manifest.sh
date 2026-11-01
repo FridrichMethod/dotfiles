@@ -279,6 +279,20 @@ assert_eq "$(expand '$ZSH_CUSTOM/plugins/x' ZSH=/opt/omz)" /opt/omz/custom/plugi
 assert_eq "$(expand '$ZSH_CUSTOM/plugins/x' ZSH=/opt/omz ZSH_CUSTOM=/srv/custom)" /srv/custom/plugins/x 'ZSH_CUSTOM set'
 assert_eq "$(expand '$NVM_DIR/nvm.sh')" "$TEST_HOME/.nvm/nvm.sh" 'NVM_DIR default'
 assert_eq "$(expand '$NVM_DIR/nvm.sh' NVM_DIR=/srv/nvm)" /srv/nvm/nvm.sh 'NVM_DIR set'
+# Match common/sh/.profile: explicit nonempty NVM_DIR, conventional dir,
+# then an existing official XDG dir. Probes only inspect paths.
+NVM_HOME="$TEST_TMP/nvm-home"
+mkdir -p "$NVM_HOME/.config/nvm" "$NVM_HOME/xdg/nvm"
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME")" "$NVM_HOME/.config/nvm/nvm.sh" 'nvm default XDG layout'
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME" XDG_CONFIG_HOME="$NVM_HOME/xdg")" "$NVM_HOME/xdg/nvm/nvm.sh" 'nvm explicit XDG layout'
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME" NVM_DIR='')" "$NVM_HOME/.config/nvm/nvm.sh" 'empty NVM_DIR uses discovery'
+mkdir -p "$NVM_HOME/.nvm"
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME")" "$NVM_HOME/.nvm/nvm.sh" 'conventional nvm wins over XDG'
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME" NVM_DIR=/srv/nvm)" /srv/nvm/nvm.sh 'explicit nvm wins over installed layouts'
+rmdir "$NVM_HOME/.config/nvm" "$NVM_HOME/xdg/nvm"
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME")" "$NVM_HOME/.nvm/nvm.sh" 'conventional nvm installation'
+rmdir "$NVM_HOME/.nvm"
+assert_eq "$(expand '$NVM_DIR/nvm.sh' HOME="$NVM_HOME")" "$NVM_HOME/.nvm/nvm.sh" 'new nvm installs use conventional layout'
 assert_eq "$(expand '$XDG_CONFIG_HOME/bat')" "$TEST_HOME/.config/bat" 'XDG_CONFIG_HOME default'
 assert_eq "$(expand '$XDG_CONFIG_HOME/bat' XDG_CONFIG_HOME=/srv/config)" /srv/config/bat 'XDG_CONFIG_HOME set'
 assert_eq "$(expand '$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont')" "$TEST_HOME/.local/share/fonts/CaskaydiaMonoNerdFont" 'XDG_DATA_HOME default'
