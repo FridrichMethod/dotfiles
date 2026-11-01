@@ -64,7 +64,7 @@ helper:
   `Invoke-DotfilesPayloadScript SOURCE [ARG...]` (PowerShell, which runs the
   script in a child `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File`)
   run SOURCE with ARG and return its exit status. A URL is downloaded first
-  (curl, else wget; `Invoke-WebRequest`), never piped into a shell, so a
+  (curl, else wget with timeout/gtimeout; PowerShell uses .NET HttpClient), never piped into a shell, so a
   failed or empty download runs nothing. It goes, under the name it was
   published with, into a fresh directory of the temporary directory that
   holds nothing else and that only this user can enter (`mktemp -d` under
@@ -77,10 +77,17 @@ helper:
   so a `configs/` or `scripts/` another user planted in a shared `/tmp`, or
   added during the download, must never be there. Each download is bounded
   by `DOTFILES_PAYLOAD_TIMEOUT` seconds (default 60: curl
-  `--connect-timeout 10 --max-time 60`, wget `-T 60 -t 1`,
-  `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
-  failed, the run tries no other, so a network that is down or stalls holds
-  a login once. A path must be an existing file. On Unix the installer's
+  `--connect-timeout 10 --max-time 60`; wget's whole process wrapped by an
+  existing `timeout` or `gtimeout`, in addition to its inactivity timeout;
+  PowerShell's built-in .NET HttpClient.Timeout covering the entire HTTP(S)
+  response body, which is buffered before writing). Wget without a total
+  deadline tool fails with a named dependency message: install curl or provide
+  timeout/gtimeout explicitly; the hook installs neither. Header receipt or
+  intermittent body bytes do not complete a download. An empty HTTP 200 body
+  is a download failure too. Once a download fails or is empty, that run tries
+  no later installer downloads, so a stalled network holds a login only once.
+  This deadline covers dotfiles' script download, not networking performed
+  inside the upstream installer. Local file:// fixture paths use local copies. A path must be an existing file. On Unix the installer's
   stdin is closed. Every installer, a download or an installed script,
   starts in `/` (PowerShell: in `$PSHOME`, which only whoever could replace
   that pwsh can write) and finds its own files through its path. It never
@@ -269,6 +276,11 @@ spec has it, for the hook and the doctor alike), on native Windows in
 | `ITEM.stamp` | the time of the item's last success, in seconds since the epoch; remove it to make the next session refresh the item |
 | `ITEM.failed` | the item's last failure: a line with its time and exit status, then for a background run the last 20 lines of its output; the next success removes it, and removing it by hand lets the next session try the item at once |
 | `payload.log` | the output of the last background run, replaced by the next one |
+
+Success stamps are staged in unique adjacent temporary files and atomically
+renamed. Concurrent successful installers do not share ITEM.stamp.tmp or create
+a false bookkeeping failure; no new payload lock is added. Failures never
+advance a success stamp. Exit 75 writes neither a failure nor a success stamp.
 
 The repositories keep their own state: the kit's managed root in
 `${XDG_DATA_HOME:-~/.local/share}/coding-agent-kit/` (Unix only; see
@@ -563,3 +575,9 @@ ls "${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/"*.failed        # no
 
 On Windows: `sync-payloads` (PyMOLScripts and awesome-skills) and
 `.\doctor.ps1`.
+
+Loopback download fixtures cover a server that stalls after headers and a
+trickling body, empty HTTP 200 responses with the failed-download latch, and
+concurrent successful stamp publication. Linux PowerShell execution exercises
+the .NET download path, not native Windows ACL, process or network behavior;
+retain native Windows validation for those platform claims.

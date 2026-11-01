@@ -11,7 +11,7 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci`, full `pre-commit run --all-files`, then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
+| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all 22 shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
 | `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
 | `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
 
@@ -45,51 +45,33 @@ with a file and line. The hook enforces the character set; English wording is
 also a documentation policy and review requirement. The payload repos have
 their own independent hooks.
 
-Every Unix test entry point (`tests/*.sh`) starts by unsetting the dotfiles
-knobs, and `tests/run.ps1` removes the same list: `DOTFILES_AUTO_UPDATE`,
-`DOTFILES_AUTO_STOW`, `DOTFILES_HOST`, `DOTFILES_DIR`, `DOTFILES_COLOR`,
-`DOTFILES_STOW_WITHOUT_OH_MY_ZSH`, `DOTFILES_PAYLOAD_AUTO_UPDATE`,
-`DOTFILES_PAYLOAD_ITEMS`, both session markers, `XDG_STATE_HOME`,
-`XDG_DATA_HOME`, and an explicit list of the coding-agent-kit variables
-(`CODING_AGENT_KIT_CONFIG`, `CODING_AGENT_KIT_COLOR`,
-`CODING_AGENT_KIT_REPO_URL` and the rest). The bootstrap playbook tells people
-to export `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` while
-provisioning, and a test or `pre-commit run` started from such a shell must
-behave as in CI; each case sets the knobs it exercises.
-`tests/test-entrypoints.sh` checks that every entry point carries the same
-list, that it covers every `DOTFILES_*`, `AWESOME_SKILLS_*` and
-`CODING_AGENT_KIT_*` name in a tracked file outside `tests/`, `docs/`,
-`.github/` and Markdown, whatever reads it (shell, PowerShell or Python;
-`DOTFILES_SYNC_PYTHON`, which `tests/run.sh` provisions, and the suites'
-`DOTFILES_TEST_*` inputs excepted), that, when `DOTFILES_TEST_KIT_HOME` names
-a home with an installed kit, it covers every `CODING_AGENT_KIT_*` (or
-`_CODING_AGENT_KIT_*`) name in that release's code outside the kit's own
-`tests/`, `docs/`, `.github/` and Markdown, so a kit release that reads a new
-knob fails CI until the list has it, and that a suite passes under those
-exports. The suites that run a launcher also drop `XDG_CONFIG_HOME`, so no kit
-configuration file of the caller is in reach.
+Test entrypoints load `tests/lib/environment.sh` or `.ps1` to clear inherited
+DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and
+_CODING_AGENT_KIT_ variables. Deliberate DOTFILES_TEST_* fixture inputs and the
+selected DOTFILES_SYNC_PYTHON remain; XDG_STATE_HOME/XDG_DATA_HOME are cleared.
+Cases set the production knobs they exercise explicitly. Launchers also keep
+caller XDG_CONFIG_HOME out of reach. New upstream variables therefore require
+no copied lists and no scan of the installed kit implementation.
 
-A commit hook in a linked worktree exports an absolute `GIT_DIR` and
-`GIT_INDEX_FILE`, which `git -C` does not override, so fixture Git would
-reinitialize, stage and commit into the caller's repository. Every suite that
-runs fixture Git in its own body drops them first, and
-`tests/test-entrypoints.sh` checks that the Bash suites
-(`bootstrap-manifest.sh`, `doctor.sh`, `e2e-harness.sh`, `setup-host.sh`,
-`unix-installer.sh`) unset them and the PowerShell ones
-(`e2e-harness.ps1`, `windows-installer-controls.ps1`) remove every `GIT_*`
-variable. It reruns the manifest suite under a relative `GIT_INDEX_FILE` and,
-when pwsh is present, the installer controls under the `GIT_DIR` and
-`GIT_INDEX_FILE` of a throwaway repository's linked worktree, which must keep
-its index, `HEAD` and `core.bare`. It also reads `.pre-commit-config.yaml`
-the way pre-commit selects files: the engine hooks must run on
-`lib/config_sync.py` and `lib/sync-runtime.sh` (`structured-config-sync` and
-`codex-config-sync` on the real Codex `config.toml` too), the `payload-update`
-hook on the payload hook, its transition shim, `config/payloads.tsv`, the rc
-files that source it and the logger, and its own `test-entrypoints` hook, which runs on any test entry point, on
-`.pre-commit-config.yaml` itself. That hook runs the test without
-`tests/run.sh` in front of it, so a failed check prints the run it captured
-(a clone without `.venv-sync` sees `run ./setup-sync.sh`), and any other
-failed assertion names its line.
+A commit hook may export GIT_DIR and GIT_INDEX_FILE, which git -C does not
+supersede. Bash fixture-Git entrypoints call the shared helper to clear the
+seven repository/index/object-directory overrides; PowerShell fixture helpers
+clear GIT_* overrides. Python Git fixtures sanitize their child environments.
+`tests/test_environment.py` tests prefix isolation and runs real disposable
+linked-worktree Git operations while checking the parent HEAD, index and
+core.bare remain unchanged. `tests/test-entrypoints.sh` invokes that focused
+fixture instead of rerunning complete manifest, payload or Windows installer
+suites just to establish environment isolation.
+
+The entrypoint test also checks pre-commit's files/exclude selection, required
+engine/config/payload triggers, and coverage of the complete shell-suite list.
+The e2e-harness and e2e-harness-windows hooks cover harness unit/fixture tests;
+these hooks do not run Docker or install into the real home. Linux CI first
+checks prerequisites without running behavior tests, then performs one full
+pre-commit behavior/lint pass. macOS retains the complete tests/run.sh --ci
+pass with system Bash/BSD tools; native Windows retains tests/run.ps1 -CI.
+Local developer hooks remain scoped to changed sources. These are invocation
+boundaries, not a measured claim of elapsed-time improvement.
 
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
 runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
@@ -169,10 +151,15 @@ them downloads anything or touches the runner's home. Fresh-machine runs are
 the opt-in [end-to-end suite](#end-to-end-bootstrap-opt-in) below, which checks
 the [acceptance checklist](bootstrap.md#acceptance-checklist) for real.
 
-`tests/host-overlays.sh` sources the `wsl-ubuntu` and `lab-ubuntu` zsh and bash
-overlays in a clean environment with a missing, a non-executable and a fake
-Linuxbrew, so a shell started before Linuxbrew exists stays silent and the
-`brew shellenv` line applies only once brew can run.
+`tests/host-overlays.sh` checks missing, non-executable and fake Linuxbrew
+under isolated Bash and zsh. Its standard-library `test_portable_shell.py`
+regressions cover HOME paths containing spaces for conda/mamba/micromamba,
+failed-hook fallback aliases preserving executable/argument quoting, conditional
+vi=nvim, Juliaup idempotence, macOS supported-prefix Homebrew with nvm ordering,
+Ubuntu PATH-selected/custom and per-user Linuxbrew, and Marlowe's durable
+CARGO_HOME without eager Cargo directory creation. No live rc, installer or
+user credentials are used. Sherlock cache placement remains subject to site
+rules; these local shell tests do not establish cluster policy.
 
 `tests/stow-ignores.sh` (and `tests/run.ps1`) runs `tests/test_stow_ignores.py`:
 it builds a name from each `.gitignore` pattern with no slash but a trailing
@@ -198,9 +185,10 @@ The launcher, configuration and Claude helper suites live in
 coding-agent-kit, whose CI runs them on its own fixtures.
 `tests/ai-integration.sh` runs `tests/test_ai_integration.py`, the
 dotfiles-content cases: the fzf-tab account preview, the alias files and the
-real `settings.json`, whose status line and hook commands must load exactly
-the three helpers that `~/.claude/coding-agent-kit/` holds, each at the event
-it serves. The cases that run the kit reach it only through its installed
+real `settings.json`, whose configured status line and hook commands must load their required
+helpers from `~/.claude/coding-agent-kit/`, each at its configured event. Extra
+upstream helper files or private environment variables are outside this
+consumer contract and do not fail the integration tests. The cases that run the kit reach it only through its installed
 paths, in the home that `DOTFILES_TEST_KIT_HOME` names (launchers in
 `.local/bin`, zsh completions in `.local/share/zsh/site-functions`, helpers in
 `.claude/coding-agent-kit`), and skip without it: `codex-as` through the alias
@@ -214,6 +202,12 @@ stand-in helpers, a missing helper exits 0 silently only on `win32` and 1
 with its path elsewhere, and a present one runs with its exit status kept on
 every platform; and on the installed helpers, skipping without them.
 
+The optional real fzf-tab PTY fixture waits for complete expected preview
+output, including the account descriptions, before ending the interaction.
+Creating the output file alone is not readiness: the fake fzf may buffer it.
+Delayed-output cases keep the same preview assertions; no fixed sleep or
+longer arbitrary delay stands in for completion evidence.
+
 `tests/payload-update.sh` drives `scripts/payload-update.sh` against fake
 installers served from `file://` URLs: the real `config/payloads.tsv` with its
 `https://raw.githubusercontent.com/FridrichMethod/` prefix pointed at a local
@@ -223,7 +217,9 @@ the foreground, in order and on the declared channel, with stdin closed; a
 fresh session doing nothing; the session marker, the opt-out and
 non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
 each item's update command and the log; a live worker blocking a second one;
-a failed first install recording nothing and the next session retrying it;
+a failed install writing ITEM.failed without a success stamp, later sessions
+reporting it without another foreground run, and retrying in the background
+after six hours;
 exit 75; `--now`, the aliases, a failed download, the wget fallback, each
 download staged alone in a fresh private directory, every installer starting
 in `/`, outside the caller's working directory, where git finds no planted

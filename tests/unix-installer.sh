@@ -181,7 +181,7 @@ if env HOME="$TARGET" bash "$FIXTURE/stow-all.sh" test-host >"$TEST_TMP/conflict
     echo 'ERROR: a conflicting home file passed the Stow dry run' >&2
     exit 1
 fi
-grep -Fq 'Stow would conflict with the files listed above, so nothing was changed' "$TEST_TMP/conflict.log"
+grep -Fq 'Stow would conflict with the files listed above' "$TEST_TMP/conflict.log"
 grep -Fq '.fixture-host' "$TEST_TMP/conflict.log"
 [[ ! -e "$TARGET/.codex/config.toml" ]]
 [[ ! -L "$TARGET/.fixture-host" ]] && grep -Fxq 'a file of the home' "$TARGET/.fixture-host"

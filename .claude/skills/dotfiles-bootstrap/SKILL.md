@@ -12,7 +12,8 @@ disable-model-invocation: true
 Use this to provision a fresh machine for this repository, finish a partial
 setup, or fix what `./doctor.sh` reports. `docs/bootstrap.md` is the contract
 for every step, flag, exit code and HUMAN block: read it before acting and
-follow it over your defaults. If `./doctor.sh` or `./setup-host.sh` is missing
+follow it over your defaults. Tool/package inventories and versions live in
+`config/bootstrap/`; do not copy or invent a second inventory. If `./doctor.sh` or `./setup-host.sh` is missing
 from this checkout, stop and say so.
 
 1. Resolve the host: ask the person which overlay this is (`mac`, `wsl-ubuntu`,

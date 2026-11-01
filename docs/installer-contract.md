@@ -8,6 +8,11 @@ target, it invokes every selected helper with `--check`. The checks validate
 the parser runtime and portable/live documents without creating directories,
 materializing files, or modifying the tracked baseline.
 
+After read-only preflight, exact dangling links from retired Sherlock packages
+are removed before the Stow dry run. A conflict stops sync and Stow application,
+but does not undo that bounded legacy-link cleanup. Live/foreign links and
+regular files stay intact; see [Sherlock retirement](sherlock-kit.md).
+
 After both stows succeeded it removes the links Stow made from the two
 packages that the payload repos replaced (`common/coding-agent-kit`,
 `common/pymol`), each only while it is a symlink whose text is exactly the one

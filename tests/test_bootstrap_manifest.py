@@ -609,6 +609,10 @@ def validate(config_dir, repo_root):
 
 
 class RepositoryManifestTests(unittest.TestCase):
+    def test_repository_agent_guide_fits_instruction_budget(self):
+        self.assertLess(len((ROOT / "AGENTS.md").read_bytes()), 28_000,
+                        "Keep repository rules below 28,000 bytes; move explanations to docs.")
+
     def test_repository_manifests_docs_and_skills_are_valid(self):
         self.assertEqual(validate(ROOT / "config/bootstrap", ROOT), [])
 

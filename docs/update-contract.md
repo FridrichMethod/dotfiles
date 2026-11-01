@@ -91,3 +91,30 @@ repositories and injected installers/elevation/task dispatch. Run it through
 reports an explicit local skip when `pwsh` is unavailable; the Windows CI job
 must require the suite. Mocked dispatch and ordinary link tests do not prove
 real Task Scheduler execution or OpenSSH network-logon symlink trust.
+
+## Windows worker operations
+
+**On Windows** - `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1`, only in an interactive console (not for `-File`/`-Command` scripts, `-NonInteractive` or piped stdin), and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
+
+```powershell
+cd "$HOME\dotfiles"
+.\stow-all.ps1 win
+.\scripts\dotfiles-auto-stow.ps1 -Register
+```
+
+The on-demand task runs as that user with `Interactive` logon and `Highest` privileges, using `pwsh -NoProfile -NonInteractive -WindowStyle Hidden`. It starts the registering pwsh by path, so register from the MSI PowerShell that [HW-clone](bootstrap.md#hw-clone-clone-the-repository) installs: `-Register` refuses a pwsh whose folder is named for its version, such as the MSIX package winget installs by default, and the login hook refuses to start a task whose pwsh is gone. Registration explicitly authorizes the checkout's updated installer scripts to run with administrator privileges. It stores no password, uses the user's home, allows battery operation, and ignores overlapping task starts. Task names include a checkout/user hash. No UAC prompt is launched from the login hook; ordinary shells enqueue work, while elevated shells can apply directly. The interactive task requires that user to be logged on to Windows.
+
+The worker verifies the requested revision, home, host and clean working tree again under the update lock before running `stow-all.ps1 -Strict`. Any installer warning or failed portable sync prevents marking the revision as applied. A queued task is not reported as a completed stow. Inspect its result and last-run log with:
+
+```powershell
+. .\scripts\dotfiles-auto-stow.ps1
+Get-ScheduledTaskInfo -TaskName (Get-DotfilesTaskName $PWD.Path)
+Get-Content (Join-Path (Get-DotfilesStateDirectory $PWD.Path) 'restow.log')
+```
+
+Set `DOTFILES_AUTO_STOW=0` before the login hook to stop automatic stow. To remove the registered worker entirely, from elevated PowerShell in the same checkout:
+
+```powershell
+. .\scripts\dotfiles-auto-stow.ps1
+Unregister-ScheduledTask -TaskName (Get-DotfilesTaskName $PWD.Path)
+```

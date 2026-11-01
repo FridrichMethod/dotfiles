@@ -414,7 +414,7 @@ if run_fixture dry-conflict STOW_DRY_RC=1; then
 fi
 assert_events "stow:[-n][--restow][--no-folding][-d][$FIXTURE/common][alpha][claude][codex]"
 grep -Fq 'WARNING! stowing would cause conflicts' "$TEST_TMP/dry-conflict.stderr"
-grep -Fq 'Stow would conflict with the files listed above, so nothing was changed' "$TEST_TMP/dry-conflict.stderr"
+grep -Fq 'Stow would conflict with the files listed above' "$TEST_TMP/dry-conflict.stderr"
 grep -Fq 'never stow --adopt' "$TEST_TMP/dry-conflict.stderr"
 cmp "$STATE" "$TEST_TMP/expected-state"
 

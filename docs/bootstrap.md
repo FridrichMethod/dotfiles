@@ -1084,10 +1084,9 @@ and prints this block even when the login env already exists.
 
 Applies to `sherlock` and `marlowe`, inside an allocation. The conda-forge spec
 [`hpc-login-env.yml`](../config/bootstrap/hpc-login-env.yml) holds the shell and
-CLI toolset (zsh, git, gh, stow, tmux, fzf, eza, bat, fd, ripgrep, nvim, uv,
-nodejs, ...), with the floors of `tools.tsv` written as `>=X` and the
-conda-forge name traps commented (`nvim`, `fd-find`, `go-shfmt`, `tealdeer`,
-`git-delta`). Every workstation's `ssh sherlock` / `ssh marlowe` RemoteCommand
+CLI package names and constraints; [tools.tsv](../config/bootstrap/tools.tsv)
+owns the doctor's version floors. Name traps are commented in the yml.
+Every workstation's `ssh sherlock` / `ssh marlowe` RemoteCommand
 execs `$HOME/micromamba/envs/login/bin/zsh`.
 
 - **Check:** `~/micromamba/envs/login/bin/zsh --version && ~/micromamba/envs/login/bin/python3 --version`
@@ -1159,11 +1158,9 @@ cluster; vendor binaries and conda-forge builds each need a minimum glibc.
 ### S3-clones: oh-my-zsh, theme and plugin clones
 
 Applies to every Unix host, **before** `./stow-all.sh`. Rows in
-[`git-clones.tsv`](../config/bootstrap/git-clones.tsv): oh-my-zsh at
-`~/.oh-my-zsh`, powerlevel10k under `$ZSH_CUSTOM/themes`, and fzf-tab,
-fast-syntax-highlighting, zsh-autosuggestions, you-should-use,
-conda-zsh-completion and zsh-completions under `$ZSH_CUSTOM/plugins`
-(`$ZSH_CUSTOM` defaults to `~/.oh-my-zsh/custom`). Nothing here is pinned:
+[`git-clones.tsv`](../config/bootstrap/git-clones.tsv) own repository names,
+destinations and branches. Clone oh-my-zsh first; ZSH_CUSTOM defaults to
+~/.oh-my-zsh/custom for the theme and plugins. Nothing here is pinned:
 each row's `ref` is the repository's default branch (`master`, and `main` for
 conda-zsh-completion), and every clone tracks it, the way oh-my-zsh's own
 auto-update (`zstyle ':omz:update' mode auto` in `common/zsh/.zshrc`) keeps
@@ -1527,8 +1524,9 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
   files), and merge what you still need into the overlay later. Then the
   prefix and `./stow-all.sh H`, for example
   `PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu`.
-  `./stow-all.sh` runs the dry run above itself and stops, before it writes
-  anything, when one is left.
+  `./stow-all.sh` runs the dry run above itself and stops, before sync or Stow application, when one is left. Exact dangling links from
+  retired Sherlock packages may already have been removed during preflight
+  ([migration](sherlock-kit.md)).
 - **Verify:** `ls -l ~/.zshrc ~/.profile ~/.gitconfig` shows links into
   `~/dotfiles/common/`; in a new shell the doctor's `stow-links`,
   and `path-order`
@@ -1633,7 +1631,8 @@ and `doctor.ps1`'s `payloads` row points here.
   (Windows, from an ordinary PowerShell 7:
   `& $HOME\dotfiles\scripts\payload-update.ps1 -Now`). In a stowed shell,
   `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
-  skills. It needs `sh` and curl or wget (Windows: PowerShell 7), plus what
+  skills. It needs `sh` and curl, or wget with an existing timeout/gtimeout
+  (Windows: PowerShell 7), plus what
   each installer needs, which its README lists (Git for the kit and the
   skills).
 - **Verify:** the `payloads` row is `ok`; the last background refresh is in
@@ -1690,10 +1689,10 @@ a git clone, not an extracted archive.
 
 ### W1-winget: winget import
 
-Installs the 23 packages of [`winget.json`](../config/bootstrap/winget.json):
-PowerShell 7, Git, Python 3.12, Node.js LTS, the CLI tools (fzf, zoxide, eza,
-bat, fd, ripgrep, delta, jq, Neovim, uv, gh, tlrc, aria2, GNU Make),
-oh-my-posh, Windows Terminal, WezTerm, Claude Code and Codex.
+Installs the package inventory in
+[`winget.json`](../config/bootstrap/winget.json). Platform aliases and doctor
+probes are defined in [tools.tsv](../config/bootstrap/tools.tsv), not in a
+second documentation list.
 
 - **Check:** `winget list --id Git.Git -e` (or `.\doctor.ps1 -Host win`)
 - **Install:** automatic via setup-host.ps1:
@@ -2137,12 +2136,8 @@ fail-closed behavior beyond what is stated.
 - **Windows Terminal re-serializes its stowed settings.** Terminal saves
   `settings.json` back through the [HW-stow](#hw-stow-elevated-stow) link
   whenever the file it loads is not in its own form, which leaves the clone
-  dirty. The tracked file is committed in the form that the Terminal on
-  GitHub's `windows-2025` runner wrote on 2026-10-11 (its order of `actions`
-  and `keybindings`, and a stub for each built-in profile, which
-  `tests/windows-installer.sh` requires); another Terminal release may order
-  the arrays differently, so commit what it writes if `git status` shows the
-  file after Terminal starts. The Windows PowerShell and Command Prompt stubs
+  dirty. Terminal releases can reorder its arrays, so inspect and retain the native
+  serialization if starting Terminal changes the tracked file. The Windows PowerShell and Command Prompt stubs
   stay `"hidden": true`: Terminal treats a generated profile that its
   `state.json` lists but `settings.json` omits as deleted, so a visible stub
   brings both profiles back on a host that had already dropped them.
@@ -2158,10 +2153,6 @@ Deferred on purpose; each is a separate change.
   runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
   the login-env form the other overlays use
   (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
-- **Hardcoded conda and mamba prefixes.** The overlays' `conda initialize`
-  blocks and `MAMBA_*` exports name one machine's prefix (for example
-  `/Users/<name>/miniconda3` in `mac/`); re-aim them at `$HOME`, as AGENTS.md
-  asks of machine-specific paths ([X-host-tools](#x-host-tools-host-specific-tools)).
 - **`win/wsl` is not a `$HOME`-shaped package.** `stow-all.ps1` links
   `wsl.conf` and `mount.vbs` into `%USERPROFILE%`, where neither does
   anything: `wsl.conf` only works as `/etc/wsl.conf` inside the distribution,
@@ -2183,8 +2174,9 @@ Deferred on purpose; each is a separate change.
 
 ## Acceptance checklist
 
-No real machine has run it yet; the container and CI-runner rows below
-approximate one.
+Fresh-machine acceptance is still pending for the platforms below. Container
+and hosted-runner tests approximate portions of setup; they do not prove site
+policy, real credentials, fresh Windows 11 or untouched macOS behavior.
 Each run starts from a fresh machine, follows the quick start for its
 platform, and passes when all of these hold:
 
@@ -2206,17 +2198,10 @@ platform, and passes when all of these hold:
 | Sherlock inside `sh_dev`, host `sherlock` | | not yet run | |
 | Marlowe inside an interactive Slurm job, host `marlowe` | | not yet run | |
 | Native Windows 11, elevated stow, host `win` | | not yet run | |
-| Container `ubuntu:24.04` (24.04.5, glibc 2.39), host `lab-ubuntu` | 2026-10-11 | pass | `tests/e2e/run.sh` at `447f447`, cache off, 324 s, 4 applies. Passwordless sudo, no desktop session (H1-fcitx5 left to the person), a minimized Docker image (no man pages) |
-| Same image with `WSL_DISTRO_NAME=Ubuntu`, host `wsl-ubuntu` | 2026-10-11 | pass | Same run, 218 s, 4 applies. Exercises the WSL logic only: no WSL kernel, `/mnt/c`, interop or `wslview` |
-| Container `fedora:44` (glibc 2.43), other Linux | 2026-10-11 | pass | Same run, 57 s. [X-other-linux](#x-other-linux-other-linux-distributions) by hand with the helpers taken from this file, then a common-only stow; setup-host has no host here, so criteria 2 and 3 cover the doctor only |
-| Container `rockylinux:9` (9.8, glibc 2.34) with EPEL Lmod 9.4.2, host `sherlock` | 2026-10-11 | pass | Same run, 32 s, 3 applies. No sudo; `SLURM_JOB_ID` and the site's `SCRATCH` faked; the login env really built by micromamba; no site modules, Slurm, NFS or quota. Approximates the cluster's OS, not Sherlock itself |
-| Container `ubuntu:24.04` with Ubuntu's Lmod 8.6.19, host `marlowe` | 2026-10-11 | pass | Same run, 29 s, 3 applies. No sudo; `SLURM_JOB_ID` faked, `CONDA_PKGS_DIRS` set to the overlay's `/scratch/m000191` path as the person would. Approximates Marlowe, not the cluster itself |
-| GitHub runner `macos-15` (macOS 15, arm64, Bash 3.2), host `mac` | 2026-10-11 | pass | `bootstrap-e2e` run 38112146167 at `274aaf7`, 2 applies, a 107 s job. Not fresh: Homebrew, the Command Line Tools and many formulae preinstalled, and the runner's own dotfiles moved aside by the H7-stow `mv -n` lines; the home snapshots leave out the runner's agent, tool cache, `Library` and media folders; no `timeout`, so only the job limit bounds a hang |
-| GitHub runner `windows-2025` (Server 2025 24H2, pwsh 7.6.6), host `win` | 2026-10-11 | pass | Same run, 2 applies (`winget import` 225 s), a 5 min job. Windows Server, not Windows 11; already elevated, so every step ran under that token, not only HW-stow; Windows Terminal preinstalled; the per-user CRL cache is noted, not checked |
 
-The container rows come from the opt-in suite of
-[docs/testing.md](testing.md#end-to-end-bootstrap-opt-in), which plays the
-person through the HUMAN blocks under a fixed policy and checks the five
-criteria above plus a silent login shell. The runner rows come from its
-`bootstrap-e2e` workflow, whose same run also passed the five container hosts
-on GitHub's `ubuntu-24.04` runner.
+Keep new acceptance records with their reproducible run artifacts: revision,
+platform, tool versions, options, failures and limitations. Historical runner
+and container receipts are available in Git history, not maintained as current
+operational guarantees here. The [opt-in suite](testing.md#end-to-end-bootstrap-opt-in)
+implements the HUMAN-block policy and checks idempotence, no-write modes and
+quiet startup. Native site/desktop acceptance remains a separate check.

@@ -201,3 +201,32 @@ Native backend tests run on all three OSes; tests specific to POSIX permission
 bits/FIFOs are explicitly marked. Windows symlink tests require the CI runner's
 symlink privilege. These tests do not establish OpenSSH network-logon trust or
 Task Scheduler behavior; those are separate installer/update integration checks.
+
+## Permission policy rationale
+
+The portable Claude arrays intentionally reserve ask for sudo and deny for the
+irrecoverable extremes listed in AGENTS.md. In auto mode an ask rule prompts a
+person even when a hook would allow the command, so broad ask rules would remove
+commands from classifier review. Ordinary rm, recursive rm, git clean and npx
+therefore remain classifier decisions, not portable allow/ask rules.
+
+The classifier has built-in checks for critical paths, including root, its
+direct children, HOME, the working directory and parents, directory-wide globs
+and Windows drive roots. An allow rule or hook cannot approve these paths;
+this also applies inside command/process substitutions. Claude inspects Git
+status before work-discarding commands. Denials appear under /permissions,
+Recently denied (retry with r); auto mode pauses after 3 consecutive or 20 total
+blocks. Keep the literal $defaults entries when tuning autoMode prose so the
+built-in allow/soft_deny lists remain included.
+
+With classifyAllShell enabled, Bash allow rules are suspended in auto mode.
+Protected-path writes are checked before allow rules even outside that mode.
+Adding a shell allow pattern cannot fix a classifier false positive or grant
+permission to loosen live .claude settings. A person applies those changes.
+
+Broad allow patterns for network transfers, code loaders, package installers
+and remote-mutating Git/GitHub operations were reviewed and knowingly accepted.
+An automated review recommended narrower argument-anchored alternatives, such
+as host-limited curl and in-tree requirements-only pip installs. That remains a
+host threat-model decision, not authorization for unrelated policy changes.
+No permission values change as part of this documentation consolidation.

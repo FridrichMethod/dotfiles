@@ -219,7 +219,7 @@ stow_dry_run() {
     # shellcheck disable=SC2086 # package names are single words
     if ! output=$(stow -n --restow --no-folding -d "$1" $2 2>&1); then
         printf '%s\n' "$output" >&2
-        dotfiles_log error "Stow would conflict with the files listed above, so nothing was changed. Move each one aside (for example mv ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt, then rerun (docs/bootstrap.md H7-stow)."
+        dotfiles_log error "Stow would conflict with the files listed above; no sync files or Stow links were applied. Exact retired dangling links may already have been removed. Move each one aside (for example mv ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt, then rerun (docs/bootstrap.md H7-stow)."
         exit 1
     fi
 }
