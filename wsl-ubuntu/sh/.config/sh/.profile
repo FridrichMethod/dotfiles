@@ -5,10 +5,10 @@
 # !! Contents within this block are managed by juliaup !!
 
 case ":$PATH:" in
-    *:/home/fridrichmethod/.juliaup/bin:*) ;;
+    *":$HOME/.juliaup/bin:"*) ;;
 
     *)
-        export PATH=/home/fridrichmethod/.juliaup/bin${PATH:+:${PATH}}
+        export PATH="$HOME/.juliaup/bin${PATH:+:${PATH}}"
         ;;
 esac
 

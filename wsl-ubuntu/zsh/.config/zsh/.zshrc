@@ -1,20 +1,25 @@
 #!/bin/zsh
 
-# Homebrew (Linuxbrew) environment
-if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+# Homebrew (Linuxbrew) environment: prefer the selected brew, then the
+# supported shared and per-user installer prefixes, as setup/doctor do.
+if command -v brew >/dev/null 2>&1; then
+    eval "$(brew shellenv)"
+elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+elif [ -x "$HOME/.linuxbrew/bin/brew" ]; then
+    eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"
 fi
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/fridrichmethod/miniconda3/bin/conda' 'shell.zsh' 'hook' 2>/dev/null)"
+__conda_setup="$("$HOME/miniconda3/bin/conda" 'shell.zsh' 'hook' 2>/dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/home/fridrichmethod/miniconda3/etc/profile.d/conda.sh" ]; then
-        . "/home/fridrichmethod/miniconda3/etc/profile.d/conda.sh"
+    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "$HOME/miniconda3/etc/profile.d/conda.sh"
     else
-        export PATH="/home/fridrichmethod/miniconda3/bin:$PATH"
+        export PATH="$HOME/miniconda3/bin:$PATH"
     fi
 fi
 unset __conda_setup
@@ -23,8 +28,8 @@ unset __conda_setup
 # shfmt: off
 # >>> mamba initialize >>>
 # !! Contents within this block are managed by 'mamba shell init' !!
-export MAMBA_EXE='/home/fridrichmethod/miniconda3/bin/mamba'
-export MAMBA_ROOT_PREFIX='/home/fridrichmethod/miniconda3'
+export MAMBA_EXE="$HOME/miniconda3/bin/mamba"
+export MAMBA_ROOT_PREFIX="$HOME/miniconda3"
 __mamba_setup="$("$MAMBA_EXE" shell hook --shell zsh --root-prefix "$MAMBA_ROOT_PREFIX" 2>/dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__mamba_setup"

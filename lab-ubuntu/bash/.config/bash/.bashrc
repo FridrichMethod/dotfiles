@@ -1,8 +1,13 @@
 #!/bin/bash
 
-# Homebrew (Linuxbrew) environment
-if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+# Homebrew (Linuxbrew) environment: prefer the selected brew, then the
+# supported shared and per-user installer prefixes, as setup/doctor do.
+if command -v brew >/dev/null 2>&1; then
+    eval "$(brew shellenv)"
+elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+elif [ -x "$HOME/.linuxbrew/bin/brew" ]; then
+    eval "$("$HOME/.linuxbrew/bin/brew" shellenv)"
 fi
 
 # >>> conda initialize >>>

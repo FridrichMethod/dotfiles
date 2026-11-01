@@ -123,4 +123,6 @@ else
     printf 'SKIP: zsh overlay guards (zsh unavailable).\n'
 fi
 
+python3 -I -B "$REPO_ROOT/tests/test_portable_shell.py"
+
 echo "host-overlays=PASS"
