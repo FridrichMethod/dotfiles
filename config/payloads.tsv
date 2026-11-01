@@ -40,7 +40,7 @@
 # it into a shell, run it with ARG in / (PowerShell: in $PSHOME; never in
 # the caller's directory or the download's) and return its exit status (75:
 # another run holds that repo's lock).
-kit	channel	0.6
+kit	channel	0.7
 kit	days	1
 kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"

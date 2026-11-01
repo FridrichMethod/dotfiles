@@ -236,7 +236,7 @@ and summary counts; `-WhatIf` reports a preview, not a successful install.
 | **Terminals** | WezTerm, Kitty, Windows Terminal |
 | **Editor** | Vim |
 | **AI Assistants** | Claude Code and OpenAI Codex global defaults |
-| **Payload repos** | [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling, newest patch of channel `0.6`), [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`awesome-skills`](https://github.com/FridrichMethod/awesome-skills), installed by their own installers through [`config/payloads.tsv`](config/payloads.tsv); no submodules |
+| **Payload repos** | [`coding-agent-kit`](https://github.com/FridrichMethod/coding-agent-kit) (Codex and Claude tooling, newest patch of channel `0.7`), [`PyMOLScripts`](https://github.com/FridrichMethod/PyMOLScripts) and [`awesome-skills`](https://github.com/FridrichMethod/awesome-skills), installed by their own installers through [`config/payloads.tsv`](config/payloads.tsv); no submodules |
 | **Bootstrap** | New machine: `./doctor.sh` and `./setup-host.sh` (sha256-pinned downloads, no sudo), then the first stow |
 | **Install** | After parser setup: `./stow-all.sh <host>` |
 | **Update** | On every login (throttled to once per session) |
@@ -641,7 +641,7 @@ on every Unix one), by their own installers, instead of living in this one:
 
 | Item | Repository | Installs (Unix) | Native Windows |
 |---|---|---|---|
-| `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | the newest patch release of channel `0.6`: `codex-as`, `claude-as`, their Bash and zsh completions, the three Claude helpers | nothing: the kit runs on Linux, macOS and WSL only |
+| `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | the newest patch release of channel `0.7`: `codex-as`, `claude-as`, their Bash and zsh completions, the three Claude helpers | nothing: the kit runs on Linux, macOS and WSL only |
 | `pymol` | [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) | `~/.pymolrc`, `~/.pymolrc.py` | the same |
 | `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | the skill library of `~/.claude/skills/` and `~/.codex/skills/` | the same |
 
