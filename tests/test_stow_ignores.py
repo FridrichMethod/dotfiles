@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 # Top-level directories that hold code, not Stow packages (AGENTS.md); every
@@ -123,11 +124,18 @@ def cases():
     return samples, misses
 
 
+def git_environment():
+    # A commit hook's repository, index and object-store overrides must not
+    # redirect fixture writes or the real-root listing below.
+    return {key: value for key, value in os.environ.items() if not key.startswith("GIT_")} | {
+        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
 def git_ignored(paths, scratch):
     """The PATHS that git, reading only this .gitignore, ignores in a package."""
     repo, config = scratch / "repo", scratch / "gitconfig"
     config.write_text("")
-    env = os.environ | {"GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1"}
+    env = git_environment() | {"GIT_CONFIG_GLOBAL": str(config)}
     subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
     shutil.copyfile(ROOT / ".gitignore", repo / ".gitignore")
     # NUL-separated bytes: a text-mode pipe on Windows would end each path in \r.
@@ -152,6 +160,34 @@ class StowIgnoreTest(unittest.TestCase):
         self.assertEqual([path for path in self.misses if path in ignored], [],
                          "cases() built a near miss that .gitignore matches")
 
+    def test_fixture_git_ignores_commit_hook_environment(self):
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+
+        def git(*args):
+            return subprocess.run(["git", *map(str, args)], env=env, check=True,
+                                  capture_output=True, text=True).stdout.strip()
+
+        parent, linked = self.scratch / "parent", self.scratch / "linked"
+        git("init", "-q", parent)
+        (parent / "tracked").write_text("fixture\n")
+        git("-C", parent, "add", "tracked")
+        git("-C", parent, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
+            "commit", "-q", "-m", "fixture")
+        git("-C", parent, "worktree", "add", "-q", "--detach", linked)
+        metadata = Path(git("-C", linked, "rev-parse", "--absolute-git-dir"))
+        watched = [parent / ".git/config", parent / ".git/HEAD", parent / ".git/index",
+                   metadata / "HEAD", metadata / "index"]
+        before = [path.read_bytes() for path in watched]
+        with patch.dict(os.environ, {"GIT_DIR": str(metadata), "GIT_INDEX_FILE": str(metadata / "index"),
+                                     "GIT_WORK_TREE": str(linked)}):
+            ignored = git_ignored(self.samples + self.misses, self.scratch)
+            self.assertEqual([path.read_bytes() for path in watched], before,
+                             "fixture Git changed its caller's repository or index")
+            # This real-root query must also ignore the fixture's inherited index.
+            self.test_tracked_files_are_stowed()
+        self.assertEqual([path for path in self.samples if path not in ignored], [])
+
     def test_stowrc_ignores_what_git_ignores(self):
         for installer, ignores in ignorers().items():
             with self.subTest(installer):
@@ -163,7 +199,7 @@ class StowIgnoreTest(unittest.TestCase):
     def test_tracked_files_are_stowed(self):
         verdicts = ignorers().values()
         listing = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-s", "-z"], check=True,
-                                 capture_output=True, text=True).stdout
+                                 capture_output=True, text=True, env=git_environment()).stdout
         hidden = {}
         for entry in filter(None, listing.split("\0")):
             meta, path = entry.split("\t", 1)
