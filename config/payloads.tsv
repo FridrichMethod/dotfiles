@@ -34,7 +34,8 @@
 #   payload_script INTERPRETER SOURCE [ARG...]       (sh)
 #   Invoke-DotfilesPayloadScript SOURCE [ARG...]     (PowerShell)
 # which download SOURCE when it is a URL (curl or wget; Invoke-WebRequest)
-# into a temporary file within DOTFILES_PAYLOAD_TIMEOUT seconds, never piping
+# within DOTFILES_PAYLOAD_TIMEOUT seconds into a fresh private temporary
+# directory that holds nothing else and is removed afterwards, never piping
 # it into a shell, run it with ARG and return its exit status (75: another
 # run holds that repo's lock).
 kit	channel	0.6

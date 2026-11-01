@@ -86,9 +86,14 @@ for helper in statusline notify check-git-hooks; do
     : >"$HOME/.claude/coding-agent-kit/$helper.cjs"
 done
 SH
+# PyMOLScripts' and awesome-skills' installers read a configs/ or scripts/
+# directory beside themselves as a checkout's, so their fakes record the
+# directory they run from: its path, mode and entries.
 cat >"$REMOTE/PyMOLScripts/main/install.sh" <<'SH'
 #!/bin/sh
 printf 'pymol-install [%s]\n' "$*" >>"$EVENTS"
+here=$(dirname -- "$0")
+printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.pymol-dir"
 [ "${FAKE_PYMOL_STATUS:-0}" = 0 ] || exit "$FAKE_PYMOL_STATUS"
 : >"$HOME/.pymolrc"
 : >"$HOME/.pymolrc.py"
@@ -96,6 +101,8 @@ SH
 cat >"$REMOTE/awesome-skills/main/install.sh" <<'SH'
 #!/bin/bash
 printf 'skills-install [%s] bash=%s\n' "$*" "${BASH_VERSION:+yes}" >>"$EVENTS"
+here=$(dirname -- "$0")
+printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.skills-dir"
 [ "${FAKE_SKILLS_STATUS:-0}" = 0 ] || exit "$FAKE_SKILLS_STATUS"
 mkdir -p "$HOME/.local/share/awesome-skills"
 printf '{}\n' >"$HOME/.local/share/awesome-skills/claude.json"
@@ -384,6 +391,32 @@ source_hook bash DOTFILES_DIR="$STALLED" DOTFILES_PAYLOAD_TIMEOUT=3
 kill "$STALL"
 wait "$STALL" 2>/dev/null || :
 STALL=
+
+# A download runs alone in a fresh directory of TMPDIR that only this user can
+# enter, removed after the run: what another user planted in a shared TMPDIR
+# (a configs/.pymolrc.py, a scripts/install_skills.py) is never beside it.
+new_home
+mkdir "$TEST_TMP/configs" "$TEST_TMP/scripts"
+printf 'planted\n' >"$TEST_TMP/configs/.pymolrc.py"
+printf 'planted\n' >"$TEST_TMP/scripts/install_skills.py"
+now pymol skills
+[[ "$STATUS" == 0 ]] || fail 'the staged installers failed'
+for item in pymol skills; do
+    { read -r here && read -r mode && entries=$(cat); } <"$EVENTS.$item-dir" || fail "the $item fake left no record"
+    case $here in
+        "$TEST_TMP"/dotfiles-payload.*) ;;
+        *) fail "$item ran from $here, not from a fresh directory of TMPDIR" ;;
+    esac
+    [[ "$mode" == drwx------ ]] || fail "$item ran from a directory with mode $mode"
+    [[ "$entries" == install.sh ]] || fail "$item's directory held more than its script: $entries"
+    [[ ! -e "$here" ]] || fail "$item's staging directory was left behind"
+done
+rm -r "$TEST_TMP/configs" "$TEST_TMP/scripts"
+# A failed installer leaves its directory behind neither.
+new_home
+FAKE_PYMOL_STATUS=1 now pymol
+read -r here <"$EVENTS.pymol-dir"
+[[ "$STATUS" == 1 && -n "$here" && ! -e "$here" ]] || fail 'a failed installer left its staging directory behind'
 
 # A download that fails runs nothing and leaves no temporary file.
 new_home

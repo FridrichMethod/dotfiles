@@ -57,14 +57,21 @@ by the hook with the channel in `$channel` (`$Channel`) and with one helper:
   `Invoke-DotfilesPayloadScript SOURCE [ARG...]` (PowerShell, which runs the
   script in a child `pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File`)
   run SOURCE with ARG and return its exit status. A URL is downloaded first
-  (curl, else wget; `Invoke-WebRequest`) into a temporary file, never piped
-  into a shell, so a failed or empty download runs nothing; the file is
-  removed afterwards. Each download is bounded by `DOTFILES_PAYLOAD_TIMEOUT`
-  seconds (default 60: curl `--connect-timeout 10 --max-time 60`, wget
-  `-T 60 -t 1`, `Invoke-WebRequest -TimeoutSec 60`), and once one download of
-  a run failed, the run tries no other, so a network that is down or stalls
-  holds a login once. A path must be an existing file. On Unix the
-  installer's stdin is closed.
+  (curl, else wget; `Invoke-WebRequest`), never piped into a shell, so a
+  failed or empty download runs nothing. It goes, under the name it was
+  published with, into a fresh directory of the temporary directory that
+  holds nothing else and that only this user can enter (`mktemp -d` under
+  umask 077 in `${TMPDIR:-/tmp}`; on Windows a new subdirectory of the
+  account's own `%TEMP%`), and that directory is removed afterwards:
+  PyMOLScripts' and awesome-skills' installers read files beside themselves
+  as a checkout's, so a `configs/` or `scripts/` another user planted in a
+  shared `/tmp` must never be there. Each download is bounded by
+  `DOTFILES_PAYLOAD_TIMEOUT` seconds (default 60: curl
+  `--connect-timeout 10 --max-time 60`, wget `-T 60 -t 1`,
+  `Invoke-WebRequest -TimeoutSec 60`), and once one download of a run
+  failed, the run tries no other, so a network that is down or stalls holds
+  a login once. A path must be an existing file. On Unix the installer's
+  stdin is closed.
 
 Every URL is under `https://raw.githubusercontent.com/FridrichMethod/`:
 `tests/payload-update.sh` points that prefix at `file://` fakes and fails on

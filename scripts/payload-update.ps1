@@ -73,27 +73,39 @@ $PayloadFailed = & { try {
     $script:PayloadOffline = $false
     function Invoke-DotfilesPayloadScript {
         # SOURCE [ARG...], for the windows-* rows: run SOURCE, a URL first
-        # downloaded into a temporary .ps1 within the timeout or an installed
-        # script, in a child pwsh with ARG, and return its exit status. After
-        # one failed download a run tries no other. A simple function, so
-        # -Channel and the like reach the script instead of binding here.
+        # downloaded within the timeout or an installed script, in a child
+        # pwsh with ARG, and return its exit status. A download goes into a
+        # fresh directory of its own, removed afterwards: PyMOLScripts' and
+        # awesome-skills' installers read files beside themselves as a
+        # checkout's, which another user could plant in a shared temporary
+        # directory. After one failed download a run tries no other. A simple
+        # function, so -Channel and the like reach the script instead of
+        # binding here.
         $source = [string]$args[0]
         $rest = @($args | Select-Object -Skip 1 | ForEach-Object { [string]$_ })
-        $temporary = $null
+        $staging = $null
         try {
             $file = $source
             if ($source -match '^[A-Za-z][A-Za-z0-9+.-]*://') {
                 if ($script:PayloadOffline) { throw 'skipped: a download already failed in this run' }
                 $script:PayloadOffline = $true
-                $temporary = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-' + [Guid]::NewGuid().ToString('N') + '.ps1')
-                if ($source -like 'file:*') { Copy-Item -LiteralPath ([Uri]$source).LocalPath -Destination $temporary -ErrorAction Stop }
+                $staging = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-payload-' + [Guid]::NewGuid().ToString('N'))
+                # Windows' temporary directory is the account's own; elsewhere
+                # (the tests) mkdir -m 700, since .NET before 7 sets no mode.
+                if ($IsWindows) { [void][IO.Directory]::CreateDirectory($staging) }
+                else {
+                    & (Get-Command -Name mkdir -CommandType Application -TotalCount 1).Source -m 700 $staging
+                    if ($LASTEXITCODE -ne 0) { $staging = $null; throw 'cannot create a temporary directory' }
+                }
+                # Named as published, so the installer's own path reads as in its README.
+                $file = Join-Path $staging $(if ($source -match '/([A-Za-z0-9_-][A-Za-z0-9._-]*\.ps1)$') { $Matches[1] } else { 'install.ps1' })
+                if ($source -like 'file:*') { Copy-Item -LiteralPath ([Uri]$source).LocalPath -Destination $file -ErrorAction Stop }
                 else {
                     $ProgressPreference = 'SilentlyContinue'
-                    Invoke-WebRequest -Uri $source -OutFile $temporary -TimeoutSec $timeout -ErrorAction Stop
+                    Invoke-WebRequest -Uri $source -OutFile $file -TimeoutSec $timeout -ErrorAction Stop
                 }
                 $script:PayloadOffline = $false
-                if ((Get-Item -LiteralPath $temporary).Length -eq 0) { throw "$source downloaded empty" }
-                $file = $temporary
+                if ((Get-Item -LiteralPath $file).Length -eq 0) { throw "$source downloaded empty" }
             }
             elseif (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "$source is missing" }
             & $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file @rest 2>&1 | ForEach-Object { Write-Host "$_" }
@@ -103,7 +115,7 @@ $PayloadFailed = & { try {
             Write-DotfilesLog error "cannot run $($source): $($_.Exception.Message)"
             return 1
         }
-        finally { if ($temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction Ignore } }
+        finally { if ($staging) { Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction Ignore } }
     }
 
     function Test-PayloadInstalled([string]$Name) {

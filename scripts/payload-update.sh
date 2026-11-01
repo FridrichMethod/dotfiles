@@ -82,11 +82,19 @@ field() {
 }
 
 # payload_script INTERPRETER SOURCE [ARG...]: run SOURCE with ARG, stdin
-# closed, and return its status. A URL is first downloaded into a temporary
-# file, within the timeout; after one failed download a run tries no other.
-download='' offline=''
-trap '[ -z "$download" ] || rm -f "$download"' 0
+# closed, and return its status. A URL is first downloaded, within the
+# timeout, into a fresh directory that only this user can enter and that holds
+# nothing else, removed afterwards: PyMOLScripts' and awesome-skills'
+# installers read files beside themselves as a checkout's, which another user
+# could plant in a shared TMPDIR. After one failed download a run tries no
+# other.
+staging='' offline=''
+trap '[ -z "$staging" ] || rm -rf "$staging"' 0
 trap 'exit 1' HUP INT TERM
+unstage() {
+    [ -z "$staging" ] || rm -rf "$staging"
+    staging=
+}
 payload_script() {
     interpreter=$1 source=$2
     shift 2
@@ -101,16 +109,23 @@ payload_script() {
                 return 1
             fi
             offline=1
-            download=$(mktemp "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
+            staging=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
+            # Named as published, so the installer's $0 reads as in its README.
+            download=$staging/${source##*/}
+            case ${source##*/} in
+                '' | .* | *[!A-Za-z0-9._-]*) download=$staging/install ;;
+            esac
             if command -v curl >/dev/null 2>&1; then
                 curl -fsSL --connect-timeout "$connect" --max-time "$timeout" -o "$download" -- "$source" && offline=
             elif command -v wget >/dev/null 2>&1; then
                 wget -q -T "$timeout" -t 1 -O "$download" -- "$source" && offline=
             else
+                unstage
                 dotfiles_log error "neither curl nor wget is installed; cannot download $source"
                 return 1
             fi
             if [ -n "$offline" ] || [ ! -s "$download" ]; then
+                unstage
                 dotfiles_log error "cannot download $source (within ${timeout}s)"
                 return 1
             fi
@@ -126,8 +141,7 @@ payload_script() {
     esac
     script_status=0
     "$interpreter" "$@" </dev/null || script_status=$?
-    [ -z "$download" ] || rm -f "$download"
-    download=
+    unstage
     return "$script_status"
 }
 

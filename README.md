@@ -480,7 +480,7 @@ Keeps the three [payload repos](#payload-repos) installed and current by running
 | `DOTFILES_PAYLOAD_AUTO_UPDATE` | `1` | `0` disables the automatic runs; `sync-payloads` still works |
 | `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` | the items it manages; set but empty manages none |
 
-**Requirements** - POSIX `sh` and curl or wget (PowerShell 7 on Windows), then what each repository's installer needs, which its README lists (Git for the kit and the skills; Python 3.11+ for the launchers, and with PyYAML for the skill installer). A download goes to a temporary file first and is never piped into a shell.
+**Requirements** - POSIX `sh` and curl or wget (PowerShell 7 on Windows), then what each repository's installer needs, which its README lists (Git for the kit and the skills; Python 3.11+ for the launchers, and with PyYAML for the skill installer). A download goes first into a fresh private temporary directory of its own, removed afterwards, and is never piped into a shell.
 
 **On Windows** - `scripts/payload-update.ps1` runs at the end of the PowerShell 7 profile, right after `scripts/dotfiles-update.ps1`, in interactive consoles only, and starts its refreshes in a hidden, detached `pwsh -NoProfile`. It never runs automatically from an elevated session, whose installs would leave Administrators-owned git clones; open an ordinary PowerShell after an elevated stow.
 

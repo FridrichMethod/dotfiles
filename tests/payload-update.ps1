@@ -77,13 +77,22 @@ $helpers = Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME '.claude/coding-agent-kit'
 [void][IO.Directory]::CreateDirectory($helpers)
 foreach ($name in 'statusline', 'notify', 'check-git-hooks') { [IO.File]::WriteAllText((Join-Path $helpers "$name.cjs"), '') }
 '@
+    # PyMOLScripts' and awesome-skills' installers read a configs/ or scripts/
+    # directory beside themselves as a checkout's, so their fakes record the
+    # directory they run from and its entries.
     Write-Fixture (Join-Path $remote 'PyMOLScripts/main/install.ps1') @'
 Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "pymol-install [$args]"
+$here = Split-Path -Parent $PSCommandPath
+$mode = if ($IsWindows) { '-' } else { "$(& ls -ld $here)".Substring(0, 10) }
+[IO.File]::WriteAllLines("$env:PAYLOAD_EVENTS.pymol-dir", [string[]]@($here, $mode, ((Get-ChildItem -LiteralPath $here -Force -Name) -join ' ')))
 if ($env:FAKE_PYMOL_STATUS -and $env:FAKE_PYMOL_STATUS -ne '0') { exit ([int]$env:FAKE_PYMOL_STATUS) }
 foreach ($name in '.pymolrc', '.pymolrc.py') { [IO.File]::WriteAllText((Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME $name), '') }
 '@
     Write-Fixture (Join-Path $remote 'awesome-skills/main/install.ps1') @'
 Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "skills-install [$args]"
+$here = Split-Path -Parent $PSCommandPath
+$mode = if ($IsWindows) { '-' } else { "$(& ls -ld $here)".Substring(0, 10) }
+[IO.File]::WriteAllLines("$env:PAYLOAD_EVENTS.skills-dir", [string[]]@($here, $mode, ((Get-ChildItem -LiteralPath $here -Force -Name) -join ' ')))
 if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$env:FAKE_SKILLS_STATUS) }
 [void][IO.Directory]::CreateDirectory((Join-Path $env:LOCALAPPDATA 'awesome-skills/library'))
 '@
@@ -175,6 +184,29 @@ if ($env:FAKE_SKILLS_STATUS -and $env:FAKE_SKILLS_STATUS -ne '0') { exit ([int]$
         Assert-True ((Get-Events $case) -ceq '') "a fresh failure was retried: $(Get-Events $case)"
         $run = Invoke-Hook $case @('-Now', 'skills')
         Assert-True ($run.Code -eq 0 -and (Get-Record $case skills) -ceq '') "a success kept the record: $($run.Text)"
+    }
+    Test-Case 'a download runs alone in a fresh private directory, removed afterwards' {
+        # What another user planted in a shared temporary directory is never
+        # beside the installer.
+        $case = New-Case
+        $temporary = Join-Path $case.Root 'tmp'
+        Write-Fixture (Join-Path $temporary 'configs/.pymolrc.py') 'planted'
+        Write-Fixture (Join-Path $temporary 'scripts/install_skills.py') 'planted'
+        $run = Invoke-Hook $case @('-Now', 'pymol', 'skills')
+        Assert-True ($run.Code -eq 0) $run.Text
+        foreach ($name in 'pymol', 'skills') {
+            $record = @([IO.File]::ReadAllLines("$($case.Events).$name-dir"))
+            # A fresh directory beside the planted ones, whatever spelling of
+            # the temporary path (a Windows short name) the run saw.
+            Assert-True ((Split-Path -Leaf $record[0]) -like 'dotfiles-payload-*' -and
+                (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $record[0]) 'configs/.pymolrc.py'))) "$name ran from $($record[0])"
+            Assert-True ($IsWindows -or $record[1] -ceq 'drwx------') "$name ran from a directory with mode $($record[1])"
+            Assert-True ($record[2] -ceq 'install.ps1') "$name's directory held more than its script: $($record[2])"
+            Assert-True (-not (Test-Path -LiteralPath $record[0])) "$name's staging directory was left behind"
+        }
+        $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '1' }
+        $here = @([IO.File]::ReadAllLines("$($case.Events).pymol-dir"))[0]
+        Assert-True ($run.Code -eq 1 -and -not (Test-Path -LiteralPath $here)) 'a failed installer left its staging directory behind'
     }
     Test-Case 'a download that fails runs nothing and is recorded' {
         $case = New-Case
