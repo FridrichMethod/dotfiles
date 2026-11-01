@@ -934,10 +934,14 @@ mkdir -p "$PAYLOAD_STATE" "$TEST_HOME/.local/bin"
 printf '1700000000 3\n[dotfiles] [error] skills: stopped for a person\n' >"$PAYLOAD_STATE/skills.failed"
 printf '1700000000 1\n' >"$PAYLOAD_STATE/kit.failed"
 ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$TEST_HOME/.local/bin/codex-as"
+RECORDS="kit failed its last run (exit 1, see $PAYLOAD_STATE/kit.failed): run sync-payloads kit; kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit; skills stopped for a person (exit 3, see $PAYLOAD_STATE/skills.failed): run sync-payloads skills and do what it asks; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol"
 run_doctor payloads-records -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row payloads warn "kit failed its last run (exit 1, see $PAYLOAD_STATE/kit.failed): run sync-payloads kit; kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit; skills stopped for a person (exit 3, see $PAYLOAD_STATE/skills.failed): run sync-payloads skills and do what it asks; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol" \
-    'docs/bootstrap.md H7-payloads'
+assert_row payloads warn "$RECORDS" 'docs/bootstrap.md H7-payloads'
+# A relative XDG_STATE_HOME is ignored, as the hook ignores it, so the
+# records are found from any working directory.
+run_doctor payloads-records-relative-state XDG_STATE_HOME=relative/state -- --host lab-ubuntu --tsv
+assert_row payloads warn "$RECORDS" 'docs/bootstrap.md H7-payloads'
 # PyMOLScripts stops with 3 at a locally edited rc file, as awesome-skills
 # does at an interrupted update.
 printf '1700000000 3\n' >"$PAYLOAD_STATE/pymol.failed"

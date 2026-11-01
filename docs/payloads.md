@@ -119,9 +119,13 @@ for each item of `DOTFILES_PAYLOAD_ITEMS` in order:
 - starts the queued items in one detached background run,
   `sh scripts/payload-update.sh --worker ITEM...` with its stdin closed and
   its output in `payload.log`. The run never enters the shell's job table and
-  outlives the shell. Nothing keeps two sessions from starting one each at
-  the same moment; the kit's and awesome-skills' installers lock themselves
-  (exit 75) and PyMOLScripts' runs converge.
+  outlives the shell. It starts in `/`, never in the caller's working
+  directory, which it would otherwise hold for as long as it runs (a USB
+  stick or an NFS mount could not be unmounted meanwhile), and every path it
+  uses is absolute: a relative `TMPDIR` is resolved against the caller's
+  directory before it starts. Nothing keeps two sessions from starting one
+  each at the same moment; the kit's and awesome-skills' installers lock
+  themselves (exit 75) and PyMOLScripts' runs converge.
 
 An item's command exiting 0 writes its stamp and removes its failure record.
 Exit 75, the code the kit's and awesome-skills' installers return while
@@ -247,7 +251,9 @@ no automatic runs at all). The provisioning shells of
 ## State
 
 In `${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (created with umask
-077), on native Windows in `%LOCALAPPDATA%\dotfiles\payload\`:
+077; `XDG_STATE_HOME` counts only when it is an absolute path, as the XDG
+spec has it, for the hook and the doctor alike), on native Windows in
+`%LOCALAPPDATA%\dotfiles\payload\`:
 
 | File | Content |
 | --- | --- |

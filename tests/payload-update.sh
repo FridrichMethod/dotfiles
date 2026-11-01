@@ -488,6 +488,49 @@ else
     printf 'SKIP: no git in /usr/bin or /bin; the planted TMPDIR/.git case did not run.\n' >&2
 fi
 
+# The background run itself starts in / too, never in the caller's working
+# directory, which it would otherwise hold for as long as it runs (a USB
+# stick or an NFS mount could not be unmounted meanwhile), and every path it
+# uses is absolute: a relative TMPDIR still names the caller's directory. A
+# fixture whose pymol probe appends where it runs: the automatic run probes
+# in the caller's directory, the background run in its own.
+CWDFIX=$TEST_TMP/cwd-fixture
+cp -R "$FIXTURE" "$CWDFIX"
+tab=$'\t'
+sed "s#^pymol${tab}unix-probe${tab}#&pwd -P >>\"\$EVENTS.probe-cwd\"; #" "$FIXTURE/config/payloads.tsv" \
+    >"$CWDFIX/config/payloads.tsv"
+grep -q 'probe-cwd' "$CWDFIX/config/payloads.tsv" || fail 'the probe fixture does not record its working directory'
+new_home
+now pymol
+stamp_age pymol 86400
+mkdir -p "$TEST_TMP/caller/tmp"
+pushd "$TEST_TMP/caller" >/dev/null
+source_hook bash DOTFILES_DIR="$CWDFIX" DOTFILES_PAYLOAD_ITEMS=pymol TMPDIR=tmp
+popd >/dev/null
+wait_for grep -q 'pymol: update done' "$STATE/payload.log"
+[[ "$(cat "$EVENTS.probe-cwd")" == "$TEST_TMP/caller"$'\n'/ ]] ||
+    fail "the background run did not start in / (probed in: $(tr '\n' ' ' <"$EVENTS.probe-cwd"))"
+read -r here <"$EVENTS.pymol-dir"
+case $here in
+    "$TEST_TMP"/caller/tmp/dotfiles-payload.*) ;;
+    *) fail "the background run staged pymol in $here, not in the caller's relative TMPDIR" ;;
+esac
+rm -r "$TEST_TMP/caller" "$CWDFIX"
+
+# A relative XDG_STATE_HOME is ignored, as the XDG spec says, so the records
+# are the same from every working directory; an absolute one is followed.
+new_home
+mkdir "$TEST_TMP/relative"
+pushd "$TEST_TMP/relative" >/dev/null
+XDG_STATE_HOME=state now pymol
+popd >/dev/null
+[[ "$STATUS" == 0 && -s "$STATE/pymol.stamp" && ! -e "$TEST_TMP/relative/state" ]] ||
+    fail 'a relative XDG_STATE_HOME was followed'
+rm -r "$TEST_TMP/relative"
+XDG_STATE_HOME=$HOME_DIR/xdg-state now pymol
+[[ "$STATUS" == 0 && -s "$HOME_DIR/xdg-state/dotfiles/payload/pymol.stamp" ]] ||
+    fail 'an absolute XDG_STATE_HOME was not followed'
+
 # A download that fails runs nothing and leaves no temporary file.
 new_home
 mv "$REMOTE/PyMOLScripts/main/install.sh" "$TEST_TMP/pymol-install.sh"

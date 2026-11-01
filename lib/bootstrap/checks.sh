@@ -475,7 +475,11 @@ BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 # with what to run. Every shortfall only warns.
 bootstrap_check_payloads() {
     local config=$1/config/payloads.tsv items item line probe person links package path last code
-    local state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload short='' found='' issues=''
+    local state=$HOME/.local/state/dotfiles/payload short='' found='' issues=''
+    # XDG_STATE_HOME only when absolute, as the hook reads it.
+    case ${XDG_STATE_HOME-} in
+        /*) state=$XDG_STATE_HOME/dotfiles/payload ;;
+    esac
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
         return 0

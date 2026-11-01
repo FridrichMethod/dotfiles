@@ -8,7 +8,8 @@
 # `sh scripts/payload-update.sh --auto`: an absent item installs in the
 # foreground; a refresh whose days row has passed, and any retry six hours
 # after a failure (ITEM.failed, reported by every later session and the
-# doctor), runs in one detached background run (--worker) into payload.log.
+# doctor), runs in one detached background run (--worker), started in /,
+# into payload.log.
 # `--now [ITEM...]` (the sync-payloads alias) runs items in the foreground
 # whatever their state and exits 1 when one failed. Knobs:
 # DOTFILES_PAYLOAD_AUTO_UPDATE=0 (no automatic runs), DOTFILES_PAYLOAD_ITEMS
@@ -57,7 +58,13 @@ case ${HOME-} in
 esac
 config=$repo/config/payloads.tsv
 [ -r "$config" ] || fail "payload-update: missing $config."
-state=${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload
+# XDG_STATE_HOME only when absolute, as the XDG spec says: a relative one would
+# name another directory from each working directory, the background run's /
+# included.
+case ${XDG_STATE_HOME-} in
+    /*) state=$XDG_STATE_HOME/dotfiles/payload ;;
+    *) state=$HOME/.local/state/dotfiles/payload ;;
+esac
 (umask 077 && mkdir -p "$state") || fail "payload-update: cannot create $state."
 tab=$(printf '\t')
 timeout=${DOTFILES_PAYLOAD_TIMEOUT:-60}
@@ -119,7 +126,7 @@ payload_script() {
             staging=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/dotfiles-payload.XXXXXX") || return 1
             case $staging in
                 /*) ;;
-                *) staging=$PWD/$staging ;;
+                *) staging=${PWD%/}/$staging ;;
             esac
             # Named as published, so the installer's $0 reads as in its README.
             download=$staging/${source##*/}
@@ -149,7 +156,7 @@ payload_script() {
             fi
             case $source in
                 /*) ;;
-                *) source=$PWD/$source ;;
+                *) source=${PWD%/}/$source ;;
             esac
             set -- "$source" "$@"
             ;;
@@ -292,7 +299,15 @@ for item in "$@"; do
     fi
 done
 [ -n "$later" ] || exit 0
-# Started from here, the run never enters the shell's job table.
+# The run starts in /, never in the caller's directory, which it would hold
+# for as long as it runs (a USB stick or an NFS mount could not be unmounted
+# meanwhile); every path it uses is absolute ($repo, $state, a download's
+# directory), so a relative TMPDIR first becomes the caller's. Started from
+# here, it never enters the shell's job table.
+case ${TMPDIR:-/} in
+    /*) ;;
+    *) TMPDIR=${PWD%/}/$TMPDIR && export TMPDIR ;;
+esac
 # shellcheck disable=SC2086 # a word list
-sh "$repo/scripts/payload-update.sh" --worker $later </dev/null >"$state/payload.log" 2>&1 &
+(cd / && exec sh "$repo/scripts/payload-update.sh" --worker $later) </dev/null >"$state/payload.log" 2>&1 &
 exit 0
