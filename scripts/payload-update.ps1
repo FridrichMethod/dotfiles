@@ -132,11 +132,18 @@ $PayloadFailed = & { try {
                 $file = Join-Path $staging $(if ($source -match '/([A-Za-z0-9_-][A-Za-z0-9._-]*\.ps1)$') { $Matches[1] } else { 'install.ps1' })
                 if ($source -like 'file:*') { Copy-Item -LiteralPath ([Uri]$source).LocalPath -Destination $file -ErrorAction Stop }
                 else {
-                    $ProgressPreference = 'SilentlyContinue'
-                    Invoke-WebRequest -Uri $source -OutFile $file -TimeoutSec $timeout -ErrorAction Stop
+                    # Buffer the complete response under HttpClient's total
+                    # timeout. Invoke-WebRequest's timeout can end at headers,
+                    # leaving a stalled or trickling body unbounded.
+                    $client = [Net.Http.HttpClient]::new()
+                    try {
+                        $client.Timeout = [TimeSpan]::FromSeconds($timeout)
+                        [IO.File]::WriteAllBytes($file, $client.GetByteArrayAsync($source).GetAwaiter().GetResult())
+                    }
+                    finally { $client.Dispose() }
                 }
-                $script:PayloadOffline = $false
                 if ((Get-Item -LiteralPath $file).Length -eq 0) { throw "$source downloaded empty" }
+                $script:PayloadOffline = $false
             }
             elseif (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "$source is missing" }
             # Absolute before the move: a relative TMPDIR or source path is
@@ -191,9 +198,10 @@ $PayloadFailed = & { try {
         $failure = Join-Path $state "$Name.failed"
         if ($status -eq 0) {
             $stamp = Join-Path $state "$Name.stamp"
+            $temporary = "$stamp.$([Guid]::NewGuid().ToString('N')).tmp"
             try {
-                [IO.File]::WriteAllText("$stamp.tmp", "$clock`n")
-                [IO.File]::Move("$stamp.tmp", $stamp, $true)
+                [IO.File]::WriteAllText($temporary, "$clock`n")
+                [IO.File]::Move($temporary, $stamp, $true)
                 [IO.File]::Delete($failure)
                 Write-DotfilesLog ok "$($Name): $action done"
             }
@@ -201,6 +209,7 @@ $PayloadFailed = & { try {
                 Write-DotfilesLog error "$($Name): cannot record the success in $($state): $($_.Exception.Message)"
                 $status = 1
             }
+            finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction Ignore }
         }
         elseif ($status -eq 75) { Write-DotfilesLog info "$($Name): another run holds its lock; the next session tries again" }
         else {

@@ -595,4 +595,6 @@ else
     printf 'SKIP: PowerShell payload hook suite (pwsh unavailable).\n'
 fi
 
+python3 -I -B "$REPO_ROOT/tests/test_payload_download.py"
+
 printf 'payload-update=PASS\n'
