@@ -201,7 +201,19 @@ $PayloadFailed = & { try {
             $temporary = "$stamp.$([Guid]::NewGuid().ToString('N')).tmp"
             try {
                 [IO.File]::WriteAllText($temporary, "$clock`n")
-                [IO.File]::Move($temporary, $stamp, $true)
+                # Windows can briefly deny a competing rename. Retry only
+                # access/sharing errors, at most five attempts (500 ms wait).
+                for ($attempt = 0; ; $attempt++) {
+                    try {
+                        [IO.File]::Move($temporary, $stamp, $true)
+                        break
+                    }
+                    catch {
+                        $code = $_.Exception.GetBaseException().HResult -band 0xffff
+                        if ($code -notin 5, 32 -or $attempt -ge 4) { throw }
+                        Start-Sleep -Milliseconds (50 * ($attempt + 1))
+                    }
+                }
                 [IO.File]::Delete($failure)
                 Write-DotfilesLog ok "$($Name): $action done"
             }

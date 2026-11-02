@@ -277,6 +277,61 @@ os.execv(""" + repr(shutil.which("mv")) + ", ['mv', *sys.argv[1:]])\n")
     def test_powershell_concurrent_success_stamps(self):
         self.check_concurrent_stamps("ps1")
 
+    def check_powershell_stamp_error(self, exception, failures, success, retry=True):
+        self.configure("ps1", "unused")
+        attempts = self.root / "move-attempts"
+        installs = self.root / "install-calls"
+        self.env.update(PAYLOAD_TEST_ATTEMPTS=str(attempts), PAYLOAD_TEST_INSTALLS=str(installs))
+        config = self.repo / "config/payloads.tsv"
+        config.write_text(config.read_text().replace(
+            "Invoke-DotfilesPayloadScript 'unused'",
+            '[IO.File]::AppendAllText($env:PAYLOAD_TEST_INSTALLS, "run`n"); 0'))
+        hook = self.repo / "scripts/payload-update.ps1"
+        text = hook.read_text()
+        move = "[IO.File]::Move($temporary, $stamp, $true)"
+        self.assertEqual(text.count(move), 1)
+        # Inject the OS error only at the fixture's rename boundary. Once
+        # released, the same real temporary file must be published normally.
+        helper = """    $script:FixtureMoveAttempts = 0
+    function Invoke-FixtureMove($source, $target) {
+        $script:FixtureMoveAttempts++
+        [IO.File]::AppendAllText($env:PAYLOAD_TEST_ATTEMPTS, "move`n")
+        if ($script:FixtureMoveAttempts -le FAILURES) { throw EXCEPTION }
+        [IO.File]::Move($source, $target, $true)
+    }
+""".replace("FAILURES", str(failures)).replace("EXCEPTION", exception)
+        text = text.replace(move, "Invoke-FixtureMove $temporary $stamp")
+        hook.write_text(text.replace("    $ErrorActionPreference = 'Continue'",
+                                     helper + "    $ErrorActionPreference = 'Continue'", 1))
+        result, _ = self.run_hook("ps1")
+        self.assertEqual(result.returncode, 0 if success else 1, result.stdout + result.stderr)
+        self.assertEqual(installs.read_text(), "run\n", "stamp contention reran the installer")
+        count = len(attempts.read_text().splitlines())
+        if retry:
+            self.assertGreater(count, 1)
+            self.assertLessEqual(count, 5, "stamp publication retries were not bounded")
+        else:
+            self.assertEqual(count, 1, "unrelated I/O failure was retried")
+        stamp = self.state("ps1") / "pymol.stamp"
+        if success:
+            self.assertRegex(stamp.read_text(), r"^\d+\n$")
+        else:
+            self.assertFalse(stamp.exists())
+            self.assertIn("cannot record the success", result.stdout + result.stderr)
+        self.assertFalse(list(self.state("ps1").glob("*.tmp*")))
+
+    def test_powershell_stamp_recovers_after_access_denial(self):
+        self.check_powershell_stamp_error("[UnauthorizedAccessException]::new('fixture denial')", 1, True)
+
+    def test_powershell_stamp_recovers_after_sharing_violation(self):
+        self.check_powershell_stamp_error("[IO.IOException]::new('fixture sharing', -2147024864)", 1, True)
+
+    def test_powershell_stamp_persistent_denial_fails_and_cleans_up(self):
+        self.check_powershell_stamp_error("[UnauthorizedAccessException]::new('fixture denial')", 100, False)
+
+    def test_powershell_stamp_other_io_error_is_not_retried(self):
+        self.check_powershell_stamp_error("[IO.IOException]::new('fixture disk full', -2147024784)", 100, False, retry=False)
+
 
 if __name__ == "__main__":
     unittest.main()
