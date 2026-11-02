@@ -94,6 +94,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(common/sh/\.profile|common/zsh/\.zshrc|common/zsh/\.oh-my-zsh/custom/(nvm|fzf-tab)\.zsh|tests/shell-profile\.sh)$
+      - id: tmux-config
+        name: tmux plugin bootstrap and offline configuration
+        entry: tests/tmux.sh
+        language: script
+        pass_filenames: false
+        files: ^(common/tmux/.*|config/bootstrap/(git-clones|tools)\.tsv|tests/(tmux\.sh|test_tmux\.py))$
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh

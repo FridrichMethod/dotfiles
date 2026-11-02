@@ -111,7 +111,7 @@ prints) appear at the start of the When absent cell.
 | `file` | unix | manual (OS) | apt `file` | login env `file` | - | fzf previews cannot detect file types |
 | `col` | unix | manual (OS) | apt `bsdextrautils` | manual (OS) | - | fzf-tab man page previews fail |
 | `man` | unix | manual (OS) | apt `man-db` | manual (OS) | - | man, colored-man-pages and fzf-tab man previews fail |
-| `tmux` | unix | brew `tmux` | apt `tmux` | login env `tmux` | - | fzf --tmux popups and tmux sessions are unavailable |
+| `tmux` | unix | brew `tmux` | apt `tmux` | login env `tmux` | - | >= 2.6. tmux hostname-scoped recovery configuration and sessions are unavailable |
 | `homebrew` | mac | pinned `homebrew` (sudo) | - | - | - | Brewfile bundles cannot run |
 | `linuxbrew` | wsl-ubuntu, lab-ubuntu | - | pinned `homebrew` (sudo) | - | - | Brewfile bundles cannot run and the overlay brew shellenv line fails |
 | `python3` | all | brew `python` | apt `python3` (no Linuxbrew python) | login env `python` | winget `Python.Python.3.12` | >= 3.11. setup-sync and the AI config sync helpers cannot run |
@@ -129,6 +129,10 @@ prints) appear at the start of the When absent cell.
 | `you-should-use` | unix | clone | clone | clone | - | plugin you-should-use not found, no alias reminders |
 | `conda-zsh-completion` | unix | clone | clone | clone | - | plugin conda-zsh-completion not found, no conda completion |
 | `zsh-completions` | unix | clone | clone | clone | - | the extra completion functions on fpath are missing |
+| `tpm` | unix | clone | clone | clone | - | tmux plugins are not loaded (native tmux still works) |
+| `tmux-resurrect` | unix | clone | clone | clone | - | tmux layouts cannot be saved or restored |
+| `tmux-fzf` | unix | clone | clone | clone | - | prefix F has no tmux search menu |
+| `tmux-continuum` | unix | clone | clone | clone | - | tmux layouts are not saved or restored automatically |
 | `bat-theme` | all | pinned `bat-theme` | pinned `bat-theme` | pinned `bat-theme` | pinned `bat-theme` | BAT_THEME Catppuccin Mocha is unknown to bat |
 | `micromamba` | sherlock, marlowe | - | - | pinned `micromamba` | - | the login env cannot be created or updated |
 | `login-env` | sherlock, marlowe | - | - | `hpc-login-env.yml` (env `login`) | - | ssh sherlock and ssh marlowe cannot exec the login zsh |

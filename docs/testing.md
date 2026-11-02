@@ -74,7 +74,7 @@ A commit hook in a linked worktree exports an absolute `GIT_DIR` and
 reinitialize, stage and commit into the caller's repository. Every suite that
 runs fixture Git in its own body drops them first, and
 `tests/test-entrypoints.sh` checks that the Bash suites
-(`bootstrap-manifest.sh`, `doctor.sh`, `e2e-harness.sh`, `setup-host.sh`,
+(`bootstrap-manifest.sh`, `doctor.sh`, `e2e-harness.sh`, `payload-update.sh`, `setup-host.sh`,
 `unix-installer.sh`) unset them and the PowerShell ones
 (`e2e-harness.ps1`, `windows-installer-controls.ps1`) remove every `GIT_*`
 variable. It reruns the manifest suite under a relative `GIT_INDEX_FILE` and,

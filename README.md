@@ -63,6 +63,7 @@ cd ~/dotfiles
 - [At a Glance](#at-a-glance)
 - [Architecture](#architecture)
 - [Packages](#packages)
+- [tmux](#tmux)
 
 </td><td>
 
@@ -327,7 +328,7 @@ dotfiles/
 | Category | Tools |
 |---|---|
 | **Shell** | Zsh (with Powerlevel10k), Bash, POSIX `sh`, tcsh, xonsh, PowerShell 7 (PSReadLine + oh-my-posh) |
-| **Terminal** | Kitty, WezTerm, Windows Terminal |
+| **Terminal** | Kitty, WezTerm, Windows Terminal, tmux (TPM, resurrect, continuum, fzf) |
 | **Editor** | Vim |
 | **Version Control** | Git, SSH |
 | **Science** | Conda (`.condarc`), PyMOL configs (PyMOLScripts, a payload repo) |
@@ -335,6 +336,64 @@ dotfiles/
 | **AI Assistants** | Claude Code (`CLAUDE.md`, `settings.json`), OpenAI Codex (`AGENTS.md`, `config.toml`, `portable.rules`) |
 | **Utilities** | Aria2 |
 | **Input (Linux)** | Fcitx5 (lab-ubuntu only) |
+
+## tmux
+
+The shared config requires tmux 2.6+ and keeps its `Ctrl-b` prefix, mouse support, 100000 lines
+of scrollback and numbering from 1. [TPM](https://github.com/tmux-plugins/tpm)
+loads [resurrect](https://github.com/tmux-plugins/tmux-resurrect),
+[tmux-fzf](https://github.com/sainnhe/tmux-fzf) and
+[continuum](https://github.com/tmux-plugins/tmux-continuum); no full config
+framework or Oh My Tmux is needed.
+
+Install the missing clones with `./setup-host.sh --host <host> --check --only S3-clones`,
+then `./setup-host.sh --host <host> --yes --only S3-clones`, with
+`DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported. After stow,
+reload a running server with `tmux source-file ~/.tmux.conf`; new servers
+load it automatically. Plugins live in `~/.tmux/plugins/`, outside this
+checkout. Startup, reload, Stow and login hooks never install or update
+them. Without TPM, native tmux settings still work. See
+[S3-clones](docs/bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones) for
+Other Linux installation and existing-clone behavior.
+Use the stowed `~/.tmux.conf` as the sole tmux config: TPM prefers
+`${XDG_CONFIG_HOME:-~/.config}/tmux/tmux.conf` when that file exists and would
+read its plugin declarations instead.
+
+Press `Ctrl-b`, release it, then use:
+
+| Key | Action |
+| --- | --- |
+| `Ctrl-s` | Save the layout now |
+| `Ctrl-r` | Restore the last saved layout |
+| `F` | Search/manage sessions, windows and panes with fzf |
+| `I` | Install plugins added to the config |
+| `U` | Explicitly update plugins through TPM |
+| `Alt-u` | Remove plugins no longer declared in the config |
+
+Continuum saves every 15 minutes while an attached client's status line
+refreshes. It restores sessions, windows, panes, layouts and working
+directories on server startup. Reloading an established server does not
+restore; upstream treats loads within its first 10 seconds as startup.
+Programs are **not restarted**, and pane contents/scrollback are
+not saved: this does not resume training processes, SSH connections, agent
+sessions or Slurm allocations. Boot-time tmux startup is disabled; continuum
+disables its existing user `tmux.service` on systemd hosts or removes its
+`~/Library/LaunchAgents/Tmux.Start.plist` on macOS.
+
+Snapshots live in `~/.local/share/tmux/resurrect/<hostname>/`, keeping nodes
+with a shared home separate. On a single host, continuum gives the first
+tmux server precedence; later `-L`/`-S` servers do not independently autosave
+or auto-restore. Manual saves on that host still share its snapshot directory.
+Keep continuum last in the plugin list and do not overwrite its `status-right`
+hook; automatic saves require the status line to stay enabled.
+
+tmux-fzf uses a popup on tmux 3.2+ and a split otherwise. It reuses the
+existing fzf dependency and limits its menu to tmux sessions/windows/panes.
+On shared nodes, use native tmux commands for creating or renaming objects:
+upstream's new/rename dialogs use fixed `/tmp` pipe names that can collide.
+CopyQ is not required or installed; if already available on PATH, upstream
+tmux-fzf starts it on plugin load even with this reduced menu. Upstream
+plugins do not reliably support installation paths containing spaces.
 
 ## Hosts
 

@@ -77,6 +77,7 @@ tests=(
     test-entrypoints.sh
     terminal.sh
     shell-profile.sh
+    tmux.sh
     config-sync.sh
     ai-config-sync.sh
     ai-integration.sh

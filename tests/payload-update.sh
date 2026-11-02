@@ -11,6 +11,11 @@ unset DOTFILES_AUTO_UPDATE DOTFILES_AUTO_STOW DOTFILES_HOST DOTFILES_DIR _DOTFIL
     _DOTFILES_PAYLOAD_CHECKED CODING_AGENT_KIT_CONFIG CODING_AGENT_KIT_COLOR CODING_AGENT_KIT_USAGE_FILE \
     CODING_AGENT_KIT_TOKEN_ID CODING_AGENT_KIT_CLAUDE_PID CODING_AGENT_KIT_REPO_URL XDG_STATE_HOME XDG_DATA_HOME
 
+# A commit hook's Git overrides must not redirect the planted repository
+# fixture into the caller's real repository or linked worktree metadata.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 # scripts/payload-update.sh against fake installers served from file:// URLs:
 # the real config/payloads.tsv with its raw.githubusercontent.com prefix
 # pointed at a local directory, and a curl that refuses every other scheme.
