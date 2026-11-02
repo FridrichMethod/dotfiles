@@ -469,7 +469,7 @@ kind.
   like oh-my-zsh's own auto-update, and setup-host clones only a missing one
   and never modifies an existing clone
   ([S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones)). Unpinned plugin
-  code runs in every shell, the same trust model as oh-my-zsh's auto-update.
+  code runs in shell or tmux startup, the same trust model as oh-my-zsh's auto-update.
   What a package manager installs follows that manager's own current version
   and trust:
   Homebrew (`brew bundle`), apt, conda-forge (the login env, within the yml's
@@ -1160,14 +1160,15 @@ cluster; vendor binaries and conda-forge builds each need a minimum glibc.
 Applies to every Unix host, **before** `./stow-all.sh`. Rows in
 [`git-clones.tsv`](../config/bootstrap/git-clones.tsv) own repository names,
 destinations and branches. Clone oh-my-zsh first; ZSH_CUSTOM defaults to
-~/.oh-my-zsh/custom for the theme and plugins. Nothing here is pinned:
+~/.oh-my-zsh/custom for the theme and zsh plugins; tmux plugins live under
+~/.tmux/plugins/. Nothing here is pinned:
 each row's `ref` is the repository's default branch (`master`, and `main` for
 conda-zsh-completion), and every clone tracks it, the way oh-my-zsh's own
 auto-update (`zstyle ':omz:update' mode auto` in `common/zsh/.zshrc`) keeps
 `~/.oh-my-zsh` on `master`. Downloads stay sha256-pinned in
 [`installers.tsv`](../config/bootstrap/installers.tsv), the Catppuccin bat
 theme file of S3-bat-theme included. The trade-off: unpinned theme and plugin
-code runs in every shell, the same trust model as oh-my-zsh's auto-update.
+code runs in shell or tmux startup, the same trust model as oh-my-zsh's auto-update.
 
 - **Check:** `test -f ~/.oh-my-zsh/oh-my-zsh.sh && git -C ~/.oh-my-zsh/custom/plugins/fzf-tab log -1 --oneline --decorate`
 - **Install:** automatic via setup-host.sh, only for a clone that is missing.
@@ -1176,8 +1177,8 @@ code runs in every shell, the same trust model as oh-my-zsh's auto-update.
   Every other row: `git clone --depth=1 --branch REF URL DEST`. By hand:
   `clone_listed ID` per row, oh-my-zsh first (the Other Linux quick start
   loops over all of them).
-- **Verify:** doctor rows `oh-my-zsh`, `powerlevel10k` and the six plugins are
-  `ok`.
+- **Verify:** doctor rows `oh-my-zsh`, `powerlevel10k`, the six zsh plugins,
+  `tpm`, `tmux-resurrect`, `tmux-fzf` and `tmux-continuum` are `ok`.
 - **Human:** no
 
 setup-host never modifies an existing clone: a destination that is a git
@@ -1190,7 +1191,7 @@ upstream oh-my-zsh installer: it replaces `~/.zshrc` and can change your login
 shell.
 
 Updating is yours to do. oh-my-zsh updates itself, or with `omz update`, which
-updates only oh-my-zsh itself. For the theme and plugins, fast-forward each
+updates only oh-my-zsh itself. For the theme and zsh plugins, fast-forward each
 clone to its upstream branch:
 
 ```sh
@@ -1201,6 +1202,17 @@ A clone with local changes in the way or a diverged history makes its
 `pull --ff-only` stop and say so, and the loop goes on with the next one.
 `plugins/example`, which oh-my-zsh ships, lies inside the oh-my-zsh checkout,
 so the loop fast-forwards oh-my-zsh as well.
+
+For tmux, run `./setup-host.sh --host H --check --only S3-clones`, then
+`./setup-host.sh --host H --yes --only S3-clones` to install missing plugins.
+Keep `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported while
+provisioning. Once `.tmux.conf` is stowed, reload a running server with
+`tmux source-file ~/.tmux.conf`; otherwise the next tmux start loads it.
+There is no tmux startup download or automatic plugin update. Use TPM's
+`prefix + U` for an explicit update and `prefix + I` after declaring another
+plugin. Other Linux uses `clone_listed ID` as above. Native Windows installs
+none of these clones. See [tmux usage](shell.md#tmux) for save/restore
+keys, the recovery policy and shared-host limits.
 
 ### S3-bat-theme: bat theme
 

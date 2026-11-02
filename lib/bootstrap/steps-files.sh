@@ -51,7 +51,7 @@ steps_clone_head() {
 }
 
 # steps_clone_rows: git-clones.tsv rows of this host with expanded dests,
-# oh-my-zsh first (every other clone lands under its custom/ dir).
+# oh-my-zsh first (zsh plugins land under custom/, tmux plugins elsewhere).
 steps_clone_rows() {
     local rows lines row id dest rest pass
     rows=$(bootstrap_clone_rows "$STEPS_HOST") || return 1
@@ -199,8 +199,8 @@ step_S3_clones_apply() {
         [ -n "$id" ] || continue
         if ! steps_clone_apply "$id" "$dest" "$url" "$ref"; then
             if [ "$id" = oh-my-zsh ]; then
-                # The other clones would create ~/.oh-my-zsh/custom without it.
-                dotfiles_log error "oh-my-zsh clone failed; the other clones need it first"
+                # The zsh plugin clones would create custom/ without it.
+                dotfiles_log error "oh-my-zsh clone failed; the zsh plugins need it first"
                 return 1
             fi
             failed="$failed${failed:+ }$id"

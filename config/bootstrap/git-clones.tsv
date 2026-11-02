@@ -1,5 +1,5 @@
-# Git clones for the zsh framework, theme and plugins (S3-clones).
-# checked 2026-10-10: each ref is the repository's default branch, as
+# Git clones for the zsh framework, theme and zsh/tmux plugins (S3-clones).
+# checked 2026-10-10: each zsh ref is the repository's default branch, as
 # `git ls-remote --symref URL HEAD` reported it that day.
 # Tab-separated; columns: id dest url ref hosts. ids match tools.tsv rows.
 # ref is a branch name, never a commit: nothing here is pinned. A missing
@@ -19,3 +19,8 @@ you-should-use	$ZSH_CUSTOM/plugins/you-should-use	https://github.com/MichaelAqui
 # conda-incubator/conda-zsh-completion's default branch is main.
 conda-zsh-completion	$ZSH_CUSTOM/plugins/conda-zsh-completion	https://github.com/conda-incubator/conda-zsh-completion.git	main	unix
 zsh-completions	$ZSH_CUSTOM/plugins/zsh-completions	https://github.com/zsh-users/zsh-completions.git	master	unix
+# tmux repositories verified 2026-11-01: their default branch is master.
+tpm	$HOME/.tmux/plugins/tpm	https://github.com/tmux-plugins/tpm.git	master	unix
+tmux-resurrect	$HOME/.tmux/plugins/tmux-resurrect	https://github.com/tmux-plugins/tmux-resurrect.git	master	unix
+tmux-fzf	$HOME/.tmux/plugins/tmux-fzf	https://github.com/sainnhe/tmux-fzf.git	master	unix
+tmux-continuum	$HOME/.tmux/plugins/tmux-continuum	https://github.com/tmux-plugins/tmux-continuum.git	master	unix

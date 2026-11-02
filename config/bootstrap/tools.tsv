@@ -30,7 +30,7 @@ tar	core	unix	tar	--version	-	archive installs and the targz aliases fail	H1-apt
 file	core	unix	file	--version	-	fzf previews cannot detect file types	H1-apt-core
 col	core	unix	col	-	-	fzf-tab man page previews fail	H1-apt-core
 man	core	unix	man	-	-	man, colored-man-pages and fzf-tab man previews fail	H1-apt-core
-tmux	core	unix	tmux	-V	-	fzf --tmux popups and tmux sessions are unavailable	H1-apt-core
+tmux	core	unix	tmux	-V	2.6	tmux hostname-scoped recovery configuration and sessions are unavailable	H1-apt-core
 # A fresh Homebrew is off PATH until the stowed rc files run brew shellenv, so
 # doctor and setup-host first prepend the directory of bootstrap_brew_bin
 # (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to
@@ -57,6 +57,10 @@ zsh-autosuggestions	core	unix	file:$ZSH_CUSTOM/plugins/zsh-autosuggestions/zsh-a
 you-should-use	core	unix	file:$ZSH_CUSTOM/plugins/you-should-use/you-should-use.plugin.zsh	-	-	plugin you-should-use not found, no alias reminders	S3-clones
 conda-zsh-completion	core	unix	file:$ZSH_CUSTOM/plugins/conda-zsh-completion/conda-zsh-completion.plugin.zsh	-	-	plugin conda-zsh-completion not found, no conda completion	S3-clones
 zsh-completions	core	unix	dir:$ZSH_CUSTOM/plugins/zsh-completions/src	-	-	the extra completion functions on fpath are missing	S3-clones
+tpm	core	unix	file:$HOME/.tmux/plugins/tpm/tpm	-	-	tmux plugins are not loaded (native tmux still works)	S3-clones
+tmux-resurrect	core	unix	file:$HOME/.tmux/plugins/tmux-resurrect/resurrect.tmux	-	-	tmux layouts cannot be saved or restored	S3-clones
+tmux-fzf	core	unix	file:$HOME/.tmux/plugins/tmux-fzf/main.tmux	-	-	prefix F has no tmux search menu	S3-clones
+tmux-continuum	core	unix	file:$HOME/.tmux/plugins/tmux-continuum/continuum.tmux	-	-	tmux layouts are not saved or restored automatically	S3-clones
 bat-theme	core	all	file:$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	-	-	BAT_THEME Catppuccin Mocha is unknown to bat	S3-bat-theme
 micromamba	core	sherlock,marlowe	micromamba	--version	-	the login env cannot be created or updated	S2-micromamba
 login-env	core	sherlock,marlowe	file:$HOME/micromamba/envs/login/bin/zsh	-	-	ssh sherlock and ssh marlowe cannot exec the login zsh	S2-login-env

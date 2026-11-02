@@ -75,7 +75,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `file` | unix | fzf previews cannot detect file types |
 | `col` | unix | fzf-tab man page previews fail |
 | `man` | unix | man, colored-man-pages and fzf-tab man previews fail |
-| `tmux` | unix | fzf --tmux popups and tmux sessions are unavailable |
+| `tmux` | unix | tmux 2.6+ hostname-scoped recovery configuration and sessions are unavailable |
 | `homebrew` | mac | Brewfile bundles cannot run |
 | `linuxbrew` | wsl-ubuntu, lab-ubuntu | Brewfile bundles cannot run and the overlay brew shellenv line fails |
 | `python3` | all | setup-sync and the AI config sync helpers cannot run |
@@ -93,6 +93,10 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `you-should-use` | unix | plugin you-should-use not found, no alias reminders |
 | `conda-zsh-completion` | unix | plugin conda-zsh-completion not found, no conda completion |
 | `zsh-completions` | unix | the extra completion functions on fpath are missing |
+| `tpm` | unix | tmux plugins are not loaded (native tmux still works) |
+| `tmux-resurrect` | unix | tmux layouts cannot be saved or restored |
+| `tmux-fzf` | unix | prefix F has no tmux search menu |
+| `tmux-continuum` | unix | tmux layouts are not saved or restored automatically |
 | `bat-theme` | all | BAT_THEME Catppuccin Mocha is unknown to bat |
 | `micromamba` | sherlock, marlowe | the login env cannot be created or updated |
 | `login-env` | sherlock, marlowe | ssh sherlock and ssh marlowe cannot exec the login zsh |

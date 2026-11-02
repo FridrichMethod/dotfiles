@@ -11,6 +11,8 @@ set -euo pipefail
 # coding-agent-kit's Node helpers from ~/.claude/coding-agent-kit/ (Node.js 22+
 # must be on PATH when Claude runs them).
 # Day-zero prerequisites come from ./setup-host.sh and are checked by ./doctor.sh.
+# TPM and tmux plugins come from setup-host's S3-clones step. Stow only links
+# .tmux.conf; without TPM it still works with the native tmux settings.
 # It refuses to stow the zsh package before oh-my-zsh is cloned, since Stow
 # would create a real ~/.oh-my-zsh/custom that blocks the clone
 # (DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1 stows anyway), and stops before the AI

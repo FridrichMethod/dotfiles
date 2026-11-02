@@ -621,7 +621,7 @@ esac
 case " $(real_ids bootstrap_tool_rows '')" in
     *' xclip '* | *' pwsh '* | *' micromamba '*) fail 'platform mode includes host-list rows' ;;
 esac
-assert_eq "$(bootstrap_clone_rows sherlock | wc -l | tr -d ' ')" 8 'eight clones on sherlock'
+assert_eq "$(bootstrap_clone_rows sherlock | wc -l | tr -d ' ')" 12 'zsh and tmux clones on sherlock'
 assert_eq "$(bootstrap_clone_rows win | wc -l | tr -d ' ')" 0 'no clones on win'
 assert_eq "$(bootstrap_installer_row micromamba sherlock aarch64 | cut -f3 | sed 's#.*/##')" micromamba-linux-aarch64 'micromamba aarch64'
 assert_eq "$(bootstrap_installer_row codex lab-ubuntu x86_64 | cut -f3 | sed 's#.*/##')" codex-package-x86_64-unknown-linux-musl.tar.gz 'codex x86_64'

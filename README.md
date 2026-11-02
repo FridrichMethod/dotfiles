@@ -95,6 +95,13 @@ Native Windows stows an explicit common-package allowlist and no Unix shell
 packages. The [dependency guide](docs/dependencies.md) explains required and
 optional tools; `config/bootstrap/` owns installation inventories and versions.
 
+## tmux
+
+The shared tmux 2.6+ configuration uses TPM, resurrect, continuum and fzf.
+Plugins are provisioned through setup-host's S3-clones step; startup installs
+nothing. Recovery restores layouts and directories without restarting programs
+or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
+
 ## Auto-update Hooks
 
 Interactive login checks once per session, fast-forwards a clean checkout and
