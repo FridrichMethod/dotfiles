@@ -912,7 +912,7 @@ expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-payloads judgment'
 expect_text check-fresh out "# on by default once stowed: the first interactive shell installs coding-agent-kit, PyMOLScripts and awesome-skills through their own installers (config/payloads.tsv), unless DOTFILES_PAYLOAD_AUTO_UPDATE=0 is in that shell's environment"
-expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.6'
+expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.7'
 PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
 expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'

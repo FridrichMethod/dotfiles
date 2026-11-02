@@ -195,7 +195,7 @@ for shell in bash zsh sh; do
     }
     new_home
     source_hook "$shell"
-    expect_events "kit-install [--channel 0.6] stdin=[]
+    expect_events "kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes"
     expect_text "$OUT" 'marker=1'
@@ -235,7 +235,7 @@ expect_events 'pymol-install []'
 new_home
 source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit'
 expect_events 'skills-install [] bash=yes
-kit-install [--channel 0.6] stdin=[]'
+kit-install [--channel 0.7] stdin=[]'
 new_home
 source_hook bash DOTFILES_PAYLOAD_ITEMS=
 expect_events ''
@@ -255,7 +255,7 @@ stamp_age pymol 3600
 stamp_age skills $((6 * 86400))
 source_hook bash
 wait_for grep -q 'kit: update done' "$STATE/payload.log"
-expect_events 'kit-update [--update --channel 0.6]'
+expect_events 'kit-update [--update --channel 0.7]'
 [[ ! -s "$OUT" || "$(cat "$OUT")" == marker=1 ]] || fail 'a background refresh printed in the shell'
 stamp_age skills $((7 * 86400))
 stamp_age pymol 86400
@@ -286,7 +286,7 @@ expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 1, see $STA
 printf '%s 1\n' "$(($(date +%s) - 21600))" >"$STATE/kit.failed"
 source_hook bash
 wait_for grep -q 'kit: install done' "$STATE/payload.log"
-expect_events 'kit-install [--channel 0.6] stdin=[]'
+expect_events 'kit-install [--channel 0.7] stdin=[]'
 [[ ! -e "$STATE/kit.failed" && -e "$STATE/kit.stamp" ]] || fail 'a success kept the failure record'
 # A failed background run keeps the end of its output in the record, which
 # the next session reports.
@@ -311,10 +311,10 @@ expect_text "$OUT" 'pymol: another run holds its lock'
 new_home
 DOTFILES_PAYLOAD_AUTO_UPDATE=0 now kit
 [[ "$STATUS" == 0 ]] || fail '--now kit failed'
-expect_events 'kit-install [--channel 0.6] stdin=[]'
+expect_events 'kit-install [--channel 0.7] stdin=[]'
 : >"$EVENTS"
 now kit
-expect_events 'kit-update [--update --channel 0.6]'
+expect_events 'kit-update [--update --channel 0.7]'
 FAKE_KIT_STATUS=3 now skills kit
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for a failed item'
 now nope
@@ -365,14 +365,14 @@ rm "$HOME_DIR/.local/bin/codex-as"
 ln -s "$HOME_DIR/elsewhere/codex-as" "$HOME_DIR/.local/bin/codex-as"
 now kit
 expect_events 'pymol-install []
-kit-install [--channel 0.6] stdin=[]'
+kit-install [--channel 0.7] stdin=[]'
 
 # AWESOME_SKILLS_AUTO_UPDATE=0, the old hook's opt-out, still leaves skills
 # out of the automatic runs, with one notice, until 2027-01-31; a manual
 # run and a selection without skills ignore it.
 new_home
 source_hook bash AWESOME_SKILLS_AUTO_UPDATE=0
-expect_events 'kit-install [--channel 0.6] stdin=[]
+expect_events 'kit-install [--channel 0.7] stdin=[]
 pymol-install []'
 expect_text "$ERR" '[dotfiles] [warn] AWESOME_SKILLS_AUTO_UPDATE=0 leaves skills out until 2027-01-31, when it stops working; set DOTFILES_PAYLOAD_ITEMS="kit pymol" instead'
 source_hook bash AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='kit pymol'
@@ -564,13 +564,13 @@ pymol-install []'
 new_home
 in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/common/sh/.profile" >"$OUT" 2>"$ERR" ||
     fail 'common/sh/.profile failed'
-expect_events 'kit-install [--channel 0.6] stdin=[]
+expect_events 'kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes'
 new_home
 in_env bash --noprofile --norc -i -c '. "$DOTFILES_DIR/scripts/awesome-skills-update.sh"' >"$OUT" 2>"$ERR" ||
     fail 'the transition shim failed'
-expect_events 'kit-install [--channel 0.6] stdin=[]
+expect_events 'kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes'
 ZSHRC=$REPO_ROOT/common/zsh/.zshrc

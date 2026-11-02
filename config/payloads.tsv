@@ -34,13 +34,13 @@
 # hook, the sh one with the kit channel in $channel, and with
 #   payload_script INTERPRETER SOURCE [ARG...]       (sh)
 #   Invoke-DotfilesPayloadScript SOURCE [ARG...]     (PowerShell)
-# which download SOURCE when it is a URL (curl or wget; Invoke-WebRequest)
+# which download SOURCE when it is a URL (curl or wget; .NET HttpClient)
 # within DOTFILES_PAYLOAD_TIMEOUT seconds into a fresh private temporary
 # directory that holds nothing else and is removed afterwards, never piping
 # it into a shell, run it with ARG in / (PowerShell: in $PSHOME; never in
 # the caller's directory or the download's) and return its exit status (75:
 # another run holds that repo's lock).
-kit	channel	0.6
+kit	channel	0.7
 kit	days	1
 kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"

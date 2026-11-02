@@ -150,8 +150,12 @@ The session-once payload hook calls each repository's own installer:
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit),
 [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) and
 [awesome-skills](https://github.com/FridrichMethod/awesome-skills).
-`config/payloads.tsv` owns platform selection and kit channel (currently 0.6).
+`config/payloads.tsv` owns platform selection and kit channel (currently 0.7).
 There are no submodules or consumer-side source pins.
+
+awesome-skills manages its own copies under `~/.claude/skills/`,
+`~/.codex/skills/` and `~/.agents/skills/awesome-skills/`; Codex reads both of
+its roots. Selection and migration stay with that repository's installer.
 
 Absent items install in the foreground; due updates run in one detached
 background process. Success stamps are separate from `ITEM.failed` records;

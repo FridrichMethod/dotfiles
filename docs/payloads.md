@@ -17,15 +17,15 @@ payload hooks `scripts/payload-update.sh` (Unix) and
 
 There is no submodule, no bump workflow and no pin on the dotfiles side. The
 kit follows the newest patch release of the `MAJOR.MINOR` channel that
-`config/payloads.tsv` declares (`0.6`); PyMOLScripts and awesome-skills
+`config/payloads.tsv` declares (`0.7`); PyMOLScripts and awesome-skills
 install from their `main`. What each repository installs, its options and its
 own state are in its README; this file covers only how dotfiles calls them.
 
 | Item | Repository | Unix | Native Windows | Refresh |
 | --- | --- | --- | --- | --- |
-| `kit` | coding-agent-kit | a managed install of channel `0.6`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows), and its launchers never ran natively | daily |
+| `kit` | coding-agent-kit | a managed install of channel `0.7`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows), and its launchers never ran natively | daily |
 | `pymol` | PyMOLScripts | `~/.pymolrc` and `~/.pymolrc.py` | the same two files in `$HOME` | daily |
-| `skills` | awesome-skills | the library and the selections of `~/.claude/skills/` and `~/.codex/skills/` | the same, through its `install.ps1` | weekly |
+| `skills` | awesome-skills | its skill copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/`, with selection and visibility managed by its installer | the same, through its `install.ps1` | weekly |
 
 `common/claude/.claude/settings.json` runs the helpers by their home-relative
 path, for example
@@ -53,7 +53,7 @@ comments, and the first row of an item and field wins.
 | `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, in the foreground |
 | `unix-install`, `windows-install` | the first-install command; an item without a `windows-install` row (the kit) is not available on native Windows: it is no default item there, and a run that names it says so (exit 0, no record) |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
-| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook and the doctor word such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills at an interrupted update it cannot undo alone because a file it would restore was edited since (its message names the `--restore` command to run) |
+| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook and the doctor word such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills where it will not go on alone: an interrupted update it cannot undo because a file it would restore was edited since, an update that would remove many installed skills at once, a Codex skill folder that would pass 1,990 entries, or a Codex folder layout it cannot use; its message names the command to run, such as `--restore` |
 | `stow-links` | `PACKAGE PATH...`: home paths that the installer refuses while they are links into the retired dotfiles package `common/PACKAGE` (the kit's launchers and Bash completions); while one is, the hook does not call the installer and says to run `stow-all` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
@@ -93,10 +93,10 @@ helper:
   that pwsh can write) and finds its own files through its path. It never
   runs in the caller's working directory, which may be a shared one too (a
   shell started in `/tmp`) or an untrusted checkout (a VS Code terminal
-  starts in its workspace): awesome-skills' remote bootstrap runs
-  `python3 -c` on Unix, which imports modules from its working directory
-  first, and on Windows finds git with Python's `shutil.which`, which
-  searches the working directory first. Nor does it run in its download
+  starts in its workspace). The upstream installers also own their Python
+  import and executable lookup isolation; dotfiles does not rely on their
+  internal implementation to choose a neutral starting directory.
+  Nor does it run in its download
   directory, whose parent may be shared: git looks for a repository from
   its working directory upwards, so the kit's `git ls-remote`, run outside
   any repository, would read a `/tmp/.git` another user made wherever
@@ -342,21 +342,23 @@ released.
 
 `kit channel` is the `MAJOR.MINOR` line the rest of this configuration is
 written for: the helper paths in `settings.json`, the completion directory in
-`.zshrc` and the `CODING_AGENT_KIT_*` names that every test entry point
-unsets. A new minor release (breaking while the kit is 0.x) is taken through a
+`.zshrc` and the public launcher/install commands it calls. Test entry points
+clear inherited kit variable prefixes through `tests/lib/environment.sh` and
+`.ps1`, without scanning the kit's implementation. A new minor release
+(breaking while the kit is 0.x) is taken through a
 reviewed change, landed like any other (a `ci/**` branch, see AGENTS.md):
 
 1. Read the kit's CHANGELOG for the new line and adapt what it changed in this
-   repository: `settings.json`, `.zshrc`, the unset list of `tests/run.sh`,
-   every other test entry point and `tests/run.ps1`, and the `kit` rows.
+   repository: `settings.json`, `.zshrc`, the public integration tests and the
+   `kit` rows. Preserve shared test-environment isolation.
 2. Change the `kit channel` row. The update row passes it too
    (`... --update --channel "$channel"`): a
    host's managed root remembers its channel and a plain `--update` keeps it,
    while a run that names another channel switches to that channel's newest
    release, so every installed host moves at its next refresh.
 3. Push the branch: CI installs the real kit of the new channel and runs the
-   installed-kit cases, including the check that the test entry points unset
-   every `CODING_AGENT_KIT_*` name the release reads.
+   installed-kit cases for the required helpers, launcher commands and
+   completion wiring. Extra upstream helpers or variable names are allowed.
 
 Each host then switches at its next refresh, or at once with
 `sync-payloads kit`. A bad patch release is fixed forward in the kit, with a
@@ -365,12 +367,11 @@ back to an older line is a channel change to that line.
 
 ## Adapting to the repositories' interfaces
 
-The rows were written against the interface the three repositories agreed on
-before they released it, and checked against their draft READMEs:
-awesome-skills' Windows data root (`%LOCALAPPDATA%\awesome-skills`) is the
-value to re-check first. When a repository documents
-its final commands, or later changes them in a release, edit only
-`config/payloads.tsv`, in one reviewed change:
+The rows follow the repositories' published README interfaces. Recheck the
+commands, exit statuses and persistent probe paths when an upstream release
+changes them, including awesome-skills' Windows data root
+(`%LOCALAPPDATA%\awesome-skills`). Change the rows in `config/payloads.tsv`
+and their contract documentation together, in one reviewed change:
 
 1. Take the commands from the repository's README, the section it names as its
    stable interface, never from its code.
