@@ -97,7 +97,9 @@ optional tools; `config/bootstrap/` owns installation inventories and versions.
 
 ## tmux
 
-The shared tmux 2.6+ configuration uses TPM, resurrect, continuum and fzf.
+The shared tmux 2.6+ configuration uses TPM, resurrect, continuum and fzf,
+with a Catppuccin Mocha appearance, text extraction, clipboard helpers,
+a floating scratch terminal and a custom which-key menu on supported versions.
 Plugins are provisioned through setup-host's S3-clones step; startup installs
 nothing. Recovery restores layouts and directories without restarting programs
 or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).

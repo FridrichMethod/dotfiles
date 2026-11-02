@@ -1162,8 +1162,8 @@ Applies to every Unix host, **before** `./stow-all.sh`. Rows in
 destinations and branches. Clone oh-my-zsh first; ZSH_CUSTOM defaults to
 ~/.oh-my-zsh/custom for the theme and zsh plugins; tmux plugins live under
 ~/.tmux/plugins/. Nothing here is pinned:
-each row's `ref` is the repository's default branch (`master`, and `main` for
-conda-zsh-completion), and every clone tracks it, the way oh-my-zsh's own
+each row's `ref` is the repository's default branch (`master` or `main`),
+and every clone tracks it, the way oh-my-zsh's own
 auto-update (`zstyle ':omz:update' mode auto` in `common/zsh/.zshrc`) keeps
 `~/.oh-my-zsh` on `master`. Downloads stay sha256-pinned in
 [`installers.tsv`](../config/bootstrap/installers.tsv), the Catppuccin bat
@@ -1178,7 +1178,10 @@ code runs in shell or tmux startup, the same trust model as oh-my-zsh's auto-upd
   `clone_listed ID` per row, oh-my-zsh first (the Other Linux quick start
   loops over all of them).
 - **Verify:** doctor rows `oh-my-zsh`, `powerlevel10k`, the six zsh plugins,
-  `tpm`, `tmux-resurrect`, `tmux-fzf` and `tmux-continuum` are `ok`.
+  `tpm`, `tmux-resurrect`, `tmux-fzf`, `tmux-continuum`, `catppuccin-tmux`,
+  `extrakto`, `tmux-yank`, `tmux-floax`, `tmux-which-key`, `tmux-cpu` and
+  `tmux-battery` are `ok`. The clones are provisioned on all Unix hosts;
+  the tmux config enables features only on compatible tmux versions.
 - **Human:** no
 
 setup-host never modifies an existing clone: a destination that is a git

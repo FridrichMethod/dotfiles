@@ -77,8 +77,22 @@ The shared config requires tmux 2.6+ and keeps its `Ctrl-b` prefix, mouse suppor
 of scrollback and numbering from 1. [TPM](https://github.com/tmux-plugins/tpm)
 loads [resurrect](https://github.com/tmux-plugins/tmux-resurrect),
 [tmux-fzf](https://github.com/sainnhe/tmux-fzf) and
-[continuum](https://github.com/tmux-plugins/tmux-continuum); no full config
+[continuum](https://github.com/tmux-plugins/tmux-continuum). Catppuccin Mocha,
+extrakto, yank, FloaX, which-key, CPU/RAM and battery plugins add appearance
+and interaction where the tmux version and host support them. No full config
 framework or Oh My Tmux is needed.
+
+The native fallback uses the same Mocha colors without requiring any plugin:
+transparent status background, mauve active pane borders, centered windows
+and PREFIX/COPY/ZOOM indicators. On tmux 3.2+, Catppuccin adds rounded window
+tabs and Nerd Font status capsules matching WezTerm and Kitty. The status line
+shows the session, directory and host; CPU/RAM appear when available, and
+battery appears only on a supported battery-powered host. Metrics describe
+the host running tmux, not a particular process or scheduler allocation.
+CPU/RAM jobs forward to tmux-cpu with a private 0700 cache under
+`~/.cache/tmux-metrics/`; only those subprocesses receive the cache TMPDIR.
+Unsafe, foreign or symlinked cache paths hide the optional metrics without
+changing the shell's TMPDIR or following shared temporary-file symlinks.
 
 Install the missing clones with `./setup-host.sh --host <host> --check --only S3-clones`,
 then `./setup-host.sh --host <host> --yes --only S3-clones`, with
@@ -100,9 +114,38 @@ Press `Ctrl-b`, release it, then use:
 | `Ctrl-s` | Save the layout now |
 | `Ctrl-r` | Restore the last saved layout |
 | `F` | Search/manage sessions, windows and panes with fzf |
+| `Tab` | Extract output text with fzf; Enter copies and Tab inserts |
+| `Space` | Open the custom which-key menu (tmux 3.0+) |
+| `Alt-f` | Toggle the persistent floating scratch shell (tmux 3.3+) |
+| `Alt-Shift-f` | Open the floating shell's resize/fullscreen/embed menu |
+| `y` / `Y` | Copy the command line / working directory with desktop yank |
 | `I` | Install plugins added to the config |
 | `U` | Explicitly update plugins through TPM |
 | `Alt-u` | Remove plugins no longer declared in the config |
+
+The prefix remains Ctrl-b. `p` still selects the previous window, `F` still
+opens fzf, and `?` still displays the native key reference. Copy mode uses
+vi movement and `y` to copy. Desktop yank requires an available clipboard
+backend; SSH sessions use native OSC 52 through the connected terminal.
+The terminal must allow clipboard writes. On tmux 3.2+, extrakto uses that
+transport for SSH copies; older SSH sessions keep text in the tmux buffer.
+Extrakto uses the existing Python/fzf tools, clears inherited fzf options,
+and captures at most 2000 recent lines per window pane.
+
+The Space menu groups Sessions, Windows, Panes and Tools, with layout
+save/restore, resize, fzf, extraction, floating shell and plugin/config
+actions. The stowed `~/.config/tmux/which-key.conf` is a manual native tmux
+configuration: upstream autobuild is disabled, so reload needs no Python
+menu generation, pip package or virtual environment. Upstream may copy its
+default config into ignored files in its own checkout on first load; the
+stowed menu is then applied. Edit the stowed file to customize the menu.
+
+Modern files are version-gated with numeric comparisons, including multi-digit
+minor versions. Old tmux keeps the native theme and recovery. TPM statically
+scans ordinary `@plugin` declarations regardless of conditionals; the supported
+legacy `@tpm_plugins` option registers conditional plugins and is rebuilt on
+each reload. The main config loads Catppuccin only on 3.2+, which-key on 3.0+
+and FloaX on 3.3+; popup/menu style options are limited to 3.4+.
 
 Continuum saves every 15 minutes while an attached client's status line
 refreshes. It restores sessions, windows, panes, layouts and working
@@ -120,6 +163,13 @@ tmux server precedence; later `-L`/`-S` servers do not independently autosave
 or auto-restore. Manual saves on that host still share its snapshot directory.
 Keep continuum last in the plugin list and do not overwrite its `status-right`
 hook; automatic saves require the status line to stay enabled.
+
+FloaX keeps its own scratch session while hidden and preserves that shell's
+directory rather than changing it on every toggle. The config corrects the
+current upstream bindings to use the shipped `scripts/floax.sh` and
+`scripts/menu.sh`, without modifying the plugin checkout. The scratch session
+is included in layout snapshots; its running programs follow the same
+layout-only restore policy as other sessions.
 
 tmux-fzf uses a popup on tmux 3.2+ and a split otherwise. It reuses the
 existing fzf dependency and limits its menu to tmux sessions/windows/panes.

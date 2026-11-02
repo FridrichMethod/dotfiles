@@ -96,6 +96,13 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `tpm` | unix | tmux plugins are not loaded (native tmux still works) |
 | `tmux-resurrect` | unix | tmux layouts cannot be saved or restored |
 | `tmux-fzf` | unix | prefix F has no tmux search menu |
+| `catppuccin-tmux` | unix | modern tmux windows use the native Mocha fallback theme |
+| `extrakto` | unix | prefix Tab cannot extract paths and text from pane output |
+| `tmux-yank` | unix | desktop copy mode lacks clipboard helpers |
+| `tmux-floax` | unix | modern tmux has no persistent floating scratch terminal |
+| `tmux-which-key` | unix | upstream which-key menu defaults are unavailable |
+| `tmux-cpu` | unix | tmux status cannot display CPU and RAM percentages |
+| `tmux-battery` | unix | tmux status cannot display battery charge on a laptop |
 | `tmux-continuum` | unix | tmux layouts are not saved or restored automatically |
 | `bat-theme` | all | BAT_THEME Catppuccin Mocha is unknown to bat |
 | `micromamba` | sherlock, marlowe | the login env cannot be created or updated |
