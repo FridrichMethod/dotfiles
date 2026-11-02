@@ -60,6 +60,13 @@ zsh-completions	core	unix	dir:$ZSH_CUSTOM/plugins/zsh-completions/src	-	-	the ex
 tpm	core	unix	file:$HOME/.tmux/plugins/tpm/tpm	-	-	tmux plugins are not loaded (native tmux still works)	S3-clones
 tmux-resurrect	core	unix	file:$HOME/.tmux/plugins/tmux-resurrect/resurrect.tmux	-	-	tmux layouts cannot be saved or restored	S3-clones
 tmux-fzf	core	unix	file:$HOME/.tmux/plugins/tmux-fzf/main.tmux	-	-	prefix F has no tmux search menu	S3-clones
+catppuccin-tmux	core	unix	file:$HOME/.tmux/plugins/tmux/catppuccin.tmux	-	-	modern tmux windows use the native Mocha fallback theme	S3-clones
+extrakto	core	unix	file:$HOME/.tmux/plugins/extrakto/extrakto.tmux	-	-	prefix Tab cannot extract paths and text from pane output	S3-clones
+tmux-yank	core	unix	file:$HOME/.tmux/plugins/tmux-yank/yank.tmux	-	-	desktop copy mode lacks clipboard helpers	S3-clones
+tmux-floax	core	unix	file:$HOME/.tmux/plugins/tmux-floax/floax.tmux	-	-	modern tmux has no persistent floating scratch terminal	S3-clones
+tmux-which-key	core	unix	file:$HOME/.tmux/plugins/tmux-which-key/plugin.sh.tmux	-	-	upstream which-key menu defaults are unavailable	S3-clones
+tmux-cpu	core	unix	file:$HOME/.tmux/plugins/tmux-cpu/cpu.tmux	-	-	tmux status cannot display CPU and RAM percentages	S3-clones
+tmux-battery	core	unix	file:$HOME/.tmux/plugins/tmux-battery/battery.tmux	-	-	tmux status cannot display battery charge on a laptop	S3-clones
 tmux-continuum	core	unix	file:$HOME/.tmux/plugins/tmux-continuum/continuum.tmux	-	-	tmux layouts are not saved or restored automatically	S3-clones
 bat-theme	core	all	file:$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	-	-	BAT_THEME Catppuccin Mocha is unknown to bat	S3-bat-theme
 micromamba	core	sherlock,marlowe	micromamba	--version	-	the login env cannot be created or updated	S2-micromamba

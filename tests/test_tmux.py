@@ -5,10 +5,12 @@ files or network are reached. Real upstream plugin smoke checks are manual.
 """
 import csv
 import os
+import re
 import shlex
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +25,15 @@ PLUGINS = {
     "sainnhe/tmux-fzf": "main.tmux",
     "tmux-plugins/tmux-continuum": "continuum.tmux",
 }
+CUSTOM_PLUGINS = {
+    "catppuccin/tmux": ("catppuccin-tmux", "catppuccin.tmux"),
+    "laktak/extrakto": ("extrakto", "extrakto.tmux"),
+    "tmux-plugins/tmux-yank": ("tmux-yank", "yank.tmux"),
+    "omerxx/tmux-floax": ("tmux-floax", "floax.tmux"),
+    "alexwforsythe/tmux-which-key": ("tmux-which-key", "plugin.sh.tmux"),
+    "tmux-plugins/tmux-cpu": ("tmux-cpu", "cpu.tmux"),
+    "tmux-plugins/tmux-battery": ("tmux-battery", "battery.tmux"),
+}
 
 
 def manifest(name):
@@ -34,6 +45,23 @@ def manifest(name):
 
 
 class PluginProvisioning(unittest.TestCase):
+    def test_custom_plugins_have_matching_unix_installation_and_probes(self):
+        clones, probes = manifest("git-clones.tsv"), manifest("tools.tsv")
+        config = "\n".join(path.read_text() for path in
+                           (ROOT / "common/tmux").rglob("*.conf"))
+        for plugin, (identifier, entry) in CUSTOM_PLUGINS.items():
+            with self.subTest(plugin=plugin):
+                self.assertIn(plugin, config)
+                self.assertIn(identifier, clones)
+                self.assertIn(identifier, probes)
+                destination = f"$HOME/.tmux/plugins/{plugin.split('/')[1]}"
+                self.assertEqual(clones[identifier]["dest"], destination)
+                self.assertEqual(clones[identifier]["url"], f"https://github.com/{plugin}.git")
+                self.assertEqual(clones[identifier]["hosts"], "unix")
+                self.assertEqual(probes[identifier]["probe"], f"file:{destination}/{entry}")
+                self.assertEqual(probes[identifier]["hosts"], "unix")
+                self.assertEqual(probes[identifier]["doc"], "S3-clones")
+
     def test_declared_plugins_are_installed_and_probed_on_unix(self):
         # TPM reads @plugin declarations from the config, not show-options
         # (which contains only the final value of the repeated @plugin key).
@@ -67,7 +95,7 @@ class TmuxConfiguration(unittest.TestCase):
         self.home = self.root / "home with spaces"
         self.home.mkdir()
         self.config = self.home / ".tmux.conf"
-        shutil.copyfile(CONFIG, self.config)
+        shutil.copytree(ROOT / "common/tmux", self.home, dirs_exist_ok=True)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         for command in ("git", "curl", "wget"):
@@ -114,6 +142,107 @@ class TmuxConfiguration(unittest.TestCase):
         self.assertFalse((self.home / ".tmux").exists())
         self.assertEqual(self.tmux("list-sessions", "-F", "#{session_name}"), "fixture")
 
+    def test_native_theme_and_copy_keys_work_without_any_plugins(self):
+        self.source()
+        self.assertIn("bg=default", self.option("status-style"))
+        self.assertIn("#cba6f7", self.option("pane-active-border-style"))
+        self.assertEqual(self.option("mode-keys"), "vi")
+        self.assertIn("copy-selection", self.tmux("list-keys", "-T", "copy-mode-vi", "y"))
+        self.assertIn("COPY", self.option("status-left"))
+        self.assertIn("ZOOM", self.option("status-left"))
+        self.assertEqual(self.option("set-clipboard"), "on")
+        # Reload must preserve every native pane and the ordinary previous-window key.
+        before = self.tmux("list-panes", "-a", "-F", "#{pane_id}")
+        self.source()
+        self.assertEqual(before, self.tmux("list-panes", "-a", "-F", "#{pane_id}"))
+        self.assertIn("previous-window", self.tmux("list-keys", "-T", "prefix", "p"))
+
+    def test_metric_jobs_survive_plugin_status_rewriters_with_spaces_in_home(self):
+        scripts = self.home / ".tmux/plugins/tmux-cpu/scripts"
+        scripts.mkdir(parents=True)
+        for metric in ("cpu", "ram"):
+            script = scripts / f"{metric}_percentage.sh"
+            script.write_text('#!/bin/sh\nprintf "42%%"\n')
+            script.chmod(0o755)
+        self.source()
+        # CPU, battery and continuum read status via show-options before
+        # writing it back. This exposes tmux's literal-dollar escaping.
+        for _ in range(3):
+            self.tmux("set-option", "-g", "status-right", self.option("status-right"))
+        commands = re.findall(r"#\((python3 .*?)\)", self.option("status-right"))
+        self.assertGreaterEqual(len(commands), 2)
+        for command in commands:
+            expanded = self.tmux("display-message", "-p", command)
+            result = subprocess.run(expanded, shell=True, env=self.env,
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "42%")
+
+    def test_menu_autobuild_is_disabled_without_startup_installers(self):
+        self.source()
+        self.assertEqual(self.option("@tmux-which-key-disable-autobuild"), "1")
+        self.assertFalse((self.home / ".tmux/plugins/tmux-which-key").exists())
+        version = tuple(map(int, re.match(r"(\d+)\.(\d+)", self.tmux("-V").split()[1]).groups()))
+        if version >= (3, 0):
+            binding = self.tmux("list-keys", "-T", "prefix", "Space")
+            self.assertIn("display-menu", binding)
+            self.assertIn("+Sessions", binding)
+
+    def test_optional_plugin_registration_is_idempotent_and_remote_aware(self):
+        for command in ("fzf", "pbcopy"):
+            executable = self.bin / command
+            executable.write_text("#!/bin/sh\nexit 0\n")
+            executable.chmod(0o755)
+        self.source()
+        first = self.option("@tpm_plugins").split()
+        self.assertIn("laktak/extrakto", first)
+        self.assertIn("tmux-plugins/tmux-yank", first)
+        self.source()
+        self.assertEqual(first, self.option("@tpm_plugins").split())
+        self.assertEqual(len(first), len(set(first)))
+        # Sessions retain removals from update-environment, which override a
+        # server-global value. Model the SSH client's session environment.
+        self.tmux("set-environment", "-t", "fixture", "SSH_CONNECTION",
+                  "127.0.0.1 1234 127.0.0.1 22")
+        self.source()
+        self.assertNotIn("tmux-plugins/tmux-yank", self.option("@tpm_plugins").split())
+
+    def test_remote_reload_removes_previous_desktop_clipboard_bindings(self):
+        for table, key in (("prefix", "y"), ("prefix", "Y"),
+                           ("copy-mode", "MouseDragEnd1Pane"),
+                           ("copy-mode-vi", "MouseDragEnd1Pane")):
+            self.tmux("bind-key", "-T", table, key, "run-shell", "desktop-clipboard-marker")
+        self.tmux("set-environment", "-t", "fixture", "SSH_CONNECTION", "fixture-ssh")
+        self.source()
+        self.assertNotIn("desktop-clipboard-marker", self.tmux("list-keys"))
+
+    def test_menu_actions_preserve_quoted_directory_without_executing_its_text(self):
+        self.source()
+        if not self.option("@wk_menu_windows"):
+            self.skipTest("native menus require tmux 3.0+")
+        directory = self.root / 'space \\"; set -g @cwd-injected yes; #'
+        directory.mkdir()
+        origin = self.tmux("new-window", "-P", "-F", "#{pane_id}",
+                           "-c", str(directory), "/bin/sh")
+        for menu, label in (("windows", "New here"),
+                            ("panes", "Split side by side"),
+                            ("panes", "Split top / bottom")):
+            with self.subTest(action=label):
+                items = shlex.split(self.tmux("display-message", "-p", f"#{{@wk_menu_{menu}}}"))
+                action = items[items.index(label) + 2]
+                # display-menu expands the action's formats before parsing it.
+                expanded = self.tmux("display-message", "-p", "-t", origin, action)
+                command = self.root / "menu-action.conf"
+                command.write_text(expanded + "\n")
+                before = set(self.tmux("list-panes", "-a", "-F", "#{pane_id}").splitlines())
+                self.tmux("source-file", str(command))
+                after = set(self.tmux("list-panes", "-a", "-F", "#{pane_id}").splitlines())
+                self.assertEqual(len(after - before), 1)
+                pane = (after - before).pop()
+                self.assertEqual(self.tmux("display-message", "-p", "-t", pane,
+                                           "#{pane_current_path}"), str(directory))
+                self.assertEqual(self.option("@cwd-injected"), "")
+
     def test_recovery_policy_uses_a_concrete_host_directory(self):
         self.source()
         for name, value in {
@@ -145,6 +274,52 @@ class TmuxConfiguration(unittest.TestCase):
                          [str(self.home / ".tmux/plugins") + "/"] * 2)
         self.assertEqual(self.tmux("list-sessions", "-F", "#{session_name}"), "fixture")
 
+
+@unittest.skipUnless(os.name == "posix", "Unix-only metric forwarder")
+class MetricForwarding(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="tmux-metric-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.home = self.root / "home with spaces"
+        self.home.mkdir()
+        self.scripts = self.home / ".tmux/plugins/tmux-cpu/scripts"
+        self.scripts.mkdir(parents=True)
+        script = self.scripts / "cpu_percentage.sh"
+        script.write_text('#!/bin/sh\nprintf "%s" "$TMPDIR" > "$HOME/forwarded-tmpdir"\nprintf "42%%"\n')
+        script.chmod(0o755)
+        self.env = {"HOME": str(self.home), "PATH": "/usr/bin:/bin",
+                    "TMPDIR": str(self.root / "shared-temp")}
+        self.forwarder = ROOT / "common/tmux/.config/tmux/metric.py"
+
+    def run_metric(self, argument="cpu"):
+        result = subprocess.run([sys.executable, "-I", "-B", str(self.forwarder), argument],
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        return result.stdout
+
+    def test_upstream_metric_uses_private_cache_without_changing_host_tmpdir(self):
+        self.assertEqual(self.run_metric(), "42%")
+        cache = Path((self.home / "forwarded-tmpdir").read_text())
+        self.assertNotEqual(str(cache), self.env["TMPDIR"])
+        self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(cache.stat().st_uid, os.getuid())
+        self.assertEqual(self.env["TMPDIR"], str(self.root / "shared-temp"))
+
+    def test_symlink_or_shared_cache_is_refused_without_running_upstream(self):
+        cache = self.home / ".cache/tmux-metrics"
+        cache.parent.mkdir()
+        outside = self.root / "outside"
+        outside.mkdir()
+        cache.symlink_to(outside, target_is_directory=True)
+        self.assertEqual(self.run_metric(), "")
+        self.assertFalse((self.home / "forwarded-tmpdir").exists())
+        cache.unlink()
+        cache.mkdir(mode=0o755)
+        self.assertEqual(self.run_metric(), "")
+        self.assertEqual(cache.stat().st_mode & 0o777, 0o755)
+        self.assertFalse((self.home / "forwarded-tmpdir").exists())
 
 if __name__ == "__main__":
     unittest.main()

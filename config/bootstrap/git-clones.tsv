@@ -23,4 +23,13 @@ zsh-completions	$ZSH_CUSTOM/plugins/zsh-completions	https://github.com/zsh-users
 tpm	$HOME/.tmux/plugins/tpm	https://github.com/tmux-plugins/tpm.git	master	unix
 tmux-resurrect	$HOME/.tmux/plugins/tmux-resurrect	https://github.com/tmux-plugins/tmux-resurrect.git	master	unix
 tmux-fzf	$HOME/.tmux/plugins/tmux-fzf	https://github.com/sainnhe/tmux-fzf.git	master	unix
+# Customization plugins verified 2026-11-01 against upstream default branches.
+# Catppuccin's TPM basename is tmux; the id avoids the native tmux tool row.
+catppuccin-tmux	$HOME/.tmux/plugins/tmux	https://github.com/catppuccin/tmux.git	main	unix
+extrakto	$HOME/.tmux/plugins/extrakto	https://github.com/laktak/extrakto.git	master	unix
+tmux-yank	$HOME/.tmux/plugins/tmux-yank	https://github.com/tmux-plugins/tmux-yank.git	master	unix
+tmux-floax	$HOME/.tmux/plugins/tmux-floax	https://github.com/omerxx/tmux-floax.git	main	unix
+tmux-which-key	$HOME/.tmux/plugins/tmux-which-key	https://github.com/alexwforsythe/tmux-which-key.git	main	unix
+tmux-cpu	$HOME/.tmux/plugins/tmux-cpu	https://github.com/tmux-plugins/tmux-cpu.git	master	unix
+tmux-battery	$HOME/.tmux/plugins/tmux-battery	https://github.com/tmux-plugins/tmux-battery.git	master	unix
 tmux-continuum	$HOME/.tmux/plugins/tmux-continuum	https://github.com/tmux-plugins/tmux-continuum.git	master	unix
