@@ -456,8 +456,8 @@ keeps it off (see [the hook](#unix)).
    or the next elevated `.\stow-all.ps1 win` runs.
 2. The new `stow-all.ps1` stows, then removes the links it made from the two
    retired packages, each only while it is a symlink whose text is exactly
-   the path it wrote, `<clone>\common\<package>\<path>`, dangling or not,
-   then the same four directories once empty. A declined removal is a
+   the path it wrote, `<clone>\common\<package>\<path>`, dangling or not.
+   Harmless empty legacy directories are left in place. A declined link removal is a
    warning, so the revision is not acknowledged. It installs nothing: an
    installer run elevated would leave Administrators-owned clones.
 3. From the next ordinary interactive PowerShell 7 on, the new profile's
