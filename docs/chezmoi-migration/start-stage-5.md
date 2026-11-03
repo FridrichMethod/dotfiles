@@ -7,17 +7,28 @@ incomplete Stage 4 operational/candidate gates as passed, or perform Stage 6
 source/runtime retirement. Read docs/chezmoi-migration/status.md first and distinguish
 candidate code, actual native fixture results, hosted validation and real hosts.
 
-Start by inspecting HEAD, branch, status, the full staged AND unstaged diff,
-untracked task files and worktrees at /tmp/dotfiles-chezmoi-stage4-integration,
-branch chezmoi-stage4-integration. Stages 1-4 runtime is committed through
-bf9995809ca7564c0728f87bcbefe91c8a3cc5e0, including the Sherlock static artifact,
-Terminal preference, directory-mode correction, five-host secret gate and exact
-tmux handoff. Carry any subsequent pending tracked/untracked changes as well as
-the committed source when creating another worktree. Do not replay a historical
-whole-aggregate patch over this HEAD. The user's two original main tmux edits
-were verified, staged deliberately and accepted by the matching fast-forward;
-main was clean afterward. Validate parity and keep a recoverable patch. Never
+Start at the canonical $HOME/dotfiles checkout on main. Inspect HEAD, branch,
+status, the full staged AND unstaged diff, untracked task files and worktree list.
+Read the committed Stage 4 closure record before creating a fresh Stage 5 task
+worktree under $HOME/dotfiles/.worktrees/. The former Stage 4 coordinator is not
+a required entry path and can be removed after its result reaches main.
+Carry the complete committed result and any subsequent pending work, not the
+original planning baseline or a historical whole-aggregate patch. Stages 1-4
+include the Sherlock static artifact, Terminal preference, directory-mode
+correction, five-host secret gate, exact tmux handoff, encrypted source and native
+typed-no-op formatting correction. The user's original main tmux edits were
+verified, staged deliberately and accepted by the matching fast-forward. Validate
+parity and preserve a recoverable patch before moving pending work. Never
 reset/stash/discard or overwrite unrelated edits.
+
+Committed Stages 1-4 also live in the persistent main Git object store and remote;
+they do not depend on /tmp surviving. The user-requested private checkpoint at
+$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02
+preserves all 28 migration worktree patches/untracked files, original modes and
+handoff records, plus safe operator/review exports. Its readback hashes passed.
+It is a historical local checkpoint, not current host status or a remote backup
+of private evidence. Read its README/manifests before recovery, never blindly
+apply its old whole patches to newer main. Inspect later commits/diffs first.
 
 Runtime bf99958 passed all three jobs of CI 41567805090 and all eight jobs of
 bootstrap e2e 41567805363 and reached local/remote main. It is both the supported
@@ -29,21 +40,29 @@ need their applicable exact gates. The user explicitly authorized
 commit, publication and rollout; do not ask again for blanket authority.
 Read the current continuation in status.md and actual-fleet table in
 stage-4-evidence.md before any action. Earlier outcome checkpoints through
-12262e6 passed all three CI jobs; the current source correction requires its own
-exact checks. No Stage 5 execution is authorized by preparing this handoff.
-All five Unix ordinary takeovers are accepted. Mac, WSL and Marlowe have also
+12262e6 passed all three CI jobs. The native formatting correction
+15068b9936dc1bf36416d59154746e8f643d5bd5 passed all three CI 41684120644 jobs and
+all eight bootstrap e2e 41684121107 jobs, then reached local/remote main. No Stage 5
+execution is authorized by preparing this handoff.
+All five Unix ordinary takeovers and secret enrollments are accepted. They have
 accepted eight-file deployment, nonforce convergence, offline consumer and updater
 checks. Mac/WSL use fresh SSH evidence; cluster masters are not fresh MFA proof.
 Sherlock's source-only kit 0.7.0 upgrade passed using its existing login runtime,
 with original files and links preserved. Current numbered site rules permit this
 light foreground work; environment builds and heavy installs still need a job.
-Windows' ordinary Medium/non-elevated desktop audit passed all26 targets and five
-control parents; its temporary audit task was removed. The prior user deferral is
-superseded; complete the separately reviewed takeover under existing authority.
+Windows completed native takeover on 15068b9: 26 regular targets, 61 unchanged
+parents, two nonforce repeats, empty diff, both shell smokes, ordinary
+Medium/non-elevated updater and same-session skip, fresh nonmultiplexed SSH and
+persisted acceptance. Maintenance is off; secretEnrollment=false; five exact
+operator tasks were removed. The old restow task remains disabled for Stage 6.
+Do not replay completed bridge, init, conversion or deployment steps. Historical private-operator stops and their
+reviewed remaining-only continuations remain in stage-4-evidence.md.
 Lab's requested shared Astra/xhigh preference is applied. A later formatting-only
-rewrite exposed an always-reserialize conflict. Validate and publish the scoped
-native typed-no-op preservation fix, then use a fresh Lab continuation; no repeated
-force or silent rebind of old plans. Current integration and actual host outcomes
+rewrite exposed an always-reserialize conflict. The published native typed-no-op
+preservation fix passed a fresh Lab continuation: 67-target review, two nonforce
+applies, empty diff, updater and fresh WSL-to-Lab SSH, with all 59 ordinary files
+unchanged. Maintenance is off and enrollment true; no further force was needed.
+Current integration and actual host outcomes
 must be checked again rather than treating this preparation as completion.
 Lab retains a legacy-submodule warning; WSL also retains 11 preexisting missing
 tmux plugin checkouts. Do not expand this migration into unrelated cleanup.
@@ -165,14 +184,17 @@ established. Do not repeat the exclusive-output generation/retrieval steps.
 All five host identities were generated locally and eight production inputs were
 encrypted for the exact six recipients. Each host and retrieved R passed
 all-eight recovery; only ciphertext entered published source 74985d08.
-Actual deployment remains a separate host gate. Mac, WSL and Marlowe are accepted;
-Lab and Sherlock require their current reviewed continuations. All specific
+Actual deployment remains a separate host gate. All five Unix hosts are accepted.
+Sherlock's earlier post-repeat metadata guard cause remains unknown; a separately
+reviewed remaining-only continuation passed empty diff, offline consumer, updater,
+existing-master access and persisted-binding acceptance without replaying
+deployment. Maintenance is off and enrollment true. All specific
 deployment approvals are now resolved. Lab and WSL's historical one-file
 normalizations ran once; preserve those receipts and never reuse failed capsules.
 Lab's later explicit Astra/xhigh correction also passed, followed by a new
 formatting-only rewrite. The current source fix preserves validated typed no-ops
-and retains all unsupported-input and genuine-conflict protections. Its exact CI
-and actual host acceptance are required; see the current Stage 4 evidence.
+and retains all unsupported-input and genuine-conflict protections. Exact CI/e2e
+and actual Lab acceptance passed; see the current Stage 4 evidence.
 All five task-installed Bitwarden clients were removed; Sherlock never installed
 one and its Bitwarden tooling proposal is canceled. SSH stays ordinary.
 Sherlock's separately approved local pinned controller remains outside dotfiles.
@@ -210,8 +232,9 @@ before claiming consumer readiness; native Codex auth remains separate from
 Claude scope. No production dummy
 credentials, private keys in Git, recurring OAuth refresh replay, or permanent
 create-if-missing auth seeds. Keep consumer paths, app-written auth, SSH trust
-and the existing recovery channel. Secret enrollment is unfinished Stage 4
-operational work, not an invitation to redesign secrets during Stage 5.
+and the existing recovery channel. Approved secret enrollment is accepted on
+all five Unix hosts. Windows native takeover is separately accepted, with no
+secret enrollment. This is not an invitation to redesign secrets during Stage 5.
 
 Keep all legacy physical package paths and literal native bridges through this
 stage. Stage 6 owns canonical source consolidation, stow-all/.stowrc/link-trust

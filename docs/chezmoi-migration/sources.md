@@ -36,8 +36,11 @@ already correct. A scoped native `deepEqual` branch preserves original input
 only after complete validation and transformation. Isolated existing-state tests
 cover nonforce convergence and unchanged target metadata after LF/CRLF and
 no-final-newline reformatting. Native integer/float types remain distinct, and
-NaN conservatively follows canonical serialization. Hosted and real-host results
-for this correction must be recorded separately before activation.
+NaN conservatively follows canonical serialization. Exact `15068b9` passed all
+three jobs of CI 41684120644 and all eight bootstrap e2e 41684121107 jobs before
+main landing. Separately, Lab's actual 67-target review, two nonforce applies,
+empty diff, updater and fresh WSL-to-Lab SSH passed with the reformatted Codex
+input byte-identical. This host evidence is distinct from the synthetic suite.
 
 Native config init now reads existing TOML and preserves unrelated local
 settings, including age and data, with native

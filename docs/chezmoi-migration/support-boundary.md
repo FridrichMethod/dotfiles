@@ -47,10 +47,13 @@ not promise a safe unsupported jump across the Stage 6 deletion cutoff.
 
 Lab's 59, Mac's 56, WSL's 55 and both clusters' 54 targets are regular files;
 native ownership/state remain. Maintenance was removed at ordinary acceptance;
-Lab subsequently reentered maintenance for secret enrollment. Actual updater checks
+Lab subsequently completed secret enrollment on exact-green `15068b9` and left
+maintenance again. Actual updater checks
 passed; lab/Mac/WSL passed fresh SSH and clusters used existing masters.
-Application limits and other exceptions remain in status.md; Windows' ordinary-user
-ACL gate is explicitly deferred. Commit, publication and D11 rollout authority
+Application limits and other exceptions remain in status.md. Windows accepted
+all 26 regular targets on `15068b9`, including ordinary-token updater/session
+skip, fresh SSH and persisted bindings. Maintenance is off; its legacy restow
+task stays disabled until Stage 6. Commit, publication and D11 rollout authority
 are already granted; exact candidate gates and concrete host prerequisites still
 apply. Before any Stage 6 breaking publication, execute the quiescence and
 offline-home recovery procedure below: a declared cutoff alone cannot stop an

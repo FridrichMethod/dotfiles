@@ -1,7 +1,8 @@
 # Stage 4 candidate and actual-host evidence
 
-Dates: 2026-11-02 through 2026-11-03 local. This separates accepted runtime and
-actual-host evidence from unfinished rollout and secret enrollment. Read [status.md](status.md) and
+Dates: 2026-11-02 through 2026-11-03 local. All six native takeovers and all five
+approved Unix secret enrollments are accepted. This separates actual-host results
+from fixtures, hosted validation and historical partial operations. Read [status.md](status.md) and
 [takeover.md](takeover.md) together. Stages 5/6 have not started.
 
 ## Preserved input and reviewable result
@@ -37,6 +38,60 @@ byte-for-byte from `/tmp/dotfiles-tmux-corners.patch`. Its two original main edi
 were deliberately staged and accepted by the matching fast-forward, with a
 fresh private target backup before lab native apply. Both source and live native
 theme retain the fix; no tmux reload or restart was needed.
+
+At the user's later preservation/organization request, all 28 registered migration
+worktrees were checkpointed in private persistent Git metadata: complete binary
+diffs, nonignored untracked files with original modes and handoff records. All
+653 core files passed readback hashes. Committed results already existed in the
+main object store and origin/main. The active coordinator was then moved intact
+to `$HOME/dotfiles/.worktrees/chezmoi-stage4-integration`; HEAD, full diff and
+status matched exactly before and after. Earlier `/tmp` paths in historical
+records describe where those operations actually ran. Global Codex/Claude
+instructions now require `.worktrees/` for persistent work, permit `/tmp` for
+brief disposable tasks, and require prompt cleanup after verified integration
+and release by active agents. The repository ignores the directory in both Git
+and Stow. Existing OneDrive independent-clone rules remain the exception.
+
+Independent cleanup audit and a fresh coordinator comparison found 26 completed
+worker worktrees with no unique commits, no active dependency and exact durable
+patch/untracked-file/mode backups. Their required work was already carried into
+main; historical superseded versions remain recoverable from the checkpoint.
+The only ignored worker residue was verified generated Python bytecode. The
+coordinator removed those exact worktrees with Git's worktree command, then
+deleted their 25 merged branches with nonforce `git branch -d`. Main remained
+clean. At that checkpoint, the only registered worktrees left were main and the
+active `.worktrees/` coordinator, to be removed after final verified integration.
+Future stages start from canonical main. Unrelated ignored environments/payloads and still-used private
+operators/native test binaries were preserved. Local receipt:
+`$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02/cleanup-complete.json`.
+
+The worktree policy is committed as `493f39545a63f69c32648b97936736286fa43dcd`.
+Moving the coordinator under the real home exposed two legacy-sync argument
+fixtures whose relative paths reached the native ownership guard before usage
+validation. Each fixture now runs in its existing private temporary directory;
+runtime guards are unchanged. Both focused fixtures, the full Linux suite and
+full pre-commit passed, with independent review. The repository guide remains
+below its enforced 28,000-byte limit; full global Codex/Claude rules are aligned.
+Exact [CI 41702351649](https://github.com/FridrichMethod/dotfiles/actions/runs/41702351649)
+passed all three platforms; exact
+[bootstrap e2e 41702352195](https://github.com/FridrichMethod/dotfiles/actions/runs/41702352195)
+passed all eight jobs. CI's first Windows attempt failed in the unchanged payload
+loopback fixture when it indexed an empty headers timestamp list. The precise
+pre-header cause was not captured. Independent diagnosis confirmed the policy
+delta did not touch that fixture or downloader; one failed-job rerun at the same
+commit passed without changing deadlines, assertions or runtime code. The failed
+attempt and successful rerun remain separate retained evidence.
+
+After Windows acceptance and its persistent backup, local and remote main
+fast-forwarded to `493f395`. Lab's two global instruction files matched their
+previous published bytes and were backed up privately before targeted native
+nonforce apply and repeat. The resulting exact two-target diff was empty, both
+files matched canonical source and their modes/parent security metadata remained
+unchanged. Receipt:
+`011ce99a50040747f9c65fa3fdbfc85a70a9719f107c6dc45c15e5929bd1c69a`.
+Other hosts retain their separately recorded accepted revisions; routine login
+updates can carry the published instruction changes. No all-host final-HEAD
+deployment is claimed.
 
 ## Implemented contract
 
@@ -412,11 +467,11 @@ Only metadata receipts were transferred to the coordinator.
 
 | Host | Actual observation | Takeover outcome / blocker |
 | --- | --- | --- |
-| lab-ubuntu | All59 ordinary targets and updater/access accepted. User-approved normalization and later Astra/xhigh correction each passed with private backups. A subsequent formatting-only rewrite changed no typed value | Native no-op preservation correction and a fresh deployment continuation are being validated. All deployment approvals resolved; maintenance on, enrollment false. No repeated force or stale-plan reuse; legacy cleanup remains Stage6 |
+| lab-ubuntu | All59 ordinary targets and subsequent eight-file enrollment accepted on15068b9: two nonforce applies, empty67-target diff, offline consumer, automatic updater, fresh WSL-to-Lab SSH and persisted-binding checks | Maintenance off, enrollment true. All59 ordinary files and five excluded auth siblings unchanged; current Codex formatting retained with Astra/xhigh. No further force or stale-plan reuse; legacy cleanup remains Stage6 |
 | mac | Ordinary takeover accepted 56 targets. Secret-canary preparation backed up 58 files before and after the exact `74985d08` fast-forward. After new direct-user approval, actual eight-file deployment and fresh SSH passed | Secret canary accepted: two nonforced applies, empty diff, offline consumer and actual updater passed; 56 ordinary files and shared `.config` 0770 preserved. Maintenance off, enrollment true. No GUI/p10k or credential-server authentication claim |
 | wsl-ubuntu | Ordinary55 and subsequent eight-file deployment accepted: two nonforce applies, empty63-target diff, offline consumer, actual updater, fresh SSH and persisted-binding checks | Maintenance off, enrollment true;55 ordinary files unchanged, new private parent0700/files0600. Existing11 tmux prerequisites and retired-submodule warning remain |
-| win | Actual ordinary Medium/non-elevated desktop audit passed26 unique targets, five control parents and both NoProfile paths. Exact temporary task removed. Source remains7edf12 with its reviewed Terminal edit preserved | Native26-target takeover is being prepared against the next exact-green candidate. Previous user deferral superseded. Audit changed no targets/source/ACL/native marker |
-| sherlock | All54 ordinary targets/updater accepted. Official kit0.7.0 source-only update passed using existing login runtime:50 new files,53 previous files and nine links preserved, private backup verified | Fresh consumer/secret continuation is being prepared. No environment build or job was required for the completed light update; ordinary source remainsBF99958. Existing master is not fresh MFA proof |
+| win | Accepted on15068b9:26regular targets, seven protected ACL replacements,16native owned-link conversions and three regular-file applications. Two nonforce repeats, empty diff, both shell smokes, ordinary-token updater/session skip, fresh nonmultiplexed SSH and persisted-binding checks passed | All61parents unchanged; maintenance off, enrollment false. Five exact operator tasks removed; old restow task disabled for Stage6. Original Terminal customization preserved through reviewed source bridge. No GUI/application-auth claim |
+| sherlock | All54 ordinary targets and subsequent eight-file enrollment accepted on15068b9: empty62-target diff, offline8 consumer checks, actual updater and persisted-binding acceptance. Kit0.7.0 source-only update preserved53 previous files and nine links | Maintenance off, enrollment true. Earlier post-repeat metadata guard failure remains unexplained; remaining-only completion passed without replaying deployment. Existing master is not fresh MFA proof; no environment build or job for the light kit update |
 | marlowe | Runtime installation/repair and consumer checks passed. Verified 56-file backups before and after exact BF-to-749 source fast-forward preceded all 62 target previews. Actual eight-file deployment, nonforced repeat, empty diff, offline consumer, updater and existing-master access passed; 54 ordinary files and runtime/parents unchanged | Secret deployment accepted after rechecking persisted post-apply bindings. Maintenance off, enrollment true; eight files 0600 in a new 0700 parent. Earlier bridge approval denial resolved by new direct-user approval. No fresh MFA or credential-server authentication claim; native Codex is separate |
 
 Lab, Mac, WSL, Sherlock and Marlowe ordinary native takeovers are accepted as described
@@ -884,16 +939,107 @@ byte formatting. Recursive typed differences are zero; other protected bindings
 remain intact and the writer is unproven. The user reports no manual change and
 permits necessary overwrite. A small source correction instead avoids recurring
 format-only conflicts: validate and transform fully, then preserve original input
-only on native typed equality. Exact hosted gates and a fresh Lab continuation
-are required. No further force or stale-plan reuse has occurred.
+only on native typed equality. Exact hosted gates and the fresh Lab continuation
+subsequently passed as recorded below. No further force or stale-plan reuse occurred.
+
+### Accepted formatting correction and Lab enrollment
+
+Exact runtime `15068b9936dc1bf36416d59154746e8f643d5bd5` passed all three
+jobs of [CI 41684120644](https://github.com/FridrichMethod/dotfiles/actions/runs/41684120644)
+and all eight jobs of [bootstrap e2e 41684121107](https://github.com/FridrichMethod/dotfiles/actions/runs/41684121107).
+Full local `tests/run.sh --ci` passed with 156 native methods and 31 Windows
+method skips; the frozen full pre-commit and independent code/documentation
+review passed. Logs are `/tmp/chezmoi-stage4-format-aggregate-tests.log` and
+`/tmp/chezmoi-stage4-format-frozen-precommit.log`. Earlier full hook runs passed
+behavior but detected concurrent documentation edits; the final frozen run had
+no edits. Local and remote main then fast-forwarded to this exact commit.
+
+A separate private actual-data fixture used Lab's reformatted 4131-byte Codex
+config and a copied native state database. Only the private copy's target key
+was remapped through native state commands; the original database and unrelated
+entries remained intact. Ten private native commands, two nonforce applies,
+empty diff and unchanged target metadata passed. This was supplemental evidence,
+not a live deployment. Receipt:
+`87485c11405a83774239b16587fd43ac13cfb8be49a622dbd1179f2c5193576c`.
+
+The first pre-publication backup stopped after 34 private copies on a transient
+process-file-descriptor access failure, before source or target changes. Evidence
+was retained; the process disappeared before diagnosis, so its cause is unproven.
+A separately reviewed backup-only continuation kept full worker checks before
+and after the snapshot and complete source/file/parent guards around each read.
+All 69 backups then passed readback, including the eight existing Lab static files.
+The source-only fast-forward preserved every bound live object. A fresh private
+native review checked exactly 67 outputs against those backups: 59 ordinary
+files unchanged and eight credentials matching the approved producer manifest.
+
+The reviewed one-shot controller extended the existing native operator only to
+persist final config/state metadata for separate acceptance. Eight isolated
+failure-path tests and independent review passed. Actual deployment then passed
+two nonforce eight-file applies, empty full diff, offline consumer readability,
+one successful automatic updater pull and a skipped second call. All 59 ordinary
+files, five excluded auth siblings and existing parents remained bound. The
+Codex config kept its current 4131-byte layout and Astra/xhigh values.
+
+Root retained its WSL control channel, then opened a genuinely new nonmultiplexed
+WSL-to-Lab SSH connection. The probe verified the exact Lab boot identity, home,
+native marker, source revision, absent maintenance and disabled payload hooks.
+Final acceptance used the persisted post-apply config/state metadata and original
+fixed cohort, without a new baseline. Maintenance is off and enrollment true.
+Apply receipt:
+`544b0355c370035f593f581a656f84ed9450aebc0b2eab939ef049249c320a7d`;
+fresh-access receipt:
+`682a12583c07afc99638afa289b50b0801ab8db726e0f4c1107c2f3db6522b5b`;
+accepted receipt:
+`c6b8feef9e3efa9a918269af92d1b70bf9e13101c14d94081beeeaf5148015cf`.
+No credential-server authentication was tested.
+
+### Remaining actual host continuations
 
 Sherlock's source-only kit0.7.0 upgrade is accepted:50 exact new files,53 original
 files preserved, nine links unchanged, private backups and parent security checks
 passed. No environment/profile edit, account call or job ran. Fresh site rules
 permit this light foreground work; the earlier allocation-only claim was too
 strict. Receipt: `b666343578f6ca9a92d10d6db4a4193b722ad61dc29337c63263bd45c8f59b5a`.
-Its separate secret continuation is being prepared against the next exact-green
-source, using the existing authenticated master.
+Its separate secret continuation uses exact-green15068 and the existing
+authenticated master. Actual maintenance suppression and56 private backups passed.
+An initial snapshot dispatch stopped before mutation because a just-transferred
+input was temporarily not visible; later directory/stat/ACL/hash checks verified
+the exact file. The unchanged phase then passed with a new exclusive result,
+preserving the failure evidence. The precise visibility cause remains unproven.
+
+The first source bridge stopped after read-only origin inspection: the existing
+canonical GitHub SSH remote did not match its HTTPS-only allowlist. No fetch or
+merge ran. The separately reviewed correction retained that exact origin and
+branch binding, verified the explicit public HTTPS URL through native offline
+URL expansion, then fetched it with the existing helper/askpass/header/cookie
+isolation. Eleven local Git/fake bridge tests passed. Actual fast-forward from
+bf99958 to15068 then passed, with all56 backups and live bindings unchanged and
+maintenance retained. Bridge receipt:
+`60680bf5495baef2642769231b5cefeb604b5b9e9afae75ef8f8c5a801a73899`.
+Post-bridge inspection and private62-target review passed. The actual first and
+repeat eight-file nonforce commands both exited zero with empty stderr; first
+deployment also verified all eight hashes. The post-repeat full metadata guard
+then failed. Maintenance restoration was confirmed; no diff, consumer or updater
+step had run. The changed metadata field was not persisted, so its cause remains
+unknown. Read-only diagnosis found all54 ordinary files, existing parents,
+runtime and source unchanged, config exactly equal to the approved candidate,
+and all eight private file hashes correct. An isolated fake-only NFS repeat
+fixture passed with no metadata differences and did not reproduce the failure.
+
+A small separately reviewed continuation pinned that actual audited new config,
+state and eight-file metadata while retaining every original ordinary/parent/
+runtime binding. Six isolated methods passed, including a native62-target case,
+old/new drift refusals and transport/restoration failures. It ran no explicit
+apply loop, enrollment enablement or directory creation. Actual remaining empty
+diff, eight offline consumer reads, normal updater pull and same-session skip
+passed. Metadata was persisted around each remaining step. Existing-master access
+then passed and the original final acceptance rechecked persisted bindings.
+All54 ordinary files remained unchanged, the new parent is0700, eight files are
+0600 with private ACLs, maintenance is off and enrollment true. Historical repeat
+metadata equality and a known cause are explicitly not claimed. Receipts:
+completion `18fd544c7f775bd697c2fa00dae4adc0272e201dc6d59066db5245c6d2bbbe7b`;
+native acceptance `37baca93abbf4c694b7420073de6095efe806f8960512b357e533dfac49c1a75`.
+No fresh cluster MFA or credential-server authentication was tested.
 
 Windows' actual ordinary-token audit passed: same user, Medium/non-elevated,
 desktop session1,26 unique targets with all access checks and unchanged metadata,
@@ -901,13 +1047,156 @@ five control parents and both NoProfile shell mappings. Task Scheduler returned
 an account name instead of literal SID; native translation confirmed identity
 before the one Run. The exact idle task was removed afterward, retaining evidence.
 Receipt: `22569b6d40ceefd40ac8efd15f390278b81655ffb73e6167fb9ed2a1558c7a9d`.
-No target/source/ACL/native marker changed in that audit. Native26-target takeover
-is being prepared, preserving the user's exact Terminal edit. There is no current
+No target/source/ACL/native marker changed in that audit. There is no current
 user deferral or manual PowerShell prerequisite.
 
-Publish and activate only the reviewed exact-green correction, then complete
-remaining host gates and record actual outcomes. Existing Mac/Marlowe acceptance
-remains valid. Keep repository/fixture/CI and host results distinct.
+Subsequent isolated native fixtures also ran under the same ordinary Medium
+desktop token. Real Windows Git preserved a deliberately staged candidate-matching
+edit through a fast-forward; a hidden interactive console had unredirected input/
+output and loaded PSReadLine. Ten actual ACL models covered all26 targets.
+Three regular-file updates and16 link conversions did not broaden access, but
+native replacement of seven links across five models inherited additional allow
+principals from their destination parents. Existing parent ACLs remained unchanged.
+That result blocks direct native conversion of those seven links.
+
+A bounded one-off replacement instead creates a same-parent temporary file with
+the original referent's explicit protected DACL before writing bytes. The actual
+current user already has FullControl and becomes the new owner; SYSTEM and
+Administrators retain their exact grants. Native same-volume MoveFileEx replaces
+the owned link entry, preserving the referent and parent security metadata.
+Ordinary-token fixtures passed all five models, including nonforce native
+adoption/repeat, empty diff and a later nonforce update preserving the DACL.
+Foreign referent, changed parent and preexisting temporary-file cases refused.
+A separate post-staging/pre-rename drift test refused at its second guard,
+leaving the original link/referent/parent unchanged and retaining the protected
+staged bytes. Receipt:
+`feaaf920d1fee21a5f8ffbfe5c045f87882b645c67c0689369e53838eaf7cff1`.
+These fixtures made no production target/source/ACL changes. The complete
+26-target takeover is a separate actual operation recorded below; it preserves
+the user's reviewed Terminal customization.
+
+The final frozen operator is runtime bundle `9d4c7f8d`, artifact manifest
+`8d3e9adc`. Independent review verified all 24 artifact and 16 runtime hashes,
+the 391 pinned public source files and 26 referents, and closed the worker,
+script-scope, canonical-root, executable-binding and failure-restoration findings.
+Eight local transport tests passed. Actual Windows Python 3.12.10 passed all 17
+saved-AI validator tests; all 12 PowerShell scripts parsed. Scheduler, phase-log
+and ordinary-console fixtures passed. The saved-AI helper retains complete typed
+tree comparison and exact JSON precision; its narrow Windows cross-API ctime
+handling preserves full same-API before/after stamps. These remain synthetic
+configuration tests, separate from actual saved-configuration validation.
+Review receipt: `cae8c13fb0d15beb961da09739e02a9d1ce7562318ac4ca613078a0e93944cea`.
+
+Fresh actual read-only inspection `68d7e3ac` bound the same 23 owned links,
+three regular files, 56 parents and six absent native control entries. The sole
+Terminal source edit matched the earlier reviewed original bytes, the source
+remained at `7edf12` and the exact legacy task was still enabled/idle. Only a new
+private helper capsule and diagnostics were written during preparation. Root
+released the complete one-shot execution against this exact inspection and
+bundle, holding main at `15068b9` throughout; actual acceptance is a separate result.
+
+The first actual execution completed clean source fast-forward to `15068b9`,
+26-file backups before and after it, canonical W1 provisioning and verified
+native initialization. Backup manifests start `c3425bdc` and `7af479c5`. A private
+operator template then refused an incompatible-type `umask` comparison before
+any managed-target conversion or ownership-marker creation. All 23 link entries
+and three regular bodies remained; the fast-forward had already updated the
+linked source referents to their pinned published contents. Both backup sets
+remain available. The exact execute task and owned children were
+quiescent; the bounded restore task confirmed maintenance protection and was
+removed. The legacy task remained disabled. Stopped-state receipt:
+`638fd1e4c9a20e3598ecb1648086dab6a8f8df09bbffef16b96086ec809c939b`.
+This is an actual partial operation, not a fixture or successful takeover; its
+already-completed bridge, provisioning and initialization must not be replayed.
+
+The complete same-option native-init fixture reproduced a float64 mask value:
+the original integer comparison failed, while `63.0` accepted only the intended
+63 and refused 18/0. Fresh read-only binding `353ebe4f` retained the original
+26 postbackup targets and 56 parents, adding only five reviewed control parents.
+Created config/state/binary hashes were freshly reviewed; their historical stamp
+continuity was not available and was not claimed. Continuation bundle `309b03c5`
+validated the complete config contract and native pre-apply state on private
+copies, then used the unchanged reviewed tail. Independent review `1141dcd2`
+verified all 30 artifact hashes and the restored Git/Python binary checks.
+
+That actual continuation reached all 26 regular targets: seven protected ACL
+materializations and 16 native owned-link conversions; three existing regular
+files were applied without force. Two nonforce full applies and an empty diff
+passed. Persisted
+pre-activation receipt:
+`a6543166bdff3c2edb10cdef9acbfe5c431f2c0e9b0e9031a3312169fa23826e`.
+The subsequent smoke harness stopped because PowerShell 5.1 emitted only CLIXML
+first-use progress on stderr despite exit 0 and the expected success sentinel.
+PowerShell 7 passed with empty stderr; no actual updater had started. Maintenance
+restoration and owned-process quiescence were confirmed in stop receipt
+`58fb41ded3c098099096bbc767e3587b72b125e475c95de51a9423c8087a309c`.
+A fresh comparison retained every target, all 61 parents, config/state/binary,
+native marker and pinned source. Native fixture 22 then verified child-scoped
+progress suppression while real errors, unexpected stdout and exit 7 still
+refused. This changes only the private smoke harness, not the profile or runtime.
+
+Activation-only bundle `a5291221` then passed both actual shell smokes and reached
+the ordinary-console updater. Its private proof incorrectly required exactly one
+total FETCH_HEAD row; the actual fetch produced eight valid rows, one mergeable
+main and seven explicitly not-for-merge. It stopped before the second-call skip;
+the warning buffer was not retained, so that attempt does not prove zero warnings
+or full updater acceptance. All 26 targets, 61 parents, config, binary, marker and
+391 pinned source files remained unchanged. Native state lastWriteTime advanced;
+other state metadata remained unchanged. Maintenance restoration and quiescence
+were confirmed. This was a proof failure, not evidence of an updater defect.
+
+A read-only native state review used private config/state copies. Nine expected
+buckets contained exactly 26 canonical target paths, file types and matching byte
+hashes; configState matched the published template and unrelated buckets were
+empty. The private-copy native diff was empty, and the live state stayed unchanged
+throughout this review. Receipt:
+`c43dc583aeede57959a6f3dad1bebcc3767ee6abf88bc4eca313cf3da2df3010`.
+The remaining-only operator retained the original pre-activation evidence and
+explicitly accepted only that reviewed state transition. It did not reset a
+timestamp or silently recapture all bindings. A real two-branch Git fixture
+proved the corrected predicate: exactly one expected mergeable main row, with
+any additional rows required to be well-formed and explicitly not-for-merge.
+Six invalid cases refused. Warning output is now retained on failure.
+
+Final bundle `73ee95f3`, artifact manifest `4812f076`, passed independent review
+`5387b9ab`, eight local transport tests and ten native PowerShell parse checks.
+Its actual remaining-only execution passed. A fresh ordinary Medium-token console
+performed one native updater call and proved the second same-session call skipped;
+warnings were empty. This acceptance session is separate from the earlier partial
+attempt's fetch. All 26 targets and 61 parents remained bound. Fresh
+nonmultiplexed SSH passed, and a separate ordinary-token acceptance rechecked the
+persisted source/config/state/marker bindings. Maintenance is off, enrollment
+false and the legacy restow task remains disabled. Three prior failed execute
+tasks and the final execute/accept tasks were removed only after exact idle XML
+checks. No bridge, initialization or deployment was replayed in this continuation.
+
+Actual final receipts:
+
+| Receipt | SHA256 |
+| --- | --- |
+| Execute | `dc053c6fdd46788897d3cf783092d886a017321e78395c26280704ac42d54d14` |
+| Ordinary-console activation | `78478a4ba705a8d8ae9878ba1355a286634125635494760987fa2d41a559ca43` |
+| Fresh SSH | `9d7cedd0e056214dec1f078c7a82e1db4da4448d9c9c530654c798209c1a235b` |
+| Persisted acceptance | `14e36134222c41806a039bb5ad7577d8f9686c9e0557a918055d325670235b9a` |
+| Complete, including task cleanup | `2f5b6b7e14a1727cd7de8bb53254432a240317f96133be1d693c02a66a572e8d` |
+
+Independent review verified these receipts and their relationships. Ordinary
+desktop-token evidence is separate from the high-token SSH transport; fresh SSH
+does not establish an interactive ordinary shell or GUI/application authentication.
+No Windows static-secret enrollment or coding-agent-kit installation is claimed.
+All six Stage 4 host gates are now accepted; per-host revisions and application
+limits remain distinct from repository, fixture and CI results.
+
+After acceptance, the four exact Windows production capsules were copied to
+`%LOCALAPPDATA%/dotfiles-stage4-recovery/15068-accepted-04-20261103`.
+All 5,978 files (10,797,875 bytes) passed SHA256 readback under protected private
+ACLs, with the complete original file set and source metadata unchanged. The
+original Temp capsules remain. Raw application backups stayed on Windows; only
+safe counts and receipt hashes were exported. Independent review covered this
+bounded copy-only procedure. Actual copy receipt:
+`b7e4a8780120bf0d18e7091bb5525b82464896b06185540b497e36ded68a62a3`;
+private manifest:
+`d8929e5c2cf9767b8ebe02ab046ded7bc6172abd4c5d202ee35c08533abe29fb`.
 
 [Stage 5](stage-5-ecosystem.md) and its [fresh-session prompt](start-stage-5.md)
 contain the next caller map. They are a handoff only. No Stage 5 cleanup or

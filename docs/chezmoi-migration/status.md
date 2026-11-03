@@ -1,13 +1,13 @@
 # Migration state and next-session record
 
-## Current Stage 4 continuation
+## Stage 4 closure
 
 The user explicitly approved the remaining deployments, commit/publication and
 main integration, selected shared Codex `gpt-6-astra` / `xhigh`, resumed Windows,
 and requested the lightweight Sherlock kit update on its login node. No blanket
 approval, recovery-custody choice or mandatory job ID remains outstanding.
 
-Mac, WSL and Marlowe have accepted all eight secret targets, repeated nonforce
+All five Unix hosts have accepted all eight secret targets, nonforce
 convergence, offline consumer and actual updater checks. Their enrollment flags
 are true and maintenance is off. WSL's final acceptance binds actual fresh SSH;
 Marlowe uses the existing authenticated master and does not claim fresh MFA.
@@ -16,27 +16,65 @@ Sherlock's official kit 0.7.0 update passed: 50 new release files, all 53 previo
 files retained, nine owned links and parent security metadata preserved. It used
 the existing login environment and required no environment build or job. Fresh
 site rules permit this bounded source-file deployment; the earlier allocation
-block was an overly strict interpretation. Secret deployment is being prepared.
+block was an overly strict interpretation. Sherlock also accepted all eight
+secret files on `15068b9`: empty 62-target diff, offline consumer, actual updater
+and existing-master access passed. Final acceptance rechecked persisted bindings;
+maintenance is off. An earlier post-repeat metadata guard failure remains of
+unknown cause; the reviewed remaining-only continuation did not replay deployment.
 
-Windows' genuine ordinary-user audit passed in the existing desktop session:
-26 exact targets, five control parents and both NoProfile shell paths. The
-one-off Limited task was removed after verified completion. Native takeover
-remains separate and is being prepared; the previous user deferral is superseded.
+Windows completed native takeover on `15068b9`: all 26 targets are regular
+files, with seven protected ACL replacements, 16 native owned-link conversions
+and three existing regular-file applications. Two nonforce repeats, empty diff,
+both PowerShell profile smokes, actual ordinary-token updater and same-session
+skip, fresh nonmultiplexed SSH and persisted-binding acceptance passed. All 61
+parents stayed unchanged; maintenance is off and secret enrollment remains false.
+Five exact idle operator tasks were removed. The legacy restow task remains
+disabled for Stage 6 retirement. Earlier bounded operator failures and reviewed
+continuations remain recorded separately; no GUI or account-authentication claim
+is made. All six hosts have actual Stage 4 acceptance.
 
-Lab's approved Astra/xhigh correction passed, but its config was subsequently
-reformatted without changing any typed value. A small native modifier fix is
-being validated: after all existing validation and transformations, preserve
-original input when native typed equality says no change is needed. Actual policy
-changes retain canonical serialization and ordinary conflict protection. Lab
-remains in maintenance with enrollment false until the reviewed candidate and
-fresh host continuation pass. Do not reuse its stale saved plan or repeat force.
+Lab's approved Astra/xhigh correction passed. The subsequent formatting-only
+rewrite is handled by the accepted native modifier fix: after all existing
+validation and transformations, preserve original input when native typed equality
+says no change is needed. Actual policy changes retain canonical serialization
+and ordinary conflict protection. Lab's fresh 67-target review and eight-file
+enrollment passed on `15068b9`, preserving all 59 ordinary files and five excluded
+auth siblings. Two nonforce applies, empty full diff, offline consumer, automatic
+updater and fresh nonmultiplexed WSL-to-Lab SSH passed. Persisted post-apply
+bindings were rechecked before acceptance; maintenance is off and enrollment true.
 
-Main remains at encrypted release `74985d08` while the new runtime candidate is
-prepared. Integration includes all earlier outcome commits through `12262e6`;
-that checkpoint passed all three jobs of CI 41670447610. New code must pass its
-own applicable exact hosted gates before main or real-host activation. Current
+Local and remote main reached runtime correction
+`15068b9936dc1bf36416d59154746e8f643d5bd5` after all three jobs of CI
+41684120644 and all eight bootstrap e2e 41684121107 jobs passed. Full local
+`tests/run.sh --ci`, frozen full pre-commit and independent review also passed.
+Integration includes all earlier outcome commits through `12262e6`. Current
 per-host evidence and limits are in [stage-4-evidence.md](stage-4-evidence.md).
 Stages 5/6 have not started.
+
+Worktree-policy commit `493f39545a63f69c32648b97936736286fa43dcd` passed all three
+jobs of CI 41702351649 and all eight bootstrap e2e 41702352195 jobs. The two
+relative-path fixtures now isolate themselves in their existing temporary homes;
+runtime behavior is unchanged. The full Linux suite and pre-commit passed.
+Local and remote main then fast-forwarded to that exact policy commit. Lab's two
+global instruction files were refreshed with targeted nonforce apply and repeat;
+their diff is empty and file modes/parent security metadata were preserved.
+The remaining closure changes record actual outcomes and the Stage 5 handoff;
+they require their own exact three-platform CI before main fast-forward.
+
+Committed Stages 1-4 are stored in the main checkout's persistent Git object
+store and published on origin/main; the `/tmp` worktrees are not their only
+copy. At the user's preservation checkpoint, all 28 migration worktrees were
+saved under `$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02`:
+full staged/unstaged binary patches, 562 nonignored untracked files with original
+modes, original Stage 3/tmux patches and handoff records. The 653-file core
+manifest passed readback verification. Separate private Lab, Windows, Sherlock
+and review exports preserve safe operator evidence without credential values or
+identities. These local Git-metadata backups are not committed or pushed. After
+fresh verification and release by active agents, 26 completed worktrees and 25
+merged task branches were removed. Retain the checkpoints; remove the final
+coordinator and its merged branch after the closure result reaches verified main.
+Future work starts from main, not the retired coordinator. Never replay an old
+aggregate patch over newer main.
 
 ## Publication and historical operational checkpoints
 
@@ -176,22 +214,23 @@ before the main fast-forward.
 | 1 | Implemented; Linux/macOS/Windows probes and independent review | No real HOME takeover or fleet migration | 23 probes; Windows one Unix-TZ skip; inventory and CI integration |
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
-| 4 | Runtime `bf99958` and encrypted source `74985d08` passed exact CI/e2e and reached main; formatting correction under validation | Five Unix ordinary takeovers and Mac/WSL/Marlowe secrets accepted; Sherlock kit and Windows ordinary-user audit passed; Lab/Sherlock deployment and Windows takeover remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
+| 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Not started | Depends on integration scope | None |
 | 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
 
 ## Decisions and open choices
 
-Stage 4 integration is `/tmp/dotfiles-chezmoi-stage4-integration` on
-`chezmoi-stage4-integration`, with accepted runtime `bf99958`, encrypted source
-`74985d08` and subsequent operational-record updates. Stages 1-4 are committed
-through the encrypted-source release; do not replay the old
-whole-aggregate `/tmp/chezmoi-stage4-candidate.patch` over this HEAD. The original
-Stage 3 coordinator and earlier patches remain historical recovery evidence.
-Inspect all staged, unstaged and untracked changes before carrying the pending
-candidate into another worktree. The original main tmux edits were preserved in
-the coordinated landing. The user explicitly authorized commits, publication and
-rollout; no blanket authorization question remains. Exact candidate CI/e2e,
+Use the canonical `$HOME/dotfiles` main checkout and this committed record for the
+next stage. Accepted runtime `bf99958`, encrypted source `74985d08` and native
+formatting correction `15068b9` already reached local and remote main. Preserve
+subsequent commits and inspect staged, unstaged and untracked changes before
+creating a fresh `.worktrees/` task checkout. The former Stage 4 coordinator is
+disposable after verified integration; no future stage depends on its path.
+Do not replay the old whole-aggregate `/tmp/chezmoi-stage4-candidate.patch` over
+newer main. Original Stage 3 inputs and earlier patches are historical recovery
+evidence in the durable checkpoint. The original main tmux edits were preserved
+in the coordinated landing. The user explicitly authorized commits, publication
+and rollout; no blanket authorization question remains. Exact candidate CI/e2e,
 private recovery custody and concrete host gates still apply.
 The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
 
@@ -760,7 +799,14 @@ to all-directory apply. See [takeover.md](takeover.md) for the complete procedur
 All five accepted Unix hosts use reviewed local native `umask = 0o077` to avoid
 widening known 0600 files; this is a local choice, not a global shell-umask policy.
 
-| Host | Current actual state | Remaining gate |
+### Historical operational checkpoint before the direct continuation
+
+This table and the following custody/allocation notes preserve an earlier
+checkpoint. The current continuation at the top and the current fleet table in
+[Stage 4 evidence](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures)
+supersede these old pending approvals, deferral and allocation claims.
+
+| Host | State at this checkpoint | Gate at this checkpoint |
 | --- | --- | --- |
 | lab-ubuntu | 59 ordinary targets accepted. User-approved one-file normalization passed once. The subsequent 69-file backup and 67-target preview passed, but a later read-only guard found one changed native-owned `model` value in live Codex config; all other bindings and backups remain exact | Old secret plan is stale and unexecuted. Preserve the current model until its intended scope is resolved, then prepare a fresh review; no silent rebind or repeated force. Deployment confirmation also remains pending after automatic review refused execution. Maintenance on, enrollment false; excluded auth siblings untouched |
 | mac | Secret canary accepted on exact `74985d08`: eight files 0600 in a new 0700 parent, 56 ordinary files unchanged, two nonforced applies, empty diff, offline consumer checks, one updater pull and fresh nonmultiplexed SSH passed | Persisted post-apply bindings rechecked before acceptance; maintenance off, enrollment true. Shared `.config` 0770 preserved. Earlier automatic-review denials were resolved by a new direct-user approval; no GUI/p10k or credential-server acceptance claim |

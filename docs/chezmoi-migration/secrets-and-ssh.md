@@ -17,8 +17,14 @@ deployment remains a separate host gate. Mac has now accepted all eight files,
 offline consumer checks, updater and fresh SSH. Marlowe's eight-file deployment,
 offline consumer, updater and existing-master access passed; final acceptance
 rechecked its persisted post-apply binding. WSL subsequently accepted all eight,
-63-target convergence, updater, fresh SSH and persisted-binding checks. Lab and
-Sherlock retain their recorded deployment gates.
+63-target convergence, updater, fresh SSH and persisted-binding checks. Lab then
+accepted all eight on `15068b9`: 67-target convergence, all 59 ordinary files
+unchanged, updater and fresh WSL-to-Lab SSH passed; final acceptance rechecked
+persisted post-apply bindings. Sherlock subsequently accepted all eight on
+`15068b9`, with empty 62-target diff, offline consumer, actual updater and
+existing-master access. Final acceptance checked persisted bindings; maintenance
+is off. Its earlier post-repeat metadata guard failure remains of unknown cause,
+and the reviewed continuation completed only the remaining acceptance steps.
 These checks do not claim credential-server authentication. A local
 `.secrets` directory on the same disk cannot establish independent recovery.
 

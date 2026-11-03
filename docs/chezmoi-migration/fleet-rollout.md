@@ -9,16 +9,21 @@ do not claim new MFA access.
 Their native ownership/state remain. Maintenance was removed at ordinary
 acceptance. Mac subsequently accepted its eight-file secret deployment and left
 maintenance again. WSL subsequently accepted eight-file deployment and fresh SSH,
-restoring automatic updates. Lab remains in maintenance while a formatting-only
-conflict is addressed by the native typed-no-op correction. Marlowe accepted eight-file
+restoring automatic updates. Lab accepted eight-file enrollment on `15068b9`,
+including 67-target convergence, unchanged ordinary files, actual updater and
+fresh WSL-to-Lab SSH; maintenance is off. Marlowe accepted eight-file
 secret deployment after checking persisted post-apply bindings and restored
 automatic updates. Existing WSL
 tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
 from ordinary-file acceptance. Sherlock's kit0.7.0 upgrade passed using the
-existing login runtime; its secret deployment remains separate. Windows' genuine
-ordinary-user desktop audit passed all26 targets and five control parents. Native
-takeover is being prepared; the prior user deferral is superseded. Native fixtures
-and SSH connectivity are distinct from takeover. The operator procedure is
+existing login runtime; its subsequent eight-file enrollment and persisted-binding
+acceptance passed on `15068b9`, including empty 62-target diff, actual updater and
+existing-master access. Maintenance is off. Windows subsequently accepted all 26
+regular targets on `15068b9`, with unchanged parent ACLs, two nonforce repeats,
+empty diff, both shell smokes, actual ordinary-token updater/session skip, fresh
+SSH and persisted-binding acceptance. Maintenance is off; secret enrollment is
+false and the legacy restow task remains disabled. Five exact operator tasks
+were cleaned. Native fixtures remain distinct from these actual outcomes. The operator procedure is
 [takeover.md](takeover.md). Commit/publication/rollout authority is explicit;
 the corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
 bootstrap e2e 41567805363 jobs before main landing and actual ordinary takeover.
@@ -26,6 +31,8 @@ It is the supported Stow recovery bridge and first accepted ordinary-native
 release; source/runtime retirement has not started.
 Encrypted source `74985d08` subsequently passed exact CI 41586461636 and bootstrap
 e2e 41586462369 before reaching main. This does not itself enable host enrollment.
+The native formatting correction `15068b9` passed CI 41684120644 (all three)
+and bootstrap e2e 41684121107 (all eight) before main landing and Lab enrollment.
 
 ## Authorization and scope
 

@@ -22,22 +22,33 @@ Preserve [fleet execution](fleet-rollout.md) and
 
 ## Entry state and gates
 
-This is a handoff, not Stage 5 implementation. The complete result remains in
-`/tmp/dotfiles-chezmoi-stage4-integration`, branch `chezmoi-stage4-integration`.
-Read the current continuation in [status.md](status.md) and exact per-host results
-in [stage-4-evidence.md](stage-4-evidence.md), including subsequent changes and
-their applicable exact CI gates, before creating another worktree.
+This is a handoff, not Stage 5 implementation. Start at `$HOME/dotfiles` on main,
+inspect current status and read the committed closure record in [status.md](status.md)
+and exact per-host results in [stage-4-evidence.md](stage-4-evidence.md). Preserve
+subsequent changes and their applicable exact CI gates before creating a fresh
+task worktree under `.worktrees/`. Do not depend on the former Stage 4 coordinator
+remaining on disk after its integrated result is validated.
 
 The accepted ordinary-native bridge is `bf99958`; encrypted source `74985d08`
 also passed exact three-platform CI and bootstrap e2e before reaching main.
-All five Unix ordinary takeovers passed. Mac, WSL and Marlowe subsequently
+All five Unix ordinary takeovers and subsequent secret enrollments passed. They
 accepted eight-file deployment, nonforce convergence, offline consumer and actual
 updater checks. Sherlock's kit 0.7.0 source update is accepted using its existing
-login runtime; secret deployment remains separate. Windows' actual ordinary-user
-audit passed, superseding its previous deferral; native takeover is being prepared.
+login runtime; its eight-file enrollment then passed empty diff, consumer,
+updater, existing-master access and final persisted-binding checks on `15068b9`.
+Its earlier post-repeat metadata guard cause remains unknown; the reviewed
+continuation completed only remaining checks without replaying deployment.
+Windows completed all 26 regular targets on `15068b9`, two nonforce repeats,
+empty diff, both shell smokes, ordinary-token updater/session skip, fresh SSH and
+persisted-binding acceptance. Maintenance is off; enrollment remains false and
+the old restow task stays disabled for Stage 6. All six Stage 4 host gates passed;
+historical partial operations remain separately documented.
 Lab's shared Astra/xhigh correction passed, then a formatting-only rewrite
 exposed a native modifier conflict. The scoped typed-no-op preservation correction
-requires its own exact validation and fresh host continuation. No blanket
+`15068b9` passed exact CI 41684120644 (all three) and bootstrap e2e 41684121107
+(all eight), then reached main. Lab's fresh 67-target review, two nonforce applies,
+empty diff, actual updater and fresh WSL-to-Lab SSH passed; all 59 ordinary files
+and five excluded auth siblings remained bound. No blanket
 deployment approval, recovery choice or mandatory Sherlock job ID remains open.
 Do not repeat historical force exceptions or treat a prepared candidate as a
 completed host migration. Existing-master access never proves fresh MFA, and

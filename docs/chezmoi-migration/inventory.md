@@ -16,13 +16,16 @@ totals are 49/64/63/67/62/62/26 in the same order. Without it, the ordinary tota
 above remain unchanged. Mac's production flag is enabled after actual acceptance
 of all 64 targets. Marlowe's flag is also enabled after actual 62-target
 convergence and final persisted-binding acceptance. WSL's flag is enabled after
-63-target convergence and fresh-access acceptance. Lab and Sherlock flags remain
-false while their fresh continuations are prepared. The
-encrypted source passed exact CI/e2e and reached main at `74985d08`; remaining
-host deployments stay separately gated.
+63-target convergence and fresh-access acceptance. Lab's flag is enabled after
+67-target convergence and fresh WSL-to-Lab access acceptance on `15068b9`.
+Sherlock's flag is enabled after actual 62-target convergence and final
+persisted-binding acceptance on `15068b9`. All five Unix flags are enabled. The
+encrypted source passed exact CI/e2e and reached main at `74985d08`; all five
+approved host deployments are now accepted. Native Windows separately accepted
+all 26 ordinary targets on `15068b9`, with enrollment false.
 The exact-green `bf99958` release has actual ordinary acceptance for lab's 59,
 Mac's 56, WSL's 55 and each cluster's 54 targets; this does not change source counts. Per-host backups,
-parent preservation, application limits and unfinished hosts are recorded in
+parent preservation, application limits and historical blockers are recorded in
 [Stage 4 evidence](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
 
 ## Derivation, applicability and notation
