@@ -40,8 +40,9 @@ class TakeoverRecoveryTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Unix directory modes; Windows ACL evidence is separate")
     def test_operator_prepares_only_missing_parents_and_preserves_existing_modes(self):
-        with SourceFixture("lab-ubuntu", native_os="linux") as fixture:
-            fixture.config.write_text('umask = 0o077\n[data]\nhost = "lab-ubuntu"\n'
+        role = self.role()
+        with SourceFixture(role) as fixture:
+            fixture.config.write_text(f'umask = 0o077\n[data]\nhost = "{role}"\n'
                                       'enrollStaticSecrets = true\n', encoding="utf-8")
             secret_source = fixture.source / "home/private_dot_secrets"
             # Discard only this fixture's copied ciphertext before opting in;
@@ -87,7 +88,7 @@ class TakeoverRecoveryTests(unittest.TestCase):
                 self.assertEqual(sibling.read_bytes(), b"unmanaged sibling\n")
                 self.assertEqual(stat.S_IMODE(sibling.stat().st_mode), 0o640)
                 current = snapshot(fixture.destination)
-                self.assertEqual(set(current), set(expected_entries("lab-ubuntu")) |
+                self.assertEqual(set(current), set(expected_entries(role)) |
                                  {".secrets/operator-probe", ".config/tmux/operator-owned"})
                 if first_apply is not None:
                     self.assertEqual(current, first_apply)
@@ -115,7 +116,7 @@ class TakeoverRecoveryTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Unix dangling directory link; Windows ACL evidence is separate")
     def test_operator_refuses_dangling_directory_instead_of_preparing_it(self):
-        with SourceFixture("lab-ubuntu", native_os="linux") as fixture:
+        with SourceFixture(self.role()) as fixture:
             target = fixture.destination / ".config/tmux"
             target.parent.mkdir()
             foreign = fixture.root / "absent foreign directory"
