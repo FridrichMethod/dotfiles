@@ -13,7 +13,8 @@ established. Eight production inputs were encrypted privately to the exact six
 recipients. Each host and retrieved R passed all-eight equality checks, and a
 disposable outsider failed all eight. Only the eight ciphertexts entered source
 commit `74985d08`, which passed exact CI/e2e before reaching main. Actual target
-deployment remains a separate host gate. Mac has now accepted all eight files,
+deployment is accepted on all five Unix hosts; Windows enrollment is false by
+design. Per host: Mac has accepted all eight files,
 offline consumer checks, updater and fresh SSH. Marlowe's eight-file deployment,
 offline consumer, updater and existing-master access passed; final acceptance
 rechecked its persisted post-apply binding. WSL subsequently accepted all eight,
@@ -110,6 +111,30 @@ ownership checks are complete. Native init preserves this local data and age
 configuration. Enroll only the eight privately approved static files as
 `encrypted_private_` leaves under `home/private_dot_secrets`, never an `exact_`
 directory or `create_` auth seed. SSH remains on its ordinary source paths.
+
+### Rotating an enrolled static token
+
+The kit's `claude-as` enrolls only when `~/.secrets/claude-NAME` is absent and
+never overwrites an existing token file. Do not delete or move a managed
+`~/.secrets/claude-NAME` and re-enroll in place: that host's next nonforce login
+update then stops at `.secrets/claude-NAME` (changed since last write), leaving
+later targets stale until the new ciphertext lands. Instead:
+
+1. Obtain the new token under an unmanaged temporary name, such as
+   `claude-as TEMPNAME` with an empty label. `.secrets` is not an exact directory,
+   so native apply leaves that sibling alone.
+2. Privately run native `encrypt --use-builtin-age=true` with the full explicit
+   argument set (see [takeover.md](takeover.md)) and one `--age-recipient` for
+   each of exactly six recipients: the five host public recipients plus R. Never
+   use `chezmoi add` without `--encrypt`, and never `re-add`.
+3. Privately verify that each host identity and retrieved R decrypt it to the
+   same bytes, as in Stage 4, without printing values.
+4. Replace `home/private_dot_secrets/encrypted_private_claude-NAME.age` through the
+   normal CI landing. Each enrolled host's login update replaces its target; then
+   remove the temporary token file.
+
+If the old token was revoked or exposed, also purging its copies in private
+Stage 4 backups and rehearsal destinations is a user decision, never automatic.
 
 Ordinary source fixtures copy the entire candidate, including opaque ciphertext,
 with enrollment disabled. Their exact ordinary inventory remains unchanged and

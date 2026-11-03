@@ -10,8 +10,8 @@ candidate code, actual native fixture results, hosted validation and real hosts.
 Start at the canonical $HOME/dotfiles checkout on main. Inspect HEAD, branch,
 status, the full staged AND unstaged diff, untracked task files and worktree list.
 Read the committed Stage 4 closure record before creating a fresh Stage 5 task
-worktree under $HOME/dotfiles/.worktrees/. The former Stage 4 coordinator is not
-a required entry path and can be removed after its result reaches main.
+worktree under $HOME/dotfiles/.worktrees/. The former Stage 4 coordinator worktree
+and branch were removed after closure; start from main (a5d9ad7 or later).
 Carry the complete committed result and any subsequent pending work, not the
 original planning baseline or a historical whole-aggregate patch. Stages 1-4
 include the Sherlock static artifact, Terminal preference, directory-mode
@@ -38,9 +38,10 @@ CI 41586461636 jobs and all eight bootstrap e2e 41586462369 jobs before reaching
 main. Carry that complete source and later outcome records. Subsequent changes
 need their applicable exact gates. The user explicitly authorized
 commit, publication and rollout; do not ask again for blanket authority.
-Read the current continuation in status.md and actual-fleet table in
-stage-4-evidence.md before any action. Earlier outcome checkpoints through
-12262e6 passed all three CI jobs. The native formatting correction
+Read status.md's Stages 1-4 consolidation checkpoint section (current host table
+and open items) and the Stage 4 acceptance table in stage-4-evidence.md before
+any action. Earlier outcome checkpoints through 12262e6 passed all three CI jobs.
+The native formatting correction
 15068b9936dc1bf36416d59154746e8f643d5bd5 passed all three CI 41684120644 jobs and
 all eight bootstrap e2e 41684121107 jobs, then reached local/remote main. No Stage 5
 execution is authorized by preparing this handoff.
@@ -72,7 +73,10 @@ stage-3-native-config,stage-4-takeover,takeover,stage-5-ecosystem,
 stage-6-retirement,support-boundary,secrets-and-ssh,fleet-rollout}.md. Read
 docs/{bootstrap,payloads,shell,config-sync,update-contract,testing}.md where their
 callers change. Consult the final Stage 4 ledger/review/resolutions recorded in
-status; /tmp/chezmoi-stage4-ledger.md and /tmp/chezmoi-stage4-review.md are local
+status. The former /tmp/chezmoi-stage4-ledger.md and /tmp/chezmoi-stage4-review.md
+are preserved, with the rest of the cited /tmp evidence, in the private unpushed
+$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/
+(manifest ../tmp-evidence-manifest.sha256). Read them there; they are local
 supplemental evidence, not substitutes for the aggregate or completion record.
 
 Use one coordinator integration checkout and separate branches/worktrees for
@@ -117,6 +121,10 @@ must not recreate source write-through. POSIX root-ancestor checks must not form
 double-leading-slash UNC paths under Git Bash. Keep native
 fast-forward-only updates, dirty/divergent refusal, no force/stash/rebase,
 bounded noninteractive execution and generic nonsecret failure messages.
+Windows updater hardening candidate: scripts/chezmoi-update.ps1 takes the first
+chezmoi Application on PATH; prefer the exact provisioned ~/.local/bin/chezmoi.exe.
+A Codex desktop sandbox group has Modify on ~/.local on the win host, so a planted
+chezmoi.com could shadow it. Dotfiles did not create those grants.
 
 Preserve the directory correction: native file apply, diff and update explicitly
 use --exclude=dirs; no effective config-key replacement was found in v2.74.
@@ -126,9 +134,13 @@ apply --include=dirs --recursive=false only for exact still-absent directories.
 An empty list skips preparation; zero target arguments would select all dirs.
 Future missing parents require reviewed preparation, never an automatic creator
 or all-directory fallback. Earlier files or source Git may already change before
-failure. Existing private parents need separate permission review. Lab selected
-local native umask 077 to preserve known 0600 files; do not impose a global umask
-or silently chmod shared parents. The actual updater acceptance runs in a fresh
+failure. Existing private parents need separate permission review. On Windows, a
+new win-applicable target under an EXISTING parent inherits that parent's ACL:
+name the parent's ACL model for each new win target and reuse the reviewed
+protected-materialization step when the parent is broader than the intended file
+ACL. Lab selected local native umask 077 to preserve known 0600 files; do not
+impose a global umask or silently chmod shared parents. The actual updater
+acceptance runs in a fresh
 interactive session after controlled maintenance removal, with payloads off;
 a maintenance/opt-out skip proves suppression only. Restore maintenance on failure.
 
@@ -137,6 +149,11 @@ adapter, the declared current-layout support cutoff without an all-host waiting
 gate, and authorized agent execution on reachable hosts. D7 remains unresolved:
 whether upstream payload installs/updates become explicit-only. Present the
 concrete choice before changing that lifecycle. D6 does not answer D7.
+Observed awesome-skills inputs for D7: Sherlock's installer refuses the
+site-mandated scratch-backed ~/.cache symlink; Marlowe's run stops for a person
+on the legacy ~/.codex/skills root above the 1990-folder limit; native Windows has
+no payload state yet, so its first ordinary interactive pwsh login will install
+skills in the foreground.
 
 Follow stage-5-ecosystem.md's exact retained/deleted caller tables. First audit
 provisioning step IDs, asset ownership and doctor advice. Keep package managers
@@ -184,7 +201,8 @@ established. Do not repeat the exclusive-output generation/retrieval steps.
 All five host identities were generated locally and eight production inputs were
 encrypted for the exact six recipients. Each host and retrieved R passed
 all-eight recovery; only ciphertext entered published source 74985d08.
-Actual deployment remains a separate host gate. All five Unix hosts are accepted.
+Actual deployment is accepted on all five Unix hosts; Windows enrollment is false
+by design.
 Sherlock's earlier post-repeat metadata guard cause remains unknown; a separately
 reviewed remaining-only continuation passed empty diff, offline consumer, updater,
 existing-master access and persisted-binding acceptance without replaying
@@ -224,7 +242,13 @@ without a new baseline; maintenance is off and enrollment true. Existing-master
 access does not establish fresh MFA or credential-server authentication.
 Do not repeat the completed backup, source bridge or apply. An initial automatic
 approval denial of the bridge was resolved by a new direct-user approval for
-the unchanged reviewed command.
+the unchanged reviewed command. The job 553043 in-allocation probes above do not
+cover Marlowe login nodes: a site AppArmor profile (block-node) denies node there,
+so the Claude settings Node hooks (PreToolUse Bash guard, Notification,
+statusLine) fail open. Codex is absent and unused on Marlowe. Both are Stage 5
+product choices: accept and document, host-specific Claude settings without Node
+hooks, or helpers ported off Node; descope Codex on Marlowe or use a non-node
+binary. Never work around the site profile.
 Consult current Stage 4 evidence before proceeding. Native Codex
 is separately absent from inspected PATH. Kit 0.7 presence is not proof of
 usable accounts. Resolve required runtime provisioning under current site rules

@@ -1,7 +1,7 @@
 # Agent Guide
 
-This repository stores cross-platform dotfiles with a native chezmoi candidate
-and a guarded GNU Stow compatibility path during the Stage 4 bridge.
+This repository stores cross-platform dotfiles deployed by native chezmoi on all
+six hosts, with a guarded Stow compatibility path until Stage 6.
 
 ## Scope and layout
 
@@ -148,8 +148,8 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 - .stowrc owns --target=~ and ignores: mirror every .gitignore pattern with no slash except an optional trailing slash as a whole path component plus descendants. Use character classes for literal metacharacters (`[.]`), end regexes in `$`, and keep Stow 2.3/2.4/PowerShell parity plus tracked-file coverage tests.
 - Do not shell-quote `.stowrc` option values. GNU Stow parses the file directly, and Stow 2.3.1 treats quote characters around `--ignore=` regexes literally; keep the focused test that stows into a temporary target with materialized files already present.
 - `.stowrc` also excludes app-rewritten or helper-materialized files that `stow-all.sh` writes as machine-local regular files instead of symlinks: Codex `config.toml` and Claude `settings.json` (merged, portable keys win), Codex `portable.rules` (materialized without touching `default.rules`), and the fcitx5 `profile` (materialized wholesale, since it holds nothing machine-specific). Add any new such file to both the `.stowrc` ignore list and matching POSIX/Windows sync steps, and keep its helper fail-closed.
-- Keep the Unix updater POSIX sh and the PowerShell twin in parity: DOTFILES_DIR/AUTO_UPDATE, exported _DOTFILES_CHECKED, clean trees, fast-forward only, remembered host, locking, retries and no submodules. PowerShell runs only for interactive consoles, skips redirected stdout and must not set ErrorActionPreference=Stop. Keep update-hooks tests; [update-contract.md](docs/update-contract.md) owns acknowledgement and locking details.
-- Automatic stow is enabled by default; `DOTFILES_AUTO_STOW=0` keeps pull-only behavior and `DOTFILES_AUTO_UPDATE=0` disables the entire hook. Unix must remember the explicitly installed host or use `DOTFILES_HOST`, never guess a Linux/cluster overlay. Store host/applied-revision state only in local Git metadata, bound to the home/platform. Windows automatic stow must run elevated through `scripts/dotfiles-auto-stow.ps1` or its explicitly registered current-user task; do not launch login-time UAC prompts. Failed or partial installs must not advance applied state. Keep executable update-hook tests for both shells.
+- Keep the legacy Unix updater POSIX sh and PowerShell twin in parity: DOTFILES_DIR/AUTO_UPDATE, exported _DOTFILES_CHECKED, clean trees, fast-forward only, remembered host, locking, retries and no submodules. PowerShell runs only for interactive consoles, skips redirected stdout and must not set ErrorActionPreference=Stop. Keep executable update-hooks tests for both shells; [update-contract.md](docs/update-contract.md) owns acknowledgement/locking. Native homes use `scripts/chezmoi-update.sh`/`.ps1` per takeover.md.
+- Legacy automatic stow is enabled by default; `DOTFILES_AUTO_STOW=0` keeps pull-only behavior and `DOTFILES_AUTO_UPDATE=0` disables the entire hook. Unix must remember the explicitly installed host or use `DOTFILES_HOST`, never guess a Linux/cluster overlay. Store host/applied-revision state only in local Git metadata, bound to the home/platform. Windows automatic stow must run elevated through `scripts/dotfiles-auto-stow.ps1` or its explicitly registered current-user task; do not launch login-time UAC prompts. Failed or partial installs must not advance applied state.
 - Packages hold regular files only (`stow-all.ps1` skips a symlink in one with a warning), so Windows clones need no `core.symlinks`. Keep the `.gitignore` lines of the three retired submodule checkouts and the `.stowrc` lines `^coding-agent-kit(/|$)` and `^PyMOLScripts(/|$)` until no host has those leftovers, and the `scripts/awesome-skills-update.sh` shim until every host has logged in once since the change.
 
 ## Windows

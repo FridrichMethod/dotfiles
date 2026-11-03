@@ -239,6 +239,10 @@ No recursive deletion/exact ownership of shared app, SSH or payload directories.
 
 ## Required implementation outcomes
 
+Stage 4 is implemented and accepted on all six hosts; see [status.md](status.md)
+and [stage-4-evidence.md](stage-4-evidence.md). This list preserves the
+acceptance plan; do not restart Stage 4 from its unchecked items.
+
 - [ ] Publish the supported current layout/tool floors, an immutable last
   supported Stow revision and a tested manual bridge/clean-install procedure.
   Use `support-boundary.md`'s checklist, including old generated overrides,

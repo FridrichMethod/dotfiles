@@ -1,7 +1,8 @@
 # Agent-executed rollout on the six target hosts
 
-Current Stage 4 actual observations and blockers are in
-[stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
+Stage 4 actual acceptance observations are in
+[stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures);
+the current per-host state is in [status.md](status.md).
 Lab's 59, Mac's 56, WSL's 55 and each cluster's 54 ordinary targets completed native
 takeover, repeat convergence and controlled automatic-update activation. Lab,
 Mac and WSL passed fresh ordinary SSH; clusters used existing authenticated masters and
@@ -15,7 +16,7 @@ fresh WSL-to-Lab SSH; maintenance is off. Marlowe accepted eight-file
 secret deployment after checking persisted post-apply bindings and restored
 automatic updates. Existing WSL
 tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
-from ordinary-file acceptance. Sherlock's kit0.7.0 upgrade passed using the
+from ordinary-file acceptance. Sherlock's kit 0.7.0 upgrade passed using the
 existing login runtime; its subsequent eight-file enrollment and persisted-binding
 acceptance passed on `15068b9`, including empty 62-target diff, actual updater and
 existing-master access. Maintenance is off. Windows subsequently accepted all 26
@@ -174,8 +175,9 @@ reported both local retrieval checks PASS, then confirmed full retrieval on
 another device. Custody and all five host identities are established. Eight
 production inputs are encrypted for the exact six recipients, and each host
 plus retrieved R passed all-eight recovery. Only ciphertext entered the published
-`74985d08` source; actual deployment remains a separate host gate. Keep host private
-identities local and export only public recipients.
+`74985d08` source; actual deployment is accepted on all five Unix hosts and Windows
+enrollment is false by design. Keep host private identities local and export only
+public recipients.
 Mutable Codex auth remains excluded; SSH stays ordinary. Bitwarden was canceled
 and all five task-installed clients removed; Sherlock never installed one.
 Do not reopen its canceled toolkit/allocation proposal. Launcher provisioning

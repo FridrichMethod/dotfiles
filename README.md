@@ -102,9 +102,10 @@ Packages mirror HOME paths. Stow uses `--restow --no-folding`: individual links
 let common and host packages compose. Git overrides use `~/.gitconfig_local`;
 SSH delegates to `~/.ssh/config.d/*.conf`. A target has one owner: move a full
 host-specific file out of common rather than defining it in both layers.
-Native Windows stows an explicit common-package allowlist and no Unix shell
-packages. The [dependency guide](docs/dependencies.md) explains required and
-optional tools; `config/bootstrap/` owns installation inventories and versions.
+Legacy Windows (`stow-all.ps1`) stows an explicit common-package allowlist and no
+Unix shell packages; native Windows deploys 26 regular files. The
+[dependency guide](docs/dependencies.md) explains required and optional tools;
+`config/bootstrap/` owns installation inventories and versions.
 
 ## tmux
 
@@ -244,10 +245,19 @@ and unmarked homes retain the legacy path. Real takeover and selected secret
 enrollment require the [Stage 4 procedure](docs/chezmoi-migration/takeover.md)
 and recorded release gates; fixture passes are not real-host outcomes.
 
-To add a package, mirror its HOME path under `common/<tool>/` or a host overlay,
-add its configuration, then rerun the installer. Keep secrets local, code in its
-shell dialect and documentation in English ASCII. Follow [AGENTS.md](AGENTS.md)
-for manifest changes, checks and landing policy; keep common-before-host order.
+To add a configuration file, put the canonical file at its HOME path under
+`common/<tool>/` or a host overlay; legacy source stays canonical until Stage 6.
+Add the matching `home/` literal-include template, its
+[inventory](docs/chezmoi-migration/inventory.md) row and stated totals, a
+`home/.chezmoiignore` role entry unless it applies to every role, and the exact
+counts in `tests/chezmoi_source_support.py`. If it introduces a new parent
+directory, plan the reviewed per-host `apply --include=dirs --recursive=false`
+preparation from the [takeover procedure](docs/chezmoi-migration/takeover.md)
+before landing. Native homes receive the change through the login update;
+`stow-all` applies only to legacy (unmarked) homes. Keep secrets local, code in
+its shell dialect and documentation in English ASCII. Follow
+[AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy; keep
+common-before-host order.
 
 ## License
 

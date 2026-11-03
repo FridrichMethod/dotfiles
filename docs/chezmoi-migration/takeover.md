@@ -5,8 +5,9 @@ This procedure is for the reviewed compatibility release, with the physical
 CI, import whole application directories, or force a whole-home apply. The
 corrected Stage 4 release `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` passed exact
 hosted CI/e2e and lab ordinary takeover. It is the supported Stow recovery bridge
-and first accepted ordinary-native release. Actual-home acceptance remains
-separate for every other host. Plain native apply changes existing shared
+and first accepted ordinary-native release. All six hosts have since accepted
+takeover: per-host acceptance is in [stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures),
+the current state in [status.md](status.md). Plain native apply changes existing shared
 directory modes; use the corrected file-only procedure below.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
@@ -234,9 +235,22 @@ by an upstream revision, even with a populated state database. The native
 less-interactive mode rejects that first-target conflict while allowing genuinely
 absent new targets and ordinary known updates. A source fast-forward can succeed
 before apply refuses a target; no whole-home transaction is promised. It disables
-credential prompts and uses transport timeouts. Arbitrary user Git hooks are not
+credential prompts. An SSH connect timeout and an HTTPS low-speed abort bound
+normal transport failures; an HTTPS connect to a silently blackholed route can
+still wait for OS/curl connect defaults. That limit is accepted; a portable
+watchdog would be a Stage 5 design question. Arbitrary user Git hooks are not
 a globally bounded execution environment. Errors produce a generic warning;
 secret-bearing native output is not printed. A later session may retry.
+
+Run every manual native command with the updater's full explicit argument set:
+`--source`, `--working-tree`, `--destination`, `--config`, `--cache` and
+`--persistent-state` as in `scripts/chezmoi-update.sh`/`.ps1`. Without it,
+chezmoi v2.74 uses a separate state database,
+`$HOME/.config/chezmoi/chezmoistate.boltdb`, because `home/.chezmoi.toml.tmpl`
+sets no `persistentState` and native falls back to the config directory. A plain
+`chezmoi apply` or `chezmoi update` can then overwrite local edits without the
+changed-since-last-write refusal and later stall the login updater. Making the
+template set `persistentState` is a Stage 5 item requiring a reviewed re-init.
 
 The update invocation also pins `--exclude=dirs` to preserve shared parent modes
 and ACLs. New files under existing prepared parents can update automatically.

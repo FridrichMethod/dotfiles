@@ -1,8 +1,8 @@
 # Stage 5: Ecosystem simplification implementation plan
 
 > **For agentic workers:** Use subagent-driven-development with separate worktrees
-> under [README.md](README.md). Start from the complete Stage 4 integration
-> artifact and [start-stage-5.md](start-stage-5.md), never a bare baseline HEAD.
+> under [README.md](README.md). Start from current main, which is the integration
+> artifact, and [start-stage-5.md](start-stage-5.md), never a bare baseline HEAD.
 
 **Goal:** Reduce remaining lifecycle code by adopting native chezmoi/package-manager
 behavior and explicit upstream interfaces, without replacing it with another
@@ -91,7 +91,8 @@ retrieval on another device was confirmed. All five host identities now exist
 locally, and eight production inputs are encrypted for the exact six recipients. All five host
 identities and retrieved R each decrypt all eight; only ciphertext entered source
 commit `74985d08`, which passed exact CI 41586461636 and bootstrap e2e 41586462369
-before reaching main. Deployment remains a separate host gate. Do not reopen
+before reaching main. Deployment is accepted on all five Unix hosts; Windows
+enrollment is false by design. Do not reopen
 the approved scope or custody choices. Keep private
 names/values out of this document.
 SSH configuration remains ordinary configuration; no new private SSH target is
