@@ -187,6 +187,12 @@
                 "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
                 "hidden": true,
                 "name": "Command Prompt"
+            },
+            {
+                "commandline": "\"%WINDIR%\\System32\\cmd.exe\" /K %LOCALAPPDATA%\\Schrodinger\\PyMOL2\\Scripts\\activate.bat %LOCALAPPDATA%\\Schrodinger\\PyMOL2",
+                "name": "PyMOL2 Prompt (base)",
+                "icon": "%LOCALAPPDATA%\\Schrodinger\\PyMOL2\\Menu\\miniforge_console_shortcut.ico",
+                "startingDirectory": "%USERPROFILE%"
             }
         ]
     },

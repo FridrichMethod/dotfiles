@@ -169,9 +169,15 @@ the equivalent argument array using PowerShell without elevation, with closed
 stdin. Keep successful old SSH access until a genuinely fresh ordinary connection
 passes; site/MFA master-only checks retain their documented limit.
 
-Run applicable shell/profile/application checks and the thin updater. A headless
-SSH command is not a GUI reload check. Only after these checks remove the exact
-maintenance file and restore intended session opt-outs. Keep the native marker
+Run applicable shell/profile/application and fresh-access checks while maintenance
+is active. A headless SSH command is not a GUI reload check. Then remove the exact
+maintenance file for controlled activation and test the thin updater from a fresh
+interactive process with `DOTFILES_AUTO_UPDATE` enabled and `_DOTFILES_CHECKED`
+unset; keep payload automatic updates disabled during this probe. A call skipped
+by maintenance or an opt-out proves only suppression. Inspect warnings and actual
+source/state/target outcomes: the adapter intentionally preserves a usable shell
+exit status on failure. Restore maintenance immediately if activation fails.
+Only after acceptance restore intended session opt-outs. Keep the native marker
 and legacy Windows task disabled. Record actual results for each host separately.
 
 ## Updates and edits after takeover
