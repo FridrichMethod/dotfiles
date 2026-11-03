@@ -2,15 +2,15 @@
 
 Current Stage 4 actual observations and blockers are in
 [stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
-Lab's 59, WSL's 55 and each cluster's 54 ordinary targets have completed native
-takeover, repeat convergence and controlled automatic-update activation. Lab and
-WSL passed fresh ordinary SSH; clusters used existing authenticated masters and
+Lab's 59, Mac's 56, WSL's 55 and each cluster's 54 ordinary targets completed native
+takeover, repeat convergence and controlled automatic-update activation. Lab,
+Mac and WSL passed fresh ordinary SSH; clusters used existing authenticated masters and
 do not claim new MFA access.
-Their native ownership/state remain and maintenance is removed. Existing WSL
+Their native ownership/state remain. Maintenance was removed at ordinary
+acceptance; Lab subsequently reentered maintenance for secret enrollment. Existing WSL
 tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
 from ordinary-file acceptance. Cluster consumer prerequisites remain separate
-from accepted ordinary targets. Mac SSH currently
-times out, and the user explicitly deferred Windows' ordinary-user execution/ACL
+from accepted ordinary targets. The user explicitly deferred Windows' ordinary-user execution/ACL
 gate. Native fixtures and SSH connectivity are distinct from takeover. The operator procedure is
 [takeover.md](takeover.md). Commit/publication/rollout authority is explicit;
 the corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
@@ -97,7 +97,7 @@ or unrelated SSH aliases for the six intended destinations.
    inventory and ancestors; prepare only exact still-absent directories through
    reviewed native directory-only, nonrecursive apply, skipping an empty list.
    Never fall back to an all-directory apply. Review local umask separately;
-   all four accepted Unix hosts selected native umask 077. Apply the reviewed files, then perform a
+   all five accepted Unix hosts selected native umask 077. Apply the reviewed files, then perform a
    second apply, shell/profile/application checks and actual thin updater checks
    after controlled maintenance removal. Restore maintenance on failure. Missing
    parents can stop apply after a source fast-forward or earlier file writes.
@@ -135,10 +135,11 @@ native evidence, and a headless connection cannot prove a GUI restarted properly
 Do not equate a rendered config or successful SSH echo with those checks.
 
 Sherlock requires current `/etc/agents/AGENTS.md` and relevant topic files at each
-session and after compaction. This preflight reused an existing master and ran
-only permitted light reads. Dotfiles has no project-pinned sherlock-kit; this
-task installed none and used no global/other-project copy. Any later job workflow
-must resolve the project's toolkit requirement before using it. Heavy checks,
+session and after compaction. The initial preflight reused an existing master and
+ran only permitted light reads, with no toolkit installation at that checkpoint.
+The later separately approved local controller pins sherlock-kit v0.6.0; dotfiles
+does not acquire that dependency. Use that project's pinned tool for its jobs and
+transfers, respecting current site rules. Heavy checks,
 compilation and environment creation require allocation; no detached login-node
 updater/supervisor is permitted. Keep site-specific updater behavior compliant.
 Read the applicable rules on Marlowe before installation or substantive changes.
@@ -152,8 +153,13 @@ neither binary provisioning nor configuration apply requires an environment buil
 
 Eight static Claude files are authorized for lab, Mac, WSL, Sherlock and Marlowe
 plus independent R. Apple Passwords is selected and already syncs to another
-usable device. Independent R was generated privately on Mac; its actual
-deposit/retrieval and real enrollment remain pending. Keep host private
+usable device. Independent R was generated privately on Mac, and the user
+reported both local retrieval checks PASS, then confirmed full retrieval on
+another device. Custody and all five host identities are established. Eight
+production inputs are encrypted for the exact six recipients, and each host
+plus retrieved R passed all-eight recovery. Only ciphertext enters source;
+publication/deployment remain
+pending. Keep host private
 identities local and export only public recipients.
 Mutable Codex auth remains excluded; SSH stays ordinary. Bitwarden was canceled
 and all five task-installed clients removed; Sherlock never installed one.

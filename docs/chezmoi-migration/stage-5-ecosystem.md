@@ -29,8 +29,10 @@ Corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
 bootstrap e2e 41567805363 jobs before main landing. Lab's 59 and WSL's 55 ordinary
 targets subsequently passed actual native takeover and updater/access checks.
 Sherlock and Marlowe each accepted 54 ordinary targets and actual updater checks
-under existing-master access. Maintenance is removed on all four. Mac access,
-Windows' deferred ordinary-user check, secret custody and cluster consumer
+under existing-master access. Mac subsequently accepted 56 targets, actual
+updater activation and fresh nonmultiplexed SSH. Maintenance is removed on all
+five at ordinary acceptance; Lab later reentered maintenance for secret enrollment.
+Windows' deferred ordinary-user check, secret deployment and cluster consumer
 prerequisites remain separately recorded gates. Read the current Stage 4 record in
 [status.md](status.md), the current aggregate diff and its saved patch before
 creating worktrees. Temporary ledgers/review logs supplement the repository
@@ -68,9 +70,13 @@ D6 (thin automatic dotfiles updates), D9 (declared current-layout cutoff) and D1
 (agent-executed six-host migration/retirement) are resolved. D7 (payload scheduling)
 is unresolved. The user has approved the private eight-file static-secret scope
 for lab, Mac, WSL, Sherlock and Marlowe plus recovery recipient R. Apple Passwords
-is selected; actual independent deposit/retrieval and bootstrap remain pending.
-Do not reopen the approved scope or enroll
-values before custody is settled. Keep private names/values out of this document.
+is selected; local retrieval checks were reported PASS and independent full
+retrieval on another device was confirmed. All five host identities now exist
+locally, and eight production inputs are encrypted for the exact six recipients. All five host
+identities and retrieved R each decrypt all eight; only ciphertext enters source.
+Publication and deployment
+remain pending. Do not reopen the approved scope or custody choices. Keep private
+names/values out of this document.
 SSH configuration remains ordinary configuration; no new private SSH target is
 implied. Preserve app-written auth, existing trust and recovery access.
 

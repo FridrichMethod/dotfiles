@@ -33,8 +33,9 @@
   is removed. WSL's 55 ordinary files and updater/access checks also passed;
   its preexisting tmux prerequisites remain missing. Sherlock and Marlowe each
   accepted 54 ordinary files and actual updater checks, with maintenance removed;
-  access used existing authenticated masters, not fresh MFA. Mac access currently
-  times out; the user explicitly deferred Windows' ordinary-user execution/ACL gate.
+  access used existing authenticated masters, not fresh MFA. Mac subsequently
+  accepted 56 ordinary files, controlled updater activation and fresh
+  nonmultiplexed SSH. The user explicitly deferred Windows' ordinary-user gate.
 - Initial connection-only preflight: four SSH successes, local lab-ubuntu access, and
   SSH auth rejection on win/lab-ubuntu; see [fleet rollout](fleet-rollout.md).
 - Earlier connectivity-only follow-up: Mac's own SSH client reached win and
@@ -44,20 +45,30 @@
   keys and the existing ACL remain intact. Only the one new authorization-file
   backup was removed at the user's request. That connection check performed no
   dotfiles migration; later actual takeover is recorded separately above.
-- The eight approved credential files have not been read or enrolled. Independent
-  R was generated privately; custody remains pending. See [secrets and SSH](secrets-and-ssh.md).
+- All five host identities were generated privately on their own hosts. The
+  eight approved static inputs were encrypted in an isolated private Lab capsule
+  for exactly those five recipients plus R. Lab, Mac, WSL and retrieved R have
+  each decrypted all eight with private equality checks, and both clusters then
+  passed the same checks: 48 equalities across six recipients. A disposable
+  outsider failed all eight. Only the verified ciphertexts enter the candidate;
+  source publication is pending. No secret target deployment is enabled.
+  See [secrets and SSH](secrets-and-ssh.md).
 - Eight static Claude files are approved for lab, Mac, WSL, Sherlock and Marlowe
   plus recovery recipient R. Mutable Codex auth stays excluded and SSH stays
   ordinary. Apple Passwords is selected and already syncs to another usable
-  device; R was generated privately on Mac, with deposit/retrieval still pending.
+  device; R was generated privately on Mac. The user reported local recipient
+  matching and retrieved-R-only challenge PASS, then explicitly confirmed full
+  retrieval of the saved item on another device. Custody and host bootstrap are
+  established. Lab is temporarily in maintenance for secret enrollment; ordinary
+  acceptance above remains valid, and the other four Unix homes remain active.
   All five task-installed
   Bitwarden clients were removed; Sherlock never had one installed.
 - Native chezmoi executables tested: official v2.74.0 Linux amd64, Darwin arm64
   and Windows amd64, SHA256 verified. Stage 3's final candidate has 64 native
   test methods; exact passes/skips and full-run evidence appear below. Remote work
   used private temporary fixtures at those checkpoints; their evidence is
-  distinct from the later accepted lab takeover above. No production credential
-  enrollment occurred.
+  distinct from the later takeovers and real cryptographic enrollment above.
+  No production credentials were used in those isolated fixtures.
 - Active work: finish [Stage 4](stage-4-takeover.md) and its recorded gates.
   The [Stage 5 prompt](start-stage-5.md) is a handoff, not authorization to start it.
 - The new [inventory](inventory.md) derives 95 tracked package paths at
@@ -101,7 +112,7 @@ before the main fast-forward.
 | 1 | Implemented; Linux/macOS/Windows probes and independent review | No real HOME takeover or fleet migration | 23 probes; Windows one Unix-TZ skip; inventory and CI integration |
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
-| 4 | Corrected runtime `bf99958` passed exact CI/e2e and reached main | Lab/WSL/Sherlock/Marlowe ordinary takeover accepted; Mac access, custody/consumer readiness and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
+| 4 | Corrected runtime `bf99958` passed exact CI/e2e and reached main; eight encrypted source leaves now prepared | All five Unix ordinary takeovers accepted; all six recipients verified against all eight files; secret publication/deployment, cluster consumer readiness and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Not started | Depends on integration scope | None |
 | 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
 
@@ -133,7 +144,7 @@ The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
 | D10 | Select concrete tested minimum versions before removing old-tool branches; preserve supported OSes and current safety semantics | Stage 1 inventory, coherent component changes through Stage 5 |
 | D11 | Agents execute migration, tests and precise legacy retirement on the six hosts in Stages 4/6; do not defer reachable-host work to a later manual user task | Explicit user authorization; persists across sessions; concrete auth/privilege/site blockers remain |
 | D12 | Include allowlisted secrets and private SSH information through native encryption/vault integration; preserve app-written auth state | User-requested scope; Stage 1 classifies consumers and tests; Stage 4 enrolls real values |
-| D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; host private identities stay local. R generated privately on Mac; Apple Passwords deposit/retrieval, host bootstrap and enrollment remain pending |
+| D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; all five identities generated locally. Apple Passwords custody confirmed on another device and retrieved R decrypts all eight. Publication/deployment remain separate gates |
 
 D6 is resolved: the user selected keeping login automatic updates with a thin
 chezmoi adapter. Stage 4 must implement that direction, with noninteractive
@@ -681,30 +692,36 @@ targets; skip the command for an empty list. Preserve all existing parents.
 Future missing parents require the same preparation. Git or earlier files may
 already have changed before a later failure; there is no transaction or fallback
 to all-directory apply. See [takeover.md](takeover.md) for the complete procedure.
-All four accepted Unix hosts use reviewed local native `umask = 0o077` to avoid
+All five accepted Unix hosts use reviewed local native `umask = 0o077` to avoid
 widening known 0600 files; this is a local choice, not a global shell-umask policy.
 
 | Host | Current actual state | Remaining gate |
 | --- | --- | --- |
-| lab-ubuntu | 59 ordinary regular files, private backups, two AI reviews, repeat convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed. Native ownership/state present; maintenance removed | Secret custody/enrollment pending. Existing retired-submodule warning retained for Stage 6; no GUI/auth acceptance claim |
-| mac | 56-target metadata preflight and reviewed execution artifacts; ordinary SSH repeatedly times out. Shared root-owned `.config` must retain 0770 | Restore existing connectivity; no ordinary takeover. Independent R generation succeeded earlier, while deposit/retrieval remains pending |
-| wsl-ubuntu | 55 ordinary regular files, both private backups, independent AI review, convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed; maintenance removed | Existing 11 tmux plugin prerequisites and retired-submodule warning remain; no unrelated installs or tmux/GUI validation. Secret custody/enrollment pending |
+| lab-ubuntu | 59 ordinary regular files, private backups, two AI reviews, repeat convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed. Native ownership/state present; maintenance reenabled for secret enrollment | Host identity and eight-file crypto checks passed; source publication/deployment pending. Existing retired-submodule warning retained for Stage 6; no GUI/auth acceptance claim |
+| mac | 56 ordinary regular files, fresh current/after-init backups, independent AI review, preserved parents including root-owned `.config` 0770, convergence, actual updater/old-writer refusal and fresh nonmultiplexed SSH passed; maintenance removed | Existing verified Homebrew binary reused without installation. Source was already clean `bf99958`; no operator pre-fast-forward backup claim. Non-TTY startup is not GUI/p10k acceptance; host identity and eight-file crypto checks passed; deployment pending |
+| wsl-ubuntu | 55 ordinary regular files, both private backups, independent AI review, convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed; maintenance removed | Existing 11 tmux plugin prerequisites and retired-submodule warning remain; no unrelated installs or tmux/GUI validation. Host identity and eight-file crypto checks passed; deployment pending |
 | win | 26-target metadata preflight; 23 exact links and three regular files. Terminal preference retained | User explicitly deferred ordinary-user execution/ACL check; no target/task/production ACL change or takeover |
-| sherlock | Verified official static musl installed; clean `bf99958`, 54 reviewed regular targets, preserved parents/cache layout, repeat convergence and actual updater/old-writer refusal passed. Maintenance removed; private state/binding retained | Historical postcheck interruption has unknown cause; reviewed bounded continuation passed with current-state backup. Existing master is not fresh MFA proof. Kit 0.6 upgrade/allocation and custody remain gates |
-| marlowe | Clean `bf99958`, 54 reviewed regular targets, preserved parents, repeat convergence and actual updater/old-writer refusal passed; maintenance removed, state/binding retained | Existing-master access only. Kit 0.7 is present but actual login Python is 3.10.12, below launcher's 3.11 floor; the Node runtime for helpers is missing and native Codex is absent from inspected PATH. Ordinary takeover is not full consumer/application readiness; custody remains pending |
+| sherlock | Verified official static musl installed; clean `bf99958`, 54 reviewed regular targets, preserved parents/cache layout, repeat convergence and actual updater/old-writer refusal passed. Maintenance removed; private state/binding retained | Historical postcheck interruption has unknown cause; reviewed bounded continuation passed with current-state backup. Existing master is not fresh MFA proof. Kit 0.6 upgrade/allocation gates secret deployment; identity and eight-file crypto checks passed |
+| marlowe | Clean `bf99958`, 54 reviewed regular targets, preserved parents, repeat convergence and actual updater/old-writer refusal passed; maintenance removed, state/binding retained | Existing-master access only. Kit 0.7 is present but actual login Python is 3.10.12, below launcher's 3.11 floor; the Node runtime for helpers is missing and native Codex is absent from inspected PATH. Identity and eight-file crypto checks passed; consumer prerequisites still gate deployment |
 
 Apple Passwords custody is chosen and second-device sync is confirmed. The
-private handoff generated independent R on Mac; deposit and independent retrieval
-must still be proved before enrollment. R alone must recover all eight approved static files, each
+private handoff generated independent R on Mac. The user reported
+`RECIPIENT_MATCH=PASS` and `RETRIEVED_R_ONLY_CHALLENGE=PASS`, then explicitly
+confirmed full retrieval from another device. This closes the independent
+custody gate without exporting the key. R alone must recover all eight approved static files, each
 encrypted for the five host public recipients plus R; host private identities
 never leave their hosts. Mutable Codex auth remains local, and SSH snippets remain
-ordinary. No host identity or production ciphertext exists. Bitwarden was canceled:
+ordinary. All five host identities and eight private production ciphertexts now
+exist; retrieved R alone passed actual eight-file recovery. Publication and
+deployment have not yet occurred. Bitwarden was canceled:
 all five task-installed clients were removed, Sherlock never installed one, and
 no Bitwarden installation remains planned. A separate, concrete proposal for a
-local pinned sherlock-kit v0.6.0 controller now awaits the dependency approval
-explicitly required by the user's global rules. It is needed to establish a
-compliant allocation route for Sherlock's coding-agent-kit 0.7 upgrade; it does
-not authorize a tiny job or waive site rules. See stage-4-evidence.md.
+local pinned sherlock-kit v0.6.0 controller received the required dependency
+approval, was installed separately and passed doctor. New-job submission is
+also explicitly authorized; no additional approval or mandatory job ID is
+pending. Current numbered site Rule 10 still requires at least ten useful
+minutes per job, and no compliant bundle/allocation has been established for
+the short coding-agent-kit upgrade. See stage-4-evidence.md.
 The Mac uninstall's unintended LLVM
 removal was disclosed and exact version 22.1.8 restored; do not claim identical
 prior keg bytes. Detailed receipts stay in [Stage 4 evidence](stage-4-evidence.md).

@@ -1,8 +1,10 @@
 """Disposable native age evidence; no production credentials or secret reports."""
 
+import base64
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import shutil
 import stat
@@ -16,6 +18,36 @@ FIXTURES = Path(__file__).parent / "fixtures" / "chezmoi" / "secrets"
 
 
 class NativeSecretTests(unittest.TestCase):
+    def test_enrolled_source_contains_only_eight_opaque_age_leaves(self):
+        # Read ciphertext only. Private recipient/equality checks belong to the
+        # operator; CI must never receive a production decryption identity.
+        parent = ROOT / "home/private_dot_secrets"
+        self.assertTrue(parent.is_dir() and not parent.is_symlink(),
+                        "the approved encrypted source directory must exist")
+        leaves = list(parent.iterdir())
+        self.assertEqual(len(leaves), 8, "the approved enrollment has exactly eight leaves")
+        for path in leaves:
+            self.assertTrue(path.is_file() and not path.is_symlink(),
+                            "encrypted source leaves must be regular files")
+            self.assertIsNotNone(re.fullmatch(r"encrypted_private_claude-[a-z0-9]+\.age", path.name),
+                                 "only private encrypted Claude leaves are selected")
+            lines = path.read_bytes().splitlines()
+            self.assertGreater(len(lines), 2, "source must contain armored age ciphertext")
+            self.assertTrue(lines[0] == b"-----BEGIN AGE ENCRYPTED FILE-----",
+                            "source must start with age armor")
+            self.assertTrue(lines[-1] == b"-----END AGE ENCRYPTED FILE-----",
+                            "source must end with age armor")
+            try:
+                body = base64.b64decode(b"".join(lines[1:-1]), validate=True)
+            except ValueError:
+                self.fail("source must contain valid age armor, never plaintext")
+            self.assertTrue(body.startswith(b"age-encryption.org/v1\n"),
+                            "source must contain an age v1 envelope")
+            header = body.split(b"\n--- ", 1)
+            self.assertEqual(len(header), 2, "age header authentication must be present")
+            self.assertEqual(header[0].count(b"\n-> X25519 "), 6,
+                             "each ciphertext must carry six native recipients")
+
     def assert_success(self, result):
         # Do not put captured encryption/decryption output into failure messages.
         self.assertEqual(result.returncode, 0, "native synthetic age command failed")

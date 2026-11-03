@@ -6,8 +6,13 @@ static-for-consumer files are approved for lab, Mac, WSL, Sherlock and Marlowe
 plus independent recovery; five mutable Codex auth files remain excluded.
 SSH snippets retain ordinary mappings by explicit choice. Apple Passwords is
 selected for recovery custody. Independent R was generated in a private Mac
-handoff directory; actual deposit/retrieval and host bootstrap remain pending.
-No host identity or production ciphertext has been enrolled. A local
+handoff directory. The user reported local recipient matching and retrieved-R-only
+challenge PASS, then explicitly confirmed retrieving the full saved identity
+on another device. Recovery custody and all five local host identities are
+established. Eight production inputs were encrypted privately to the exact six
+recipients. Each host and retrieved R passed all-eight equality checks, and a
+disposable outsider failed all eight. Only the eight ciphertexts enter the
+candidate source; publication and actual target deployment remain pending. A local
 `.secrets` directory on the same disk cannot establish independent recovery.
 
 ## Scope added by the user
@@ -192,8 +197,11 @@ removed from recurring source after bootstrap. Static-for-consumer candidates
 and application-written refresh stores are classified separately in
 [inventory.md](inventory.md). The approved eight-file classification now has a
 public channel-0.7 consumer review. Sherlock's installed kit v0.6 still requires
-the reviewed upgrade and actual interface check before real enrollment; public
-source review alone does not upgrade that host.
+the reviewed upgrade and actual interface check before enabling/applying secrets
+on that host. Approved host identity generation, encrypted source preparation
+and private decryption checks can proceed independently. The approved recipient
+grant gives that host cryptographic access even while deployment is disabled;
+public source review alone does not upgrade its consumer.
 
 Synthetic output checks use a public-target allowlist for diff and inspect
 successful apply output/source for the disposable canary. This does not promise

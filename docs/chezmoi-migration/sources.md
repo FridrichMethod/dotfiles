@@ -20,12 +20,15 @@ patterns and config-key alternatives did not preserve the required behavior in
 these probes. The actual regression evidence and nontransactional boundary are
 in [Stage 4 evidence](stage-4-evidence.md#published-bridge-and-subsequent-corrections).
 Release `bf99958` passed exact three-platform CI and seven-role bootstrap e2e;
-actual lab and WSL takeover additionally proved file convergence, preserved
+actual lab, Mac and WSL takeover additionally proved file convergence, preserved
 parents, fresh SSH and real thin-updater execution. Both clusters passed ordinary
 takeover and updater checks using existing masters, with fresh MFA access unproved.
 These host receipts are
 separate from fixture results and do not establish GUI/application authentication
-or independent recovery custody.
+or independent recovery custody. Mac reused its existing Homebrew v2.74.0 binary,
+whose bytes matched the verified official bottle; its six actual isolated
+recovery tests and ordinary takeover are recorded separately from hosted CI.
+No Mac package installation or GUI/p10k acceptance is claimed.
 
 Native config init now reads existing TOML and preserves unrelated local
 settings, including age and data, with native
@@ -41,8 +44,15 @@ For the recovery-custody request, the official
 and published CLI checksums. Installing a client is not proof of account setup,
 vault custody or age recovery. The private proposal retains actual selections.
 The user subsequently selected Apple Passwords and canceled Bitwarden; all
-task-installed clients were removed. Actual recovery deposit/retrieval remains
-pending, separately from the confirmed second-device sync choice.
+task-installed clients were removed. The user reported local recipient-match
+and retrieved-R-only challenge checks PASS, then separately confirmed full
+retrieval from the saved Passwords item on another device. This establishes
+custody without exporting the private identity. Subsequent private native
+enrollment generated five host identities locally and eight ciphertexts with six
+recipients each. Actual per-host and retrieved-R checks passed 48 equalities;
+a disposable outsider failed all eight. Keyless candidate fixtures and CI use
+only opaque ciphertext. These checks do not prove issuer/account validity or
+actual deployment; the evidence document records those separate gates.
 
 Planning references read on 2026-11-01; native evidence added on 2026-11-02.
 Prefer these official sources over third-party migration examples. Live

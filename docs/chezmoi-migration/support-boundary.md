@@ -31,7 +31,8 @@ still-absent exact directories may receive native directory-only, nonrecursive
 apply. An empty missing list skips that command. Missing future parents require
 operator preparation, not an automatic creator or plain-apply fallback. A failed
 apply may follow Git or earlier file writes. Review local native umask and private
-parent modes separately; lab selected local 077 without changing global policy.
+parent modes separately; all five accepted Unix hosts selected local 077 without
+changing global policy.
 
 The immutable supported Stow recovery bridge and first accepted ordinary-native
 cutover revision are both `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0`. This is a
@@ -44,9 +45,11 @@ commits and retained all 95 physical source referents and 448 synthetic links;
 the exact scope and reproducible evidence are in stage-4-evidence.md. It does
 not promise a safe unsupported jump across the Stage 6 deletion cutoff.
 
-Lab's 59 targets are regular files, native ownership/state are established,
-maintenance is removed and actual updater/fresh-access acceptance passed.
-Other host outcomes and exceptions remain in status.md; Windows' ordinary-user
+Lab's 59, Mac's 56, WSL's 55 and both clusters' 54 targets are regular files;
+native ownership/state remain. Maintenance was removed at ordinary acceptance;
+Lab subsequently reentered maintenance for secret enrollment. Actual updater checks
+passed; lab/Mac/WSL passed fresh SSH and clusters used existing masters.
+Application limits and other exceptions remain in status.md; Windows' ordinary-user
 ACL gate is explicitly deferred. Commit, publication and D11 rollout authority
 are already granted; exact candidate gates and concrete host prerequisites still
 apply. Before any Stage 6 breaking publication, execute the quiescence and

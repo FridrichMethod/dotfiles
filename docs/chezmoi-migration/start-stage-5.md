@@ -33,11 +33,16 @@ masters do not establish fresh MFA access. Sherlock's first post-apply verificat
 stopped for an unknown reason; all 54 writes and first full apply had succeeded.
 A separately reviewed current-state backup and remaining single nonforced full
 apply/diff passed without relaxing guards. Preserve that evidence and uncertainty.
-Mac access currently times out;
-its reviewed artifacts are prepared but no native takeover occurred. The user
+Mac subsequently accepted 56 regular targets, two full convergent applies,
+controlled updater activation, old-writer refusal and fresh nonmultiplexed SSH.
+Its source was already clean bf99958 when connectivity returned; no operator
+source fast-forward or pre-fast-forward backup is claimed. Fresh current and
+after-init backups matched. The existing official-bottle-verified Homebrew
+chezmoi was reused without installation; root/staff .config mode0770 and other
+parents were preserved. Non-TTY agent startup is not GUI/p10k acceptance. The user
 explicitly deferred Windows' ordinary-user execution/ACL gate;
 do not retry automatic de-elevation or claim Windows acceptance. Preserve
-specific auth/privilege/site/ownership boundaries and unfinished recovery custody.
+specific auth/privilege/site/ownership boundaries and unfinished secret enrollment.
 Lab retains a legacy-submodule warning; WSL retains that warning and 11 preexisting
 missing tmux plugin checkouts. Shell/native acceptance is not full application
 readiness or GUI validation. Do not silently expand this migration into cleanup
@@ -59,8 +64,9 @@ mirrored skills, runners, hooks and CI unless explicitly delegated. Do not edit
 the same checkout concurrently. Preserve recoverable patches and obtain
 independent read-only review of the final aggregate.
 
-Stage 4 candidate behavior: setup-host defaults to native provisioning and
-installs pinned SHA256-verified chezmoi v2.74.0 at ~/.local/bin. Unix uses
+Stage 4 candidate behavior: setup-host defaults to native provisioning, reuses
+an existing minimum-satisfying chezmoi, and otherwise installs pinned
+SHA256-verified v2.74.0 at ~/.local/bin. Unix uses
 S4-chezmoi and H7-native; Windows W1-chezmoi and HW-native. setup-host never
 initializes/applies configuration or creates the ownership marker. Its HUMAN
 handoff points to takeover.md. Explicit --legacy-stow / -LegacyStow retains the
@@ -152,16 +158,25 @@ default-off local enrollment gate still excludes win/common-only, including with
 true opt-in, and rejects malformed flags. Do not ask again for this scope or infer
 new targets. Mutable Codex auth remains excluded and requires host-local login.
 Apple Passwords is selected and sync to a second usable device is confirmed,
-and R was generated privately on Mac. Actual deposit/retrieval, host bootstrap
-and enrollment remain pending. All five task-installed Bitwarden clients were
+and R was generated privately on Mac. The user reported RECIPIENT_MATCH=PASS and
+RETRIEVED_R_ONLY_CHALLENGE=PASS from the local retrieval script, then explicitly
+confirmed full retrieval from the saved item on another device. Custody is now
+established. Do not repeat the exclusive-output generation/retrieval steps.
+All five host identities were generated locally and eight production inputs were
+encrypted for the exact six recipients. Each host and retrieved R passed
+all-eight recovery; only ciphertext enters source. Publication and deployment
+remain pending. Lab is temporarily
+in maintenance for enrollment. All five task-installed Bitwarden clients were
 removed; Sherlock never installed one and its Bitwarden tooling proposal is canceled.
 Consult the private record and never log names/values here. SSH stays ordinary.
-Sherlock kit 0.6 still needs reviewed channel-0.7 upgrade before enrollment;
+Sherlock kit 0.6 still needs reviewed channel-0.7 upgrade before secret deployment;
 the official source review and separate local pinned sherlock-kit v0.6.0
-controller proposal are prepared. Adding that dependency requires the user's
-specific approval under their global rule, and execution still requires an
-appropriate allocation. Do not reuse the canceled Bitwarden authorization or
-submit a tiny/padded job to bypass useful-work rules. Read stage-4-evidence.md
+controller proposal were prepared. The user approved the dependency, which was
+installed separately and passed doctor, and explicitly authorized a new job.
+No repeat approval or mandatory existing job ID is required. Current numbered
+site Rule 10 still requires ten useful minutes per job; no qualifying bundle
+or existing allocation is established. Do not submit a tiny/padded job or
+repeat checks solely to fill time. Read stage-4-evidence.md
 for the current decision and concrete proposal before acting.
 Marlowe's actual login Python 3.10.12 does not meet the launcher's 3.11 floor;
 The Node runtime for helpers is missing, and native Codex is absent from inspected

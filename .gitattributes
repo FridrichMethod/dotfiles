@@ -9,3 +9,6 @@
 # alone; they still diff as text.
 win/wsl/.wslconfig -text
 win/wsl/mount.vbs -text
+
+# Native encrypted source is opaque; preserve the verified ciphertext bytes.
+home/private_dot_secrets/*.age -text

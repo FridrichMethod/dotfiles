@@ -9,10 +9,14 @@ Stage 4 keeps all 95 physical package paths, 67 ordinary native source entries a
 two AI modifies. Role target totals remain 49/56/55/59/54/54/26. Login profile
 bridges now dispatch the native updater by the home binding; no legacy sync
 helper enters native targets. Ownership/maintenance files and native runtime
-state are local metadata, not new managed targets. Private secret enrollment is
-still gated; approved candidates add no ciphertext to this inventory yet.
+state are local metadata, not new managed targets. Eight separately approved
+encrypted source leaves now live under `home/private_dot_secrets`; they are not
+additional legacy package rows. With local enrollment enabled, complete role
+totals are 49/64/63/67/62/62/26 in the same order. Without it, the ordinary totals
+above remain unchanged. All five production flags are currently false; candidate
+publication and actual deployment remain separately gated.
 The exact-green `bf99958` release has actual ordinary acceptance for lab's 59,
-WSL's 55 and each cluster's 54 targets; this does not change source counts. Per-host backups,
+Mac's 56, WSL's 55 and each cluster's 54 targets; this does not change source counts. Per-host backups,
 parent preservation, application limits and unfinished hosts are recorded in
 [Stage 4 evidence](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
 
@@ -59,8 +63,10 @@ Stage 2 implements ordinary paths and verifies exact target sets and bytes with
 Stage 3 adds exactly the two N modify paths with canonical legacy policy inputs;
 their output is checked semantically because native serialization is intentional.
 Typed Codex owned/retired metadata contains no policy values and has a parity
-test against the legacy constants. Eight static candidates are privately approved,
-but no production encrypted source is enrolled yet.
+test against the legacy constants. The eight separate static-secret source leaves
+use `encrypted_private_` and preserve native age ciphertext bytes through a
+targeted `-text` attribute. Their six real recipient checks stay private; keyless
+CI checks opaque source structure and ordinary role exclusion without identities.
 
 Owner **D** is dotfiles content with the application as reader; **D/app** means
 dotfiles baseline plus application-written live state; **D/legacy** means only
