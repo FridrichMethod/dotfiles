@@ -171,6 +171,15 @@ native apply refuses foreign links. Full aggregate pre-commit passed
 consistency pass is validated separately. Hosted gates remain pending for the
 new exact candidate.
 
+Candidate `1c109d2` was published to CI 41566499702 and bootstrap e2e
+41566499764. Its Mac CI rejected the new operator test's Linux role during
+native init, correctly enforcing the actual Darwin host guard. The fixture now
+selects the actual platform role for both operator cases, local config and exact
+target-set expectation; no OS guard or permission assertion was weakened.
+All six focused Linux methods pass. A bounded actual-Mac fixture connection
+timed out before transfer or execution, so no Mac rerun is claimed. The corrected
+exact candidate must pass fresh hosted gates before landing or target apply.
+
 ## Actual fleet outcomes, separate from fixtures
 
 | Host | Actual observation | Takeover outcome / blocker |
@@ -202,8 +211,16 @@ The user selected Apple Passwords and confirmed synchronization to another usabl
 device. The personal item is `dotfiles age recovery`; actual private deposit and
 independent retrieval remain pending. R alone recovers all eight files; host
 private identities stay local and only public recipients are exported. A same-disk
-`.secrets` directory is not independent recovery custody. No production identity
-has been generated or credential file enrolled. Codex mutable auth remains
+`.secrets` directory is not independent recovery custody. Independent R was
+generated in a private Mac handoff directory using the unchanged verified
+v2.74 binary and already-green bridge age evidence. Native generation, public
+recipient conversion and public R-only challenge encryption passed without
+exporting or printing R. Actual Passwords deposit and second-device retrieval
+are pending user actions; the prepared retrieval check uses only the returned
+identity. This isolated custody step wrote no managed target, host identity or
+production ciphertext and read none of the eight token files. A later extra
+metadata-only SSH check timed out; that does not invalidate the completed
+generation result or establish custody. Codex mutable auth remains
 application-owned; each host needs its own login state.
 
 The user first requested Bitwarden installations, then canceled them and requested

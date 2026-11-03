@@ -140,7 +140,7 @@ default-off local enrollment gate still excludes win/common-only, including with
 true opt-in, and rejects malformed flags. Do not ask again for this scope or infer
 new targets. Mutable Codex auth remains excluded and requires host-local login.
 Apple Passwords is selected and sync to a second usable device is confirmed,
-but R has not been generated, deposited or retrieved. Actual custody/bootstrap
+and R was generated privately on Mac. Actual deposit/retrieval, host bootstrap
 and enrollment remain pending. All five task-installed Bitwarden clients were
 removed; Sherlock never installed one and its toolkit proposal is canceled.
 Consult the private record and never log names/values here. SSH stays ordinary.

@@ -5,8 +5,9 @@ in [stage-4-evidence.md](stage-4-evidence.md#secret-choices-and-custody). Eight
 static-for-consumer files are approved for lab, Mac, WSL, Sherlock and Marlowe
 plus independent recovery; five mutable Codex auth files remain excluded.
 SSH snippets retain ordinary mappings by explicit choice. Apple Passwords is
-selected for recovery custody, but actual private deposit/retrieval and bootstrap
-remain pending, so no real identity or ciphertext has been enrolled. A local
+selected for recovery custody. Independent R was generated in a private Mac
+handoff directory; actual deposit/retrieval and host bootstrap remain pending.
+No host identity or production ciphertext has been enrolled. A local
 `.secrets` directory on the same disk cannot establish independent recovery.
 
 ## Scope added by the user

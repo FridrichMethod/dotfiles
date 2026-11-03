@@ -39,7 +39,8 @@
 - Eight static Claude files are approved for lab, Mac, WSL, Sherlock and Marlowe
   plus recovery recipient R. Mutable Codex auth stays excluded and SSH stays
   ordinary. Apple Passwords is selected and already syncs to another usable
-  device; R has not been generated, deposited or retrieved. All five task-installed
+  device; R was generated privately on Mac, with deposit/retrieval still pending.
+  All five task-installed
   Bitwarden clients were removed; Sherlock never had one installed.
 - Native chezmoi executables tested: official v2.74.0 Linux amd64, Darwin arm64
   and Windows amd64, SHA256 verified. Stage 3's final candidate has 64 native
@@ -682,11 +683,11 @@ files; this is a local choice, not a new global config or shell-umask policy.
 | marlowe | Existing-master preflight; kit 0.7 launchers present, native Codex absent from inspected PATH | Canary and candidate gates; Codex installation/auth is separate from Claude enrollment; no takeover |
 
 Apple Passwords custody is chosen and second-device sync is confirmed. The next
-private handoff must still generate R, deposit it and prove independent retrieval
-before enrollment. R alone must recover all eight approved static files, each
+private handoff generated independent R on Mac; deposit and independent retrieval
+must still be proved before enrollment. R alone must recover all eight approved static files, each
 encrypted for the five host public recipients plus R; host private identities
 never leave their hosts. Mutable Codex auth remains local, and SSH snippets remain
-ordinary. No production identity or ciphertext exists. Bitwarden was canceled:
+ordinary. No host identity or production ciphertext exists. Bitwarden was canceled:
 all five task-installed clients were removed, Sherlock never installed one, and
 no toolkit/install proposal remains open. The Mac uninstall's unintended LLVM
 removal was disclosed and exact version 22.1.8 restored; do not claim identical

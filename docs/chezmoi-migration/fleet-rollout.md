@@ -145,8 +145,9 @@ installation or environment build occurred on either cluster.
 
 Eight static Claude files are authorized for lab, Mac, WSL, Sherlock and Marlowe
 plus independent R. Apple Passwords is selected and already syncs to another
-usable device, but R generation/deposit/retrieval and real enrollment remain
-pending. Keep host private identities local and export only public recipients.
+usable device. Independent R was generated privately on Mac; its actual
+deposit/retrieval and real enrollment remain pending. Keep host private
+identities local and export only public recipients.
 Mutable Codex auth remains excluded; SSH stays ordinary. Bitwarden was canceled
 and all five task-installed clients removed; Sherlock never installed one.
 Do not reopen its canceled toolkit/allocation proposal. Launcher provisioning
