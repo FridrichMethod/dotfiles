@@ -236,7 +236,7 @@ The [chezmoi migration](docs/chezmoi-migration/status.md) includes native
 Claude/Codex modifies, ordinary source under `home/`, explicit local `[data].host`
 and Stage 4 guarded takeover/update/provisioning. Native apply needs no sync venv.
 The [native contract](docs/config-sync.md#native-configuration-and-stage-4-handover) documents
-native serialization for policy changes, preservation of unchanged Codex input,
+native serialization for policy changes, preservation of unchanged Claude/Codex input,
 exact ownership and safe refusal of unsupported inputs.
 CI requires verified v2.74.0; local native probes skip if chezmoi is absent,
 while an invalid explicit path fails. Canonical legacy source remains available

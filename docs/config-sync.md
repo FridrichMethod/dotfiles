@@ -49,15 +49,22 @@ the tested multiline basic/literal-string consumer semantics; explicit `\r\n`
 escapes retain CRLF values. Empty TOML is valid. Malformed TOML, missing required
 policy or invalid types fail without replacing the affected target.
 
-Changed native output is canonical JSON/TOML. After all TOML validation and
-ownership transformations, Codex compares the result with an independently
-parsed original using native typed equality. An equal result returns the original
-input bytes, preserving application formatting and avoiding a conflict caused
-only by reserialization. A different result uses native TOML serialization;
-comments and layout can then change. This is a conservative equality check,
-not a new parser or formatting engine. Second apply converges. `private_` normally
-produces Unix 0600; stricter/readonly existing modes and actual Windows ACLs need
-Stage 4 destination review. An administrative synthetic ACL is not that review.
+Changed native output is canonical JSON/TOML. After all validation and
+transformation, each modify compares the result with an independently parsed
+original using native typed equality: Claude after both JSON parses, the
+permission and portable-model checks, the U+FFFD guard and the merge; Codex
+after all TOML validation and ownership transformations. An equal result returns
+the original input bytes, preserving application formatting (Claude Code's
+insertion-ordered JSON, Codex comments and layout) and avoiding a conflict caused
+only by reserialization. Empty or whitespace-only Claude input is never kept.
+A different result uses native sorted-key JSON or TOML serialization; layout and
+comments can then change. Object key order is ignored, but array order, value
+types and JSON number spelling are not, so `1` and `"1"` or `1.0` still rewrite.
+A Claude no-op also keeps duplicate live keys whose native last value already
+matches. This is a conservative equality check, not a new parser or formatting
+engine. Second apply converges. `private_` normally produces Unix 0600;
+stricter/readonly existing modes and actual Windows ACLs need Stage 4
+destination review. An administrative synthetic ACL is not that review.
 Neither failures nor native conflict refusal promise a whole-home transaction.
 Exit status matters even when stderr is empty; routine apply must retain
 `--mode=file --less-interactive --no-tty --error-on-conflict --force=false`, closed stdin

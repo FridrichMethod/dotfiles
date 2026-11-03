@@ -47,4 +47,14 @@
 {{- template "claude-validate-unicode" $portable -}}
 {{- $merged := dict "live" $live "portable" $portable | jq ".live * .portable" -}}
 {{- if ne (len $merged) 1 -}}{{- fail "expected one merged Claude JSON value" -}}{{- end -}}
-{{- first $merged | toPrettyJson -}}
+{{- $merged = first $merged -}}
+{{- /* Reparse independently of the merge input. Keep app formatting only for a typed no-op. */ -}}
+{{- $unchanged := false -}}
+{{- if ne $nonWhitespace "" -}}
+  {{- $unchanged = deepEqual $merged (first (.chezmoi.stdin | jq "fromjson")) -}}
+{{- end -}}
+{{- if $unchanged -}}
+  {{- .chezmoi.stdin -}}
+{{- else -}}
+  {{- $merged | toPrettyJson -}}
+{{- end -}}

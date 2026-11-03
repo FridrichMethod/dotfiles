@@ -28,10 +28,11 @@ the execution contract, with the native parser decisions updated from evidence.
 
 ## Global constraints and review focus
 
-Preserve portable security-policy values and live-only state. Codex uses canonical
-formatting when policy transformation changes typed data; a validated typed no-op
-preserves the original bytes. Do not introduce a second parser, custom atomic writer, template
-framework, generic configuration merger or per-application subprocess.
+Preserve portable security-policy values and live-only state. Claude and Codex use
+canonical formatting when policy transformation changes typed data; a validated
+typed no-op preserves the original bytes. Do not introduce a second parser,
+custom atomic writer, template framework, generic configuration merger or
+per-application subprocess.
 
 Review malformed/empty input; authoritative arrays/false/null; Codex quoted keys
 and TOML types; shared-file ownership; and accidental dependence on a developer's
@@ -131,7 +132,8 @@ profile discovery from overridden HOME or Linux OS-data rendering.
 Use the executable artificial templates in
 `tests/fixtures/chezmoi/native-config/` as syntax evidence, not as the full
 production policy. `jq` is builtin and returns a list: wrap live/portable in an
-object, use `.live * .portable`, require one result, then `first | toPrettyJson`.
+object, use `.live * .portable`, require one result, then `first | toPrettyJson`
+unless the result is a validated typed no-op of nonempty live input.
 Read `.chezmoi.stdin`, initialize only missing/empty content, validate object
 roots, and preserve false/null/empty arrays. Never use truthy fallback operators
 for owned values. Keep all real portable policy values unchanged.
@@ -157,6 +159,11 @@ strings, preserving `json.Number` through merge/serialization. Never substitute
 `typeIs "string"`, since json.Number has string kind. Native duplicates remain
 last-value-wins. A parsed U+FFFD guard rejects invalid UTF-8/surrogate replacement
 and intentionally valid U+FFFD before writing; valid Unicode pairs remain supported.
+After every check and the merge, Claude returns the original nonempty live bytes,
+including CRLF and key order, only when the merged object is native `deepEqual`
+to an independently reparsed live document. Claude Code writes insertion-ordered
+JSON after plugin, marketplace or model changes, so sorted serialization alone
+would otherwise conflict. `json.Number` compares by token and types stay distinct.
 
 Native `replace "\r\n" "\n"` before `fromToml` selects LF physical newlines for
 parsing while retaining explicit escaped CRLF. Codex returns the original bytes,

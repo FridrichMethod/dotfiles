@@ -42,6 +42,16 @@ main landing. Separately, Lab's actual 67-target review, two nonforce applies,
 empty diff, updater and fresh WSL-to-Lab SSH passed with the reformatted Codex
 input byte-identical. This host evidence is distinct from the synthetic suite.
 
+The Claude modify had the same always-reserialize conflict: Claude Code 2.1.317
+rewrites `settings.json` in insertion order after plugin, marketplace or first
+model changes, so sorted `toPrettyJson` output stopped the next nonforce update.
+The same scoped `deepEqual` branch now follows every Claude check and the merge.
+Isolated tests cover JS-style reordering with added live-only keys under LF/CRLF
+and no final newline, owned drift and type-only changes, and validation before
+the no-op. A temporary-home probe with that real CLI's marketplace add failed
+nonforce apply before the change and converged byte-identically after it. Hosted
+and real-host results for this correction must be recorded separately.
+
 Native config init now reads existing TOML and preserves unrelated local
 settings, including age and data, with native
 [setValueAtPath](https://www.chezmoi.io/reference/templates/functions/setValueAtPath/)
