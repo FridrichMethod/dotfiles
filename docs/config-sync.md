@@ -196,6 +196,14 @@ fields are:
 | `permissions.workspace-net.network` | `enabled`, `allow_local_binding` |
 | `permissions.workspace-net.network.domains` | `"*"` |
 | `memories` | `generate_memories`, `use_memories` |
+| `tui` | `status_line` (ordered string array) |
+
+The shared status line includes cumulative session token counters and the native
+estimated thread cost item. Codex CLI 0.166.0 exposes cost only for Enterprise
+workspaces and omits it when unavailable. `context-used` reports context window
+occupancy, independently of cumulative tokens. Other `tui` settings, including
+colors, theme and onboarding state, remain local. `/statusline` edits the live
+layout; the next dotfiles apply restores the shared array.
 
 Portable values replace these paths only. Other live keys, tables, comments,
 multiline strings and arrays of tables are retained by TOMLKit's document model.

@@ -36,6 +36,7 @@ CODEX_POLICY = (
     (("permissions", "workspace-net", "network", "domains", "*"), str),
     (("memories", "generate_memories"), bool),
     (("memories", "use_memories"), bool),
+    (("tui", "status_line"), list),
 )
 CODEX_RETIRED = (
     ("sandbox_mode",),

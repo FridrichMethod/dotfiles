@@ -104,6 +104,10 @@ use_memories = true
 generate_memories = true
 source_only = "drop-me"
 
+[tui]
+status_line = ["used-tokens", "estimated-thread-cost"]
+source_only = "drop-me"
+
 [source_only]
 drop = true
 TOML
@@ -153,6 +157,10 @@ generate_memories = false
 use_memories = false
 retention_days = 30
 
+[tui]
+status_line = ["codex-version"]
+status_line_use_colors = false
+
 [projects."/machine-only/project"]
 trust_level = "trusted"
 
@@ -201,6 +209,9 @@ allow_local_binding = false
 [memories]
 generate_memories = true
 use_memories = true
+
+[tui]
+status_line = ["used-tokens", "estimated-thread-cost"]
 TOML
 
 cat >"$TEST_TMP/expected-live.toml" <<'TOML'
@@ -239,6 +250,10 @@ generate_memories = true
 use_memories = true
 retention_days = 30
 
+[tui]
+status_line = ["used-tokens", "estimated-thread-cost"]
+status_line_use_colors = false
+
 [permissions.machine_local]
 extends = ":workspace"
 
@@ -273,7 +288,7 @@ with open(sys.argv[2], "rb") as handle:
 # Explicit migration retains the source-only runtime state before removing
 # it from the tracked baseline. Current live values win any runtime conflicts.
 expected["source_only"] = {"drop": True}
-for table in (expected["features"], expected["memories"],
+for table in (expected["features"], expected["memories"], expected["tui"],
               expected["permissions"]["workspace-net"],
               expected["permissions"]["workspace-net"]["network"]):
     table["source_only"] = "drop-me"

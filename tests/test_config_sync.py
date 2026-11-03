@@ -62,6 +62,20 @@ custom_field=42
         result, _ = self.codex(live)
         self.assertEqual(result["project_doc_fallback_filenames"], ["CLAUDE.md"])
 
+    def test_codex_status_line_sync_preserves_other_tui_settings(self):
+        live = b'''[tui]
+status_line = ["codex-version"]
+status_line_use_colors = false
+theme = "local-theme"
+[tui.model_availability_nux]
+local_model = 4
+'''
+        result, raw = self.codex(live)
+        expected = sync.parse_toml(live).unwrap()["tui"]
+        expected["status_line"] = sync.parse_toml(CODEX).unwrap()["tui"]["status_line"]
+        self.assertEqual(result["tui"], expected)
+        self.assertEqual(self.codex(raw)[1], raw)
+
     def test_codex_multiline_strings_preserve_content_and_comments(self):
         live = b'# keep heading\nnotes = """\n  first\n\n[not_a_table]\n  last\n""" # keep suffix\n'
         result, raw = self.codex(live)

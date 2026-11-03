@@ -48,7 +48,7 @@ class CodexPolicyMetadataTests(unittest.TestCase):
             "retired": [list(path) for path in RETIRED],
         }}
         self.assertEqual(json.loads(MANIFEST.read_text(encoding="utf-8")), expected)
-        self.assertEqual(len(expected["codexPolicy"]["owned"]), 18)
+        self.assertEqual(len(expected["codexPolicy"]["owned"]), 19)
         self.assertEqual(len(expected["codexPolicy"]["retired"]), 3)
 
 
@@ -139,6 +139,23 @@ name = "second"
                 target = self.prepare(fixture, live)
                 actual = self.apply(fixture, target)
                 self.assertEqual(actual, tomllib.loads(PORTABLE.read_text(encoding="utf-8")))
+
+    def test_status_line_sync_preserves_other_tui_settings(self):
+        initial = '''[tui]
+status_line = ["codex-version"]
+status_line_use_colors = false
+theme = "local-theme"
+[tui.model_availability_nux]
+local_model = 4
+'''
+        with SourceFixture(HOST) as fixture:
+            target = self.prepare(fixture, initial)
+            expected = tomllib.loads(initial)["tui"]
+            expected["status_line"] = tomllib.loads(PORTABLE.read_text())["tui"]["status_line"]
+            self.assertEqual(self.apply(fixture, target)["tui"], expected)
+            before = target.read_bytes()
+            self.apply(fixture, target)
+            self.assertEqual(target.read_bytes(), before)
 
     def test_app_reformat_with_existing_state_is_nonforce_byte_and_metadata_noop(self):
         unknown = ('[unknown]\ninteger = 1\nfloat = 1.0\nflag = false\n'

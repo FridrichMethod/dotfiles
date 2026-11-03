@@ -174,6 +174,11 @@ visibly. Launcher/account operation belongs to the kit's own documentation.
 Claude model selection remains machine-local; its effort, plugins and
 permissions are shared. Codex portable model/reasoning defaults live in its
 tracked config; host-local profile settings are preserved.
+The shared Codex CLI status line shows cumulative session tokens (total, input
+and output), alongside model, directory, thread, Git branch, context usage and
+weekly limits. Estimated thread cost appears only when supported by the account
+(Enterprise workspaces in Codex CLI 0.166.0). Edit `tui.status_line` in the tracked
+Codex config to change the shared layout; other TUI preferences remain local.
 
 ## Payload repos
 

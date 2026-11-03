@@ -26,3 +26,18 @@ allow_local_binding = false
 [memories]
 generate_memories = true
 use_memories = true
+
+[tui]
+# Session token totals; estimated cost appears only for supported Enterprise workspaces.
+status_line = [
+    "model-with-reasoning",
+    "used-tokens",
+    "total-input-tokens",
+    "total-output-tokens",
+    "estimated-thread-cost",
+    "current-dir",
+    "thread-name",
+    "git-branch",
+    "context-used",
+    "weekly-limit",
+]

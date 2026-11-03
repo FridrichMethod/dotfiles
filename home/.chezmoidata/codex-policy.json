@@ -127,6 +127,13 @@
           "use_memories"
         ],
         "type": "bool"
+      },
+      {
+        "path": [
+          "tui",
+          "status_line"
+        ],
+        "type": "string-array"
       }
     ],
     "retired": [
