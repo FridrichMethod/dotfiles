@@ -26,11 +26,13 @@ path = '''(^|/)\.secrets/'''
 # fake bearer tokens of the PowerShell history-filter test (the second only
 # in older commits, so a full-history scan stays clean too).
 [[allowlists]]
-description = "Public key fingerprints and test fixtures"
+description = "Public key fingerprints, test fixtures and verified receipt digest"
 regexTarget = "match"
 regexes = [
     '''2C6106201985B60E6C7AC87323F3D4EA75716059''',
     '''7F38BBB59D064DBCB3D84D725612B36462313325''',
     '''Bearer abc123def456ghi''',
     '''Bearer abcdefghijkl''',
+    # SHA256 of the nonsecret Stage 4 Lab fresh-access receipt, not an API key.
+    '''682a12583c07afc99638afa289b50b0801ab8db726e0f4c1107c2f3db6522b5b''',
 ]
