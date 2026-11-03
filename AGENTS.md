@@ -6,6 +6,7 @@ and a guarded GNU Stow compatibility path during the Stage 4 bridge.
 ## Scope and layout
 
 - Shared defaults live in `common/`.
+- Keep persistent worktrees in `.worktrees/`. Follow the global guides for temporary work, preservation and post-integration cleanup.
 - Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, and `win/`. Other Linux distributions have no overlay; they stow `common/` only.
 - Packages mirror `$HOME` paths (for example `.config/...`, `.ssh/...`).
 - Root scripts are person-facing setup/check entry points; `scripts/` contains login/scheduled hooks, `lib/` sourced/imported code, and `config/` their data. Place files by their caller. Keep `.stowrc` at the root for GNU Stow.

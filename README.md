@@ -144,6 +144,13 @@ The repository [AGENTS.md](AGENTS.md) contains project rules; [CLAUDE.md](CLAUDE
 only imports it. Keep the guide below 28,000 bytes. User-global Claude/Codex
 instructions and portable settings live under `common/claude` and `common/codex`.
 
+Both global guides place persistent agent worktrees in the current project's
+`.worktrees/` directory; brief disposable work may use `/tmp`. Keep unfinished
+work and handoffs in durable storage. After integration and validation, release
+active users and remove completed worktrees and their merged task branches.
+Git and Stow ignore `.worktrees/`; OneDrive checkouts retain their independent-clone
+exception.
+
 Claude settings and Codex config are merged into mutable regular files rather
 than linked. Portable values win while credentials, host-only settings and
 runtime state stay local. Codex rules are materialized without touching

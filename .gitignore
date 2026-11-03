@@ -22,6 +22,7 @@ $RECYCLE.BIN/
 *.stackdump
 
 # Editor/IDE files
+.worktrees/
 *~
 *.swp
 *.swo

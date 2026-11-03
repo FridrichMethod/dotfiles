@@ -11,6 +11,9 @@ SYNC="$REPO_ROOT/lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-fcitx5-sync.XXXXXX")"
 trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
+# Keep relative argument fixtures outside a possibly native-owned checkout home.
+cd -- "$TEST_TMP"
+
 assert_mode() {
     python3 - "$1" "$2" <<'PY'
 import os

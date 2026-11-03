@@ -12,6 +12,9 @@ SYNC_PYTHON=${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-codex-sync.XXXXXX")"
 trap 'rm -rf "$TEST_TMP"' EXIT HUP INT TERM
 
+# Keep relative argument fixtures outside a possibly native-owned checkout home.
+cd -- "$TEST_TMP"
+
 hash_file() {
     if command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$1" | awk '{print $1}'

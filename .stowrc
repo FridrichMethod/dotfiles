@@ -9,6 +9,7 @@
 # OS metadata
 --ignore=(^|/)([.]DS_Store[^/]?|[.]_[^/]*|[.]AppleDouble|[.]LSOverride|Icon[^/]|[.]Spotlight-V100|[.]Trashes|[.]fseventsd|[.]TemporaryItems|[.]VolumeIcon[.]icns|[.]apdisk|Desktop[.]ini|Thumbs[.]db|ehthumbs[.]db|[$]RECYCLE[.]BIN|[^/]*[.]stackdump)(/.*)?$
 # Editor and IDE files
+--ignore=(^|/)[.]worktrees(/.*)?$
 --ignore=(^|/)([^/]*~|[^/]*[.](sw[pomn]|tmp|bak|orig|rej|patch|iml|code-workspace|sublime-project|sublime-workspace|log)|[.][#][^/]*|[#][^/]*[#]|[.]idea|[.]vscode|[.]history)(/.*)?$
 # Language caches, dependencies, build and test output, Cursor
 --ignore=(^|/)(__pycache__|[^/]*[.]py[cod]|[.]pytest_cache|[.]mypy_cache|[.]ruff_cache|[.]tox|[.]venv|[.]cache|node_modules|dist|build|coverage|[.]coverage|coverage[.]xml|[.]cursor)(/.*)?$

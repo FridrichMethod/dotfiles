@@ -27,6 +27,9 @@
 
 - Assume Claude Code and Codex may be active on the same project at the same time.
 - Do not let two write-capable agents edit the same checkout concurrently. Prefer a separate Git worktree and branch for each agent or task.
+- Put persistent worktrees under the current project's root `.worktrees/<task-or-agent>/` directory. Do not create sibling worktrees outside the project or scatter them across other project directories. Brief, disposable worktrees may use `/tmp`.
+- Ensure `.worktrees/` is ignored by Git before creating it. Preserve unfinished changes and handoff records in durable storage; `/tmp` must not be their only copy.
+- Once a task is integrated and validated, confirm no agent or process still uses its worktree, then promptly remove it with `git worktree remove` and delete its merged task branch. Check status, diffs, untracked files and integration before cleanup; preserve unexplained or unmerged work instead of forcing deletion. Keep the active checkout clean and the worktree list current.
 - Before editing, inspect repository status and relevant diffs. Treat existing modifications as user-owned unless clearly produced by the current task.
 - Never discard, reset, stash, amend, rebase, or overwrite user work unless explicitly requested.
 - When commits are requested, keep them atomic and reviewable, stage files deliberately, and do not use `git add .` blindly.
