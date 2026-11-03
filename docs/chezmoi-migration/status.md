@@ -33,8 +33,9 @@
   jobs of [CI 41613012922](https://github.com/FridrichMethod/dotfiles/actions/runs/41613012922)
   on `ci/chezmoi-stage4-outcomes`. Later outcome records are prepared on the same
   integration branch and require their own exact CI. Main remains `74985d08`
-  while the retained Lab/WSL deployment plans bind that revision. Complete those
-  plans or explicitly replace them with fresh reviewed plans before advancing
+  while the retained WSL deployment plan binds that revision. Lab's later model
+  drift invalidates its old plan and requires a fresh review. Complete the WSL
+  plan or explicitly replace it with a fresh reviewed plan before advancing
   main; do not run a stale plan after its updater would pull a newer revision.
 - Implemented migration candidates: Stage 1 isolated foundation, Stage 2 ordinary
   source, Stage 3 native AI configuration and Stage 4 compatibility/takeover.
@@ -720,7 +721,7 @@ widening known 0600 files; this is a local choice, not a global shell-umask poli
 
 | Host | Current actual state | Remaining gate |
 | --- | --- | --- |
-| lab-ubuntu | 59 ordinary targets accepted. User-approved one-file normalization passed once. After the reviewed process-exit guard correction, a fresh secret review passed 69 backups, all 67 target equalities and an empty eight-target dry run | Automatic approval review rejected secret apply before execution, recognizing only the recent normalization approval. Specific deployment confirmation pending; maintenance on, enrollment false. Failed capsules, 66 other files and five excluded auth siblings preserved; no second force |
+| lab-ubuntu | 59 ordinary targets accepted. User-approved one-file normalization passed once. The subsequent 69-file backup and 67-target preview passed, but a later read-only guard found one changed native-owned `model` value in live Codex config; all other bindings and backups remain exact | Old secret plan is stale and unexecuted. Preserve the current model until its intended scope is resolved, then prepare a fresh review; no silent rebind or repeated force. Deployment confirmation also remains pending after automatic review refused execution. Maintenance on, enrollment false; excluded auth siblings untouched |
 | mac | Secret canary accepted on exact `74985d08`: eight files 0600 in a new 0700 parent, 56 ordinary files unchanged, two nonforced applies, empty diff, offline consumer checks, one updater pull and fresh nonmultiplexed SSH passed | Persisted post-apply bindings rechecked before acceptance; maintenance off, enrollment true. Shared `.config` 0770 preserved. Earlier automatic-review denials were resolved by a new direct-user approval; no GUI/p10k or credential-server acceptance claim |
 | wsl-ubuntu | 55 ordinary targets accepted. User-approved normalization passed once. Fresh continuation bound actual Mac acceptance and normalized state, retained maintenance, backed up 57 files and passed all 63 native target equalities | Automatic approval review rejected secret apply before execution, recognizing only the recent normalization approval. Specific deployment confirmation pending; maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
 | win | 26-target metadata preflight; 23 exact links and three regular files. Terminal preference retained | User explicitly deferred ordinary-user execution/ACL check; no target/task/production ACL change or takeover |

@@ -54,6 +54,11 @@ passed, binding actual Mac acceptance and its normalization result. Automatic
 approval review then refused both secret applies before execution and required
 specific deployment confirmations, which remain pending. Preserve the failed
 capsules and do not repeat either one-file force operation.
+The final read-only continuation audit subsequently invalidated Lab's saved plan:
+its live Codex `model` value changed, with all other protected bindings and 69
+backup readbacks intact. Preserve that value until its intended scope is resolved
+and a fresh review is prepared. WSL's saved binding still passes; only its expired
+local SSH control socket needs renewal before the controller's own checks.
 Mac was selected as the permitted alternative. After private backups, exact
 source fast-forward, native review and a new direct-user approval resolving
 automatic-review denials, all eight files, nonforced convergence, offline consumer,

@@ -412,7 +412,7 @@ Only metadata receipts were transferred to the coordinator.
 
 | Host | Actual observation | Takeover outcome / blocker |
 | --- | --- | --- |
-| lab-ubuntu | All 59 ordinary targets and updater/access accepted. User-approved normalization passed once. After the reviewed process-exit guard correction, fresh 69-file backup and all 67 target previews passed | Secret apply rejected by automatic approval review before execution; specific deployment confirmation pending. Maintenance on, enrollment false. Failed capsules retained; no second normalization. Retired-submodule warning belongs to Stage 6 |
+| lab-ubuntu | All 59 ordinary targets and updater/access accepted. User-approved normalization passed once; the subsequent 69-file backup and 67-target preview passed. A later read-only guard found one changed native-owned Codex `model` value; all other protected bindings and backups remain exact | Old secret plan is stale and unexecuted. Current model preserved pending scope resolution and a fresh review; no silent rebind or repeated force. Deployment confirmation also remains pending after automatic review refused execution. Maintenance on, enrollment false. Retired-submodule warning belongs to Stage 6 |
 | mac | Ordinary takeover accepted 56 targets. Secret-canary preparation backed up 58 files before and after the exact `74985d08` fast-forward. After new direct-user approval, actual eight-file deployment and fresh SSH passed | Secret canary accepted: two nonforced applies, empty diff, offline consumer and actual updater passed; 56 ordinary files and shared `.config` 0770 preserved. Maintenance off, enrollment true. No GUI/p10k or credential-server authentication claim |
 | wsl-ubuntu | Ordinary takeover accepted 55 files and updater/fresh SSH. User-approved normalization passed once; fresh continuation bound actual Mac acceptance, retained maintenance, backed up 57 files and passed all 63 target previews | Secret apply rejected by automatic approval review before execution; specific deployment confirmation pending. Maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
 | win | Last checkout preflight: main `7edf12fb5b61b6e6d96703bc67f4521e69501d0c`; 26 targets, 23 exact links and three regular files. Both NoProfile profile paths match. The appended Terminal profile is preserved with equivalent environment-variable prefixes | Not migrated; user deferred the required ordinary-user execution/ACL check. SSH is administrative; bounded automatic de-elevation did not complete the target audit. No task, marker, target or production ACL change |
@@ -863,6 +863,25 @@ authentication were not tested. Native Codex remains a separate absent prerequis
 
 ## Remaining Stage 4 gates and Stage 5 handoff
 
+The final read-only continuation audit found actual Lab drift after its prior
+successful preview: `~/.codex/config.toml` still has 4,140 bytes and mode 0600,
+but top-level `model` differs from both the approved backup and shared policy.
+Exactly one native-owned typed scalar value changed; no type, live-only, added,
+removed or array-length change was found. Inode and timestamps also changed;
+ownership, ACL, link count, all other protected files/parents and all 69 backup
+readbacks remain exact. The writer is unknown. The strict guard stopped before
+apply, and no new baseline or second normalization was created. Preserve the
+current file until the model preference's intended scope is resolved; the old
+Lab plan cannot execute even if deployment scope is confirmed.
+
+WSL's independent read-only continuation audit still matched its exact saved
+plan: clean source `74985d08`, 55 ordinary files, config/state, parents, maintenance,
+identity metadata, candidate and backup manifest. All eight secret targets and
+their parent remain absent. The previous local control socket has expired;
+standard BatchMode access still works. A retained channel must be reestablished
+at the reviewed socket before the unchanged controller's own checks and apply.
+Neither audit performed a configuration or secret write.
+
 The user authorized commit/publication and main landing. Corrected `bf99958`
 passed exact hosted CI/e2e and ordinary acceptance on all five Unix hosts.
 It is the immutable
@@ -872,8 +891,9 @@ all six recipient checks passed. Encrypted source `74985d08` passed its exact
 hosted gates and is published. Mac is the accepted secret canary with actual
 fresh-access evidence; Marlowe subsequently accepted deployment under existing
 authenticated access. Lab and WSL have each completed their separately approved
-single-file normalization; continue their fresh guarded plans without repeating
-force or reusing failed capsules. Continue independent
+single-file normalization. Resolve Lab's later model drift and prepare a fresh
+review; WSL retains its guarded plan with transport renewal required. Do not
+repeat force or reuse failed capsules. Continue independent
 unblocked work under D11, recording actual
 target/app/access outcomes and exceptions without treating fixtures as rollout.
 

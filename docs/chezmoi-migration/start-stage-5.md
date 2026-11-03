@@ -29,9 +29,10 @@ need their applicable exact gates. The user explicitly authorized
 commit, publication and rollout; do not ask again for blanket authority.
 Outcome checkpoint cb7f11a039fbfc00428408e873730701d0aebf9b passed all three
 CI 41613012922 jobs on ci/chezmoi-stage4-outcomes. Inspect actual integration
-HEAD and later outcome commits before proceeding. Main remains at 74985d08 while the
-retained Lab/WSL deployment plans require that exact updater destination.
-Finish or explicitly replace those plans before advancing main; publication
+HEAD and later outcome commits before proceeding. Main remains at 74985d08 while
+the retained WSL deployment plan requires that exact updater destination.
+Lab's later model drift invalidates its old plan. Finish or explicitly replace
+the WSL plan before advancing main; publication
 authorization does not make a stale host binding valid.
 Lab's 59 and WSL's 55 ordinary files are native regular targets; repeat convergence,
 parent preservation, actual updater invocation, old-writer refusal and fresh
@@ -195,6 +196,14 @@ Do not repeat those normalizations or infer routine force authority. Both hosts
 remain in maintenance. Lab's process-observation PermissionError preserved all
 97 file/44 directory bindings; a narrow process-exit guard correction passed
 six tests and independent review, then a new 67-target private review passed.
+That preview is now historical: a later read-only guard found one changed
+native-owned top-level model value in Lab's live Codex config. The file remains
+4140 bytes/0600; all other protected bindings and 69 backup readbacks match.
+The writer is unknown. Preserve that current model until its intended scope is
+resolved, then prepare a fresh review. Never silently rebind the old plan or
+repeat its one-time force exception. WSL's current read-only guard still passes;
+its expired local control socket needs a retained channel through the existing
+verified BatchMode route before execution. Neither follow-up audit wrote to HOME.
 Keep both failed capsules. WSL's fresh continuation bound actual normalization
 and accepted Mac evidence, backed up 57 files and passed its 63-target review.
 Automatic approval review then refused both secret applies before execution,
