@@ -51,6 +51,27 @@ class NativeProvisionTests(unittest.TestCase):
         self.assertIn("H7-stow", result.stdout)
         self.assertNotIn("S4-chezmoi", result.stdout)
 
+    def test_sherlock_plan_uses_static_binary_for_legacy_glibc(self):
+        # The real host has glibc 2.17; the generic v2.74 binary requires 2.34.
+        for host, platform in (("sherlock", "linux-musl"), ("marlowe", "linux"),
+                               ("lab-ubuntu", "linux"), ("wsl-ubuntu", "linux")):
+            with self.subTest(host=host):
+                result = subprocess.run(
+                    [shutil.which("bash"), "-eu", "-c", '''
+for lib in manifest steps-common steps-archives; do
+    . "$1/lib/bootstrap/$lib.sh"
+done
+bootstrap_init "$1"
+STEPS_HOST=$2 STEPS_ARCH=x86_64
+step_S4_chezmoi_plan
+''', "_", str(ROOT), host], cwd=self.home, env=self.env, text=True, capture_output=True,
+                    stdin=subprocess.DEVNULL, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertRegex(result.stdout, rf"chezmoi_[^ ]+_{platform}_amd64\.tar\.gz")
+                self.assertIn(str(self.home / ".local/bin/chezmoi"), result.stdout)
+                self.assertEqual(list(self.home.iterdir()), [])
+
     def test_native_doctor_does_not_require_stow_or_sync_runtime(self):
         result = self.run_script("doctor.sh", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)

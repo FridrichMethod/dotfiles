@@ -45,7 +45,8 @@ kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitt
 bat-theme	file	https://raw.githubusercontent.com/catppuccin/bat/6810349b28055dce54076712fc05fc68da4b8ec0/themes/Catppuccin%20Mocha.tmTheme	395566f08ceb301b936b91c077690ef94f7aeb651b121553f201c99c2bd4aa77	$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	all	any	core	-
 # chezmoi v2.74.0, pinned 2026-11-02 from the official release checksums.
 # Extract only the executable; no init/apply, installer script or rc edit.
-chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_amd64.tar.gz	1b98a567f726f41540414aea4caf912699d53e248b29ccf8369cf553657b2374	$HOME/.local/bin/chezmoi	wsl-ubuntu,lab-ubuntu,sherlock,marlowe	x86_64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_amd64.tar.gz	1b98a567f726f41540414aea4caf912699d53e248b29ccf8369cf553657b2374	$HOME/.local/bin/chezmoi	wsl-ubuntu,lab-ubuntu,marlowe	x86_64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux-musl_amd64.tar.gz	0fd6400784ad310ef0904d74d99d5d95e7c1d01cfd249b3510c606ca45d6a1d5	$HOME/.local/bin/chezmoi	sherlock	x86_64	core	-
 chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_arm64.tar.gz	bf89495d1aab5e4fa0fc1ba9457837b34ee8dec9b787570f2de3e1c12a5835a5	$HOME/.local/bin/chezmoi	wsl-ubuntu,lab-ubuntu,sherlock,marlowe	aarch64	core	-
 chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_darwin_amd64.tar.gz	3d30cb05efae2f4a68519d6d0e8856765f2b21a0686e66498ee6d2de7707e5e6	$HOME/.local/bin/chezmoi	mac	x86_64	core	-
 chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_darwin_arm64.tar.gz	9d89672a597a9333ab47ea5173fcececb85c04864205686a7aa5699c3d8bd98c	$HOME/.local/bin/chezmoi	mac	aarch64	core	-

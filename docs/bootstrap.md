@@ -59,6 +59,10 @@ or directory at the managed binary destination requires operator judgment.
 No shell rc, native config, marker, auth state or sync environment is created.
 The official release checksum manifest is the integrity source; this does not
 claim independent signature verification. `--check` only reads and probes.
+Sherlock x86_64 selects the official static musl archive: its glibc 2.17 cannot
+load the generic v2.74.0 Linux binary, which requires glibc 2.34. A private
+staged version probe on Sherlock verified the static binary without installing
+a runtime, creating an environment or changing the destination convention.
 
 ### H7-native: Reviewed native configuration handover
 
