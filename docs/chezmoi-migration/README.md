@@ -1,8 +1,10 @@
 # Chezmoi migration handoff
 
 Status: Stage 4 runtime `bf99958` passed exact hosted CI/e2e and actual ordinary
-takeover on accepted hosts. Remaining host, recovery-custody and enrollment gates
-are recorded in [status.md](status.md); Stages 5/6 have not started. Read that record
+takeover on all five Unix hosts. Encrypted source `74985d08` subsequently passed
+its exact CI/e2e gates and reached main; recovery custody is established.
+Remaining host and deployment gates are recorded in [status.md](status.md);
+Stages 5/6 have not started. Read that record
 before starting work. Initial research baseline: `738f619`; consolidation baseline:
 `1a9d30b`. The completed review's old-layout/tool-support plan is now integrated in
 [support-boundary.md](support-boundary.md); do not execute its old standalone prompt.

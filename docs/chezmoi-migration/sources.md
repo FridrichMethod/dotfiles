@@ -51,8 +51,10 @@ custody without exporting the private identity. Subsequent private native
 enrollment generated five host identities locally and eight ciphertexts with six
 recipients each. Actual per-host and retrieved-R checks passed 48 equalities;
 a disposable outsider failed all eight. Keyless candidate fixtures and CI use
-only opaque ciphertext. These checks do not prove issuer/account validity or
-actual deployment; the evidence document records those separate gates.
+only opaque ciphertext. Source commit `74985d08` passed exact CI 41586461636 and
+bootstrap e2e 41586462369 before reaching main. These checks do not prove
+issuer/account validity or actual deployment; the evidence document records
+those separate gates.
 
 Planning references read on 2026-11-01; native evidence added on 2026-11-02.
 Prefer these official sources over third-party migration examples. Live

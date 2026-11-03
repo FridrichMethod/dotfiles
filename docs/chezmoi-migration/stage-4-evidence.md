@@ -1,6 +1,6 @@
 # Stage 4 candidate and actual-host evidence
 
-Date: 2026-11-02 local / 2026-11-03 UTC. This separates accepted runtime and
+Dates: 2026-11-02 through 2026-11-03 local. This separates accepted runtime and
 actual-host evidence from unfinished rollout and secret enrollment. Read [status.md](status.md) and
 [takeover.md](takeover.md) together. Stages 5/6 have not started.
 
@@ -23,8 +23,9 @@ Separate Unix, Windows and provisioning worktrees returned recoverable patches,
 integrated sequentially. The user explicitly authorized commits, publication
 and exact-green main landing. The bridge reached main at `9c1a31f` after all
 required hosted gates. The corrected release `bf99958` subsequently passed its
-own hosted gates and lab ordinary takeover below; credential enrollment remains
-pending. Unrelated work remains preserved, including the separately handed-off
+own hosted gates and lab ordinary takeover below. Encrypted source `74985d08`
+then passed its exact hosted gates and reached main; target deployment remains
+separate. Unrelated work remains preserved, including the separately handed-off
 tmux fix and Windows Terminal preference.
 
 The original main checkout's 13 untracked planning documents were verified
@@ -411,17 +412,17 @@ Only metadata receipts were transferred to the coordinator.
 
 | Host | Actual observation | Takeover outcome / blocker |
 | --- | --- | --- |
-| lab-ubuntu | Main reached exact green `bf99958`; original planning docs and tmux handoff preserved. Verified native binary, refreshed private snapshots, native init, all 59 regular targets and repeated convergence passed | Ordinary canary accepted: shell/fresh SSH/actual updater/old-writer refusal passed, parents preserved, maintenance removed. Secret bootstrap/enrollment pending; retained submodule warning belongs to Stage 6 |
-| mac | Access returned; source was already clean `bf99958`. Current/after-init backups, independent AI review, existing verified Homebrew binary, all 56 regular targets and convergence passed | Ordinary takeover accepted: controlled updater/old-writer refusal and fresh nonmultiplexed SSH passed; shared `.config` 0770 and all parents preserved, maintenance removed. No package installation or operator source fast-forward; no GUI/p10k acceptance |
-| wsl-ubuntu | Fresh clean `9c1a31f` source reached exact green `bf99958`; separate pre/postbridge backups, independent AI review, all 55 regular files and repeated convergence passed | Ordinary takeover accepted: shell/fresh SSH/actual updater/old-writer refusal passed, parents preserved, maintenance removed. Existing 11 tmux prerequisites and retired-submodule warning remain; host identity and eight-file crypto checks passed; deployment pending |
+| lab-ubuntu | All 59 ordinary targets and updater/access accepted. User-approved normalization passed once. After the reviewed process-exit guard correction, fresh 69-file backup and all 67 target previews passed | Secret apply rejected by automatic approval review before execution; specific deployment confirmation pending. Maintenance on, enrollment false. Failed capsules retained; no second normalization. Retired-submodule warning belongs to Stage 6 |
+| mac | Ordinary takeover accepted 56 targets. Secret-canary preparation backed up 58 files before and after the exact `74985d08` fast-forward. After new direct-user approval, actual eight-file deployment and fresh SSH passed | Secret canary accepted: two nonforced applies, empty diff, offline consumer and actual updater passed; 56 ordinary files and shared `.config` 0770 preserved. Maintenance off, enrollment true. No GUI/p10k or credential-server authentication claim |
+| wsl-ubuntu | Ordinary takeover accepted 55 files and updater/fresh SSH. User-approved normalization passed once; fresh continuation bound actual Mac acceptance, retained maintenance, backed up 57 files and passed all 63 target previews | Secret apply rejected by automatic approval review before execution; specific deployment confirmation pending. Maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
 | win | Last checkout preflight: main `7edf12fb5b61b6e6d96703bc67f4521e69501d0c`; 26 targets, 23 exact links and three regular files. Both NoProfile profile paths match. The appended Terminal profile is preserved with equivalent environment-variable prefixes | Not migrated; user deferred the required ordinary-user execution/ACL check. SSH is administrative; bounded automatic de-elevation did not complete the target audit. No task, marker, target or production ACL change |
 | sherlock | Clean `6db67ed` reached exact green `bf99958`; verified static musl installed, private pre/post/current backups, all 54 regular files, empty diff and actual updater passed | Ordinary takeover accepted; parents/cache preserved, maintenance removed and native binding/state retained. Historical postcheck cause unknown; reviewed continuation passed. Identity and eight-file crypto checks passed; kit 0.6 upgrade/site allocation gate deployment; master is not fresh MFA proof |
-| marlowe | Clean `2c177fc` reached exact green `bf99958`; verified native binary, private pre/post backups, all 54 regular files, repeat convergence and actual updater passed | Ordinary takeover accepted; parents preserved, maintenance removed and native binding/state retained. Existing-master access only. Identity and eight-file crypto checks passed; Python 3.11+ and Node consumer prerequisites still gate deployment; native Codex is separate |
+| marlowe | All 54 ordinary files and updater accepted. Native installation job 553033 added 27 runtime packages once; repair job 553043 then corrected 3,342 new file modes with all bytes, original 32 records and parents preserved. Isolated Python 3.14.4, tomllib and Node 26.0.0 passed | Runtime accepted; fresh consumer inspection and 62-target secret deployment remain separate gates. Maintenance off, enrollment false, existing-master access only. Native Codex is separate |
 
 Lab, Mac, WSL, Sherlock and Marlowe ordinary native takeovers are accepted as described
 above, with application and access limits retained. Other hosts are recorded
-independently. Subsequent private cryptographic enrollment is recorded below;
-no secret target deployment has occurred. D11 and explicit publication authority remain in force;
+independently. Subsequent private cryptographic enrollment and accepted Mac
+secret deployment are recorded below. D11 and explicit publication authority remain in force;
 they do not replace exact-candidate CI or concrete host prerequisites.
 Do not relabel an offline/site/token blocker as a successful migration.
 
@@ -490,10 +491,11 @@ not opened. Both clusters subsequently passed all eight with their own local
 identities: 48 private equalities across six recipients. A disposable outsider
 was rejected by all eight. These checks establish cryptographic access and
 byte equality, not issuer validity, expiration, successful account login or
-application/API acceptance. Mac and WSL still have no `.secrets` directory;
-all five host enrollment flags remain false. Both clusters also retain absent
+application/API acceptance. At that checkpoint Mac and WSL had no `.secrets` directory;
+all five host enrollment flags remained false at that cryptographic checkpoint.
+Both clusters also retained absent
 `.secrets` directories and unchanged ordinary/config/state targets. Lab
-maintenance remains active.
+maintenance remained active.
 
 Cluster verification used existing authenticated masters and only lightweight
 native crypto checks. Sherlock transfers used the separately pinned controller's
@@ -522,9 +524,166 @@ Private evidence is retained in
 `/tmp/chezmoi-stage4-secret-enrollment/all-six-production-verification.json`.
 The actual producer manifest is kept outside Git. Synthetic operator tests,
 host metadata receipts and these real decryptions are distinct evidence.
-Source publication still requires a private plaintext/key scan, keyless fixtures
-and exact-green CI/e2e. Deployment then starts with the
-Lab canary before ready Mac/WSL expansion; cluster consumer/site gates remain.
+### Published encrypted source
+
+Commit `74985d08f6ec91391e8f6ba3b54e95d08ad91d44` contains only the eight
+approved ciphertexts, their byte-preserving attribute, source guard and evidence
+updates. A private scan of all 391 working-tree files and all 391 indexed files
+found none of the eight plaintext inputs or private-key material. No scanner
+exclusion was added. Keyless fixtures retain all ordinary seven-role totals with
+enrollment disabled. Local native validation ran 150 methods with 31 Windows
+method skips on Linux; the complete local runner, full pre-commit and independent
+review passed.
+
+All three jobs of
+[CI 41586461636](https://github.com/FridrichMethod/dotfiles/actions/runs/41586461636)
+and all eight jobs of
+[bootstrap e2e 41586462369](https://github.com/FridrichMethod/dotfiles/actions/runs/41586462369)
+passed for that exact commit before local and remote main fast-forwarded to it.
+Lab's fresh 69-file prepublication backup and final metadata guard passed before
+the fast-forward; maintenance remained on. This publication is separate from
+host opt-in, target deployment and account authentication. The immutable supported
+Stow recovery bridge and first accepted ordinary-native release remain `bf99958`.
+
+The first deployment attempt selected Lab as canary; cluster consumer/site gates
+remain. Later ordinary-source metadata checks found Mac
+still clean at `bf99958` and WSL already clean at `74985d08`. WSL's Codex target
+had changed timestamps only, with the same inode, size, mode and ACL; that
+metadata-only check did not establish content equality or attribute the writer.
+A subsequent actual native read-only preview compared all ordinary bytes using
+the existing false config, `/dev/null` state and an absent cache path. Mac's
+56 files all matched. WSL matched 54 of 55; only its Codex config differed,
+1,547 versus 1,556 rendered bytes, with recursively identical TOML keys, types
+and values. Both hosts retained all target/config/state/parent metadata, absent
+secret parents and false enrollment; the cache path remained absent. No config
+bodies left either host. WSL therefore required its own specifically reviewed
+regular-file serialization decision; the Lab proposal did not authorize WSL force.
+A WSL-specific operator bound that actual 55-file metadata inspection, exact
+source, false enrollment and absent secret parent. It prepared fresh target/state
+backups, one targeted normalization, a nonforced repeat and empty diff while
+preserving the other 54 targets. Three focused isolated tests and independent
+review passed. Its separate exception initially awaited approval; the later
+approved execution is recorded below.
+Because Lab's regular-file exception then awaited a decision and Mac passed all 56
+ordinary-byte comparisons, the coordinator selected Mac as the alternate secret
+canary allowed by stage-4-takeover.md. This is an execution-order decision, not
+an accepted deployment. The prepared Mac gate must bind its explicit selection,
+exact green source and six-recipient evidence without inventing a Lab acceptance
+receipt. Expansion still requires an actual accepted canary and fresh access.
+
+Mac subsequently completed the actual prebridge phase: maintenance and worker
+suppression passed, 58 files were privately backed up, and clean source advanced
+from `bf99958` to exact green `74985d08` with an ordinary fast-forward. All 56
+ordinary files, native config/state, parent permissions and existing verified
+Brew launcher binding were preserved. A fresh 58-file postbridge backup and
+native review then passed the exact 64-target set, all 56 ordinary byte matches,
+all eight approved secret equality checks and typed config preservation. With
+the secret parent still absent, no successful file dry run is claimed.
+
+Automatic approval review rejected the final Mac apply twice before process
+creation. Its stated reason was that the earlier direct-user rollout authority
+appeared only as coordinator-relayed context to that reviewer. The second
+submission provided the existing scope, custody and exact-green evidence; it was
+also refused. The coordinator requested a specific direct approval for this
+already-prepared Mac operation, without reopening recipient scope or blanket
+D11 authority. No third attempt or alternate execution route was used. At this
+checkpoint Mac maintenance remained on, enrollment false and `.secrets` absent;
+the old SSH channel and both backups remained available. No managed deployment
+or fresh-access acceptance is claimed.
+
+Before the second policy submission, independent inspection found a separate
+controller-only transport-failure gap. The corrected wrapper attempts the same
+pinned maintenance-restoration path after SSH timeout, unsuccessful exit or
+unreadable receipts and reports restoration only when confirmed. Ten isolated
+failure cases passed. Native deployment code, force=false and actual plan
+bindings were unchanged; these tests are not host execution evidence.
+
+### Accepted Mac secret canary
+
+The user subsequently approved the exact prepared Mac deployment directly.
+A fresh metadata-only check confirmed clean `74985d08`, all retained bindings,
+maintenance on, false enrollment, absent secret parent and the held SSH channel.
+The same reviewed controller then passed automatic approval review and executed;
+no alternate route or unreviewed retry was used to evade the earlier denials.
+
+Actual native deployment enabled the local enrollment flag, created only the
+0700 secret parent and eight 0600 files, preserved all 56 ordinary files and
+existing parent permissions, passed two nonforced applies and an empty full diff,
+and verified offline consumer readability. The real updater performed one
+fast-forward-only pull and skipped its second same-session invocation. Fresh
+nonmultiplexed SSH passed. The coordinator then checked the actual apply/fresh
+receipts and revalidated persisted post-apply bindings before writing acceptance.
+Mac is the accepted secret canary; maintenance is off and enrollment is true.
+These checks do not test the remote credential issuer or an authenticated API.
+The old access channel and both private backups remain available.
+
+### Lab secret preview and one-file serialization gate
+
+The first post-publication private preview stopped after 12 native commands:
+the strict ordinary-file comparison found that `$HOME/.codex/config.toml` was
+4,131 bytes while native rendering produced 4,140 bytes. Recursive TOML
+comparison established identical keys, types, values, arrays and nesting. The
+trimmed-line multiset was identical; indentation, one blank line and assignment
+order differed. The historical writer is unknown. No live config, target or
+native state changed during this refused preview. Lab maintenance stayed on,
+and the failed private review capsule and fresh 69-file backup were retained.
+
+A private copy using the actual original/canonical bytes reproduced native
+nonforce conflict refusal with exit 1. A separate isolated proof used exactly
+one targeted force operation, preserved all typed values and mode 0600, and
+passed an unchanged nonforce repeat and empty diff. It accessed no production
+HOME. A small one-file operator was then prepared with fresh durable target/state
+backups, unchanged guards for the other 66 managed files and five excluded auth
+siblings, one-force-only enforcement, and no retry or rollback. Three isolated
+native/guard tests and independent review passed. Those are preparation results,
+not a live normalization or deployment outcome.
+
+The original Stage 4 specification permits force only for individually reviewed
+backed-up link conversions. This target is a regular file, so the coordinator
+requested a separate explicit exception for this exact serialization change.
+Normal update and secret deployment remain nonforced; the strict ordinary-byte
+canary guard remains intact. Any accepted normalization must precede a fresh
+canary plan in a new capsule, never a blind retry of the failed preview.
+
+The user later approved the exact Lab and WSL one-file exceptions separately.
+Both executed once and passed fresh target/state backups, recursive typed-value
+preservation, a nonforced repeat and empty targeted diff. Lab preserved its other
+66 files and five excluded auth siblings; WSL preserved the other 54 ordinary
+files and left its secret parent absent. Neither operation enabled secrets, and
+both retained maintenance. No repeat normalization is authorized by that result.
+
+Lab's newly inspected 67-target preview then stopped at process observation:
+PermissionError while enumerating one candidate process's `/proc/PID/fd`.
+All 69 private backups and the disabled config candidate completed; no enabled
+native candidate command, target cat, dry run or apply ran. All 97 protected file
+and 44 directory bindings still matched. That PID was absent at the subsequent
+bounded check, which does not establish the historical reason for EACCES.
+The failed capsule is retained while the process-exit case is diagnosed; live
+inaccessible candidate processes must still fail closed.
+
+A separate narrow guard variant now rechecks metadata after PermissionError
+and skips only confirmed vanished, zombie or out-of-scope processes. Live
+same-user and uninspectable candidates still refuse. Six focused synthetic
+methods and independent review passed. Original operators and both failed
+capsules remain immutable. A fresh plan differed only in the reviewed helper
+binding, with all other files and 44 directories unchanged. The new actual Lab
+review passed 69 fresh backups, all 67 native target equalities and an empty
+eight-target dry run. No further normalization was performed.
+
+WSL separately retained its original normalization maintenance marker, bound
+the actual accepted Mac receipt and took a fresh 57-file current-green backup;
+source was already `74985d08`, so no fast-forward is claimed. Its actual private
+review passed the exact 63 targets, all 55 ordinary equalities and eight approved
+secret equalities, preserving live config/state and the absent secret parent.
+Four focused continuation tests and independent review passed. Its controller
+retains the accepted Mac transport-failure restoration behavior.
+
+Automatic approval review then rejected both concrete Lab and WSL secret-apply
+commands before process creation. It recognized the recent single-file
+normalization approvals but did not recognize earlier D11/scope authority as
+covering these deployments. Exact additional deployment confirmations were
+requested separately. Neither command was retried or rerouted; both hosts keep
+maintenance on and enrollment false while those confirmations are pending.
 
 ### Canceled password-manager provisioning and cluster consumers
 
@@ -556,8 +715,14 @@ precede the canonical foreground `sync-payloads kit` operation. The committed
 Sherlock overlay requires an appropriate allocation. The user approved the
 separate local pinned sherlock-kit v0.6.0 dependency, which was installed in its
 own controller project; commit 09a37281 and local/remote doctor passed. The new
-project's status is empty, not proof that the user has no unrelated jobs. The
-user also explicitly authorized submitting a new job; an existing job ID is
+project's status is empty, not proof that the user has no unrelated jobs. A later
+supported broader query through the same approved pinned executable found one
+running current-user allocation belonging to another project. Before any reuse,
+the exact-ID query showed that it had independently ended. Spare resources and
+membership were never established, and no helper entered, modified or signaled
+that workload. No investigation of the unrelated job's failure was performed.
+The user also
+explicitly authorized submitting a new job; an existing job ID is
 optional and no further submission approval is pending. Current numbered site
 Rule 10 requires at least ten minutes of useful work per job. No qualifying
 bundle or suitable existing allocation is established, so no job, remote
@@ -569,8 +734,79 @@ be submitted merely to bypass the site's useful-work batching rule.
 Actual controller and rule evidence:
 `/tmp/chezmoi-sherlock-kit-provisioning-result.md`. Marlowe's separate bounded
 existing-login repair proposal is `/tmp/chezmoi-marlowe-runtime-repair-plan.md`;
-it preserves the 32 package records and needs an allocation plus a reviewed
-solver plan, not environment recreation. No solver transaction has been applied.
+it required preserving the 32 package records and an allocation plus a reviewed
+solver plan, not environment recreation. No package transaction had been applied
+at that initial proposal checkpoint.
+The subsequent direct-prefix check confirmed Python and Node packages/binaries
+absent from that exact login prefix, with all 32 records unchanged. The initial
+missing-Slurm result came from a sanitized subprocess that dropped the site's
+observed module paths; restoring only those paths resolved it. Actual Slurm
+queries and `sbatch --test-only` accepted a CPU-only request under the observed
+default basic-project account. A reviewed bounded allocation-only solver plan
+uses one CPU, 2 GiB and a ten-minute cap, exact existing-package pins, an isolated
+cache and explicit public conda-forge configuration. That preparation alone did
+not establish a successful solve or package installation.
+The first actual allocation stopped before the solver because a binary identity
+check compared client-local NFS device numbers across nodes. A separate
+diagnostic established that this was the sole differing field: all 32 package
+records, the other eight stat fields and exact binary bytes matched. The corrected
+binding preserves full stat checks within each node and exact bytes across nodes.
+The subsequent solver completed successfully in 15 seconds: 27 additions,
+zero removals and no replacement of an existing package name, selecting Python
+3.14.4 and Node.js 26.0.0 under the declared lower bounds. All existing records,
+history, runtime paths and parent metadata remained unchanged. No installation
+had occurred at that checkpoint. Native micromamba integrity flags alone do not
+refuse preexisting destination files, so a separately reviewed preparation job
+downloaded and SHA256-verified the exact 27 archives, then used native extraction
+in private staging. Job 552957 completed 0:0 in 27 seconds with one CPU, 2 GiB
+and no GPU. All 55 native commands succeeded with empty stderr. Its inventory
+covered 7,355 package and generated destinations: zero existing collisions,
+zero package link/unlink scripts and zero native trash/message/lock objects.
+All original 32 package records, history, watched runtime paths and parent
+identities/ACLs remained unchanged. This was extraction and inspection only;
+installation had not yet occurred at that preparation checkpoint. The exact installation
+proposal is retained in `/tmp/chezmoi-marlowe-runtime-install-proposal.md`.
+
+The subsequent exact native installation ran once in allocation job 553033.
+It used only the 27 verified local archives, an independent private cache,
+`--always-copy`, `--no-pyc`, no solver and no package scripts. Native installation
+returned zero with empty stderr, creating 59 package records while preserving
+the original 32. The old history bytes were retained with an append. The job
+then failed its regular-file permission postcheck before Python/Node probes;
+that failure is not authority to repeat the successful installation.
+
+Read-only diagnosis found 3,342 new regular files with real group-write access:
+3,132 at 0664 and 210 at 0775. Seventeen upstream archives carry those same
+permissions; native copying preserved them despite umask 077. The existing
+prefix is 0755 and HOME 0750, so group traversal exists; this is not the earlier
+owner-only NFS mask projection. All 759 new directories are 0700, all 163
+intrinsic links match, and all 406 suppressed pyc paths are absent. Original
+records, existing parents and outside source/config/trust/secret metadata remain
+unchanged, apart from the already-proven client-local device-number difference.
+No native trash/message/lock object remained. An exact new-file-only repair was
+prepared to remove write bits from those 3,342 bound files while retaining
+their bytes and executable bits, without directory or old-file chmod, reinstall
+or manual rollback.
+
+The first repair staging check stopped before directory creation or job submission
+because the literal filesystem root `/` has different inodes on login and compute
+nodes. Read-only diagnosis confirmed that all NFS ancestor inodes, modes, owners
+and ACLs matched; only their already-proven client-local device numbers differed.
+A narrow correction accepts only the exact root-owned 0755, empty-ACL shape for
+the initial cross-node `/` check, then binds full node-local identity. NFS inode
+and full per-file checks remain unchanged. Eleven isolated tests and independent
+review passed before the corrected staging was released.
+
+Actual repair job 553043 completed 0:0 in 26 seconds: 3,132 files changed from
+0664 to 0644 and 210 from 0775 to 0755. No directory changed. All 7,355 target
+states/content hashes, 59 records, original 32 records, post-install history,
+163 links, 406 absent pyc paths and parent/outside bindings passed. Private progress
+records preserve every original and resulting file identity. The isolated absolute
+login-prefix probes passed Python 3.14.4, tomllib and Node 26.0.0 with empty stderr.
+No installer, account or credential call ran in this repair. The actual receipt
+and reviewed script hashes were independently checked before runtime acceptance.
+Fresh consumer inspection and secret deployment remain separate gates; existing
+master access does not establish fresh cluster MFA.
 
 ## Remaining Stage 4 gates and Stage 5 handoff
 
@@ -579,8 +815,12 @@ passed exact hosted CI/e2e and ordinary acceptance on all five Unix hosts.
 It is the immutable
 supported Stow recovery bridge and first accepted ordinary-native release;
 see support-boundary.md. Custody and all five host identities are established;
-all six recipient checks passed. Finish gated source publication before deploying
-the prepared ciphertext. Continue other unblocked homes under D11, recording actual
+all six recipient checks passed. Encrypted source `74985d08` passed its exact
+hosted gates and is published. Mac is the accepted secret canary with actual
+fresh-access evidence. Lab and WSL have each completed their separately approved
+single-file normalization; continue their fresh guarded plans without repeating
+force or reusing failed capsules. Continue independent
+unblocked work under D11, recording actual
 target/app/access outcomes and exceptions without treating fixtures as rollout.
 
 [Stage 5](stage-5-ecosystem.md) and its [fresh-session prompt](start-stage-5.md)

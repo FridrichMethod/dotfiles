@@ -7,7 +7,9 @@ takeover, repeat convergence and controlled automatic-update activation. Lab,
 Mac and WSL passed fresh ordinary SSH; clusters used existing authenticated masters and
 do not claim new MFA access.
 Their native ownership/state remain. Maintenance was removed at ordinary
-acceptance; Lab subsequently reentered maintenance for secret enrollment. Existing WSL
+acceptance. Mac subsequently accepted its eight-file secret deployment and left
+maintenance again; Lab and WSL currently remain in maintenance after their
+approved one-file Codex normalizations. Existing WSL
 tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
 from ordinary-file acceptance. Cluster consumer prerequisites remain separate
 from accepted ordinary targets. The user explicitly deferred Windows' ordinary-user execution/ACL
@@ -17,6 +19,8 @@ the corrected release `bf99958` passed all three CI 41567805090 jobs and all eig
 bootstrap e2e 41567805363 jobs before main landing and actual ordinary takeover.
 It is the supported Stow recovery bridge and first accepted ordinary-native
 release; source/runtime retirement has not started.
+Encrypted source `74985d08` subsequently passed exact CI 41586461636 and bootstrap
+e2e 41586462369 before reaching main. This does not itself enable host enrollment.
 
 ## Authorization and scope
 
@@ -157,9 +161,8 @@ usable device. Independent R was generated privately on Mac, and the user
 reported both local retrieval checks PASS, then confirmed full retrieval on
 another device. Custody and all five host identities are established. Eight
 production inputs are encrypted for the exact six recipients, and each host
-plus retrieved R passed all-eight recovery. Only ciphertext enters source;
-publication/deployment remain
-pending. Keep host private
+plus retrieved R passed all-eight recovery. Only ciphertext entered the published
+`74985d08` source; actual deployment remains a separate host gate. Keep host private
 identities local and export only public recipients.
 Mutable Codex auth remains excluded; SSH stays ordinary. Bitwarden was canceled
 and all five task-installed clients removed; Sherlock never installed one.

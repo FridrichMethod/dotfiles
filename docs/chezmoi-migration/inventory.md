@@ -13,8 +13,10 @@ state are local metadata, not new managed targets. Eight separately approved
 encrypted source leaves now live under `home/private_dot_secrets`; they are not
 additional legacy package rows. With local enrollment enabled, complete role
 totals are 49/64/63/67/62/62/26 in the same order. Without it, the ordinary totals
-above remain unchanged. All five production flags are currently false; candidate
-publication and actual deployment remain separately gated.
+above remain unchanged. Mac's production flag is enabled after actual acceptance
+of all 64 targets; the other four flags remain false at this checkpoint. The
+encrypted source passed exact CI/e2e and reached main at `74985d08`; remaining
+host deployments stay separately gated.
 The exact-green `bf99958` release has actual ordinary acceptance for lab's 59,
 Mac's 56, WSL's 55 and each cluster's 54 targets; this does not change source counts. Per-host backups,
 parent preservation, application limits and unfinished hosts are recorded in

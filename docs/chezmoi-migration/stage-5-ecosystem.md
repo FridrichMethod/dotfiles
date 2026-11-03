@@ -31,12 +31,29 @@ targets subsequently passed actual native takeover and updater/access checks.
 Sherlock and Marlowe each accepted 54 ordinary targets and actual updater checks
 under existing-master access. Mac subsequently accepted 56 targets, actual
 updater activation and fresh nonmultiplexed SSH. Maintenance is removed on all
-five at ordinary acceptance; Lab later reentered maintenance for secret enrollment.
+five at ordinary acceptance. Mac later accepted the eight-file secret canary and
+left maintenance again; Lab and WSL remain in maintenance after their approved
+one-file Codex normalizations.
 Windows' deferred ordinary-user check, secret deployment and cluster consumer
 prerequisites remain separately recorded gates. Read the current Stage 4 record in
 [status.md](status.md), the current aggregate diff and its saved patch before
 creating worktrees. Temporary ledgers/review logs supplement the repository
 record; they do not replace it or authorize publication.
+The Lab and WSL typed-equivalent Codex serialization differences were each
+normalized once after separate direct-user approvals. Both passed typed-value
+preservation, nonforced repeat and empty diff; this is not routine-force authority.
+Lab's subsequent preview stopped on process observation with every binding
+unchanged; the narrow process-exit correction passed six tests and independent
+review, then a new 67-target preview passed. WSL's fresh 63-target review also
+passed, binding actual Mac acceptance and its normalization result. Automatic
+approval review then refused both secret applies before execution and required
+specific deployment confirmations, which remain pending. Preserve the failed
+capsules and do not repeat either one-file force operation.
+Mac was selected as the permitted alternative. After private backups, exact
+source fast-forward, native review and a new direct-user approval resolving
+automatic-review denials, all eight files, nonforced convergence, offline consumer,
+actual updater and fresh SSH passed. Mac is the accepted secret canary; remaining
+hosts require fresh plans binding that actual acceptance and their current state.
 
 Stage 4 adds native-default provisioning, explicit legacy compatibility flags,
 per-home native/maintenance guards, thin native login update adapters and isolated
@@ -73,9 +90,10 @@ for lab, Mac, WSL, Sherlock and Marlowe plus recovery recipient R. Apple Passwor
 is selected; local retrieval checks were reported PASS and independent full
 retrieval on another device was confirmed. All five host identities now exist
 locally, and eight production inputs are encrypted for the exact six recipients. All five host
-identities and retrieved R each decrypt all eight; only ciphertext enters source.
-Publication and deployment
-remain pending. Do not reopen the approved scope or custody choices. Keep private
+identities and retrieved R each decrypt all eight; only ciphertext entered source
+commit `74985d08`, which passed exact CI 41586461636 and bootstrap e2e 41586462369
+before reaching main. Deployment remains a separate host gate. Do not reopen
+the approved scope or custody choices. Keep private
 names/values out of this document.
 SSH configuration remains ordinary configuration; no new private SSH target is
 implied. Preserve app-written auth, existing trust and recovery access.

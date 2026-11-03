@@ -22,6 +22,13 @@
   gate, directory-mode correction and the user's exact tmux handoff. The two
   matching main edits were deliberately staged before the fast-forward; no user
   work was discarded. Inspect subsequent working-tree changes before carrying.
+- Published encrypted-source release:
+  `74985d08f6ec91391e8f6ba3b54e95d08ad91d44`, after all three jobs of
+  [CI 41586461636](https://github.com/FridrichMethod/dotfiles/actions/runs/41586461636)
+  and all eight jobs of
+  [bootstrap e2e 41586462369](https://github.com/FridrichMethod/dotfiles/actions/runs/41586462369)
+  passed. Local and remote main fast-forwarded to that exact commit. Only the
+  eight approved ciphertexts entered source; target deployment is a separate gate.
 - Implemented migration candidates: Stage 1 isolated foundation, Stage 2 ordinary
   source, Stage 3 native AI configuration and Stage 4 compatibility/takeover.
   The corrected runtime passed hosted validation and the lab ordinary-file
@@ -30,7 +37,8 @@
 - Lab ordinary takeover is accepted: 59 regular targets, repeat convergence,
   unchanged parent modes, shell and fresh SSH checks, actual automatic native
   update and old-writer refusal passed. Native ownership/state remain; maintenance
-  is removed. WSL's 55 ordinary files and updater/access checks also passed;
+  was removed at ordinary acceptance and later reenabled for secret enrollment.
+  WSL's 55 ordinary files and updater/access checks also passed;
   its preexisting tmux prerequisites remain missing. Sherlock and Marlowe each
   accepted 54 ordinary files and actual updater checks, with maintenance removed;
   access used existing authenticated masters, not fresh MFA. Mac subsequently
@@ -50,8 +58,10 @@
   for exactly those five recipients plus R. Lab, Mac, WSL and retrieved R have
   each decrypted all eight with private equality checks, and both clusters then
   passed the same checks: 48 equalities across six recipients. A disposable
-  outsider failed all eight. Only the verified ciphertexts enter the candidate;
-  source publication is pending. No secret target deployment is enabled.
+  outsider failed all eight. Only the verified ciphertexts entered `74985d08`;
+  source publication passed its exact gates. Mac subsequently accepted all eight
+  deployed secret targets, offline consumer checks, updater and fresh SSH.
+  The other four host enrollment flags remain false at this checkpoint.
   See [secrets and SSH](secrets-and-ssh.md).
 - Eight static Claude files are approved for lab, Mac, WSL, Sherlock and Marlowe
   plus recovery recipient R. Mutable Codex auth stays excluded and SSH stays
@@ -59,8 +69,9 @@
   device; R was generated privately on Mac. The user reported local recipient
   matching and retrieved-R-only challenge PASS, then explicitly confirmed full
   retrieval of the saved item on another device. Custody and host bootstrap are
-  established. Lab is temporarily in maintenance for secret enrollment; ordinary
-  acceptance above remains valid, and the other four Unix homes remain active.
+  established. Mac secret-canary acceptance restored its automatic updates.
+  Lab and WSL are temporarily in maintenance after their separately approved
+  one-file Codex normalizations; ordinary acceptance above remains valid.
   All five task-installed
   Bitwarden clients were removed; Sherlock never had one installed.
 - Native chezmoi executables tested: official v2.74.0 Linux amd64, Darwin arm64
@@ -112,15 +123,16 @@ before the main fast-forward.
 | 1 | Implemented; Linux/macOS/Windows probes and independent review | No real HOME takeover or fleet migration | 23 probes; Windows one Unix-TZ skip; inventory and CI integration |
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
-| 4 | Corrected runtime `bf99958` passed exact CI/e2e and reached main; eight encrypted source leaves now prepared | All five Unix ordinary takeovers accepted; all six recipients verified against all eight files; secret publication/deployment, cluster consumer readiness and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
+| 4 | Corrected runtime `bf99958` and encrypted source `74985d08` each passed exact CI/e2e and reached main | All five Unix ordinary takeovers accepted; all six recipients verified against all eight files; secret deployment, cluster consumer readiness and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Not started | Depends on integration scope | None |
 | 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
 
 ## Decisions and open choices
 
 Stage 4 integration is `/tmp/dotfiles-chezmoi-stage4-integration` on
-`chezmoi-stage4-integration`, with accepted runtime `bf99958` and subsequent
-operational-record updates. Stages 1-4 are committed through that release; do not replay the old
+`chezmoi-stage4-integration`, with accepted runtime `bf99958`, encrypted source
+`74985d08` and subsequent operational-record updates. Stages 1-4 are committed
+through the encrypted-source release; do not replay the old
 whole-aggregate `/tmp/chezmoi-stage4-candidate.patch` over this HEAD. The original
 Stage 3 coordinator and earlier patches remain historical recovery evidence.
 Inspect all staged, unstaged and untracked changes before carrying the pending
@@ -697,12 +709,12 @@ widening known 0600 files; this is a local choice, not a global shell-umask poli
 
 | Host | Current actual state | Remaining gate |
 | --- | --- | --- |
-| lab-ubuntu | 59 ordinary regular files, private backups, two AI reviews, repeat convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed. Native ownership/state present; maintenance reenabled for secret enrollment | Host identity and eight-file crypto checks passed; source publication/deployment pending. Existing retired-submodule warning retained for Stage 6; no GUI/auth acceptance claim |
-| mac | 56 ordinary regular files, fresh current/after-init backups, independent AI review, preserved parents including root-owned `.config` 0770, convergence, actual updater/old-writer refusal and fresh nonmultiplexed SSH passed; maintenance removed | Existing verified Homebrew binary reused without installation. Source was already clean `bf99958`; no operator pre-fast-forward backup claim. Non-TTY startup is not GUI/p10k acceptance; host identity and eight-file crypto checks passed; deployment pending |
-| wsl-ubuntu | 55 ordinary regular files, both private backups, independent AI review, convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed; maintenance removed | Existing 11 tmux plugin prerequisites and retired-submodule warning remain; no unrelated installs or tmux/GUI validation. Host identity and eight-file crypto checks passed; deployment pending |
+| lab-ubuntu | 59 ordinary targets accepted. User-approved one-file normalization passed once. After the reviewed process-exit guard correction, a fresh secret review passed 69 backups, all 67 target equalities and an empty eight-target dry run | Automatic approval review rejected secret apply before execution, recognizing only the recent normalization approval. Specific deployment confirmation pending; maintenance on, enrollment false. Failed capsules, 66 other files and five excluded auth siblings preserved; no second force |
+| mac | Secret canary accepted on exact `74985d08`: eight files 0600 in a new 0700 parent, 56 ordinary files unchanged, two nonforced applies, empty diff, offline consumer checks, one updater pull and fresh nonmultiplexed SSH passed | Persisted post-apply bindings rechecked before acceptance; maintenance off, enrollment true. Shared `.config` 0770 preserved. Earlier automatic-review denials were resolved by a new direct-user approval; no GUI/p10k or credential-server acceptance claim |
+| wsl-ubuntu | 55 ordinary targets accepted. User-approved normalization passed once. Fresh continuation bound actual Mac acceptance and normalized state, retained maintenance, backed up 57 files and passed all 63 native target equalities | Automatic approval review rejected secret apply before execution, recognizing only the recent normalization approval. Specific deployment confirmation pending; maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
 | win | 26-target metadata preflight; 23 exact links and three regular files. Terminal preference retained | User explicitly deferred ordinary-user execution/ACL check; no target/task/production ACL change or takeover |
 | sherlock | Verified official static musl installed; clean `bf99958`, 54 reviewed regular targets, preserved parents/cache layout, repeat convergence and actual updater/old-writer refusal passed. Maintenance removed; private state/binding retained | Historical postcheck interruption has unknown cause; reviewed bounded continuation passed with current-state backup. Existing master is not fresh MFA proof. Kit 0.6 upgrade/allocation gates secret deployment; identity and eight-file crypto checks passed |
-| marlowe | Clean `bf99958`, 54 reviewed regular targets, preserved parents, repeat convergence and actual updater/old-writer refusal passed; maintenance removed, state/binding retained | Existing-master access only. Kit 0.7 is present but actual login Python is 3.10.12, below launcher's 3.11 floor; the Node runtime for helpers is missing and native Codex is absent from inspected PATH. Identity and eight-file crypto checks passed; consumer prerequisites still gate deployment |
+| marlowe | 54 ordinary targets and updater accepted; maintenance off. Allocation job 553033 installed 27 runtime packages once, producing 59 records and preserving original 32. Job 553043 then repaired exactly 3,342 new file modes and passed all content/parent checks plus isolated Python 3.14.4, tomllib and Node 26.0.0 probes | Runtime accepted; fresh consumer inspection and the 62-target secret deployment plan remain pending. No reinstall, directory chmod or old-file change. Existing-master access only; secret enrollment remains false. Native Codex is a separate absent prerequisite |
 
 Apple Passwords custody is chosen and second-device sync is confirmed. The
 private handoff generated independent R on Mac. The user reported
@@ -712,8 +724,8 @@ custody gate without exporting the key. R alone must recover all eight approved 
 encrypted for the five host public recipients plus R; host private identities
 never leave their hosts. Mutable Codex auth remains local, and SSH snippets remain
 ordinary. All five host identities and eight private production ciphertexts now
-exist; retrieved R alone passed actual eight-file recovery. Publication and
-deployment have not yet occurred. Bitwarden was canceled:
+exist; retrieved R alone passed actual eight-file recovery. Encrypted source
+`74985d08` is published; actual deployment remains a separate gate. Bitwarden was canceled:
 all five task-installed clients were removed, Sherlock never installed one, and
 no Bitwarden installation remains planned. A separate, concrete proposal for a
 local pinned sherlock-kit v0.6.0 controller received the required dependency
