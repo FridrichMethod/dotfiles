@@ -85,8 +85,11 @@ framework or Oh My Tmux is needed.
 The native fallback uses the same Mocha colors without requiring any plugin:
 transparent status background, mauve active pane borders, centered windows
 and PREFIX/COPY/ZOOM indicators. On tmux 3.2+, Catppuccin adds rounded window
-tabs and Nerd Font status capsules matching WezTerm and Kitty. The status line
-shows the session, directory and host; CPU/RAM appear when available, and
+tabs and Nerd Font status capsules matching WezTerm and Kitty. Window caps use
+explicit foreground colors and the default background, avoiding upstream's
+invalid `fg=none` styles with a transparent status line. Reloading the config
+updates both current and inactive window caps without restarting sessions.
+The status line shows the session, directory and host; CPU/RAM appear when available, and
 battery appears only on a supported battery-powered host. Metrics describe
 the host running tmux, not a particular process or scheduler allocation.
 CPU/RAM jobs forward to tmux-cpu with a private 0700 cache under
