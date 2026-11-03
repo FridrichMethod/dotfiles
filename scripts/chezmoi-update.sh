@@ -76,7 +76,9 @@ _dotfiles_native_update() (
     # native state; error-on-conflict alone can silently adopt/overwrite them.
     # Transport timeouts bound normal network failures; builtin age and closed
     # stdin avoid unlock prompts. Native output is not a secret-redaction boundary.
-    "$_df_chezmoi" "$@" update --apply --recurse-submodules=false </dev/null >/dev/null 2>&1
+    # Preserve shared parent modes. Missing parents require reviewed operator
+    # preparation before an unattended update can apply their children.
+    "$_df_chezmoi" "$@" update --apply --exclude=dirs --recurse-submodules=false </dev/null >/dev/null 2>&1
 )
 
 if ! _dotfiles_native_update; then

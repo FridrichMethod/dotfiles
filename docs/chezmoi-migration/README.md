@@ -164,8 +164,9 @@ cannot repair an auto-pull race retroactively. Follow the fleet rollout order.
    tmux changes in `738f619`, not blindly on `origin/main`.
 3. These handoff files may initially be uncommitted. A worktree created from HEAD
    will not contain them. Read them first, then carry the complete required
-   candidate diff and new files into the integration worktree. Stages 1-4 are
-   currently uncommitted, not documentation alone. Never stash, discard or
+   candidate diff and new files into the integration worktree. Stages 1-4 now
+   exist in the committed bridge plus follow-up changes; inspect status.md and
+   the complete current diff instead of replaying a historical patch. Never stash, discard or
    indiscriminately copy unrelated changes. Commit only with active authorization.
 4. Use one integration worktree owned by the coordinator and one separate branch
    and worktree per write-capable subagent. Never have two writers in one checkout.

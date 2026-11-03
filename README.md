@@ -10,7 +10,7 @@ Secret enrollment is explicit and encrypted; mutable auth/runtime state stays lo
 
 Clone once per home/platform. Native source selection uses explicit local
 `[data].host`; the checkout remains available for updates and literal source reads.
-For the uncommitted candidate's release/rollout gates, read the
+For the candidate's release/rollout gates and actual host outcomes, read the
 [migration status](docs/chezmoi-migration/status.md).
 
 ```sh
@@ -28,6 +28,9 @@ native path explicitly provisions verified chezmoi 2.74.0+ and creates no sync
 venv. Follow the HUMAN blocks, then the
 [native initialization/takeover procedure](docs/chezmoi-migration/takeover.md).
 Existing homes require ownership review and private backups before first apply.
+File apply and login updates use `--exclude=dirs` to preserve existing shared
+parent permissions. Prepare only inspected missing directories through the
+native directory-only procedure; plain apply can change existing parent modes.
 
 For an explicitly retained legacy Stow home only:
 
@@ -115,7 +118,7 @@ or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
 ## Auto-update Hooks
 
 After native handover, interactive login checks once per session and calls
-chezmoi update with explicit paths, fast-forward-only Git, closed stdin and
+chezmoi update with explicit paths, `--exclude=dirs`, fast-forward-only Git, closed stdin and
 conflict handling. It refuses dirty source, missing/empty native state and OneDrive
 source writes; failures warn and leave the shell usable. Unmarked homes retain
 the legacy updater in the [update contract](docs/update-contract.md). A persistent

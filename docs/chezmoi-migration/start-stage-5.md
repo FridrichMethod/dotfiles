@@ -1,28 +1,35 @@
 # Fresh-session prompt: Stage 5
 
 ```text
-Implement only Stage 5 of the chezmoi migration. Do not restart completed
-Stages 1-4, treat incomplete Stage 4 gates as passed, or perform Stage 6 source/
-runtime retirement. Read docs/chezmoi-migration/status.md first and distinguish
+Implement only Stage 5 of the chezmoi migration when the current stage handoff
+permits it. Do not restart completed Stages 1-3 or the Stage 4 bridge, treat
+incomplete Stage 4 operational/candidate gates as passed, or perform Stage 6
+source/runtime retirement. Read docs/chezmoi-migration/status.md first and distinguish
 candidate code, actual native fixture results, hosted validation and real hosts.
 
 Start by inspecting HEAD, branch, status, the full staged AND unstaged diff,
 untracked task files and worktrees at /tmp/dotfiles-chezmoi-stage4-integration,
-branch chezmoi-stage4-integration. Its baseline is 1a9d30b. This is an uncommitted
-aggregate carrying all Stages 1-4, not a committed branch tip. A worktree made
-from bare HEAD loses the entire implementation. Preserve subsequent user work;
-read the final status record for the complete backup patch and verify it against
-the current aggregate before use. Carry all required tracked and untracked
-candidate files to the new integration worktree, validate parity, and retain a
-recoverable patch. Never reset/stash/discard or overwrite unrelated edits.
+branch chezmoi-stage4-integration. Stages 1-4 are committed through published
+bridge 9c1a31f. Integration HEAD c4412a5 also contains local 77bb03e (Sherlock
+static musl artifact) and c4412a5 (portable Terminal preference and controlled
+updater activation). Carry the current pending tracked/untracked changes as well
+as the committed source when creating another worktree; a HEAD-only copy omits
+the newer directory-mode, five-host secret-scope and tmux candidate changes.
+Do not replay the old whole-aggregate patch over this HEAD. The user's two-file
+tmux handoff is imported into the candidate, with originals preserved in main's
+checkout pending coordinated landing. Validate parity and keep a recoverable
+patch. Never reset/stash/discard or overwrite unrelated edits.
 
-At handoff no candidate commit, hosted CI/bootstrap-e2e publication or real-home
-migration has occurred. Do not invent release hashes or infer commit/push/landing
-authority from D11 or this prompt. Prepare concrete reviewed changes first and
-follow active authorization and exact-green-candidate repository gates. The
-historical CI runs at 1a9d30b prove none of this candidate. D11 still authorizes
-six-host operations after applicable checks, without another blanket rollout
-question; specific auth/privilege/site/ownership blockers remain.
+Bridge 9c1a31f passed all three jobs of CI 41558979663 and all eight jobs of
+bootstrap e2e 41558979671 and reached local/remote main. Later commits and pending
+candidate changes need their own exact gates. The user explicitly authorized
+commit, publication and rollout; do not ask again for blanket authority.
+Lab has maintenance, verified native binary, 59 private snapshots and native
+init, but no managed target apply or native ownership marker: the canary stopped
+at shared-directory permission changes. Other Unix hosts have not been taken
+over. The user explicitly deferred Windows' ordinary-user execution/ACL gate;
+do not retry automatic de-elevation or claim Windows acceptance. Preserve
+specific auth/privilege/site/ownership boundaries and unfinished recovery custody.
 
 Read AGENTS.md and docs/chezmoi-migration/{README,status,inventory,sources,
 stage-3-native-config,stage-4-takeover,takeover,stage-5-ecosystem,
@@ -47,6 +54,9 @@ initializes/applies configuration or creates the ownership marker. Its HUMAN
 handoff points to takeover.md. Explicit --legacy-stow / -LegacyStow retains the
 old setup-sync/Stow path. Native doctor omits Stow/parser requirements; legacy
 mode still checks them. Do not reimplement this split or create a sync venv.
+Sherlock's glibc 2.17 rejects the generic Linux artifact; 77bb03e selects the
+verified official static musl build that passed an isolated native probe.
+Do not infer a production installation from that probe or broaden path conventions.
 
 The frozen native binding is ~/.config/dotfiles/native, a regular non-symlink
 file with exactly three LF-terminated lines: dotfiles-chezmoi-v1, canonical HOME,
@@ -70,6 +80,20 @@ must not recreate source write-through. POSIX root-ancestor checks must not form
 double-leading-slash UNC paths under Git Bash. Keep native
 fast-forward-only updates, dirty/divergent refusal, no force/stash/rebase,
 bounded noninteractive execution and generic nonsecret failure messages.
+
+Preserve the directory correction: native file apply, diff and update explicitly
+use --exclude=dirs; no effective config-key replacement was found in v2.74.
+The operator inspects managed --include=dirs relative to canonical destination,
+with ancestor ownership/type/reparse/mode/ACL checks, then runs native
+apply --include=dirs --recursive=false only for exact still-absent directories.
+An empty list skips preparation; zero target arguments would select all dirs.
+Future missing parents require reviewed preparation, never an automatic creator
+or all-directory fallback. Earlier files or source Git may already change before
+failure. Existing private parents need separate permission review. Lab selected
+local native umask 077 to preserve known 0600 files; do not impose a global umask
+or silently chmod shared parents. The actual updater acceptance runs in a fresh
+interactive session after controlled maintenance removal, with payloads off;
+a maintenance/opt-out skip proves suppression only. Restore maintenance on failure.
 
 D6, D9 and D11 are resolved. Preserve the thin automatic native dotfiles login
 adapter, the declared current-layout support cutoff without an all-host waiting
@@ -108,11 +132,20 @@ use a foreign/global toolkit in place of project-pinned shk, or build an HPC
 environment outside an allocation or under SCRATCH. Respect OneDrive independent
 clone rules and one operation owner per home/checkout.
 
-User-approved secret scope is eight private static files, the three approved
-host recipients and recovery recipient. Do not ask again for that scope or infer
-new targets. Production enrollment remains pending secure recovery-identity
-custody/bootstrap; consult its private record, preserve authorization and never
-log names/values here. SSH stays ordinary configuration. No production dummy
+User-approved secret scope is eight static Claude files for lab, Mac, WSL,
+Sherlock and Marlowe plus independent recovery recipient R. Each ciphertext must
+include those six public recipients; R alone can recover all eight files. Host
+private identities remain local and only public recipients are exported. The
+default-off local enrollment gate still excludes win/common-only, including with
+true opt-in, and rejects malformed flags. Do not ask again for this scope or infer
+new targets. Mutable Codex auth remains excluded and requires host-local login.
+Apple Passwords is selected and sync to a second usable device is confirmed,
+but R has not been generated, deposited or retrieved. Actual custody/bootstrap
+and enrollment remain pending. All five task-installed Bitwarden clients were
+removed; Sherlock never installed one and its toolkit proposal is canceled.
+Consult the private record and never log names/values here. SSH stays ordinary.
+Sherlock kit 0.6 still needs reviewed channel-0.7 upgrade before enrollment;
+Marlowe's missing native Codex is separate from Claude scope. No production dummy
 credentials, private keys in Git, recurring OAuth refresh replay, or permanent
 create-if-missing auth seeds. Keep consumer paths, app-written auth, SSH trust
 and the existing recovery channel. Secret enrollment is unfinished Stage 4
@@ -158,7 +191,8 @@ tests/chezmoi.* and chezmoi-takeover.*, guard/provision/update-config/recovery
 modules and current platform behavior. Bootstrap e2e uses explicit legacy flow,
 then native provisioning plus isolated takeover/recovery with a required native
 binary and tests/test_chezmoi_takeover_recovery.py. Do not label it real HOME
-migration. Hosted exact-candidate CI/e2e still needs actual runs/authorization.
+migration. Every new exact candidate still needs actual hosted CI/e2e runs;
+commit/publication authorization is already granted.
 Record native passes/skips separately; Mac tmux 3.8 has previously recorded
 adversarial-menu failures, so do not report it green or fix it silently.
 

@@ -7,8 +7,12 @@ using the symbol/path inventory below; do not delete by old line numbers.
 
 ## Stage 4 candidate boundary
 
-The complete uncommitted bridge is in the `chezmoi-stage4-integration` worktree.
-It retains all legacy physical source paths and supports explicit legacy
+The Stage 4 bridge reached local and remote main at `9c1a31f` after all three
+CI 41558979663 jobs and all eight bootstrap e2e 41558979671 jobs passed. The
+`chezmoi-stage4-integration` worktree now has local follow-ups `77bb03e` and
+`c4412a5` plus pending directory-mode, secret-scope and tmux handoff changes;
+their exact hosted candidate gates remain pending. The bridge retains all legacy
+physical source paths and supports explicit legacy
 provisioning through `--legacy-stow` / `-LegacyStow`; native is the new setup
 default. Native setup requires chezmoi 2.74.0, an explicit compatible role and
 the [reviewed takeover procedure](takeover.md). The thin updater uses an actual
@@ -16,15 +20,27 @@ home/source binding, nonempty native state, clean source and native
 `--less-interactive --no-tty --error-on-conflict` with fast-forward-only Git.
 It does not use a sync parser environment. Bash 3.2 and both Windows shell
 profile paths remain in scope; no new Bash/tmux/Claude client floor is declared.
+Sherlock's glibc 2.17 needs the official static musl artifact selected by
+`77bb03e`; its isolated verified probe passed, but no production install occurred.
 
-Last supported Stow revision and first native release revision are **unassigned**:
-no release commit or exact green hosted candidate exists yet. `1a9d30b` is the
-input baseline, not a fabricated release cutoff. The continuation did not grant
-commit/publication authority. Only after the reviewed candidate and required
-checks are complete may that missing authority be requested, followed by the
-existing exact-green CI/e2e landing gates. D11 still authorizes subsequent host
-execution; do not ask for blanket rollout permission again. Stage 6 must not
-delete the bridge until the real immutable revisions and cutoff are recorded.
+The corrected candidate explicitly passes `--exclude=dirs` on native file
+apply/diff/update. Existing shared parents retain their modes/ACLs; only reviewed
+still-absent exact directories may receive native directory-only, nonrecursive
+apply. An empty missing list skips that command. Missing future parents require
+operator preparation, not an automatic creator or plain-apply fallback. A failed
+apply may follow Git or earlier file writes. Review local native umask and private
+parent modes separately; lab selected local 077 without changing global policy.
+
+Last supported Stow revision and first accepted native cutover revision remain
+**unassigned**. `9c1a31f` is a published compatibility bridge, not a declared
+legacy deletion cutoff or completed actual-home acceptance. Lab has maintenance,
+native binary/init and 59 private target snapshots, but no managed target apply
+or ownership marker because the directory-mode finding stopped the canary.
+All other hosts remain untaken over; Windows' ordinary-user ACL gate is explicitly
+deferred by the user. Commit, publication and D11 rollout authorization are
+already granted; exact candidate gates and concrete host prerequisites still
+apply. Do not ask for blanket authority again. Stage 6 must not delete the bridge
+until real immutable revisions and the support cutoff are recorded.
 
 ## Resolved user direction
 

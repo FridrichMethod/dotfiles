@@ -3,8 +3,11 @@
 This procedure is for the reviewed compatibility release, with the physical
 `common/` and host paths still present. It is not permission to skip candidate
 CI, import whole application directories, or force a whole-home apply. The
-Stage 4 working result is uncommitted: last-Stow and first-native release hashes
-remain unassigned until authorized real commits and exact green CI exist.
+Stage 4 bridge `9c1a31f` passed exact hosted CI/e2e and reached main. Actual-home
+acceptance remains separate: subsequent preflight found that plain native apply
+changes existing shared-directory modes. Use the corrected file-only procedure
+below only from its reviewed, green release. Final recovery/native release hashes
+remain pending that acceptance record.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 2.6, PowerShell 7 entrypoints
@@ -104,6 +107,14 @@ canonicalization removes TOML layout/comments. Back up and review those changes.
 Only a nonsecret explicit target allowlist may be diffed into ordinary logs.
 Even native errors may include input text; capture real diagnostics privately.
 
+Review the native umask against every original target mode. Native ordinary files
+follow the selected umask; private attributes alone do not protect other files.
+For the inspected personal homes, local `umask = 0o077` keeps ordinary files at
+0600 and executable files at 0700, avoiding wider access than the existing 0600
+targets. Set this in the local native config after review, without changing the
+shell's umask or shared parent permissions. Init preserves the local setting.
+Existing read-only or otherwise stricter targets still require explicit review.
+
 Inspect historical `AGENTS.override.md` against the exact generated marker in
 the old installer; a user-owned override is not removable. Inspect local
 `filter.codex-portable`, old opt-outs and exact retired package links. Preserve
@@ -139,11 +150,11 @@ installation, secret enrollment or authentication is an apply hook.
 ```sh
 chezmoi --source "$source" --working-tree "$source" \
   --destination "$destination" --config "$config" --cache "$cache" \
-  --persistent-state "$state" --mode=file --no-tty --error-on-conflict \
+  --persistent-state "$state" --mode=file --no-tty --error-on-conflict --force=false \
   --no-pager --use-builtin-diff init </dev/null
 ```
 
-Before the first destination mutation, write the ownership file privately as
+Before the first managed destination mutation, write the ownership file privately as
 exactly three UTF-8 LF-terminated lines: `dotfiles-chezmoi-v1`, canonical
 destination, canonical source. It is local metadata, never a managed target or
 revision receipt. Keep the maintenance marker in place. Every legacy installer,
@@ -156,15 +167,43 @@ printf '%s\n' dotfiles-chezmoi-v1 "$destination" "$source" \
 chmod 600 "$destination/.config/dotfiles/native"
 ```
 
+Plain native apply also manages directory modes and can broaden an existing
+0700 parent or try to chmod a shared, differently owned parent. The supported
+operator and login-update commands therefore explicitly exclude directory
+entries. There is no effective equivalent configuration key in the tested
+release; bare `chezmoi apply` is not this procedure.
+Keep `--force=false` explicit on all non-conversion commands, including directory
+preparation, regular/full apply and diff; preserved local config may set force.
+Only an individually reviewed link conversion replaces it with `--force=true`.
+
+Before file apply, obtain the exact native directory set with the same explicit
+arguments and `managed --include=dirs --nul-path-separator`. Inspect each path
+relative to the canonical destination, not the current directory, and inspect
+every ancestor using lstat, distinguishing an absent path from a dangling
+link, Windows junction/reparse point, foreign object or inaccessible parent.
+Preserve all existing real directory modes and ACLs. For only the reviewed,
+still-absent directories, use native
+`apply --include=dirs --recursive=false EXACT_ABSENT_DIR...`; do not pass an
+existing shared directory. If the missing list is empty, skip this command:
+zero targets would select every directory. Native source attributes create new private parents
+at 0700. Recheck absence and ancestors immediately before creation; never use
+force. A missing parent cannot be created by the file-only apply below.
+
+Because directory entries are excluded thereafter, verify existing private
+secret parents are owned real 0700 directories before enrollment. Exclusion
+does not repair an unsafe mode. Never silently chmod a shared existing parent.
+
 Privately dry-run the selected two AI targets with the same explicit arguments
-and `apply --dry-run TARGET`. After reviewing each exact owned link and its
+and `apply --exclude=dirs --dry-run TARGET`. After reviewing each exact owned link and its
 snapshot, use the same command with `apply --force "$target"` for that single
-link only. Repeat individually. For ordinary existing regular files use normal
-`apply "$target"` after review, without force. Never force a directory or the
+link only, also passing `--exclude=dirs`. Repeat individually. For ordinary
+existing regular files use `apply --exclude=dirs "$target"` after review,
+without force. Never force a directory or the
 whole home. Native failures may leave earlier targets changed; keep both markers.
 
-Once every target is reviewed, run full `apply` with the same arguments, then
-run it again and require an empty nonsecret targeted diff. On Windows invoke
+Once every target is reviewed, run full `apply --exclude=dirs` with the same
+arguments, then run it again and require an empty nonsecret targeted
+`diff --exclude=dirs`. On Windows invoke
 the equivalent argument array using PowerShell without elevation, with closed
 stdin. Keep successful old SSH access until a genuinely fresh ordinary connection
 passes; site/MFA master-only checks retain their documented limit.
@@ -196,6 +235,14 @@ before apply refuses a target; no whole-home transaction is promised. It disable
 credential prompts and uses transport timeouts. Arbitrary user Git hooks are not
 a globally bounded execution environment. Errors produce a generic warning;
 secret-bearing native output is not printed. A later session may retry.
+
+The update invocation also pins `--exclude=dirs` to preserve shared parent modes
+and ACLs. New files under existing prepared parents can update automatically.
+An upstream file under a missing parent requires the reviewed directory-only
+preparation above before retrying. Such a failure may follow a Git fast-forward
+or earlier file changes; it is not a transactional refusal. Do not remove the
+exclusion, delete state, or run plain apply to bypass it. Reconcile and require
+full file convergence after preparing the exact missing directories.
 
 `DOTFILES_AUTO_UPDATE=0` disables native login updates. `DOTFILES_AUTO_STOW` and
 `DOTFILES_HOST` remain legacy-only. Payload lifecycle is unchanged except for

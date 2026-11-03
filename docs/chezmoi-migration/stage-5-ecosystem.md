@@ -23,10 +23,12 @@ Preserve [fleet execution](fleet-rollout.md) and
 ## Entry state and gates
 
 This is an implementation plan, not a Stage 5 implementation or a Stage 4 release
-certificate. At this handoff the candidate is uncommitted on `1a9d30b`, in branch
-`chezmoi-stage4-integration` at `/tmp/dotfiles-chezmoi-stage4-integration`, carrying
-the complete Stages 1-4 result. It has not been committed, published for hosted
-CI/bootstrap e2e, or used to migrate a real home. Read the final Stage 4 record in
+certificate. Branch `chezmoi-stage4-integration` at
+`/tmp/dotfiles-chezmoi-stage4-integration` carries the complete Stages 1-4 result.
+Bridge `9c1a31f` passed exact hosted CI/bootstrap e2e and reached main; later
+compatibility, directory-mode, secret-scope and tmux changes need their own gates.
+Lab preparation stopped before managed target apply; actual host acceptance is
+separate from fixtures and publication. Read the current Stage 4 record in
 [status.md](status.md), the current aggregate diff and its saved patch before
 creating worktrees. Temporary ledgers/review logs supplement the repository
 record; they do not replace it or authorize publication.
@@ -50,8 +52,9 @@ these checks when reducing code; they protect current native behavior.
 The required native-platform fixtures, independent review, local checks and exact
 candidate hosted CI/e2e remain Stage 4 completion/activation gates. Immutable
 last-Stow/first-native revisions can be named only after real commits exist.
-Preparing Stage 5 in isolation does not waive those gates or imply authorization
-to commit, publish, land or activate it. D11 authorizes the six-host operations
+Preparing Stage 5 in isolation does not waive those gates or extend the current
+Stage 4 scope. Commit/publication/landing authority for Stage 4 is explicit.
+D11 authorizes the six-host operations
 after applicable gates, but does not turn preflight into migration. Concrete
 access, privilege, site and ownership blockers remain; do not restore a gate
 requiring every offline host to attest migration.
@@ -59,8 +62,9 @@ requiring every offline host to attest migration.
 D6 (thin automatic dotfiles updates), D9 (declared current-layout cutoff) and D11
 (agent-executed six-host migration/retirement) are resolved. D7 (payload scheduling)
 is unresolved. The user has approved the private eight-file static-secret scope
-and three-host plus recovery recipient scope. Real enrollment still awaits secure
-recovery-identity custody/bootstrap; do not reopen the approved scope or enroll
+for lab, Mac, WSL, Sherlock and Marlowe plus recovery recipient R. Apple Passwords
+is selected; actual independent deposit/retrieval and bootstrap remain pending.
+Do not reopen the approved scope or enroll
 values before custody is settled. Keep private names/values out of this document.
 SSH configuration remains ordinary configuration; no new private SSH target is
 implied. Preserve app-written auth, existing trust and recovery access.

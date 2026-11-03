@@ -14,14 +14,25 @@ Independent audit compared all 126 changed paths and full binary diff with
 There were no additional changes or untracked files at carry time. The original
 coordinator was not edited. Its complete Stages 1-3 result was applied to
 `/tmp/dotfiles-chezmoi-stage4-integration`, branch `chezmoi-stage4-integration`,
-at the same HEAD. The inherited patch is staged; Stage 4 is unstaged, with new
-files included through intent-to-add. `git diff` reviews Stage 4;
-`git diff HEAD` reviews the entire candidate.
+at the same HEAD. The complete aggregate was subsequently committed as
+`e77e745`, with follow-up commits below. Review the whole result against
+`1a9d30b`, including any later working-tree diff; a HEAD-only diff no longer
+contains the original carried stages.
 
 Separate Unix, Windows and provisioning worktrees returned recoverable patches,
-integrated sequentially. No commit, push, PR, hosted CI run, release cutoff,
-live takeover or credential enrollment has occurred. Unrelated work remains
-preserved in the original checkout and on Windows.
+integrated sequentially. The user explicitly authorized commits, publication
+and exact-green main landing. The bridge reached main at `9c1a31f` after all
+required hosted gates. No completed live takeover or credential enrollment is
+claimed. Unrelated work remains preserved, including the separately handed-off
+tmux fix and Windows Terminal preference.
+
+The original main checkout's 13 untracked planning documents were verified
+unchanged, moved intact to the private local
+`$HOME/.local/state/dotfiles-stage4-preserved-planning-20261102/original-docs`,
+and reverified against their retained manifest before fast-forward. They were
+not reset, stashed or overwritten. The later two-file tmux handoff was imported
+byte-for-byte from `/tmp/dotfiles-tmux-corners.patch`; its original main edits
+remain preserved pending coordinated landing. No native apply may undo that fix.
 
 ## Implemented contract
 
@@ -110,20 +121,71 @@ nonsecret files plus integrity/isolated-runner metadata. No rejection was
 bypassed, and no transfer blocker remains. All fixture source/runtime bytes
 were verified independently of subsequent documentation-only record updates.
 
+### Published bridge and subsequent corrections
+
+| Commit | Hosted CI | Hosted bootstrap e2e | Outcome |
+| --- | --- | --- | --- |
+| `e77e745` | 41553620773: Linux/Windows passed; Mac fixture path failed | 41553620937: Mac/cluster/Windows fixture failures | Not landed |
+| `dc2df42` | 41556058800: all three passed | 41556059382: Windows fixture working-directory issue; other roles passed | Not landed |
+| `9c1a31f4efa0b23a67e9a20640a2f236eae64325` | [41558979663](https://github.com/FridrichMethod/dotfiles/actions/runs/41558979663): all three passed | [41558979671](https://github.com/FridrichMethod/dotfiles/actions/runs/41558979671): select plus all seven roles passed | Exact commit fast-forwarded to main |
+
+The Windows correction pins the PowerShell 5 child working directory to its
+fixture. The earlier generated-path provenance was not fully reproduced; the
+final hosted run establishes containment for that exact candidate. Later local
+commits `77bb03e` and `c4412a5` select the compatible official Sherlock static
+artifact and preserve the user's additional Terminal profile with portable
+environment prefixes. Their combined full pre-commit passed. They and the
+subsequent changes below still need their own exact hosted gates before rollout.
+
+Before lab target writes, actual v2.74 isolated probes showed plain apply changes
+existing shared directory modes: a 0700 parent can become 0755 or 0775 depending
+on umask. The effective correction is explicit `--exclude=dirs` on both native
+update adapters and every operator file apply/diff. A config-key alternative
+was ineffective. File-only apply does not create missing parents: the operator
+inspects native managed directories, rejects links/reparse points, and prepares
+only still-absent exact parents with nonrecursive directory-only apply. An empty
+missing list must skip that command. Existing directory modes remain unchanged;
+future missing parents require another reviewed preparation, and failed apply
+is not transactional. Local native umask 077 avoids widening the inspected lab
+regular targets. Existing private parents require explicit ownership/mode checks.
+
+The regressions reproduced the unsafe mode change before the fix. Corrected
+Unix adapter suite: 22 methods passed, including ambient umask 002/022 and
+missing-parent refusal. Actual isolated Windows adapter suite: 31 methods
+passed, with unchanged parent SDDL and missing-parent refusal; this does not
+satisfy the deferred real-user ACL gate. Operator recovery suite: six methods
+passed, including private missing-parent preparation, repeated convergence,
+unmanaged sibling/local model retention and dangling-link refusal. Worker full
+pre-commit runs passed; aggregate checks and independent review are recorded
+separately when completed. Reports are `/tmp/chezmoi-directory-permissions-review.md`,
+`/tmp/chezmoi-stage4-windows-directory-parity-report.md` and
+`/tmp/chezmoi-operator-permissions-report.md`.
+
+The corrected aggregate Linux `tests/run.sh --ci` passed with `test-suite=PASS`
+(`/tmp/chezmoi-stage4-directory-aggregate-tests.log`). Independent cross-review
+confirmed the runtime flags, five-host opt-in scope, operator patch and exact
+tmux handoff. It found two documentation gaps, now corrected: pin force false
+despite preserved local config, and remove the obsolete implication that fresh
+native apply refuses foreign links. Full aggregate pre-commit passed
+(`/tmp/chezmoi-stage4-directory-aggregate-precommit.log`); a final documentation
+consistency pass is validated separately. Hosted gates remain pending for the
+new exact candidate.
+
 ## Actual fleet outcomes, separate from fixtures
 
 | Host | Actual observation | Takeover outcome / blocker |
 | --- | --- | --- |
-| lab-ubuntu | Local main `1a9d30b`; untracked migration docs retained; existing parser environment reused only for tests | Not migrated; exact published candidate/CI gates pending |
-| mac | Fresh BatchMode route; clean main `1a9d30b`; non-OneDrive checkout; native fixtures in private temporary capsule | Not migrated; publication gates pending; headless fixtures are not GUI checks |
-| wsl-ubuntu | Fresh BatchMode route; clean main `1a9d30b` | Not migrated; publication gates pending |
-| win | Fresh direct SSH; main `7edf12fb5b61b6e6d96703bc67f4521e69501d0c`; modified tracked Terminal settings preserved; both NoProfile CurrentUserAllHosts paths match fixed mappings | Not migrated; publication gates, user-owned Terminal drift and ordinary-user token/ACL validation pending; SSH token is administrative |
-| sherlock | Existing master on login node, no allocation; all five current site/topic rules read; clean main `6db67edf7b53e5436a2657219e63763393e6eb21` | Not migrated; publication/site gates pending; master access does not prove fresh MFA access; no native dotfiles provisioning or build/job attempted |
-| marlowe | Existing master on login node, no allocation; standard site-guide path absent, current official operating policy checked; clean main `2c177fcb6b6e1a3482ed71e1ef659a43973d9609` | Not migrated; publication/site gates pending; no native dotfiles provisioning attempted |
+| lab-ubuntu | Main reached green `9c1a31f`; original planning docs preserved; subsequent two-file tmux handoff retained. Verified native binary installed; persistent maintenance, 59-target private snapshots and explicit native init completed. Both actual AI dry runs and private policy/local-state comparisons passed | Canary prepared, not migrated: no managed target apply or native ownership marker. Paused before writes for the directory permission correction and refreshed snapshot of the newer tmux edit |
+| mac | Last checkout preflight: clean main `1a9d30b`, non-OneDrive; 56 targets, 53 exact links and three regular files. Root-owned `.config` is writable/searchable by the user's group and must retain its permissions | Not migrated; await canary and corrected candidate gates; headless checks are not GUI checks |
+| wsl-ubuntu | Last checkout preflight: clean main `1a9d30b`; 55 targets, 52 exact links and three regular files; no foreign links or linked parents | Not migrated; await canary and corrected candidate gates; preserve existing shared-parent modes |
+| win | Last checkout preflight: main `7edf12fb5b61b6e6d96703bc67f4521e69501d0c`; 26 targets, 23 exact links and three regular files. Both NoProfile profile paths match. The appended Terminal profile is preserved with equivalent environment-variable prefixes | Not migrated; user deferred the required ordinary-user execution/ACL check. SSH is administrative; bounded automatic de-elevation did not complete the target audit. No task, marker, target or production ACL change |
+| sherlock | Existing master; five current site/topic files reread; last checkout preflight clean main `6db67edf7b53e5436a2657219e63763393e6eb21`. Actual glibc 2.17 rejects the generic binary; verified official static musl v2.74 probe passed privately | Not migrated; no production native install/apply. Artifact correction needs its exact candidate gates. Kit 0.6 requires reviewed channel-0.7 upgrade before enrollment; master access does not prove fresh MFA access |
+| marlowe | Existing master; current official operating policy checked; last checkout preflight clean main `2c177fcb6b6e1a3482ed71e1ef659a43973d9609`. Kit 0.7 launchers present; native Codex absent from inspected PATH | Not migrated; await canary and candidate gates. Native Codex installation/auth is separate from Claude credential enrollment |
 
-No real-home maintenance marker, task change, backup, age identity or takeover
-was created. D11 permits the eventual canary and subsequent reachable-host work;
-it does not substitute for exact-candidate publication authorization or CI.
+Only the lab preparation above created native home config/state, maintenance
+and exact private backups. No managed target apply or real encrypted enrollment
+has occurred. D11 and explicit publication authority remain in force;
+they do not replace exact-candidate CI or concrete host prerequisites.
 Do not relabel an offline/site/token blocker as a successful migration.
 
 ## Secret choices and custody
@@ -132,46 +194,42 @@ Private proposal: `/tmp/chezmoi-stage4-private/secret-proposal.md`, directory 07
 files 0600. Exact candidates, consumers and ownership evidence stay there.
 Current channel-0.7 public consumer code was checked against upstream without
 reading credential values. The user approved eight static-for-consumer files,
-lab/mac/WSL recipients plus independent recovery, and account-label exposure in
+lab/mac/WSL/Sherlock/Marlowe recipients plus independent recovery, and account-label exposure in
 encrypted filenames. Five Codex mutable auth files remain excluded. The user
 chose to keep seven SSH snippets in their ordinary mappings.
 
-The user has no existing independent recovery store and requested a cross-platform
-password manager with host installation assistance. Bitwarden is the proposed
-custody tool. Account setup, secure-item creation and private recovery handoff
-remain pending. A same-disk `.secrets` directory can hold a host identity but is
-not independent recovery custody. No real key was generated or secret enrolled.
-Password-manager installation outcomes are separate from native takeover and
-do not satisfy the account/custody gate by themselves.
+The user selected Apple Passwords and confirmed synchronization to another usable
+device. The personal item is `dotfiles age recovery`; actual private deposit and
+independent retrieval remain pending. R alone recovers all eight files; host
+private identities stay local and only public recipients are exported. A same-disk
+`.secrets` directory is not independent recovery custody. No production identity
+has been generated or credential file enrolled. Codex mutable auth remains
+application-owned; each host needs its own login state.
 
-The user separately requested password-manager installation on all six hosts.
-These are actual installation results, not fixture or takeover results:
+The user first requested Bitwarden installations, then canceled them and requested
+removal after selecting Apple Passwords. These actual outcomes are separate from
+fixtures, custody and takeover:
 
 | Host | Bitwarden outcome |
 | --- | --- |
-| mac | Desktop 2026.10.3 installed in user Applications; Homebrew receipt, DMG SHA256 and strict code-signature verification passed |
-| lab-ubuntu | CLI 2026.10.1 installed at `~/.local/bin/bw`; official archive and executable hashes passed; isolated version probe passed |
-| wsl-ubuntu | CLI 2026.10.1 installed at the separate WSL `~/.local/bin/bw`; both hashes and isolated version probe passed |
-| marlowe | CLI 2026.10.1 installed at `~/.local/bin/bw`; verified prebuilt binary, isolated staged version probe before install, mode 755 and final hash passed |
-| sherlock | Not installed: verified standalone binary failed staged loading on missing GLIBC/C++ runtime symbols; destination remains absent. Site module `devel nodejs/24.13.0` provides Node 24.13.0/npm 11.6.2, satisfying the npm package engines. Dependency installation and application execution are unverified; the allocation-based alternative needs a separately approved project-pinned toolkit. No system-library change, unsupported downgrade or environment build attempted |
-| win | Desktop 2026.10.3 installed with pinned user-scope x64 winget command after tests; installer hash verified, expected user-path product/file versions match and Authenticode is Valid for Bitwarden Inc. |
+| mac | Task-installed Desktop removed; app and cask receipt absent. Homebrew unexpectedly auto-removed preexisting llvm@22 22.1.8; that exact version was restored from a verified official bottle, with a successful clang probe and no other formula-version changes. Prior keg hashes were unavailable, so byte-identical restoration is not claimed |
+| lab-ubuntu | Exact verified task-installed CLI removed; destination absent |
+| wsl-ubuntu | Exact verified task-installed CLI removed; destination absent |
+| marlowe | CLI first moved into the existing micromamba login environment as requested, then both task binary and exact task backup removed; all 32 Conda package records unchanged |
+| sherlock | Never installed after its staged ABI failure. Bitwarden Node/toolkit/allocation proposal canceled; no pending authorization for it |
+| win | Exact task-installed user-scope Desktop removed. Installer data-deletion behavior was checked first; expected app-data directory was absent before and after, and no user data was purged |
 
-No client was signed in or unlocked; no existing vault data was read. Version
-probes used private temporary appdata. Cluster module prerequisites and actual
-site rules were checked: the bounded prebuilt copy needed no allocation, but
-Sherlock's standalone runtime compatibility check failed. A separate npm route
-can use its existing compatible site module, but no installation or build was
-run on the login node. Reports are
-`/tmp/bitwarden-install-plan.md`, `/tmp/bitwarden-cluster-preflight.md`,
-`/tmp/bitwarden-cluster-install-report.md` and
-`/tmp/bitwarden-sherlock-runtime-followup.md`; Windows records are
-`/tmp/bitwarden-win-install.log` and `/tmp/bitwarden-win-verification.json`.
+No client was signed in or unlocked and no vault data was read. Current removal
+evidence is `/tmp/bitwarden-lab-uninstall-report.md`,
+`/tmp/bitwarden-uninstall-unix-report.md` and
+`/tmp/bitwarden-win-uninstall-report.md`. Historical installation reports remain
+retained separately. Apple Passwords custody needs no Bitwarden client.
 
 ## Remaining Stage 4 gates and Stage 5 handoff
 
-Local/native validation and independent fix review are complete. The complete
-candidate still needs commit/publication authorization. Follow the
-exact-green three-platform CI and bootstrap e2e gates before landing. Assign
+The user authorized commit/publication and main landing. Bridge `9c1a31f` passed
+all required hosted checks and reached main. Later actual-host corrections need
+their own exact-green three-platform CI/bootstrap e2e before canary apply. Assign
 immutable last-Stow/first-native revisions only when they exist. Complete custody
 and secure first-identity handoff before enrollment. Then execute one recoverable
 canary and other unblocked homes under D11, recording actual target/app/access

@@ -89,7 +89,7 @@ function Invoke-DotfilesNativeUpdate {
             '(not .chezmoi.config.git.autoadd) (not .chezmoi.config.git.autocommit) (not .chezmoi.config.git.autopush) }}'
         $config = Invoke-DotfilesNativeProcess $chezmoi ($arguments + @('execute-template', $safeConfig)) $binding
         if ($config.Code -ne 0 -or $config.Output.Trim() -cne 'true') { throw 'Native update configuration is unsafe.' }
-        $updated = Invoke-DotfilesNativeProcess $chezmoi ($arguments + @('update', '--apply', '--recurse-submodules=false')) $binding
+        $updated = Invoke-DotfilesNativeProcess $chezmoi ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $binding
         if ($updated.Code -ne 0) { throw 'Native update failed.' }
     }
     catch {

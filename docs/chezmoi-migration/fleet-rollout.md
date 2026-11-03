@@ -2,10 +2,15 @@
 
 Current Stage 4 actual observations and blockers are in
 [stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
-All six remain unmigrated. Native platform fixtures, SSH connectivity and
-password-manager installation are distinct from takeover. The operator procedure
-is [takeover.md](takeover.md). Publication authority and exact-candidate hosted
-CI/e2e remain pending; D11 is already resolved.
+All six remain unmigrated. Lab has maintenance, a verified native binary, 59
+private target snapshots and native init, but no managed target apply or native
+ownership marker. Other Unix hosts have not been taken over; the user explicitly
+deferred Windows' ordinary-user execution/ACL gate. Native fixtures and SSH
+connectivity are distinct from takeover. The operator procedure is
+[takeover.md](takeover.md). Commit/publication/rollout authority is explicit;
+the `9c1a31f` bridge passed all three CI 41558979663 jobs and all eight bootstrap
+e2e 41558979671 jobs and reached main. Later compatibility and directory-mode
+candidate changes require their own exact green gates before rollout resumes.
 
 ## Authorization and scope
 
@@ -81,9 +86,16 @@ or unrelated SSH aliases for the six intended destinations.
    Keep the current access/recovery channel open. Save private snapshots of only
    the affected files, link text and relevant modes/ACLs outside the source tree.
 5. Prepare required native tools and the selected secret backend using the
-   explicit provisioning rules. Apply the reviewed source, then perform a second
-   apply, shell/profile/application checks and the thin updater checks. Do not
-   print secret diffs or start arbitrary authenticated application sessions.
+   explicit provisioning rules. Preserve existing parent modes/ACLs with
+   `--exclude=dirs` on file apply/diff/update. Inspect the native directory
+   inventory and ancestors; prepare only exact still-absent directories through
+   reviewed native directory-only, nonrecursive apply, skipping an empty list.
+   Never fall back to an all-directory apply. Review local umask separately;
+   lab's selected native umask is 077. Apply the reviewed files, then perform a
+   second apply, shell/profile/application checks and actual thin updater checks
+   after controlled maintenance removal. Restore maintenance on failure. Missing
+   parents can stop apply after a source fast-forward or earlier file writes.
+   Do not print secret diffs or start arbitrary authenticated application sessions.
 6. Validate new access before dropping the old channel. On ordinary SSH targets,
    use a genuinely fresh connection with multiplexing disabled; a new command
    over the old master is insufficient. Where site/MFA rules require the user's
@@ -125,6 +137,22 @@ compilation and environment creation require allocation; no detached login-node
 updater/supervisor is permitted. Keep site-specific updater behavior compliant.
 Read the applicable rules on Marlowe before installation or substantive changes.
 
+Sherlock's observed glibc 2.17 cannot run the generic v2.74 Linux artifact. The
+official SHA256-verified static musl build passed an isolated version probe;
+`77bb03e` selects it without changing the existing destination convention.
+That local follow-up still needs its exact hosted gates. No native production
+installation or environment build occurred on either cluster.
+
+Eight static Claude files are authorized for lab, Mac, WSL, Sherlock and Marlowe
+plus independent R. Apple Passwords is selected and already syncs to another
+usable device, but R generation/deposit/retrieval and real enrollment remain
+pending. Keep host private identities local and export only public recipients.
+Mutable Codex auth remains excluded; SSH stays ordinary. Bitwarden was canceled
+and all five task-installed clients removed; Sherlock never installed one.
+Do not reopen its canceled toolkit/allocation proposal. Launcher provisioning
+and account acceptance remain separate host checks: Sherlock still has kit 0.6,
+and Marlowe lacks native Codex on the inspected PATH.
+
 ## Recording and incomplete targets
 
 Keep one small nonsecret table in `status.md`, not a runtime fleet registry:
@@ -134,7 +162,8 @@ Keep one small nonsecret table in `status.md`, not a runtime fleet registry:
 | Fill per host | Timestamp/method | Revision | Ready/not needed | Result | Result/limits | Exact scope/result | Concrete next action |
 
 Attempt all six within the session's available access. Carry unreachable or
-blocked targets forward explicitly; do not call them migrated. Native-only source
+blocked targets forward explicitly, respecting the user's Windows deferral;
+do not call them migrated. Native-only source
 retirement need not wait indefinitely for every offline host, but the stage cannot
 claim fleet completion until all six actually pass. Record repository completion
 and reachable-host execution separately. Keep controlled upgrade/recovery guidance

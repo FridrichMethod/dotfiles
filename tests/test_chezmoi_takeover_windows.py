@@ -175,6 +175,51 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertFalse((self.home / ".sample").is_symlink())
         self.assertEqual(self.git("stash", "list"), "")
 
+    def test_update_excludes_directories_and_applies_files_in_existing_parent(self):
+        self.setup_native()
+        parent = self.home / ".managed"
+        parent.mkdir()
+        acl_before = self.ps("(Get-Acl -LiteralPath " + ps_string(parent) + ").Sddl")
+        self.assertEqual(acl_before.returncode, 0, acl_before.stderr)
+        source_parent = self.repo / "home/dot_managed"
+        source_parent.mkdir()
+        (source_parent / "settings").write_text("new nested file\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "file in prepared parent")
+        self.git("push", "origin", "main")
+        trace = self.f.root / "native update arguments.json"
+        before = "$script:nativeProcess=(Get-Item Function:Invoke-DotfilesNativeProcess).ScriptBlock;" + \
+            "function Invoke-DotfilesNativeProcess {param($Program,$Arguments,$Binding);" + \
+            "if($Arguments -contains 'update'){ConvertTo-Json -InputObject @($Arguments) -Compress | " + \
+            "Set-Content -LiteralPath " + ps_string(trace) + "};" + \
+            "& $script:nativeProcess $Program $Arguments $Binding};"
+        result = self.update(before)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
+        self.assertIn("--exclude=dirs", json.loads(trace.read_text(encoding="utf-8-sig")))
+        self.assertEqual((parent / "settings").read_text(), "new nested file\n")
+        self.assertFalse((parent / "settings").is_symlink())
+        acl_after = self.ps("(Get-Acl -LiteralPath " + ps_string(parent) + ").Sddl")
+        self.assertEqual(acl_after.returncode, 0, acl_after.stderr)
+        self.assertEqual(acl_after.stdout, acl_before.stdout)
+
+    def test_update_refuses_new_file_when_managed_parent_is_absent(self):
+        self.setup_native()
+        sender = self.f.root / "new directory sender"
+        self.git("clone", str(self.remote), str(sender))
+        source_parent = sender / "home/dot_missing"
+        source_parent.mkdir()
+        (source_parent / "settings").write_text("new nested file\n")
+        self.git("add", ".", cwd=sender)
+        self.git("commit", "-qm", "new managed parent", cwd=sender)
+        self.git("push", cwd=sender)
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("[dotfiles]", result.stdout + result.stderr)
+        self.assertFalse((self.home / ".missing").exists())
+        self.assertTrue((self.repo / "home/dot_missing/settings").is_file())
+        self.assertEqual((self.home / ".sample").read_text(), "initial\n")
+
     def test_dirty_tracked_and_untracked_source_prevents_native_write(self):
         self.setup_native()
         for path in (self.repo / "home/dot_sample", self.repo / "untracked"):

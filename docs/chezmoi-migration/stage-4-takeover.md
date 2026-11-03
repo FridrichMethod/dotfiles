@@ -145,8 +145,8 @@ The existing `SourceFixture` invocation establishes this command structure:
 
 ```sh
 chezmoi --source "$source" --destination "$destination" --config "$config" \
-  --cache "$cache" --persistent-state "$state" --no-tty --error-on-conflict \
-  --no-pager --use-builtin-diff apply </dev/null
+  --cache "$cache" --persistent-state "$state" --no-tty --error-on-conflict --force=false \
+  --no-pager --use-builtin-diff apply --exclude=dirs </dev/null
 ```
 
 All six paths must be explicit and owned by the intended home. Role is written
@@ -154,10 +154,17 @@ to local `[data].host`; it is never inferred from DOTFILES_HOST or OS. In fixtur
 run targeted diff/apply against the two AI files before full apply, then repeat
 apply and require an empty nonsecret diff. Preserve the 67 ordinary legacy
 bridges, private/executable/empty/binary/CRLF behavior and shared unmanaged state.
+Preserve existing directory permissions with the explicit exclusion above.
+Before file apply, use the native managed-directory inventory to inspect and
+create only still-absent exact parents with directory-only nonrecursive apply;
+follow takeover.md. Future updates needing a new parent fail until this reviewed
+preparation is complete. Review local umask and existing 0700 secret parents;
+directory exclusion deliberately does not enforce or repair their modes.
 
 For each existing link, snapshot link text, referent bytes and relevant modes/
 ACLs privately outside source; prove the exact canonical legacy owner. Ordinary
-apply refusal is expected. A tested targeted `apply --force "$target"` may convert
+apply is not an ownership check: fresh native state can replace a foreign link.
+A tested targeted `apply --exclude=dirs --force=true "$target"` may convert
 only that individually verified link after quiescence/backup; never add force
 to a whole-home or recurring apply. `add --follow` is import-only and must not
 replace a modify template. Foreign links, directories, unreadable targets,

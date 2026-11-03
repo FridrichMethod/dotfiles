@@ -13,6 +13,13 @@ absent new targets and known safe updates. The
 describe the native mechanism; isolated v2.74.0 regressions establish this
 candidate's actual boundary. No custom state parser or second journal was added.
 
+Later v2.74 probes established that plain apply also changes existing directory
+modes. The corrected operator/update commands pin `--exclude=dirs`; missing
+parents require inspected native directory-only preparation. Ignore-directory
+patterns and config-key alternatives did not preserve the required behavior in
+these probes. The actual regression evidence and nontransactional boundary are
+in [Stage 4 evidence](stage-4-evidence.md#published-bridge-and-subsequent-corrections).
+
 Native config init now reads existing TOML and preserves unrelated local
 settings, including age and data, with native
 [setValueAtPath](https://www.chezmoi.io/reference/templates/functions/setValueAtPath/)
@@ -26,6 +33,9 @@ For the recovery-custody request, the official
 [CLI documentation](https://bitwarden.com/help/cli/) establish platform clients
 and published CLI checksums. Installing a client is not proof of account setup,
 vault custody or age recovery. The private proposal retains actual selections.
+The user subsequently selected Apple Passwords and canceled Bitwarden; all
+task-installed clients were removed. Actual recovery deposit/retrieval remains
+pending, separately from the confirmed second-device sync choice.
 
 Planning references read on 2026-11-01; native evidence added on 2026-11-02.
 Prefer these official sources over third-party migration examples. Live
@@ -89,8 +99,9 @@ only the CI architectures above. The native Mac follow-up used the official raw
 `chezmoi-darwin-arm64` artifact from release v2.74.0, SHA256
 `9d4d7aeecb40b2616af766f88cf6ea45ed2b1fc0a9793df7b075b63847ae47f8`,
 verified locally and after transfer against the same official manifest. Actual
-Linux/Mac/Windows fixtures now ran; hosted CI jobs remain unpublished/unrun for
-this uncommitted patch. Intel Mac execution is not established by arm64 results.
+Linux/Mac/Windows fixtures ran at that checkpoint; hosted CI had not yet run.
+The later bridge's exact hosted runs are recorded in Stage 4 evidence. Intel Mac
+execution is not established by arm64 results.
 
 ## Observed Stage 1 deployment contract
 

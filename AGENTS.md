@@ -56,6 +56,11 @@ Real takeover follows exact candidate CI gates and existing D11 authority;
 commits/publication require active authorization. Enroll only privately selected
 static secrets with explicit recipients/bootstrap/recovery; no plaintext,
 identities or recurring OAuth state in source. Never force routine apply.
+Pin `--exclude=dirs` on native file apply/update to preserve shared parents;
+the tested release has no effective config-key equivalent. Prepare only exact
+missing directories with reviewed native directory-only apply. Future missing
+parents require that preparation before retry; a failure is not transactional.
+Review local umask and existing private-parent modes before takeover/enrollment.
 
 ## Shell conventions
 

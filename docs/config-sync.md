@@ -58,6 +58,13 @@ Exit status matters even when stderr is empty; routine apply must retain
 `--mode=file --less-interactive --no-tty --error-on-conflict --force=false`, closed stdin
 and no blanket force.
 
+File apply/update also passes `--exclude=dirs`; plain native apply can change
+existing shared-directory permissions. The operator prepares only inspected
+missing parents using native directory-only, nonrecursive apply. A later update
+requiring another parent fails until that preparation is done; Git and earlier
+files may already have changed. Review the local native umask and existing
+private-parent modes separately, as described in the takeover procedure.
+
 Fresh native state does not provide a first-apply ownership guard: ordinary
 apply can replace a preexisting foreign symlink. Inspect exact owners and private
 snapshots before any takeover apply. This also affects a new target first added

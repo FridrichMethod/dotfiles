@@ -141,6 +141,52 @@ class UnixTakeoverTests(unittest.TestCase):
             self.assertFalse((f.root / "wrong-config").exists())
             self.assertFalse((f.root / "wrong-state").exists())
 
+    def test_update_preserves_existing_shared_parent_modes(self):
+        for mask in ("002", "022"):
+            with self.subTest(umask=mask), UpdateFixture() as f:
+                entries = (("dot_ssh", ".ssh", 0o700),
+                           ("dot_claude", ".claude", 0o700),
+                           ("dot_codex", ".codex", 0o700),
+                           ("dot_config/nested", ".config/nested", 0o775))
+                (f.destination / ".config").chmod(0o770)
+                for source_name, target_name, mode in entries:
+                    source = f.producer / "home" / source_name
+                    source.mkdir(parents=True)
+                    (source / "private_probe").write_text("new managed value\n")
+                    target = f.destination / target_name
+                    target.mkdir(parents=True, exist_ok=True)
+                    target.chmod(mode)
+                f.advance()
+                for _ in range(2):
+                    result = f.hook(code=f'umask {mask}; . "$1"')
+                    self.assertEqual(result.returncode, 0)
+                    self.assertNotIn("[dotfiles] [warn]", result.stderr)
+                    self.assertEqual((f.destination / ".config").stat().st_mode & 0o777, 0o770)
+                    for _, target_name, mode in entries:
+                        target = f.destination / target_name
+                        self.assertEqual(target.stat().st_mode & 0o777, mode)
+                        self.assertEqual((target / "probe").read_text(), "new managed value\n")
+                        self.assertEqual((target / "probe").stat().st_mode & 0o777, 0o600)
+                    self.assertEqual((f.destination / ".sample").read_text(), "after\n")
+
+    def test_update_refuses_missing_new_parent_until_operator_preparation(self):
+        for source_name, target_name in (("dot_new-parent", ".new-parent"),
+                                         ("private_dot_secrets", ".secrets")):
+            with self.subTest(parent=target_name), UpdateFixture() as f:
+                source = f.producer / "home" / source_name
+                source.mkdir()
+                (source / "private_probe").write_text("new managed value\n")
+                f.commit("new target under an absent parent", f.producer)
+                f.git("push", "origin", "main", cwd=f.producer)
+                self.assert_warning(f.hook())
+                target = f.destination / target_name
+                self.assertFalse(target.exists())
+                self.assertFalse(target.is_symlink())
+                self.assertEqual((f.destination / ".sample").read_text(), "before\n")
+                self.assertTrue(f.marker.is_file())
+                # Native update may fast-forward before the apply refuses.
+                self.assertEqual(f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD", cwd=f.producer))
+
     def test_dirty_tracked_and_untracked_source_refuse_without_stash(self):
         for kind in ("tracked", "untracked"):
             with self.subTest(kind=kind), UpdateFixture() as f:
