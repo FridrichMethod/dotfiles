@@ -25,10 +25,13 @@ Preserve [fleet execution](fleet-rollout.md) and
 This is an implementation plan, not a Stage 5 implementation or a Stage 4 release
 certificate. Branch `chezmoi-stage4-integration` at
 `/tmp/dotfiles-chezmoi-stage4-integration` carries the complete Stages 1-4 result.
-Bridge `9c1a31f` passed exact hosted CI/bootstrap e2e and reached main; later
-compatibility, directory-mode, secret-scope and tmux changes need their own gates.
-Lab preparation stopped before managed target apply; actual host acceptance is
-separate from fixtures and publication. Read the current Stage 4 record in
+Corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
+bootstrap e2e 41567805363 jobs before main landing. Lab's 59 and WSL's 55 ordinary
+targets subsequently passed actual native takeover and updater/access checks.
+Sherlock and Marlowe each accepted 54 ordinary targets and actual updater checks
+under existing-master access. Maintenance is removed on all four. Mac access,
+Windows' deferred ordinary-user check, secret custody and cluster consumer
+prerequisites remain separately recorded gates. Read the current Stage 4 record in
 [status.md](status.md), the current aggregate diff and its saved patch before
 creating worktrees. Temporary ledgers/review logs supplement the repository
 record; they do not replace it or authorize publication.
@@ -50,8 +53,10 @@ record rather than assuming a finding is fixed because a patch exists. Preserve
 these checks when reducing code; they protect current native behavior.
 
 The required native-platform fixtures, independent review, local checks and exact
-candidate hosted CI/e2e remain Stage 4 completion/activation gates. Immutable
-last-Stow/first-native revisions can be named only after real commits exist.
+candidate hosted CI/e2e passed for the accepted runtime. `bf99958` is the immutable
+supported Stow recovery bridge and first accepted ordinary-native release, as
+defined in support-boundary.md. Any later runtime or enrolled-source candidate
+must pass its applicable gates before activation.
 Preparing Stage 5 in isolation does not waive those gates or extend the current
 Stage 4 scope. Commit/publication/landing authority for Stage 4 is explicit.
 D11 authorizes the six-host operations

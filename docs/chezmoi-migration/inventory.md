@@ -11,6 +11,10 @@ bridges now dispatch the native updater by the home binding; no legacy sync
 helper enters native targets. Ownership/maintenance files and native runtime
 state are local metadata, not new managed targets. Private secret enrollment is
 still gated; approved candidates add no ciphertext to this inventory yet.
+The exact-green `bf99958` release has actual ordinary acceptance for lab's 59,
+WSL's 55 and each cluster's 54 targets; this does not change source counts. Per-host backups,
+parent preservation, application limits and unfinished hosts are recorded in
+[Stage 4 evidence](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
 
 ## Derivation, applicability and notation
 
@@ -55,7 +59,8 @@ Stage 2 implements ordinary paths and verifies exact target sets and bytes with
 Stage 3 adds exactly the two N modify paths with canonical legacy policy inputs;
 their output is checked semantically because native serialization is intentional.
 Typed Codex owned/retired metadata contains no policy values and has a parity
-test against the legacy constants. No static-secret target is selected yet.
+test against the legacy constants. Eight static candidates are privately approved,
+but no production encrypted source is enrolled yet.
 
 Owner **D** is dotfiles content with the application as reader; **D/app** means
 dotfiles baseline plus application-written live state; **D/legacy** means only

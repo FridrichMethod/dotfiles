@@ -1,6 +1,8 @@
 # Chezmoi migration handoff
 
-Status: Stage 4 compatibility candidate locally validated and reviewed; no live migration. Read [status.md](status.md)
+Status: Stage 4 runtime `bf99958` passed exact hosted CI/e2e and actual ordinary
+takeover on accepted hosts. Remaining host, recovery-custody and enrollment gates
+are recorded in [status.md](status.md); Stages 5/6 have not started. Read that record
 before starting work. Initial research baseline: `738f619`; consolidation baseline:
 `1a9d30b`. The completed review's old-layout/tool-support plan is now integrated in
 [support-boundary.md](support-boundary.md); do not execute its old standalone prompt.
@@ -128,7 +130,7 @@ remains an import stub. Mirrored first-party skills remain identical.
 | [2. Source state](stage-2-source-state.md) | Complete ordinary-file and host model with temporary legacy-source bridge | Implemented candidate and exact source checks | Candidate source, tested in temporary homes |
 | [3. Native configuration](stage-3-native-config.md) | Native AI modifies; complete candidate needs no sync venv | Implemented with explicit safe input refusals | Isolated native fixtures; Stage 4 performs takeover |
 | [4. Takeover](stage-4-takeover.md) | Declared cutoff, tested handover, real canary takeover, secret enrollment, thin login adapter | Ordered work packages with paths, guards, recovery and platform gates | Agent executes under the user's recorded six-host authorization |
-| [5. Ecosystem simplification](stage-5-ecosystem.md) | Smaller provisioning/diagnostics/payload integration and verified old-tool branch removal | Framework | Preserve only the declared current support contract |
+| [5. Ecosystem simplification](stage-5-ecosystem.md) | Smaller provisioning/diagnostics/payload integration and verified old-tool branch removal | Exact retained/deleted caller map and fresh-session handoff | Preserve the declared support contract; D7 remains a separate decision |
 | [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Framework | Roll out to all reachable unblocked hosts; record exceptions without an all-host waiting gate |
 
 Stages run in this order. Code completion and real-host operations are different

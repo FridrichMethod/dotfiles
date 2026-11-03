@@ -2,15 +2,21 @@
 
 Current Stage 4 actual observations and blockers are in
 [stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures).
-All six remain unmigrated. Lab has maintenance, a verified native binary, 59
-private target snapshots and native init, but no managed target apply or native
-ownership marker. Other Unix hosts have not been taken over; the user explicitly
-deferred Windows' ordinary-user execution/ACL gate. Native fixtures and SSH
-connectivity are distinct from takeover. The operator procedure is
+Lab's 59, WSL's 55 and each cluster's 54 ordinary targets have completed native
+takeover, repeat convergence and controlled automatic-update activation. Lab and
+WSL passed fresh ordinary SSH; clusters used existing authenticated masters and
+do not claim new MFA access.
+Their native ownership/state remain and maintenance is removed. Existing WSL
+tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
+from ordinary-file acceptance. Cluster consumer prerequisites remain separate
+from accepted ordinary targets. Mac SSH currently
+times out, and the user explicitly deferred Windows' ordinary-user execution/ACL
+gate. Native fixtures and SSH connectivity are distinct from takeover. The operator procedure is
 [takeover.md](takeover.md). Commit/publication/rollout authority is explicit;
-the `9c1a31f` bridge passed all three CI 41558979663 jobs and all eight bootstrap
-e2e 41558979671 jobs and reached main. Later compatibility and directory-mode
-candidate changes require their own exact green gates before rollout resumes.
+the corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
+bootstrap e2e 41567805363 jobs before main landing and actual ordinary takeover.
+It is the supported Stow recovery bridge and first accepted ordinary-native
+release; source/runtime retirement has not started.
 
 ## Authorization and scope
 
@@ -91,7 +97,7 @@ or unrelated SSH aliases for the six intended destinations.
    inventory and ancestors; prepare only exact still-absent directories through
    reviewed native directory-only, nonrecursive apply, skipping an empty list.
    Never fall back to an all-directory apply. Review local umask separately;
-   lab's selected native umask is 077. Apply the reviewed files, then perform a
+   all four accepted Unix hosts selected native umask 077. Apply the reviewed files, then perform a
    second apply, shell/profile/application checks and actual thin updater checks
    after controlled maintenance removal. Restore maintenance on failure. Missing
    parents can stop apply after a source fast-forward or earlier file writes.
@@ -101,7 +107,7 @@ or unrelated SSH aliases for the six intended destinations.
    over the old master is insufficient. Where site/MFA rules require the user's
    authenticated master, record that limit and the specific user-assisted check
    needed; never force a new login. For local lab-ubuntu, keep local recovery
-   access and record its SSH authentication blocker separately.
+   access; the actual post-takeover WSL-to-lab fresh SSH check passed.
 7. After the canary succeeds, roll out to the remaining reachable targets with
    one operation owner per host. Limited parallelism is fine only after confirming
    distinct writable state. A failure stops that host's retirement and any rollout
@@ -140,8 +146,9 @@ Read the applicable rules on Marlowe before installation or substantive changes.
 Sherlock's observed glibc 2.17 cannot run the generic v2.74 Linux artifact. The
 official SHA256-verified static musl build passed an isolated version probe;
 `77bb03e` selects it without changing the existing destination convention.
-That local follow-up still needs its exact hosted gates. No native production
-installation or environment build occurred on either cluster.
+That correction is included in the accepted exact-green release. Actual cluster
+installation and takeover outcomes are recorded separately in stage-4-evidence.md;
+neither binary provisioning nor configuration apply requires an environment build.
 
 Eight static Claude files are authorized for lab, Mac, WSL, Sherlock and Marlowe
 plus independent R. Apple Passwords is selected and already syncs to another

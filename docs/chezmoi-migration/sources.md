@@ -19,6 +19,13 @@ parents require inspected native directory-only preparation. Ignore-directory
 patterns and config-key alternatives did not preserve the required behavior in
 these probes. The actual regression evidence and nontransactional boundary are
 in [Stage 4 evidence](stage-4-evidence.md#published-bridge-and-subsequent-corrections).
+Release `bf99958` passed exact three-platform CI and seven-role bootstrap e2e;
+actual lab and WSL takeover additionally proved file convergence, preserved
+parents, fresh SSH and real thin-updater execution. Both clusters passed ordinary
+takeover and updater checks using existing masters, with fresh MFA access unproved.
+These host receipts are
+separate from fixture results and do not establish GUI/application authentication
+or independent recovery custody.
 
 Native config init now reads existing TOML and preserves unrelated local
 settings, including age and data, with native

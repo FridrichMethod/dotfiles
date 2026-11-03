@@ -2,7 +2,7 @@
 
 Cross-platform configuration for macOS, WSL/Ubuntu, Stanford Sherlock, Marlowe
 and native Windows, moving to native chezmoi regular-file deployment. The Stage 4
-compatibility candidate retains physical GNU Stow sources for existing homes.
+compatibility release retains physical GNU Stow sources for existing homes.
 Shared defaults in `common/` and host overlays remain canonical through Stage 6.
 Secret enrollment is explicit and encrypted; mutable auth/runtime state stays local.
 
@@ -10,7 +10,7 @@ Secret enrollment is explicit and encrypted; mutable auth/runtime state stays lo
 
 Clone once per home/platform. Native source selection uses explicit local
 `[data].host`; the checkout remains available for updates and literal source reads.
-For the candidate's release/rollout gates and actual host outcomes, read the
+For release/rollout gates and actual host outcomes, read the
 [migration status](docs/chezmoi-migration/status.md).
 
 ```sh

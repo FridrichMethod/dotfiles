@@ -7,11 +7,12 @@ using the symbol/path inventory below; do not delete by old line numbers.
 
 ## Stage 4 candidate boundary
 
-The Stage 4 bridge reached local and remote main at `9c1a31f` after all three
-CI 41558979663 jobs and all eight bootstrap e2e 41558979671 jobs passed. The
-`chezmoi-stage4-integration` worktree now has local follow-ups `77bb03e` and
-`c4412a5` plus pending directory-mode, secret-scope and tmux handoff changes;
-their exact hosted candidate gates remain pending. The bridge retains all legacy
+The corrected Stage 4 release reached local and remote main at
+`bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` after all three CI 41567805090 jobs
+and all eight bootstrap e2e 41567805363 jobs passed. Lab's actual ordinary-file
+canary then passed. The earlier `9c1a31f` bridge remains historical evidence;
+the corrected release contains the directory-mode, secret-scope, compatibility
+and tmux handoff changes. The bridge retains all legacy
 physical source paths and supports explicit legacy
 provisioning through `--legacy-stow` / `-LegacyStow`; native is the new setup
 default. Native setup requires chezmoi 2.74.0, an explicit compatible role and
@@ -21,7 +22,8 @@ home/source binding, nonempty native state, clean source and native
 It does not use a sync parser environment. Bash 3.2 and both Windows shell
 profile paths remain in scope; no new Bash/tmux/Claude client floor is declared.
 Sherlock's glibc 2.17 needs the official static musl artifact selected by
-`77bb03e`; its isolated verified probe passed, but no production install occurred.
+`77bb03e`; its isolated verified probe passed. Actual per-host installation and
+acceptance are recorded separately in status.md.
 
 The corrected candidate explicitly passes `--exclude=dirs` on native file
 apply/diff/update. Existing shared parents retain their modes/ACLs; only reviewed
@@ -31,16 +33,25 @@ operator preparation, not an automatic creator or plain-apply fallback. A failed
 apply may follow Git or earlier file writes. Review local native umask and private
 parent modes separately; lab selected local 077 without changing global policy.
 
-Last supported Stow revision and first accepted native cutover revision remain
-**unassigned**. `9c1a31f` is a published compatibility bridge, not a declared
-legacy deletion cutoff or completed actual-home acceptance. Lab has maintenance,
-native binary/init and 59 private target snapshots, but no managed target apply
-or ownership marker because the directory-mode finding stopped the canary.
-All other hosts remain untaken over; Windows' ordinary-user ACL gate is explicitly
-deferred by the user. Commit, publication and D11 rollout authorization are
-already granted; exact candidate gates and concrete host prerequisites still
-apply. Do not ask for blanket authority again. Stage 6 must not delete the bridge
-until real immutable revisions and the support cutoff are recorded.
+The immutable supported Stow recovery bridge and first accepted ordinary-native
+cutover revision are both `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0`. This is a
+deliberate compatibility release: legacy Stow recovery and native takeover are
+both tested here. `1a9d30b` is the pre-migration input baseline, not the recovery
+release. Later physical legacy retention does not extend the declared supported
+Stow release automatically. No legacy source/runtime deletion occurs in Stage 4.
+An isolated direct `1a9d30b` to `bf99958` ff-only fixture skipped ten intermediate
+commits and retained all 95 physical source referents and 448 synthetic links;
+the exact scope and reproducible evidence are in stage-4-evidence.md. It does
+not promise a safe unsupported jump across the Stage 6 deletion cutoff.
+
+Lab's 59 targets are regular files, native ownership/state are established,
+maintenance is removed and actual updater/fresh-access acceptance passed.
+Other host outcomes and exceptions remain in status.md; Windows' ordinary-user
+ACL gate is explicitly deferred. Commit, publication and D11 rollout authority
+are already granted; exact candidate gates and concrete host prerequisites still
+apply. Before any Stage 6 breaking publication, execute the quiescence and
+offline-home recovery procedure below: a declared cutoff alone cannot stop an
+old updater from fetching a deletion commit.
 
 ## Resolved user direction
 

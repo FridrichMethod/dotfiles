@@ -190,8 +190,10 @@ again recreates the seed. Persistent create-if-missing is therefore unsuitable
 as recurring auth deployment. Optional initial seeding must be explicit and
 removed from recurring source after bootstrap. Static-for-consumer candidates
 and application-written refresh stores are classified separately in
-[inventory.md](inventory.md); installed kit v0.6 source evidence requires a
-channel-0.7 interface recheck before real enrollment.
+[inventory.md](inventory.md). The approved eight-file classification now has a
+public channel-0.7 consumer review. Sherlock's installed kit v0.6 still requires
+the reviewed upgrade and actual interface check before real enrollment; public
+source review alone does not upgrade that host.
 
 Synthetic output checks use a public-target allowlist for diff and inspect
 successful apply output/source for the disposable canary. This does not promise

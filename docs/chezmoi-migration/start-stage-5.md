@@ -9,27 +9,39 @@ candidate code, actual native fixture results, hosted validation and real hosts.
 
 Start by inspecting HEAD, branch, status, the full staged AND unstaged diff,
 untracked task files and worktrees at /tmp/dotfiles-chezmoi-stage4-integration,
-branch chezmoi-stage4-integration. Stages 1-4 are committed through published
-bridge 9c1a31f. Integration HEAD c4412a5 also contains local 77bb03e (Sherlock
-static musl artifact) and c4412a5 (portable Terminal preference and controlled
-updater activation). Carry the current pending tracked/untracked changes as well
-as the committed source when creating another worktree; a HEAD-only copy omits
-the newer directory-mode, five-host secret-scope and tmux candidate changes.
-Do not replay the old whole-aggregate patch over this HEAD. The user's two-file
-tmux handoff is imported into the candidate, with originals preserved in main's
-checkout pending coordinated landing. Validate parity and keep a recoverable
-patch. Never reset/stash/discard or overwrite unrelated edits.
+branch chezmoi-stage4-integration. Stages 1-4 runtime is committed through
+bf9995809ca7564c0728f87bcbefe91c8a3cc5e0, including the Sherlock static artifact,
+Terminal preference, directory-mode correction, five-host secret gate and exact
+tmux handoff. Carry any subsequent pending tracked/untracked changes as well as
+the committed source when creating another worktree. Do not replay a historical
+whole-aggregate patch over this HEAD. The user's two original main tmux edits
+were verified, staged deliberately and accepted by the matching fast-forward;
+main was clean afterward. Validate parity and keep a recoverable patch. Never
+reset/stash/discard or overwrite unrelated edits.
 
-Bridge 9c1a31f passed all three jobs of CI 41558979663 and all eight jobs of
-bootstrap e2e 41558979671 and reached local/remote main. Later commits and pending
-candidate changes need their own exact gates. The user explicitly authorized
+Runtime bf99958 passed all three jobs of CI 41567805090 and all eight jobs of
+bootstrap e2e 41567805363 and reached local/remote main. It is both the supported
+Stow recovery bridge and first accepted ordinary-native release. Subsequent
+changes need their applicable exact gates. The user explicitly authorized
 commit, publication and rollout; do not ask again for blanket authority.
-Lab has maintenance, verified native binary, 59 private snapshots and native
-init, but no managed target apply or native ownership marker: the canary stopped
-at shared-directory permission changes. Other Unix hosts have not been taken
-over. The user explicitly deferred Windows' ordinary-user execution/ACL gate;
+Lab's 59 and WSL's 55 ordinary files are native regular targets; repeat convergence,
+parent preservation, actual updater invocation, old-writer refusal and fresh
+ordinary SSH passed. Native markers/state remain and maintenance is removed.
+Sherlock and Marlowe each accepted 54 ordinary files and actual updater checks,
+with private state/binding retained and maintenance removed. Existing cluster
+masters do not establish fresh MFA access. Sherlock's first post-apply verification
+stopped for an unknown reason; all 54 writes and first full apply had succeeded.
+A separately reviewed current-state backup and remaining single nonforced full
+apply/diff passed without relaxing guards. Preserve that evidence and uncertainty.
+Mac access currently times out;
+its reviewed artifacts are prepared but no native takeover occurred. The user
+explicitly deferred Windows' ordinary-user execution/ACL gate;
 do not retry automatic de-elevation or claim Windows acceptance. Preserve
 specific auth/privilege/site/ownership boundaries and unfinished recovery custody.
+Lab retains a legacy-submodule warning; WSL retains that warning and 11 preexisting
+missing tmux plugin checkouts. Shell/native acceptance is not full application
+readiness or GUI validation. Do not silently expand this migration into cleanup
+or install unrelated components merely to erase those recorded findings.
 
 Read AGENTS.md and docs/chezmoi-migration/{README,status,inventory,sources,
 stage-3-native-config,stage-4-takeover,takeover,stage-5-ecosystem,
@@ -142,10 +154,21 @@ new targets. Mutable Codex auth remains excluded and requires host-local login.
 Apple Passwords is selected and sync to a second usable device is confirmed,
 and R was generated privately on Mac. Actual deposit/retrieval, host bootstrap
 and enrollment remain pending. All five task-installed Bitwarden clients were
-removed; Sherlock never installed one and its toolkit proposal is canceled.
+removed; Sherlock never installed one and its Bitwarden tooling proposal is canceled.
 Consult the private record and never log names/values here. SSH stays ordinary.
 Sherlock kit 0.6 still needs reviewed channel-0.7 upgrade before enrollment;
-Marlowe's missing native Codex is separate from Claude scope. No production dummy
+the official source review and separate local pinned sherlock-kit v0.6.0
+controller proposal are prepared. Adding that dependency requires the user's
+specific approval under their global rule, and execution still requires an
+appropriate allocation. Do not reuse the canceled Bitwarden authorization or
+submit a tiny/padded job to bypass useful-work rules. Read stage-4-evidence.md
+for the current decision and concrete proposal before acting.
+Marlowe's actual login Python 3.10.12 does not meet the launcher's 3.11 floor;
+The Node runtime for helpers is missing, and native Codex is absent from inspected
+PATH. Kit 0.7 presence is not proof of
+usable accounts. Resolve required runtime provisioning under current site rules
+before claiming consumer readiness; native Codex auth remains separate from
+Claude scope. No production dummy
 credentials, private keys in Git, recurring OAuth refresh replay, or permanent
 create-if-missing auth seeds. Keep consumer paths, app-written auth, SSH trust
 and the existing recovery channel. Secret enrollment is unfinished Stage 4

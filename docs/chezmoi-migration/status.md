@@ -6,36 +6,46 @@
   the initial feasibility assessment at `2c177fc`.
 - Original consolidation baseline: `1a9d30b`. The other review session finished
   its fixes and integrated tmux before the plan merge; retain that history.
-- Published Stage 4 bridge: local and remote `main` reached exact commit
+- Initial published Stage 4 bridge: local and remote `main` reached exact commit
   `9c1a31f4efa0b23a67e9a20640a2f236eae64325` after all three jobs of
   [CI 41558979663](https://github.com/FridrichMethod/dotfiles/actions/runs/41558979663)
   and all eight jobs of
   [bootstrap e2e 41558979671](https://github.com/FridrichMethod/dotfiles/actions/runs/41558979671)
   passed. No force or history rewrite was used.
-- Integration HEAD is `c4412a5`, following local `77bb03e` (Sherlock static musl
-  artifact selection) and `c4412a5` (portable Terminal preference and controlled
-  updater acceptance). These follow-ups and the further shared-directory-mode
-  correction have not passed their exact hosted candidate gates or reached main.
-  Inspect the current working-tree diff; the newer tmux user handoff is imported
-  into the candidate and its original main-checkout edits remain preserved.
+- Accepted ordinary-native release:
+  `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0`, after all three jobs of
+  [CI 41567805090](https://github.com/FridrichMethod/dotfiles/actions/runs/41567805090)
+  and all eight jobs of
+  [bootstrap e2e 41567805363](https://github.com/FridrichMethod/dotfiles/actions/runs/41567805363)
+  passed. Local and remote main fast-forwarded to that exact commit. It includes
+  the Sherlock static artifact, portable Terminal preference, five-host secret
+  gate, directory-mode correction and the user's exact tmux handoff. The two
+  matching main edits were deliberately staged before the fast-forward; no user
+  work was discarded. Inspect subsequent working-tree changes before carrying.
 - Implemented migration candidates: Stage 1 isolated foundation, Stage 2 ordinary
   source, Stage 3 native AI configuration and Stage 4 compatibility/takeover.
-  The bridge passed hosted validation; the corrected candidate, secret custody
-  and actual rollout remain separate gates; see [Stage 4 evidence](stage-4-evidence.md).
-- Real homes taken over: none. Lab has persistent maintenance, the verified
-  native binary, 59 private target snapshots and explicit native init. No managed
-  target apply or native ownership marker was created: the canary stopped at the
-  shared-directory permission finding. Other Unix hosts have not been taken over;
-  the user explicitly deferred Windows' ordinary-user execution/ACL gate.
+  The corrected runtime passed hosted validation and the lab ordinary-file
+  canary. Secret custody and per-host rollout remain separate outcomes; see
+  [Stage 4 evidence](stage-4-evidence.md).
+- Lab ordinary takeover is accepted: 59 regular targets, repeat convergence,
+  unchanged parent modes, shell and fresh SSH checks, actual automatic native
+  update and old-writer refusal passed. Native ownership/state remain; maintenance
+  is removed. WSL's 55 ordinary files and updater/access checks also passed;
+  its preexisting tmux prerequisites remain missing. Sherlock and Marlowe each
+  accepted 54 ordinary files and actual updater checks, with maintenance removed;
+  access used existing authenticated masters, not fresh MFA. Mac access currently
+  times out; the user explicitly deferred Windows' ordinary-user execution/ACL gate.
 - Initial connection-only preflight: four SSH successes, local lab-ubuntu access, and
   SSH auth rejection on win/lab-ubuntu; see [fleet rollout](fleet-rollout.md).
-- Follow-up: Mac's own SSH client also reaches win and lab-ubuntu. All six now
-  have an observed operation route. The user then added the lab public key on
+- Earlier connectivity-only follow-up: Mac's own SSH client reached win and
+  lab-ubuntu, establishing an observed route for all six at that checkpoint.
+  The user then added the lab public key on
   Windows; fresh direct lab-to-win SSH was independently verified. Both public
   keys and the existing ACL remain intact. Only the one new authorization-file
-  backup was removed at the user's request. No dotfiles migration was performed.
-- Real secret values inspected/enrolled by this planning work: none; only local
-  names/types/modes were checked. See [secrets and SSH](secrets-and-ssh.md).
+  backup was removed at the user's request. That connection check performed no
+  dotfiles migration; later actual takeover is recorded separately above.
+- The eight approved credential files have not been read or enrolled. Independent
+  R was generated privately; custody remains pending. See [secrets and SSH](secrets-and-ssh.md).
 - Eight static Claude files are approved for lab, Mac, WSL, Sherlock and Marlowe
   plus recovery recipient R. Mutable Codex auth stays excluded and SSH stays
   ordinary. Apple Passwords is selected and already syncs to another usable
@@ -45,8 +55,9 @@
 - Native chezmoi executables tested: official v2.74.0 Linux amd64, Darwin arm64
   and Windows amd64, SHA256 verified. Stage 3's final candidate has 64 native
   test methods; exact passes/skips and full-run evidence appear below. Remote work
-  used private temporary fixtures only; their evidence is distinct from the
-  later lab preparation above. No managed HOME apply or secret enrollment occurred.
+  used private temporary fixtures at those checkpoints; their evidence is
+  distinct from the later accepted lab takeover above. No production credential
+  enrollment occurred.
 - Active work: finish [Stage 4](stage-4-takeover.md) and its recorded gates.
   The [Stage 5 prompt](start-stage-5.md) is a handoff, not authorization to start it.
 - The new [inventory](inventory.md) derives 95 tracked package paths at
@@ -90,20 +101,20 @@ before the main fast-forward.
 | 1 | Implemented; Linux/macOS/Windows probes and independent review | No real HOME takeover or fleet migration | 23 probes; Windows one Unix-TZ skip; inventory and CI integration |
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
-| 4 | Bridge `9c1a31f` passed exact CI/e2e and reached main; later compatibility, directory-mode, scope and tmux candidate changes await their gates | Lab prepared but no managed apply/ownership marker; other hosts not taken over; custody and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
+| 4 | Corrected runtime `bf99958` passed exact CI/e2e and reached main | Lab/WSL/Sherlock/Marlowe ordinary takeover accepted; Mac access, custody/consumer readiness and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Not started | Depends on integration scope | None |
-| 6 | Not started | Support-cutoff deliverables not implemented | None |
+| 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
 
 ## Decisions and open choices
 
 Stage 4 integration is `/tmp/dotfiles-chezmoi-stage4-integration` on
-`chezmoi-stage4-integration`, now at committed `c4412a5` plus pending changes.
-Stages 1-4 are committed through the published bridge; do not replay the old
+`chezmoi-stage4-integration`, with accepted runtime `bf99958` and subsequent
+operational-record updates. Stages 1-4 are committed through that release; do not replay the old
 whole-aggregate `/tmp/chezmoi-stage4-candidate.patch` over this HEAD. The original
 Stage 3 coordinator and earlier patches remain historical recovery evidence.
 Inspect all staged, unstaged and untracked changes before carrying the pending
-candidate into another worktree. Preserve the original main tmux edits until
-coordinated landing. The user explicitly authorized commits, publication and
+candidate into another worktree. The original main tmux edits were preserved in
+the coordinated landing. The user explicitly authorized commits, publication and
 rollout; no blanket authorization question remains. Exact candidate CI/e2e,
 private recovery custody and concrete host gates still apply.
 The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
@@ -122,7 +133,7 @@ The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
 | D10 | Select concrete tested minimum versions before removing old-tool branches; preserve supported OSes and current safety semantics | Stage 1 inventory, coherent component changes through Stage 5 |
 | D11 | Agents execute migration, tests and precise legacy retirement on the six hosts in Stages 4/6; do not defer reachable-host work to a later manual user task | Explicit user authorization; persists across sessions; concrete auth/privilege/site blockers remain |
 | D12 | Include allowlisted secrets and private SSH information through native encryption/vault integration; preserve app-written auth state | User-requested scope; Stage 1 classifies consumers and tests; Stage 4 enrolls real values |
-| D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; host private identities stay local. Apple Passwords selected; actual recovery generation/deposit/retrieval and enrollment remain pending |
+| D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; host private identities stay local. R generated privately on Mac; Apple Passwords deposit/retrieval, host bootstrap and enrollment remain pending |
 
 D6 is resolved: the user selected keeping login automatic updates with a thin
 chezmoi adapter. Stage 4 must implement that direction, with noninteractive
@@ -649,19 +660,19 @@ execution. D6 thin login updates, D9 support cutoff without an all-host waiting
 gate, and D11 six-host execution authority remain unchanged. The next prompt is
 [start-stage-4.md](start-stage-4.md). Stop at Stage 3; no real HOME was taken over.
 
-## Stage 4 live preparation and pending corrected candidate
+## Stage 4 ordinary acceptance and remaining host gates
 
-The published `9c1a31f` bridge passed the exact CI/e2e runs linked above. Those
-results do not validate later `77bb03e`, `c4412a5` or working-tree changes. The
-next candidate includes the reviewed Sherlock artifact, Terminal preference,
-five-host static-secret scope, tmux handoff and directory permission correction.
-Freeze and test that exact combined result before publishing or resuming apply.
-Historical native test counts above and in Stage 4 evidence retain their original
-snapshot scope; do not relabel them as checks of this newer candidate.
+Corrected runtime `bf99958` passed its exact CI/e2e runs linked above and reached
+main before lab canary and WSL execution. It includes the reviewed Sherlock
+artifact, Terminal preference, five-host static-secret scope, tmux handoff and
+directory permission correction. Earlier fixture counts retain their original
+snapshot scope. Final local native validation ran 149 methods with 31 Windows
+method skips; hosted native Windows and Mac passed at the exact release.
 
 During lab preparation, isolated probes found that plain native apply changes
 existing parent modes, including 0700 private directories and a 0770 shared
-`.config`. No real managed target was applied. The corrected contract pins `--exclude=dirs` on
+`.config`. The finding stopped the first attempt before target writes and was
+fixed before actual takeover. The accepted contract pins `--exclude=dirs` on
 file apply, diff and routine update. Inspect the native `managed --include=dirs`
 inventory relative to the canonical destination, including ancestor ownership,
 links/reparse points, modes and ACLs. Only exact still-absent reviewed directories
@@ -670,26 +681,31 @@ targets; skip the command for an empty list. Preserve all existing parents.
 Future missing parents require the same preparation. Git or earlier files may
 already have changed before a later failure; there is no transaction or fallback
 to all-directory apply. See [takeover.md](takeover.md) for the complete procedure.
-Lab will use reviewed local native `umask = 0o077` to avoid widening known 0600
-files; this is a local choice, not a new global config or shell-umask policy.
+All four accepted Unix hosts use reviewed local native `umask = 0o077` to avoid
+widening known 0600 files; this is a local choice, not a global shell-umask policy.
 
 | Host | Current actual state | Remaining gate |
 | --- | --- | --- |
-| lab-ubuntu | Verified chezmoi 2.74.0 installed; maintenance and old-worker suppression checked; 59 private target snapshots, native init and two AI dry-run/private merge reviews passed. No native ownership marker or managed target apply | Corrected exact candidate gates, refresh snapshot for preserved newer tmux edit, then reviewed canary apply and actual updater acceptance |
-| mac | 56-target metadata preflight; 53 exact links and three regular files. Shared root-owned `.config` must keep its existing permissions | Canary, corrected candidate gates and ordinary application/access acceptance; no takeover |
-| wsl-ubuntu | 55-target metadata preflight; 52 exact links and three regular files | Canary and corrected candidate gates; preserve shared-parent modes; no takeover |
+| lab-ubuntu | 59 ordinary regular files, private backups, two AI reviews, repeat convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed. Native ownership/state present; maintenance removed | Secret custody/enrollment pending. Existing retired-submodule warning retained for Stage 6; no GUI/auth acceptance claim |
+| mac | 56-target metadata preflight and reviewed execution artifacts; ordinary SSH repeatedly times out. Shared root-owned `.config` must retain 0770 | Restore existing connectivity; no ordinary takeover. Independent R generation succeeded earlier, while deposit/retrieval remains pending |
+| wsl-ubuntu | 55 ordinary regular files, both private backups, independent AI review, convergence, preserved parents, actual updater/old-writer refusal and fresh SSH passed; maintenance removed | Existing 11 tmux plugin prerequisites and retired-submodule warning remain; no unrelated installs or tmux/GUI validation. Secret custody/enrollment pending |
 | win | 26-target metadata preflight; 23 exact links and three regular files. Terminal preference retained | User explicitly deferred ordinary-user execution/ACL check; no target/task/production ACL change or takeover |
-| sherlock | Existing master and current site-rule preflight; generic v2.74 binary fails glibc 2.17, verified static musl probe passes privately. No native production install/apply | Corrected artifact gates and canary; kit 0.6 needs reviewed channel-0.7 upgrade before enrollment; master access is not fresh MFA proof |
-| marlowe | Existing-master preflight; kit 0.7 launchers present, native Codex absent from inspected PATH | Canary and candidate gates; Codex installation/auth is separate from Claude enrollment; no takeover |
+| sherlock | Verified official static musl installed; clean `bf99958`, 54 reviewed regular targets, preserved parents/cache layout, repeat convergence and actual updater/old-writer refusal passed. Maintenance removed; private state/binding retained | Historical postcheck interruption has unknown cause; reviewed bounded continuation passed with current-state backup. Existing master is not fresh MFA proof. Kit 0.6 upgrade/allocation and custody remain gates |
+| marlowe | Clean `bf99958`, 54 reviewed regular targets, preserved parents, repeat convergence and actual updater/old-writer refusal passed; maintenance removed, state/binding retained | Existing-master access only. Kit 0.7 is present but actual login Python is 3.10.12, below launcher's 3.11 floor; the Node runtime for helpers is missing and native Codex is absent from inspected PATH. Ordinary takeover is not full consumer/application readiness; custody remains pending |
 
-Apple Passwords custody is chosen and second-device sync is confirmed. The next
+Apple Passwords custody is chosen and second-device sync is confirmed. The
 private handoff generated independent R on Mac; deposit and independent retrieval
 must still be proved before enrollment. R alone must recover all eight approved static files, each
 encrypted for the five host public recipients plus R; host private identities
 never leave their hosts. Mutable Codex auth remains local, and SSH snippets remain
 ordinary. No host identity or production ciphertext exists. Bitwarden was canceled:
 all five task-installed clients were removed, Sherlock never installed one, and
-no toolkit/install proposal remains open. The Mac uninstall's unintended LLVM
+no Bitwarden installation remains planned. A separate, concrete proposal for a
+local pinned sherlock-kit v0.6.0 controller now awaits the dependency approval
+explicitly required by the user's global rules. It is needed to establish a
+compliant allocation route for Sherlock's coding-agent-kit 0.7 upgrade; it does
+not authorize a tiny job or waive site rules. See stage-4-evidence.md.
+The Mac uninstall's unintended LLVM
 removal was disclosed and exact version 22.1.8 restored; do not claim identical
 prior keg bytes. Detailed receipts stay in [Stage 4 evidence](stage-4-evidence.md).
 

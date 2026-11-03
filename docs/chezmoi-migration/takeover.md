@@ -3,11 +3,11 @@
 This procedure is for the reviewed compatibility release, with the physical
 `common/` and host paths still present. It is not permission to skip candidate
 CI, import whole application directories, or force a whole-home apply. The
-Stage 4 bridge `9c1a31f` passed exact hosted CI/e2e and reached main. Actual-home
-acceptance remains separate: subsequent preflight found that plain native apply
-changes existing shared-directory modes. Use the corrected file-only procedure
-below only from its reviewed, green release. Final recovery/native release hashes
-remain pending that acceptance record.
+corrected Stage 4 release `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` passed exact
+hosted CI/e2e and lab ordinary takeover. It is the supported Stow recovery bridge
+and first accepted ordinary-native release. Actual-home acceptance remains
+separate for every other host. Plain native apply changes existing shared
+directory modes; use the corrected file-only procedure below.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 2.6, PowerShell 7 entrypoints
