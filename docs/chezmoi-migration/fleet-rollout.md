@@ -9,7 +9,9 @@ do not claim new MFA access.
 Their native ownership/state remain. Maintenance was removed at ordinary
 acceptance. Mac subsequently accepted its eight-file secret deployment and left
 maintenance again; Lab and WSL currently remain in maintenance after their
-approved one-file Codex normalizations. Existing WSL
+approved one-file Codex normalizations. Marlowe subsequently accepted eight-file
+secret deployment after checking persisted post-apply bindings and restored
+automatic updates. Existing WSL
 tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
 from ordinary-file acceptance. Cluster consumer prerequisites remain separate
 from accepted ordinary targets. The user explicitly deferred Windows' ordinary-user execution/ACL

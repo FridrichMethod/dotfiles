@@ -417,7 +417,7 @@ Only metadata receipts were transferred to the coordinator.
 | wsl-ubuntu | Ordinary takeover accepted 55 files and updater/fresh SSH. User-approved normalization passed once; fresh continuation bound actual Mac acceptance, retained maintenance, backed up 57 files and passed all 63 target previews | Secret apply rejected by automatic approval review before execution; specific deployment confirmation pending. Maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
 | win | Last checkout preflight: main `7edf12fb5b61b6e6d96703bc67f4521e69501d0c`; 26 targets, 23 exact links and three regular files. Both NoProfile profile paths match. The appended Terminal profile is preserved with equivalent environment-variable prefixes | Not migrated; user deferred the required ordinary-user execution/ACL check. SSH is administrative; bounded automatic de-elevation did not complete the target audit. No task, marker, target or production ACL change |
 | sherlock | Clean `6db67ed` reached exact green `bf99958`; verified static musl installed, private pre/post/current backups, all 54 regular files, empty diff and actual updater passed | Ordinary takeover accepted; parents/cache preserved, maintenance removed and native binding/state retained. Historical postcheck cause unknown; reviewed continuation passed. Identity and eight-file crypto checks passed; kit 0.6 upgrade/site allocation gate deployment; master is not fresh MFA proof |
-| marlowe | All 54 ordinary files and updater accepted. Native installation job 553033 added 27 runtime packages once; repair job 553043 then corrected 3,342 new file modes with all bytes, original 32 records and parents preserved. Isolated Python 3.14.4, tomllib and Node 26.0.0 passed | Runtime accepted; fresh consumer inspection and 62-target secret deployment remain separate gates. Maintenance off, enrollment false, existing-master access only. Native Codex is separate |
+| marlowe | Runtime installation/repair and consumer checks passed. Verified 56-file backups before and after exact BF-to-749 source fast-forward preceded all 62 target previews. Actual eight-file deployment, nonforced repeat, empty diff, offline consumer, updater and existing-master access passed; 54 ordinary files and runtime/parents unchanged | Secret deployment accepted after rechecking persisted post-apply bindings. Maintenance off, enrollment true; eight files 0600 in a new 0700 parent. Earlier bridge approval denial resolved by new direct-user approval. No fresh MFA or credential-server authentication claim; native Codex is separate |
 
 Lab, Mac, WSL, Sherlock and Marlowe ordinary native takeovers are accepted as described
 above, with application and access limits retained. Other hosts are recorded
@@ -805,8 +805,61 @@ records preserve every original and resulting file identity. The isolated absolu
 login-prefix probes passed Python 3.14.4, tomllib and Node 26.0.0 with empty stderr.
 No installer, account or credential call ran in this repair. The actual receipt
 and reviewed script hashes were independently checked before runtime acceptance.
-Fresh consumer inspection and secret deployment remain separate gates; existing
-master access does not establish fresh cluster MFA.
+Fresh consumer inspection and secret deployment remained separate gates at that
+runtime checkpoint; existing master access does not establish fresh cluster MFA.
+
+### Marlowe secret continuation
+
+Fresh read-only inspection verified the accepted login-prefix runtime, native
+Claude executable, kit 0.7 public files and links, absent default kit override,
+clean `bf99958` source, 54 unchanged ordinary targets and eight absent secrets.
+The adapter retains the full historical binding and adds runtime observations.
+An independent review caught a saved-versus-current environment gap; exact kit
+and XDG selection equality now precedes runtime inspection. Eleven isolated
+methods passed, including native 62-target deployment, NFS/private-parent checks
+and refusal/restoration cases. This is distinct from actual host deployment.
+
+The actual host inspection then matched every historical binding. Maintenance
+was established and proved to suppress both update paths. All 56 ordinary/config/
+state backups were privately read back and verified; no plaintext backups left
+the host. A separately reviewed source bridge pins that backup, exact parents,
+clean main, canonical public origin and exact green `74985d08`. Synthetic Git
+tests exposed URL-specific HTTP settings that survive generic overrides; six
+exact scoped resets corrected the three settings for both accepted origin forms.
+All four real-Git regression methods and independent review passed. Credential
+helper behavior was verified with a synthetic positive control, without reading
+actual credentials. The operator claims only those verified transport settings.
+
+Automatic approval review initially refused the bridge before process creation,
+stating that it saw only assistant-relayed authority for the remote Git mutation.
+The coordinator checked the original user-adopted D11 scope and exact CI gates.
+Before any resubmission, the user provided a new direct approval. The identical
+frozen command then passed review and executed once: clean main advanced from
+`bf99958` to `74985d08`; all 54 ordinary files, native config/state, runtime,
+parents and 56 backups remained bound. Maintenance stayed on and all eight secret
+targets remained absent at that source-only checkpoint.
+
+The actual private review then backed up and read back 56 files and verified all
+62 native target renders: 54 ordinary files plus the eight approved credentials.
+The one-shot transport controller passed five isolated failure-path methods and
+independent review. The coordinator executed it once after explicit sole-host
+handoff. Actual deployment passed: the new parent is 0700, all eight single-link
+files are 0600, both nonforced applies converged and the full file diff was empty.
+The offline consumer read all eight, and the real updater performed one successful
+fast-forward-only pull followed by a skipped second call. All 54 ordinary files,
+runtime, identities and existing parents remained bound. Only the reviewed local
+config, native state and secrets changed. Maintenance is off and enrollment true.
+
+The retained authenticated SSH master passed the post-apply access check with
+both private stderr logs empty. The separate acceptance controller passed three
+isolated transport tests and independent review. Actual acceptance then rechecked
+the persisted post-apply binding without recapturing a baseline or repeating
+apply. Its native receipt binds apply receipt
+`79517fc565013f4cf849e76284e9e594a9c0aca8be4bd899395da1c08e0fc8c3`;
+the accepted receipt digest is
+`4f7f693622e0b112e1de15c45b102007d698a2aae8b61242e77b636fd897b023`.
+This is existing-master access only: fresh MFA and credential-server
+authentication were not tested. Native Codex remains a separate absent prerequisite.
 
 ## Remaining Stage 4 gates and Stage 5 handoff
 
@@ -817,7 +870,8 @@ supported Stow recovery bridge and first accepted ordinary-native release;
 see support-boundary.md. Custody and all five host identities are established;
 all six recipient checks passed. Encrypted source `74985d08` passed its exact
 hosted gates and is published. Mac is the accepted secret canary with actual
-fresh-access evidence. Lab and WSL have each completed their separately approved
+fresh-access evidence; Marlowe subsequently accepted deployment under existing
+authenticated access. Lab and WSL have each completed their separately approved
 single-file normalization; continue their fresh guarded plans without repeating
 force or reusing failed capsules. Continue independent
 unblocked work under D11, recording actual

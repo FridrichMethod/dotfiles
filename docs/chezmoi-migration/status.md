@@ -29,6 +29,13 @@
   [bootstrap e2e 41586462369](https://github.com/FridrichMethod/dotfiles/actions/runs/41586462369)
   passed. Local and remote main fast-forwarded to that exact commit. Only the
   eight approved ciphertexts entered source; target deployment is a separate gate.
+- Outcome checkpoint `cb7f11a039fbfc00428408e873730701d0aebf9b` passed all three
+  jobs of [CI 41613012922](https://github.com/FridrichMethod/dotfiles/actions/runs/41613012922)
+  on `ci/chezmoi-stage4-outcomes`. Later outcome records are prepared on the same
+  integration branch and require their own exact CI. Main remains `74985d08`
+  while the retained Lab/WSL deployment plans bind that revision. Complete those
+  plans or explicitly replace them with fresh reviewed plans before advancing
+  main; do not run a stale plan after its updater would pull a newer revision.
 - Implemented migration candidates: Stage 1 isolated foundation, Stage 2 ordinary
   source, Stage 3 native AI configuration and Stage 4 compatibility/takeover.
   The corrected runtime passed hosted validation and the lab ordinary-file
@@ -61,7 +68,9 @@
   outsider failed all eight. Only the verified ciphertexts entered `74985d08`;
   source publication passed its exact gates. Mac subsequently accepted all eight
   deployed secret targets, offline consumer checks, updater and fresh SSH.
-  The other four host enrollment flags remain false at this checkpoint.
+  Marlowe subsequently accepted all eight with 62-target convergence, retained
+  authenticated access and an unchanged persisted post-apply binding.
+  Lab, WSL and Sherlock enrollment flags remain false at this checkpoint.
   See [secrets and SSH](secrets-and-ssh.md).
 - Eight static Claude files are approved for lab, Mac, WSL, Sherlock and Marlowe
   plus recovery recipient R. Mutable Codex auth stays excluded and SSH stays
@@ -72,6 +81,8 @@
   established. Mac secret-canary acceptance restored its automatic updates.
   Lab and WSL are temporarily in maintenance after their separately approved
   one-file Codex normalizations; ordinary acceptance above remains valid.
+  Marlowe's eight-file deployment restored automatic updates after private
+  backups, 62-target review and an exact source fast-forward.
   All five task-installed
   Bitwarden clients were removed; Sherlock never had one installed.
 - Native chezmoi executables tested: official v2.74.0 Linux amd64, Darwin arm64
@@ -714,7 +725,7 @@ widening known 0600 files; this is a local choice, not a global shell-umask poli
 | wsl-ubuntu | 55 ordinary targets accepted. User-approved normalization passed once. Fresh continuation bound actual Mac acceptance and normalized state, retained maintenance, backed up 57 files and passed all 63 native target equalities | Automatic approval review rejected secret apply before execution, recognizing only the recent normalization approval. Specific deployment confirmation pending; maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
 | win | 26-target metadata preflight; 23 exact links and three regular files. Terminal preference retained | User explicitly deferred ordinary-user execution/ACL check; no target/task/production ACL change or takeover |
 | sherlock | Verified official static musl installed; clean `bf99958`, 54 reviewed regular targets, preserved parents/cache layout, repeat convergence and actual updater/old-writer refusal passed. Maintenance removed; private state/binding retained | Historical postcheck interruption has unknown cause; reviewed bounded continuation passed with current-state backup. Existing master is not fresh MFA proof. Kit 0.6 upgrade/allocation gates secret deployment; identity and eight-file crypto checks passed |
-| marlowe | 54 ordinary targets and updater accepted; maintenance off. Allocation job 553033 installed 27 runtime packages once, producing 59 records and preserving original 32. Job 553043 then repaired exactly 3,342 new file modes and passed all content/parent checks plus isolated Python 3.14.4, tomllib and Node 26.0.0 probes | Runtime accepted; fresh consumer inspection and the 62-target secret deployment plan remain pending. No reinstall, directory chmod or old-file change. Existing-master access only; secret enrollment remains false. Native Codex is a separate absent prerequisite |
+| marlowe | Runtime installation/repair and consumer checks passed. Verified 56-file backups before and after the exact BF-to-749 source fast-forward preceded all 62 target previews. Eight-file deployment passed twice nonforce, empty diff, offline consumer, actual updater and existing-master access; 54 ordinary files and runtime/parents unchanged | Secret deployment accepted after rechecking persisted post-apply bindings. Maintenance off, enrollment true; eight files 0600 in a new 0700 parent. Earlier bridge approval denial resolved by new direct-user approval. No fresh MFA or credential-server authentication claim; native Codex remains a separate absent prerequisite |
 
 Apple Passwords custody is chosen and second-device sync is confirmed. The
 private handoff generated independent R on Mac. The user reported

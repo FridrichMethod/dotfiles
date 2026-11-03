@@ -14,8 +14,10 @@ recipients. Each host and retrieved R passed all-eight equality checks, and a
 disposable outsider failed all eight. Only the eight ciphertexts entered source
 commit `74985d08`, which passed exact CI/e2e before reaching main. Actual target
 deployment remains a separate host gate. Mac has now accepted all eight files,
-offline consumer checks, updater and fresh SSH; the other hosts retain their
-recorded gates. These checks do not claim credential-server authentication. A local
+offline consumer checks, updater and fresh SSH. Marlowe's eight-file deployment,
+offline consumer, updater and existing-master access passed; final acceptance
+rechecked its persisted post-apply binding. Lab, WSL and Sherlock retain their recorded gates.
+These checks do not claim credential-server authentication. A local
 `.secrets` directory on the same disk cannot establish independent recovery.
 
 ## Scope added by the user

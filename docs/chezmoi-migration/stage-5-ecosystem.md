@@ -34,6 +34,11 @@ updater activation and fresh nonmultiplexed SSH. Maintenance is removed on all
 five at ordinary acceptance. Mac later accepted the eight-file secret canary and
 left maintenance again; Lab and WSL remain in maintenance after their approved
 one-file Codex normalizations.
+Marlowe's runtime and fresh consumer checks passed. Verified 56-file backups and
+the exact source fast-forward preceded all 62 previews and actual eight-file
+deployment, nonforced convergence, offline consumer, updater and existing-master
+access. Final acceptance rechecked the persisted post-apply binding. Maintenance
+is off and enrollment true, with fresh MFA and account authentication untested.
 Windows' deferred ordinary-user check, secret deployment and cluster consumer
 prerequisites remain separately recorded gates. Read the current Stage 4 record in
 [status.md](status.md), the current aggregate diff and its saved patch before

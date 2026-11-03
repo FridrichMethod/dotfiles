@@ -27,6 +27,12 @@ CI 41586461636 jobs and all eight bootstrap e2e 41586462369 jobs before reaching
 main. Carry that complete source and later outcome records. Subsequent changes
 need their applicable exact gates. The user explicitly authorized
 commit, publication and rollout; do not ask again for blanket authority.
+Outcome checkpoint cb7f11a039fbfc00428408e873730701d0aebf9b passed all three
+CI 41613012922 jobs on ci/chezmoi-stage4-outcomes. Inspect actual integration
+HEAD and later outcome commits before proceeding. Main remains at 74985d08 while the
+retained Lab/WSL deployment plans require that exact updater destination.
+Finish or explicitly replace those plans before advancing main; publication
+authorization does not make a stale host binding valid.
 Lab's 59 and WSL's 55 ordinary files are native regular targets; repeat convergence,
 parent preservation, actual updater invocation, old-writer refusal and fresh
 ordinary SSH passed. Native markers/state remain. Maintenance was removed at
@@ -180,8 +186,9 @@ All five host identities were generated locally and eight production inputs were
 encrypted for the exact six recipients. Each host and retrieved R passed
 all-eight recovery; only ciphertext entered published source 74985d08.
 Actual deployment remains a separate host gate. Mac's eight-file deployment is
-accepted as recorded above; the other four enrollment flags remain false at this
-checkpoint. Lab and WSL each received a separate direct-user one-file force
+accepted as recorded above; Marlowe's actual deployment and final persisted-binding
+acceptance also passed. Lab, WSL and Sherlock enrollment flags
+remain false. Lab and WSL each received a separate direct-user one-file force
 exception for typed-equivalent Codex serialization. Both executed once, preserving
 typed values and all other targets, followed by nonforced repeat and empty diff.
 Do not repeat those normalizations or infer routine force authority. Both hosts
@@ -219,7 +226,18 @@ All 759 new directories are 0700. Subsequent job 553043 repaired exactly those
 3,342 new file modes, preserving bytes, original records, parents and all other
 bindings. Isolated Python 3.14.4, tomllib and Node 26.0.0 probes passed; runtime
 acceptance is complete. Do not rerun installation or repair. Fresh consumer
-inspection and the 62-target secret deployment plan remain separate gates.
+inspection subsequently passed. A verified 56-file backup and exact clean
+bf99958-to-74985d08 source fast-forward completed with all live config/ordinary/runtime
+bindings preserved. A fresh 56-file backup and all 62 private target previews
+then passed. Actual eight-file deployment passed two nonforced applies, empty
+diff, offline consumer, updater and existing-master access. All 54 ordinary
+files, runtime and existing parents remained unchanged; files are 0600 and the
+new parent 0700. Final acceptance rechecked the persisted post-apply binding
+without a new baseline; maintenance is off and enrollment true. Existing-master
+access does not establish fresh MFA or credential-server authentication.
+Do not repeat the completed backup, source bridge or apply. An initial automatic
+approval denial of the bridge was resolved by a new direct-user approval for
+the unchanged reviewed command.
 Consult current Stage 4 evidence before proceeding. Native Codex
 is separately absent from inspected PATH. Kit 0.7 presence is not proof of
 usable accounts. Resolve required runtime provisioning under current site rules
