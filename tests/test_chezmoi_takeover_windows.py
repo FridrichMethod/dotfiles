@@ -203,6 +203,33 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(acl_after.returncode, 0, acl_after.stderr)
         self.assertEqual(acl_after.stdout, acl_before.stdout)
 
+    def test_update_keeps_explicit_protected_dacl_while_content_updates(self):
+        self.setup_native()
+        target = self.home / ".sample"
+        # Replace inherited entries with one explicit owner entry; native Windows
+        # writes in place, so a routine update must not reset this private DACL.
+        acl_before = self.ps("$p=" + ps_string(target) + ";$a=Get-Acl -LiteralPath $p;" +
+                             "$a.SetAccessRuleProtection($true,$false);" +
+                             "$a.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(" +
+                             "[System.Security.Principal.WindowsIdentity]::GetCurrent().User," +
+                             "'FullControl','Allow'));Set-Acl -LiteralPath $p -AclObject $a;" +
+                             "(Get-Acl -LiteralPath $p).Sddl")
+        self.assertEqual(acl_before.returncode, 0, acl_before.stderr)
+        self.assertIn("D:P", acl_before.stdout)
+        sender = self.f.root / "content update sender"
+        self.git("clone", str(self.remote), str(sender))
+        (sender / "home/dot_sample").write_text("updated\n")
+        self.git("commit", "-qam", "update existing target", cwd=sender)
+        self.git("push", cwd=sender)
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
+        self.assertEqual(target.read_text(), "updated\n")
+        self.assertFalse(target.is_symlink())
+        acl_after = self.ps("(Get-Acl -LiteralPath " + ps_string(target) + ").Sddl")
+        self.assertEqual(acl_after.returncode, 0, acl_after.stderr)
+        self.assertEqual(acl_after.stdout, acl_before.stdout)
+
     def test_update_refuses_new_file_when_managed_parent_is_absent(self):
         self.setup_native()
         sender = self.f.root / "new directory sender"
