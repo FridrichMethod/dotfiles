@@ -15,8 +15,9 @@ additional legacy package rows. With local enrollment enabled, complete role
 totals are 49/64/63/67/62/62/26 in the same order. Without it, the ordinary totals
 above remain unchanged. Mac's production flag is enabled after actual acceptance
 of all 64 targets. Marlowe's flag is also enabled after actual 62-target
-convergence and final persisted-binding acceptance. Lab, WSL and
-Sherlock flags remain false at this checkpoint. The
+convergence and final persisted-binding acceptance. WSL's flag is enabled after
+63-target convergence and fresh-access acceptance. Lab and Sherlock flags remain
+false while their fresh continuations are prepared. The
 encrypted source passed exact CI/e2e and reached main at `74985d08`; remaining
 host deployments stay separately gated.
 The exact-green `bf99958` release has actual ordinary acceptance for lab's 59,

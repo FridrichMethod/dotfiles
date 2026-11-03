@@ -1,6 +1,47 @@
 # Migration state and next-session record
 
-## Current state
+## Current Stage 4 continuation
+
+The user explicitly approved the remaining deployments, commit/publication and
+main integration, selected shared Codex `gpt-6-astra` / `xhigh`, resumed Windows,
+and requested the lightweight Sherlock kit update on its login node. No blanket
+approval, recovery-custody choice or mandatory job ID remains outstanding.
+
+Mac, WSL and Marlowe have accepted all eight secret targets, repeated nonforce
+convergence, offline consumer and actual updater checks. Their enrollment flags
+are true and maintenance is off. WSL's final acceptance binds actual fresh SSH;
+Marlowe uses the existing authenticated master and does not claim fresh MFA.
+
+Sherlock's official kit 0.7.0 update passed: 50 new release files, all 53 previous
+files retained, nine owned links and parent security metadata preserved. It used
+the existing login environment and required no environment build or job. Fresh
+site rules permit this bounded source-file deployment; the earlier allocation
+block was an overly strict interpretation. Secret deployment is being prepared.
+
+Windows' genuine ordinary-user audit passed in the existing desktop session:
+26 exact targets, five control parents and both NoProfile shell paths. The
+one-off Limited task was removed after verified completion. Native takeover
+remains separate and is being prepared; the previous user deferral is superseded.
+
+Lab's approved Astra/xhigh correction passed, but its config was subsequently
+reformatted without changing any typed value. A small native modifier fix is
+being validated: after all existing validation and transformations, preserve
+original input when native typed equality says no change is needed. Actual policy
+changes retain canonical serialization and ordinary conflict protection. Lab
+remains in maintenance with enrollment false until the reviewed candidate and
+fresh host continuation pass. Do not reuse its stale saved plan or repeat force.
+
+Main remains at encrypted release `74985d08` while the new runtime candidate is
+prepared. Integration includes all earlier outcome commits through `12262e6`;
+that checkpoint passed all three jobs of CI 41670447610. New code must pass its
+own applicable exact hosted gates before main or real-host activation. Current
+per-host evidence and limits are in [stage-4-evidence.md](stage-4-evidence.md).
+Stages 5/6 have not started.
+
+## Publication and historical operational checkpoints
+
+The following checkpoints retain what was known then. The current continuation
+above supersedes their pending approvals, Windows deferral and allocation claim.
 
 - Planning baseline: `738f619` on 2026-11-01. It includes local tmux changes after
   the initial feasibility assessment at `2c177fc`.
@@ -135,7 +176,7 @@ before the main fast-forward.
 | 1 | Implemented; Linux/macOS/Windows probes and independent review | No real HOME takeover or fleet migration | 23 probes; Windows one Unix-TZ skip; inventory and CI integration |
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
-| 4 | Corrected runtime `bf99958` and encrypted source `74985d08` each passed exact CI/e2e and reached main | All five Unix ordinary takeovers accepted; all six recipients verified against all eight files; secret deployment, cluster consumer readiness and Windows ordinary-user gate remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
+| 4 | Runtime `bf99958` and encrypted source `74985d08` passed exact CI/e2e and reached main; formatting correction under validation | Five Unix ordinary takeovers and Mac/WSL/Marlowe secrets accepted; Sherlock kit and Windows ordinary-user audit passed; Lab/Sherlock deployment and Windows takeover remain | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Not started | Depends on integration scope | None |
 | 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
 

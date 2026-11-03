@@ -22,48 +22,26 @@ Preserve [fleet execution](fleet-rollout.md) and
 
 ## Entry state and gates
 
-This is an implementation plan, not a Stage 5 implementation or a Stage 4 release
-certificate. Branch `chezmoi-stage4-integration` at
-`/tmp/dotfiles-chezmoi-stage4-integration` carries the complete Stages 1-4 result.
-Corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
-bootstrap e2e 41567805363 jobs before main landing. Lab's 59 and WSL's 55 ordinary
-targets subsequently passed actual native takeover and updater/access checks.
-Sherlock and Marlowe each accepted 54 ordinary targets and actual updater checks
-under existing-master access. Mac subsequently accepted 56 targets, actual
-updater activation and fresh nonmultiplexed SSH. Maintenance is removed on all
-five at ordinary acceptance. Mac later accepted the eight-file secret canary and
-left maintenance again; Lab and WSL remain in maintenance after their approved
-one-file Codex normalizations.
-Marlowe's runtime and fresh consumer checks passed. Verified 56-file backups and
-the exact source fast-forward preceded all 62 previews and actual eight-file
-deployment, nonforced convergence, offline consumer, updater and existing-master
-access. Final acceptance rechecked the persisted post-apply binding. Maintenance
-is off and enrollment true, with fresh MFA and account authentication untested.
-Windows' deferred ordinary-user check, secret deployment and cluster consumer
-prerequisites remain separately recorded gates. Read the current Stage 4 record in
-[status.md](status.md), the current aggregate diff and its saved patch before
-creating worktrees. Temporary ledgers/review logs supplement the repository
-record; they do not replace it or authorize publication.
-The Lab and WSL typed-equivalent Codex serialization differences were each
-normalized once after separate direct-user approvals. Both passed typed-value
-preservation, nonforced repeat and empty diff; this is not routine-force authority.
-Lab's subsequent preview stopped on process observation with every binding
-unchanged; the narrow process-exit correction passed six tests and independent
-review, then a new 67-target preview passed. WSL's fresh 63-target review also
-passed, binding actual Mac acceptance and its normalization result. Automatic
-approval review then refused both secret applies before execution and required
-specific deployment confirmations, which remain pending. Preserve the failed
-capsules and do not repeat either one-file force operation.
-The final read-only continuation audit subsequently invalidated Lab's saved plan:
-its live Codex `model` value changed, with all other protected bindings and 69
-backup readbacks intact. Preserve that value until its intended scope is resolved
-and a fresh review is prepared. WSL's saved binding still passes; only its expired
-local SSH control socket needs renewal before the controller's own checks.
-Mac was selected as the permitted alternative. After private backups, exact
-source fast-forward, native review and a new direct-user approval resolving
-automatic-review denials, all eight files, nonforced convergence, offline consumer,
-actual updater and fresh SSH passed. Mac is the accepted secret canary; remaining
-hosts require fresh plans binding that actual acceptance and their current state.
+This is a handoff, not Stage 5 implementation. The complete result remains in
+`/tmp/dotfiles-chezmoi-stage4-integration`, branch `chezmoi-stage4-integration`.
+Read the current continuation in [status.md](status.md) and exact per-host results
+in [stage-4-evidence.md](stage-4-evidence.md), including subsequent changes and
+their applicable exact CI gates, before creating another worktree.
+
+The accepted ordinary-native bridge is `bf99958`; encrypted source `74985d08`
+also passed exact three-platform CI and bootstrap e2e before reaching main.
+All five Unix ordinary takeovers passed. Mac, WSL and Marlowe subsequently
+accepted eight-file deployment, nonforce convergence, offline consumer and actual
+updater checks. Sherlock's kit 0.7.0 source update is accepted using its existing
+login runtime; secret deployment remains separate. Windows' actual ordinary-user
+audit passed, superseding its previous deferral; native takeover is being prepared.
+Lab's shared Astra/xhigh correction passed, then a formatting-only rewrite
+exposed a native modifier conflict. The scoped typed-no-op preservation correction
+requires its own exact validation and fresh host continuation. No blanket
+deployment approval, recovery choice or mandatory Sherlock job ID remains open.
+Do not repeat historical force exceptions or treat a prepared candidate as a
+completed host migration. Existing-master access never proves fresh MFA, and
+offline consumer checks do not prove credential-server authentication.
 
 Stage 4 adds native-default provisioning, explicit legacy compatibility flags,
 per-home native/maintenance guards, thin native login update adapters and isolated

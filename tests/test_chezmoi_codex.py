@@ -140,6 +140,98 @@ name = "second"
                 actual = self.apply(fixture, target)
                 self.assertEqual(actual, tomllib.loads(PORTABLE.read_text(encoding="utf-8")))
 
+    def test_app_reformat_with_existing_state_is_nonforce_byte_and_metadata_noop(self):
+        unknown = ('[unknown]\ninteger = 1\nfloat = 1.0\nflag = false\n'
+                   'offset = 2026-11-01T12:34:56.123456789-08:00\n'
+                   'escaped = "first\\r\\nsecond"\n'
+                   '"literal.dot" = {"*" = [true, 7, "kept"]}\n'
+                   '[[unknown.providers]]\nname = "first"\n')
+        for newline, final_newline in (("\n", True), ("\r\n", True), ("\r\n", False)):
+            with self.subTest(newline=repr(newline), final=final_newline), SourceFixture(HOST) as fixture:
+                target = self.prepare(fixture, unknown)
+                expected = self.apply(fixture, target)
+                self.assertTrue(fixture.state.is_file())
+                original = target.read_bytes()
+                app_bytes = ("# App formatting and comments stay local.\n" + policy_text() +
+                             "\n" + unknown).replace("\n", newline).encode("utf-8")
+                if not final_newline:
+                    app_bytes = app_bytes.removesuffix(newline.encode())
+                self.assertEqual(tomllib.loads(app_bytes.decode()), expected)
+                self.assertNotEqual(app_bytes, original)
+                target.write_bytes(app_bytes)
+                before = target.stat()
+                metadata = lambda st: (st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid,
+                                       st.st_nlink, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+                source_before = snapshot(fixture.source)
+                flags = ("--mode=file", "--less-interactive", "--force=false")
+                for action in ("apply", "apply", "diff"):
+                    result = fixture.run(*flags, action, "--exclude=dirs", str(target))
+                    self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+                    self.assertEqual(target.read_bytes(), app_bytes)
+                    self.assertEqual(metadata(target.stat()), metadata(before))
+                self.assertEqual(snapshot(fixture.source), source_before)
+
+    def test_native_semantic_equality_distinguishes_integer_float_and_nan(self):
+        with SourceFixture(HOST) as fixture:
+            for left, right, expected in (("value = 1", "value = 1.0", "false"),
+                                          ("value = nan", "value = nan", "false"),
+                                          ("value = 2026-11-01T12:34:56-08:00",
+                                           "value = 2026-11-01T12:34:56-08:00", "true")):
+                with self.subTest(left=left, right=right):
+                    template = "{{ deepEqual (fromToml " + json.dumps(left) + ") (fromToml " + json.dumps(right) + ") }}"
+                    result = fixture.run("execute-template", template)
+                    self.assertEqual((result.returncode, result.stdout), (0, expected), result.stderr)
+
+    def test_nan_remains_conservative_instead_of_claiming_byte_preservation(self):
+        with SourceFixture(HOST) as fixture:
+            target = self.prepare(fixture, "unknown = nan\n")
+            self.apply(fixture, target)
+            app_bytes = ("# App formatting\nunknown = nan\n" + policy_text()).encode()
+            target.write_bytes(app_bytes)
+            result = fixture.run("cat", str(target))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotEqual(result.stdout.encode(), app_bytes)
+            result = fixture.run("--less-interactive", "--force=false", "apply",
+                                 "--exclude=dirs", str(target))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(target.read_bytes(), app_bytes)
+
+    def test_owned_type_changes_and_retired_keys_are_not_formatting_noops(self):
+        cases = (policy_text({("model",): 1}),
+                 policy_text({("features", "multi_agent"): 1}),
+                 policy_text() + 'sandbox_mode = "old"\n')
+        for live in cases:
+            with self.subTest(live=live), SourceFixture(HOST) as fixture:
+                target = self.prepare(fixture)
+                expected = self.apply(fixture, target)
+                target.write_bytes(live.encode("utf-8"))
+                before = target.read_bytes()
+                rendered = fixture.run("cat", str(target))
+                self.assertEqual(rendered.returncode, 0, rendered.stderr)
+                self.assertEqual(tomllib.loads(rendered.stdout), expected)
+                self.assertNotEqual(rendered.stdout.encode(), before)
+                result = fixture.run("--less-interactive", "--force=false", "apply",
+                                     "--exclude=dirs", str(target))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(target.read_bytes(), before)
+
+    def test_matching_policy_still_refuses_invalid_live_input(self):
+        for suffix in (b'unknown = 2026-11-01\n', b'unknown = "\xff"\n',
+                       b'unknown = 1\nunknown = 2\n'):
+            with self.subTest(suffix=suffix), SourceFixture(HOST) as fixture:
+                target = self.prepare(fixture)
+                self.apply(fixture, target)
+                target.write_bytes(suffix + policy_text().encode())
+                self.assert_refused(fixture, target)
+
+    def test_matching_live_policy_still_validates_complete_portable_input(self):
+        for portable in (policy_text(missing=("model",)),
+                         policy_text({("model",): False}),
+                         policy_text() + 'unknown = 2026-11-01\n'):
+            with self.subTest(portable=portable), SourceFixture(HOST) as fixture:
+                target = self.prepare(fixture, policy_text(), portable)
+                self.assert_refused(fixture, target)
+
     def test_unknown_portable_fields_never_acquire_ownership(self):
         portable = PORTABLE.read_text(encoding="utf-8") + (
             '\n[unknown]\nnew = "portable"\nstamp = 2026-11-01T12:34:56+05:30\n')

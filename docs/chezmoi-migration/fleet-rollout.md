@@ -8,14 +8,17 @@ Mac and WSL passed fresh ordinary SSH; clusters used existing authenticated mast
 do not claim new MFA access.
 Their native ownership/state remain. Maintenance was removed at ordinary
 acceptance. Mac subsequently accepted its eight-file secret deployment and left
-maintenance again; Lab and WSL currently remain in maintenance after their
-approved one-file Codex normalizations. Marlowe subsequently accepted eight-file
+maintenance again. WSL subsequently accepted eight-file deployment and fresh SSH,
+restoring automatic updates. Lab remains in maintenance while a formatting-only
+conflict is addressed by the native typed-no-op correction. Marlowe accepted eight-file
 secret deployment after checking persisted post-apply bindings and restored
 automatic updates. Existing WSL
 tmux plugin prerequisites and retired-checkout diagnostics are recorded separately
-from ordinary-file acceptance. Cluster consumer prerequisites remain separate
-from accepted ordinary targets. The user explicitly deferred Windows' ordinary-user execution/ACL
-gate. Native fixtures and SSH connectivity are distinct from takeover. The operator procedure is
+from ordinary-file acceptance. Sherlock's kit0.7.0 upgrade passed using the
+existing login runtime; its secret deployment remains separate. Windows' genuine
+ordinary-user desktop audit passed all26 targets and five control parents. Native
+takeover is being prepared; the prior user deferral is superseded. Native fixtures
+and SSH connectivity are distinct from takeover. The operator procedure is
 [takeover.md](takeover.md). Commit/publication/rollout authority is explicit;
 the corrected release `bf99958` passed all three CI 41567805090 jobs and all eight
 bootstrap e2e 41567805363 jobs before main landing and actual ordinary takeover.
@@ -169,7 +172,7 @@ identities local and export only public recipients.
 Mutable Codex auth remains excluded; SSH stays ordinary. Bitwarden was canceled
 and all five task-installed clients removed; Sherlock never installed one.
 Do not reopen its canceled toolkit/allocation proposal. Launcher provisioning
-and account acceptance remain separate host checks: Sherlock still has kit 0.6,
+and account acceptance remain separate host checks: Sherlock now has kit 0.7.0,
 and Marlowe lacks native Codex on the inspected PATH.
 
 ## Recording and incomplete targets
@@ -181,7 +184,7 @@ Keep one small nonsecret table in `status.md`, not a runtime fleet registry:
 | Fill per host | Timestamp/method | Revision | Ready/not needed | Result | Result/limits | Exact scope/result | Concrete next action |
 
 Attempt all six within the session's available access. Carry unreachable or
-blocked targets forward explicitly, respecting the user's Windows deferral;
+blocked targets forward explicitly, using current authorization and evidence;
 do not call them migrated. Native-only source
 retirement need not wait indefinitely for every offline host, but the stage cannot
 claim fleet completion until all six actually pass. Record repository completion

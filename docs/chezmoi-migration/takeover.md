@@ -103,7 +103,9 @@ takeover, and may conflict with or replace the intended source representation.
 
 Privately preflight the two AI inputs. Local TOML dates/times/datetimes and JSON
 U+FFFD remain unsupported; do not bypass their guards or use TZ as a fix. Native
-canonicalization removes TOML layout/comments. Back up and review those changes.
+serialization removes TOML layout/comments when policy changes require output.
+A validated typed no-op preserves the original Codex bytes. Back up and review
+actual changes; this does not bypass target ownership or conflict protection.
 Only a nonsecret explicit target allowlist may be diffed into ordinary logs.
 Even native errors may include input text; capture real diagnostics privately.
 

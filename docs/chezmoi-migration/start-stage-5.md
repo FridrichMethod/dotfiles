@@ -27,47 +27,26 @@ CI 41586461636 jobs and all eight bootstrap e2e 41586462369 jobs before reaching
 main. Carry that complete source and later outcome records. Subsequent changes
 need their applicable exact gates. The user explicitly authorized
 commit, publication and rollout; do not ask again for blanket authority.
-Outcome checkpoint cb7f11a039fbfc00428408e873730701d0aebf9b passed all three
-CI 41613012922 jobs on ci/chezmoi-stage4-outcomes. Inspect actual integration
-HEAD and later outcome commits before proceeding. Main remains at 74985d08 while
-the retained WSL deployment plan requires that exact updater destination.
-Lab's later model drift invalidates its old plan. Finish or explicitly replace
-the WSL plan before advancing main; publication
-authorization does not make a stale host binding valid.
-Lab's 59 and WSL's 55 ordinary files are native regular targets; repeat convergence,
-parent preservation, actual updater invocation, old-writer refusal and fresh
-ordinary SSH passed. Native markers/state remain. Maintenance was removed at
-ordinary acceptance. Mac later accepted secret deployment and left maintenance
-again; Lab and WSL remain in maintenance after their approved normalizations.
-Sherlock and Marlowe each accepted 54 ordinary files and actual updater checks,
-with private state/binding retained and maintenance removed. Existing cluster
-masters do not establish fresh MFA access. Sherlock's first post-apply verification
-stopped for an unknown reason; all 54 writes and first full apply had succeeded.
-A separately reviewed current-state backup and remaining single nonforced full
-apply/diff passed without relaxing guards. Preserve that evidence and uncertainty.
-Mac subsequently accepted 56 regular targets, two full convergent applies,
-controlled updater activation, old-writer refusal and fresh nonmultiplexed SSH.
-Its source was already clean bf99958 at ordinary takeover; that phase had no
-operator source fast-forward. Fresh current and after-init backups matched.
-The later secret-canary phase backed up 58 files before advancing bf99958 to
-exact green 74985d08, then made a fresh postbridge backup and passed the private
-64-target preview. Automatic approval review first refused execution; a new
-direct-user approval resolved that gate. The unchanged reviewed controller then
-deployed eight files with mode 0600 under a new 0700 parent, with all 56 ordinary files
-unchanged, two nonforced applies, empty diff, offline consumer and actual updater
-checks, followed by fresh nonmultiplexed SSH. Persisted post-apply bindings were
-rechecked before acceptance. Mac is the accepted secret canary, with maintenance
-off and enrollment true; no credential-server authentication was tested. The existing Homebrew
-chezmoi, verified against its official bottle, was reused without installation;
-root/staff .config mode 0770 and other
-parents were preserved. Non-TTY agent startup is not GUI/p10k acceptance. The user
-explicitly deferred Windows' ordinary-user execution/ACL gate;
-do not retry automatic de-elevation or claim Windows acceptance. Preserve
-specific auth/privilege/site/ownership boundaries and unfinished secret enrollment.
-Lab retains a legacy-submodule warning; WSL retains that warning and 11 preexisting
-missing tmux plugin checkouts. Shell/native acceptance is not full application
-readiness or GUI validation. Do not silently expand this migration into cleanup
-or install unrelated components merely to erase those recorded findings.
+Read the current continuation in status.md and actual-fleet table in
+stage-4-evidence.md before any action. Earlier outcome checkpoints through
+12262e6 passed all three CI jobs; the current source correction requires its own
+exact checks. No Stage 5 execution is authorized by preparing this handoff.
+All five Unix ordinary takeovers are accepted. Mac, WSL and Marlowe have also
+accepted eight-file deployment, nonforce convergence, offline consumer and updater
+checks. Mac/WSL use fresh SSH evidence; cluster masters are not fresh MFA proof.
+Sherlock's source-only kit 0.7.0 upgrade passed using its existing login runtime,
+with original files and links preserved. Current numbered site rules permit this
+light foreground work; environment builds and heavy installs still need a job.
+Windows' ordinary Medium/non-elevated desktop audit passed all26 targets and five
+control parents; its temporary audit task was removed. The prior user deferral is
+superseded; complete the separately reviewed takeover under existing authority.
+Lab's requested shared Astra/xhigh preference is applied. A later formatting-only
+rewrite exposed an always-reserialize conflict. Validate and publish the scoped
+native typed-no-op preservation fix, then use a fresh Lab continuation; no repeated
+force or silent rebind of old plans. Current integration and actual host outcomes
+must be checked again rather than treating this preparation as completion.
+Lab retains a legacy-submodule warning; WSL also retains 11 preexisting missing
+tmux plugin checkouts. Do not expand this migration into unrelated cleanup.
 
 Read AGENTS.md and docs/chezmoi-migration/{README,status,inventory,sources,
 stage-3-native-config,stage-4-takeover,takeover,stage-5-ecosystem,
@@ -186,43 +165,20 @@ established. Do not repeat the exclusive-output generation/retrieval steps.
 All five host identities were generated locally and eight production inputs were
 encrypted for the exact six recipients. Each host and retrieved R passed
 all-eight recovery; only ciphertext entered published source 74985d08.
-Actual deployment remains a separate host gate. Mac's eight-file deployment is
-accepted as recorded above; Marlowe's actual deployment and final persisted-binding
-acceptance also passed. Lab, WSL and Sherlock enrollment flags
-remain false. Lab and WSL each received a separate direct-user one-file force
-exception for typed-equivalent Codex serialization. Both executed once, preserving
-typed values and all other targets, followed by nonforced repeat and empty diff.
-Do not repeat those normalizations or infer routine force authority. Both hosts
-remain in maintenance. Lab's process-observation PermissionError preserved all
-97 file/44 directory bindings; a narrow process-exit guard correction passed
-six tests and independent review, then a new 67-target private review passed.
-That preview is now historical: a later read-only guard found one changed
-native-owned top-level model value in Lab's live Codex config. The file remains
-4140 bytes/0600; all other protected bindings and 69 backup readbacks match.
-The writer is unknown. Preserve that current model until its intended scope is
-resolved, then prepare a fresh review. Never silently rebind the old plan or
-repeat its one-time force exception. WSL's current read-only guard still passes;
-its expired local control socket needs a retained channel through the existing
-verified BatchMode route before execution. Neither follow-up audit wrote to HOME.
-Keep both failed capsules. WSL's fresh continuation bound actual normalization
-and accepted Mac evidence, backed up 57 files and passed its 63-target review.
-Automatic approval review then refused both secret applies before execution,
-recognizing the normalization approvals but not prior D11/scope authority for
-deployment. Exact deployment confirmations were requested and remain pending;
-do not retry or reroute without resolving that specific gate. Read the latest
-outcome in stage-4-evidence.md.
-All five task-installed Bitwarden clients were
-removed; Sherlock never installed one and its Bitwarden tooling proposal is canceled.
-Consult the private record and never log names/values here. SSH stays ordinary.
-Sherlock kit 0.6 still needs reviewed channel-0.7 upgrade before secret deployment;
-the official source review and separate local pinned sherlock-kit v0.6.0
-controller proposal were prepared. The user approved the dependency, which was
-installed separately and passed doctor, and explicitly authorized a new job.
-No repeat approval or mandatory existing job ID is required. Current numbered
-site Rule 10 still requires ten useful minutes per job; no qualifying bundle
-or existing allocation is established. Do not submit a tiny/padded job or
-repeat checks solely to fill time. Read stage-4-evidence.md
-for the current decision and concrete proposal before acting.
+Actual deployment remains a separate host gate. Mac, WSL and Marlowe are accepted;
+Lab and Sherlock require their current reviewed continuations. All specific
+deployment approvals are now resolved. Lab and WSL's historical one-file
+normalizations ran once; preserve those receipts and never reuse failed capsules.
+Lab's later explicit Astra/xhigh correction also passed, followed by a new
+formatting-only rewrite. The current source fix preserves validated typed no-ops
+and retains all unsupported-input and genuine-conflict protections. Its exact CI
+and actual host acceptance are required; see the current Stage 4 evidence.
+All five task-installed Bitwarden clients were removed; Sherlock never installed
+one and its Bitwarden tooling proposal is canceled. SSH stays ordinary.
+Sherlock's separately approved local pinned controller remains outside dotfiles.
+The official kit 0.7.0 source-only upgrade passed on the login node, preserving its
+previous release, links and existing runtime. No allocation/job ID is required
+for that completed light deployment; current site rules still govern later work.
 Before runtime provisioning, Marlowe's inspected shell selected system Python
 3.10.12 and its exact micromamba login prefix contained neither Python nor Node.
 The allocation-only solver proposed 27 additions and zero removals, retaining

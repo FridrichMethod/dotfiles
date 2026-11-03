@@ -58,4 +58,9 @@
 {{- /* Validate both documents and every ancestor before modifying parsed live data. */ -}}
 {{- range $policy.retired -}}{{- $live = deleteValueAtPath (join "." .) $live -}}{{- end -}}
 {{- range $assignments -}}{{- $live = setValueAtPath .path .value $live -}}{{- end -}}
-{{- toToml $live -}}
+{{- /* Reparse independently: path assignments mutate $live. Keep app formatting only for a typed no-op. */ -}}
+{{- if deepEqual $live (fromToml (replace "\r\n" "\n" .chezmoi.stdin)) -}}
+  {{- .chezmoi.stdin -}}
+{{- else -}}
+  {{- toToml $live -}}
+{{- end -}}

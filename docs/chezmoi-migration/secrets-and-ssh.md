@@ -16,7 +16,9 @@ commit `74985d08`, which passed exact CI/e2e before reaching main. Actual target
 deployment remains a separate host gate. Mac has now accepted all eight files,
 offline consumer checks, updater and fresh SSH. Marlowe's eight-file deployment,
 offline consumer, updater and existing-master access passed; final acceptance
-rechecked its persisted post-apply binding. Lab, WSL and Sherlock retain their recorded gates.
+rechecked its persisted post-apply binding. WSL subsequently accepted all eight,
+63-target convergence, updater, fresh SSH and persisted-binding checks. Lab and
+Sherlock retain their recorded deployment gates.
 These checks do not claim credential-server authentication. A local
 `.secrets` directory on the same disk cannot establish independent recovery.
 
@@ -201,9 +203,10 @@ as recurring auth deployment. Optional initial seeding must be explicit and
 removed from recurring source after bootstrap. Static-for-consumer candidates
 and application-written refresh stores are classified separately in
 [inventory.md](inventory.md). The approved eight-file classification now has a
-public channel-0.7 consumer review. Sherlock's installed kit v0.6 still requires
-the reviewed upgrade and actual interface check before enabling/applying secrets
-on that host. Approved host identity generation, encrypted source preparation
+public channel-0.7 consumer review. Sherlock's official source-only kit upgrade
+to v0.7.0 and root version checks passed, preserving its prior release and links.
+Fresh consumer and target review still precede secret apply on that host.
+Approved host identity generation, encrypted source preparation
 and private decryption checks can proceed independently. The approved recipient
 grant gives that host cryptographic access even while deployment is disabled;
 public source review alone does not upgrade its consumer.

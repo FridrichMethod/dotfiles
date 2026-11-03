@@ -28,8 +28,9 @@ the execution contract, with the native parser decisions updated from evidence.
 
 ## Global constraints and review focus
 
-Preserve portable security-policy values and live-only state. Canonical formatting
-is intentional. Do not introduce a second parser, custom atomic writer, template
+Preserve portable security-policy values and live-only state. Codex uses canonical
+formatting when policy transformation changes typed data; a validated typed no-op
+preserves the original bytes. Do not introduce a second parser, custom atomic writer, template
 framework, generic configuration merger or per-application subprocess.
 
 Review malformed/empty input; authoritative arrays/false/null; Codex quoted keys
@@ -157,8 +158,15 @@ strings, preserving `json.Number` through merge/serialization. Never substitute
 last-value-wins. A parsed U+FFFD guard rejects invalid UTF-8/surrogate replacement
 and intentionally valid U+FFFD before writing; valid Unicode pairs remain supported.
 
-Native `replace "\r\n" "\n"` before `fromToml` selects LF physical newlines while
-retaining explicit escaped CRLF. Exact-byte production tests cover multiline
+Native `replace "\r\n" "\n"` before `fromToml` selects LF physical newlines for
+parsing while retaining explicit escaped CRLF. Codex returns the original bytes,
+including physical CRLF, only when the fully validated transformed document is
+native `deepEqual` to an independently parsed original. This avoids conflicts
+when an application changes formatting without changing policy values. Both
+inputs, temporal restrictions, required types and ancestors are still validated
+before that comparison, and retired keys are still removed. Integers and floats
+remain distinct; native NaN equality is false, so NaN documents conservatively
+continue through canonical serialization. Exact-byte production tests cover multiline
 basic/literal strings, continuations and portable-owned strings. Do not let
 Windows `write_text` choose synthetic input bytes implicitly, or claim these
 stdlib/native comparisons are real application startup tests.
@@ -194,8 +202,11 @@ stdlib/native comparisons are real application startup tests.
   arrays of tables, multiline strings, integers and native TOML timestamps.
 - [x] Verify typed required fields and malformed live/portable documents fail
   without replacing the affected target. Use tested delete-path syntax.
-- [x] Document canonical formatting/comment loss and the native edit workflow.
-  Do not reintroduce legacy formatting preservation through a filter or helper.
+- [x] Document canonical formatting/comment loss on actual typed policy changes
+  and the native edit workflow. Preserve exact input bytes on a validated native
+  typed no-op, including comments and absence of a final newline. Existing-state
+  fixtures require nonforce apply, empty diff and unchanged target metadata after
+  application reformatting. No external parser, filter or helper is involved.
 - [x] Explicitly retire `--migrate-portable` from the new native API and describe
   manual recovery of a historically polluted portable source before adoption.
   Do not port source writeback into normal apply. Keep retired-key removal as

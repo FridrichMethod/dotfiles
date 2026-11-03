@@ -30,6 +30,15 @@ whose bytes matched the verified official bottle; its six actual isolated
 recovery tests and ordinary takeover are recorded separately from hosted CI.
 No Mac package installation or GUI/p10k acceptance is claimed.
 
+A later real Lab formatting-only rewrite exposed unnecessary native TOML
+reserialization: the old modifier conflicted even when all policy values were
+already correct. A scoped native `deepEqual` branch preserves original input
+only after complete validation and transformation. Isolated existing-state tests
+cover nonforce convergence and unchanged target metadata after LF/CRLF and
+no-final-newline reformatting. Native integer/float types remain distinct, and
+NaN conservatively follows canonical serialization. Hosted and real-host results
+for this correction must be recorded separately before activation.
+
 Native config init now reads existing TOML and preserves unrelated local
 settings, including age and data, with native
 [setValueAtPath](https://www.chezmoi.io/reference/templates/functions/setValueAtPath/)

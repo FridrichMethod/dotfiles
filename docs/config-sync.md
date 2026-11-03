@@ -49,8 +49,13 @@ the tested multiline basic/literal-string consumer semantics; explicit `\r\n`
 escapes retain CRLF values. Empty TOML is valid. Malformed TOML, missing required
 policy or invalid types fail without replacing the affected target.
 
-Native output is canonical JSON/TOML; TOML comments, original layout and first
-apply bytes are not preserved. Second apply converges. `private_` normally
+Changed native output is canonical JSON/TOML. After all TOML validation and
+ownership transformations, Codex compares the result with an independently
+parsed original using native typed equality. An equal result returns the original
+input bytes, preserving application formatting and avoiding a conflict caused
+only by reserialization. A different result uses native TOML serialization;
+comments and layout can then change. This is a conservative equality check,
+not a new parser or formatting engine. Second apply converges. `private_` normally
 produces Unix 0600; stricter/readonly existing modes and actual Windows ACLs need
 Stage 4 destination review. An administrative synthetic ACL is not that review.
 Neither failures nor native conflict refusal promise a whole-home transaction.

@@ -412,11 +412,11 @@ Only metadata receipts were transferred to the coordinator.
 
 | Host | Actual observation | Takeover outcome / blocker |
 | --- | --- | --- |
-| lab-ubuntu | All 59 ordinary targets and updater/access accepted. User-approved normalization passed once; the subsequent 69-file backup and 67-target preview passed. A later read-only guard found one changed native-owned Codex `model` value; all other protected bindings and backups remain exact | Old secret plan is stale and unexecuted. Current model preserved pending scope resolution and a fresh review; no silent rebind or repeated force. Deployment confirmation also remains pending after automatic review refused execution. Maintenance on, enrollment false. Retired-submodule warning belongs to Stage 6 |
+| lab-ubuntu | All59 ordinary targets and updater/access accepted. User-approved normalization and later Astra/xhigh correction each passed with private backups. A subsequent formatting-only rewrite changed no typed value | Native no-op preservation correction and a fresh deployment continuation are being validated. All deployment approvals resolved; maintenance on, enrollment false. No repeated force or stale-plan reuse; legacy cleanup remains Stage6 |
 | mac | Ordinary takeover accepted 56 targets. Secret-canary preparation backed up 58 files before and after the exact `74985d08` fast-forward. After new direct-user approval, actual eight-file deployment and fresh SSH passed | Secret canary accepted: two nonforced applies, empty diff, offline consumer and actual updater passed; 56 ordinary files and shared `.config` 0770 preserved. Maintenance off, enrollment true. No GUI/p10k or credential-server authentication claim |
-| wsl-ubuntu | Ordinary takeover accepted 55 files and updater/fresh SSH. User-approved normalization passed once; fresh continuation bound actual Mac acceptance, retained maintenance, backed up 57 files and passed all 63 target previews | Secret apply rejected by automatic approval review before execution; specific deployment confirmation pending. Maintenance on, enrollment false, secret parent absent. Existing 11 tmux prerequisites and retired-submodule warning remain |
-| win | Last checkout preflight: main `7edf12fb5b61b6e6d96703bc67f4521e69501d0c`; 26 targets, 23 exact links and three regular files. Both NoProfile profile paths match. The appended Terminal profile is preserved with equivalent environment-variable prefixes | Not migrated; user deferred the required ordinary-user execution/ACL check. SSH is administrative; bounded automatic de-elevation did not complete the target audit. No task, marker, target or production ACL change |
-| sherlock | Clean `6db67ed` reached exact green `bf99958`; verified static musl installed, private pre/post/current backups, all 54 regular files, empty diff and actual updater passed | Ordinary takeover accepted; parents/cache preserved, maintenance removed and native binding/state retained. Historical postcheck cause unknown; reviewed continuation passed. Identity and eight-file crypto checks passed; kit 0.6 upgrade/site allocation gate deployment; master is not fresh MFA proof |
+| wsl-ubuntu | Ordinary55 and subsequent eight-file deployment accepted: two nonforce applies, empty63-target diff, offline consumer, actual updater, fresh SSH and persisted-binding checks | Maintenance off, enrollment true;55 ordinary files unchanged, new private parent0700/files0600. Existing11 tmux prerequisites and retired-submodule warning remain |
+| win | Actual ordinary Medium/non-elevated desktop audit passed26 unique targets, five control parents and both NoProfile paths. Exact temporary task removed. Source remains7edf12 with its reviewed Terminal edit preserved | Native26-target takeover is being prepared against the next exact-green candidate. Previous user deferral superseded. Audit changed no targets/source/ACL/native marker |
+| sherlock | All54 ordinary targets/updater accepted. Official kit0.7.0 source-only update passed using existing login runtime:50 new files,53 previous files and nine links preserved, private backup verified | Fresh consumer/secret continuation is being prepared. No environment build or job was required for the completed light update; ordinary source remainsBF99958. Existing master is not fresh MFA proof |
 | marlowe | Runtime installation/repair and consumer checks passed. Verified 56-file backups before and after exact BF-to-749 source fast-forward preceded all 62 target previews. Actual eight-file deployment, nonforced repeat, empty diff, offline consumer, updater and existing-master access passed; 54 ordinary files and runtime/parents unchanged | Secret deployment accepted after rechecking persisted post-apply bindings. Maintenance off, enrollment true; eight files 0600 in a new 0700 parent. Earlier bridge approval denial resolved by new direct-user approval. No fresh MFA or credential-server authentication claim; native Codex is separate |
 
 Lab, Mac, WSL, Sherlock and Marlowe ordinary native takeovers are accepted as described
@@ -706,7 +706,11 @@ evidence is `/tmp/bitwarden-lab-uninstall-report.md`,
 `/tmp/bitwarden-win-uninstall-report.md`. Historical installation reports remain
 retained separately. Apple Passwords custody needs no Bitwarden client.
 
-Sherlock's existing coding-agent-kit 0.6 needs a separate reviewed upgrade to
+The following cluster prerequisite history predates the accepted Sherlock kit
+update in the current fleet table. Its earlier allocation-only interpretation
+and deployment approvals are superseded by the current continuation below.
+
+Sherlock's then-existing coding-agent-kit 0.6 needed a separate reviewed upgrade to
 channel 0.7 before enabling/applying its selected secret targets. Official v0.7.0 consumer/installer source was
 reviewed without reading tokens. The installer builds no environment, but it
 does not check exported-release local edits, prunes older releases and has no
@@ -863,39 +867,47 @@ authentication were not tested. Native Codex remains a separate absent prerequis
 
 ## Remaining Stage 4 gates and Stage 5 handoff
 
-The final read-only continuation audit found actual Lab drift after its prior
-successful preview: `~/.codex/config.toml` still has 4,140 bytes and mode 0600,
-but top-level `model` differs from both the approved backup and shared policy.
-Exactly one native-owned typed scalar value changed; no type, live-only, added,
-removed or array-length change was found. Inode and timestamps also changed;
-ownership, ACL, link count, all other protected files/parents and all 69 backup
-readbacks remain exact. The writer is unknown. The strict guard stopped before
-apply, and no new baseline or second normalization was created. Preserve the
-current file until the model preference's intended scope is resolved; the old
-Lab plan cannot execute even if deployment scope is confirmed.
+The user's direct continuation resolves the specific Lab/WSL deployment approvals,
+selects shared Astra/xhigh, resumes Windows and authorizes lightweight Sherlock
+login-node deployment. Recovery custody and recipient scope remain resolved.
 
-WSL's independent read-only continuation audit still matched its exact saved
-plan: clean source `74985d08`, 55 ordinary files, config/state, parents, maintenance,
-identity metadata, candidate and backup manifest. All eight secret targets and
-their parent remain absent. The previous local control socket has expired;
-standard BatchMode access still works. A retained channel must be reestablished
-at the reviewed socket before the unchanged controller's own checks and apply.
-Neither audit performed a configuration or secret write.
+WSL has now accepted all eight files, unchanged55 ordinary targets, two nonforced
+applies, empty63-target diff, offline consumer and actual updater checks, then
+fresh nonmultiplexed SSH and persisted-binding acceptance. Files are0600 under a
+new0700 parent; maintenance is off and enrollment true. The final receipt is
+`3ea8c3d7f47731c54f9c3aa0749ed355db22b01dc19319dacb1cc5ba30443629`.
 
-The user authorized commit/publication and main landing. Corrected `bf99958`
-passed exact hosted CI/e2e and ordinary acceptance on all five Unix hosts.
-It is the immutable
-supported Stow recovery bridge and first accepted ordinary-native release;
-see support-boundary.md. Custody and all five host identities are established;
-all six recipient checks passed. Encrypted source `74985d08` passed its exact
-hosted gates and is published. Mac is the accepted secret canary with actual
-fresh-access evidence; Marlowe subsequently accepted deployment under existing
-authenticated access. Lab and WSL have each completed their separately approved
-single-file normalization. Resolve Lab's later model drift and prepare a fresh
-review; WSL retains its guarded plan with transport renewal required. Do not
-repeat force or reuse failed capsules. Continue independent
-unblocked work under D11, recording actual
-target/app/access outcomes and exceptions without treating fixtures as rollout.
+Lab's approved model correction passed with the desired Astra/xhigh values,
+private backup readback, nonforce repeat and empty targeted diff. The later
+continuation stopped before writes when the target returned to its earlier4131
+byte formatting. Recursive typed differences are zero; other protected bindings
+remain intact and the writer is unproven. The user reports no manual change and
+permits necessary overwrite. A small source correction instead avoids recurring
+format-only conflicts: validate and transform fully, then preserve original input
+only on native typed equality. Exact hosted gates and a fresh Lab continuation
+are required. No further force or stale-plan reuse has occurred.
+
+Sherlock's source-only kit0.7.0 upgrade is accepted:50 exact new files,53 original
+files preserved, nine links unchanged, private backups and parent security checks
+passed. No environment/profile edit, account call or job ran. Fresh site rules
+permit this light foreground work; the earlier allocation-only claim was too
+strict. Receipt: `b666343578f6ca9a92d10d6db4a4193b722ad61dc29337c63263bd45c8f59b5a`.
+Its separate secret continuation is being prepared against the next exact-green
+source, using the existing authenticated master.
+
+Windows' actual ordinary-token audit passed: same user, Medium/non-elevated,
+desktop session1,26 unique targets with all access checks and unchanged metadata,
+five control parents and both NoProfile shell mappings. Task Scheduler returned
+an account name instead of literal SID; native translation confirmed identity
+before the one Run. The exact idle task was removed afterward, retaining evidence.
+Receipt: `22569b6d40ceefd40ac8efd15f390278b81655ffb73e6167fb9ed2a1558c7a9d`.
+No target/source/ACL/native marker changed in that audit. Native26-target takeover
+is being prepared, preserving the user's exact Terminal edit. There is no current
+user deferral or manual PowerShell prerequisite.
+
+Publish and activate only the reviewed exact-green correction, then complete
+remaining host gates and record actual outcomes. Existing Mac/Marlowe acceptance
+remains valid. Keep repository/fixture/CI and host results distinct.
 
 [Stage 5](stage-5-ecosystem.md) and its [fresh-session prompt](start-stage-5.md)
 contain the next caller map. They are a handoff only. No Stage 5 cleanup or
