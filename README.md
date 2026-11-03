@@ -172,11 +172,15 @@ Dotfiles keeps their configuration but no copy of the kit implementation.
 Native Windows does not install/check the kit: missing helpers exit silently
 there, while existing 0.6 helper copies still run; missing Unix helpers fail
 visibly. Launcher/account operation belongs to the kit's own documentation.
+Claude's status-line command enables the kit's ANSI colors for captured output,
+while preserving an explicit `CODING_AGENT_KIT_COLOR` setting. `NO_COLOR` and
+`TERM=dumb` disable colors. The renderer lives in the kit; the command and color
+preference live in dotfiles.
 Claude model selection remains machine-local; its effort, plugins and
 permissions are shared. Codex portable model/reasoning defaults live in its
 tracked config; host-local profile settings are preserved.
-The shared Codex CLI status line shows cumulative session tokens (total, input
-and output), alongside model, directory, thread, Git branch, context usage and
+The shared Codex CLI status line shows cumulative session tokens,
+alongside model, directory, thread, Git branch, context usage and
 weekly limits. Estimated thread cost appears only when supported by the account
 (Enterprise workspaces in Codex CLI 0.166.0). Edit `tui.status_line` in the tracked
 Codex config to change the shared layout; other TUI preferences remain local.

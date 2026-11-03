@@ -32,8 +32,6 @@ use_memories = true
 status_line = [
     "model-with-reasoning",
     "used-tokens",
-    "total-input-tokens",
-    "total-output-tokens",
     "estimated-thread-cost",
     "current-dir",
     "thread-name",

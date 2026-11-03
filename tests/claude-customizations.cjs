@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { after, test } = require('node:test');
+const { stripVTControlCharacters } = require('node:util');
 
 // Git exports repository overrides while running commit hooks. Isolate this
 // test process before calling the in-process gitBranch helper as well as any
@@ -49,13 +50,13 @@ const helperCommands = () => [
   ['notify.cjs', settings.hooks.Notification[0].hooks[0].command],
   ['check-git-hooks.cjs', settings.hooks.PreToolUse[0].hooks[0].command],
 ];
-const runAs = (platform, home, command) => {
+const runAs = (platform, home, command, environment = {}) => {
   const match = command.match(/^node -e "([^"]+)"$/);
   assert.ok(match, command);
   return spawnSync(process.execPath, ['-e',
     `Object.defineProperty(process, 'platform', { value: '${platform}' }); ` +
     'require("os").homedir = () => process.env.CLAUDE_DOTFILES_TEST_HOME; ' + match[1]], {
-    env: { ...process.env, CLAUDE_DOTFILES_TEST_HOME: home }, input: '{}', encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, ...environment, CLAUDE_DOTFILES_TEST_HOME: home }, input: '{}', encoding: 'utf8', timeout: 5000,
   });
 };
 
@@ -97,6 +98,23 @@ test('a present helper runs on every platform, its exit status kept', () => {
   }
 });
 
+test('status line enables captured-output colors and preserves explicit overrides', () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude color home '));
+  try {
+    const target = path.join(temporary, '.claude', 'coding-agent-kit');
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, 'statusline.cjs'),
+      "exports.main = () => process.stdout.write(process.env.CODING_AGENT_KIT_COLOR ?? 'unset');\n");
+    for (const value of [undefined, 'auto', 'always', 'never', '']) {
+      const result = runAs('linux', temporary, settings.statusLine.command, { CODING_AGENT_KIT_COLOR: value });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, value ?? 'always');
+    }
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test('portable commands run the installed helpers through a home path containing spaces',
   { skip: kitHome ? false : 'no installed coding-agent-kit (DOTFILES_TEST_KIT_HOME)' }, () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude home '));
@@ -113,7 +131,7 @@ test('portable commands run the installed helpers through a home path containing
         input: JSON.stringify(input), encoding: 'utf8', timeout: 5000,
       });
     };
-    assert.equal(execute(settings.statusLine.command, {}).stdout.trim(), 'Claude | ctx ? | ~$?');
+    assert.equal(stripVTControlCharacters(execute(settings.statusLine.command, {}).stdout).trim(), 'Claude | ctx ? | ~$?');
     const notify = settings.hooks.Notification[0].hooks[0];
     const output = execute(notify.command, { hook_event_name: 'Notification', notification_type: 'idle_prompt' });
     assert.equal(output.status, 0, output.stderr);

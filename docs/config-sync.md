@@ -205,7 +205,7 @@ fields are:
 | `memories` | `generate_memories`, `use_memories` |
 | `tui` | `status_line` (ordered string array) |
 
-The shared status line includes cumulative session token counters and the native
+The shared status line includes the cumulative session token total and the native
 estimated thread cost item. Codex CLI 0.166.0 exposes cost only for Enterprise
 workspaces and omits it when unavailable. `context-used` reports context window
 occupancy, independently of cumulative tokens. Other `tui` settings, including
