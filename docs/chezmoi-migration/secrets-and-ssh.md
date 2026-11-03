@@ -68,6 +68,30 @@ permissions and actual Windows ACL checks. Encryption does not hide source file
 names. Do not put values into `.chezmoidata`, portable AI preferences, test output
 or plaintext tracked templates. Use only ciphertext or appropriate vault references.
 
+### Explicit local enrollment gate
+
+The local native config must set `[data].enrollStaticSecrets = true` before
+`.secrets` enters the target set, and only `mac`, `wsl-ubuntu` and `lab-ubuntu`
+can select it. An absent or false flag ignores the entire directory; other
+hosts ignore it even with a true flag. A present non-boolean value fails before
+destination writes. This gate never removes existing local secrets and is not
+a cryptographic access boundary: each ciphertext still needs the explicitly
+approved host and independent recovery recipients.
+
+Keep the flag absent until identity/bootstrap, recovery custody and exact-file
+ownership checks are complete. Native init preserves this local data and age
+configuration. Enroll only the eight privately approved static files as
+`encrypted_private_` leaves under `home/private_dot_secrets`, never an `exact_`
+directory or `create_` auth seed. SSH remains on its ordinary source paths.
+
+Ordinary source fixtures copy the entire candidate, including opaque ciphertext,
+with enrollment disabled. Their exact ordinary inventory remains unchanged and
+CI needs no production identities. Separate native tests use only disposable
+identities and synthetic ciphertext to exercise opt-in, host selection, private
+permissions and missing-identity failure. Real recipient/decryption equality and
+consumer acceptance remain private rollout checks; do not print secret diffs or
+decrypted bytes to establish them.
+
 ## Mutable auth is a separate lifecycle
 
 Codex can refresh cached login tokens during use; Claude owns its credential file

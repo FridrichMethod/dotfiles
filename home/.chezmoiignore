@@ -1,6 +1,17 @@
 {{- template "validate-host" . -}}
+{{- $enrollStaticSecrets := false -}}
+{{- if hasKey . "enrollStaticSecrets" -}}
+  {{- if not (kindIs "bool" .enrollStaticSecrets) -}}
+    {{- fail "[data].enrollStaticSecrets must be a boolean" -}}
+  {{- end -}}
+  {{- $enrollStaticSecrets = .enrollStaticSecrets -}}
+{{- end -}}
 # Isolated native candidate. Legacy source remains canonical until Stage 6.
 # Patterns name destinations; none removes existing or unmanaged files.
+# Enrollment is local and explicit; host selection is not a decryption boundary.
+{{ if not (and $enrollStaticSecrets (has .host (list "mac" "wsl-ubuntu" "lab-ubuntu"))) }}
+.secrets
+{{ end }}
 {{ if eq .host "win" }}
 .aliases
 .bash_aliases
