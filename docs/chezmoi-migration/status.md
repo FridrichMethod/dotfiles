@@ -1,5 +1,118 @@
 # Migration state and next-session record
 
+## Stages 1-4 consolidation checkpoint (2026-11-03)
+
+This section is the current state. The Stage 4 closure below and the
+[acceptance table](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures)
+record how and at which revision each host was accepted. Stages 5/6 have not
+started. The closure `a5d9ad7` passed exact CI 41719265671 on Linux, macOS and
+native Windows, plus main-push CI 41721427618. The latest applicable bootstrap
+e2e is 41702352195 on `493f395`; later closure commits changed only docs and
+`.gitleaks.toml`. The consolidation commit that adds this section lands only
+after its own exact CI.
+
+Each host was probed, then advanced through its normal native updater where
+needed. Fast-forward only, nonforce, `--exclude=dirs`; no takeover, identity
+bootstrap or enrollment step was repeated. "Checkout" means the bound source;
+"ordinary config" means native `status --exclude=dirs` and rendered-equality
+checks with live-only configuration preserved.
+
+| Host | Checkout | Binding | Ordinary config | Enrollment / consumer | Updater / maintenance | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| lab-ubuntu | `a5d9ad7`, clean; the canonical main checkout, advanced by the coordinator's fast-forwards | Marker, state and safe update contract valid; chezmoi 2.74.0 | Status empty, 67 managed (8 encrypted); both guides and both AI configs equal rendered output | True; eight 0600 files in a 0700 `.secrets`; five excluded auth siblings untouched; `claude-as` on PATH | Maintenance absent; no payload failure record | Ignored retired-submodule leftovers lie outside the native root; four legacy wrapper links in `~/.local/bin` retire in Stage 6 |
+| mac | `493f395` -> `a5d9ad7` by the actual updater; login updates had already advanced it from `74985d0` | Valid | Status empty, 64 managed; before/after target and parent manifest identical | True; eight files unchanged | Maintenance absent; no payload failure record | A preexisting merged, clean linked worktree outside the repository was left alone |
+| wsl-ubuntu | Already `a5d9ad7` through four unattended login updates | Valid | Status empty, 63 managed; the guide and Codex template deltas were applied by those updates | True | Maintenance absent; no payload failure record | 0 of 11 tmux plugin checkouts; core tmux loads without errors because plugin loading is guarded, so only plugin features are missing |
+| win | `15068b9` -> `a5d9ad7` by `scripts/chezmoi-update.ps1` under a one-off ordinary Medium-token task, removed afterwards | Valid; administrator SSH was used only for read-only metadata | Status empty, 26 regular targets; only the two guides changed, in place, with owner and protected DACL unchanged; the other 24 targets and 18 parents unchanged | False by design | Maintenance absent; legacy restow task still Disabled for Stage 6; no payload state yet | Codex desktop sandbox accounts hold preexisting Modify grants on several profile directories; dotfiles did not create them |
+| sherlock | `15068b9` -> `a5d9ad7` by the actual updater in the login shell | Valid; static musl chezmoi 2.74.0 | Status empty, 62 managed; only the two guides changed; stat/hash/ACL of the other 60 targets and parents unchanged | True; `claude-as --list` resolves eight files offline; Claude, Codex and Lmod Node run | Maintenance absent; the site profile keeps payload auto-update off; awesome-skills refuses the scratch-backed `~/.cache` link | Existing master only, no fresh MFA; the earlier post-repeat metadata failure did not recur |
+| marlowe | `15068b9` -> `a5d9ad7` by the actual updater; login updates had advanced it from `74985d08` | Valid | Status empty, 62 managed; only the two guides changed | True; `claude-as --list` resolves eight files; Claude runs | Maintenance absent; awesome-skills stops on the legacy Codex skills root | A site AppArmor profile denies `node` on login nodes, so Claude's Node hooks fail open there; Codex is absent and unused |
+
+On all six hosts the checkout is updated and the live managed files are applied.
+Program checks are availability checks only. No application login, credential
+server or GUI authentication was tested. Cluster access reused existing masters.
+Private before/after evidence stays on each host under
+`~/.local/state/dotfiles-consolidation-20261103/` and in the coordinator's
+unpushed `.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/`.
+The consolidation commit changes no rendered output for these converged files;
+each login updater fast-forwards to it.
+
+### Review outcome
+
+The pass reviewed `1a9d30b..a5d9ad7` for AI transforms, writer guards and the
+login binding, permissions, credential consumers and documentation, with an
+independent verifier for each material finding. Guards, binding, mode pinning
+and secret paths/modes held. Fixed in the consolidation commit:
+
+- The Claude settings modifier always reserialized with sorted keys. Claude
+  Code writes in insertion order (plugin install, marketplace add, first
+  `/model`), so the next nonforce login update would stop at
+  `~/.claude/settings.json` and leave later targets stale. It now mirrors the
+  Codex fix: after all validation, keep the original input when the merged result
+  is typed-equal. Reproduced with Claude Code 2.1.317 in a temporary home; no
+  host had hit it, since every status was empty.
+- Stale current-state statements, the README package procedure, legacy labels
+  on the AGENTS updater rules, takeover notes on the native state database and
+  transport bounds, a static-token rotation runbook, and Stage 5 notes for
+  Marlowe and Windows.
+- Evidence these docs cite under `/tmp` (68 entries) was copied with modes and a
+  verified sha256 manifest to that private consolidation directory.
+
+Accepted limits, unchanged now:
+
+- Native commands without the updater's explicit argument set use a separate
+  `~/.config/chezmoi/chezmoistate.boltdb`; always pass the full set
+  ([takeover.md](takeover.md#updates-and-edits-after-takeover)).
+- An HTTPS connect to a silently dropped route is bounded only by OS/curl defaults.
+- Replacing an enrolled token in place stalls that host's updater until the new
+  ciphertext lands; follow the runbook in [secrets-and-ssh.md](secrets-and-ssh.md).
+- Private Stage 4 backups and Lab's enrollment rehearsal destination hold
+  plaintext token copies (0600 in private 0700 directories). Purging them on
+  rotation or revocation is a user decision, never automatic.
+- Windows Codex sandbox grants are app-created; dotfiles manages no directory ACLs.
+- Retired submodule leftovers and legacy wrapper links stay until Stage 6.
+
+Stage 5 inputs, none blocking this checkpoint:
+
+- D7 payload lifecycle, including Sherlock's `~/.cache` refusal, Marlowe's
+  Codex skills root limit and Windows' first foreground skills install.
+- Marlowe login nodes: accept and document, give Marlowe Claude settings without
+  Node hooks, or port the helpers off Node; descope Codex there or use a non-Node
+  binary. Never bypass the site profile.
+- Make the config template set `persistentState` (requires reviewed re-init), or
+  keep the full-argument rule.
+- Windows: prefer the exact provisioned `chezmoi.exe` over the first PATH match;
+  name the parent ACL model of any new target under an existing parent.
+- Widen the gitleaks secrets-directory rule to the encoded `private_dot_secrets/`
+  source path; the source-guard unit test already blocks plaintext there.
+
+### Stages 1-4 component map
+
+- Native source root: `.chezmoiroot`, `home/.chezmoi.toml.tmpl`,
+  `home/.chezmoiignore`, `home/.chezmoitemplates/validate-host`; explicit
+  `[data].host`, owned fast-forward update config, role ignores and the secret
+  gate. Tests: `test_chezmoi_source_state.py`, `test_chezmoi_update_config.py`,
+  `test_chezmoi_rendered.py`.
+- Ordinary bridge: `home/**.tmpl` literal includes of the 95 legacy package
+  paths, which stay canonical until Stage 6; see [inventory.md](inventory.md).
+- AI transforms: `home/dot_claude/modify_private_settings.json`,
+  `home/dot_codex/modify_private_config.toml`, `home/.chezmoidata/codex-policy.json`.
+  Tests: `test_chezmoi_claude.py`, `test_chezmoi_codex.py`,
+  `test_chezmoi_native_config.py`.
+- Static secrets: eight `home/private_dot_secrets/encrypted_private_claude-*.age`,
+  builtin age, five host recipients plus R. Test: `test_chezmoi_secrets.py`.
+- Ownership and maintenance: `lib/chezmoi-guard.sh`/`.ps1` and the refusals in
+  every legacy writer and payload hook. Tests: `test_chezmoi_guard.py` and the
+  takeover tests.
+- D6 login adapters: `scripts/chezmoi-update.sh`/`.ps1`, dispatched from the
+  shared profiles and the PowerShell profile.
+- Provisioning and doctor: native-default `setup-host.*`, `lib/bootstrap*`,
+  `doctor.*` and `config/bootstrap/*` with the pinned v2.74.0 (static musl on
+  Sherlock); `--legacy-stow` / `-LegacyStow` keep the old path.
+- Takeover and recovery: [takeover.md](takeover.md) with
+  `test_chezmoi_takeover_{unix,windows,recovery}.py`.
+- Retained for Stage 6: legacy packages, `stow-all.*`, `.stowrc`, `setup-sync.*`,
+  `.venv-sync`, `lib/sync-runtime.sh`, `lib/config_sync.py`, the four sync
+  wrappers, the old updaters and the disabled Windows restow task.
+
 ## Stage 4 closure
 
 The user explicitly approved the remaining deployments, commit/publication and
@@ -58,8 +171,8 @@ runtime behavior is unchanged. The full Linux suite and pre-commit passed.
 Local and remote main then fast-forwarded to that exact policy commit. Lab's two
 global instruction files were refreshed with targeted nonforce apply and repeat;
 their diff is empty and file modes/parent security metadata were preserved.
-The remaining closure changes record actual outcomes and the Stage 5 handoff;
-they require their own exact three-platform CI before main fast-forward.
+The closure commits `2a612f5` and `a5d9ad7` then passed exact CI 41719265671 on
+all three platforms, and local and remote main fast-forwarded to `a5d9ad7`.
 
 Committed Stages 1-4 are stored in the main checkout's persistent Git object
 store and published on origin/main; the `/tmp` worktrees are not their only
@@ -71,10 +184,12 @@ manifest passed readback verification. Separate private Lab, Windows, Sherlock
 and review exports preserve safe operator evidence without credential values or
 identities. These local Git-metadata backups are not committed or pushed. After
 fresh verification and release by active agents, 26 completed worktrees and 25
-merged task branches were removed. Retain the checkpoints; remove the final
-coordinator and its merged branch after the closure result reaches verified main.
-Future work starts from main, not the retired coordinator. Never replay an old
-aggregate patch over newer main.
+merged task branches were removed. After the closure reached verified main, the
+coordinator and its branch were removed too: 27 task worktrees, 26 merged local
+branches and seven task-owned remote CI/e2e branches in total, leaving only main.
+The final private record is `FINAL-HANDOFF.md` in that checkpoint. Retain the
+checkpoints. Future work starts from main. Never replay an old aggregate patch
+over newer main.
 
 ## Publication and historical operational checkpoints
 
@@ -171,7 +286,8 @@ above supersedes their pending approvals, Windows deferral and allocation claim.
   used private temporary fixtures at those checkpoints; their evidence is
   distinct from the later takeovers and real cryptographic enrollment above.
   No production credentials were used in those isolated fixtures.
-- Active work: finish [Stage 4](stage-4-takeover.md) and its recorded gates.
+- Active work at that checkpoint: finish [Stage 4](stage-4-takeover.md) and its
+  recorded gates. Stage 4 has since closed; see the consolidation checkpoint above.
   The [Stage 5 prompt](start-stage-5.md) is a handoff, not authorization to start it.
 - The new [inventory](inventory.md) derives 95 tracked package paths at
   `1a9d30b`, including all five tmux files and assets. The old 91 count is stale.
@@ -214,7 +330,7 @@ before the main fast-forward.
 | 1 | Implemented; Linux/macOS/Windows probes and independent review | No real HOME takeover or fleet migration | 23 probes; Windows one Unix-TZ skip; inventory and CI integration |
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
-| 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
+| 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e; closure `a5d9ad7` passed exact CI 41719265671 | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Not started | Depends on integration scope | None |
 | 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
 
@@ -224,14 +340,14 @@ Use the canonical `$HOME/dotfiles` main checkout and this committed record for t
 next stage. Accepted runtime `bf99958`, encrypted source `74985d08` and native
 formatting correction `15068b9` already reached local and remote main. Preserve
 subsequent commits and inspect staged, unstaged and untracked changes before
-creating a fresh `.worktrees/` task checkout. The former Stage 4 coordinator is
-disposable after verified integration; no future stage depends on its path.
+creating a fresh `.worktrees/` task checkout. The former Stage 4 coordinator
+was removed after verified integration; no future stage depends on its path.
 Do not replay the old whole-aggregate `/tmp/chezmoi-stage4-candidate.patch` over
 newer main. Original Stage 3 inputs and earlier patches are historical recovery
 evidence in the durable checkpoint. The original main tmux edits were preserved
 in the coordinated landing. The user explicitly authorized commits, publication
-and rollout; no blanket authorization question remains. Exact candidate CI/e2e,
-private recovery custody and concrete host gates still apply.
+and rollout; no blanket authorization question remains. Recovery custody is
+established; exact candidate CI/e2e and concrete host gates still apply.
 The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
 
 | ID | Decision | State / owner |
@@ -248,7 +364,7 @@ The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
 | D10 | Select concrete tested minimum versions before removing old-tool branches; preserve supported OSes and current safety semantics | Stage 1 inventory, coherent component changes through Stage 5 |
 | D11 | Agents execute migration, tests and precise legacy retirement on the six hosts in Stages 4/6; do not defer reachable-host work to a later manual user task | Explicit user authorization; persists across sessions; concrete auth/privilege/site blockers remain |
 | D12 | Include allowlisted secrets and private SSH information through native encryption/vault integration; preserve app-written auth state | User-requested scope; Stage 1 classifies consumers and tests; Stage 4 enrolls real values |
-| D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; all five identities generated locally. Apple Passwords custody confirmed on another device and retrieved R decrypts all eight. Publication/deployment remain separate gates |
+| D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; all five identities generated locally. Apple Passwords custody confirmed on another device and retrieved R decrypts all eight. Published in `74985d08` and accepted on all five Unix hosts; Windows enrollment stays false |
 
 D6 is resolved: the user selected keeping login automatic updates with a thin
 chezmoi adapter. Stage 4 must implement that direction, with noninteractive
