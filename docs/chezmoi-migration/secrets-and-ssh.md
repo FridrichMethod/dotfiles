@@ -121,20 +121,26 @@ update then stops at `.secrets/claude-NAME` (changed since last write), leaving
 later targets stale until the new ciphertext lands. Instead:
 
 1. Obtain the new token under an unmanaged temporary name, such as
-   `claude-as TEMPNAME` with an empty label. `.secrets` is not an exact directory,
-   so native apply leaves that sibling alone.
+   `claude-as TEMPNAME`. `.secrets` is not an exact directory, so native apply
+   leaves that sibling alone.
 2. Privately run native `encrypt --use-builtin-age=true` with the full explicit
-   argument set (see [takeover.md](takeover.md)) and one `--age-recipient` for
-   each of exactly six recipients: the five host public recipients plus R. Never
-   use `chezmoi add` without `--encrypt`, and never `re-add`.
+   argument set (see [takeover.md](takeover.md)) and
+   `--age-recipient-file PRIVATE_FILE`, a private file listing exactly the six
+   public recipients (five hosts plus R), one per line. In v2.74 a repeated
+   `--age-recipient` keeps only the last value, and `chezmoi add --encrypt` uses the
+   host's configured recipients; never use `add` without `--encrypt` or `re-add`.
+   The result must carry exactly six X25519 stanzas, as `test_chezmoi_secrets.py`
+   checks.
 3. Privately verify that each host identity and retrieved R decrypt it to the
    same bytes, as in Stage 4, without printing values.
 4. Replace `home/private_dot_secrets/encrypted_private_claude-NAME.age` through the
    normal CI landing. Each enrolled host's login update replaces its target; then
-   remove the temporary token file.
+   remove the temporary token file and any `TEMPNAME` kit metadata, and revoke the
+   superseded token at the issuer. Git history keeps the old ciphertext, so
+   revocation, not deletion, retires it.
 
-If the old token was revoked or exposed, also purging its copies in private
-Stage 4 backups and rehearsal destinations is a user decision, never automatic.
+Purging old copies in private Stage 4 backups and rehearsal destinations is a
+user decision, never automatic.
 
 Ordinary source fixtures copy the entire candidate, including opaque ciphertext,
 with enrollment disabled. Their exact ordinary inventory remains unchanged and

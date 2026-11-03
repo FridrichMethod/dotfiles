@@ -48,7 +48,7 @@ to `$HOME/dotfiles/.worktrees/chezmoi-stage4-integration`; HEAD, full diff and
 status matched exactly before and after. Earlier `/tmp` paths in historical
 records describe where those operations actually ran. Follow-up 2026-11-03: the
 68 top-level `/tmp` evidence entries these records cite were copied with modes and
-a readback-verified SHA256 manifest to the private, unpushed
+a readback-verified SHA256 manifest to the private, unpushed lab-ubuntu store
 `$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/`
 (manifest `../tmp-evidence-manifest.sha256`). Consult that copy, not `/tmp`.
 Global Codex/Claude instructions now require `.worktrees/` for persistent work,

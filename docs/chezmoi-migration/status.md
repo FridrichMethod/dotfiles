@@ -32,8 +32,9 @@ server or GUI authentication was tested. Cluster access reused existing masters.
 Private before/after evidence stays on each host under
 `~/.local/state/dotfiles-consolidation-20261103/` and in the coordinator's
 unpushed `.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/`.
-The consolidation commit changes no rendered output for these converged files;
-each login updater fast-forwards to it.
+A separate session then landed `130d240`, a shared Codex status line that changes
+`~/.codex/config.toml` on every host. The consolidation commits change no
+rendered output for these converged files. Login updaters fast-forward to both.
 
 ### Review outcome
 
@@ -79,8 +80,10 @@ Stage 5 inputs, none blocking this checkpoint:
   binary. Never bypass the site profile.
 - Make the config template set `persistentState` (requires reviewed re-init), or
   keep the full-argument rule.
-- Windows: prefer the exact provisioned `chezmoi.exe` over the first PATH match;
-  name the parent ACL model of any new target under an existing parent.
+- Windows: review the inherited sandbox Modify grant on `~/.local/bin` or verify
+  the executable before running it, then prefer the exact provisioned
+  `chezmoi.exe` over the first PATH match; name the parent ACL model of any new
+  target under an existing parent.
 - Widen the gitleaks secrets-directory rule to the encoded `private_dot_secrets/`
   source path; the source-guard unit test already blocks plaintext there.
 

@@ -105,7 +105,7 @@ takeover, and may conflict with or replace the intended source representation.
 Privately preflight the two AI inputs. Local TOML dates/times/datetimes and JSON
 U+FFFD remain unsupported; do not bypass their guards or use TZ as a fix. Native
 serialization removes TOML layout/comments when policy changes require output.
-A validated typed no-op preserves the original Codex bytes. Back up and review
+A validated typed no-op preserves the original Claude/Codex bytes. Back up and review
 actual changes; this does not bypass target ownership or conflict protection.
 Only a nonsecret explicit target allowlist may be diffed into ordinary logs.
 Even native errors may include input text; capture real diagnostics privately.
@@ -236,9 +236,10 @@ less-interactive mode rejects that first-target conflict while allowing genuinel
 absent new targets and ordinary known updates. A source fast-forward can succeed
 before apply refuses a target; no whole-home transaction is promised. It disables
 credential prompts. An SSH connect timeout and an HTTPS low-speed abort bound
-normal transport failures; an HTTPS connect to a silently blackholed route can
-still wait for OS/curl connect defaults. That limit is accepted; a portable
-watchdog would be a Stage 5 design question. Arbitrary user Git hooks are not
+normal transport failures; an HTTPS connect to a silently blackholed route, or
+an SSH session that stalls after connecting, can still wait for OS/curl/SSH
+defaults. That limit is accepted; a portable watchdog would be a Stage 5 design
+question. Arbitrary user Git hooks are not
 a globally bounded execution environment. Errors produce a generic warning;
 secret-bearing native output is not printed. A later session may retry.
 

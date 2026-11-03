@@ -74,7 +74,8 @@ stage-6-retirement,support-boundary,secrets-and-ssh,fleet-rollout}.md. Read
 docs/{bootstrap,payloads,shell,config-sync,update-contract,testing}.md where their
 callers change. Consult the final Stage 4 ledger/review/resolutions recorded in
 status. The former /tmp/chezmoi-stage4-ledger.md and /tmp/chezmoi-stage4-review.md
-are preserved, with the rest of the cited /tmp evidence, in the private unpushed
+are preserved, with the rest of the cited /tmp evidence, on lab-ubuntu only, in the
+private unpushed
 $HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/
 (manifest ../tmp-evidence-manifest.sha256). Read them there; they are local
 supplemental evidence, not substitutes for the aggregate or completion record.
@@ -121,10 +122,21 @@ must not recreate source write-through. POSIX root-ancestor checks must not form
 double-leading-slash UNC paths under Git Bash. Keep native
 fast-forward-only updates, dirty/divergent refusal, no force/stash/rebase,
 bounded noninteractive execution and generic nonsecret failure messages.
-Windows updater hardening candidate: scripts/chezmoi-update.ps1 takes the first
-chezmoi Application on PATH; prefer the exact provisioned ~/.local/bin/chezmoi.exe.
-A Codex desktop sandbox group has Modify on ~/.local on the win host, so a planted
-chezmoi.com could shadow it. Dotfiles did not create those grants.
+Windows updater hardening candidate: a Codex desktop sandbox group holds an
+inherited Modify grant on ~/.local (including ~/.local/bin) on the win host.
+chezmoi.exe itself carried no such grant when checked, but files created there
+inherit it. Review or restrict that grant first, or verify the executable's
+owner/ACL/hash before running it. Secondary: scripts/chezmoi-update.ps1 takes the
+first chezmoi Application on PATH, so a planted chezmoi.com could shadow the
+provisioned ~/.local/bin/chezmoi.exe; prefer that exact path. Dotfiles did not
+create those grants.
+Also carried into Stage 5: native commands without the updater's full explicit
+argument set use a separate ~/.config/chezmoi/chezmoistate.boltdb (set
+persistentState in the config template with a reviewed re-init, or keep the
+full-argument rule; see takeover.md), and a portable transport watchdog is only a
+design question. The Claude settings modifier now matches the Codex typed no-op
+preservation, so Claude Code's own insertion-order rewrites no longer stop nonforce
+login updates.
 
 Preserve the directory correction: native file apply, diff and update explicitly
 use --exclude=dirs; no effective config-key replacement was found in v2.74.
@@ -211,7 +223,8 @@ deployment approvals are now resolved. Lab and WSL's historical one-file
 normalizations ran once; preserve those receipts and never reuse failed capsules.
 Lab's later explicit Astra/xhigh correction also passed, followed by a new
 formatting-only rewrite. The current source fix preserves validated typed no-ops
-and retains all unsupported-input and genuine-conflict protections. Exact CI/e2e
+for both Codex and Claude and retains all unsupported-input and genuine-conflict
+protections. Exact CI/e2e
 and actual Lab acceptance passed; see the current Stage 4 evidence.
 All five task-installed Bitwarden clients were removed; Sherlock never installed
 one and its Bitwarden tooling proposal is canceled. SSH stays ordinary.

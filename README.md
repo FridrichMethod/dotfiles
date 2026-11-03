@@ -253,8 +253,13 @@ Add the matching `home/` literal-include template, its
 counts in `tests/chezmoi_source_support.py`. If it introduces a new parent
 directory, plan the reviewed per-host `apply --include=dirs --recursive=false`
 preparation from the [takeover procedure](docs/chezmoi-migration/takeover.md)
-before landing. Native homes receive the change through the login update;
-`stow-all` applies only to legacy (unmarked) homes. Keep secrets local, code in
+before landing. Also check each applicable native host for an existing
+unmanaged file at the new path: the login update stops on it as a first-target
+conflict until it is reconciled under that procedure. For a file that applies
+on Windows, name its parent's ACL model first (see
+[start-stage-5.md](docs/chezmoi-migration/start-stage-5.md)). Native homes
+receive the change through the login update; `stow-all` applies only to legacy
+(unmarked) homes. Keep secrets local, code in
 its shell dialect and documentation in English ASCII. Follow
 [AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy; keep
 common-before-host order.
