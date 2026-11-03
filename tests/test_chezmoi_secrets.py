@@ -70,7 +70,7 @@ class NativeSecretTests(unittest.TestCase):
     def test_unenrolled_and_wrong_host_sources_stay_keyless_with_exact_ordinary_inventory(self):
         for role in ROLES:
             native_os = "darwin" if role == "mac" else "windows" if role == "win" else "linux"
-            values = (None, "false") if role in ("mac", "wsl-ubuntu", "lab-ubuntu") else (None, "false", "true")
+            values = (None, "false", "true") if role in ("common-only", "win") else (None, "false")
             for value in values:
                 with self.subTest(role=role, opt_in=value), SourceFixture(role, native_os=native_os) as fixture:
                     if value is not None:
@@ -89,17 +89,18 @@ class NativeSecretTests(unittest.TestCase):
                     self.assertEqual(snapshot(fixture.source), before)
 
     def test_enrollment_flag_rejects_non_boolean_data_before_destination_writes(self):
-        for value in ('"true"', '"false"', '""', "1", "0", "[]", "{}"):
-            with self.subTest(value=value), SourceFixture("lab-ubuntu", native_os="linux") as fixture:
-                with fixture.config.open("a", encoding="utf-8") as config:
-                    config.write(f"enrollStaticSecrets = {value}\n")
-                result = fixture.run("apply")
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("enrollStaticSecrets", result.stderr)
-                self.assertEqual(list(fixture.destination.iterdir()), [])
+        for role in ("lab-ubuntu", "sherlock", "marlowe"):
+            for value in ('"true"', '"false"', '""', "1", "0", "[]", "{}"):
+                with self.subTest(role=role, value=value), SourceFixture(role, native_os="linux") as fixture:
+                    with fixture.config.open("a", encoding="utf-8") as config:
+                        config.write(f"enrollStaticSecrets = {value}\n")
+                    result = fixture.run("apply")
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("enrollStaticSecrets", result.stderr)
+                    self.assertEqual(list(fixture.destination.iterdir()), [])
 
     def test_enrolled_supported_hosts_deploy_only_synthetic_private_secrets(self):
-        for role in ("mac", "wsl-ubuntu", "lab-ubuntu"):
+        for role in ("mac", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"):
             with self.subTest(role=role), ChezmoiFixture() as fixture:
                 self.prepare(fixture)
                 self.install_enrollment_gate(fixture, role)
@@ -115,6 +116,7 @@ class NativeSecretTests(unittest.TestCase):
                                          "apply", "--use-builtin-age=true")
                     self.assert_success(result)
                     self.assertTrue(canary not in result.stdout + result.stderr)
+                    self.assertTrue(target.is_file(), "enrolled host must deploy its selected secret")
                     self.assertTrue(target.read_text() == canary)
                     self.assertEqual(sibling.read_bytes(), b"synthetic app-owned refresh state\n")
                 self.assertEqual(snapshot(fixture.source), before)

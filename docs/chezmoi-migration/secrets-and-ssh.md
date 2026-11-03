@@ -2,11 +2,12 @@
 
 Stage 4 private proposal and user choices are summarized without account names
 in [stage-4-evidence.md](stage-4-evidence.md#secret-choices-and-custody). Eight
-static-for-consumer files and lab/mac/WSL plus independent recovery scope are
-approved; five mutable Codex auth files remain excluded. SSH snippets retain
-ordinary mappings by explicit choice. Recovery custody/bootstrap remains pending,
-so no real identity or ciphertext has been enrolled. A local `.secrets` directory
-on the same disk cannot itself establish independent recovery custody.
+static-for-consumer files are approved for lab, Mac, WSL, Sherlock and Marlowe
+plus independent recovery; five mutable Codex auth files remain excluded.
+SSH snippets retain ordinary mappings by explicit choice. Apple Passwords is
+selected for recovery custody, but actual private deposit/retrieval and bootstrap
+remain pending, so no real identity or ciphertext has been enrolled. A local
+`.secrets` directory on the same disk cannot establish independent recovery.
 
 ## Scope added by the user
 
@@ -71,12 +72,19 @@ or plaintext tracked templates. Use only ciphertext or appropriate vault referen
 ### Explicit local enrollment gate
 
 The local native config must set `[data].enrollStaticSecrets = true` before
-`.secrets` enters the target set, and only `mac`, `wsl-ubuntu` and `lab-ubuntu`
-can select it. An absent or false flag ignores the entire directory; other
-hosts ignore it even with a true flag. A present non-boolean value fails before
+`.secrets` enters the target set. The approved roles are `mac`, `wsl-ubuntu`,
+`lab-ubuntu`, `sherlock` and `marlowe`. An absent or false flag ignores the entire
+directory on every role; `win` and `common-only` ignore it even with a true flag.
+A present non-boolean value fails before
 destination writes. This gate never removes existing local secrets and is not
 a cryptographic access boundary: each ciphertext still needs the explicitly
 approved host and independent recovery recipients.
+
+Every selected ciphertext includes the five host public recipients and recovery
+recipient R. R alone can recover all eight static files; host private identities
+remain local and only public recipients are exported. Cluster deployment also
+requires current site rules and verified channel-0.7 launcher consumers. Tool
+provisioning and actual account acceptance are separate from enrollment scope.
 
 Keep the flag absent until identity/bootstrap, recovery custody and exact-file
 ownership checks are complete. Native init preserves this local data and age
