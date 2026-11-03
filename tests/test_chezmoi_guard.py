@@ -52,7 +52,8 @@ class WriterGuardTests(unittest.TestCase):
 
     def test_native_payload_dispatch_uses_bound_source_with_stale_dotfiles_dir(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            # macOS TMPDIR may use /var rather than canonical /private/var.
+            root = Path(temporary).resolve()
             home, source, stale = (root / name for name in ("home", "source", "stale"))
             for path in (home / ".config/dotfiles", source / "scripts", source / "lib",
                          source / "config", stale / "scripts"):

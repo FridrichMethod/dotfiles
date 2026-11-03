@@ -158,8 +158,11 @@ e2e_step_native_fixtures() {
         e2e_step_end fail 'native takeover/recovery fixture is missing from this checkout'
         return 0
     fi
-    e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-        env DOTFILES_TEST_CHEZMOI="$binary" DOTFILES_TEST_REQUIRE_CHEZMOI=1 bash tests/chezmoi.sh || rc=$?
+    # The prepared login environment supplies Python 3.11+ on HPC hosts;
+    # the base image's PATH may have an older Python or none at all.
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" \
+        "cd $(e2e_quote "$E2E_CLONE") && env DOTFILES_TEST_CHEZMOI=$(e2e_quote "$binary") DOTFILES_TEST_REQUIRE_CHEZMOI=1 bash tests/chezmoi.sh" \
+        "$E2E_TIMEOUT_APPLY" || rc=$?
     if [ "$rc" != 0 ]; then
         E2E_BROKEN=native-fixtures
         e2e_step_end fail "isolated native suite exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"

@@ -103,6 +103,7 @@ mkdir -p "$UNIT/native-suite/tests"
 native_failure=$(
     E2E_FLOW=other E2E_CLONE=$UNIT/native-suite DOTFILES_TEST_CHEZMOI=/independently/supplied/chezmoi
     E2E_STEP_OUT=$UNIT/native.out E2E_STEP_ERR=$UNIT/native.err E2E_TIMEOUT_APPLY=1
+    E2E_SYS_PATH=$PATH
     e2e_step_begin() { :; }
     e2e_step_end() { printf '%s\n' "$1"; }
     e2e_run() { return 1; }
@@ -111,6 +112,79 @@ native_failure=$(
 )
 expect_eq 'native suite failure is blocking' "$native_failure" 'fail
 native-fixtures'
+
+# Native discovery needs the prepared login runtime: the base image may have
+# no Python or an older Python without tomllib. Run the real suite entrypoint
+# with a deliberately unusable base Python and a working login-only Python.
+NATIVE_HOME="$UNIT/native home"
+mkdir -p "$NATIVE_HOME/runtime/bin" "$NATIVE_HOME/base/bin" "$NATIVE_HOME/fixture source/tests/lib"
+ln -s "$(command -v python3)" "$NATIVE_HOME/runtime/bin/python3"
+cp "$REPO_ROOT/tests/chezmoi.sh" "$NATIVE_HOME/fixture source/tests/chezmoi.sh"
+cp "$REPO_ROOT/tests/lib/environment.sh" "$NATIVE_HOME/fixture source/tests/lib/environment.sh"
+cat >"$NATIVE_HOME/base/bin/python3" <<'SH'
+#!/bin/sh
+printf 'base image Python cannot run native fixtures\n' >&2
+exit 79
+SH
+cat >"$NATIVE_HOME/runtime/bin/zsh" <<'SH'
+#!/bin/bash
+set -eu
+[ "$1" = -il ] && [ "$2" = -c ]
+export PATH="$HOME/runtime/bin:$PATH"
+exec /bin/bash --noprofile --norc -c "$3"
+SH
+cat >"$NATIVE_HOME/native 'tool" <<'SH'
+#!/bin/sh
+[ "$1" = --version ] || exit 2
+printf 'explicit native fixture binary\n'
+SH
+chmod +x "$NATIVE_HOME/base/bin/python3" "$NATIVE_HOME/runtime/bin/zsh" "$NATIVE_HOME/native 'tool"
+cat >"$NATIVE_HOME/fixture source/tests/test_chezmoi_takeover_recovery.py" <<'PY'
+from contextlib import chdir
+import os
+from pathlib import Path
+import subprocess
+import tomllib
+import unittest
+
+
+class PreparedRuntimeTests(unittest.TestCase):
+    def test_login_runtime_preserves_explicit_native_binary_and_working_directory(self):
+        home = Path(os.environ["HOME"])
+        binary = os.environ["DOTFILES_TEST_CHEZMOI"]
+        self.assertEqual(binary, str(home / "native 'tool"))
+        self.assertEqual(os.environ["DOTFILES_TEST_REQUIRE_CHEZMOI"], "1")
+        self.assertEqual(Path.cwd(), home / "fixture source")
+        with chdir(home):
+            self.assertEqual(tomllib.loads("prepared = true"), {"prepared": True})
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout, "explicit native fixture binary\n")
+        self.assertFalse(Path("force-failure").exists(), "deliberate native fixture failure")
+PY
+for native_outcome in pass fail; do
+    [ "$native_outcome" != fail ] || : >"$NATIVE_HOME/fixture source/force-failure"
+    # shellcheck disable=SC2034 # run state consumed by the sourced e2e helpers
+    native_result=$(
+        HOME=$NATIVE_HOME E2E_FLOW=other E2E_CLONE="$NATIVE_HOME/fixture source"
+        DOTFILES_TEST_CHEZMOI="$NATIVE_HOME/native 'tool"
+        PATH="$NATIVE_HOME/base/bin:$PATH" E2E_SYS_PATH=$PATH
+        E2E_LOGIN_ZSH="$NATIVE_HOME/runtime/bin/zsh"
+        E2E_STEP_OUT=$UNIT/native-login.out E2E_STEP_ERR=$UNIT/native-login.err
+        E2E_STEP_LOG=$UNIT/native-login.log E2E_TIMEOUT_APPLY=30 E2E_BROKEN=''
+        e2e_step_begin() { :; }
+        e2e_step_end() { printf '%s\n' "$1"; }
+        e2e_step_native_fixtures
+        printf '%s\n' "$E2E_BROKEN"
+    )
+    if [ "$native_outcome" = pass ]; then
+        [ "$native_result" = pass ] || cat "$UNIT/native-login.err" >&2
+        expect_eq 'native fixtures use the prepared login Python and explicit binary' "$native_result" pass
+    else
+        expect_eq 'login native fixture failure remains blocking' "$native_result" 'fail
+native-fixtures'
+        expect_text 'native fixture failure reaches phase stderr' "$UNIT/native-login.err" 'deliberate native fixture failure'
+    fi
+done
 
 # The stdout of an apply run that exits 3: plan lines, then three blocks,
 # one with %q-quoted paths (a home with a space) in its mv and stow lines.

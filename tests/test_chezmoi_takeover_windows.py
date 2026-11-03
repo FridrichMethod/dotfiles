@@ -356,8 +356,9 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.bind()
         body = ". " + ps_string(ROOT / "lib/chezmoi-guard.ps1") + ";if(-not(Test-DotfilesNativeOwned " + ps_string(self.home) + ")){throw 'not owned'};exit 0"
         encoded = base64.b64encode(body.encode("utf-16le")).decode()
+        # Match the PS7 fixture budget, including hosted e2e process startup.
         result = subprocess.run([str(shell), "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-                                env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+                                env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_binding_rejects_repository_subdirectory_as_source(self):
