@@ -113,20 +113,52 @@ if [ -r "$HOME/.config/sh/.profile" ]; then
     . "$HOME/.config/sh/.profile"
 fi
 
-# Dotfiles auto-update check (bash/sh only; zsh runs it at end of .zshrc)
-if [ -z "${ZSH_VERSION:-}" ]; then
-    _df_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/dotfiles-update.sh"
+# Both shells use the same home binding. zsh calls this after ssh-agent/env
+# setup; bash/sh calls it here. Maintenance survives unrelated future logins.
+_dotfiles_login_updates() {
+    case $- in *i*) ;; *) return 0 ;; esac
+    if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
+        return 0
+    fi
+    _df_hook_root=${DOTFILES_DIR:-$HOME/dotfiles}
+    _df_update=$_df_hook_root/scripts/dotfiles-update.sh
+    if [ -e "$HOME/.config/dotfiles/native" ] || [ -L "$HOME/.config/dotfiles/native" ]; then
+        # Read only enough to locate the shared validator. Any malformed marker
+        # prevents both dispatches; it never falls back to the legacy writer.
+        if ! _df_hook_root=$(
+            [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
+            {
+                IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_root
+            } <"$HOME/.config/dotfiles/native" || exit 1
+            [ "$_df_version" = dotfiles-chezmoi-v1 ] || exit 1
+            [ "${_df_root#/}" != "$_df_root" ] || exit 1
+            [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
+            # shellcheck source=/dev/null
+            . "$_df_root/lib/chezmoi-guard.sh"
+            dotfiles_native_source "$HOME"
+        ); then
+            printf '%s\n' '[dotfiles] [warn] Native home binding is invalid; automatic updates skipped.' >&2
+            unset _df_hook_root _df_update
+            return 0
+        fi
+        _df_update=$_df_hook_root/scripts/chezmoi-update.sh
+        if [ ! -r "$_df_update" ]; then
+            printf '%s\n' '[dotfiles] [warn] Native updater is unavailable; inspect the source checkout.' >&2
+        fi
+    fi
     if [ -r "$_df_update" ]; then
         # shellcheck source=/dev/null
         . "$_df_update"
     fi
-    unset _df_update
-
-    # Payload repos (bash/sh only; zsh sources it from the .zshrc tail)
-    _df_payload="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh"
+    # Keep payload scheduling separate from the native dotfiles update policy.
+    _df_payload=$_df_hook_root/scripts/payload-update.sh
     if [ -r "$_df_payload" ]; then
         # shellcheck source=/dev/null
         . "$_df_payload"
     fi
-    unset _df_payload
+    unset _df_hook_root _df_update _df_payload
+}
+if [ -z "${ZSH_VERSION:-}" ]; then
+    _dotfiles_login_updates
+    unset -f _dotfiles_login_updates
 fi

@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # E2E_BROKEN is read by common.sh and steps.sh
 # The other-Linux flow of tests/e2e/inside.sh (Fedora, no overlay): the
-# docs/bootstrap.md "Other Linux" quick start and X-other-linux done as the
+# docs/bootstrap.md legacy "Other Linux" quick start and X-other-linux done as the
 # person does them: the distribution's packages, the fetch_pinned and
 # clone_listed helpers taken from the clone's own docs, the clone loop, the
 # bat theme, the vim dirs, setup-sync, the host-less stow, then the login
@@ -182,5 +182,8 @@ e2e_flow_other() {
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
+    e2e_skip native-provision 'setup-host has no common-only provisioning route; no ad hoc native installer'
+    e2e_skip native-check 'no supported setup-host route for this host'
+    e2e_or_skip native-fixtures e2e_step_native_fixtures
     e2e_audits
 }

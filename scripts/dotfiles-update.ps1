@@ -13,6 +13,8 @@
     DOTFILES_AUTO_STOW    0 keeps pull enabled but skips automatic stow
     DOTFILES_HOST         override remembered host (win or empty on Windows)
 #>
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/chezmoi-guard.ps1')
+if (-not (Test-DotfilesLegacyWriteAllowed -TargetPath $HOME)) { return }
 if ([Console]::IsOutputRedirected) { return }
 if ($env:_DOTFILES_CHECKED) { return }
 

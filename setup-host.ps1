@@ -4,7 +4,11 @@
     Day-zero installer for the win host - the thin Windows twin of setup-host.sh.
 
 .DESCRIPTION
-    Runs five steps in order, each checked first and applied only when it is
+    Native configuration provisioning is the default. -LegacyStow selects the
+    supported Stow/parser compatibility path. Native W1-chezmoi replaces
+    W1-setup-sync and HW-native replaces HW-stow/HW-auto-stow-task.
+
+    Runs the selected steps in order, each checked first and applied only when it is
     todo, then prints the person-only steps as HUMAN blocks:
 
       W1-winget       winget import config/bootstrap/winget.json --no-upgrade,
@@ -66,6 +70,9 @@
 .PARAMETER Yes
     Apply without asking. Required when the session is not interactive.
 
+.PARAMETER LegacyStow
+    Provision the supported Stow/parser compatibility path explicitly.
+
 .PARAMETER PrintManual
     Print every HUMAN block and exit 0 without checking or applying anything.
 
@@ -83,7 +90,8 @@ param(
     [string]$Tier = 'core,cli,ai',
     [switch]$Check,
     [switch]$Yes,
-    [switch]$PrintManual
+    [switch]$PrintManual,
+    [switch]$LegacyStow
 )
 
 Set-StrictMode -Version Latest
@@ -103,6 +111,11 @@ $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W
 $HumanSteps = @('HW-clone', 'HW-stow', 'HW-auto-stow-task', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
 # A pending blocking step makes the run exit 3 (setup-host.sh's "blocking").
 $BlockingHumanSteps = @('HW-clone', 'HW-stow')
+if (-not $LegacyStow) {
+    $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')
+    $HumanSteps = @('HW-clone', 'HW-native', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
+    $BlockingHumanSteps = @('HW-clone', 'HW-native')
+}
 
 function New-SetupState {
     param([string]$Id, [ValidateSet('done', 'todo', 'human', 'skip')][string]$Status, [string]$Detail)
@@ -183,6 +196,23 @@ function Get-SetupBatThemeRow {
     }
     if ($rows[0].url -cnotmatch '^https://' -or $rows[0].sha256 -cnotmatch '^[0-9a-f]{64}$') {
         throw [IO.InvalidDataException]::new('installers.tsv bat-theme needs an https url and a 64-digit lowercase hex sha256')
+    }
+    return $rows[0]
+}
+
+function Get-SetupChezmoiRow {
+    $arch = switch ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
+        'X64' { 'x86_64' }
+        'Arm64' { 'aarch64' }
+        default { throw [IO.InvalidDataException]::new('No pinned chezmoi artifact for this architecture') }
+    }
+    $rows = @($script:InstallerRows | Where-Object {
+            $_.id -ceq 'chezmoi' -and $_.arch -ceq $arch -and (Test-BootstrapHostMatch $_.hosts win)
+        })
+    if ($rows.Count -ne 1 -or $rows[0].kind -cne 'archive' -or
+        $rows[0].url -cnotmatch '^https://' -or $rows[0].sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        $rows[0].dest -cne '$HOME/.local/bin/chezmoi.exe') {
+        throw [IO.InvalidDataException]::new('installers.tsv needs one pinned chezmoi archive for this Windows architecture')
     }
     return $rows[0]
 }
@@ -274,6 +304,15 @@ function Get-SetupStepState {
             if ($LASTEXITCODE -eq 0 -and $themes -ccontains $name) { return New-SetupState $Id done 'theme pinned and known to bat' }
             return New-SetupState $Id todo 'theme pinned; run bat cache --build to register it'
         }
+        'W1-chezmoi' {
+            if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }
+            [void](Get-SetupChezmoiRow)
+            $rows = @(Get-SetupStepRows W1-chezmoi)
+            if ($rows.Count -ne 1) { throw [IO.InvalidDataException]::new('tools.tsv needs one chezmoi row for win') }
+            $state = Get-BootstrapToolStatus $rows[0]
+            if ($state.Status -ceq 'ok') { return New-SetupState $Id done "chezmoi $($state.Probe.Version) at $($state.Probe.Path)" }
+            return New-SetupState $Id todo 'install pinned, SHA256-verified chezmoi into ~/.local/bin; configuration handover is separate'
+        }
         'W1-setup-sync' {
             if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }
             $runtime = Get-BootstrapSyncPython $RepoRoot
@@ -355,6 +394,7 @@ function Test-SetupHumanDone {
         # needs neither core.symlinks nor Developer Mode.
         'HW-clone' { return Test-Path -LiteralPath (Join-Path $RepoRoot '.git') }
         'HW-stow' { return Test-SetupStowed }
+        'HW-native' { return Test-BootstrapNativeReady -RepoRoot $RepoRoot }
         'HW-auto-stow-task' {
             $autoStow = Join-Path $RepoRoot 'scripts/dotfiles-auto-stow.ps1'
             if (-not $IsWindows -or -not (Test-Path -LiteralPath $autoStow -PathType Leaf)) { return $false }
@@ -399,12 +439,26 @@ function Get-SetupHumanBlock {
     $repo = ConvertTo-SetupQuoted $RepoRoot
     switch -CaseSensitive ($Id) {
         'HW-clone' {
+            $powerShellNote = if ($LegacyStow) {
+                '# Git, and PowerShell 7 as the MSI in Program Files\PowerShell\7, which HW-auto-stow-task starts by path:'
+            } else {
+                '# Git and PowerShell 7 as the MSI in Program Files\PowerShell\7:'
+            }
             return @{ Kind = 'judgment'; Lines = @(
                     '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.'
-                    '# Git, and PowerShell 7 as the MSI in Program Files\PowerShell\7, which HW-auto-stow-task starts by path:'
+                    $powerShellNote
                     'winget install --id Git.Git -e --source winget'
                     'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix'
                     'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
+                ) }
+        }
+        'HW-native' {
+            return @{ Kind = 'judgment'; Lines = @(
+                    '# Follow docs/chezmoi-migration/takeover.md from this checkout.'
+                    '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.'
+                    '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.'
+                    '# Quiesce writers, snapshot exact targets, initialize with all paths explicit and establish the home binding.'
+                    '# Native regular-file updates need no elevation or auto-stow scheduled task.'
                 ) }
         }
         'HW-stow' {
@@ -517,6 +571,10 @@ function Invoke-SetupStep {
             if ($LASTEXITCODE -ne 0) { return New-BootstrapResult failed "bat cache --build exited $LASTEXITCODE" $LASTEXITCODE }
             return $result
         }
+        'W1-chezmoi' {
+            $row = Get-SetupChezmoiRow
+            return Install-BootstrapChezmoi -Uri $row.url -Sha256 $row.sha256 -Destination (Join-Path $HOME '.local/bin/chezmoi.exe')
+        }
         'W1-setup-sync' {
             $runtime = Get-BootstrapSyncPython $RepoRoot
             if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
@@ -605,6 +663,7 @@ function Invoke-BootstrapSetup {
                     'id', 'kind', 'url', 'sha256', 'dest', 'hosts', 'arch', 'tier', 'human'))
         Assert-SetupWingetManifest (Join-Path $config 'winget.json')
         [void](Get-SetupBatThemeRow)
+        if (-not $LegacyStow) { [void](Get-SetupChezmoiRow) }
     }
     catch [IO.InvalidDataException] {
         Write-DotfilesLog error "Invalid manifest: $($_.Exception.Message)"
@@ -668,7 +727,8 @@ function Invoke-BootstrapSetup {
     foreach ($id in $pending) { Write-SetupHumanBlock $id }
     $held = @($pending | Where-Object { $_ -cin $BlockingHumanSteps })
     if ($held.Count) {
-        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1"
+        $legacyFlag = if ($LegacyStow) { ' -LegacyStow' } else { '' }
+        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1$legacyFlag"
         $script:SetupStatus = 3
         return
     }

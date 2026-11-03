@@ -254,13 +254,6 @@ if ! _is_agent_session && [[ ${TERM_PROGRAM:-} == WezTerm || (-n ${WT_SESSION:-}
     typeset -g POWERLEVEL9K_TERM_SHELL_INTEGRATION=true
 fi
 
-# Dotfiles auto-update check (runs at end so ssh-agent/env is ready; run stow-all.sh and restart shell to apply)
-_df_update="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/dotfiles-update.sh"
-[[ -r "$_df_update" ]] && source "$_df_update"
-unset _df_update
-
-# Payload repos (coding-agent-kit, PyMOLScripts, awesome-skills): installed
-# and refreshed through their own installers; see scripts/payload-update.sh
-_df_payload="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh"
-[[ -r "$_df_payload" ]] && source "$_df_payload"
-unset _df_payload
+# Shared home-bound update/payload dispatch, after ssh-agent/env is ready.
+(($+functions[_dotfiles_login_updates])) && _dotfiles_login_updates
+unset -f _dotfiles_login_updates

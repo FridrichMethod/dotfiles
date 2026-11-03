@@ -1,6 +1,7 @@
 # Agent Guide
 
-This repository stores cross-platform dotfiles managed with GNU Stow.
+This repository stores cross-platform dotfiles with a native chezmoi candidate
+and a guarded GNU Stow compatibility path during the Stage 4 bridge.
 
 ## Scope and layout
 
@@ -30,10 +31,10 @@ These files are installed on every host, including fresh machines and clusters, 
 
 ## Working commands
 
-- Provision AI-sync parser once per clone: `./setup-sync.sh` (Windows: `./setup-sync.ps1`), with Python 3.11+.
+- Legacy only: provision the AI-sync parser with `./setup-sync.sh` (Windows: `./setup-sync.ps1`), with Python 3.11+.
 - Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
 - Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
-- Stow configs: `./stow-all.sh [host-dir]`
+- Native initialization/takeover: follow `docs/chezmoi-migration/takeover.md`; legacy Stow remains `./stow-all.sh [host-dir]`.
 - Install or update the payload repos now: `sync-payloads [ITEM...]`, or `sh scripts/payload-update.sh --now` (Windows: `scripts/payload-update.ps1 -Now`, unelevated)
 - Run checks: `pre-commit run --all-files`
 
@@ -42,6 +43,19 @@ These files are installed on every host, including fresh machines and clusters, 
 Keep this guide below 28,000 bytes; move explanatory material to canonical docs, never omit substantive rules.
 
 After modifying any file, run `pre-commit run --all-files` to ensure changes pass CI checks before committing.
+
+The [chezmoi migration](docs/chezmoi-migration/README.md) is staged. Stage 4 keeps
+explicit local `[data].host`, native AI transforms and literal legacy inputs until
+Stage 6. Preserve unsupported-input refusal, exact ownership/policy parity and
+WebP/terminfo byte parity. New provisioning defaults to native without a sync venv;
+`--legacy-stow` / `-LegacyStow` retains the old path. Home-bound native ownership
+blocks old writers; maintenance blocks future dotfiles AND payload workers.
+Keep legacy paths/runtime for supported old callers until Stage 6. First apply
+is not an ownership guard: review exact targets and private snapshots first.
+Real takeover follows exact candidate CI gates and existing D11 authority;
+commits/publication require active authorization. Enroll only privately selected
+static secrets with explicit recipients/bootstrap/recovery; no plaintext,
+identities or recurring OAuth state in source. Never force routine apply.
 
 ## Shell conventions
 
@@ -94,7 +108,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 - coding-agent-kit owns Unix launchers, completions and Claude Node helpers under `~/.claude/coding-agent-kit/`; dotfiles ships no kit config. Linux/macOS/WSL only: no Windows install/check rows. Native Windows missing helpers exit 0 silently, existing 0.6 copies still run, and Unix missing helpers fail visibly. Preserve these platform guards.
 - Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
 - The repository root `CLAUDE.md` is only an `@AGENTS.md` import stub for Claude Code; `AGENTS.md` is the single repository guide for every agent. Add or change repository policy in `AGENTS.md`, never in the stub.
-- Set Project instructions to `claude-md-and-agents-md` under both pluginConfigs IDs, agents-md@builtin and cc-plugin-agents-md@builtin (pre-2.1.285 clients use the latter). Keep native ancestor loading and the CLAUDE.md stub for old clients.
+- Set Project instructions to `claude-md-and-agents-md` under both pluginConfigs IDs, agents-md@builtin and cc-plugin-agents-md@builtin (pre-2.1.285 clients use the former; newer clients accept either). Keep native ancestor loading and the CLAUDE.md stub for old clients.
 - Shared settings may contain portable preferences, permission rules, plugin identifiers, and remote marketplace declarations.
 - Do not declare `model` in the portable Claude `settings.json`. The sync asserts every key it declares, so a shared `model` would silently undo each host's `/model` choice on the next stow. Model selection stays machine-local; `effortLevel` and the rest remain shared.
 - Preserve Claude permission tiers and authoritative arrays: ask holds only sudo; deny holds sudo pip/pip3, sudo rm, and the exact `rm -rf /`, `rm -fr /`, `rm -rf ~`, `rm -fr ~` patterns. Never add trailing wildcards to those rm denials. Reviewed installs/network/Git/GitHub operations remain in allow. This accepted broad policy is not a prompt to redesign permissions; its rationale is in [config-sync.md](docs/config-sync.md#permission-policy-rationale).
@@ -107,7 +121,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 
 - Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; `codex-rules-sync` materializes it without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
 - Keep all three AI sync helpers fail-closed; when shared config, permission or rule behavior changes, update their sources, README and focused tests together.
-- Keep structured merges in `lib/config_sync.py`; only TOML sync and the full runtime check require pinned `tomlkit`, while JSON/rules use the Python standard library. Do not reintroduce AWK/regex TOML parsing or a second JSON engine. Normal sync never rewrites the portable source; baseline cleanup is an explicit migration. Never broaden existing regular-file Unix permissions.
+- Keep legacy helper merges in `lib/config_sync.py`; only legacy TOML sync and the full runtime check require pinned `tomlkit`, while JSON/rules use the Python standard library. The native candidate uses the Stage 3 contract above and never calls this backend. Do not add custom parsers or a second legacy JSON engine. Normal sync never rewrites portable source; baseline cleanup is an explicit legacy migration. Legacy sync never broadens existing regular-file Unix permissions.
 - Installers must run every selected AI helper with read-only `--check` before any apply; `--quiet` suppresses successful helper chatter, never errors. Provision `.venv-sync` or an explicitly selected interpreter in advance; profiles, automatic updates and the payload hooks must never install these dependencies.
 - Stow cannot merge two files targeting the same path. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
 - Keep third-party skill payloads out of dotfiles; awesome-skills' own installer, which the payload hook runs, owns only its installed copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/` (Codex reads both roots) on each host.
@@ -121,7 +135,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 
 - Keep status output in lib/terminal.sh/.ps1, with DOTFILES_COLOR=auto|always|never; nonempty NO_COLOR and TERM=dumb disable it. Preserve plain redirected logs, PowerShell stream capture and caller preferences. Under auto only, recognize p10k instant-prompt capture through __p9k_instant_prompt_active and a numeric still-terminal saved fd; all other hidden terminals stay plain. Never pass a nonnumeric fd to dash -t. Add no formatting dependency.
 
-- `stow-all.sh` is the canonical setup command. Before any sync helper writes, it refuses to stow a package that links into `~/.oh-my-zsh` until `~/.oh-my-zsh/oh-my-zsh.sh` exists (`DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1` overrides) and stops when a Stow dry run (`stow -n`) finds a conflict. Native Windows stows no zsh package and adopts conflicting files, so `stow-all.ps1` has neither check.
+- `stow-all.sh` is the legacy setup command, refused for native-owned/maintenance homes. Before any sync helper writes, it refuses packages linking into `~/.oh-my-zsh` until `~/.oh-my-zsh/oh-my-zsh.sh` exists (`DOTFILES_STOW_WITHOUT_OH_MY_ZSH=1` overrides) and stops on Stow dry-run conflicts. Legacy Windows stows no zsh and adopts conflicts, so `stow-all.ps1` has neither check.
 - Keep order stable: stow `common/` packages first, then optional host packages.
 - Preserve Stow flags unless intentionally migrating behavior:
   - `--restow --no-folding`
@@ -134,7 +148,7 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 
 ## Windows
 
-- `stow-all.ps1` is the canonical setup command on native Windows; `stow-all.sh` rejects the `win` host and points at it. GNU Stow needs Perl and POSIX symlink semantics, so it is not used there.
+- `stow-all.ps1` is the legacy Windows command; `stow-all.sh` rejects `win` and points at it. Native chezmoi deploys regular files unelevated after actual profile/ACL preflight; it uses no elevated restow task. GNU Stow is not used on native Windows.
 - Keep the two installers semantically aligned: `--target=~`, `--no-folding`, restow idempotency, the same ignore sources (`.stowrc` `--ignore=` lines plus per-package `.stow-local-ignore`), and the same portable/live sync steps. `stow-all.ps1` parses `.stowrc` rather than restating its patterns and invokes the same `claude-settings-sync`, `codex-config-sync`, and `codex-rules-sync` helpers through Git Bash (fail-closed when Git Bash or the helpers' own dependencies are missing); never fork the ignore list or reimplement the helpers.
 - `stow-all.ps1` stows an explicit allowlist of `common/` packages, not every package. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell packages must stay out of a Windows `$HOME`. Extend `$CommonPackages` only for tools that run natively on Windows.
 - `win/` packages mirror `$HOME` paths like every other package, including `Documents\PowerShell\` and `AppData\Local\Packages\`. No installer special-casing is needed because both live under `$HOME`.

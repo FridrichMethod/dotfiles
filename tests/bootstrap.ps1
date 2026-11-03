@@ -275,6 +275,7 @@ function global:Install-PSResource {
     [void][IO.Directory]::CreateDirectory((Join-Path $env:FIXTURE_MODULES $Name))
 }
 $parameters = $env:FIXTURE_PARAMETERS | ConvertFrom-Json -AsHashtable
+if (-not $parameters.ContainsKey('LegacyStow')) { $parameters.LegacyStow = $true }
 & $env:FIXTURE_SCRIPT @parameters
 exit $LASTEXITCODE
 '@
@@ -415,7 +416,7 @@ function Get-WinToolIds {
     # Independent of lib/bootstrap.ps1: data rows whose hosts are all or name win.
     $rows = @([IO.File]::ReadAllLines((Join-Path $sourceRoot 'config/bootstrap/tools.tsv')) |
             Where-Object { $_ -and -not $_.StartsWith('#') } | Select-Object -Skip 1)
-    return @($rows | ForEach-Object { $cells = $_.Split("`t"); if ($cells[2] -ceq 'all' -or $cells[2].Split(',') -ccontains 'win') { $cells[0] } })
+    return @($rows | ForEach-Object { $cells = $_.Split("`t"); if ($cells[0] -cne 'chezmoi' -and ($cells[2] -ceq 'all' -or $cells[2].Split(',') -ccontains 'win')) { $cells[0] } })
 }
 
 . (Join-Path $sourceRoot 'lib/bootstrap.ps1')
@@ -462,6 +463,7 @@ function Test-VenvUnsupported {
 $script:MockInstalled = @()
 $script:MockEvents = [Collections.Generic.List[string]]::new()
 $script:DownloadSource = ''
+$script:DownloadBytes = $null
 function Get-InstalledPSResource {
     [CmdletBinding()] param([string]$Name)
     $script:MockEvents.Add("Get-InstalledPSResource $Name")
@@ -475,7 +477,8 @@ function Install-PSResource {
 function Invoke-WebRequest {
     [CmdletBinding()] param([string]$Uri, [string]$OutFile, [int]$MaximumRetryCount, [int]$RetryIntervalSec)
     $script:MockEvents.Add("Invoke-WebRequest $Uri")
-    [IO.File]::WriteAllText($OutFile, $script:DownloadSource)
+    if ($null -ne $script:DownloadBytes) { [IO.File]::WriteAllBytes($OutFile, $script:DownloadBytes) }
+    else { [IO.File]::WriteAllText($OutFile, $script:DownloadSource) }
 }
 
 try {
@@ -486,8 +489,18 @@ try {
         if (-not $realPython) { $realPython = (Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11').Path }
         if ($realPython) {
             $template = Join-Path $testRoot 'venv-template'
-            $null | & $realPython -m venv --without-pip $template *> $null
-            if ($LASTEXITCODE -eq 0) { $script:VenvTemplate = $template }
+            $templatePython = Join-Path $template 'Scripts/python.exe'
+            $null | & $realPython -I -B -m venv --without-pip $template *> $null
+            if ($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists($templatePython)) {
+                # Store Python can resolve its base into the deliberately fake
+                # USERPROFILE and create no executable. An existing PATH Python
+                # builds the same package-free temporary fixture instead.
+                $pathPython = (Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11').Path
+                Assert-True ([bool]$pathPython) 'An existing PATH Python is required for the stdlib fixture.'
+                $null | & $pathPython -I -B -m venv --without-pip $template *> $null
+            }
+            Assert-True ($LASTEXITCODE -eq 0 -and [IO.File]::Exists($templatePython)) 'The stdlib fixture interpreter was not created.'
+            $script:VenvTemplate = $template
         }
     }
 
@@ -1070,6 +1083,56 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         }
     }
 
+    Test-Case 'native chezmoi ZIP verification preserves old files on failure and extracts only its executable' {
+        $fixture = New-Fixture
+        $archive = Join-Path $fixture.State 'chezmoi.zip'
+        $zip = [IO.Compression.ZipFile]::Open($archive, [IO.Compression.ZipArchiveMode]::Create)
+        try {
+            foreach ($name in @('chezmoi.exe', 'unrelated.txt')) {
+                $stream = [IO.StreamWriter]::new($zip.CreateEntry($name).Open())
+                try { $stream.Write("fixture $name") } finally { $stream.Dispose() }
+            }
+        }
+        finally { $zip.Dispose() }
+        $script:DownloadBytes = [IO.File]::ReadAllBytes($archive)
+        $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+        $destination = Join-Path $fixture.Home '.local/bin/chezmoi.exe'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+        [IO.File]::WriteAllText($destination, 'original binary')
+        try {
+            $bad = Install-BootstrapChezmoi -Uri 'https://example.invalid/chezmoi.zip' -Sha256 ('0' * 64) -Destination $destination
+            Assert-True (-not $bad.Success -and $bad.Message.Contains('sha256 mismatch')) 'bad native checksum accepted'
+            Assert-Equal ([IO.File]::ReadAllText($destination)) 'original binary' 'checksum failure replaced the binary'
+            $good = Install-BootstrapChezmoi -Uri 'https://example.invalid/chezmoi.zip' -Sha256 $digest -Destination $destination
+            Assert-True $good.Success "native install failed: $($good.Message)"
+            Assert-Equal ([IO.File]::ReadAllText($destination)) 'fixture chezmoi.exe' 'native executable bytes'
+            Assert-True (-not [IO.File]::Exists((Join-Path (Split-Path -Parent $destination) 'unrelated.txt'))) 'unselected ZIP member extracted'
+            Assert-True (-not [IO.Directory]::Exists((Join-Path $fixture.Repo '.venv-sync'))) 'native install created sync runtime'
+            Assert-True (-not [IO.Directory]::Exists((Join-Path $fixture.Home '.config'))) 'native install applied configuration'
+        }
+        finally { $script:DownloadBytes = $null }
+    }
+
+    Test-Case 'native setup and doctor omit the legacy parser and elevated stow path' {
+        $fixture = New-Fixture
+        $before = Get-Snapshot (Get-FixtureRoots $fixture)
+        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $false }
+        Assert-Exit $run 3 'native check before handover'
+        Assert-True ([bool]($run.Lines -match '^W1-chezmoi todo ')) 'native binary step missing'
+        Assert-True ([bool]($run.Lines -match '^HW-native human ')) 'native handover step missing'
+        Assert-True (-not [bool]($run.Lines -match 'W1-setup-sync|HW-stow|HW-auto-stow-task')) 'native plan selected legacy steps'
+        $doctor = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true; LegacyStow = $false }
+        Assert-True ([bool]($doctor.Lines -match "`tchezmoi`t")) 'native doctor omitted chezmoi'
+        Assert-True ([bool]($doctor.Lines -match "`tnative-config`t")) 'native doctor omitted binding check'
+        Assert-True (-not [bool]($doctor.Lines -match "`tvenv-sync`t")) 'native doctor checked legacy runtime'
+        Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native runtime calls'
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'native check wrote files'
+        $manual = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true; LegacyStow = $false }
+        Assert-Exit $manual 0 'native manual handoff'
+        Assert-True ($manual.Stdout.Contains('docs/chezmoi-migration/takeover.md')) 'missing native procedure'
+        Assert-True (-not $manual.Stdout.Contains('HW-auto-stow-task')) 'native task handoff'
+    }
+
     Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 while work remains' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
@@ -1281,7 +1344,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $ids = @($blocks | ForEach-Object Id)
         Assert-True ($ids -contains 'HW-stow' -and $ids -contains 'HW-auth') "HUMAN blocks: $($ids -join ',')"
         Assert-True ($ids -notcontains 'HW-clone') 'HW-clone printed although the checkout is a clone'
-        Assert-Equal $run.Lines[-1] '[dotfiles] [warn] HUMAN steps pending: HW-stow; run the HUMAN blocks above, then rerun .\setup-host.ps1' 'pending summary'
+        Assert-Equal $run.Lines[-1] '[dotfiles] [warn] HUMAN steps pending: HW-stow; run the HUMAN blocks above, then rerun .\setup-host.ps1 -LegacyStow' 'pending summary'
         Assert-Equal @(Get-ChildItem -LiteralPath $fixture.Temp -Filter 'dotfiles-bootstrap-*').Count 0 'scratch left behind'
         $count = @(Get-FixtureEvents $fixture).Count
         Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment) 3 'second apply'

@@ -3,6 +3,8 @@
 set -euo pipefail
 
 # Usage: ./stow-all.sh [host-dir]
+# Legacy compatibility only: native-owned or maintenance homes refuse writes.
+# New installations use the native setup documented in README.md.
 # Example: ./stow-all.sh wsl-ubuntu
 # If no host-dir is provided, only stow common.
 # Successful setup remembers this home/platform/host for automatic login stow.
@@ -27,6 +29,13 @@ set -euo pipefail
 
 HOST="${1:-}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -r "$REPO_ROOT/lib/chezmoi-guard.sh" ]]; then
+    printf '%s\n' 'dotfiles: required legacy writer guard is missing; refusing installation.' >&2
+    exit 1
+fi
+# shellcheck source=lib/chezmoi-guard.sh
+. "$REPO_ROOT/lib/chezmoi-guard.sh"
+dotfiles_legacy_write_allowed "$HOME" || exit 1
 if [[ -r "$REPO_ROOT/lib/terminal.sh" ]]; then
     # shellcheck source=lib/terminal.sh
     . "$REPO_ROOT/lib/terminal.sh"

@@ -84,6 +84,7 @@ usage() {
         './stow-all.sh recorded) means the detected platform without an overlay.' \
         '' \
         'Options:' \
+        '  --legacy-stow     check the supported Stow/parser compatibility path' \
         '  --tier LIST|all     required tiers, comma list of core, cli, ai, desktop,' \
         '                      contributor, host (default core,cli,ai); rows of other' \
         '                      tiers report warn instead of missing or outdated' \
@@ -132,6 +133,7 @@ QUIET=0
 ONLINE=0
 SMOKE=0
 LIST=0
+BOOTSTRAP_LEGACY_STOW=0
 
 while [[ $# -gt 0 ]]; do
     option=$1
@@ -160,6 +162,7 @@ while [[ $# -gt 0 ]]; do
         --online) ONLINE=1 ;;
         --smoke) SMOKE=1 ;;
         --list) LIST=1 ;;
+        --legacy-stow) BOOTSTRAP_LEGACY_STOW=1 ;;
         -h | --help)
             usage
             exit 0
@@ -275,7 +278,8 @@ while [[ -n "$lines" ]]; do
     esac
     SEEN_IDS="$SEEN_IDS$id "
 done
-ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
+ROWS=$(bootstrap_tool_rows "$HOST" | bootstrap_mode_tool_rows) || invalid_manifest 'unreadable'
+BOOTSTRAP_STRUCTURAL_CHECKS=$(bootstrap_mode_structural_checks)
 # The row fields bootstrap_split assigns by name below, declared so a lint of
 # this file alone (a pre-commit run without the libraries) sees them.
 probe='' flag='' floor='' absent='' doc=''

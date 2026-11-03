@@ -98,6 +98,8 @@ if ($Target.TrimEnd('\', '/') -eq [IO.Path]::GetPathRoot($Target).TrimEnd('\', '
     throw 'TargetRoot must not be a drive or share root.'
 }
 $Target = $Target.TrimEnd('\', '/')
+. (Join-Path $RepoRoot 'lib/chezmoi-guard.ps1')
+if (-not (Test-DotfilesLegacyWriteAllowed -TargetPath $Target)) { throw 'Legacy writes are disabled for this destination.' }
 $profileTarget = [IO.Path]::GetFullPath([Environment]::GetFolderPath('UserProfile')).TrimEnd('\', '/')
 $recordAppliedState = $Target.Equals($profileTarget, [StringComparison]::OrdinalIgnoreCase)
 if (Test-Path -LiteralPath $Target -PathType Leaf) { throw "TargetRoot is not a directory: $Target" }

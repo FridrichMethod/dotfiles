@@ -587,8 +587,13 @@ function Invoke-DotfilesUpdate {
         $hookSource = [IO.File]::ReadAllText($hookPath)
         $consoleGuard = 'if ([Console]::IsOutputRedirected) { return }'
         Assert-True ($hookSource.Contains($consoleGuard)) 'Console guard not found.'
-        # Simulate a console only at its explicit guard, leaving hook logic intact.
-        $interactiveHook = [scriptblock]::Create($hookSource.Replace($consoleGuard, ''))
+        # Keep a real script path so the new shared guard resolves through
+        # PSScriptRoot. Simulate only the console boundary, not writer safety.
+        $guardDirectory = Join-Path $fixture.Repo 'lib'
+        [void][IO.Directory]::CreateDirectory($guardDirectory)
+        Copy-Item -LiteralPath (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1') -Destination $guardDirectory
+        $interactiveHook = Join-Path $stubDirectory 'interactive-hook.ps1'
+        [IO.File]::WriteAllText($interactiveHook, $hookSource.Replace($consoleGuard, ''))
         $global:DotfilesTestHookCalls = 0
         $env:DOTFILES_DIR = $fixture.Repo
         $env:DOTFILES_AUTO_UPDATE = '0'

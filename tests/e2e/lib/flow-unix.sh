@@ -3,21 +3,22 @@
 # The unix flow of tests/e2e/inside.sh: clone, doctor-initial, the no-write
 # --check, the setup-host apply loop with its HUMAN blocks, the second apply,
 # the login shell, the payload repos, the final doctor runs, the negatives
-# and the audits: the docs/bootstrap.md quick start, driven the way
+# and the audits: the legacy docs/bootstrap.md quick start, driven the way
 # "Running it with an agent" says an agent drives it. Sourced after
-# steps.sh; same portability rules.
+# steps.sh; same portability rules. Native binary provisioning and isolated
+# native fixtures follow the legacy flow, without migrating its HOME.
 
 E2E_SKIPPED_BLOCKS=' ' # block ids already recorded as skip
 E2E_ALLOC_DONE=0
 
-# e2e_step_check_nowrite: ./setup-host.sh --host H --check plans (exit 3
+# e2e_step_check_nowrite: ./setup-host.sh --legacy-stow --host H --check plans (exit 3
 # while work remains, 0 when nothing is left) and writes nothing.
 e2e_step_check_nowrite() {
     local rc=0 problems
     e2e_step_begin check-nowrite check:check-nowrite
     e2e_nowrite_begin check-nowrite
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        env TMPDIR="$E2E_NW_TMP" ./setup-host.sh --host "$E2E_SETUP_HOST" --check || rc=$?
+        env TMPDIR="$E2E_NW_TMP" ./setup-host.sh --legacy-stow --host "$E2E_SETUP_HOST" --check || rc=$?
     problems=$(e2e_nowrite_end check-nowrite)
     case $rc in
         0 | 3)
@@ -153,7 +154,7 @@ e2e_handle_blocks() {
     done
 }
 
-# e2e_apply_loop: ./setup-host.sh --host H --yes until it exits 0, at most
+# e2e_apply_loop: ./setup-host.sh --legacy-stow --host H --yes until it exits 0, at most
 # eight runs. Exit 3 hands the printed blocks to e2e_handle_blocks; a run
 # whose blocks are all skips fails as "no progress" (the "HUMAN steps
 # pending:" ids from stderr name what setup-host waits for); exit 1 or 2
@@ -166,7 +167,7 @@ e2e_apply_loop() {
         rc=0
         e2e_step_begin "$name" "setup:$name"
         e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-            ./setup-host.sh --host "$E2E_SETUP_HOST" --yes || rc=$?
+            ./setup-host.sh --legacy-stow --host "$E2E_SETUP_HOST" --yes || rc=$?
         if [ "$n" = 1 ]; then
             E2E_APPLY1_OUT=$E2E_STEP_OUT E2E_APPLY1_RC=$rc
         fi
@@ -204,7 +205,7 @@ e2e_apply_loop() {
     return 1
 }
 
-# e2e_step_second_apply: one more ./setup-host.sh --host H --yes exits 0,
+# e2e_step_second_apply: one more ./setup-host.sh --legacy-stow --host H --yes exits 0,
 # applies nothing ("<id> done applied: ..." would be a step that redid its
 # work) and writes nothing in HOME.
 e2e_step_second_apply() {
@@ -212,7 +213,7 @@ e2e_step_second_apply() {
     e2e_step_begin second-apply setup:second-apply
     e2e_nowrite_begin second-apply
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-        ./setup-host.sh --host "$E2E_SETUP_HOST" --yes || rc=$?
+        ./setup-host.sh --legacy-stow --host "$E2E_SETUP_HOST" --yes || rc=$?
     applied=$(grep -E '^[A-Za-z0-9-]+ done applied: ' "$E2E_STEP_OUT" 2>/dev/null) || true
     problems=$(e2e_nowrite_end second-apply)
     if [ "$rc" != 0 ]; then
@@ -242,5 +243,10 @@ e2e_flow_unix() {
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
+    # The sandbox HOME remains a legacy install. Provision the native binary,
+    # then exercise takeover/recovery only in the native suite's temp homes.
+    e2e_or_skip native-provision e2e_step_native_provision
+    e2e_or_skip native-check e2e_step_native_check
+    e2e_or_skip native-fixtures e2e_step_native_fixtures
     e2e_audits
 }

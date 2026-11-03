@@ -285,6 +285,7 @@ function New-DryRun {
     $script:ProcessCalls.Clear()
     $script:Snapshots.Clear()
     $script:SnapshotCalls.Clear()
+    $script:TaskNames = 'existing-task'
     $script:StowMode = $StowMode
     $script:Stowed = @{ Done = $true; Detail = "~\.gitconfig -> $(Join-Path $clone 'common/git/.gitconfig')" }
     return $clone
@@ -317,6 +318,7 @@ function Use-DryRun {
     # $script:Stowed; each HOME snapshot takes the next of $script:Snapshots.
     param([scriptblock]$Action)
     function Update-E2EPath { }
+    function Get-E2EScheduledTaskNames { return $script:TaskNames }
     function Test-E2EStowed { return @{ Done = $script:Stowed['Done']; Detail = $script:Stowed['Detail'] } }
     function Get-E2ESnapshot {
         param([string]$Root, [string[]]$Prune = @())
@@ -515,7 +517,7 @@ try {
     Test-Case 'setup-host.ps1 -PrintManual: each printed block meets its policy row, its HW-stow line is the one the harness runs' {
         $case = Reset-RunState
         Start-E2EStep print-manual check:print-manual
-        $code = Invoke-Child -Arguments @('-NoProfile', '-NonInteractive', '-File', (Join-Path $sourceRoot 'setup-host.ps1'), '-Host', 'win', '-PrintManual') `
+        $code = Invoke-Child -Arguments @('-NoProfile', '-NonInteractive', '-File', (Join-Path $sourceRoot 'setup-host.ps1'), '-LegacyStow', '-Host', 'win', '-PrintManual') `
             -WorkingDirectory $case
         Assert-Equal $code 0 "setup-host.ps1 -PrintManual exit code: $([IO.File]::ReadAllText($E2E['StepErr']))"
         $blocks = @(ConvertFrom-E2EBlocks -Output @(Get-E2ELines $E2E['StepOut']) -Directory (Join-Path $case 'manual.blocks'))
@@ -865,7 +867,7 @@ try {
         Assert-Equal $rows[7].Detail 'exit 0 after 2 run(s); 4 done, 1 skip' 'apply-2'
         Assert-Equal "$($E2E['Passes']) $($E2E['Fails']) $($E2E['Skips']) [$($E2E['Broken'])]" '3 0 5 []' 'counters and Broken'
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
-            'setup-host.ps1 -Host win -Yes 3600; setup-host.ps1 -Host win -Yes 3600' 'the setup-host.ps1 runs'
+            'setup-host.ps1 -LegacyStow -Host win -Yes 3600; setup-host.ps1 -LegacyStow -Host win -Yes 3600' 'the setup-host.ps1 runs'
         Assert-Equal $script:ProcessCalls.Count 1 'HW-stow line runs'
         $call = $script:ProcessCalls[0]
         Assert-Equal $call.FilePath $E2E['PowerShell'] 'the stow child'
@@ -1023,7 +1025,7 @@ try {
         Use-DryRun { Invoke-E2EStepCheckNoWrite }
         $call = $script:PwshCalls[0]
         $temp = Join-Path $E2E['Out'] 'tmp/check-nowrite'
-        Assert-Equal "$($call.Script) $($call.Arguments) $($call.Timeout)" 'setup-host.ps1 -Host win -Check 900' 'the -Check run'
+        Assert-Equal "$($call.Script) $($call.Arguments) $($call.Timeout)" 'setup-host.ps1 -LegacyStow -Host win -Check 900' 'the -Check run'
         Assert-Equal "$($call.Environment['TEMP'])|$($call.Environment['TMP'])" "$temp|$temp" 'its TEMP and TMP'
         Assert-Equal @(Get-SummaryRows)[0].Detail 'exit 3; 4 todo, 6 human; no writes' 'a noted cache entry passes -Check'
         Assert-Equal (Read-Utf8 (Join-Path $E2E['Out'] 'snapshots/check-nowrite.diff')) "noted added $noted\Content\A1`n" 'the noted diff'
@@ -1055,7 +1057,7 @@ try {
         Add-Run 0 (Get-ApplyOutput -Clone $clone -Blocks $Reminders -Done)
         $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($cacheOnly)
         Use-DryRun { Invoke-E2EStepSecondApply }
-        Assert-Equal "$($script:PwshCalls[0].Arguments) $($script:PwshCalls[0].Timeout)" '-Host win -Yes 3600' 'the second -Yes'
+        Assert-Equal "$($script:PwshCalls[0].Arguments) $($script:PwshCalls[0].Timeout)" '-LegacyStow -Host win -Yes 3600' 'the second -Yes'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'pass exit 0, nothing applied, HOME untouched' 'a second apply with a noted cache entry'
 
         $clone = New-DryRun
@@ -1079,7 +1081,7 @@ try {
         Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-", "ok`tpayloads`tai`tinstalled: pymol, skills`t-")
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
-            'scripts/payload-update.ps1 -Now 2700; doctor.ps1 -Host win -Tsv 900' 'the -Now run, then the doctor'
+            'scripts/payload-update.ps1 -Now 2700; doctor.ps1 -LegacyStow -Host win -Tsv 900' 'the -Now run, then the doctor'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             'pass exit 0; doctor payloads ok: installed: pymol, skills' 'every payload installed'
 
@@ -1112,6 +1114,69 @@ try {
             'fail exit 1 (124 is the 2700s timeout): [dotfiles] [error] payload-update: skills failed (exit 1)' 'a failed -Now'
     }
 
+    Test-Case 'native provisioning permits only the binary and leaves HW-native to the person' {
+        $binary = Get-Path $HOME '.local/bin/chezmoi.exe'
+        $config = Get-Path $HOME '.config/chezmoi/chezmoi.toml'
+        $before = New-FakeSnapshot @{ $config = '100|1' }
+        $after = New-FakeSnapshot @{ $config = '100|1'; $binary = '1024|2' }
+        $pending = '[dotfiles] [warn] HUMAN steps pending: HW-native; run the HUMAN blocks above, then rerun .\setup-host.ps1'
+        foreach ($failure in @('', 'configuration', 'task', 'legacy-parser', 'pending')) {
+            [void](New-DryRun)
+            $script:Snapshots.Enqueue($before)
+            $script:Snapshots.Enqueue($(if ($failure -ceq 'configuration') {
+                        New-FakeSnapshot @{ $config = '200|2'; $binary = '1024|2' }
+                    } else { $after }))
+            $output = @('[dotfiles] [step] W1-chezmoi: install verified archive', '[dotfiles] [ok] W1-chezmoi: installed: chezmoi')
+            if ($failure -ceq 'legacy-parser') { $output += '[dotfiles] [step] W1-setup-sync: build parser' }
+            $output += if ($failure -ceq 'pending') { $pending.Replace('HW-native;', 'HW-stow;') } else { $pending }
+            Add-Run 3 $output -Action { if ($failure -ceq 'task') { $script:TaskNames = 'new-task' } }
+            Use-DryRun { Invoke-E2EStepNativeProvision }
+            $row = @(Get-SummaryRows)[0]
+            $want = if ($failure) { 'fail' } else { 'pass' }
+            Assert-Equal $row.Status $want "native provisioning case '$failure': $($row.Detail)"
+            Assert-Equal $script:PwshCalls[0].Arguments '-Host win -Yes' 'native default without LegacyStow'
+            Assert-Equal $script:ProcessCalls.Count 0 'HW-native handoff was executed'
+            if ($failure) { Assert-Equal $E2E['Broken'] native-provision 'native failure must stop fixtures' }
+        }
+    }
+
+    Test-Case 'native check is write-free, requires the binary, and permits only HW-native blocking' {
+        $before = New-FakeSnapshot @{}
+        [void](New-DryRun)
+        $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($before)
+        Add-Run 3 @('W1-chezmoi done already installed', 'HW-native human judgment step for a person; blocks completion')
+        Use-DryRun { Invoke-E2EStepNativeCheck }
+        Assert-Equal (@(Get-SummaryRows)[0].Status) pass 'ready native check'
+        Assert-Equal $script:PwshCalls[0].Arguments '-Host win -Check' 'native check arguments'
+        [void](New-DryRun)
+        $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($before)
+        Add-Run 3 @('W1-chezmoi done already installed', 'W1-setup-sync todo missing', 'HW-native human judgment step for a person; blocks completion')
+        Use-DryRun { Invoke-E2EStepNativeCheck }
+        Assert-Equal (@(Get-SummaryRows)[0].Status) fail 'parser todo must fail native check'
+        Assert-Equal $E2E['Broken'] native-check 'native check failure must stop fixtures'
+    }
+
+    Test-Case 'native fixtures require the provisioned binary and propagate failure' {
+        [void](New-DryRun)
+        Use-DryRun { Invoke-E2EStepNativeFixtures }
+        Assert-Equal (@(Get-SummaryRows)[0].Status) fail 'missing Stage 4 fixture cannot pass'
+        Assert-Equal $script:PwshCalls.Count 0 'missing native fixture must not start an incomplete aggregate'
+        foreach ($code in @(0, 1)) {
+            $clone = New-DryRun
+            New-File (Join-Path $clone 'tests/test_chezmoi_takeover_recovery.py') ''
+            Invoke-Git $clone @('add', 'tests/test_chezmoi_takeover_recovery.py')
+            Invoke-Git $clone @('-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid', 'commit', '-q', '-m', 'native fixture stand-in')
+            Add-Run $code
+            Use-DryRun { Invoke-E2EStepNativeFixtures }
+            $call = $script:PwshCalls[0]
+            Assert-Equal $call.Script tests/chezmoi.ps1 'native aggregate entrypoint'
+            Assert-Equal $call.Environment['DOTFILES_TEST_CHEZMOI'] (Join-Path $HOME '.local/bin/chezmoi.exe') 'native binary selection'
+            Assert-Equal $call.Environment['DOTFILES_TEST_REQUIRE_CHEZMOI'] 1 'native prerequisite cannot skip'
+            $want = if ($code) { 'fail' } else { 'pass' }
+            Assert-Equal (@(Get-SummaryRows)[0].Status) $want 'native fixture status'
+        }
+    }
+
     Test-Case 'Invoke-E2EFlowWin runs the steps in order and, once one breaks the flow, skips what depends on it' {
         $script:FlowCalls = [Collections.Generic.List[string]]::new()
         $script:BreakAt = ''
@@ -1130,8 +1195,11 @@ try {
         function Invoke-E2EStepLoginShell { Complete-FlowStub login-shell }
         function Invoke-E2EStepPayloads { Complete-FlowStub payloads }
         function Invoke-E2EStepDoctorFinal { Complete-FlowStub doctor-final }
-        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'second-apply', 'login-shell', 'payloads', 'doctor-final')
-        foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1')) {
+        function Invoke-E2EStepNativeProvision { Complete-FlowStub native-provision }
+        function Invoke-E2EStepNativeCheck { Complete-FlowStub native-check }
+        function Invoke-E2EStepNativeFixtures { Complete-FlowStub native-fixtures }
+        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'second-apply', 'login-shell', 'payloads', 'doctor-final', 'native-provision', 'native-check', 'native-fixtures')
+        foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1', 'native-provision', 'native-check')) {
             [void](Reset-RunState)
             $script:FlowCalls.Clear()
             $script:BreakAt = $breakAt

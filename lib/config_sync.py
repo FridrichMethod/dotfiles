@@ -256,7 +256,19 @@ def ensure_distinct(source: Path, live: Path, label="portable"):
         raise SyncError(f"{label} and live must not be the same regular file")
 
 
+def refuse_native_destination(live: Path):
+    """Guard the destination, including linked parents, never its final link."""
+    parent = live.absolute().parent
+    for start in (parent, parent.resolve()):
+        for ancestor in (start, *start.parents):
+            for name in ("native", "maintenance"):
+                marker = ancestor / ".config" / "dotfiles" / name
+                if marker.exists() or marker.is_symlink():
+                    raise SyncError("legacy write refused: destination is native-owned or in maintenance")
+
+
 def synchronize(kind: str, portable: Path, live: Path, *, check=False, migrate=False):
+    refuse_native_destination(live)
     portable_bytes = read_regular(portable)
     live_bytes = read_regular(live, missing_ok=True)
     ensure_distinct(portable, live)
@@ -306,6 +318,7 @@ def main(argv=None):
         args = parser.parse_args(arguments)
         if args.migrate_portable and args.kind != "codex-config-sync":
             parser.error("--migrate-portable is only supported by codex-config-sync")
+        refuse_native_destination(args.live)
         require_runtime(toml=args.kind == "codex-config-sync")
         synchronize(args.kind, args.portable, args.live, check=args.check, migrate=args.migrate_portable)
         if not args.quiet:

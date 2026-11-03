@@ -1,0 +1,50 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /* Reject decoding replacements, including intentional U+FFFD, before writes. */ -}}
+{{- define "claude-validate-unicode" -}}
+  {{- if typeIs "string" . -}}
+    {{- if contains "\uFFFD" . -}}
+      {{- fail "Claude JSON replacement characters are unsupported; affected target is unchanged" -}}
+    {{- end -}}
+  {{- else if kindIs "map" . -}}
+    {{- range $key, $value := . -}}
+      {{- if contains "\uFFFD" $key -}}
+        {{- fail "Claude JSON replacement characters are unsupported; affected target is unchanged" -}}
+      {{- end -}}
+      {{- template "claude-validate-unicode" $value -}}
+    {{- end -}}
+  {{- else if kindIs "slice" . -}}
+    {{- range . -}}{{- template "claude-validate-unicode" . -}}{{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $live := dict -}}
+{{- $nonWhitespace := .chezmoi.stdin | replace " " "" | replace "\t" "" | replace "\r" "" | replace "\n" "" -}}
+{{- if ne $nonWhitespace "" -}}
+  {{- /* Raw fromjson retains json.Number tokens; fromJson would coerce them. */ -}}
+  {{- $parsed := .chezmoi.stdin | jq "fromjson" -}}
+  {{- if ne (len $parsed) 1 -}}{{- fail "expected one live Claude JSON value" -}}{{- end -}}
+  {{- $live = first $parsed -}}
+  {{- if not (kindIs "map" $live) -}}{{- fail "live Claude JSON root must be an object" -}}{{- end -}}
+{{- end -}}
+{{- $portableJSON := include (joinPath .chezmoi.workingTree "common/claude/.claude/settings.json") -}}
+{{- $parsed := $portableJSON | jq "fromjson" -}}
+{{- if ne (len $parsed) 1 -}}{{- fail "expected one portable Claude JSON value" -}}{{- end -}}
+{{- $portable := first $parsed -}}
+{{- if not (kindIs "map" $portable) -}}{{- fail "portable Claude JSON root must be an object" -}}{{- end -}}
+{{- if hasKey $portable "model" -}}{{- fail "portable Claude model is not allowed; keep model selection machine-local" -}}{{- end -}}
+{{- $permissions := get $portable "permissions" -}}
+{{- if not (kindIs "map" $permissions) -}}{{- fail "portable Claude permissions must be an object" -}}{{- end -}}
+{{- range $name := list "allow" "ask" "deny" -}}
+  {{- if or (ne $name "deny") (hasKey $permissions $name) -}}
+    {{- $items := get $permissions $name -}}
+    {{- if not (kindIs "slice" $items) -}}{{- fail "portable Claude permissions must be string arrays" -}}{{- end -}}
+    {{- range $items -}}
+      {{- /* json.Number has kind string but is not a permission string. */ -}}
+      {{- if not (typeIs "string" .) -}}{{- fail "portable Claude permissions must be string arrays" -}}{{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- template "claude-validate-unicode" $live -}}
+{{- template "claude-validate-unicode" $portable -}}
+{{- $merged := dict "live" $live "portable" $portable | jq ".live * .portable" -}}
+{{- if ne (len $merged) 1 -}}{{- fail "expected one merged Claude JSON value" -}}{{- end -}}
+{{- first $merged | toPrettyJson -}}

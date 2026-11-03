@@ -1,5 +1,31 @@
 # Behavioral test coverage
 
+The Stage 1-3 `tests/chezmoi.sh` / `.ps1` suite runs real v2.74.0 in disposable
+homes: regular/private deployment, explicit-path isolation, drift refusal,
+preview, owned-link takeover, native JSON/TOML modifies and synthetic builtin-age
+success/failure. `test_chezmoi*.py` parses rendered output without a merge runtime
+on child PATH. Native macOS/Windows execution and Windows ACLs need their own
+evidence; the CI workflow provisions the binary in all three jobs. See the
+[migration record](../docs/chezmoi-migration/status.md) for actual results.
+
+Stage 2 `test_chezmoi_source_state.py` checks the 95-row inventory against the
+Git index, all seven exact ordinary-file sets, byte parity, native attributes,
+unmanaged siblings, unchanged source and repeat apply. It separately labels
+supplemental OS-data rendering. Linked-worktree/space paths, explicit host/init,
+the minimum version, binary and empty files, and CRLF are covered.
+`test_chezmoi_rendered.py` parses/lints applied output; canonical legacy lint and
+behavior suites remain active while the temporary include bridge exists.
+
+Stage 3 adds `test_chezmoi_claude.py`, `test_chezmoi_codex.py` and independent
+`test_chezmoi_integration.py`: exact portable ownership, authoritative arrays,
+local/unknown state, JSON numeric tokens and Unicode refusal, typed metadata
+parity, recursive local-temporal refusal, offset timestamps, literal paths,
+CRLF multiline strings, malformed input and destructive ancestor conflicts.
+Complete candidate sets add exactly two private AI targets per role. Rendered
+TOML/JSON is parsed, literal canonical inputs stay read-only, and the native
+path runs with empty child PATH and no sync environment. Parser exclusions name
+only the exact modify templates; portable/data files retain their parser hooks.
+
 `./tests/run.sh` is the Unix entry point; `./tests/run.ps1` is the PowerShell
 entry point. CI requires `--ci` on Unix and `-CI` on native Windows. Provision
 the pinned parser with `setup-sync.sh` / `setup-sync.ps1` first. The pre-commit

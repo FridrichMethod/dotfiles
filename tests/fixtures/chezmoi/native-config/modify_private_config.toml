@@ -1,0 +1,12 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- $live := fromToml .chezmoi.stdin -}}
+{{- if hasKey $live "features" -}}
+  {{- if not (kindIs "map" (get $live "features")) -}}
+    {{- fail "features must be a table before assigning owned fields" -}}
+  {{- end -}}
+{{- end -}}
+{{- $live = setValueAtPath (list "features" "*") false $live -}}
+{{- $live = setValueAtPath (list "features" "literal.dot") true $live -}}
+{{- $live = setValueAtPath "features.owned" true $live -}}
+{{- $live = deleteValueAtPath "retired.setting" $live -}}
+{{- toToml $live }}

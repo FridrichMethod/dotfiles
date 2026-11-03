@@ -98,6 +98,8 @@ class TmuxConfiguration(unittest.TestCase):
         shutil.copytree(ROOT / "common/tmux", self.home, dirs_exist_ok=True)
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        # Config shell commands need the native tool on this isolated PATH.
+        (self.bin / "tmux").symlink_to(TMUX)
         for command in ("git", "curl", "wget"):
             executable = self.bin / command
             executable.write_text('#!/bin/sh\necho unexpected-network >> "$HOME/network"\nexit 99\n')
@@ -317,6 +319,7 @@ class MetricForwarding(unittest.TestCase):
         self.assertFalse((self.home / "forwarded-tmpdir").exists())
         cache.unlink()
         cache.mkdir(mode=0o755)
+        cache.chmod(0o755)
         self.assertEqual(self.run_metric(), "")
         self.assertEqual(cache.stat().st_mode & 0o777, 0o755)
         self.assertFalse((self.home / "forwarded-tmpdir").exists())

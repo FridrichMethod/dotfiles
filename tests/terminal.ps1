@@ -157,6 +157,9 @@ catch { Write-DotfilesLog error $_.Exception.Message; exit 17 }
         $fixtureScripts = Join-Path $fixture 'scripts'
         [void][IO.Directory]::CreateDirectory($fixtureScripts)
         Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/dotfiles-auto-stow.ps1') -Destination $fixtureScripts
+        $guardDirectory = Join-Path $fixture 'lib'
+        [void][IO.Directory]::CreateDirectory($guardDirectory)
+        Copy-Item -LiteralPath (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1') -Destination $guardDirectory
         $command = @'
 $ErrorActionPreference = 'Stop'
 . (Join-Path $env:DOTFILES_TEST_TEMP 'partial checkout/scripts/dotfiles-auto-stow.ps1')
@@ -198,6 +201,9 @@ Write-DotfilesLog error 'partial checkout diagnostic'
         $fixture = Join-Path $temporaryRoot 'broken worker checkout'
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture '.git'))
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture 'scripts'))
+        $guardDirectory = Join-Path $fixture 'lib'
+        [void][IO.Directory]::CreateDirectory($guardDirectory)
+        Copy-Item -LiteralPath (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1') -Destination $guardDirectory
         [IO.File]::WriteAllText((Join-Path $fixture 'scripts/dotfiles-auto-stow.ps1'), "throw 'worker load failed'")
         $outputText = Invoke-LogChild @'
 $ErrorActionPreference = 'Stop'
@@ -206,7 +212,9 @@ $env:DOTFILES_DIR = Join-Path $env:DOTFILES_TEST_TEMP 'broken worker checkout'
 $env:DOTFILES_AUTO_UPDATE = '1'
 $source = [IO.File]::ReadAllText((Join-Path $env:DOTFILES_TEST_ROOT 'scripts/dotfiles-update.ps1'))
 $source = $source.Replace('if ([Console]::IsOutputRedirected) { return }', '')
-. ([scriptblock]::Create($source))
+$hook = Join-Path $env:DOTFILES_DIR 'scripts/interactive-hook.ps1'
+[IO.File]::WriteAllText($hook, $source)
+. $hook
 if ($env:_DOTFILES_CHECKED -ne '1') { throw 'Load failure lost session marker.' }
 if ($ErrorActionPreference -ne 'Stop' -or -not $PSNativeCommandUseErrorActionPreference) { throw 'Load failure changed caller preferences.' }
 Write-Output 'profile continued'

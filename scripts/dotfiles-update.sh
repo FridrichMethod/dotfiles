@@ -16,10 +16,22 @@ esac
 # A subshell isolates variables, umask, and traps from the calling shell.
 _dotfiles_update_check() (
     [ "${DOTFILES_AUTO_UPDATE:-1}" != "0" ] || return 0
+    # Stop before Git metadata, locks, fetches or installers can write. This
+    # fixed-path guard also covers old minimal checkouts without the library.
+    for _df_guard in native maintenance; do
+        if [ -e "$HOME/.config/dotfiles/$_df_guard" ] || [ -L "$HOME/.config/dotfiles/$_df_guard" ]; then
+            return 0
+        fi
+    done
     command -v git >/dev/null 2>&1 || return 0
     _df_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
     [ -d "$_df_dir" ] || return 0
     cd "$_df_dir" || return 0
+    if [ -r ./lib/chezmoi-guard.sh ]; then
+        # shellcheck source=lib/chezmoi-guard.sh
+        . ./lib/chezmoi-guard.sh
+        dotfiles_legacy_write_allowed "$HOME" || return 0
+    fi
     if [ -r ./lib/terminal.sh ]; then
         # shellcheck source=lib/terminal.sh
         . ./lib/terminal.sh

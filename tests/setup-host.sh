@@ -199,7 +199,7 @@ case_command() {
         BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew"
         FAKE_DPKG_INSTALLED="$DPKG_ALL"
         ${extra[@]+"${extra[@]}"}
-        "$BASH" "$FIXTURE/setup-host.sh" "$@")
+        "$BASH" "$FIXTURE/setup-host.sh" --legacy-stow "$@")
 }
 
 # run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
@@ -837,7 +837,7 @@ expect_no_text check-missing out 'HUMAN-BEGIN H7-chsh'
 expect_line check-missing 'HUMAN-BEGIN H7-auth auth'
 expect_text check-missing err 'HUMAN steps pending: H1-apt-core H1-linuxbrew'
 expect_text check-missing err 'steps to apply: S2-brew-bundle S3-clones'
-expect_text check-missing err 'after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu without --check'
+expect_text check-missing err 'after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu --legacy-stow without --check'
 expect_no_events check-missing
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
@@ -1092,7 +1092,7 @@ rm -rf "$CASE_HOME/.vim"
 run_case check-todo -- --host lab-ubuntu --check --tier all
 expect_rc check-todo 3
 expect_text check-todo out 'S3-dirs todo'
-expect_text check-todo err 'steps to apply: S3-dirs; rerun ./setup-host.sh --host lab-ubuntu --tier all without --check'
+expect_text check-todo err 'steps to apply: S3-dirs; rerun ./setup-host.sh --host lab-ubuntu --legacy-stow --tier all without --check'
 expect_no_text check-todo out 'nothing blocking remains'
 expect_no_text check-todo err 'HUMAN steps pending'
 expect_no_events check-todo

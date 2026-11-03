@@ -1,0 +1,58 @@
+{{- template "validate-host" . -}}
+# Isolated native candidate. Legacy source remains canonical until Stage 6.
+# Patterns name destinations; none removes existing or unmanaged files.
+{{ if eq .host "win" }}
+.aliases
+.bash_aliases
+.bash_profile
+.bashrc
+.profile
+.tcshrc
+.tmux.conf
+.vimrc
+.xonshrc
+.p10k.zsh
+.zprofile
+.zsh_aliases
+.zshenv
+.zshrc
+.oh-my-zsh
+.local
+.config/aria2
+.config/bash
+.config/sh
+.config/zsh
+.config/kitty
+.config/tmux
+{{ end }}
+{{ if ne .host "win" }}
+Documents
+AppData
+.wslconfig
+mount.vbs
+wsl.conf
+.config/oh-my-posh
+{{ end }}
+{{ if eq .host "common-only" }}
+.config/bash/.bashrc
+.config/sh
+.config/zsh
+{{ end }}
+{{ if ne .host "lab-ubuntu" }}
+.config/fcitx5
+.xprofile
+.local/bin/claude-limited
+{{ end }}
+{{ if ne .host "sherlock" }}
+.terminfo
+{{ end }}
+{{ if ne .host "mac" }}
+.gitignore_global
+.ssh/config.d/mac.conf
+{{ end }}
+{{ if not (has .host (list "wsl-ubuntu" "lab-ubuntu" "marlowe" "win")) }}
+.gitconfig_local
+{{ end }}
+{{ if not (has .host (list "mac" "wsl-ubuntu" "lab-ubuntu" "win")) }}
+.ssh/config.d/legacy.conf
+{{ end }}

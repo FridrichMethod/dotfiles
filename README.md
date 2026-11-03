@@ -1,14 +1,17 @@
 # Dotfiles
 
 Cross-platform configuration for macOS, WSL/Ubuntu, Stanford Sherlock, Marlowe
-and native Windows, managed with GNU Stow. Shared defaults in `common/` load
-before a selected host overlay. Secrets, accounts and application runtime state
-stay local.
+and native Windows, moving to native chezmoi regular-file deployment. The Stage 4
+compatibility candidate retains physical GNU Stow sources for existing homes.
+Shared defaults in `common/` and host overlays remain canonical through Stage 6.
+Secret enrollment is explicit and encrypted; mutable auth/runtime state stays local.
 
 ## Quick Start
 
-Clone once per home/platform and keep the checkout in place: the installed
-links and sync wrappers depend on it.
+Clone once per home/platform. Native source selection uses explicit local
+`[data].host`; the checkout remains available for updates and literal source reads.
+For the uncommitted candidate's release/rollout gates, read the
+[migration status](docs/chezmoi-migration/status.md).
 
 ```sh
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
@@ -20,12 +23,13 @@ cd ~/dotfiles
 
 Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 setup-host installs tools and prints HUMAN blocks for commands it does not run,
-including sudo, authentication, allocations, login-shell changes and stow.
-Follow each block and rerun setup-host until complete. Before the first stow,
-clone oh-my-zsh and move aside each conflicting home file as instructed; never
-use `stow --adopt`. Use the exact H7-stow line, including its PATH prefix.
+including sudo, authentication, allocations and login-shell changes. The default
+native path explicitly provisions verified chezmoi 2.74.0+ and creates no sync
+venv. Follow the HUMAN blocks, then the
+[native initialization/takeover procedure](docs/chezmoi-migration/takeover.md).
+Existing homes require ownership review and private backups before first apply.
 
-On an already provisioned Unix host:
+For an explicitly retained legacy Stow home only:
 
 ```sh
 ./setup-sync.sh             # Python 3.11+; once per clone, no activation
@@ -38,8 +42,9 @@ whole-home transaction. Failed/partial application never acknowledges a new
 revision. See the [bootstrap playbook](docs/bootstrap.md#quick-start) and
 [installer contract](docs/installer-contract.md).
 
-For a common-only installation on other Linux, use `./stow-all.sh` without a
-host and `./doctor.sh --platform other`; install prerequisites by the
+Legacy provisioning/doctor use `--legacy-stow`. They refuse native-owned homes.
+For native common-only installation on other Linux, select `common-only` in
+local chezmoi data and use `./doctor.sh --platform other`; install prerequisites by the
 [other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions).
 setup-host requires a supported explicit host. Do not build HPC environments
 outside a Slurm allocation or under scratch.
@@ -57,9 +62,12 @@ cd $HOME\dotfiles
 .\setup-host.ps1 -Host win
 ```
 
-Follow the HW-* HUMAN blocks. An existing machine can run `setup-sync.ps1`
-and then `stow-all.ps1 win` from **elevated** PowerShell. Add `-WhatIf` to
-preview and `-Strict` to reject incomplete installation. Local readability does
+Follow the HW-* HUMAN blocks and the native takeover procedure. Regular-file
+native updates run unelevated, without a scheduled restow task or UAC prompt.
+Both actual PowerShell profile paths and ordinary-user destination ACLs must be
+checked before takeover. Legacy `-LegacyStow` provisioning retains `setup-sync.ps1`
+and **elevated** `stow-all.ps1 win`; `-WhatIf` previews and `-Strict` rejects
+incomplete installation. Legacy local readability does
 not prove link trust: Windows OpenSSH can reject an unelevated link with error
 448, "untrusted mount point". The installer checks RedirectionGuard in a
 separate process. See [Windows installation](docs/windows-installer.md),
@@ -106,18 +114,20 @@ or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
 
 ## Auto-update Hooks
 
-Interactive login checks once per session, fast-forwards a clean checkout and
-restows its remembered host. It never discards local edits or guesses a Unix
-overlay. A failed stow retries on a later login without needing another pull.
-The [update contract](docs/update-contract.md) describes locks, receipts and
-Windows elevation; Windows Terminal needs a restart to load settings changes.
+After native handover, interactive login checks once per session and calls
+chezmoi update with explicit paths, fast-forward-only Git, closed stdin and
+conflict handling. It refuses dirty source, missing/empty native state and OneDrive
+source writes; failures warn and leave the shell usable. Unmarked homes retain
+the legacy updater in the [update contract](docs/update-contract.md). A persistent
+maintenance marker blocks both update and payload hooks during takeover.
+Windows Terminal still needs a restart to load settings changes.
 
 | Variable | Effect |
 | --- | --- |
 | `DOTFILES_AUTO_UPDATE=0` | Disable the dotfiles login updater |
-| `DOTFILES_AUTO_STOW=0` | Permit pulls without automatic restow |
-| `DOTFILES_DIR` | Select the checkout (default `~/dotfiles`) |
-| `DOTFILES_HOST` | Override remembered Unix host; empty means common only |
+| `DOTFILES_AUTO_STOW=0` | Legacy only: permit pulls without automatic restow |
+| `DOTFILES_DIR` | Legacy checkout selection; native uses its home-bound marker |
+| `DOTFILES_HOST` | Legacy only: override remembered Unix host; native uses local data |
 | `DOTFILES_COLOR` | `auto`, `always` or `never`; NO_COLOR/TERM=dumb disable color |
 | `DOTFILES_PAYLOAD_AUTO_UPDATE=0` | Disable the separate automatic payload hook |
 
@@ -134,7 +144,9 @@ instructions and portable settings live under `common/claude` and `common/codex`
 Claude settings and Codex config are merged into mutable regular files rather
 than linked. Portable values win while credentials, host-only settings and
 runtime state stay local. Codex rules are materialized without touching
-`default.rules`. Provision the parser explicitly; login never installs it.
+`default.rules`. Native modifies use builtin JSON/TOML functions with no Python,
+external jq or sync venv. The following parser selection applies only to legacy
+compatibility: provision it explicitly; login never installs it.
 A provisioned interpreter that satisfies the selected helper's dependencies
 can be selected with DOTFILES_SYNC_PYTHON. Setup, doctor and wrappers share this
 choice; an invalid override fails without creating an unused default venv.
@@ -191,6 +203,8 @@ separate: consumer projects pin/install their own toolkit.
 
 ```sh
 ./setup-sync.sh
+# Install the selected chezmoi test release, or name an already verified binary:
+export DOTFILES_TEST_CHEZMOI=/path/to/chezmoi
 pre-commit install
 ./tests/run.sh --ci
 pre-commit run --all-files
@@ -202,6 +216,17 @@ platform evidence; local skips do not establish native behavior. The
 [testing guide](docs/testing.md) explains prerequisites, focused suites, CI,
 optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.
+
+The [chezmoi migration](docs/chezmoi-migration/status.md) includes native
+Claude/Codex modifies, ordinary source under `home/`, explicit local `[data].host`
+and Stage 4 guarded takeover/update/provisioning. Native apply needs no sync venv.
+The [native contract](docs/config-sync.md#native-configuration-and-stage-4-handover) documents
+canonical formatting, exact ownership and safe refusal of unsupported inputs.
+CI requires verified v2.74.0; local native probes skip if chezmoi is absent,
+while an invalid explicit path fails. Canonical legacy source remains available
+and unmarked homes retain the legacy path. Real takeover and selected secret
+enrollment require the [Stage 4 procedure](docs/chezmoi-migration/takeover.md)
+and recorded release gates; fixture passes are not real-host outcomes.
 
 To add a package, mirror its HOME path under `common/<tool>/` or a host overlay,
 add its configuration, then rerun the installer. Keep secrets local, code in its

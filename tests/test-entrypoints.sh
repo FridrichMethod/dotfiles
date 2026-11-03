@@ -26,7 +26,10 @@ mkdir "$TEST_TMP/bin"
 for dependency in bash sh git python3 node dirname; do
     ln -s "$(command -v "$dependency")" "$TEST_TMP/bin/$dependency"
 done
-if PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --ci --check-prerequisites \
+if (
+    unset DOTFILES_TEST_CHEZMOI DOTFILES_TEST_REQUIRE_CHEZMOI
+    PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --ci --check-prerequisites
+) \
     >"$TEST_TMP/ci.stdout" 2>"$TEST_TMP/ci.stderr"; then
     printf 'ERROR: CI accepted a missing Stow integration prerequisite.\n' >&2
     exit 1
@@ -34,17 +37,31 @@ fi
 grep -Fq 'CI requires stow' "$TEST_TMP/ci.stderr" ||
     fail_run ci 'tests/run.sh --ci --check-prerequisites did not name the missing stow.'
 
-if ! PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --check-prerequisites \
+grep -Fq 'CI requires chezmoi' "$TEST_TMP/ci.stderr" ||
+    fail_run ci 'tests/run.sh --ci --check-prerequisites did not name missing chezmoi.'
+
+if ! (
+    unset DOTFILES_TEST_CHEZMOI DOTFILES_TEST_REQUIRE_CHEZMOI
+    PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --check-prerequisites
+) \
     >"$TEST_TMP/local.stdout" 2>"$TEST_TMP/local.stderr"; then
     fail_run local 'tests/run.sh --check-prerequisites failed with only optional tools missing.'
 fi
 for skipped in 'real GNU Stow integration' 'optional Unix PowerShell checks' \
-    'optional installed-Codex exec-policy checks'; do
+    'optional installed-Codex exec-policy checks' 'native chezmoi fixtures'; do
     grep -Fq "SKIP: $skipped" "$TEST_TMP/local.stdout" ||
         fail_run local "tests/run.sh --check-prerequisites did not skip the $skipped."
 done
 grep -Fxq 'test-prerequisites=PASS' "$TEST_TMP/local.stdout" ||
     fail_run local 'tests/run.sh --check-prerequisites did not print test-prerequisites=PASS.'
+
+if DOTFILES_TEST_CHEZMOI="$TEST_TMP/missing-chezmoi" /bin/bash "$TEST_DIR/run.sh" --check-prerequisites \
+    >"$TEST_TMP/chezmoi.stdout" 2>"$TEST_TMP/chezmoi.stderr"; then
+    printf 'ERROR: tests accepted an invalid explicit chezmoi executable.\n' >&2
+    exit 1
+fi
+grep -Fq 'invalid DOTFILES_TEST_CHEZMOI' "$TEST_TMP/chezmoi.stderr" ||
+    fail_run chezmoi 'tests/run.sh did not reject the explicit invalid chezmoi path.'
 
 rm "$TEST_TMP/bin/node"
 if PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --check-prerequisites \
@@ -133,11 +150,49 @@ need = {
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
                          'tests/windows-installer-controls.ps1', 'tests/lib/environment.sh',
                          'tests/lib/environment.ps1', 'tests/test_environment.py'],
+    'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
+                       'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
+                       'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
+                       'scripts/dotfiles-auto-stow.ps1', 'scripts/payload-update.sh',
+                       'stow-all.sh', 'stow-all.ps1', 'lib/sync-runtime.sh',
+                       'tests/chezmoi-takeover.sh', 'tests/chezmoi-takeover.ps1',
+                       'lib/config_sync.py', 'home/.chezmoidata/codex-policy.json',
+                       'home/dot_claude/modify_private_settings.json',
+                       'home/dot_codex/modify_private_config.toml',
+                       'tests/test_chezmoi_claude.py', 'tests/test_chezmoi_codex.py',
+                       'tests/test_chezmoi_integration.py',
+                       '.chezmoiroot', '.chezmoiversion', 'home/.chezmoiignore',
+                       'home/dot_zshrc.tmpl', 'home/dot_local/bin/executable_my-fzf-preview.sh.tmpl',
+                       'home/dot_config/aria2/aria2.conf.tmpl', 'home/dot_wezterm.lua.tmpl',
+                       'tests/chezmoi_source_support.py', 'tests/test_chezmoi_source_state.py',
+                       'tests/test_chezmoi_rendered.py', 'docs/chezmoi-migration/inventory.md',
+                       'common/sh/.profile', 'win/wsl/.wslconfig', 'mac/sh/.config/sh/.profile',
+                       'tests/test_chezmoi_native_config.py', 'tests/test_chezmoi_secrets.py',
+                       'tests/fixtures/chezmoi/native-config/modify_private_settings.json',
+                       'tests/fixtures/chezmoi/secrets/README.md', 'tests/chezmoi.sh',
+                       'tests/chezmoi.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1',
+                       '.github/scripts/install-test-chezmoi.py'],
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh'],
     'e2e-harness-windows': ['tests/e2e-harness-windows.sh', 'tests/e2e-harness.ps1',
                             'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1'],
 }
 missed = []
+for name, excluded, checked in (
+    ('check-json', ['home/dot_claude/modify_private_settings.json',
+                    'tests/fixtures/chezmoi/native-config/modify_private_settings.json'],
+                   ['common/claude/.claude/settings.json', 'home/.chezmoidata/codex-policy.json',
+                    'home/dot_claude/ordinary.json']),
+    ('check-toml', ['home/dot_codex/modify_private_config.toml',
+                    'tests/fixtures/chezmoi/native-config/modify_private_config.toml'],
+                   ['common/codex/.codex/config.toml', 'home/dot_codex/ordinary.toml']),
+):
+    exclude = hooks[name][0].get('exclude')
+    for path in excluded:
+        if not exclude or not exclude.search(path):
+            missed.append(f'{name} attempts to parse native template {path}')
+    for path in checked:
+        if exclude and exclude.search(path):
+            missed.append(f'{name} excludes ordinary policy/data {path}')
 for name, paths in need.items():
     if len(hooks.get(name, [])) != 1:
         sys.exit(f'ERROR: .pre-commit-config.yaml must define the hook {name} exactly once.')

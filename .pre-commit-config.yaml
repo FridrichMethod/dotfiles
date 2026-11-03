@@ -16,7 +16,9 @@ repos:
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
+        exclude: ^(tests/fixtures/chezmoi/native-config/modify_private_settings[.]json|home/dot_claude/modify_private_settings[.]json)$
       - id: check-toml
+        exclude: ^(tests/fixtures/chezmoi/native-config/modify_private_config[.]toml|home/dot_codex/modify_private_config[.]toml)$
       - id: check-added-large-files
         args: [--maxkb=40000, --enforce-all]
 
@@ -50,10 +52,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
-        exclude: ^(scripts/(dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$
+        exclude: ^(scripts/(chezmoi-update|dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(sync-runtime|terminal)\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(chezmoi-update|dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -82,6 +84,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.pre-commit-config\.yaml|tests/[^/]+\.(sh|ps1)|tests/test_environment\.py|tests/lib/environment\.(sh|ps1))$
+      - id: chezmoi-native
+        name: isolated native chezmoi deployment, transforms and encryption
+        entry: tests/chezmoi.sh
+        language: script
+        pass_filenames: false
+        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(config_sync[.]py|sync-runtime[.]sh|chezmoi-guard[.](sh|ps1))|scripts/(chezmoi-update|dotfiles-update|dotfiles-auto-stow|payload-update)[.](sh|ps1)|stow-all[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh

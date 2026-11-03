@@ -12,6 +12,81 @@ $script:E2EUpstream = 'https://github.com/FridrichMethod/dotfiles.git'
 # skipped result after it (inside.sh reads "<id> done applied:" plan lines).
 $script:E2EAppliedRe = '\[step\] [A-Za-z0-9-]+: |: (installed|present|skipped): '
 
+function Get-E2EScheduledTaskNames {
+    # Read task identities only: native provisioning must not register a task.
+    return (@(Get-ScheduledTask -ErrorAction Stop | ForEach-Object { $_.TaskPath + $_.TaskName } | Sort-Object) -join "`n")
+}
+
+function Invoke-E2EStepNativeProvision {
+    # All legacy automated steps already passed. The native run may install
+    # only chezmoi and must stop at HW-native without running that handoff.
+    Start-E2EStep native-provision setup:native-provision
+    $before = Get-E2ESnapshot -Root $HOME -Prune (Get-E2EPruneList)
+    $tasks = Get-E2EScheduledTaskNames
+    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Yes') -TimeoutSeconds $E2ETimeout['Apply']
+    $after = Get-E2ESnapshot -Root $HOME -Prune (Get-E2EPruneList)
+    $output = @(Get-E2ELines $E2E['StepOut'])
+    $pending = Get-E2EPendingIds (@($output) + @(Get-E2ELines $E2E['StepErr']))
+    $binary = [IO.Path]::GetFullPath((Join-Path $HOME '.local/bin/chezmoi.exe'))
+    $allowedAdded = @($binary, (Split-Path $binary -Parent), (Join-Path $HOME '.local'))
+    $differences = @(Compare-E2ESnapshot -Before $before -After $after)
+    $unexpected = @($differences | Where-Object {
+            -not (Test-E2ENoted -Difference $_) -and
+            -not ($_.StartsWith('added ') -and $_.Substring(6) -in $allowedAdded) -and
+            -not $_.StartsWith("changed $binary (")
+        })
+    [IO.File]::WriteAllText((Join-Path $E2E['Out'] 'snapshots/native-provision.diff'), (($differences -join "`n") + "`n"), $script:E2EUtf8)
+    $otherApplied = @($output | Where-Object { $_ -match $script:E2EAppliedRe -and $_ -notmatch 'W1-chezmoi:' })
+    $reason = ''
+    if ($code -ne 3 -or $pending -cne 'HW-native') { $reason = "exit $code; pending '$pending', expected only HW-native" }
+    elseif ($otherApplied.Count) { $reason = "unexpected automated step: $(ConvertTo-E2EOneLine ($otherApplied -join "`n") 300)" }
+    elseif ($unexpected.Count) { $reason = "HOME changed outside native binary: $(ConvertTo-E2EOneLine ($unexpected -join "`n") 300)" }
+    elseif ((Get-E2EScheduledTaskNames) -cne $tasks) { $reason = 'scheduled task identities changed' }
+    elseif (-not $after.ContainsKey($binary) -or $after[$binary] -notmatch '^[0-9]+\|[0-9]+$') { $reason = 'native binary is missing or not a regular file' }
+    if ($reason) {
+        $E2E['Broken'] = 'native-provision'
+        Complete-E2EStep fail $reason
+    }
+    else { Complete-E2EStep pass 'W1-chezmoi provisioned; only HW-native pending; source, legacy runtime, HOME configuration and task identities unchanged' }
+}
+
+function Invoke-E2EStepNativeCheck {
+    Start-E2EStep native-check check:native-check
+    Start-E2ENoWrite native-check
+    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Check') `
+        -TimeoutSeconds $E2ETimeout['Check'] -Environment (Get-E2ENoWriteEnvironment)
+    $problems = Stop-E2ENoWrite native-check
+    $output = @(Get-E2ELines $E2E['StepOut'])
+    $todo = @($output | Where-Object { $_ -cmatch '^[A-Za-z0-9-]+ todo ' })
+    $blocking = @($output | Where-Object { $_ -cmatch '^[A-Za-z0-9-]+ human .*; blocks completion$' })
+    $binaryReady = @($output | Where-Object { $_ -cmatch '^W1-chezmoi done ' }).Count -eq 1
+    if ($code -ne 3 -or -not $binaryReady -or $todo.Count -or $blocking.Count -ne 1 -or $blocking[0] -cnotmatch '^HW-native human ' -or $problems) {
+        $E2E['Broken'] = 'native-check'
+        Complete-E2EStep fail "native check exit $code; chezmoi ready=$binaryReady, $($todo.Count) todo, blocking=$($blocking -join ', '); $problems"
+    }
+    else { Complete-E2EStep pass 'W1-chezmoi ready; only HW-native pending; no writes' }
+}
+
+function Invoke-E2EStepNativeFixtures {
+    # The native suite owns temp homes and explicit native state paths. Its
+    # transform children have empty PATH, independent of the legacy parser.
+    Start-E2EStep native-fixtures check:native-fixtures
+    if (-not [IO.File]::Exists((Join-Path $E2E['Clone'] 'tests/test_chezmoi_takeover_recovery.py'))) {
+        $E2E['Broken'] = 'native-fixtures'
+        Complete-E2EStep fail 'native takeover/recovery fixture is missing from this checkout'
+        return
+    }
+    $code = Invoke-E2EPwsh -Script tests/chezmoi.ps1 -TimeoutSeconds $E2ETimeout['Apply'] -Environment @{
+        DOTFILES_TEST_CHEZMOI = (Join-Path $HOME '.local/bin/chezmoi.exe')
+        DOTFILES_TEST_REQUIRE_CHEZMOI = '1'
+    }
+    if ($code -ne 0) {
+        $E2E['Broken'] = 'native-fixtures'
+        Complete-E2EStep fail "isolated native suite exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"
+    }
+    else { Complete-E2EStep pass 'isolated native source/config/takeover/recovery fixtures passed; legacy sandbox home not migrated' }
+}
+
 function Invoke-E2EStepClone {
     # The clone a person makes (HW-clone): from the read-only source checkout
     # at E2E_REV, its origin pointed at GitHub as a real clone has it.
@@ -119,7 +194,7 @@ function Invoke-E2EStepDoctorInitial {
     # and the tools are missing) and writes nothing, in TEMP or HOME.
     Start-E2EStep doctor-initial check:doctor-initial
     Start-E2ENoWrite doctor-initial
-    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') `
+    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-LegacyStow', '-Host', 'win', '-Tsv') `
         -TimeoutSeconds $E2ETimeout['Check'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite doctor-initial
     $suffix = if ($problems) { "; $problems" } else { '' }
@@ -133,7 +208,7 @@ function Invoke-E2EStepCheckNoWrite {
     # nothing is left) and writes nothing.
     Start-E2EStep check-nowrite check:check-nowrite
     Start-E2ENoWrite check-nowrite
-    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Check') `
+    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-LegacyStow', '-Host', 'win', '-Check') `
         -TimeoutSeconds $E2ETimeout['Check'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite check-nowrite
     $output = @(Get-E2ELines $E2E['StepOut'])
@@ -156,7 +231,7 @@ function Invoke-E2EStepSecondApply {
     Update-E2EPath
     Start-E2EStep second-apply setup:second-apply
     Start-E2ENoWrite second-apply
-    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Yes') `
+    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-LegacyStow', '-Host', 'win', '-Yes') `
         -TimeoutSeconds $E2ETimeout['Apply'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite second-apply
     $output = @(Get-E2ELines $E2E['StepOut'])
@@ -210,7 +285,7 @@ function Invoke-E2EStepPayloads {
         Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Block'])s timeout): $detail"
         return
     }
-    [void](Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check'])
+    [void](Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-LegacyStow', '-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check'])
     $row = $null
     foreach ($line in @(Get-E2ELines $E2E['StepOut'])) {
         $cells = $line.Split("`t")
@@ -227,7 +302,7 @@ function Invoke-E2EStepDoctorFinal {
     # doctor.ps1 -Host win, with the PATH a new terminal reads, exits 0.
     Update-E2EPath
     Start-E2EStep doctor-final check:doctor-final
-    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win') -TimeoutSeconds $E2ETimeout['Check']
+    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-LegacyStow', '-Host', 'win') -TimeoutSeconds $E2ETimeout['Check']
     if ($code -eq 0) { Complete-E2EStep pass 'exit 0 with the registry PATH' }
     else { Complete-E2EStep fail "exit ${code}: $(Get-E2EProblemLines $E2E['StepOut'])" }
 }

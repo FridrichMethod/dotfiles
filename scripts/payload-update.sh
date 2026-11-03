@@ -17,6 +17,16 @@
 # download, default 60), DOTFILES_DIR; AWESOME_SKILLS_AUTO_UPDATE=0 leaves
 # skills out of the automatic runs until 2027-01-31.
 
+# Persistent operator maintenance covers future shells and detached workers.
+# Existing workers must still be identified and allowed to finish before takeover.
+if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
+    if [ "${1-}" = --now ]; then
+        printf '%s\n' 'dotfiles: payload update refused during maintenance.' >&2
+        return 1 2>/dev/null || exit 1
+    fi
+    return 0 2>/dev/null || exit 0
+fi
+
 case ${1-} in
     --auto | --now | --worker) ;;
     *)
@@ -29,7 +39,9 @@ case ${1-} in
             _DOTFILES_PAYLOAD_CHECKED=1
             export _DOTFILES_PAYLOAD_CHECKED
             if [ "${DOTFILES_PAYLOAD_AUTO_UPDATE:-1}" != 0 ]; then
-                sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh" --auto || :
+                # The login dispatcher selected this exact source from the home
+                # binding; do not switch back to a stale DOTFILES_DIR here.
+                sh "${_df_payload:-${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh}" --auto || :
             fi
         fi
         return 0 2>/dev/null || exit 0

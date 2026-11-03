@@ -76,8 +76,41 @@ E2E_OUT=$UNIT E2E_RUN_USER=tester E2E_SETUP_HOST=lab-ubuntu
 . "$E2E_DIR/lib/blocks.sh"
 # shellcheck source=tests/e2e/lib/assert.sh
 . "$E2E_DIR/lib/assert.sh"
+# shellcheck source=tests/e2e/lib/steps.sh
+. "$E2E_DIR/lib/steps.sh"
 # shellcheck source=tests/e2e/lib/flow-other.sh
 . "$E2E_DIR/lib/flow-other.sh"
+
+# Common-only provisioning stays unsupported. Native fixture discovery may
+# skip only without an independently supplied binary; supported flows fail
+# when their Stage 4 tests are missing or the aggregate fails.
+native_skip=$(
+    # shellcheck disable=SC2123 # deliberately hide all independently installed binaries
+    E2E_FLOW=other DOTFILES_TEST_CHEZMOI='' PATH=/no-native-tools
+    e2e_skip() { printf '%s:%s\n' "$1" "$2"; }
+    e2e_step_native_fixtures
+)
+expect_eq 'common-only native skip' "$native_skip" 'native-fixtures:no independently supplied chezmoi; common-only native provisioning unsupported'
+native_missing=$(
+    E2E_FLOW=unix E2E_CLONE=$UNIT/missing-native-suite
+    e2e_step_begin() { :; }
+    e2e_step_end() { printf '%s:%s\n' "$1" "$2"; }
+    e2e_step_native_fixtures
+)
+expect_eq 'missing native takeover fixture fails' "$native_missing" 'fail:native takeover/recovery fixture is missing from this checkout'
+mkdir -p "$UNIT/native-suite/tests"
+: >"$UNIT/native-suite/tests/test_chezmoi_takeover_recovery.py"
+native_failure=$(
+    E2E_FLOW=other E2E_CLONE=$UNIT/native-suite DOTFILES_TEST_CHEZMOI=/independently/supplied/chezmoi
+    E2E_STEP_OUT=$UNIT/native.out E2E_STEP_ERR=$UNIT/native.err E2E_TIMEOUT_APPLY=1
+    e2e_step_begin() { :; }
+    e2e_step_end() { printf '%s\n' "$1"; }
+    e2e_run() { return 1; }
+    e2e_step_native_fixtures
+    printf '%s\n' "$E2E_BROKEN"
+)
+expect_eq 'native suite failure is blocking' "$native_failure" 'fail
+native-fixtures'
 
 # The stdout of an apply run that exits 3: plan lines, then three blocks,
 # one with %q-quoted paths (a home with a space) in its mv and stow lines.
@@ -626,12 +659,14 @@ cat >"$SRC/setup-host.sh" <<'SH'
 #!/bin/bash
 # e2e-harness fixture: a setup-host.sh stand-in (see tests/e2e-harness.sh).
 set -u
-host='' mode=check
+host='' mode=check legacy=0 only=''
 while [ $# -gt 0 ]; do
     case $1 in
         --host) host=$2; shift ;;
         --check) mode=check ;;
         --yes) mode=apply ;;
+        --legacy-stow) legacy=1 ;;
+        --only) only=$2; shift ;;
         *) printf '[dotfiles] [error] unknown argument: %s\n' "$1" >&2; exit 2 ;;
     esac
     shift
@@ -652,6 +687,17 @@ case $host in
         ;;
     *) printf '[dotfiles] [error] unknown host: %s\n' "$host" >&2; exit 2 ;;
 esac
+if [ "$legacy" = 0 ]; then
+    [ "$only" = S4-chezmoi ] || { printf 'native stub requires --only S4-chezmoi\n' >&2; exit 2; }
+    if [ "$mode" = apply ]; then
+        mkdir -p "$HOME/.local/bin"
+        printf '#!/bin/sh\nprintf "chezmoi version v2.74.0\\n"\n' >"$HOME/.local/bin/chezmoi"
+        chmod 755 "$HOME/.local/bin/chezmoi"
+    fi
+    [ -x "$HOME/.local/bin/chezmoi" ] || exit 3
+    printf 'S4-chezmoi done chezmoi 2.74.0\n'
+    exit 0
+fi
 root=$(cd "$(dirname "$0")" && pwd -P)
 scratch=$HOME/.cache/dotfiles-bootstrap
 installer=$scratch/claude/install.sh
@@ -760,14 +806,16 @@ cat >"$SRC/doctor.sh" <<'SH'
 #!/bin/bash
 # e2e-harness fixture: a doctor.sh stand-in (see tests/e2e-harness.sh).
 set -u
-tsv=0
+tsv=0 legacy=0
 for argument in "$@"; do
     case $argument in
         --tsv) tsv=1 ;;
+        --legacy-stow) legacy=1 ;;
         --host | --platform | --smoke | lab-ubuntu | other) ;;
         *) printf '[dotfiles] [error] unknown argument: %s\n' "$argument" >&2; exit 2 ;;
     esac
 done
+[ "$legacy" = 1 ] || { printf 'legacy doctor requires --legacy-stow\n' >&2; exit 2; }
 # PLANT
 claude=missing stow=missing rc=1
 [ ! -x "$HOME/.local/bin/claude" ] || claude=ok
@@ -830,6 +878,16 @@ esac
 printf 'HOST=%s\n' "$host" >"$state" || exit 1
 printf '[dotfiles] [ok] stowed common%s\n' "${host:+ and $host}"
 exit 0
+SH
+mkdir -p "$SRC/tests"
+: >"$SRC/tests/test_chezmoi_takeover_recovery.py"
+cat >"$SRC/tests/chezmoi.sh" <<'SH'
+#!/bin/bash
+set -eu
+[ "$DOTFILES_TEST_REQUIRE_CHEZMOI" = 1 ]
+[ "$DOTFILES_TEST_CHEZMOI" = "$HOME/.local/bin/chezmoi" ]
+"$DOTFILES_TEST_CHEZMOI" --version
+printf 'isolated native fixture entrypoint stand-in\n'
 SH
 chmod +x "$SRC/setup-host.sh" "$SRC/doctor.sh" "$SRC/stow-all.sh" "$SRC/scripts/payload-update.sh"
 git -C "$SRC" init -q
@@ -971,6 +1029,9 @@ expect_step clean login-shell pass 'exit 0; silent'
 expect_step clean payloads pass 'exit 0; doctor payloads ok: installed: kit, pymol, skills'
 expect_step clean doctor-final pass 'exit 0 from the login shell'
 expect_step clean doctor-smoke pass 'exit 0 from the login shell'
+expect_step clean native-provision pass 'S4-chezmoi'
+expect_step clean native-check pass 'no writes'
+expect_step clean native-fixtures pass 'isolated native'
 expect_step clean negative-wsl-refused pass 'exit 2: '
 expect_step clean negative-root-refused pass 'not root'
 expect_step clean audit-wrappers pass '4 wrapper call(s), all in human or negative phases'
@@ -986,7 +1047,7 @@ expect_eq 'clean wrappers.log' "$(cut -f 2,3 "$CLEAN_OUT/log/wrappers.log" | tr 
 human:H1-apt-core sudo
 human:H7-stow stow
 negative:root-refused sudo'
-expect_text 'clean wrappers.log argv' "$CLEAN_OUT/log/wrappers.log" "${TAB}-n ./setup-host.sh --host lab-ubuntu --check"
+expect_text 'clean wrappers.log argv' "$CLEAN_OUT/log/wrappers.log" "${TAB}-n ./setup-host.sh --legacy-stow --host lab-ubuntu --check"
 for phase in human:H1-apt-core human:S5-claude human:H7-stow negative:wsl-refused negative:root-refused check:doctor-initial setup:apply-1; do
     expect_eq "clean timeline $phase" "$(awk -F '\t' -v p="$phase" '$3 == p { print $2 }' "$CLEAN_OUT/log/timeline" | tr '\n' ' ')" 'begin end '
 done
@@ -1001,6 +1062,8 @@ expect_text 'clean env.txt' "$CLEAN_OUT/env.txt" 'host=lab-ubuntu flow=unix prof
 [ -f "$CLEAN_HOME/.bashrc.pre-dotfiles" ] && [ ! -e "$CLEAN_HOME/.bashrc" ] || fail 'clean: the mv -n lines did not move ~/.bashrc aside'
 [ -L "$CLEAN_HOME/.zshrc" ] || fail 'clean: ~/.zshrc is not the stow link'
 [ -x "$CLEAN_HOME/.local/bin/claude" ] || fail 'clean: the gated installer did not run'
+[ -x "$CLEAN_HOME/.local/bin/chezmoi" ] || fail 'clean: native chezmoi was not provisioned'
+[ ! -e "$CLEAN_HOME/.config/dotfiles/native" ] || fail 'clean: provisioning created a native binding in the legacy home'
 [ -f "$CLEAN_HOME/.cache/dotfiles-bootstrap/apt-core.done" ] || fail 'clean: the apt block did not run through the sudo stub'
 [ -z "$(git -C "$SRC" status --porcelain)" ] || fail 'clean: the source checkout changed'
 [ -z "$(git -C "$CLEAN_HOME/dotfiles" status --porcelain --untracked-files=all)" ] || fail 'clean: the clone is not clean'

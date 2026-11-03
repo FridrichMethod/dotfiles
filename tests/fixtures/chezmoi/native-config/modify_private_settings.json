@@ -1,0 +1,12 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- $live := dict -}}
+{{- if ne (trim .chezmoi.stdin) "" -}}
+  {{- $live = fromJson .chezmoi.stdin -}}
+  {{- if not (kindIs "map" $live) -}}
+    {{- fail "live JSON root must be an object" -}}
+  {{- end -}}
+{{- end -}}
+{{- $portable := fromJson (include ".chezmoitemplates/portable.json") -}}
+{{- $results := dict "live" $live "portable" $portable | jq ".live * .portable" -}}
+{{- if ne (len $results) 1 -}}{{- fail "expected one jq merge result" -}}{{- end -}}
+{{- first $results | toPrettyJson }}

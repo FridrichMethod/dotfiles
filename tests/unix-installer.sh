@@ -37,7 +37,7 @@ printf '%s\n' '# fixture oh-my-zsh entrypoint' >"$TARGET/.oh-my-zsh/oh-my-zsh.sh
 cp "$REPO_ROOT/stow-all.sh" "$REPO_ROOT/.stowrc" "$FIXTURE/"
 cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$FIXTURE/scripts/"
 cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" \
-    "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
+    "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp -R "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$FIXTURE/common/"
 printf '%s\n' 'host overlay fixture' >"$FIXTURE/test-host/sample/.fixture-host"
 git init -q -b main "$FIXTURE"
@@ -295,7 +295,7 @@ new_tree() {
     fi
     cp "$REPO_ROOT/scripts/dotfiles-update.sh" "$REPO_ROOT/scripts/payload-update.sh" \
         "$REPO_ROOT/scripts/awesome-skills-update.sh" "$1/scripts/"
-    cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$1/lib/"
+    cp "$REPO_ROOT/lib/config_sync.py" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$1/lib/"
     cp -RP "$REPO_ROOT/common/codex" "$REPO_ROOT/common/claude" "$1/common/"
     sed "s#https://raw.githubusercontent.com/FridrichMethod/#file://$REMOTE/#g" \
         "$REPO_ROOT/config/payloads.tsv" >"$1/config/payloads.tsv"

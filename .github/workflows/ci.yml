@@ -42,6 +42,8 @@ jobs:
           sudo apt-get install --yes stow
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.sh
+      - name: Provision verified native chezmoi test runtime
+        run: python .github/scripts/install-test-chezmoi.py
       - name: Check required CI prerequisites
         run: /bin/bash ./tests/run.sh --ci --check-prerequisites
       # The same steps pre-commit/action@v3.0.1 runs, without its unmaintained
@@ -91,6 +93,8 @@ jobs:
           echo "FZF_TAB_TEST_DIR=$RUNNER_TEMP/fzf-tab" >> "$GITHUB_ENV"
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.sh
+      - name: Provision verified native chezmoi test runtime
+        run: python .github/scripts/install-test-chezmoi.py
       - name: Run behavior tests with system Bash and BSD utilities
         run: /bin/bash ./tests/run.sh --ci
 
@@ -114,5 +118,7 @@ jobs:
           package-manager-cache: false
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.ps1
+      - name: Provision verified native chezmoi test runtime
+        run: python .github/scripts/install-test-chezmoi.py
       - name: Run required native PowerShell and Node suites
         run: ./tests/run.ps1 -CI

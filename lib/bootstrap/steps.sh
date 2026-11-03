@@ -46,11 +46,13 @@ S3-bat-theme auto core - macos,debian,hpc
 S3-dirs auto core - macos,debian,hpc
 S4-nvm auto ai - macos,debian
 S4-setup-sync auto core - macos,debian,hpc
+S4-chezmoi auto core - macos,debian,hpc
 S5-claude inspect ai yes debian
 S5-codex auto ai - debian
 S6-nerd-font auto desktop - lab-ubuntu
 S6-kitty auto desktop - lab-ubuntu
 H7-stow judgment - yes macos,debian,hpc
+H7-native judgment - yes macos,debian,hpc
 H7-chsh chsh - no macos,debian
 H7-auth auth - no macos,debian,hpc
 H7-payloads judgment - no macos,debian,hpc
@@ -80,6 +82,9 @@ steps_rows() {
         lines=${lines#*"$BOOTSTRAP_NL"}
         bootstrap_split ' ' "$line" id kind tier blocking scopes
         [ -n "$id" ] || continue
+        case ${BOOTSTRAP_LEGACY_STOW:-0}:$id in
+            0:S4-setup-sync | 0:H7-stow | 1:S4-chezmoi | 1:H7-native) continue ;;
+        esac
         case ",$scopes," in
             *",$STEPS_PROFILE,"* | *",$STEPS_HOST,"*) ;;
             *) continue ;;
@@ -148,6 +153,8 @@ steps_get() {
 # steps_needs ID: the steps that must be done before ID on this profile.
 steps_needs() {
     case $STEPS_PROFILE:$1 in
+        macos:H7-native | debian:H7-native) echo S3-clones S2-brew-bundle S4-chezmoi ;;
+        hpc:H7-native) echo S3-clones S2-login-env S4-chezmoi ;;
         macos:H1-homebrew | macos:S3-clones | macos:S4-nvm) echo H1-xcode-clt ;;
         macos:S2-brew-bundle) echo H1-homebrew ;;
         macos:S4-setup-sync) echo S2-brew-bundle ;;
@@ -384,6 +391,7 @@ steps_run_one() {
 # steps_rerun: the command that continues this run.
 steps_rerun() {
     printf './setup-host.sh --host %s' "$STEPS_HOST"
+    [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ] || printf ' --legacy-stow'
     [ "$STEPS_TIERS" = core,cli,ai ] || printf ' --tier %s' "$STEPS_TIERS"
     printf '\n'
 }

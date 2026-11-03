@@ -702,8 +702,18 @@ class FilesystemTests(unittest.TestCase):
         # A fresh venv without pip or site packages is a real no-tomlkit
         # interpreter on every CI platform, without downloading anything.
         runtime = self.directory / "stdlib runtime"
-        venv.EnvBuilder(with_pip=False).create(runtime)
+        if os.name == "nt" and not Path(sys._base_executable).is_file():
+            # Store Python resolves its base through USERPROFILE, which is
+            # deliberately synthetic here. Use the existing PATH interpreter
+            # to create the same package-free disposable fixture instead.
+            python = shutil.which("python")
+            self.assertIsNotNone(python, "An existing PATH Python is required for the stdlib fixture")
+            subprocess.run([python, "-I", "-B", "-m", "venv", "--without-pip", str(runtime)],
+                           check=True, capture_output=True, timeout=30)
+        else:
+            venv.EnvBuilder(with_pip=False).create(runtime)
         interpreter = runtime / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        self.assertTrue(interpreter.is_file(), "The stdlib fixture interpreter was not created")
         env = dict(os.environ, DOTFILES_SYNC_PYTHON=str(interpreter))
         for kind, package, portable in (("claude-settings-sync", "claude", CLAUDE),
                                         ("codex-rules-sync", "codex", b"# rules\n"),

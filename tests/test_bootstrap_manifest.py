@@ -29,16 +29,16 @@ TOKENS = ("$HOME", "$ZSH_CUSTOM", "$NVM_DIR", "$XDG_CONFIG_HOME", "$XDG_DATA_HOM
 STEP_IDS = (
     "P0-preflight", "H1-xcode-clt", "H1-homebrew", "H1-apt-core", "H1-locale", "H1-linuxbrew",
     "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env", "S2-modules",
-    "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S5-claude", "S5-codex",
-    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
-    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync", "HW-clone",
+    "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S4-chezmoi", "S5-claude", "S5-codex",
+    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-native", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
+    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync", "W1-chezmoi", "HW-native", "HW-clone",
     "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
     "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
 # checks and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
                 "omz-order", "nvm-homebrew", "payloads", "gh-auth", "claude-auth", "codex-auth",
-                "zsh-smoke")
+                "zsh-smoke", "native-config")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
@@ -314,7 +314,15 @@ def check_clones(rows, tools, errors):
 
 
 def check_installers(rows, tools, errors):
-    check_unique(rows, lambda r: (r["id"], r["arch"]), "installers.tsv", errors)
+    # A single tool can have separate platform archives for the same CPU.
+    selected = {}
+    for row in rows:
+        if hosts_error(row["hosts"]):
+            continue
+        for host in expand_hosts(row["hosts"]):
+            key = row["id"], host, row["arch"]
+            report(errors, "dup-id", "installers.tsv", key in selected and f"repeated {key}")
+            selected[key] = row
     for row in rows:
         where, url, sha, dest = f"installers.tsv:{row.line}", row["url"], row["sha256"], row["dest"]
         report(errors, "installer-id", where, row["id"] not in tools and f"{row['id']} is not a tools.tsv id")

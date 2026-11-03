@@ -1,14 +1,17 @@
 # Dependencies
 
-Shell and PowerShell remain the orchestration languages. The structured merge
-backend is deliberately small; no general application framework is involved.
+Shell and PowerShell remain the entrypoint languages. Native configuration
+deployment uses chezmoi 2.74.0 or newer. The legacy structured merge backend
+remains only for the explicitly selected Stow compatibility path.
 
 ## Current requirements
 
 | Use | Requirements |
 | --- | --- |
-| Unix installation | Bash, Git, GNU Stow (and its Perl runtime), ordinary POSIX utilities |
-| Native Windows installation | PowerShell 7+, Git for Windows / Git Bash, elevated symlink creation |
+| Native Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities; no sync venv |
+| Native Windows installation | chezmoi 2.74.0+, PowerShell 7+, Git; ordinary file updates are unelevated |
+| Legacy Unix installation | Bash, Git, GNU Stow (and its Perl runtime), ordinary POSIX utilities |
+| Legacy Windows installation | PowerShell 7+, Git for Windows / Git Bash, elevated symlink creation |
 | All three AI sync helpers | Python 3.11+; no package installation during login or stow |
 | Codex TOML merge | Exact `tomlkit` pin in `requirements-sync.txt` |
 | Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
@@ -24,6 +27,9 @@ There is no global Node/npm dependency for the AI merge backend. `jq`, `uv`,
 `yq`, `jaq`, and `dasel` are not required by that backend either.
 
 ## Is a venv necessary?
+
+Native deployment needs no Python merge runtime or venv. The paragraphs below
+describe the retained legacy compatibility helpers only.
 
 No: [venv](https://docs.python.org/3/library/venv.html) provides package isolation;
 it is not needed to execute Python. The current `setup-sync` scripts deliberately
@@ -66,6 +72,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | Tool | Hosts | When absent |
 | --- | --- | --- |
 | `git` | all | cannot clone, update or stow the dotfiles |
+| `chezmoi` | all | native configuration deployment needs 2.74.0+; setup steps S4-chezmoi / W1-chezmoi provision it explicitly |
 | `bash` | unix | doctor.sh, setup-host.sh and stow-all.sh cannot run |
 | `zsh` | unix | no interactive shell for the stowed .zshrc |
 | `git-lfs` | unix | the required lfs filter in .gitconfig fails on LFS repositories |

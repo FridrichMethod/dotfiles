@@ -32,11 +32,47 @@ BOOTSTRAP_STRUCTURAL_CHECKS='locale core H1-locale
 venv-sync core S4-setup-sync
 submodule core P0-preflight
 stow-links core H7-stow
+native-config core H7-native
 path-order core H7-stow
 rc-pollution core X-rc-protection
 omz-order core X-recovery
 nvm-homebrew ai S4-nvm
 payloads ai H7-payloads'
+
+# Select checks without running chezmoi transforms or its persistent state.
+bootstrap_mode_structural_checks() {
+    local lines line id
+    lines=$BOOTSTRAP_STRUCTURAL_CHECKS$BOOTSTRAP_NL
+    while [ -n "$lines" ]; do
+        line=${lines%%"$BOOTSTRAP_NL"*}
+        lines=${lines#*"$BOOTSTRAP_NL"}
+        id=${line%% *}
+        case ${BOOTSTRAP_LEGACY_STOW:-0}:$id in
+            0:venv-sync | 0:stow-links | 1:native-config) continue ;;
+            0:path-order) line='path-order core H7-native' ;;
+        esac
+        printf '%s\n' "$line"
+    done
+}
+
+# The binding guard is shared with the native updater; no second marker parser.
+bootstrap_native_ready() (
+    [ -r "$1/lib/chezmoi-guard.sh" ] || return 1
+    # shellcheck source=lib/chezmoi-guard.sh
+    . "$1/lib/chezmoi-guard.sh"
+    ! dotfiles_maintenance_active "$HOME" || return 1
+    source=$(dotfiles_native_source "$HOME" 2>/dev/null) || return 1
+    [ "$source" = "$(cd "$1" && pwd -P)" ] || return 1
+    [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]
+)
+
+bootstrap_check_native_config() {
+    if bootstrap_native_ready "$1"; then
+        bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
+    else
+        bootstrap_check_result human 'native handover incomplete or maintenance active; follow docs/chezmoi-migration/takeover.md'
+    fi
+}
 
 # Files under common/ that third-party installers append to through the stow
 # symlinks in $HOME.
@@ -744,6 +780,7 @@ bootstrap_check_structural() {
         venv-sync) bootstrap_check_venv_sync "$2" ;;
         submodule) bootstrap_check_submodule "$2" ;;
         stow-links) bootstrap_check_stow_links "$2" ;;
+        native-config) bootstrap_check_native_config "$2" ;;
         path-order) bootstrap_check_path_order "$4" "$3" ;;
         rc-pollution) bootstrap_check_rc_pollution "$2" ;;
         omz-order) bootstrap_check_omz_order ;;

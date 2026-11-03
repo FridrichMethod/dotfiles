@@ -5,23 +5,27 @@
 
 .DESCRIPTION
     Plays the person who bootstraps a fresh Windows machine from
-    docs/bootstrap.md "Native Windows", the way "Running it with an agent"
+    docs/bootstrap.md's legacy Windows compatibility flow, the way "Running it with an agent"
     says an agent drives it: clones the source checkout at E2E_REV into
     $HOME\dotfiles (HW-clone), checks winget answers
     (W1-winget needs it; a missing one is bootstrapped through
     Microsoft.WinGet.Client and recorded as a deviation), runs doctor.ps1
-    -Host win -Tsv and setup-host.ps1 -Host win -Check and requires that
-    neither wrote in HOME or TEMP, loops setup-host.ps1 -Host win -Yes (at
+    -LegacyStow -Host win -Tsv and setup-host.ps1 -LegacyStow -Host win -Check and requires that
+    neither wrote in HOME or TEMP, loops setup-host.ps1 -LegacyStow -Host win -Yes (at
     most eight runs) running only the HW-stow block's line as an elevated
     PowerShell 7 would (it must link ~\.gitconfig and record the applied
     state, which stow-all.ps1 does only on a warning-free run), leaving every
     non-blocking HW block to the person and refusing a pending HW-clone (the
     clone is the harness's own, so that block means setup-host.ps1 did not
     accept it), then requires a second -Yes to exit 0 applying nothing, the
-    stowed profile to load silently, doctor.ps1 -Host win to exit 0, and the
+    stowed profile to load silently, doctor.ps1 -LegacyStow -Host win to exit 0, and the
     clone to stay clean after every step. Between steps PATH is rebuilt from
     the registry, as a new terminal reads it. tests/e2e/inside.sh is the Unix
-    twin.
+    twin. It then runs native setup-host without -LegacyStow: W1-chezmoi
+    installs the verified binary, and HW-native must be the only blocking
+    handoff. A native -Check writes nothing. tests/chezmoi.ps1 exercises
+    takeover and recovery in isolated temporary homes, with the provisioned
+    binary required. The legacy sandbox HOME is not migrated by this suite.
 
     It refuses to run anywhere but a GitHub Actions runner (GITHUB_ACTIONS is
     true) or a session that sets E2E_NATIVE=1, and only when $HOME\dotfiles

@@ -26,6 +26,24 @@ fi
 portable=$1
 live=$2
 
+# Resolve this legacy wrapper without following the destination being guarded.
+sync_script=$0
+sync_links=0
+while [ -L "$sync_script" ]; do
+    sync_links=$((sync_links + 1))
+    [ "$sync_links" -le 40 ] || exit 1
+    sync_dir=$(CDPATH='' cd -P -- "$(dirname -- "$sync_script")" && pwd)
+    sync_link=$(readlink "$sync_script")
+    case "$sync_link" in
+        /*) sync_script=$sync_link ;;
+        *) sync_script=$sync_dir/$sync_link ;;
+    esac
+done
+sync_root=$(CDPATH='' cd -P -- "$(dirname -- "$sync_script")/../../../.." && pwd)
+# shellcheck source=lib/chezmoi-guard.sh
+. "$sync_root/lib/chezmoi-guard.sh"
+dotfiles_legacy_write_allowed "$live" || exit 1
+
 if [ ! -f "$portable" ]; then
     echo "fcitx5-profile-sync: missing portable profile: $portable" >&2
     exit 1

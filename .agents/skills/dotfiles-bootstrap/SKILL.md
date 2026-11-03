@@ -1,6 +1,6 @@
 ---
 name: dotfiles-bootstrap
-description: Provision or check a machine for this dotfiles repository (hosts mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win, or another Linux without an overlay). Diagnoses with doctor.sh, installs pinned tools with setup-host.sh, hands sudo, login, GUI and allocation steps to the person, then stows. Use when asked to bootstrap, provision, set up or check a host, or when doctor.sh reports missing tools.
+description: Provision or check a machine for this dotfiles repository (hosts mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win, or another Linux without an overlay). Diagnoses with doctor.sh, installs pinned tools with setup-host.sh, hands sudo, login, GUI and allocation steps to the person, then hands over configuration with native chezmoi. Use when asked to bootstrap, provision, set up or check a host, or when doctor.sh reports missing tools.
 compatibility: Needs a clone of this dotfiles repository, Bash 3.2 or newer on macOS and Linux, and PowerShell 7 on Windows.
 metadata:
   playbook: docs/bootstrap.md
@@ -37,22 +37,32 @@ from this checkout, stop and say so.
    approves it in chat, as one visible top-level command, or leave it to them.
    `judgment`: the person decides.
 7. Exit 3 means work remains: a blocking HUMAN block is pending, or steps are
-   still to apply. Re-run step 5 after each block until H7-stow is the only one
+   still to apply. Re-run step 5 after each block until H7-native is the only one
    left.
-8. Ask the person about H7-payloads (on by default once stowed). Then run
-   the H7-stow block's lines exactly as printed: any `mv -n` lines first (they
-   move aside home files Stow would refuse, such as a fresh `~/.bashrc`; never
-   `stow --adopt`), then the stow line (the `PATH=` prefix for this host and
-   the clone's `stow-all.sh H`), each only as its own visible top-level
-   command that the person approves; it writes under `~/.claude` and
-   `~/.codex`. Re-run step 5; it should exit 0.
+8. Review H7-payloads before starting a new login. Follow the H7-native block
+   and `docs/chezmoi-migration/takeover.md`: explicit local host data, native
+   paths, quiescence, private backups and the home-bound writer signal. Do not
+   improvise `init --apply` or force a whole home. setup-host only provisions
+   tools and never creates the signal, initializes configuration or applies it.
 9. Finish with `./doctor.sh --host H --smoke`; exit 0 is the completion gate.
 10. Report what was installed, which HUMAN blocks remain, and every failure with
     its `docs/bootstrap.md <step-id>` reference.
 
 On native Windows use the twins (`.\doctor.ps1 -Host win -Tsv`,
 `.\setup-host.ps1 -Host win -Check`, then `-Yes`), with the same exit codes;
-the stow is the HW-stow block and the finish is `.\doctor.ps1 -Host win`.
+the handover is the HW-native block and the finish is `.\doctor.ps1 -Host win`.
 `sudo` blocks and anything elevated belong to the person.
 Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 `micromamba shell init`, never edit rc files, and never commit.
+
+Native mode is the default and installs the verified chezmoi release without
+creating `.venv-sync` or running setup-sync. Doctor checks the native binding
+and tool, without requiring the Stow/parser runtime. It remains offline and
+write-free; native diff/apply is a separate operation.
+
+Use `--legacy-stow` on BOTH Unix commands, or `-LegacyStow` on BOTH Windows
+commands, only for the supported compatibility path. That path retains
+S4-setup-sync / W1-setup-sync and H7-stow / HW-stow, including the printed
+`mv -n` conflict preparation and Windows elevation/task boundaries. Never
+run those legacy writers against a native-owned home. Current package
+manifests and existing legacy environments remain until their retirement stage.

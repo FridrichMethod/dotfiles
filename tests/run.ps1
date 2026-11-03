@@ -12,7 +12,7 @@ if ($CI -and -not $IsWindows) {
     throw 'The native Windows CI entrypoint requires Windows.'
 }
 
-foreach ($dependency in @('git', 'node')) {
+foreach ($dependency in @('git', 'node', 'python')) {
     if (-not (Get-Command $dependency -CommandType Application -ErrorAction SilentlyContinue)) {
         throw "Required test dependency not found: $dependency"
     }
@@ -31,10 +31,26 @@ if (-not (Test-Path -LiteralPath $syncPython -PathType Leaf)) {
 $env:DOTFILES_SYNC_PYTHON = $syncPython
 & $syncPython -I -B (Join-Path $repoRoot 'lib/config_sync.py') --runtime-check
 if ($LASTEXITCODE -ne 0) { throw 'Configuration runtime check failed.' }
+if (Test-Path Env:DOTFILES_TEST_CHEZMOI) {
+    if (-not (Test-Path -LiteralPath $env:DOTFILES_TEST_CHEZMOI -PathType Leaf)) {
+        throw 'Invalid DOTFILES_TEST_CHEZMOI executable path.'
+    }
+}
+elseif (-not (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue)) {
+    if ($CI -or $env:DOTFILES_TEST_REQUIRE_CHEZMOI -eq '1') {
+        throw 'CI requires chezmoi for native fixture tests.'
+    }
+    Write-Output 'SKIP: native chezmoi fixtures (install the selected release or set DOTFILES_TEST_CHEZMOI).'
+}
+if ($CI) { $env:DOTFILES_TEST_REQUIRE_CHEZMOI = '1' }
 if ($CheckPrerequisites) {
     Write-Output 'test-prerequisites=PASS'
     exit 0
 }
+
+Write-Output '==> chezmoi.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'chezmoi.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Native chezmoi fixture tests failed.' }
 
 Write-Output '==> test_environment.py'
 & $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_environment.py' -v

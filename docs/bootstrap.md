@@ -31,7 +31,65 @@ playbook links those files instead of repeating their pins and branches.
 one `### <step-id>:` heading per step, and checks that
 [dependencies.md](dependencies.md#day-zero-tools) lists every tool.
 
-## Quick start
+## Native and legacy provisioning
+
+New installations default to native chezmoi. Both setup-host entrypoints install
+its pinned, SHA256-verified release explicitly, without setup-sync or a sync
+virtual environment. They do not initialize or apply configuration. The blocking
+H7-native / HW-native step points to the reviewed
+[takeover procedure](chezmoi-migration/takeover.md), including explicit local
+host selection, quiescence, private snapshots and the per-home writer binding.
+Native doctor checks chezmoi and that binding; it never invokes transforms or
+requires Stow, TOMLKit or the sync runtime. Python remains for unrelated helpers.
+An active maintenance marker means handover is still incomplete.
+
+During this compatibility stage, `--legacy-stow` on both Unix entrypoints and
+`-LegacyStow` on both PowerShell entrypoints select the existing Stow/parser
+path explicitly. Existing setup-sync entrypoints and their runtime remain
+supported there. The package inventories are retained until Stage 5/6; native
+configuration deployment itself does not use them as a parser runtime.
+
+### S4-chezmoi: Native chezmoi binary
+
+Install the release archive selected by host and architecture from
+`config/bootstrap/installers.tsv` into `~/.local/bin/chezmoi`, extracting only
+the executable after SHA256 verification. An existing executable meeting the
+`tools.tsv` floor is retained. Unsupported architectures fail visibly. A symlink
+or directory at the managed binary destination requires operator judgment.
+No shell rc, native config, marker, auth state or sync environment is created.
+The official release checksum manifest is the integrity source; this does not
+claim independent signature verification. `--check` only reads and probes.
+
+### H7-native: Reviewed native configuration handover
+
+Follow [takeover.md](chezmoi-migration/takeover.md). Provisioning does not own this
+operation and prints no blanket apply command. A valid native binding matching
+this checkout and regular local config, with maintenance absent, satisfies the
+bootstrap handoff check; it does not substitute for the procedure's native diff,
+second apply or application checks.
+
+### W1-chezmoi: Windows native chezmoi binary
+
+The Windows equivalent of S4-chezmoi verifies the pinned ZIP and extracts only
+`chezmoi.exe` to `~/.local/bin`. Bootstrap and doctor search this directory
+explicitly; use the full executable path when invoking chezmoi manually.
+No permanent PATH or profile edit, elevation or scheduled task is performed.
+
+### HW-native: Windows native handover
+
+Follow [takeover.md](chezmoi-migration/takeover.md), including actual
+CurrentUserAllHosts discovery in both shells and ordinary-user destination ACL
+checks. The new regular-file path needs no elevated restow task. HW-stow and
+HW-auto-stow-task are emitted only with `-LegacyStow`.
+
+## Legacy quick start
+
+The following platform examples describe the supported compatibility path.
+Use `--legacy-stow` with every Unix doctor/setup-host command and `-LegacyStow`
+with their PowerShell twins in these examples. For new native installations,
+run the same prerequisites and native setup without that switch, then follow
+H7-native / HW-native instead of running Stow.
+
 
 Every platform runs the same sequence: get git (and, if you want an agent to
 drive the rest, one agent CLI), clone to `~/dotfiles`, diagnose,
@@ -84,15 +142,15 @@ xcode-select --install          # H1-xcode-clt: git comes with the Command Line 
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
-./doctor.sh --host mac
-./setup-host.sh --host mac --check
-./setup-host.sh --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
-./setup-host.sh --host mac      # again after each block, until only H7-stow still blocks
+./doctor.sh --legacy-stow --host mac
+./setup-host.sh --legacy-stow --host mac --check
+./setup-host.sh --legacy-stow --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
+./setup-host.sh --legacy-stow --host mac      # again after each block, until only H7-stow still blocks
 PATH="/opt/homebrew/bin:$PATH" ./stow-all.sh mac    # H7-stow (Intel: PATH="/usr/local/bin:$PATH")
-./setup-host.sh --host mac      # exits 0 now
+./setup-host.sh --legacy-stow --host mac      # exits 0 now
 # H7-payloads: decide before you open a new terminal
 exec zsh -l
-./doctor.sh --host mac --smoke
+./doctor.sh --legacy-stow --host mac --smoke
 ```
 
 An agent CLI before Homebrew exists: download Claude Code's installer, read it,
@@ -113,18 +171,18 @@ sudo apt-get install -y git curl
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
-./doctor.sh --host wsl-ubuntu                 # or lab-ubuntu
-./setup-host.sh --host wsl-ubuntu --check
-./setup-host.sh --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
-./setup-host.sh --host wsl-ubuntu             # again after each block (later the S5-claude inspect block),
+./doctor.sh --legacy-stow --host wsl-ubuntu                 # or lab-ubuntu
+./setup-host.sh --legacy-stow --host wsl-ubuntu --check
+./setup-host.sh --legacy-stow --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
+./setup-host.sh --legacy-stow --host wsl-ubuntu             # again after each block (later the S5-claude inspect block),
                                               # until only H7-stow still blocks
 # H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.profile), then:
 PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu   # H7-stow
-./setup-host.sh --host wsl-ubuntu             # exits 0 now
+./setup-host.sh --legacy-stow --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
 # H7-payloads: decide before you open a new terminal
 exec zsh -l
-./doctor.sh --host wsl-ubuntu --smoke
+./doctor.sh --legacy-stow --host wsl-ubuntu --smoke
 ```
 
 `lab-ubuntu` adds one gui step (H1-fcitx5: `im-config -n fcitx5` as you, then
@@ -146,20 +204,20 @@ cat /etc/os-release; ldd --version | head -n 1     # P0-preflight: record OS and
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
-./doctor.sh --host sherlock                        # or marlowe
-./setup-host.sh --host sherlock --check
-./setup-host.sh --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
+./doctor.sh --legacy-stow --host sherlock                        # or marlowe
+./setup-host.sh --legacy-stow --host sherlock --check
+./setup-host.sh --legacy-stow --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                  # H2-alloc; Marlowe: an interactive Slurm job
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
-./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-stow
+./setup-host.sh --legacy-stow --host sherlock                    # builds the login env inside the job; exit 3 at H7-stow
 exit                                               # back to the login node
 # H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.bash_profile), then:
 PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock   # H7-stow
-./setup-host.sh --host sherlock                    # exits 0 now
+./setup-host.sh --legacy-stow --host sherlock                    # exits 0 now
 # H7-payloads: decide before the next login or `ssh sherlock`
 exec "$HOME/micromamba/envs/login/bin/zsh" -l
-./doctor.sh --host sherlock --smoke
+./doctor.sh --legacy-stow --host sherlock --smoke
 ```
 
 `stow` lives in the login env, which is on PATH only once the overlay is
@@ -182,20 +240,20 @@ winget install --id Microsoft.PowerShell -e --source winget --installer-type wix
 git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
 $env:DOTFILES_AUTO_UPDATE = '0'; $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
-.\doctor.ps1 -Host win
-.\setup-host.ps1 -Host win -Check
-.\setup-host.ps1 -Host win      # exit 3 until HW-stow is done
+.\doctor.ps1 -LegacyStow -Host win
+.\setup-host.ps1 -LegacyStow -Host win -Check
+.\setup-host.ps1 -LegacyStow -Host win      # exit 3 until HW-stow is done
 # in an elevated PowerShell 7 (Run as administrator), from $HOME\dotfiles:
 .\stow-all.ps1 win
 # H7-payloads: decide before you open a new terminal; its first ordinary PowerShell installs the payload repos
 # open a new terminal, then from $HOME\dotfiles:
-.\setup-host.ps1 -Host win      # exits 0 now; prints the non-blocking HW blocks
-.\doctor.ps1 -Host win
+.\setup-host.ps1 -LegacyStow -Host win      # exits 0 now; prints the non-blocking HW blocks
+.\doctor.ps1 -LegacyStow -Host win
 ```
 
 The remaining Windows steps are HUMAN: execution policy, the optional
 automatic-stow task, the ssh-agent service, WSL and authentication (`HW-*`
-below; `.\setup-host.ps1 -PrintManual` prints them all). An agent CLI first, if
+below; `.\setup-host.ps1 -LegacyStow -PrintManual` prints them all). An agent CLI first, if
 wanted: `winget install --id Anthropic.ClaudeCode -e`.
 
 ### Other Linux

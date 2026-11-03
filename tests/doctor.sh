@@ -318,7 +318,7 @@ run_doctor() {
     done
     [ "$#" -eq 0 ] || shift
     : >"$EVENT_LOG"
-    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" "$@" \
+    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" --legacy-stow "$@" \
         >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
@@ -1211,7 +1211,7 @@ real_doctor_case() {
     : >"$REAL_MARKER"
     : >"$EVENT_LOG"
     if env -i HOME="$REAL_HOME" PATH="$PATH" TMPDIR="$REAL_TMP" LC_ALL=C TERM=dumb \
-        "$BASH" "$REPO_ROOT/doctor.sh" "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
+        "$BASH" "$REPO_ROOT/doctor.sh" --legacy-stow "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
         RC=$?

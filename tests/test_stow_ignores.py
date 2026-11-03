@@ -21,7 +21,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 # Top-level directories that hold code, not Stow packages (AGENTS.md); every
 # other one is a layer of packages, as stow-all.sh takes it.
-NOT_LAYERS = {"config", "docs", "lib", "scripts", "tests"}
+NOT_LAYERS = {"config", "docs", "home", "lib", "scripts", "tests"}
 # Tracked package files .stowrc keeps out of Stow on purpose: stow-all.sh
 # writes each as a machine-local regular file instead.
 MATERIALIZED = {".codex/config.toml", ".codex/rules/portable.rules", ".claude/settings.json",

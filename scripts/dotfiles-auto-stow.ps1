@@ -24,6 +24,7 @@ param([switch]$Register, [switch]$Apply)
 # key. Deriving it once keeps the registered task's name stable if this file
 # ever moves again.
 $DotfilesRepoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $DotfilesRepoRoot 'lib/chezmoi-guard.ps1')
 
 # Old/partial checkouts and isolated fixtures must still report failures.
 function Write-DotfilesLog {
@@ -213,6 +214,7 @@ function Request-DotfilesRestow {
 
 function Invoke-DotfilesApply {
     param([string]$Repo)
+    if (-not (Test-DotfilesLegacyWriteAllowed -TargetPath $HOME)) { throw 'Legacy writes are disabled for this destination.' }
     if (-not (Test-DotfilesElevated)) { throw 'Automatic Windows stow requires an elevated task.' }
     $directory = Get-DotfilesStateDirectory $Repo
     $lock = Open-DotfilesLock $directory -WaitSeconds 30
@@ -244,6 +246,7 @@ function Invoke-DotfilesApply {
 
 function Invoke-DotfilesUpdate {
     param([string]$Repo)
+    if (-not (Test-DotfilesLegacyWriteAllowed -TargetPath $HOME)) { throw 'Legacy writes are disabled for this destination.' }
     $directory = Get-DotfilesStateDirectory $Repo
     $lock = Open-DotfilesLock $directory
     if ($null -eq $lock) { return }
@@ -298,6 +301,9 @@ function Invoke-DotfilesUpdate {
 }
 
 if ($Register -and $Apply) { throw 'Choose either -Register or -Apply.' }
+if (($Register -or $Apply) -and -not (Test-DotfilesLegacyWriteAllowed -TargetPath $HOME)) {
+    throw 'Legacy writes are disabled for this destination.'
+}
 if ($Register) {
     # Checked first: elevating cannot help a pwsh that can never register.
     $version = $PSVersionTable.PSVersion

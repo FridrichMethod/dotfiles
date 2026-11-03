@@ -5,7 +5,7 @@
 #   kind   script (downloaded to a scratch dir, then run), binary, archive, file
 #   sha256 64 lowercase hex; "-" only for human=inspect rows
 #   dest   "-" for scripts, otherwise a tokenized path (see tools.tsv)
-#   arch   any, x86_64 or aarch64; (id, arch) is unique
+#   arch   any, x86_64 or aarch64; (id, host, arch) is unique
 #   human  "-", sudo (a person runs it), inspect (a person reads it first)
 # Every digest below was computed from a fresh download on 2026-10-09 and,
 # for GitHub release assets, matches the digest GitHub publishes for it.
@@ -43,3 +43,11 @@ kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitt
 kitty	archive	https://github.com/kovidgoyal/kitty/releases/download/v0.49.2/kitty-0.49.2-arm64.txz	0c81a995614426cccf0fecaf7d104d47cd63bbccf173d14976e9f92e3d60fce6	$HOME/.local/kitty.app	lab-ubuntu	aarch64	desktop	-
 # catppuccin/bat main head 2025-06-29 (commit 6810349b28055dce54076712fc05fc68da4b8ec0); run bat cache --build after.
 bat-theme	file	https://raw.githubusercontent.com/catppuccin/bat/6810349b28055dce54076712fc05fc68da4b8ec0/themes/Catppuccin%20Mocha.tmTheme	395566f08ceb301b936b91c077690ef94f7aeb651b121553f201c99c2bd4aa77	$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	all	any	core	-
+# chezmoi v2.74.0, pinned 2026-11-02 from the official release checksums.
+# Extract only the executable; no init/apply, installer script or rc edit.
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_amd64.tar.gz	1b98a567f726f41540414aea4caf912699d53e248b29ccf8369cf553657b2374	$HOME/.local/bin/chezmoi	wsl-ubuntu,lab-ubuntu,sherlock,marlowe	x86_64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_linux_arm64.tar.gz	bf89495d1aab5e4fa0fc1ba9457837b34ee8dec9b787570f2de3e1c12a5835a5	$HOME/.local/bin/chezmoi	wsl-ubuntu,lab-ubuntu,sherlock,marlowe	aarch64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_darwin_amd64.tar.gz	3d30cb05efae2f4a68519d6d0e8856765f2b21a0686e66498ee6d2de7707e5e6	$HOME/.local/bin/chezmoi	mac	x86_64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_darwin_arm64.tar.gz	9d89672a597a9333ab47ea5173fcececb85c04864205686a7aa5699c3d8bd98c	$HOME/.local/bin/chezmoi	mac	aarch64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_windows_amd64.zip	13dee2831d371c6ce2ac30fc9ae1aad4f70c68e7d44700f6129fe4b244ee7a95	$HOME/.local/bin/chezmoi.exe	win	x86_64	core	-
+chezmoi	archive	https://github.com/twpayne/chezmoi/releases/download/v2.74.0/chezmoi_2.74.0_windows_arm64.zip	99484604f4fb53d1f2b7a42da900cc0e45294180af7c86216d6c31c90cb80506	$HOME/.local/bin/chezmoi.exe	win	aarch64	core	-

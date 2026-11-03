@@ -1,8 +1,9 @@
 #Requires -Version 7.0
-# The flow of tests/e2e/run.ps1: the setup-host.ps1 -Yes loop with its HUMAN
+# The flow of tests/e2e/run.ps1: the setup-host.ps1 -LegacyStow -Yes loop with its HUMAN
 # blocks, and the whole sequence: clone, winget, doctor-initial, the no-write
 # -Check, the apply loop, the second apply, the profile load, the payload
-# repos and the final doctor: docs/bootstrap.md "Native Windows", driven the
+# repos and the final legacy doctor, followed by native binary provisioning
+# and isolated native fixtures. The legacy Windows compatibility flow is driven the
 # way "Running it with an agent" says an agent drives it. Dot-source only,
 # after steps.ps1.
 
@@ -131,7 +132,7 @@ function Invoke-E2EApplyLoop {
         $name = "apply-$n"
         Update-E2EPath
         Start-E2EStep $name "setup:$name"
-        $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Yes') -TimeoutSeconds $E2ETimeout['Apply']
+        $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-LegacyStow', '-Host', 'win', '-Yes') -TimeoutSeconds $E2ETimeout['Apply']
         $output = @(Get-E2ELines $E2E['StepOut'])
         $errors = @(Get-E2ELines $E2E['StepErr'])
         switch ($code) {
@@ -183,4 +184,7 @@ function Invoke-E2EFlowWin {
     Invoke-E2EOrSkip login-shell { Invoke-E2EStepLoginShell }
     Invoke-E2EOrSkip payloads { Invoke-E2EStepPayloads }
     Invoke-E2EOrSkip doctor-final { Invoke-E2EStepDoctorFinal }
+    Invoke-E2EOrSkip native-provision { Invoke-E2EStepNativeProvision }
+    Invoke-E2EOrSkip native-check { Invoke-E2EStepNativeCheck }
+    Invoke-E2EOrSkip native-fixtures { Invoke-E2EStepNativeFixtures }
 }

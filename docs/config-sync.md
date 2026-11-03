@@ -1,5 +1,87 @@
 # AI configuration sync runtime and contract
 
+## Native configuration and Stage 4 handover
+
+The isolated chezmoi candidate adds `home/dot_claude/modify_private_settings.json`
+and `home/dot_codex/modify_private_config.toml`. They use the native
+`chezmoi:modify-template` directive, have no `.tmpl` suffix, read canonical
+portable values with literal includes from the existing `common/` files and
+let chezmoi write private regular files. Native deployment invokes no Python,
+external jq, TOMLKit, custom writer or sync environment. Legacy installation and
+login behavior below remains available for unmarked legacy homes; never run
+both writers on one destination. Stage 4 adds the reviewed
+[takeover procedure](chezmoi-migration/takeover.md). Candidate CI and rollout
+results are recorded separately in the migration status.
+
+Claude retains recursive object merge with portable leaves winning and arrays
+replaced wholesale, including empty arrays. Local model, additionalDirectories
+and unknown live fields survive. Portable model is forbidden; allow/ask are
+required string arrays and deny is a string array when present. Both plugin IDs
+and every current portable permission value remain unchanged. No new client
+version floor is selected. Removing a portable key does not delete a live-only key.
+
+The JSON parser is builtin `jq "fromjson"` on raw text. Its native `json.Number`
+values pass unchanged through object merge and serialization, retaining large
+integers, long decimal fractions, signed zero and extreme exponents. Do not
+substitute `fromJson`, which can coerce these values. Duplicate keys use the
+native last-value-wins rule, unlike the legacy duplicate detector. Invalid
+UTF-8 and unpaired surrogate escapes can become U+FFFD in the native parser;
+the transform conservatively rejects U+FFFD in all parsed keys/strings before
+writing. This also rejects otherwise valid intentional U+FFFD. Valid Unicode
+and surrogate pairs remain supported. Empty/whitespace live JSON initializes
+an object; malformed, trailing or non-object JSON fails.
+
+Codex applies only the typed owned paths and removes only the retired paths
+listed below. `home/.chezmoidata/codex-policy.json` contains paths/types only,
+with a parity test against `CODEX_POLICY` and `CODEX_RETIRED`. The template reads
+that manifest literally; local template data cannot expand ownership. Unknown
+portable fields do not become policy. Every existing ancestor must be a table
+before assignment. Quoted dotted keys, literal `"*"`, int64, unknown tables and
+arrays of tables retain their native types without a JSON round trip.
+
+TOML local date, local time and local datetime are explicitly unsupported by
+this transform: v2.74.0 can shift their wall values, and Windows `TZ=UTC` is not
+a fix. A recursive native type guard rejects these values anywhere in either
+input, including arrays and retired/otherwise unowned fields, before changes
+are emitted. The affected target remains byte-identical. Offset timestamps are
+supported. Physical CRLF is normalized to LF before native parsing, matching
+the tested multiline basic/literal-string consumer semantics; explicit `\r\n`
+escapes retain CRLF values. Empty TOML is valid. Malformed TOML, missing required
+policy or invalid types fail without replacing the affected target.
+
+Native output is canonical JSON/TOML; TOML comments, original layout and first
+apply bytes are not preserved. Second apply converges. `private_` normally
+produces Unix 0600; stricter/readonly existing modes and actual Windows ACLs need
+Stage 4 destination review. An administrative synthetic ACL is not that review.
+Neither failures nor native conflict refusal promise a whole-home transaction.
+Exit status matters even when stderr is empty; routine apply must retain
+`--mode=file --less-interactive --no-tty --error-on-conflict --force=false`, closed stdin
+and no blanket force.
+
+Fresh native state does not provide a first-apply ownership guard: ordinary
+apply can replace a preexisting foreign symlink. Inspect exact owners and private
+snapshots before any takeover apply. This also affects a new target first added
+upstream after takeover; native less-interactive mode protects existing targets
+without a recorded baseline. The updater refuses missing or empty persistent
+state. The home-bound `.config/dotfiles/native` marker makes all four
+legacy sync wrappers and the Python backend refuse an explicit LIVE destination,
+including `--check` and `--migrate-portable`, before reads/writes. An unrelated
+explicit destination does not inherit the invoking HOME's guard. Maintenance
+also blocks legacy writers and future dotfiles/payload hook processes. Failed
+apply keeps ownership; removing a guard requires inspected recovery.
+
+The native API has no `--migrate-portable` or source writeback. Before takeover,
+review a historically polluted portable source privately, preserve its unknown
+state in a separate private backup, and reconcile the intended live config and
+owned portable values explicitly. Do not import an entire application directory
+or use normal apply as source cleanup. During coexistence, edit canonical
+`common/` policy values, inspect a nonsecret targeted native diff and apply.
+For live-only edits, use the application's file/editor and review the resulting
+native diff; do not `add` a mutable target over its modify template. Stage 6
+moves canonical inputs once and retires the entire legacy parser/helper chain.
+
+## Legacy compatibility path
+
 Installation and login orchestration remain shell and PowerShell. The three
 `*-sync` entrypoints delegate configuration/file operations to the
 small `lib/config_sync.py` backend. It uses Python's standard-library JSON

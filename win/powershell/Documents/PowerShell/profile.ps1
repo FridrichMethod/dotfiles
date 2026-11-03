@@ -291,11 +291,47 @@ Remove-Variable IsAgentSession
 # contract with its Unix twin; the payload hook starts its refreshes in a
 # hidden, detached pwsh, so the prompt never waits for them.
 if ($IsInteractive) {
-    $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
-    $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1'
-    if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
-    $DotfilesPayload = Join-Path $DotfilesDir 'scripts/payload-update.ps1'
-    if (Test-Path -LiteralPath $DotfilesPayload) { & $DotfilesPayload }
-    Remove-Variable DotfilesDir, DotfilesUpdate, DotfilesPayload
+    & {
+        try {
+            # A native source can be an independent clone. Read only the source
+            # hint here so its guard can validate the complete binding; never
+            # execute a retired checkout's guard, updater or payload worker.
+            $DotfilesMaintenance = $null
+            try { $DotfilesMaintenance = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/maintenance') -Force -ErrorAction Stop }
+            catch [System.Management.Automation.ItemNotFoundException] { }
+            if ($DotfilesMaintenance) { return }
+            $DotfilesNative = $null
+            try { $DotfilesNative = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/native') -Force -ErrorAction Stop }
+            catch [System.Management.Automation.ItemNotFoundException] { }
+            if ($DotfilesNative) {
+                if ($DotfilesNative -isnot [IO.FileInfo] -or ($DotfilesNative.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                    throw 'Native marker must be a regular file.'
+                }
+                $DotfilesText = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($DotfilesNative.FullName))
+                if ($DotfilesText -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') {
+                    throw 'Invalid native marker.'
+                }
+                $DotfilesDir = $Matches[2]
+                if (-not [IO.Path]::IsPathFullyQualified($DotfilesDir)) { throw 'Native source must be absolute.' }
+            } else {
+                $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
+            }
+            $DotfilesGuard = Join-Path $DotfilesDir 'lib/chezmoi-guard.ps1'
+            if (-not (Test-Path -LiteralPath $DotfilesGuard -PathType Leaf)) {
+                if ($DotfilesNative) { throw 'Native source guard is unavailable.' }
+                return
+            }
+            . $DotfilesGuard
+            if (Test-DotfilesMaintenance -HomePath $HOME) { return }
+            $DotfilesUpdate = if ($DotfilesNative) {
+                $DotfilesDir = (Get-DotfilesNativeBinding -HomePath $HOME).Source
+                Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
+            } else { Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1' }
+            if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
+            $DotfilesPayload = Join-Path $DotfilesDir 'scripts/payload-update.ps1'
+            if (Test-Path -LiteralPath $DotfilesPayload) { & $DotfilesPayload }
+        }
+        catch { [Console]::Error.WriteLine('[dotfiles] Profile hooks skipped: review the native source binding privately.') }
+    }
 }
 Remove-Variable IsInteractive

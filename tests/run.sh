@@ -46,6 +46,22 @@ elif ! "$sync_python" -I -B "$TEST_DIR/../lib/config_sync.py" --runtime-check; t
     missing=1
 fi
 export DOTFILES_SYNC_PYTHON="$sync_python"
+if [[ ${DOTFILES_TEST_CHEZMOI+x} == x ]]; then
+    if [[ ! -f "$DOTFILES_TEST_CHEZMOI" || ! -x "$DOTFILES_TEST_CHEZMOI" ]]; then
+        printf 'ERROR: invalid DOTFILES_TEST_CHEZMOI executable path.\n' >&2
+        missing=1
+    fi
+elif ! command -v chezmoi >/dev/null 2>&1; then
+    if [[ "$require_ci" == 1 || ${DOTFILES_TEST_REQUIRE_CHEZMOI:-0} == 1 ]]; then
+        printf 'ERROR: CI requires chezmoi for native fixture tests.\n' >&2
+        missing=1
+    else
+        printf 'SKIP: native chezmoi fixtures (install the selected release or set DOTFILES_TEST_CHEZMOI).\n'
+    fi
+fi
+if [[ "$require_ci" == 1 ]]; then
+    export DOTFILES_TEST_REQUIRE_CHEZMOI=1
+fi
 if ! command -v stow >/dev/null 2>&1; then
     if [[ "$require_ci" == 1 ]]; then
         printf 'ERROR: CI requires stow for real symlink integration tests.\n' >&2
@@ -70,6 +86,7 @@ node --test "$TEST_DIR/claude-customizations.cjs"
 
 tests=(
     test-entrypoints.sh
+    chezmoi.sh
     terminal.sh
     shell-profile.sh
     tmux.sh

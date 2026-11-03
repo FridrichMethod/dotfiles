@@ -40,6 +40,17 @@ param(
     [Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Item
 )
 
+# Persistent maintenance also covers new detached workers and later logins.
+# Operators still wait for already-running exact-owned workers before takeover.
+$MaintenancePath = Join-Path $HOME '.config/dotfiles/maintenance'
+if (Get-Item -LiteralPath $MaintenancePath -Force -ErrorAction SilentlyContinue) {
+    if ($Now) {
+        Write-Warning 'dotfiles: payload update refused during maintenance.'
+        exit 1
+    }
+    return
+}
+
 $Automatic = -not ($Now -or $Worker)
 if ($Automatic -and -not $Auto) {
     # The profile's call: a console, once per session, unless opted out.

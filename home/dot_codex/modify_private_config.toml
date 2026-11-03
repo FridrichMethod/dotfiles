@@ -1,0 +1,61 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- define "codex-validate-temporals" -}}
+  {{- if typeIs "time.Time" . -}}
+    {{- if has .Location.String (list "date-local" "time-local" "datetime-local") -}}
+      {{- fail "native Codex TOML does not support local date/time/datetime; affected target is unchanged" -}}
+    {{- end -}}
+  {{- else if or (kindIs "map" .) (kindIs "slice" .) (kindIs "array" .) -}}
+    {{- range . -}}{{- template "codex-validate-temporals" . -}}{{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $portableTOML := include (joinPath .chezmoi.workingTree "common/codex/.codex/config.toml") -}}
+{{- $portable := fromToml (replace "\r\n" "\n" $portableTOML) -}}
+{{- $live := fromToml (replace "\r\n" "\n" .chezmoi.stdin) -}}
+{{- template "codex-validate-temporals" $portable -}}
+{{- template "codex-validate-temporals" $live -}}
+{{- /* Read the committed schema literally: local data must not change ownership. */ -}}
+{{- $policy := (fromJson (include (joinPath .chezmoi.sourceDir ".chezmoidata/codex-policy.json"))).codexPolicy -}}
+{{- $assignments := list -}}
+{{- range $owned := $policy.owned -}}
+  {{- $value := $portable -}}
+  {{- $liveParent := $live -}}
+  {{- $livePresent := true -}}
+  {{- range $index, $key := $owned.path -}}
+    {{- if not (kindIs "map" $value) -}}
+      {{- fail (printf "Codex portable ancestor must be a table: %s" (join "." $owned.path)) -}}
+    {{- end -}}
+    {{- if not (hasKey $value $key) -}}
+      {{- fail (printf "missing Codex portable key: %s" (join "." $owned.path)) -}}
+    {{- end -}}
+    {{- $value = get $value $key -}}
+    {{- if and $livePresent (lt $index (sub (len $owned.path) 1)) -}}
+      {{- if hasKey $liveParent $key -}}
+        {{- $liveParent = get $liveParent $key -}}
+        {{- if not (kindIs "map" $liveParent) -}}
+          {{- fail (printf "Codex live ancestor must be a table: %s" (join "." $owned.path)) -}}
+        {{- end -}}
+      {{- else -}}
+        {{- $livePresent = false -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $valid := false -}}
+  {{- if eq $owned.type "string" -}}
+    {{- $valid = typeIs "string" $value -}}
+  {{- else if eq $owned.type "bool" -}}
+    {{- $valid = typeIs "bool" $value -}}
+  {{- else if eq $owned.type "string-array" -}}
+    {{- $valid = kindIs "slice" $value -}}
+    {{- if $valid -}}
+      {{- range $value -}}{{- if not (typeIs "string" .) -}}{{- $valid = false -}}{{- end -}}{{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if not $valid -}}
+    {{- fail (printf "invalid Codex portable value type: %s" (join "." $owned.path)) -}}
+  {{- end -}}
+  {{- $assignments = append $assignments (dict "path" $owned.path "value" $value) -}}
+{{- end -}}
+{{- /* Validate both documents and every ancestor before modifying parsed live data. */ -}}
+{{- range $policy.retired -}}{{- $live = deleteValueAtPath (join "." .) $live -}}{{- end -}}
+{{- range $assignments -}}{{- $live = setValueAtPath .path .value $live -}}{{- end -}}
+{{- toToml $live -}}

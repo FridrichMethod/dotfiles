@@ -11,9 +11,9 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all 22 shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
-| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
-| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12 and Node 24; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
+| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
+| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow, verified chezmoi v2.74.0; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
+| `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12, Node 24 and verified chezmoi v2.74.0; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
 
 Each Unix job first installs the real coding-agent-kit of the channel that
 `config/payloads.tsv` declares, with the payload hook's own command,
@@ -35,6 +35,41 @@ skip. On developer machines, `./tests/run.sh` reports a missing optional Stow
 integration check, installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
+
+`tests/chezmoi.sh` and `tests/chezmoi.ps1` run the small stdlib native suite.
+`DOTFILES_TEST_CHEZMOI` selects an explicit executable path (invalid paths fail);
+otherwise it resolves `chezmoi` on PATH before restricting child PATH. Missing
+chezmoi skips locally and fails with `DOTFILES_TEST_REQUIRE_CHEZMOI=1` or CI mode.
+CI provisions v2.74.0 through `.github/scripts/install-test-chezmoi.py`, verifying
+reviewed official SHA256 digests before extracting only the binary. Downloads
+never happen inside the suite. Local provisioning should likewise verify the
+selected official artifact; no new sync environment is needed for native tests.
+
+These probes isolate source, destination, configuration, cache, state, HOME and
+temporary directories and use only synthetic credentials. Native modifies run
+without Python, jq or age on child PATH. Parser hooks exclude only the exact
+artificial and production modify templates; native tests parse rendered JSON/TOML
+instead. Ordinary portable inputs and ownership data remain linted. Unix permission
+assertions do not establish Windows ACL behavior; unavailable native platforms
+remain explicit missing evidence. The legacy suites still require their existing
+TOMLKit runtime until legacy retirement.
+
+Stage 2 adds exact inventory/target-set and byte/mode/convergence checks for
+ordinary source, including empty files, binary assets and Windows CRLF. A real
+linked Git worktree with spaces proves literal include paths. Native compatible
+roles and supplemental OS-data rendering are reported separately. Rendered shell,
+Python, JSON, TOML and Lua output is checked by `test_chezmoi_rendered.py`; optional
+installed linters report skips. Canonical legacy paths retain their original
+lint hooks during coexistence. The native hook also selects encoded `home/`
+templates and their legacy inputs, so filename changes do not bypass checks.
+
+Stage 3 adds actual portable Claude/Codex transforms, typed ownership parity,
+numeric/Unicode and TOML temporal refusal, CRLF multiline semantics, invalid
+input preservation and complete candidate applies. Native compatible-role
+counts are 49/56/55/59/54/54/26 in inventory order, with exactly the two AI targets
+added to Stage 2. Shared auth/trust/payload siblings stay unmanaged. Local temporal
+refusal tests run on every OS; the historical Unix timezone characterization
+skip on Windows remains separate from the cross-platform safety assertions.
 
 The `english-documentation` hook uses native `pygrep`, configured entirely in
 `.pre-commit-config.yaml`, to check selected Markdown, reStructuredText,

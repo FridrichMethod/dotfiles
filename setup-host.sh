@@ -5,13 +5,13 @@ set -euo pipefail
 # Usage: ./setup-host.sh --host HOST [--tier LIST|all] [--check] [--yes]
 #            [--only ID]... [--skip ID]... [--keep-going] [--list] [--print-manual]
 # Example: ./setup-host.sh --host lab-ubuntu --check
-# Installs what the stowed configs assume, step by step in the order of
+# Installs tools for native chezmoi configuration by default, step by step in the order of
 # docs/bootstrap.md, from the pinned sources in config/bootstrap/. It never
 # runs sudo, chsh, stow, ./stow-all.sh, conda init, micromamba shell init or
 # git lfs install, and never writes an rc file or a tracked file: those are
 # printed as HUMAN blocks for a person (or one visible top-level agent
 # command). The only write inside the checkout is .venv-sync, made by
-# ./setup-sync.sh. --check writes nothing and makes no network calls.
+# ./setup-sync.sh in --legacy-stow compatibility mode. --check writes nothing and makes no network calls.
 # On hpc, both login and AI-sync envs build only inside an allocation and
 # outside SCRATCH/GROUP_SCRATCH; an existing login env does not bypass this.
 # Exit: 0 every selected step done (non-blocking HUMAN reminders may still
@@ -38,13 +38,14 @@ usage() {
         'Usage: ./setup-host.sh --host HOST [options]' \
         '' \
         'Installs the day-zero tools for HOST without sudo, then prints the HUMAN' \
-        'blocks (sudo, sign-in, ./stow-all.sh) that a person runs. See docs/bootstrap.md.' \
+        'blocks (sudo, sign-in, native handover) that a person runs. See docs/bootstrap.md.' \
         '' \
         '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
         '                    to DOTFILES_HOST or the host ./stow-all.sh recorded;' \
         '                    common only (a set but empty DOTFILES_HOST, or a' \
         '                    common-only install ./stow-all.sh recorded) needs --host.' \
         '                    The win host uses setup-host.ps1.' \
+        '  --legacy-stow     provision the supported Stow/parser compatibility path' \
         '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
         '                    (default core,cli,ai)' \
         '  --check           print one plan line per step and the pending HUMAN blocks;' \
@@ -124,6 +125,7 @@ YES=0
 KEEP_GOING=0
 ONLY=''
 SKIP=''
+BOOTSTRAP_LEGACY_STOW=0
 
 set_mode() {
     if [[ -n "$MODE_FLAG" && "$MODE_FLAG" != "$2" ]]; then
@@ -173,6 +175,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip=*)
             SKIP="$SKIP,${1#*=}"
+            shift
+            ;;
+        --legacy-stow)
+            BOOTSTRAP_LEGACY_STOW=1
             shift
             ;;
         --check)

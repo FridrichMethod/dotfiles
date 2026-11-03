@@ -3,6 +3,15 @@
 : "${sync_root:?sync wrapper must set the checkout root}"
 : "${sync_kind:?sync wrapper must set its helper kind}"
 
+# Refuse before even selecting the legacy parser. LIVE is always the last
+# positional argument, including --check and --migrate-portable invocations.
+# shellcheck source=lib/chezmoi-guard.sh
+. "$sync_root/lib/chezmoi-guard.sh"
+if [ "$#" -ge 2 ]; then
+    for sync_target; do :; done
+    dotfiles_legacy_write_allowed "$sync_target" || exit 1
+fi
+
 if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
     sync_python=$DOTFILES_SYNC_PYTHON
     # PowerShell/Windows Python emits native paths; Git Bash executes POSIX paths.

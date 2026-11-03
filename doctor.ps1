@@ -17,7 +17,8 @@
     Microsoft Store alias that prints no version does not count);
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
-    venv-sync passes when the interpreter the AI config sync helpers use
+    Only -LegacyStow checks venv-sync; native mode checks chezmoi and the
+    home-bound native configuration signal. Legacy venv-sync passes when the interpreter the AI config sync helpers use
     (DOTFILES_SYNC_PYTHON when set, else .venv-sync) passes
     lib/config_sync.py --runtime-check.
 
@@ -47,6 +48,9 @@
     Print only checks that are neither ok nor skip, then the summary; with
     -Tsv, only those rows after the header.
 
+.PARAMETER LegacyStow
+    Check the supported Stow/parser compatibility path instead of native chezmoi.
+
 .PARAMETER Online
     Also run the network auth probes, which may write the tools' own state.
 
@@ -64,7 +68,8 @@ param(
     [string]$Tier = 'core,cli,ai',
     [switch]$Tsv,
     [switch]$Quiet,
-    [switch]$Online
+    [switch]$Online,
+    [switch]$LegacyStow
 )
 
 Set-StrictMode -Version Latest
@@ -96,7 +101,7 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # checks, the -Online and --smoke rows); tools.tsv never uses them
 # (tests/test_bootstrap_manifest.py RESERVED_IDS).
 $ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
-    'nvm-homebrew', 'payloads', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke')
+    'nvm-homebrew', 'payloads', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'native-config')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.
@@ -157,7 +162,11 @@ function Get-DoctorSyncRuntimeResult {
 }
 
 function Get-DoctorStructuralResults {
-    Get-DoctorSyncRuntimeResult
+    if ($LegacyStow) { Get-DoctorSyncRuntimeResult }
+    elseif (Test-BootstrapNativeReady -RepoRoot $RepoRoot) {
+        New-DoctorResult ok native-config core 'native binding and local config present; review configuration with scoped native diff' HW-native
+    }
+    else { New-DoctorResult human native-config core 'native handover incomplete or maintenance active; follow docs/chezmoi-migration/takeover.md' HW-native }
 
     # Dotfiles has no submodules. The checkouts that a pull across a retired
     # one leaves on a host where it was checked out, each with its
@@ -307,7 +316,10 @@ function Invoke-BootstrapDoctor {
             if (-not $seen.Add($row.id)) { throw [IO.InvalidDataException]::new("tools.tsv repeats id '$($row.id)'") }
         }
         if (-not $Tsv -and -not $Quiet) { Write-DotfilesLog step "Checking host win (windows); required tiers: $Tier" }
-        foreach ($row in $rows) { $results.Add((Get-DoctorToolResult $row $Tier)) }
+        foreach ($row in $rows) {
+            if ($LegacyStow -and $row.id -ceq 'chezmoi') { continue }
+            $results.Add((Get-DoctorToolResult $row $Tier))
+        }
     }
     catch [IO.InvalidDataException] {
         Write-DotfilesLog error "Invalid manifest: $($_.Exception.Message)"

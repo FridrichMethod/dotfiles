@@ -249,3 +249,53 @@ step_S6_kitty_apply() {
         ln -sfn "$STEPS_DEST/bin/$tool" "$HOME/.local/bin/$tool" || return 1
     done
 }
+
+# --- S4-chezmoi (native configuration path) -------------------------------
+step_S4_chezmoi_check() {
+    local binary version floor
+    if ! steps_installer_fields chezmoi; then
+        STEP_DETAIL="no pinned chezmoi artifact for $STEPS_HOST $STEPS_ARCH"
+        return 1
+    fi
+    binary=$STEPS_DEST
+    if [ ! -x "$binary" ]; then
+        binary=$(command -v chezmoi 2>/dev/null) || binary=
+    fi
+    floor=$(steps_tool_cell chezmoi 6) || return 1
+    if [ -n "$binary" ]; then
+        version=$(bootstrap_extract_version "$("$binary" --version 2>/dev/null </dev/null)") || version=
+        if [ -n "$version" ] && bootstrap_version_ge "$version" "$floor"; then
+            STEP_DETAIL="chezmoi $version at $binary"
+            return 0
+        fi
+    fi
+    STEP_DETAIL="chezmoi >= $floor is missing; install the verified release into $STEPS_DEST"
+    return 1
+}
+
+step_S4_chezmoi_plan() {
+    steps_installer_fields chezmoi || return 1
+    printf 'verify and extract only chezmoi from %s to %s\n' "${STEPS_URL##*/}" "$STEPS_DEST"
+}
+
+step_S4_chezmoi_apply() {
+    local dest staged
+    steps_installer_fields chezmoi || {
+        dotfiles_log error "no pinned chezmoi artifact for $STEPS_HOST $STEPS_ARCH"
+        return 1
+    }
+    dest=$STEPS_DEST
+    if [ -L "$dest" ] || { [ -e "$dest" ] && [ ! -f "$dest" ]; }; then
+        dotfiles_log error "chezmoi destination is a symlink or non-regular file: $dest; inspect it before installing"
+        return 1
+    fi
+    steps_fetch_archive chezmoi || return 1
+    mkdir -p "${dest%/*}" || return 1
+    staged=$(mktemp "${dest}.XXXXXXXX") || return 1
+    if ! tar -xzOf "$STEPS_ARCHIVE" chezmoi >"$staged" </dev/null || [ ! -s "$staged" ] ||
+        ! chmod 755 "$staged" || ! mv -f "$staged" "$dest"; then
+        rm -f "$staged"
+        dotfiles_log error 'cannot extract the verified chezmoi executable'
+        return 1
+    fi
+}

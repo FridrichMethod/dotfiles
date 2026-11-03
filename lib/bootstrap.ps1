@@ -154,7 +154,10 @@ function Find-BootstrapCommand {
     $extensions = @('.exe', '.cmd', '.bat', '.ps1')
     if (-not $IsWindows) { $extensions += '' }
     $found = [Collections.Generic.List[string]]::new()
-    foreach ($entry in ([string]$env:PATH).Split([IO.Path]::PathSeparator)) {
+    $entries = @(([string]$env:PATH).Split([IO.Path]::PathSeparator))
+    # The pinned native binary is usable before configuration adds this directory.
+    if ($Name -ceq 'chezmoi') { $entries = @((Join-Path $HOME '.local/bin')) + $entries }
+    foreach ($entry in $entries) {
         $directory = $entry.Trim().Trim('"')
         if (-not $directory) { continue }
         foreach ($extension in $extensions) {
@@ -281,6 +284,8 @@ function Get-BootstrapDocRef {
         }
         'windows:S3-bat-theme' { return 'W1-bat-theme' }
         'windows:S6-nerd-font' { return 'W1-font' }
+        'windows:S4-chezmoi' { return 'W1-chezmoi' }
+        'windows:H7-native' { return 'HW-native' }
         'windows:S4-setup-sync' { return 'W1-setup-sync' }
         'windows:H7-stow' { return 'HW-stow' }
         'windows:H7-auth' { return 'HW-auth' }
@@ -662,4 +667,51 @@ function Write-BootstrapHumanBlock {
     "HUMAN-BEGIN $Step $Kind"
     $Line
     'HUMAN-END'
+}
+
+function Test-BootstrapNativeReady {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    $guard = Join-Path $RepoRoot 'lib/chezmoi-guard.ps1'
+    if (-not [IO.File]::Exists($guard)) { return $false }
+    try {
+        . $guard
+        if (Test-DotfilesMaintenance -HomePath $HOME) { return $false }
+        $binding = Get-DotfilesNativeBinding -HomePath $HOME
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if (-not $binding.Source.Equals([IO.Path]::GetFullPath($RepoRoot), $comparison)) { return $false }
+        $config = Get-Item -LiteralPath $binding.Config -Force -ErrorAction Stop
+        return -not $config.PSIsContainer -and -not ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    }
+    catch { return $false }
+}
+
+function Install-BootstrapChezmoi {
+    # Verify the archive before reading any member. Extract only the executable.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$Sha256,
+        [Parameter(Mandatory)][string]$Destination)
+    $existing = Get-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+    if ($existing -and ($existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint))) {
+        return New-BootstrapResult failed 'chezmoi destination is a link or non-regular file; inspect it before installing'
+    }
+    $scratch = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-bootstrap-' + [Guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($scratch)
+    try {
+        $archive = Join-Path $scratch 'chezmoi.zip'
+        $result = Install-BootstrapFile -Uri $Uri -Sha256 $Sha256 -Destination $archive
+        if (-not $result.Success) { return $result }
+        $zip = [IO.Compression.ZipFile]::OpenRead($archive)
+        try {
+            $entry = $zip.GetEntry('chezmoi.exe')
+            if ($null -eq $entry -or $entry.Length -eq 0) { return New-BootstrapResult failed 'verified archive has no chezmoi.exe' }
+            $binary = Join-Path $scratch 'chezmoi.exe'
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $binary)
+        }
+        finally { $zip.Dispose() }
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination))
+        [IO.File]::Move($binary, $Destination, $true)
+        return New-BootstrapResult installed 'installed SHA256-verified chezmoi; native handover remains separate'
+    }
+    catch { return New-BootstrapResult failed "chezmoi install failed: $($_.Exception.Message)" }
+    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue }
 }

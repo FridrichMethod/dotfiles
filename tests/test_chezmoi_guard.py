@@ -1,0 +1,169 @@
+"""Legacy writers cannot reclaim an explicitly handed-over destination."""
+
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@unittest.skipIf(os.name == "nt", "POSIX wrapper execution")
+class WriterGuardTests(unittest.TestCase):
+    def test_root_ancestor_does_not_become_a_windows_unc_path(self):
+        # Git Bash treats //.config as UNC, not the local POSIX root.
+        # Record the actual shell predicates without querying a network path.
+        command = '[() { printf "%s\\n" "$2"; return 1; }; . "$1"; '
+        command += 'dotfiles_native_owned /; dotfiles_maintenance_active /'
+        result = subprocess.run(["bash", "--noprofile", "--norc", "-c", command,
+                                 "guard", str(ROOT / "lib/chezmoi-guard.sh")],
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.stdout.splitlines(), ["/.config/dotfiles/native"] * 2 +
+                         ["/.config/dotfiles/maintenance"] * 2)
+
+    def test_native_binding_requires_exactly_three_terminated_lines(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary).resolve()
+            marker = home / ".config/dotfiles/native"
+            marker.parent.mkdir(parents=True)
+            (home / ".chezmoiroot").write_text("home\n")
+            binding = f"dotfiles-chezmoi-v1\n{home}\n{home}\n".encode()
+            for data, expected in ((binding, 0), (binding + b"unterminated", 1),
+                                   (binding + b"\n", 1), (binding[:-1], 1)):
+                with self.subTest(data=data):
+                    marker.write_bytes(data)
+                    result = subprocess.run(["sh", "-c", '. "$1"; dotfiles_native_source "$2"',
+                                             "guard", str(ROOT / "lib/chezmoi-guard.sh"), str(home)],
+                                            capture_output=True, timeout=15)
+                    self.assertEqual(result.returncode, expected)
+
+    def test_sherlock_profile_disables_detached_payload_login_workers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run(["sh", "-c", '. "$1"; printf "%s" "$DOTFILES_PAYLOAD_AUTO_UPDATE"',
+                                     "profile", str(ROOT / "sherlock/sh/.config/sh/.profile")],
+                                    env={"HOME": temporary, "PATH": os.defpath, "SCRATCH": "",
+                                         "DOTFILES_PAYLOAD_AUTO_UPDATE": "1"},
+                                    capture_output=True, stdin=subprocess.DEVNULL, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, b"0")
+
+    def test_native_payload_dispatch_uses_bound_source_with_stale_dotfiles_dir(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, source, stale = (root / name for name in ("home", "source", "stale"))
+            for path in (home / ".config/dotfiles", source / "scripts", source / "lib",
+                         source / "config", stale / "scripts"):
+                path.mkdir(parents=True)
+            (source / ".chezmoiroot").write_text("home\n")
+            shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
+            shutil.copyfile(ROOT / "scripts/payload-update.sh", source / "scripts/payload-update.sh")
+            shutil.copyfile(ROOT / "config/payloads.tsv", source / "config/payloads.tsv")
+            (source / "scripts/chezmoi-update.sh").write_text(":\n")
+            (stale / "scripts/payload-update.sh").write_text('touch "$HOME/wrong-source"\n')
+            (home / ".config/dotfiles/native").write_text(
+                f"dotfiles-chezmoi-v1\n{home}\n{source}\n")
+            state = home / "state"
+            env = {"HOME": str(home), "PATH": os.defpath, "TERM": "dumb",
+                   "DOTFILES_DIR": str(stale), "DOTFILES_PAYLOAD_ITEMS": "not-a-payload",
+                   "XDG_STATE_HOME": str(state)}
+            result = subprocess.run(["bash", "--noprofile", "--norc", "-i", "-c",
+                                     '. "$1"', "profile", str(ROOT / "common/sh/.profile")],
+                                    env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((home / "wrong-source").exists())
+            self.assertTrue((state / "dotfiles/payload").is_dir(), result.stderr)
+
+    def test_maintenance_blocks_new_payload_processes_before_state_creation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            marker = home / ".config/dotfiles/maintenance"
+            marker.parent.mkdir(parents=True)
+            marker.touch()
+            state = home / "state"
+            env = {"HOME": str(home), "PATH": os.defpath, "XDG_STATE_HOME": str(state),
+                   "DOTFILES_PAYLOAD_ITEMS": "not-a-payload"}
+            for mode in ("--auto", "--worker", "--now"):
+                with self.subTest(mode=mode):
+                    result = subprocess.run(["sh", str(ROOT / "scripts/payload-update.sh"), mode,
+                                             "not-a-payload"], env=env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, timeout=15)
+                    self.assertFalse(state.exists(), result.stderr)
+                    self.assertEqual(result.returncode, 1 if mode == "--now" else 0)
+
+    def test_direct_backend_refuses_before_portable_migration_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            marker = home / ".config/dotfiles/native"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("partial")
+            source = home / "portable.toml"
+            source.write_bytes((ROOT / "common/codex/.codex/config.toml").read_bytes() + b'\nlocal = true\n')
+            live = home / ".codex/config.toml"
+            live.parent.mkdir()
+            live.write_bytes(b'local = false\n')
+            before = source.read_bytes(), live.read_bytes()
+            result = subprocess.run([os.environ.get("DOTFILES_SYNC_PYTHON", sys.executable),
+                                     "-I", "-B", str(ROOT / "lib/config_sync.py"),
+                                     "codex-config-sync", "--migrate-portable", str(source), str(live)],
+                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b"legacy write refused", result.stderr)
+            self.assertEqual((source.read_bytes(), live.read_bytes()), before)
+
+    def test_four_explicit_live_writers_refuse_native_and_maintenance_homes(self):
+        cases = (
+            ("common/claude/.local/bin/claude-settings-sync", b'{"permissions":{"allow":[],"ask":[]}}', ".claude/settings.json", b'{}'),
+            ("common/codex/.local/bin/codex-config-sync", (ROOT / "common/codex/.codex/config.toml").read_bytes(), ".codex/config.toml", b'local = true\n'),
+            ("common/codex/.local/bin/codex-rules-sync", b'prefix_rule(pattern=["fixture"], decision="prompt")\n', ".codex/rules/portable.rules", b'# old\n'),
+            ("lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync", b'[Groups/0]\nName=Default\n', ".config/fcitx5/profile", b'# old\n'),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for marker in ("native", "maintenance"):
+                for wrapper, portable, relative, live_bytes in cases:
+                    with self.subTest(marker=marker, wrapper=wrapper):
+                        home = root / marker / Path(wrapper).name
+                        guard = home / ".config/dotfiles" / marker
+                        guard.parent.mkdir(parents=True)
+                        guard.write_text("incomplete handover\n")
+                        live = home / relative
+                        live.parent.mkdir(parents=True, exist_ok=True)
+                        live.write_bytes(live_bytes)
+                        source = home.parent / (Path(wrapper).name + "-portable")
+                        source.write_bytes(portable)
+                        env = {"HOME": str(root / "unrelated-home"), "PATH": os.defpath,
+                               "DOTFILES_SYNC_PYTHON": os.environ.get("DOTFILES_SYNC_PYTHON", sys.executable)}
+                        result = subprocess.run(["sh", str(ROOT / wrapper), str(source), str(live)],
+                                                env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                                timeout=15)
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(b"legacy write refused", result.stderr)
+                        self.assertEqual(live.read_bytes(), live_bytes)
+                        self.assertEqual(source.read_bytes(), portable)
+
+    def test_guard_uses_destination_not_operator_home_and_resolves_parent_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            protected = root / "native home"
+            marker = protected / ".config/dotfiles/native"
+            marker.parent.mkdir(parents=True)
+            marker.write_text("incomplete")
+            target_parent = protected / ".claude"
+            target_parent.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(target_parent, target_is_directory=True)
+            free = root / "free"
+            free.mkdir()
+            env = {"HOME": str(protected), "PATH": os.defpath}
+            for target, expected in ((free / "config", 0), (alias / "settings.json", 1)):
+                result = subprocess.run(["sh", "-c", '. "$1"; dotfiles_legacy_write_allowed "$2"',
+                                         "guard", str(ROOT / "lib/chezmoi-guard.sh"), str(target)],
+                                        env=env, capture_output=True, timeout=15)
+                self.assertEqual(result.returncode, expected, result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

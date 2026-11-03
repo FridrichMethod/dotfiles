@@ -574,8 +574,8 @@ expect_events 'kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes'
 ZSHRC=$REPO_ROOT/common/zsh/.zshrc
-grep -Fq '_df_payload="${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh"' "$ZSHRC" ||
-    fail '.zshrc does not source scripts/payload-update.sh'
+# Actual bash/zsh native dispatch and maintenance are exercised by the native
+# takeover suite; payload scheduling above exercises the shared profile caller.
 fpath_line=$(grep -n '^fpath+=$HOME/.local/share/zsh/site-functions$' "$ZSHRC" | cut -d: -f1)
 omz_line=$(grep -n '^source $ZSH/oh-my-zsh.sh$' "$ZSHRC" | cut -d: -f1)
 [[ -n "$fpath_line" && -n "$omz_line" && "$fpath_line" -lt "$omz_line" ]] ||

@@ -1,0 +1,145 @@
+{
+  "codexPolicy": {
+    "owned": [
+      {
+        "path": [
+          "model"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "model_reasoning_effort"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "plan_mode_reasoning_effort"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "personality"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "default_permissions"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "approval_policy"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "approvals_reviewer"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "project_doc_fallback_filenames"
+        ],
+        "type": "string-array"
+      },
+      {
+        "path": [
+          "features",
+          "network_proxy"
+        ],
+        "type": "bool"
+      },
+      {
+        "path": [
+          "features",
+          "multi_agent"
+        ],
+        "type": "bool"
+      },
+      {
+        "path": [
+          "features",
+          "memories"
+        ],
+        "type": "bool"
+      },
+      {
+        "path": [
+          "permissions",
+          "workspace-net",
+          "description"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "permissions",
+          "workspace-net",
+          "extends"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "permissions",
+          "workspace-net",
+          "network",
+          "enabled"
+        ],
+        "type": "bool"
+      },
+      {
+        "path": [
+          "permissions",
+          "workspace-net",
+          "network",
+          "allow_local_binding"
+        ],
+        "type": "bool"
+      },
+      {
+        "path": [
+          "permissions",
+          "workspace-net",
+          "network",
+          "domains",
+          "*"
+        ],
+        "type": "string"
+      },
+      {
+        "path": [
+          "memories",
+          "generate_memories"
+        ],
+        "type": "bool"
+      },
+      {
+        "path": [
+          "memories",
+          "use_memories"
+        ],
+        "type": "bool"
+      }
+    ],
+    "retired": [
+      [
+        "sandbox_mode"
+      ],
+      [
+        "sandbox_workspace_write"
+      ],
+      [
+        "features",
+        "js_repl"
+      ]
+    ]
+  }
+}

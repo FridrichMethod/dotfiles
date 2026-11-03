@@ -1,0 +1,25 @@
+# Native serialization deliberately normalizes comments and layout.
+integer = 9007199254740993
+timestamp = 2026-11-01T12:34:56Z
+multiline = """first line
+second line"""
+
+[projects."/tmp/project.with.dots"]
+trust_level = "trusted"
+
+[unknown]
+enabled = false
+values = [1, 2, 3]
+
+[features]
+local = "keep"
+
+[retired]
+setting = "remove"
+keep = "stay"
+
+[[servers]]
+name = "first"
+
+[[servers]]
+name = "second"
