@@ -35,6 +35,10 @@ unpushed `.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/`.
 A separate session then landed `130d240`, a shared Codex status line that changes
 `~/.codex/config.toml` on every host. The consolidation commits change no
 rendered output for these converged files. Login updaters fast-forward to both.
+The same day, after `7e344f2` landed, all six hosts reached it with an empty
+status: Lab, WSL, Sherlock and Marlowe through the actual updater, Mac and
+Windows through ordinary logins. Only `~/.codex/config.toml` gained the status
+line; `~/.claude/settings.json` stayed byte-identical.
 
 ### Review outcome
 
@@ -65,9 +69,9 @@ Accepted limits, unchanged now:
 - An HTTPS connect to a silently dropped route is bounded only by OS/curl defaults.
 - Replacing an enrolled token in place stalls that host's updater until the new
   ciphertext lands; follow the runbook in [secrets-and-ssh.md](secrets-and-ssh.md).
-- Private Stage 4 backups and Lab's enrollment rehearsal destination hold
-  plaintext token copies (0600 in private 0700 directories). Purging them on
-  rotation or revocation is a user decision, never automatic.
+- At the user's request, the 80 plaintext token copies in Lab's private Stage 4
+  backups and rehearsal destination were deleted after hash verification; their
+  manifests and receipts remain. No other host held copies.
 - Windows Codex sandbox grants are app-created; dotfiles manages no directory ACLs.
 - Retired submodule leftovers and legacy wrapper links stay until Stage 6.
 
