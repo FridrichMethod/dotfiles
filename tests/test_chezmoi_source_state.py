@@ -54,6 +54,16 @@ class SourceContractTests(unittest.TestCase):
             self.assertEqual((linked / "canonical.txt").read_bytes(), original)
             self.assertEqual(fixture.run("diff").stdout, "")
 
+    def test_source_declares_no_externals(self):
+        # Externals download while the source state is read, even with
+        # --exclude=externals, through an HTTP client without a timeout; the
+        # login updater must stay configuration-only (stage-5-ecosystem.md).
+        found = []
+        for directory, dirnames, filenames in os.walk(ROOT / "home"):
+            found += [name for name in dirnames if name == ".chezmoiexternals"]
+            found += [name for name in filenames if name.startswith(".chezmoiexternal.")]
+        self.assertEqual(found, [])
+
     def test_unselected_invalid_and_incompatible_hosts_fail_before_writing(self):
         compatible = {
             "Linux": {"common-only", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"},
