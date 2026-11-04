@@ -118,8 +118,9 @@ any other URL, so a test can never reach the network.
 
 ### Unix
 
-Only a person runs `scripts/payload-update.sh`, in the foreground: no login,
-profile, schedule or background process does, and it keeps no state of its
+Only a person runs `scripts/payload-update.sh --now`, in the foreground: no
+login, profile or schedule installs or updates a payload repo (a call from an
+older rc file does nothing, see below), and the script keeps no state of its
 own.
 
 ```sh
@@ -135,7 +136,9 @@ login dispatch in `common/sh/.profile` does; an invalid binding prints
 `[dotfiles] [error] Native home binding is invalid; payload update refused.`
 and returns 1 without running any checkout's hook. Only an unmarked (legacy)
 home runs `${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh`. They
-return the hook's status. Under persistent maintenance a `--now` run prints
+return the hook's status. The `--now` line runs the checkout its path names,
+without that check: on a native home use `sync-payloads`, or the path of the
+source the binding names. Under persistent maintenance a `--now` run prints
 `dotfiles: payload update refused during maintenance.` and exits 1 before
 anything runs.
 
@@ -185,8 +188,8 @@ pull that ended the automatic runs still source the hook without arguments,
 and a run they started may still pass the retired `--auto` or `--worker`. So
 `sh .../payload-update.sh kit`, without `--now`, does nothing either.
 
-Sherlock's site rules forbid detached login-node workers, and none can start:
-no login starts a run (`tests/test_chezmoi_guard.py` checks bash and sh
+Sherlock's site rules forbid detached login-node workers, and dotfiles starts
+none: no login starts a run (`tests/test_chezmoi_guard.py` checks bash and sh
 logins with and without the Sherlock overlay), and `--now` returns only once
 its installers have finished (`tests/payload-update.sh`). The overlay needs no
 override.
@@ -228,7 +231,9 @@ reparse point, and validated by that source's `lib/chezmoi-guard.ps1`; an
 invalid binding prints
 `[dotfiles] Payload update refused: review the native source binding privately.`
 and sets `$LASTEXITCODE` to 1 without running a hook. Only an unmarked home
-uses `$env:DOTFILES_DIR`, else `~\dotfiles`.
+uses `$env:DOTFILES_DIR`, else `~\dotfiles`. The `-Now` line runs the
+checkout its path names, without that check: on a native home use the
+functions, or the path of the source the binding names.
 
 ## Knobs
 
@@ -250,9 +255,11 @@ nothing any more. This page used to promise that the automatic runs and the
 doctor would honor `AWESOME_SKILLS_AUTO_UPDATE=0` until 2027-01-31; that
 support ended early, in Stage 5 of the chezmoi migration, together with the
 automatic runs, and the promise is withdrawn. Name the items on the command
-instead, for example `sync-payloads kit pymol`; a shell that still exports
-the variable sees `skills` in the doctor's `payloads` row again unless it
-sets `DOTFILES_PAYLOAD_ITEMS='kit pymol'`. The old skill hook's other
+instead, for example `sync-payloads kit pymol`: in a shell that still exports
+`AWESOME_SKILLS_AUTO_UPDATE=0`, a bare `sync-payloads` and the H7-payloads
+`--now` line install or update awesome-skills too, and the doctor's
+`payloads` row checks `skills` again, unless it sets
+`DOTFILES_PAYLOAD_ITEMS='kit pymol'`. The old skill hook's other
 variables (`AWESOME_SKILLS_FORCE`, `AWESOME_SKILLS_BG`,
 `AWESOME_SKILLS_INSTALLER_URL`, `AWESOME_SKILLS_REFRESH_DAYS`,
 `_AWESOME_SKILLS_CHECKED`) and those of the automatic runs
@@ -304,8 +311,8 @@ lock: concurrent runs converge.
   `sh '<clone>/scripts/payload-update.sh' --now`, installs the selected items
   now and, run again later, updates them, as `sync-payloads` does in an
   interactive shell.
-- `./setup-host.sh`, `./stow-all.sh`, `stow-all.ps1` and the login updaters
-  never run an installer of a payload repository.
+- `./setup-host.sh`, `setup-host.ps1`, `./stow-all.sh`, `stow-all.ps1` and
+  the login updaters never run an installer of a payload repository.
 
 ## Trust
 
@@ -416,8 +423,8 @@ tool calls and prompts go on. It lasts until a person runs
 `sync-payloads kit`; meanwhile the doctor's `payloads` row names the kit and
 what fails until it is installed.
 
-`tests/unix-installer.sh` runs this login, and the explicit run after it, end
-to end with real Git and Stow.
+`tests/unix-installer.sh` runs this login, and after it the explicit run
+`--now kit pymol` (not awesome-skills), end to end with real Git and Stow.
 
 On a host where the login does not stow (`DOTFILES_AUTO_STOW=0`, a dirty
 tree, an unrecorded host, a failed stow, or `DOTFILES_AUTO_UPDATE=0` after a
