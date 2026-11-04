@@ -460,6 +460,11 @@ SH
 done
 chmod 755 "$FAKE_BIN"/* "$TEST_TMP/brew-stub"
 
+# The legacy AI-sync interpreter as a tripwire: native steps never run it.
+SYNC_TRIPWIRE="$TEST_TMP/sync-python-tripwire"
+printf '#!/bin/sh\nprintf "TRIPWIRE sync-python %%s\\n" "$*" >>"$EVENT_LOG"\nexit 1\n' >"$SYNC_TRIPWIRE"
+chmod 755 "$SYNC_TRIPWIRE"
+
 # The system commands every case sees, as links in SYS_BIN, less those that
 # the fixture Brewfiles' entries are probed by (their tools.tsv rows): a jq,
 # python3 or shellcheck in the test machine's /usr/bin would otherwise
@@ -2184,6 +2189,45 @@ expect_rc hpc-scratch 1
 expect_text hpc-scratch err 'refusing to build the login env under $SCRATCH'
 expect_no_event 'micromamba:create'
 
+# --- native hpc: the login env alone satisfies H2-alloc ---------------------
+
+# The native default never consults the legacy AI-sync env: an existing
+# login env is enough, and the sync interpreter is a tripwire.
+new_home native-hpc
+mkdir -p "$CASE_HOME/micromamba/envs/login/bin"
+printf '#!/bin/sh\nexit 0\n' >"$CASE_HOME/micromamba/envs/login/bin/zsh"
+chmod 755 "$CASE_HOME/micromamba/envs/login/bin/zsh"
+snapshot >"$TEST_TMP/before"
+run_native_case native-hpc-login-env "${HPC_ENV[@]}" DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" -- --host sherlock --check
+expect_rc native-hpc-login-env 3
+expect_line native-hpc-login-env 'H2-alloc done the login env exists; no allocation is needed'
+expect_text native-hpc-login-env out "S2-login-env done login env at $CASE_HOME/micromamba/envs/login"
+expect_no_text native-hpc-login-env out 'HUMAN-BEGIN H2-alloc'
+expect_no_text native-hpc-login-env out 'S4-setup-sync'
+expect_no_text native-hpc-login-env err 'S4-setup-sync'
+expect_no_events native-hpc-login-env
+snapshot >"$TEST_TMP/after"
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'native hpc --check wrote files'
+[ -z "$(stow_mentions native-hpc-login-env)" ] ||
+    fail "native hpc names Stow: $(stow_mentions native-hpc-login-env)"
+
+# Without a login env, the native allocation gate holds as before.
+new_home native-hpc-fresh
+run_native_case native-hpc-fresh "${HPC_ENV[@]}" DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" -- --host sherlock --check
+expect_rc native-hpc-fresh 3
+expect_text native-hpc-fresh out 'H2-alloc human S2-login-env builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
+expect_line native-hpc-fresh 'HUMAN-BEGIN H2-alloc alloc'
+expect_line native-hpc-fresh 'sh_dev -t 1:00:00'
+expect_line native-hpc-fresh "$FIXTURE/setup-host.sh --host sherlock"
+expect_text native-hpc-fresh out 'S2-login-env todo blocked by H2-alloc'
+expect_no_text native-hpc-fresh out 'S4-setup-sync'
+expect_no_events native-hpc-fresh
+[ -z "$(stow_mentions native-hpc-fresh)" ] || fail "native hpc names Stow: $(stow_mentions native-hpc-fresh)"
+run_native_case native-hpc-alloc "${HPC_ENV[@]}" DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" SLURM_JOB_ID=1 -- \
+    --host sherlock --check
+expect_text native-hpc-alloc out 'H2-alloc done inside Slurm job 1'
+expect_no_events native-hpc-alloc
+
 # --- digest mismatch ---------------------------------------------------------
 
 new_home mismatch
@@ -2443,7 +2487,7 @@ for host in wsl-ubuntu sherlock marlowe; do
 done
 for name in manual manual-mac manual-wsl-ubuntu manual-sherlock manual-marlowe \
     native-manual-lab-ubuntu native-manual-wsl-ubuntu native-manual-sherlock native-manual-marlowe native-manual-mac \
-    native-recovery \
+    native-hpc-login-env native-hpc-fresh native-recovery \
     check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew stow-conflicts \
     brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty $SHARED_CASES; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
@@ -2483,6 +2527,9 @@ no_tmp_case no-tmp-list 0 -- --host lab-ubuntu --list
 no_tmp_case no-tmp-manual 0 -- --host lab-ubuntu --print-manual
 no_tmp_case no-tmp-mac 3 "${MAC_ENV[@]}" -- --host mac --check
 no_tmp_case no-tmp-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
+CASE_FLAGS=()
+no_tmp_case no-tmp-native-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
+CASE_FLAGS=(--legacy-stow)
 no_tmp_case no-tmp-provided 0 "$ALL_PATH" -- --host lab-ubuntu --check --only S2-brew-bundle
 expect_text no-tmp-provided out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 no_tmp_case no-tmp-help 0 -- --help

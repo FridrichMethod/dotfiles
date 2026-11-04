@@ -170,6 +170,11 @@ step_H1_fcitx5_plan() {
 step_H2_alloc_check() {
     local need=S2-login-env
     if steps_probe login-env; then
+        # Only --legacy-stow builds the checkout's AI-sync env here.
+        if [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ]; then
+            STEP_DETAIL='the login env exists; no allocation is needed'
+            return 0
+        fi
         if step_S4_setup_sync_check; then
             STEP_DETAIL='the login and AI-sync envs exist; no allocation is needed'
             return 0
