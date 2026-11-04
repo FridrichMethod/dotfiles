@@ -6,9 +6,12 @@ import io
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import tarfile
 import unittest
+
+from chezmoi_source_support import SourceFixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,6 +98,110 @@ step_S4_chezmoi_plan
         self.assertNotIn("HUMAN-BEGIN H7-stow", result.stdout)
         self.assertNotIn("init --apply", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
+
+    def bind_native(self, *config_lines, source=ROOT):
+        """Bind this home to SOURCE with a local config of CONFIG_LINES."""
+        marker = self.home / ".config/dotfiles/native"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(f"dotfiles-chezmoi-v1\n{self.home.resolve()}\n{source}\n")
+        config = self.home / ".config/chezmoi/chezmoi.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text("".join(f"{line}\n" for line in config_lines))
+
+    def home_snapshot(self):
+        return sorted((str(path.relative_to(self.home)), path.lstat().st_mtime_ns)
+                      for path in self.home.rglob("*"))
+
+    def test_native_role_selects_host_without_receipt_or_environment(self):
+        # DOTFILES_HOST is legacy only: a native-owned home ignores it.
+        self.bind_native("[data]", "host = 'lab-ubuntu'")
+        before = self.home_snapshot()
+        for script, step in (("doctor.sh", "native-config"), ("setup-host.sh", "H7-native")):
+            with self.subTest(script=script):
+                explicit = self.run_script(script, "--host", "lab-ubuntu", "--list")
+                other = self.run_script(script, "--host", "sherlock", "--list")
+                self.env["DOTFILES_HOST"] = "sherlock"
+                try:
+                    resolved = self.run_script(script, "--list")
+                finally:
+                    del self.env["DOTFILES_HOST"]
+                self.assertEqual(resolved.returncode, 0, resolved.stderr)
+                self.assertIn(step, resolved.stdout)
+                self.assertNotEqual(explicit.stdout, other.stdout)
+                self.assertEqual(resolved.stdout, explicit.stdout)
+        self.assertEqual(self.home_snapshot(), before)
+
+    def test_native_common_only_role_is_common_only(self):
+        os_release = self.base / "os-release"
+        os_release.write_text("ID=ubuntu\n")
+        self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
+        self.bind_native("[data]", 'host = "common-only"')
+        doctor = self.run_script("doctor.sh", "--list")
+        self.assertEqual(doctor.returncode, 0, doctor.stderr)
+        self.assertIn("selects [data].host common-only (no host overlay): checking as --platform debian",
+                      doctor.stderr)
+        setup = self.run_script("setup-host.sh", "--list")
+        self.assertEqual(setup.returncode, 2, setup.stderr)
+        self.assertIn("selects [data].host common-only (no host overlay)", setup.stderr)
+        self.assertIn("pass --host HOST", setup.stderr)
+        self.assertEqual(self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list").returncode, 0)
+
+    def test_native_home_without_one_role_requires_host(self):
+        self.env["DOTFILES_HOST"] = "lab-ubuntu"
+        for lines in (("[git]", "autoAdd = false"), ("[data]", "host = 'fedora'"),
+                      ("[data]", "host = 'mac'", "host = 'lab-ubuntu'")):
+            with self.subTest(lines=lines):
+                self.bind_native(*lines)
+                doctor = self.run_script("doctor.sh", "--list")
+                self.assertEqual(doctor.returncode, 2, doctor.stderr)
+                self.assertIn("selects no single known [data].host; pass --host HOST", doctor.stderr)
+                setup = self.run_script("setup-host.sh", "--list")
+                self.assertEqual(setup.returncode, 2, setup.stderr)
+                self.assertIn("selects no single known [data].host; pass --host HOST", setup.stderr)
+
+    def check_h7_native(self):
+        # --check refuses a machine that is not the host: pin Ubuntu (macOS CI).
+        os_release = self.base / "os-release"
+        os_release.write_text("ID=ubuntu\n")
+        self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
+        return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-native")
+
+    def test_bound_home_reports_h7_native_done(self):
+        self.bind_native("[data]", "host = 'lab-ubuntu'")
+        # A stray state database warns in the doctor but never reopens the handover.
+        (self.home / ".config/chezmoi/chezmoistate.boltdb").write_text("")
+        before = self.home_snapshot()
+        result = self.check_h7_native()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertRegex(result.stdout, r"(?m)^H7-native done ")
+        self.assertEqual(self.home_snapshot(), before)
+        other = self.base / "other-checkout"
+        other.mkdir()
+        (other / ".chezmoiroot").write_text("home\n")
+        self.bind_native("[data]", "host = 'lab-ubuntu'", source=other.resolve())
+        result = self.check_h7_native()
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertRegex(result.stdout, r"(?m)^H7-native human ")
+
+    def test_native_role_reader_accepts_chezmoi_init_output(self):
+        # The doctor's text reader against the real init rendering (toToml).
+        roles = ("common-only", "mac" if sys.platform == "darwin" else "lab-ubuntu")
+        for role in roles:
+            with self.subTest(role=role), SourceFixture(role) as fixture:
+                fixture.config.write_text(f'[data]\nhost = "{role}"\nlocal_canary = "x"\n'
+                                          '[data.decoy]\nhost = "win"\n[git]\nautoCommit = true\n')
+                result = fixture.run("init")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                rendered = fixture.config.read_bytes()
+                self.assertIn("[data]", rendered.decode().splitlines())
+                self.bind_native()
+                (self.home / ".config/chezmoi/chezmoi.toml").write_bytes(rendered)
+                reader = subprocess.run(
+                    [shutil.which("bash"), "-c", '. "$1/lib/bootstrap/platform.sh"; bootstrap_native_host', "_",
+                     str(ROOT)], env=self.env, text=True, capture_output=True, stdin=subprocess.DEVNULL,
+                    check=False)
+                self.assertEqual(reader.returncode, 0, reader.stderr)
+                self.assertEqual(reader.stdout, f"{role}\n")
 
     def archive_fixture(self, digest_ok=True):
         repo = self.base / "repo"

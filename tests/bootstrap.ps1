@@ -166,8 +166,9 @@ function New-Fixture {
             $fixture.State, $fixture.Temp, $fixture.PwshState)) {
         [void][IO.Directory]::CreateDirectory($directory)
     }
-    foreach ($file in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'lib/terminal.ps1', 'config/payloads.tsv',
-            'config/bootstrap/tools.tsv', 'config/bootstrap/installers.tsv', 'config/bootstrap/winget.json')) {
+    foreach ($file in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1',
+            'config/payloads.tsv', 'config/bootstrap/tools.tsv', 'config/bootstrap/installers.tsv',
+            'config/bootstrap/winget.json')) {
         $target = Join-Path $fixture.Repo $file
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $target))
         [IO.File]::Copy((Join-Path $sourceRoot $file), $target)
@@ -203,15 +204,16 @@ Write-Host 'fixture AI-sync runtime ready'
 }
 
 function Set-FixtureHealthy {
-    # Everything the win rows probe, plus the structural checks, is present.
-    param($Fixture, [string[]]$Except = @())
+    # Everything the win rows probe, plus the structural checks, is present;
+    # -SkipVenv leaves out the legacy .venv-sync.
+    param($Fixture, [string[]]$Except = @(), [switch]$SkipVenv)
     foreach ($name in $ToolText.Keys) {
         if ($name -notin $Except) { New-ToolShim $Fixture.Bin $name }
     }
     foreach ($module in @('PSFzf', 'CompletionPredictor', 'Microsoft.WinGet.CommandNotFound')) {
         [void][IO.Directory]::CreateDirectory((Join-Path $Fixture.Modules $module))
     }
-    New-FixtureVenv $Fixture.Repo
+    if (-not $SkipVenv) { New-FixtureVenv $Fixture.Repo }
     $files = @{
         (Join-Path $Fixture.LocalAppData $FontFile) = 'font'
         (Join-Path $Fixture.AppData $ThemeFile) = 'fixture Catppuccin Mocha theme'
@@ -245,6 +247,21 @@ function Set-FixtureStowed($Fixture) {
     [void][IO.Directory]::CreateDirectory($directory)
     @{ home = $Fixture.Home; host = 'win'; appliedHead = 'fixture-head' } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'configuration.json')
+}
+
+function Set-FixtureNativeBound {
+    # The fixture home bound to Source (default: the fixture checkout) with a
+    # local config and a provisioned chezmoi. The marker holds canonical
+    # paths, as the guard compares them (/var is /private/var on macOS).
+    param($Fixture, [string]$Source = $Fixture.Repo)
+    [IO.File]::WriteAllText((Join-Path $Source '.chezmoiroot'), "home`n")
+    $marker = Join-Path $Fixture.Home '.config/dotfiles/native'
+    $config = Join-Path $Fixture.Home '.config/chezmoi/chezmoi.toml'
+    foreach ($path in @($marker, $config)) { [void][IO.Directory]::CreateDirectory((Split-Path -Parent $path)) }
+    $binding = "dotfiles-chezmoi-v1`n$(Resolve-DotfilesDirectory $Fixture.Home)`n$(Resolve-DotfilesDirectory $Source)`n"
+    [IO.File]::WriteAllText($marker, $binding)
+    [IO.File]::WriteAllText($config, "[data]`nhost = 'win'`n")
+    New-ToolShim $Fixture.Bin 'chezmoi' 'chezmoi version v2.74.0, commit 0000000, built at 2026-01-01T00:00:00Z'
 }
 
 function Invoke-Fixture {
@@ -413,13 +430,16 @@ function Get-HumanBlocks {
     return , $blocks.ToArray()
 }
 function Get-WinToolIds {
-    # Independent of lib/bootstrap.ps1: data rows whose hosts are all or name win.
+    # Independent of lib/bootstrap.ps1: data rows whose hosts are all or name
+    # win; chezmoi, which only native mode checks, with -IncludeChezmoi.
+    param([switch]$IncludeChezmoi)
     $rows = @([IO.File]::ReadAllLines((Join-Path $sourceRoot 'config/bootstrap/tools.tsv')) |
             Where-Object { $_ -and -not $_.StartsWith('#') } | Select-Object -Skip 1)
-    return @($rows | ForEach-Object { $cells = $_.Split("`t"); if ($cells[0] -cne 'chezmoi' -and ($cells[2] -ceq 'all' -or $cells[2].Split(',') -ccontains 'win')) { $cells[0] } })
+    return @($rows | ForEach-Object { $cells = $_.Split("`t"); if (($IncludeChezmoi -or $cells[0] -cne 'chezmoi') -and ($cells[2] -ceq 'all' -or $cells[2].Split(',') -ccontains 'win')) { $cells[0] } })
 }
 
 . (Join-Path $sourceRoot 'lib/bootstrap.ps1')
+. (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1')
 
 # Builds a fixture checkout's .venv-sync, here and in the fixture's own
 # setup-sync.ps1 (a child process). Unix: a shell script that logs its
@@ -893,7 +913,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             Assert-Equal $cells[4] '-' "fix in '$line'"
             $cells[1]
         }
-        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('venv-sync', 'submodule', 'payloads')) -join ',') 'doctor ids'
+        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('venv-sync', 'payloads')) -join ',') 'doctor ids'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'doctor wrote files'
         $events = Get-FixtureEvents $fixture
         Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version') 'version probes did not run'
@@ -992,31 +1012,6 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Exit $run 0 'working DOTFILES_SYNC_PYTHON without .venv-sync'
         Assert-True ($run.Lines -contains "ok`tvenv-sync`tcore`tDOTFILES_SYNC_PYTHON=$alternatePython passes the runtime check`t-") "override ok row: $($run.Stdout)"
 
-        # The retired submodule checkouts a pull leaves: a warning naming how
-        # to check each and the Remove-Item that removes it; nothing deleted.
-        foreach ($retired in @(@('common/codex/coding-agent-kit', 'common/codex/coding-agent-kit'),
-                @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
-                @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
-                @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
-            # Native separators, as the doctor prints the path.
-            $checkout = [IO.Path]::Combine($fixture.Repo, $retired[0].Replace('/', [IO.Path]::DirectorySeparatorChar))
-            [void][IO.Directory]::CreateDirectory($checkout)
-            [IO.File]::WriteAllText((Join-Path $checkout '.git'), 'gitdir: elsewhere')
-            $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-            Assert-Exit $run 0 "the retired checkout $($retired[0]) only warns"
-            $quoted = $checkout -replace "'", "''"
-            $expected = "warn`tsubmodule`tcore`tretired submodule checkout $($retired[0]): once it holds no work of yours (git -C '$quoted' status; git -C '$quoted' log --branches --not --remotes), Remove-Item -LiteralPath '$quoted' -Recurse -Force (its repository, .git/modules/$($retired[1]), can go the same way once no other leftover uses it)`tdocs/bootstrap.md P0-preflight"
-            Assert-True ($run.Lines -contains $expected) "leftover row: $($run.Stdout)"
-            Assert-True (Test-Path -LiteralPath (Join-Path $checkout '.git')) 'doctor deleted the retired checkout'
-            Remove-Item -LiteralPath $checkout -Recurse -Force
-        }
-        [IO.File]::WriteAllText((Join-Path $fixture.Repo '.gitmodules'), '')
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^warn`tsubmodule`tcore`t.+\.gitmodules exists, but dotfiles has no submodules \(git rm \.gitmodules\)`t" }).Count -eq 1) "gitmodules row: $($run.Stdout)"
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.gitmodules') -Force
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-True ($run.Lines -contains "ok`tsubmodule`tcore`tno submodule and no retired submodule checkout`t-") "submodule row without leftovers: $($run.Stdout)"
-
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 1 'structural failures'
         Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^missing`tvenv-sync`tcore`tno .+; setup-sync.ps1 has not run.+`tdocs/bootstrap.md W1-setup-sync$" }).Count -eq 1) 'venv-sync row'
@@ -1080,6 +1075,131 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             $run = Invoke-Fixture $fixture doctor.ps1 @{}
             Assert-Exit $run 2 "tools.tsv id $($case[0])"
             Assert-True ($run.Stdout.Contains($case[1])) "id $($case[0]) message: $($run.Stdout)"
+        }
+    }
+
+    Test-Case 'native doctor reports a healthy bound host, keeps gh telemetry off and writes nothing offline' {
+        # Native mode needs no .venv-sync, so this case never skips.
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture -SkipVenv
+        Set-FixtureNativeBound $fixture
+        # Like recent real gh releases, this gh writes a telemetry device id
+        # on every command, --version included, unless GH_TELEMETRY=0.
+        New-Shim $fixture.Bin 'gh' @"
+if (`$env:GH_TELEMETRY -ne '0') { [IO.File]::WriteAllText((Join-Path `$env:FIXTURE_HOME 'gh-device-id'), 'id') }
+if ("`$args" -eq '--version') { Write-Output '$($ToolText.gh)' }
+exit 0
+"@
+        $before = Get-Snapshot (Get-FixtureRoots $fixture)
+        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true; LegacyStow = $false }
+        Assert-Exit $run 0 'healthy native doctor'
+        Assert-Equal $run.Lines[0] "status`tid`ttier`tdetail`tfix" 'native TSV header'
+        $ids = foreach ($line in @($run.Lines | Select-Object -Skip 1)) {
+            $cells = $line.Split("`t")
+            Assert-Equal $cells.Count 5 "TSV columns in '$line'"
+            Assert-Equal $cells[0] 'ok' "status in '$line'"
+            Assert-Equal $cells[4] '-' "fix in '$line'"
+            $cells[1]
+        }
+        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds -IncludeChezmoi) + @('native-config', 'payloads')) -join ',') 'native doctor ids'
+        Assert-True ($run.Lines -contains "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-") "native-config row: $($run.Stdout)"
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'native doctor wrote files'
+        $events = Get-FixtureEvents $fixture
+        Assert-True ($events -contains 'chezmoi --version' -and $events -contains 'gh --version') "version probes did not run: $($events -join '; ')"
+        Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native runtime checks'
+        Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline native doctor used the network: $($events -join '; ')"
+        $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
+        $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true; LegacyStow = $false }; Assert-Exit $quiet 0 'quiet native doctor'
+        Assert-True ($quiet.Lines.Count -eq 1 -and $quiet.Lines[0] -cmatch $summary) "quiet native doctor printed more than the summary: $($quiet.Stdout)"
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'quiet native doctor wrote files'
+    }
+
+    Test-Case 'native-config names its cause; another checkout and a stray state database only warn' {
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture -SkipVenv
+        Set-FixtureNativeBound $fixture
+        $native = @{ Tsv = $true; LegacyStow = $false }
+        $fix = 'docs/bootstrap.md HW-native'
+        $repo = Resolve-DotfilesDirectory $fixture.Repo
+        function Get-NativeConfigRow($Run) { return @($Run.Lines | Where-Object { $_ -cmatch "^[a-z]+`tnative-config`t" }) -join '|' }
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 0 'bound home'
+        Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-" 'bound row'
+
+        # A plain chezmoi command's state database: a warning, never removed.
+        $stray = Join-Path $fixture.Home '.config/chezmoi/chezmoistate.boltdb'
+        [IO.File]::WriteAllText($stray, '')
+        $before = Get-Snapshot (Get-FixtureRoots $fixture)
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 0 'stray state database'
+        Assert-Equal (Get-NativeConfigRow $run) ("warn`tnative-config`tcore`tnative binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: " +
+            "a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set " +
+            "(docs/chezmoi-migration/takeover.md); the doctor leaves the file in place`t$fix") 'stray row'
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'the stray check wrote or removed files'
+        [IO.File]::Delete($stray)
+
+        $maintenance = Join-Path $fixture.Home '.config/dotfiles/maintenance'
+        [IO.File]::WriteAllText($maintenance, '')
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 1 'maintenance'
+        Assert-True ((Get-NativeConfigRow $run) -cmatch "^human`tnative-config`tcore`tmaintenance is active \(~/\.config/dotfiles/maintenance\).+`t$fix$") "maintenance row: $($run.Stdout)"
+        [IO.File]::Delete($maintenance)
+
+        $marker = Join-Path $fixture.Home '.config/dotfiles/native'
+        $binding = [IO.File]::ReadAllText($marker)
+        [IO.File]::WriteAllText($marker, "$($binding)extra`n")
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 1 'invalid binding'
+        Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tthe native binding ~/.config/dotfiles/native is not valid for this home")) "invalid row: $($run.Stdout)"
+        [IO.File]::Delete($marker)
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 1 'no binding'
+        Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tno native binding (~/.config/dotfiles/native)")) "unbound row: $($run.Stdout)"
+        [IO.File]::WriteAllText($marker, $binding)
+
+        $config = Join-Path $fixture.Home '.config/chezmoi/chezmoi.toml'
+        $configText = [IO.File]::ReadAllText($config)
+        [IO.File]::Delete($config)
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 1 'no local config'
+        Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tthe local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file")) "config row: $($run.Stdout)"
+        [IO.File]::WriteAllText($config, $configText)
+
+        $guard = Join-Path $fixture.Repo 'lib/chezmoi-guard.ps1'
+        [IO.File]::Move($guard, "$guard.hidden")
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 1 'no guard'
+        Assert-True ((Get-NativeConfigRow $run) -cmatch "^human`tnative-config`tcore`t.+lib.chezmoi-guard\.ps1 is unreadable, so the native binding cannot be checked; use a complete checkout`t$fix$") "guard row: $($run.Stdout)"
+        [IO.File]::Move("$guard.hidden", $guard)
+
+        # Bound to another checkout, as from a worktree or second clone: warn,
+        # naming both, and setup-host keeps the handover pending.
+        $other = Join-Path $fixture.Root 'other'
+        [void][IO.Directory]::CreateDirectory((Join-Path $other '.git'))
+        Set-FixtureNativeBound $fixture -Source $other
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 0 'another checkout'
+        $otherResolved = Resolve-DotfilesDirectory $other
+        $row = Get-NativeConfigRow $run
+        Assert-True ($row.StartsWith("warn`tnative-config`tcore`tthis home is bound to $otherResolved, not to this checkout $repo; run ") -and
+            $row.EndsWith("doctor.ps1 for its native state`t$fix")) "elsewhere row: $($run.Stdout)"
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $false }
+        Assert-True ([bool]($check.Lines -cmatch '^HW-native human ')) "HW-native for another checkout: $($check.Stdout)"
+
+        # The checkout reached through a junction or symlink is the bound one,
+        # for the doctor and for setup-host's HW-native alike.
+        Set-FixtureNativeBound $fixture
+        $link = Join-Path $fixture.Root 'repo-link'
+        if ($IsWindows) { [void](New-Item -ItemType Junction -Path $link -Target $fixture.Repo) }
+        else { [void](New-Item -ItemType SymbolicLink -Path $link -Target $fixture.Repo) }
+        $linked = $fixture.PSObject.Copy()
+        $linked.Repo = $link
+        foreach ($entry in @(@('checkout', $fixture), @('linked checkout', $linked))) {
+            $run = Invoke-Fixture $entry[1] doctor.ps1 $native
+            Assert-Exit $run 0 "$($entry[0]) doctor"
+            Assert-True ((Get-NativeConfigRow $run).StartsWith("ok`tnative-config`t")) "$($entry[0]) row: $($run.Stdout)"
+            $check = Invoke-Fixture $entry[1] setup-host.ps1 @{ Check = $true; LegacyStow = $false }
+            Assert-True ([bool]($check.Lines -cmatch '^HW-native done ')) "$($entry[0]) HW-native: $($check.Stdout)"
         }
     }
 

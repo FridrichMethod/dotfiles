@@ -11,7 +11,7 @@
 #   missing   absent, or a structural requirement is not met
 #   warn      advisory: works, but differs from the documented setup
 #   skip      not checkable here (a PowerShell module on unix, macOS locale)
-#   human     a person must repair it (installer edits, stow before oh-my-zsh)
+#   human     a person must repair it (installer edits, dotfiles before oh-my-zsh)
 # Checks only read. git runs with --no-optional-locks, so it never refreshes
 # the index. Fonts are found by file name, never through fc-list, which
 # creates fontconfig caches under ~/.cache and in its prefix. venv-sync runs
@@ -30,7 +30,6 @@
 # shellcheck disable=SC2034 # read by doctor.sh
 BOOTSTRAP_STRUCTURAL_CHECKS='locale core H1-locale
 venv-sync core S4-setup-sync
-submodule core P0-preflight
 stow-links core H7-stow
 native-config core H7-native
 path-order core H7-stow
@@ -55,23 +54,74 @@ bootstrap_mode_structural_checks() {
     done
 }
 
-# The binding guard is shared with the native updater; no second marker parser.
-bootstrap_native_ready() (
-    [ -r "$1/lib/chezmoi-guard.sh" ] || return 1
+# bootstrap_native_state ROOT: this home's native binding as one word: ok,
+# maintenance, unbound (no ~/.config/dotfiles/native), invalid (a marker the
+# guard rejects), "elsewhere PATH" (bound to the checkout PATH, not ROOT),
+# config (no regular ~/.config/chezmoi/chezmoi.toml) or guard (no readable
+# ROOT/lib/chezmoi-guard.sh). The binding guard is shared with the native
+# updater; no second marker parser.
+bootstrap_native_state() (
+    if [ ! -r "$1/lib/chezmoi-guard.sh" ]; then
+        printf '%s\n' guard
+        return 0
+    fi
     # shellcheck source=lib/chezmoi-guard.sh
     . "$1/lib/chezmoi-guard.sh"
-    ! dotfiles_maintenance_active "$HOME" || return 1
-    source=$(dotfiles_native_source "$HOME" 2>/dev/null) || return 1
-    [ "$source" = "$(cd "$1" && pwd -P)" ] || return 1
-    [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]
+    if dotfiles_maintenance_active "$HOME"; then
+        state=maintenance
+    elif ! source=$(dotfiles_native_source "$HOME" 2>/dev/null); then
+        state=unbound
+        ! dotfiles_native_owned "$HOME" || state=invalid
+    elif [ "$source" != "$(cd "$1" && pwd -P)" ]; then
+        state="elsewhere $source"
+    elif [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+        state=ok
+    else
+        state=config
+    fi
+    printf '%s\n' "$state"
 )
 
+# bootstrap_native_ready ROOT: 0 when this home is bound to ROOT with its
+# local config in place (setup-host's H7-native).
+bootstrap_native_ready() {
+    [ "$(bootstrap_native_state "$1")" = ok ]
+}
+
+# bootstrap_check_native_config ROOT: the native binding, named by cause. A
+# binding to another checkout (this doctor runs from a worktree or second
+# clone) and a stray state database that a chezmoi command without the
+# updater's arguments wrote only warn; the doctor never removes that file.
 bootstrap_check_native_config() {
-    if bootstrap_native_ready "$1"; then
-        bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
-    else
-        bootstrap_check_result human 'native handover incomplete or maintenance active; follow docs/chezmoi-migration/takeover.md'
-    fi
+    local state stray=$HOME/.config/chezmoi/chezmoistate.boltdb
+    state=$(bootstrap_native_state "$1")
+    case $state in
+        ok)
+            if [ -e "$stray" ] || [ -L "$stray" ]; then
+                bootstrap_check_result warn "native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place"
+            else
+                bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
+            fi
+            ;;
+        'elsewhere '*)
+            bootstrap_check_result warn "this home is bound to ${state#elsewhere }, not to this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its native state"
+            ;;
+        maintenance)
+            bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): native updates and payload installs stay off until the reviewed procedure removes it; follow docs/chezmoi-migration/takeover.md'
+            ;;
+        unbound)
+            bootstrap_check_result human "no native binding (~/.config/dotfiles/native): this home's native handover is not done; follow docs/chezmoi-migration/takeover.md"
+            ;;
+        invalid)
+            bootstrap_check_result human 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it, never overwrite it blindly, and follow docs/chezmoi-migration/takeover.md'
+            ;;
+        config)
+            bootstrap_check_result human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow docs/chezmoi-migration/takeover.md'
+            ;;
+        *)
+            bootstrap_check_result human "$1/lib/chezmoi-guard.sh is unreadable, so the native binding cannot be checked; use a complete checkout"
+            ;;
+    esac
 }
 
 # Files under common/ that third-party installers append to through the stow
@@ -463,42 +513,6 @@ bootstrap_check_venv_sync() {
     fi
 }
 
-# The checkouts that a pull across a retired submodule leaves on a host where
-# it was checked out, each with its repository under .git/modules: the
-# pre-move coding-agent-kit checkout, the last coding-agent-kit and PyMOL
-# checkouts (the payload repos are installed now, docs/payloads.md) and the
-# sherlock-kit one. .gitignore and .stowrc keep them harmless; only their
-# owner removes them, so the doctor prints the rm and deletes nothing.
-BOOTSTRAP_RETIRED_CHECKOUTS='common/codex/coding-agent-kit common/codex/coding-agent-kit
-common/coding-agent-kit/coding-agent-kit common/codex/coding-agent-kit
-common/pymol/PyMOLScripts common/pymol/PyMOLScripts
-common/sherlock-kit/sherlock-kit common/sherlock-kit/sherlock-kit'
-
-# bootstrap_check_submodule ROOT: dotfiles has no submodules; a .gitmodules
-# names one anyway, or a retired submodule checkout is still there, is a
-# warning with what removes it.
-bootstrap_check_submodule() {
-    local lines line path module advice=''
-    if [ -f "$1/.gitmodules" ]; then
-        advice="$1/.gitmodules exists, but dotfiles has no submodules (git rm .gitmodules)"
-    fi
-    lines=$BOOTSTRAP_RETIRED_CHECKOUTS$BOOTSTRAP_NL
-    while [ -n "$lines" ]; do
-        line=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        bootstrap_split ' ' "$line" path module
-        [ -n "$path" ] || continue
-        if [ -e "$1/$path" ] || [ -L "$1/$path" ]; then
-            advice="${advice:+$advice; }retired submodule checkout $path: once it holds no work of yours (git -C \"$1/$path\" status; git -C \"$1/$path\" log --branches --not --remotes), rm -rf \"$1/$path\" (its repository, .git/modules/$module, can go the same way once no other leftover uses it)"
-        fi
-    done
-    if [ -n "$advice" ]; then
-        bootstrap_check_result warn "$advice"
-    else
-        bootstrap_check_result ok "no submodule and no retired submodule checkout"
-    fi
-}
-
 # The Claude helpers that common/claude/.claude/settings.json runs, which
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
@@ -665,7 +679,7 @@ bootstrap_check_path_order() {
         fi
     done
     if [ "$found" = 0 ]; then
-        bootstrap_check_result warn "PATH lacks ~/.local/bin; the stowed ~/.profile prepends it"
+        bootstrap_check_result warn "PATH lacks ~/.local/bin; the dotfiles ~/.profile prepends it"
         return 0
     fi
     for name in $BOOTSTRAP_LOCAL_BIN_TOOLS; do
@@ -739,15 +753,16 @@ bootstrap_check_rc_pollution() {
 }
 
 # bootstrap_check_omz_order: ~/.oh-my-zsh exists without oh-my-zsh.sh, the
-# state ./stow-all.sh leaves when it runs before the oh-my-zsh clone.
+# state applying the dotfiles (./stow-all.sh, or the native directory
+# preparation) leaves when it runs before the oh-my-zsh clone.
 bootstrap_check_omz_order() {
     local omz=$HOME/.oh-my-zsh
     if [ -d "$omz" ] && [ ! -f "$omz/oh-my-zsh.sh" ]; then
-        bootstrap_check_result human "oh-my-zsh.sh is missing from an existing ~/.oh-my-zsh (stow ran before the clone); follow the recovery recipe"
+        bootstrap_check_result human "oh-my-zsh.sh is missing from an existing ~/.oh-my-zsh (the dotfiles were applied before the clone); follow the recovery recipe"
     elif [ -f "$omz/oh-my-zsh.sh" ]; then
         bootstrap_check_result ok "found ~/.oh-my-zsh/oh-my-zsh.sh"
     else
-        bootstrap_check_result ok "no ~/.oh-my-zsh yet, so nothing was stowed into it"
+        bootstrap_check_result ok "no ~/.oh-my-zsh yet, so nothing was applied into it"
     fi
 }
 
@@ -778,7 +793,6 @@ bootstrap_check_structural() {
     case $1 in
         locale) bootstrap_check_locale "$3" ;;
         venv-sync) bootstrap_check_venv_sync "$2" ;;
-        submodule) bootstrap_check_submodule "$2" ;;
         stow-links) bootstrap_check_stow_links "$2" ;;
         native-config) bootstrap_check_native_config "$2" ;;
         path-order) bootstrap_check_path_order "$4" "$3" ;;

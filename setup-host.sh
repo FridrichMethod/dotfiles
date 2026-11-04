@@ -41,9 +41,12 @@ usage() {
         'blocks (sudo, sign-in, native handover) that a person runs. See docs/bootstrap.md.' \
         '' \
         '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
-        '                    to DOTFILES_HOST or the host ./stow-all.sh recorded;' \
-        '                    common only (a set but empty DOTFILES_HOST, or a' \
-        '                    common-only install ./stow-all.sh recorded) needs --host.' \
+        '                    on a native-owned home to the [data].host of' \
+        '                    ~/.config/chezmoi/chezmoi.toml, elsewhere to' \
+        '                    DOTFILES_HOST or the host ./stow-all.sh recorded;' \
+        '                    common only (common-only as that [data].host, a set but' \
+        '                    empty DOTFILES_HOST, or a common-only install' \
+        '                    ./stow-all.sh recorded) needs --host.' \
         '                    The win host uses setup-host.ps1.' \
         '  --legacy-stow     provision the supported Stow/parser compatibility path' \
         '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
@@ -217,11 +220,20 @@ if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
     exit 2
 fi
 
-# A set but empty DOTFILES_HOST, and without DOTFILES_HOST a common-only
-# install that ./stow-all.sh recorded for this home, mean common only (as the
-# login updater reads them), and there is no --platform here: every step
-# needs an overlay.
+# A native-owned home records its role in its native config (DOTFILES_HOST
+# and the Stow receipt do not apply there). Elsewhere a set but empty
+# DOTFILES_HOST, and without DOTFILES_HOST a common-only install that
+# ./stow-all.sh recorded for this home, mean common only (as the login
+# updater reads them). Common only either way, and there is no --platform
+# here: every step needs an overlay.
 COMMON_ONLY_HINT='setup-host needs one: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe), or follow X-other-linux in docs/bootstrap.md'
+if [[ -z "$HOST" ]] && bootstrap_native_home; then
+    if bootstrap_recorded_common_only "$REPO_ROOT"; then
+        usage_error "the native config of this home selects [data].host common-only (no host overlay); $COMMON_ONLY_HINT"
+    fi
+    HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
+        usage_error "no host: this home's native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)"
+fi
 if [[ -z "$HOST" ]] && bootstrap_host_env_empty; then
     usage_error "DOTFILES_HOST is set but empty, which means common only (no host overlay); $COMMON_ONLY_HINT"
 fi

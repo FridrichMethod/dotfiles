@@ -669,20 +669,48 @@ function Write-BootstrapHumanBlock {
     'HUMAN-END'
 }
 
-function Test-BootstrapNativeReady {
+function Get-BootstrapNativeState {
+    # This home's native binding: State ok, maintenance, unbound (no
+    # marker), invalid (a marker the guard rejects), elsewhere (Source names
+    # the bound checkout, Checkout this one), config (no regular local
+    # config) or guard (no guard library). The checkout path is resolved as
+    # the binding is, so a junction or symlink to the bound checkout is that
+    # checkout. The guard is shared with the native updater; no second
+    # marker parser.
     param([Parameter(Mandatory)][string]$RepoRoot)
     $guard = Join-Path $RepoRoot 'lib/chezmoi-guard.ps1'
-    if (-not [IO.File]::Exists($guard)) { return $false }
-    try {
-        . $guard
-        if (Test-DotfilesMaintenance -HomePath $HOME) { return $false }
-        $binding = Get-DotfilesNativeBinding -HomePath $HOME
-        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-        if (-not $binding.Source.Equals([IO.Path]::GetFullPath($RepoRoot), $comparison)) { return $false }
-        $config = Get-Item -LiteralPath $binding.Config -Force -ErrorAction Stop
-        return -not $config.PSIsContainer -and -not ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    $state = 'guard'
+    $source = ''
+    $checkout = $RepoRoot
+    if ([IO.File]::Exists($guard)) {
+        try {
+            . $guard
+            $binding = $null
+            if (Test-DotfilesMaintenance -HomePath $HOME) { $state = 'maintenance' }
+            else {
+                try { $binding = Get-DotfilesNativeBinding -HomePath $HOME }
+                catch { $state = if (Test-DotfilesNativeOwned -HomePath $HOME) { 'invalid' } else { 'unbound' } }
+            }
+            if ($binding) {
+                $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+                $config = Get-Item -LiteralPath $binding.Config -Force -ErrorAction SilentlyContinue
+                $checkout = Resolve-DotfilesDirectory $RepoRoot
+                if (-not $binding.Source.Equals($checkout, $comparison)) {
+                    $state = 'elsewhere'
+                    $source = $binding.Source
+                }
+                elseif (-not $config -or $config.PSIsContainer -or ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $state = 'config' }
+                else { $state = 'ok' }
+            }
+        }
+        catch { $state = 'invalid' }
     }
-    catch { return $false }
+    return [pscustomobject]@{ State = $state; Source = $source; Checkout = $checkout }
+}
+
+function Test-BootstrapNativeReady {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    return (Get-BootstrapNativeState -RepoRoot $RepoRoot).State -ceq 'ok'
 }
 
 function Install-BootstrapChezmoi {

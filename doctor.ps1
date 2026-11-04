@@ -5,8 +5,8 @@
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
-    three structural checks (venv-sync, submodule, payloads), prints one
-    line per check and then a summary:
+    the structural checks native-config (with -LegacyStow, venv-sync) and
+    payloads, prints one line per check and then a summary:
 
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
 
@@ -18,8 +18,10 @@
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
     Only -LegacyStow checks venv-sync; native mode checks chezmoi and the
-    home-bound native configuration signal. Legacy venv-sync passes when the interpreter the AI config sync helpers use
-    (DOTFILES_SYNC_PYTHON when set, else .venv-sync) passes
+    home-bound native configuration signal, named by cause: a binding to
+    another checkout and a stray ~/.config/chezmoi/chezmoistate.boltdb only
+    warn. Legacy venv-sync passes when the interpreter the AI config sync
+    helpers use (DOTFILES_SYNC_PYTHON when set, else .venv-sync) passes
     lib/config_sync.py --runtime-check.
 
     The doctor writes nothing and makes no network call: no winget list, no
@@ -100,7 +102,7 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # Ids the doctors report besides tools.tsv rows (doctor.sh's structural
 # checks, the -Online and --smoke rows); tools.tsv never uses them
 # (tests/test_bootstrap_manifest.py RESERVED_IDS).
-$ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
+$ReservedIds = @('locale', 'venv-sync', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
     'nvm-homebrew', 'payloads', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'native-config')
 
 function Limit-DoctorResult {
@@ -161,35 +163,37 @@ function Get-DoctorSyncRuntimeResult {
     return New-DoctorResult missing venv-sync core "$($runtime.Path) fails lib/config_sync.py --runtime-check; rerun setup-sync.ps1" $step
 }
 
+function Get-DoctorNativeConfigResult {
+    # doctor.sh's bootstrap_check_native_config: the native binding, named by
+    # cause. A binding to another checkout and a stray state database that a
+    # chezmoi command without the updater's arguments wrote only warn; the
+    # doctor never removes that file.
+    $native = Get-BootstrapNativeState -RepoRoot $RepoRoot
+    $takeover = 'follow docs/chezmoi-migration/takeover.md'
+    switch -CaseSensitive ($native.State) {
+        'ok' {
+            $stray = Join-Path $HOME '.config/chezmoi/chezmoistate.boltdb'
+            if (Get-Item -LiteralPath $stray -Force -ErrorAction SilentlyContinue) {
+                return New-DoctorResult warn native-config core ("native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: " +
+                    "a chezmoi command without the updater's full explicit argument set wrote this separate state database; " +
+                    'run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place') HW-native
+            }
+            return New-DoctorResult ok native-config core 'native binding and local config present; review configuration with scoped native diff' HW-native
+        }
+        'elsewhere' {
+            return New-DoctorResult warn native-config core "this home is bound to $($native.Source), not to this checkout $($native.Checkout); run $(Join-Path $native.Source 'doctor.ps1') for its native state" HW-native
+        }
+        'maintenance' { return New-DoctorResult human native-config core "maintenance is active (~/.config/dotfiles/maintenance): native updates and payload installs stay off until the reviewed procedure removes it; $takeover" HW-native }
+        'unbound' { return New-DoctorResult human native-config core "no native binding (~/.config/dotfiles/native): this home's native handover is not done; $takeover" HW-native }
+        'invalid' { return New-DoctorResult human native-config core "the native binding ~/.config/dotfiles/native is not valid for this home; inspect it, never overwrite it blindly, and $takeover" HW-native }
+        'config' { return New-DoctorResult human native-config core "the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; $takeover" HW-native }
+    }
+    return New-DoctorResult human native-config core "$(Join-Path $RepoRoot 'lib/chezmoi-guard.ps1') is unreadable, so the native binding cannot be checked; use a complete checkout" HW-native
+}
+
 function Get-DoctorStructuralResults {
     if ($LegacyStow) { Get-DoctorSyncRuntimeResult }
-    elseif (Test-BootstrapNativeReady -RepoRoot $RepoRoot) {
-        New-DoctorResult ok native-config core 'native binding and local config present; review configuration with scoped native diff' HW-native
-    }
-    else { New-DoctorResult human native-config core 'native handover incomplete or maintenance active; follow docs/chezmoi-migration/takeover.md' HW-native }
-
-    # Dotfiles has no submodules. The checkouts that a pull across a retired
-    # one leaves on a host where it was checked out, each with its
-    # repository under .git\modules: .gitignore and .stowrc keep them
-    # harmless, and only their owner removes them (docs/payloads.md).
-    $advice = @()
-    if ([IO.File]::Exists((Join-Path $RepoRoot '.gitmodules'))) {
-        $advice += "$(Join-Path $RepoRoot '.gitmodules') exists, but dotfiles has no submodules (git rm .gitmodules)"
-    }
-    foreach ($retired in @(
-            @('common/codex/coding-agent-kit', 'common/codex/coding-agent-kit'),
-            @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
-            @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
-            @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
-        $checkout = [IO.Path]::Combine($RepoRoot, $retired[0].Replace('/', [IO.Path]::DirectorySeparatorChar))
-        if (Get-Item -LiteralPath $checkout -Force -ErrorAction SilentlyContinue) {
-            $quoted = $checkout -replace "'", "''"
-            $advice += "retired submodule checkout $($retired[0]): once it holds no work of yours (git -C '$quoted' status; git -C '$quoted' log --branches --not --remotes), Remove-Item -LiteralPath '$quoted' -Recurse -Force (its repository, .git/modules/$($retired[1]), can go the same way once no other leftover uses it)"
-        }
-    }
-    if ($advice.Count) { New-DoctorResult warn submodule core ($advice -join '; ') P0-preflight }
-    else { New-DoctorResult ok submodule core 'no submodule and no retired submodule checkout' P0-preflight }
-
+    else { Get-DoctorNativeConfigResult }
     Get-DoctorPayloadResult
 }
 

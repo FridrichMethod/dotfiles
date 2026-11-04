@@ -36,7 +36,7 @@ STEP_IDS = (
     "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
 # checks and the --online/--smoke rows.
-RESERVED_IDS = ("locale", "venv-sync", "submodule", "stow-links", "path-order", "rc-pollution",
+RESERVED_IDS = ("locale", "venv-sync", "stow-links", "path-order", "rc-pollution",
                 "omz-order", "nvm-homebrew", "payloads", "gh-auth", "claude-auth", "codex-auth",
                 "zsh-smoke", "native-config")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")

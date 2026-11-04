@@ -6,16 +6,19 @@ set -euo pipefail
 #                    [--tsv] [--quiet] [--online] [--smoke] [--list]
 # Example: ./doctor.sh --host lab-ubuntu
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
-# has, plus structural checks (locale, .venv-sync, retired submodule
-# checkouts, stow links, PATH order, rc-file pollution, oh-my-zsh order,
-# Homebrew nvm and the payload repos of config/payloads.tsv). Read-only and
-# offline: it installs nothing, writes nothing and uses no network unless
-# --online (auth status probes) or --smoke (an interactive zsh) asks for it.
-# The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
-# for this home; it is never guessed. Common only, as the login updater reads
-# it (a set but empty DOTFILES_HOST, or a common-only install ./stow-all.sh
-# recorded), means the detected platform, as --platform. The win host is
-# checked by doctor.ps1.
+# has, plus structural checks (locale, the native binding, PATH order,
+# rc-file pollution, oh-my-zsh order, Homebrew nvm and the payload repos of
+# config/payloads.tsv; with --legacy-stow, .venv-sync and stow links instead
+# of the native binding). Read-only and offline: it installs nothing, writes
+# nothing and uses no network unless --online (auth status probes) or
+# --smoke (an interactive zsh) asks for it.
+# On a native-owned home (one with ~/.config/dotfiles/native) the host
+# defaults to the [data].host of ~/.config/chezmoi/chezmoi.toml, read as
+# text; elsewhere to DOTFILES_HOST, then to the host ./stow-all.sh recorded
+# for this home. It is never guessed. Common only (common-only as that
+# [data].host, a set but empty DOTFILES_HOST, or a common-only install
+# ./stow-all.sh recorded) means the detected platform, as --platform. The
+# win host is checked by doctor.ps1.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
 # row or a structural check); 2 usage error, invalid manifest, unknown host
 # or win.
@@ -72,16 +75,20 @@ usage() {
         'Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [options]' \
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
-        'and of the structural setup (locale, venv-sync, submodule, stow-links,' \
-        'path-order, rc-pollution, omz-order, nvm-homebrew, payloads).' \
+        'and of the structural setup (locale, native-config, path-order, rc-pollution,' \
+        'omz-order, nvm-homebrew, payloads; --legacy-stow checks venv-sync and' \
+        'stow-links instead of native-config).' \
         '' \
-        'Host selection (default: DOTFILES_HOST, else the host ./stow-all.sh recorded):' \
+        'Host selection (default: on a native-owned home the [data].host of its' \
+        'native ~/.config/chezmoi/chezmoi.toml; elsewhere DOTFILES_HOST, else the' \
+        'host ./stow-all.sh recorded):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \
         '                      (win: pwsh -File doctor.ps1 -Host win)' \
         '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
         '                      without a host overlay' \
-        'Common only (a set but empty DOTFILES_HOST, or a common-only install' \
-        './stow-all.sh recorded) means the detected platform without an overlay.' \
+        'Common only (common-only as that [data].host, a set but empty DOTFILES_HOST,' \
+        'or a common-only install ./stow-all.sh recorded) means the detected platform' \
+        'without an overlay.' \
         '' \
         'Options:' \
         '  --legacy-stow     check the supported Stow/parser compatibility path' \
@@ -196,12 +203,20 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 
 # Host and profile. --platform runs without an overlay: only all/unix rows.
-# A DOTFILES_HOST that is set but empty, and without DOTFILES_HOST a
+# A native-owned home records its role in its native config, which needs no
+# git, and DOTFILES_HOST and the Stow receipt do not apply there. Elsewhere
+# a DOTFILES_HOST that is set but empty, and without DOTFILES_HOST a
 # common-only install that ./stow-all.sh recorded for this home, mean common
-# only, as the login updater reads them, so without --host or --platform the
-# doctor checks the platform it detects, without an overlay, and says so.
+# only, as the login updater reads them. Common only, without --host or
+# --platform, means the platform the doctor detects, without an overlay, and
+# the doctor says so.
 if [[ -z "$PLATFORM" && $HOST_SET == 0 ]]; then
-    if bootstrap_host_env_empty; then
+    if bootstrap_native_home; then
+        if bootstrap_recorded_common_only "$REPO_ROOT"; then
+            PLATFORM=$(bootstrap_detect_platform)
+            dotfiles_log warn "the native config of this home selects [data].host common-only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+        fi
+    elif bootstrap_host_env_empty; then
         PLATFORM=$(bootstrap_detect_platform)
         dotfiles_log warn "DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
     elif [[ -z "${DOTFILES_HOST:-}" ]] && bootstrap_find_command git >/dev/null &&
@@ -218,7 +233,10 @@ if [[ -n "$PLATFORM" ]]; then
     HOST=
 else
     if [[ $HOST_SET == 0 ]]; then
-        if [[ -n "${DOTFILES_HOST:-}" ]]; then
+        if bootstrap_native_home; then
+            HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
+                usage_error "no host given and none recorded for this home: its native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
+        elif [[ -n "${DOTFILES_HOST:-}" ]]; then
             [[ "$DOTFILES_HOST" != win ]] || reject_win
             HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
                 usage_error "DOTFILES_HOST='$DOTFILES_HOST' is not a known host (known: $(known_hosts_line))."
@@ -285,11 +303,11 @@ BOOTSTRAP_STRUCTURAL_CHECKS=$(bootstrap_mode_structural_checks)
 probe='' flag='' floor='' absent='' doc=''
 
 # A fresh Homebrew's bin, ~/.local/bin (micromamba, codex, claude, kitty)
-# and, on hpc, the login env's bin stay off PATH until the stowed rc files
+# and, on hpc, the login env's bin stay off PATH until the dotfiles rc files
 # add them, so prepend each one that exists to find what setup-host put
-# there before stow. The order is the stowed shells': ~/.local/bin before
-# Homebrew, and on hpc the login env first. This changes only this
-# process's PATH; path-order judges the caller's PATH.
+# there before the dotfiles are applied. The order is the dotfiles shells':
+# ~/.local/bin before Homebrew, and on hpc the login env first. This changes
+# only this process's PATH; path-order judges the caller's PATH.
 ORIG_PATH=$PATH
 prepend_path() {
     case ":$PATH:" in
