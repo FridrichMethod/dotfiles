@@ -151,25 +151,16 @@ step_S5_codex_verify() {
 
 # --- S6-nerd-font (lab-ubuntu) ---------------------------------------------
 
-# steps_font_present DIR: 0 when DIR holds the font files, named after DIR
-# (CaskaydiaMonoNerdFont-*.ttf), or the user font dirs already have them.
-steps_font_present() {
-    local dir=$1 prefix found
-    prefix=${dir##*/}
-    set -- "$dir/$prefix"*.ttf
-    [ ! -f "$1" ] || return 0
-    found=$(find "${XDG_DATA_HOME:-$HOME/.local/share}/fonts" "$HOME/.fonts" -maxdepth 3 \
-        -name "$prefix*.ttf" -print 2>/dev/null </dev/null | sed -n 1p) || found=
-    [ -n "$found" ]
-}
-
 step_S6_nerd_font_check() {
+    local result
     if ! steps_installer_fields nerd-font; then
         STEP_DETAIL="no installers.tsv nerd-font row for $STEPS_HOST"
         return 2
     fi
-    if steps_font_present "$STEPS_DEST"; then
-        STEP_DETAIL="${STEPS_DEST##*/} font files are installed"
+    # The doctor's nerd-font probe: the user, system and Homebrew font dirs.
+    result=$(bootstrap_check_font "${STEPS_DEST##*/}" -)
+    if [ "${result%%"$BOOTSTRAP_TAB"*}" = ok ]; then
+        STEP_DETAIL=${result#*"$BOOTSTRAP_TAB"}
         return 0
     fi
     STEP_DETAIL="${STEPS_DEST##*/} is not installed in $STEPS_DEST"

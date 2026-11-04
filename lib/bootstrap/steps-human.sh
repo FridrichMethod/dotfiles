@@ -20,7 +20,7 @@ step_H1_xcode_clt_check() {
 step_H1_xcode_clt_plan() {
     steps_block_begin H1-xcode-clt gui
     printf '%s\n' 'xcode-select --install' \
-        "# finish the installer dialog, then run ./setup-host.sh --host $STEPS_HOST again"
+        "# finish the installer dialog, then run ./setup-host.sh --host $STEPS_HOST$(steps_mode_flag) again"
     steps_block_end
 }
 
@@ -53,7 +53,7 @@ steps_homebrew_block() {
     if [ "$STEPS_MODE" = apply ] && steps_has_digest "$path" "$STEPS_SHA"; then
         printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
     else
-        printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
+        printf '# ./setup-host.sh --host %s%s (without --check) downloads %s\n' "$STEPS_HOST" "$(steps_mode_flag)" "$STEPS_URL"
         printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
     fi
     printf '%s\n' "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v' \
@@ -170,6 +170,11 @@ step_H1_fcitx5_plan() {
 step_H2_alloc_check() {
     local need=S2-login-env
     if steps_probe login-env; then
+        # Only --legacy-stow builds the checkout's AI-sync env here.
+        if [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ]; then
+            STEP_DETAIL='the login env exists; no allocation is needed'
+            return 0
+        fi
         if step_S4_setup_sync_check; then
             STEP_DETAIL='the login and AI-sync envs exist; no allocation is needed'
             return 0
@@ -195,7 +200,7 @@ step_H2_alloc_plan() {
             ;;
     esac
     printf '%s\n' '# then, inside the allocation (export CONDA_PKGS_DIRS first, as docs/bootstrap.md S2-login-env says):'
-    printf '%s --host %s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST"
+    printf '%s --host %s%s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST" "$(steps_mode_flag)"
     steps_block_end
 }
 
@@ -268,7 +273,7 @@ step_S5_claude_plan() {
         printf '%s\n' '# read it first; the line below runs it only while its sha256 is still the one above'
         steps_digest_gate "$digest" "$path" "bash $quoted"
     else
-        printf '# ./setup-host.sh --host %s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$STEPS_URL"
+        printf '# ./setup-host.sh --host %s%s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$(steps_mode_flag)" "$STEPS_URL"
         printf '# to %s once, then prints its sha256, its size and a line\n' "$quoted"
         printf '%s\n' '# that runs it only while that sha256 holds; read the file before you run it'
     fi
@@ -470,7 +475,7 @@ step_H7_auth_plan() {
         printf '%s\n' 'ssh-keygen -t ed25519'
     fi
     printf '%s\n' 'gh auth login --git-protocol ssh' \
-        '# do not run gh auth setup-git: it writes the stowed ~/.gitconfig; .gitconfig_local sets the helper'
+        '# do not run gh auth setup-git: it rewrites ~/.gitconfig, which the dotfiles manage; .gitconfig_local sets the helper'
     if [ "$STEPS_PROFILE" = hpc ] && [ "$STEPS_MODE" = manual ]; then
         printf '%s\n' '# claude and codex only where a site module provides them (S2-modules)'
     fi

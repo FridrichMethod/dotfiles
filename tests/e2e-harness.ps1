@@ -204,7 +204,7 @@ function Get-BlockLines {
     $repo = ConvertTo-Quoted $Clone
     $body = switch -CaseSensitive ($Id) {
         'HW-clone' {
-            'judgment', '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.',
+            'judgment', '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 -LegacyStow from the clone.',
             '# Git, and PowerShell 7 as the MSI in Program Files\PowerShell\7, which HW-auto-stow-task starts by path:',
             'winget install --id Git.Git -e --source winget',
             'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix',
@@ -219,7 +219,7 @@ function Get-BlockLines {
             "& $(ConvertTo-Quoted (Join-Path (Join-Path $Clone 'scripts') 'dotfiles-auto-stow.ps1')) -Register"
         }
         'HW-execution-policy' {
-            'judgment', '# Lets the stowed profiles and these scripts run. PowerShell 7 and Windows PowerShell 5.1 keep separate settings.',
+            'judgment', '# Lets the PowerShell profiles and these scripts run. PowerShell 7 and Windows PowerShell 5.1 keep separate settings.',
             'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser',
             'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
         }
@@ -232,7 +232,7 @@ function Get-BlockLines {
             '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.', 'wsl --install -d Ubuntu'
         }
         'HW-auth' {
-            'auth', '# Sign in, then check with .\doctor.ps1 -Online. Skip gh auth setup-git: it would write the stowed ~\.gitconfig.',
+            'auth', '# Sign in, then check with .\doctor.ps1 -LegacyStow -Online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.',
             'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519', 'gh auth login --git-protocol ssh', 'claude auth login', 'codex login'
         }
         default { throw "No fixture block for $Id" }
