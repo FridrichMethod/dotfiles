@@ -665,7 +665,7 @@ SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
 
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/common/zsh"
 cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
-cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/terminal.sh"
+cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 cp -R "$FIXTURES/config/." "$FIXTURE/config/bootstrap/"
 # The real tools.tsv.
@@ -974,6 +974,25 @@ for repo in coding-agent-kit PyMOLScripts awesome-skills; do
     expect_event "curl:https://raw.githubusercontent.com/FridrichMethod/$repo/main/install.sh"
 done
 grep -Fq -- '--connect-timeout 10 --max-time 60' "$CURL_ARGS_LOG" || fail 'the payload downloads are not bounded'
+
+# On a native home the payload line runs the hook of the source the binding
+# names, as sync-payloads does, never this checkout's; a binding that does
+# not resolve leaves only notes.
+new_home payloads-native
+mkdir -p "$CASE_HOME/.config/dotfiles" "$TEST_TMP/bound-elsewhere"
+printf 'home\n' >"$TEST_TMP/bound-elsewhere/.chezmoiroot"
+printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$CASE_HOME" "$TEST_TMP/bound-elsewhere" >"$CASE_HOME/.config/dotfiles/native"
+run_native_case payloads-native-elsewhere -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-native-elsewhere 'HUMAN-BEGIN H7-payloads judgment'
+expect_line payloads-native-elsewhere "# this native home is bound to $TEST_TMP/bound-elsewhere: the line below runs that source's hook, as sync-payloads does"
+expect_line payloads-native-elsewhere "sh $TEST_TMP/bound-elsewhere/scripts/payload-update.sh --now"
+expect_no_text payloads-native-elsewhere out "$FIXTURE/scripts/payload-update.sh"
+printf 'extra\n' >>"$CASE_HOME/.config/dotfiles/native"
+run_native_case payloads-native-invalid -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-native-invalid 'HUMAN-BEGIN H7-payloads judgment'
+expect_line payloads-native-invalid "# this native home's binding does not resolve from this checkout (the doctor's native-config row says why); once it does, run sync-payloads [ITEM...] in an interactive shell"
+expect_no_text payloads-native-invalid out 'payload-update.sh'
+expect_no_text payloads-native-invalid out '# rerun the line below'
 
 # --- debian apply: every step, in phase order --------------------------------
 

@@ -1351,7 +1351,32 @@ run_doctor native-config-elsewhere -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row native-config warn "this home is bound to $TEST_TMP/bound-elsewhere, not to this checkout $FIXTURE; run $TEST_TMP/bound-elsewhere/doctor.sh for its native state" \
     'docs/bootstrap.md H7-native'
+# On a native home the payloads advice names the hook of the source the
+# binding names, which sync-payloads runs, never this checkout's; where the
+# binding does not resolve, only sync-payloads, which then refuses.
+mv "$TEST_HOME/.pymolrc.py" "$TEST_TMP/pymolrc.hidden"
+run_doctor native-payloads-elsewhere DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
+[ "$(tsv_field payloads 4)" = "not installed: pymol: run sync-payloads ITEM (sh $TEST_TMP/bound-elsewhere/scripts/payload-update.sh --now ITEM)" ] ||
+    case_fail "payloads detail [$(tsv_field payloads 4)]"
 bind_native "$FIXTURE"
+run_doctor native-payloads-bound DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+[ "$(tsv_field payloads 4)" = "not installed: pymol: run sync-payloads ITEM (sh $FIXTURE/scripts/payload-update.sh --now ITEM)" ] ||
+    case_fail "payloads detail [$(tsv_field payloads 4)]"
+for unresolved in maintenance invalid; do
+    if [ "$unresolved" = maintenance ]; then
+        : >"$NATIVE_DIR/maintenance"
+    else
+        printf 'dotfiles-chezmoi-v1\n%s\n%s\nextra\n' "$TEST_HOME" "$FIXTURE" >"$NATIVE_MARKER"
+    fi
+    run_doctor "native-payloads-$unresolved" DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+    [ "$(tsv_field payloads 4)" = 'not installed: pymol: run sync-payloads ITEM' ] ||
+        case_fail "payloads detail [$(tsv_field payloads 4)]"
+    rm -f "$NATIVE_DIR/maintenance"
+    bind_native "$FIXTURE"
+done
+mv "$TEST_TMP/pymolrc.hidden" "$TEST_HOME/.pymolrc.py"
 : >"$NATIVE_DIR/maintenance"
 run_doctor native-config-maintenance -- --host lab-ubuntu --tsv
 assert_rc 1

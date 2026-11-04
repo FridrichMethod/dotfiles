@@ -215,7 +215,7 @@ repos:
         entry: tests/setup-host.sh
         language: script
         pass_filenames: false
-        files: ^(setup-host\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/terminal\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(setup-host\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$|^tests/lib/environment\.(sh|ps1)$
       - id: bootstrap-windows
         name: Windows doctor and installer twins
         entry: tests/bootstrap-windows.sh

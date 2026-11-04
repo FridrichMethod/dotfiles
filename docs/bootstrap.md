@@ -1778,16 +1778,21 @@ selects the items a run without arguments installs and the doctor checks.
   `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
   (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
-  warns and names `sync-payloads ITEM`.
+  warns and names `sync-payloads ITEM` and, on Unix, the `--now` line of the
+  hook to run: on a native-owned home the hook of the source its binding
+  names, never the checkout the doctor runs from, and none while the binding
+  does not resolve.
 - **Install:** the line the setup-host block prints, which works before the
   dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
   `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
-  update. In an interactive shell with the dotfiles applied,
-  `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
-  skills; on a native-owned home they run the bound checkout's script and
-  refuse an invalid binding. An installer's exit 75
-  (its own lock is busy) is no failure; any other failure makes the run exit 1
+  update. On a native-owned home the block names the script of the source the
+  binding names (and says so), never the checkout setup-host runs from, and
+  only a note while the binding does not resolve. In an interactive shell
+  with the dotfiles applied, `sync-payloads [ITEM...]` does the same and
+  `sync-skills` runs only the skills; on a native-owned home they run the
+  bound checkout's script and refuse an invalid binding. An installer's exit
+  75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
   plus what each installer needs, which its README lists (Git for the kit and

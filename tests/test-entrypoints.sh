@@ -179,6 +179,7 @@ need = {
     'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1'],
     'unix-installer-integration': ['scripts/awesome-skills-update.sh'],
     'doctor': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
+    'setup-host': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'bootstrap-windows': ['lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1'],
     'e2e-harness-windows': ['tests/e2e-harness-windows.sh', 'tests/e2e-harness.ps1',
                             'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1'],
