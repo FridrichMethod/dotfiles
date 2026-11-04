@@ -713,8 +713,27 @@ function Test-BootstrapNativeReady {
     return (Get-BootstrapNativeState -RepoRoot $RepoRoot).State -ceq 'ok'
 }
 
+function New-BootstrapPrivateFile {
+    # Create Path, which must not exist, open for writing. On Windows its DACL
+    # is explicit and protected from creation on: FullControl for this user,
+    # SYSTEM and Administrators only, nothing inherited from its directory.
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not $IsWindows) { return [IO.FileStream]::new($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None) }
+    $security = [Security.AccessControl.FileSecurity]::new()
+    $security.SetAccessRuleProtection($true, $false)
+    foreach ($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')) {
+        $security.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
+                [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow))
+    }
+    return [IO.FileSystemAclExtensions]::Create([IO.FileInfo]::new($Path), [IO.FileMode]::CreateNew,
+        [Security.AccessControl.FileSystemRights]::FullControl, [IO.FileShare]::None, 4096, [IO.FileOptions]::None, $security)
+}
+
 function Install-BootstrapChezmoi {
-    # Verify the archive before reading any member. Extract only the executable.
+    # Verify the archive through the one read-only handle its executable is
+    # then extracted from, so a path swap after the check changes nothing.
+    # Extract only chezmoi.exe, into a private file beside Destination (never
+    # a DACL inherited from %TEMP%), then rename it into place.
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$Sha256,
         [Parameter(Mandatory)][string]$Destination)
@@ -724,22 +743,42 @@ function Install-BootstrapChezmoi {
     }
     $scratch = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-bootstrap-' + [Guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($scratch)
+    $staging = $null
     try {
         $archive = Join-Path $scratch 'chezmoi.zip'
         $result = Install-BootstrapFile -Uri $Uri -Sha256 $Sha256 -Destination $archive
         if (-not $result.Success) { return $result }
-        $zip = [IO.Compression.ZipFile]::OpenRead($archive)
+        $stream = [IO.FileStream]::new($archive, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
         try {
-            $entry = $zip.GetEntry('chezmoi.exe')
-            if ($null -eq $entry -or $entry.Length -eq 0) { return New-BootstrapResult failed 'verified archive has no chezmoi.exe' }
-            $binary = Join-Path $scratch 'chezmoi.exe'
-            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $binary)
+            $hash = [Security.Cryptography.SHA256]::Create()
+            try { $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+            finally { $hash.Dispose() }
+            if ($actual -cne $Sha256) { return New-BootstrapResult failed "sha256 mismatch for ${Uri}: the archive changed after its check" }
+            $stream.Position = 0
+            $zip = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read, $true)
+            try {
+                $entry = $zip.GetEntry('chezmoi.exe')
+                if ($null -eq $entry -or $entry.Length -eq 0) { return New-BootstrapResult failed 'verified archive has no chezmoi.exe' }
+                $directory = [IO.Path]::GetDirectoryName($Destination)
+                [void][IO.Directory]::CreateDirectory($directory)
+                $staging = Join-Path $directory ('.chezmoi-' + [Guid]::NewGuid().ToString('N') + '.partial')
+                $output = New-BootstrapPrivateFile $staging
+                try {
+                    $member = $entry.Open()
+                    try { $member.CopyTo($output) } finally { $member.Dispose() }
+                }
+                finally { $output.Dispose() }
+            }
+            finally { $zip.Dispose() }
         }
-        finally { $zip.Dispose() }
-        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination))
-        [IO.File]::Move($binary, $Destination, $true)
+        finally { $stream.Dispose() }
+        [IO.File]::Move($staging, $Destination, $true)
+        $staging = $null
         return New-BootstrapResult installed 'installed SHA256-verified chezmoi; native handover remains separate'
     }
     catch { return New-BootstrapResult failed "chezmoi install failed: $($_.Exception.Message)" }
-    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue }
+    finally {
+        Remove-Item -LiteralPath $scratch -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
+        if ($staging) { Remove-Item -LiteralPath $staging -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue }
+    }
 }

@@ -1,6 +1,7 @@
 """Windows writer handover and native updater behavior in disposable homes."""
 
 import base64
+import functools
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def ps_string(value):
     return "'" + str(value).replace("'", "''") + "'"
+
+
+def system32(name):
+    return str(Path(os.environ["SYSTEMROOT"]) / "System32" / name)
+
+
+@functools.cache
+def current_user_sid():
+    output = subprocess.run([system32("whoami.exe"), "/user", "/fo", "csv", "/nh"], stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, check=True, timeout=30).stdout
+    return output.strip().rsplit(",", 1)[1].strip('"')
 
 
 @unittest.skipUnless(os.name == "nt", "native Windows takeover requires Windows")
@@ -96,6 +108,43 @@ class WindowsTakeoverTests(unittest.TestCase):
         # Inspected initial application is an operator action, not unattended update.
         result = self.f.run("apply")
         self.assertEqual(result.returncode, 0, result.stderr)
+        # The fixture chezmoi stays first on PATH: the updater must not use it.
+        self.install_backend()
+
+    def icacls(self, path, *args):
+        result = subprocess.run([system32("icacls.exe"), str(path), *args], stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def install_backend(self, path=None):
+        # The explicit protected DACL W1-chezmoi writes; the runner's temporary
+        # directory ACL is never relied on.
+        path = path or self.home / ".local/bin/chezmoi.exe"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.f.binary, path)
+        self.icacls(path, "/inheritance:r", "/grant:r", "*" + current_user_sid() + ":(F)",
+                    "*S-1-5-18:(F)", "*S-1-5-32-544:(F)")
+        return path
+
+    def junction(self, link, target):
+        result = self.ps("New-Item -ItemType Junction -Path " + ps_string(link) + " -Target " +
+                         ps_string(target) + " | Out-Null")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def publish_sample(self, text):
+        (self.repo / "home/dot_sample").write_text(text)
+        self.git("commit", "-qam", "sample backend change")
+        self.git("push", "origin", "main")
+
+    def assert_backend_refused(self, result):
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("[dotfiles] Native update skipped", output)
+        self.assertIn("chezmoi.exe", output)
+        self.assertIn("docs/bootstrap.md W1-chezmoi", output)
+        self.assertEqual(output.count("[dotfiles]"), 1, output)
+        self.assertNotIn("S-1-", output)
+        self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
     def update(self, before="", after=""):
         return self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";" + before +
@@ -515,9 +564,6 @@ class WindowsTakeoverTests(unittest.TestCase):
 
     def test_native_backend_uses_provisioned_binary_when_path_omits_it(self):
         self.setup_native()
-        installed = self.home / ".local/bin/chezmoi.exe"
-        installed.parent.mkdir(parents=True)
-        shutil.copyfile(self.f.binary, installed)
         self.env["PATH"] = os.pathsep.join((str(Path(self.git_exe).parent), str(Path(self.pwsh).parent),
                                             os.environ["SYSTEMROOT"] + "\\System32"))
         (self.repo / "home/dot_sample").write_text("installed backend\n")
@@ -528,6 +574,101 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.home / ".sample").read_text(), "installed backend\n")
         self.assertEqual(self.git("stash", "list"), "")
+
+    def test_path_shadows_never_replace_the_provisioned_binary(self):
+        self.setup_native()
+        local_bin = self.home / ".local/bin"
+        earlier = self.f.root / "earlier path entry"
+        earlier.mkdir()
+        marker = self.f.root / "shadow executed"
+        for directory in (earlier, local_bin):
+            # PATHEXT puts .COM before .EXE; a PE image runs whatever its extension.
+            shutil.copyfile(system32("whoami.exe"), directory / "chezmoi.com")
+            (directory / "chezmoi.cmd").write_text("@echo shadow>>\"" + str(marker) + "\"\n")
+        self.env["PATH"] = os.pathsep.join((str(earlier), str(local_bin), self.env["PATH"]))
+        self.publish_sample("provisioned backend\n")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual((self.home / ".sample").read_text(), "provisioned backend\n")
+
+    def test_missing_provisioned_binary_warns_without_path_fallback(self):
+        self.setup_native()
+        (self.home / ".local/bin/chezmoi.exe").unlink()
+        self.publish_sample("path fallback must not apply\n")
+        self.assert_backend_refused(self.update())
+
+    def test_foreign_owner_or_writer_refuses_the_provisioned_binary(self):
+        self.setup_native()
+        installed = self.home / ".local/bin/chezmoi.exe"
+        self.publish_sample("untrusted backend must not run\n")
+        # BUILTIN\Users stands for any other account, such as an app sandbox group.
+        for change in (("/grant", "*S-1-5-32-545:(M)"), ("/setowner", "*S-1-5-32-545")):
+            installed.unlink()
+            self.install_backend()
+            self.icacls(installed, *change)
+            self.assert_backend_refused(self.update())
+
+    def test_linked_binary_or_parent_directory_is_refused(self):
+        self.setup_native()
+        local = self.home / ".local"
+        installed = local / "bin/chezmoi.exe"
+        elsewhere = self.install_backend(self.f.root / "trusted elsewhere/chezmoi.exe")
+        self.publish_sample("linked backend must not run\n")
+        installed.unlink()
+        installed.symlink_to(elsewhere)
+        self.assert_backend_refused(self.update())
+        installed.unlink()
+        installed.parent.rmdir()
+        self.junction(installed.parent, elsewhere.parent)
+        self.assert_backend_refused(self.update())
+        installed.parent.rmdir()
+        moved = self.f.root / "moved local"
+        local.rename(moved)
+        self.install_backend(moved / "bin/chezmoi.exe")
+        self.junction(local, moved)
+        self.assert_backend_refused(self.update())
+
+    def test_trust_decision_reads_owner_and_dacl_from_the_held_handle(self):
+        self.setup_native()
+        installed = self.home / ".local/bin/chezmoi.exe"
+        # Each step runs directly, so a refusal names its cause. Foreign read and
+        # deny entries and OWNER RIGHTS (hosted runners add it) stay acceptable;
+        # a foreign owner or a foreign write bit does not.
+        result = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";$p=" + ps_string(installed) +
+                         ";if(-not(Test-DotfilesNativeChezmoiPath $p)){throw 'path refused'}" +
+                         ";$s=[IO.FileStream]::new($p,'Open','Read','Read')" +
+                         ";try{$sd=[IO.FileSystemAclExtensions]::GetAccessControl($s)}finally{$s.Dispose()}" +
+                         ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw ('trusted copy refused: '+" +
+                         "$sd.GetSecurityDescriptorSddlForm('Owner,Access'))}" +
+                         ";$users=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')" +
+                         ";foreach($r in @('S-1-5-32-545,ReadAndExecute,Allow','S-1-5-32-545,Write,Deny','S-1-3-4,FullControl,Allow'))" +
+                         "{$f=$r.Split(',');$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(" +
+                         "[Security.Principal.SecurityIdentifier]::new($f[0]),$f[1],$f[2]))}" +
+                         ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw 'foreign read, deny or OWNER RIGHTS entry refused'}" +
+                         ";$owner=$sd.GetOwner([Security.Principal.SecurityIdentifier]);$sd.SetOwner($users)" +
+                         ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign owner trusted'};$sd.SetOwner($owner)" +
+                         ";$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($users,'AppendData','Allow'))" +
+                         ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign append right trusted'}")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_held_binary_handle_blocks_renaming_its_parent_directories(self):
+        # Records the NTFS behavior the updater relies on: while its read-only
+        # handle is open, .local\bin and .local cannot be renamed away and replaced.
+        self.setup_native()
+        local = self.home / ".local"
+        moves = [(local / "bin", self.f.root / "bin moved"), (local, self.f.root / "local moved")]
+        attempts = ";".join("try{[IO.Directory]::Move(" + ps_string(source) + "," + ps_string(target) +
+                            ");'moved'}catch{'refused'}" for source, target in moves)
+        release = ("[IO.Directory]::Move(" + ps_string(moves[0][0]) + "," + ps_string(moves[0][1]) + ");" +
+                   "[IO.Directory]::Move(" + ps_string(moves[0][1]) + "," + ps_string(moves[0][0]) + ");'released'")
+        result = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") +
+                         ";$held=Open-DotfilesNativeChezmoi -Destination " + ps_string(self.home) +
+                         ";if(-not $held){throw 'provisioned binary refused'};try{" + attempts +
+                         "}finally{$held.Dispose()};" + release)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), ["refused", "refused", "released"])
 
     def publish_new_target(self, upstream=True):
         source = self.repo
