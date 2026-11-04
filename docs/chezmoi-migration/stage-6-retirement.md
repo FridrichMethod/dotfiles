@@ -61,7 +61,7 @@ removing current source paths; do not build a fleet registry or legacy detector.
 | R3 | Windows converged on Stage 5 | **Pending, user-run** (steps below). No Stage 6 breaking revision may reach win before it passes |
 | R4 | Fresh-home native install procedure, documented and executable by an agent | **Open**; deliverable of A4. `step_H7_native_plan` (`lib/bootstrap/steps-human.sh:574-582`) and bootstrap.md H7-native/HW-native still defer to takeover.md, which converts existing Stow homes |
 | R5 | Stow recovery bridge and cutoff documented | Present: `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` is the last supported Stow release and the first accepted native release (support-boundary.md, "Stage 4 candidate boundary"). B7 restates it in README |
-| R6 | Isolation | Work only in `.worktrees/<task>/` worktrees or independent clones. Lab's `$HOME/dotfiles` main checkout is the bound native source of Lab's home and is shared with Codex: never edit, switch branches or leave it dirty (the native updater refuses a dirty source, `scripts/chezmoi-update.sh:57`) |
+| R6 | Isolation | Work only in `.worktrees/<task>/` worktrees or independent clones. Lab's `$HOME/dotfiles` main checkout is the bound native source of Lab's home and is shared with Codex: never edit, switch branches or leave it dirty (the native updater refuses a dirty source, `scripts/chezmoi-update.sh:57`). Worktrees under its `.worktrees/` do not dirty it: the path is ignored (`.gitignore:25`) and that status check does not list ignored paths |
 | R7 | Landing authority | AGENTS.md "Workflows and checks": exact candidate on `ci/**` (and `e2e-ci/**`), every job green, then fast-forward `main`. The auto-mode classifier has required an explicit user confirmation for `main` pushes in earlier sessions; plan for it at the landing step |
 | R8 | Decisions | D-1..D-17 answered by the user before the commits that depend on them |
 
@@ -75,10 +75,16 @@ PowerShell 7; the administrator SSH channel never writes managed targets:
    `CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212`
    (`Get-FileHash`). After that session's login updater has finished and with no
    other chezmoi running, run `pwsh -NoProfile -File <path>\reinit-win.ps1`. It
-   prints only hashes, owners, key names, booleans and nonsecret paths.
+   prints only hashes, owners, key names, booleans and nonsecret paths. It needs
+   pwsh 7.2 or later (`#Requires -Version 7.2`; win has 7.6.9) and stops unless
+   the source's `HEAD:home/.chezmoi.toml.tmpl` is blob `9e26214c` (`dddc718`'s),
+   so R3 must run before any commit that changes that template reaches main.
 3. Optional: `icacls <HOME>\.local\bin\chezmoi.exe /inheritance:d`, which keeps
    the file's current entries but stops later inheritance from `~/.local` (a
    propagated Codex sandbox Modify grant would make the updater refuse it).
+   First run `icacls <HOME>\.local\bin\chezmoi.exe` and confirm that no entry
+   names `CodexSandboxUsers`: `/inheritance:d` copies the inherited entries as
+   explicit ones, so a grant already present would become permanent.
 4. `.\doctor.ps1` (native): `native-config` ok.
 
 The agent then records, read-only: revision, config sha256 before and after,
@@ -93,12 +99,16 @@ argument set (`scripts/chezmoi-update.sh:62-67`) plus `--exclude=dirs
 --force=false`. After the Stage 5 re-init the config owns `persistentState`, so
 plain read-only commands (`status`, `diff`, `managed`, `data`,
 `execute-template`) no longer fork state; never run a plain mutating command.
+That holds only on the five re-initialized Unix hosts: on win, until R3's
+re-init passes (F11), even read-only commands need the full explicit argument
+set, because a plain one reads and creates the default
+`~/.config/chezmoi/chezmoistate.boltdb` instead of the bound state.
 
 | # | Check | Expected |
 | --- | --- | --- |
 | F1 | `~/.config/dotfiles/native` | Regular file, exactly three LF lines: `dotfiles-chezmoi-v1`, canonical HOME, canonical source (`dotfiles_native_source`, `lib/chezmoi-guard.sh:53-69`) |
 | F2 | `~/.config/dotfiles/maintenance` | Absent, except deliberately during a Phase C canary |
-| F3 | Bound chezmoi version | 2.74.0 (Sherlock: static musl build; Windows: the private `~/.local/bin/chezmoi.exe` that `Test-BootstrapNativeChezmoi` accepts) |
+| F3 | Bound chezmoi version | 2.74.0 or later (the `.chezmoiversion` floor); record the actual version. Unix updaters run the chezmoi on PATH and Mac reuses its Homebrew chezmoi, which can move. Sherlock: static musl build; Windows: the private `~/.local/bin/chezmoi.exe` that `Test-BootstrapNativeChezmoi` accepts |
 | F4 | `git -C <source> status --porcelain --untracked-files=all` | Empty |
 | F5 | Source HEAD | The last green main |
 | F6 | Native `status --exclude=dirs` | Empty |
@@ -257,9 +267,10 @@ Confirmed couplings:
 - Every e2e flow runs the legacy mode (`tests/e2e/lib/flow-unix.sh:21,170,216`;
   `steps.sh:44,71,102,196,206,232-240`; `steps.ps1:197,211,234,288,305`;
   `flow-win.ps1:135`): A4 precedes B1.
-- `tests/test_chezmoi_codex.py:13-16` imports `CODEX_POLICY` from
-  `lib/config_sync.py`; policy invariants live only in `tests/ai-config-sync.sh`
-  and repository invariants in `tests/windows-installer.sh`: A1 precedes B2/B3.
+- `tests/test_chezmoi_codex.py:13-17` imports `CODEX_POLICY` and
+  `CODEX_RETIRED` from `lib/config_sync.py`; policy invariants live only in
+  `tests/ai-config-sync.sh` and repository invariants in
+  `tests/windows-installer.sh`: A1 precedes B2/B3.
 - B5 moves files the legacy installers enumerate: after B2/B3, so no commit has a
   half-working Stow path.
 
@@ -283,15 +294,20 @@ setup-sync or create a venv. From B3 on, run everything with it unset.
   `allow` or `forbidden` decision, no machine paths); `:311-320` (global
   `CLAUDE.md` and `AGENTS.md` differ only in the destructive-action bullets);
   `:322-343` (one identical, version-free "Stanford Sherlock" section);
-  `:345-392`; `:431-470` (installed-Codex exec-policy check, optional skip).
+  `:345-388` (no host-specific path in the portable Codex rules, routine
+  commands absent, the required auto-review guardrails present; not `:390-392`,
+  which grep `stow-all.sh`, `stow-all.ps1` and `.stowrc` and so would fail at
+  B2); `:431-470` (installed-Codex exec-policy check, optional skip).
 - Port from `tests/windows-installer.sh`: `:80-104` (Windows Terminal
-  `settings.json`: strict JSON, ASCII, `Windows.Terminal.PowershellCore` never
-  disabled), `:111-114` (`CLAUDE.md` first line `@AGENTS.md`), `:116-140`
+  `settings.json`: strict JSON, ASCII, the Windows PowerShell and Command Prompt
+  built-in profile stubs listed and hidden `:93-101`,
+  `Windows.Terminal.PowershellCore` never disabled), `:111-114` (`CLAUDE.md`
+  first line `@AGENTS.md`), `:116-140`
   (PowerShell parse gate for `doctor.ps1`, `setup-host.ps1`,
   `scripts/payload-update.ps1`, `scripts/chezmoi-update.ps1`, `lib/terminal.ps1`,
   `lib/chezmoi-guard.ps1`, `tests/terminal.ps1`, `tests/run.ps1`; drop files B2/B3
   delete).
-- `tests/test_chezmoi_codex.py:13-16,43-52`: stop importing `lib/config_sync.py`;
+- `tests/test_chezmoi_codex.py:13-17,43-52`: stop importing `lib/config_sync.py`;
   `home/.chezmoidata/codex-policy.json` becomes the single authority (D-4).
 - Wire it: `tests/run.sh:87-111`, `tests/run.ps1`, a pre-commit hook selecting the
   portable policy files, `AGENTS.md`, `CLAUDE.md`, the Terminal settings and the
@@ -389,15 +405,16 @@ Unix code:
   (D-6).
 - `lib/bootstrap/steps-runtimes.sh`: header `:3`, S4-setup-sync `:212-279`.
 - `lib/bootstrap/steps-human.sh`: H2-alloc legacy branch `:173-183`; H7-stow
-  `:284-416` (`steps_stowed`, `steps_stow_conflicts`, check, path prefix, plan);
+  `:284-414` (`steps_stowed`, `steps_stow_conflicts`, check, path prefix, plan);
   H7-doctor flag `:557`.
 - `lib/bootstrap/checks.sh`: header `:18-19`, structural rows `:32-33` and the
   `path-order` doc ref `:35` (H7-native), `bootstrap_mode_structural_checks`
   `:42-55`, `bootstrap_sync_runtime_ok` `:483-490`, `bootstrap_check_venv_sync`
   `:492-514`, `bootstrap_physical_path` `:605-622` (only caller is stow-links),
   `bootstrap_check_stow_links` `:624-658`, dispatch `:800-801`.
-- `lib/bootstrap/manifest.sh`: `bootstrap_mode_tool_rows` `:215-225` (callers in
-  both entrypoints), Windows id map `:336-337`.
+- `lib/bootstrap/manifest.sh`: `bootstrap_mode_tool_rows` `:214-225` (only
+  caller `doctor.sh:302`; setup-host filters through the step-registry mode
+  filter `steps.sh:85-86` instead), Windows id map `:336-337`.
 - `lib/bootstrap/platform.sh`: `bootstrap_host_env_empty` `:164-168`,
   `bootstrap_state_file` `:232-246`; reduce `bootstrap_recorded_common_only`
   `:248-267` and `bootstrap_resolve_host` `:269-304` to their native branches.
@@ -457,6 +474,10 @@ Edit:
   comments `:322-323`; "stowed" wording `:1,281-282` and
   `WindowsPowerShell/profile.ps1:1` (changes rendered bytes; every host
   login-updates once).
+- Comments in deployed files that name source paths: `profile.ps1:7,191,281,319`,
+  `common/sh/.profile:23`, `sherlock/sh/.config/sh/.profile:83`. Rewrite them to
+  target names (`~/.zshrc`) here, where rendered bytes change anyway; B5's
+  rendered-parity gate allows no byte change.
 - `lib/chezmoi-guard.ps1`: delete `Test-DotfilesLegacyWriteAllowed` `:43-64`.
 - Delete tests: `tests/stow-all.sh` (810), `stow-ignores.sh` (20),
   `test_stow_ignores.py` (248), `unix-installer.sh` (516), `update-hooks.sh` (462),
@@ -489,8 +510,8 @@ Edit:
   `:35-48`, "On Windows" `:69-73`, "Hosts and packages" `:101-105`, "Auto-update
   Hooks" `:125-134`; AGENTS.md "Stow and update scripts" `:140-154` (keep the
   `lib/terminal` bullet `:142`), the Stow bullets of "Windows" `:155-169`,
-  including the false `:161` claim that Terminal `settings.json` "is a plain Stow
-  symlink" (natively a regular file since Stage 4).
+  including `:161` ("is a plain Stow symlink"), obsolete for native homes
+  (natively a regular file since Stage 4) and true only of legacy Windows Stow.
 
 Replacement coverage: native login dispatch stays in `tests/shell-profile.sh`,
 `tests/powershell-profile.ps1`, `tests/test_chezmoi_guard.py` and the takeover
@@ -514,16 +535,25 @@ Edit:
 - `tests/lib/environment.sh:7`, `tests/lib/environment.ps1:4`,
   `tests/test_environment.py:23`: `DOTFILES_SYNC_PYTHON` becomes an ordinary
   cleared `DOTFILES_` variable.
-- Runners: `tests/run.sh:41-48,93-97`; `tests/run.ps1:25-33,59-64`.
+- Runners: `tests/run.sh:41-48,93-94,96-97` (keep `:95` `ai-integration.sh`,
+  which A2 frees from the parser; the macOS job is the only one that runs its
+  real fzf-tab preview case, `ci.yml:91-97`); `tests/run.ps1:25-33,59-64`.
 - Delete tests: `tests/config-sync.sh` (20), `test_config_sync.py` (798),
   `codex-config-sync.sh` (414), `ai-config-sync.sh` (472, after A1),
   `fcitx5-profile-sync.sh` (128).
 - Edit tests: `tests/test_chezmoi_guard.py:179-248` (legacy writer refusal)
   delete; `tests/test_chezmoi_integration.py:57-85` keeps the "native transforms
-  never shell out" intent with the poison on any interpreter on PATH instead of
-  `:64`'s deleted helper; `tests/test_chezmoi_source_state.py:97-113` and
+  never shell out" intent, with a poison on any interpreter on PATH replacing the
+  `DOTFILES_SYNC_PYTHON` poison (`:64`) and the deleted wrapper paths
+  (`:65-67`); `tests/test_chezmoi_source_state.py:97-113` and
   `tests/chezmoi_source_support.py:74,100-116` (category C and the 95 count);
-  `tests/test-entrypoints.sh:142-146,157-159`.
+  `tests/test-entrypoints.sh:142-146` and, as an edit, `:157-159` (drop only
+  `lib/sync-runtime.sh` and `lib/config_sync.py`; the takeover suites on `:158`
+  and `codex-policy.json` on `:159` stay).
+- `config/bootstrap/apt/common.txt:19-20` (`python3-venv`, `python3-pip`), which
+  docs/dependencies.md:18 ties to parser setup: drop them unless the caller
+  re-derivation finds another consumer (for example pre-commit on a
+  contributor host); record the outcome.
 - `docs/chezmoi-migration/inventory.md`: remove the four C rows (`:97,103,104,
   145`); 95 -> 91 tracked rows; per-role package paths 52/59/58/63/57/57/29 ->
   49/56/55/59/54/54/26 (now equal to the native totals); six executable modes ->
@@ -618,13 +648,16 @@ Edit:
   at `dddc718`): `test_chezmoi_guard.py` 8, `setup-host.sh` 8,
   `test-entrypoints.sh` 7, `test_chezmoi_source_state.py` 7, `doctor.sh` 6,
   `test_tmux.py` 5, `powershell-profile.ps1` 5, `e2e-harness.ps1` 5,
-  `test_portable_shell.py` 4, `shell-profile.sh` 4, `test_bootstrap_manifest.py` 4,
-  `chezmoi_source_support.py` 3, `test_chezmoi_takeover_unix.py` 3,
-  `test_chezmoi_integration.py` 3, `test_ai_integration.py` 3, `bootstrap.ps1` 3,
-  `test_chezmoi_codex.py` 2, `host-overlays.sh` 2, `bootstrap-manifest.sh` 2,
+  `test_portable_shell.py` 4, `shell-profile.sh` 4,
+  `test_chezmoi_takeover_unix.py` 3, `test_chezmoi_integration.py` 3,
+  `test_ai_integration.py` 3, `bootstrap.ps1` 3, `test_chezmoi_codex.py` 2,
+  `host-overlays.sh` 2, `bootstrap-manifest.sh` 2,
   `test_chezmoi_takeover_windows.py` 1, `test_chezmoi_claude.py` 1,
-  `payload-update.sh` 1, `tests/lib/environment.sh` 1. Path joins built from
-  parts are not counted; grep for the tree names as well.
+  `payload-update.sh` 1. The same command also hits `tests/e2e/lib/flow-win.ps1`
+  1 (`Test-E2EStowed`, which A4 removes) and `tests/e2e/docker/site/marlowe.sh`
+  1 (a comment, listed below), plus suites B2/B3 delete. Path joins built from
+  parts and tree names alone are not counted: grep for the tree names as well
+  (for example `chezmoi_source_support.py` `TREES`/`ROW`, below).
 - `docs/chezmoi-migration/inventory.md` and `tests/chezmoi_source_support.py`
   (`TREES` `:17`, `ROW` `:21` and its parser `:42-43`): D-13. Role totals
   49/56/55/59/54/54/26 must not change.
@@ -632,7 +665,8 @@ Edit:
   `bootstrap_check_rc_pollution` `:717-758` scan `common/` sources: D-14.
   Comments: `lib/bootstrap/manifest.sh:130`, `steps-runtimes.sh:27`,
   `steps-guard.sh:6`, `checks.sh:516`, `config/bootstrap/git-clones.tsv:8`,
-  `tests/e2e/docker/site/marlowe.sh:6`.
+  `config/bootstrap/tools.tsv:22`, `config/bootstrap/apt/lab-ubuntu.txt:2`,
+  `tests/e2e/docker/site/marlowe.sh:6` (comments in deployed files belong to B2).
 - `home/.chezmoiignore:9` comment; `home/.chezmoi.toml.tmpl:1` keeps its
   working-tree `includeTemplate` of `validate-host` (not a legacy path; change it
   only if the source root moves).
@@ -714,11 +748,17 @@ design. `Test-SetupStowed`'s `LinkTarget` use leaves with B1.
 
 1. Fresh `git clone` of the candidate; no `.venv-sync`; `env -u
    DOTFILES_SYNC_PYTHON`. No tracked file outside `docs/chezmoi-migration/` may
-   name a retired mechanism; this returns only reviewed hits (`.gitignore:55`,
-   D-10 prose if kept, `DOTFILES_DIR` if D-6 keeps it):
+   name a retired mechanism; this returns only reviewed hits: `.gitignore:55`;
+   kept native negative assertions unless their commits drop them
+   (`tests/test_chezmoi_source_state.py:113`,
+   `tests/test_chezmoi_native_config.py:21`,
+   `tests/test_chezmoi_integration.py:62`, the `DOTFILES_SYNC_PYTHON` poison in
+   `tests/test_chezmoi_provision.py:31`); the D-12 retired-name test and the A4
+   e2e `.venv-sync` audit; D-10 prose if kept; `DOTFILES_DIR` only where D-6
+   keeps it:
 
    ```sh
-   git grep -n -E 'tomlkit|config_sync|sync-runtime|DOTFILES_SYNC_PYTHON|setup-sync|venv-sync|stow-all|dotfiles-update|dotfiles-auto-stow|awesome-skills-update|stow-links|legacy-stow|LegacyStow|BOOTSTRAP_LEGACY_STOW|DOTFILES_AUTO_STOW|DOTFILES_PAYLOAD_AUTO_UPDATE|dotfiles-sync-(unix|windows)|windows-link-trust|requirements-sync' -- ':!docs/chezmoi-migration'
+   git grep -n -E 'tomlkit|config_sync|sync-runtime|DOTFILES_SYNC_PYTHON|DOTFILES_DIR|setup-sync|venv-sync|stow-all|dotfiles-update|dotfiles-auto-stow|awesome-skills-update|stow-links|legacy-stow|LegacyStow|BOOTSTRAP_LEGACY_STOW|DOTFILES_AUTO_STOW|DOTFILES_PAYLOAD_AUTO_UPDATE|dotfiles-sync-(unix|windows)|windows-link-trust|requirements-sync' -- ':!docs/chezmoi-migration'
    ```
 
 2. `git grep -n 'joinPath .chezmoi.workingTree' -- home` returns only the D-2/D-3
@@ -802,7 +842,7 @@ wrappers 170 (33, 33, 31, 73); legacy updaters and shim 564
 `awesome-skills-update.sh` 6).
 
 Partial code removals (measured ranges, roughly 800 lines in total):
-`steps-human.sh` H7-stow 133 and H2-alloc branch 11; `steps-runtimes.sh`
+`steps-human.sh` H7-stow 131 and H2-alloc branch 11; `steps-runtimes.sh`
 S4-setup-sync 68; `checks.sh` venv-sync 32, physical-path and stow-links 54,
 payload stow-links about 12, structural/mode/dispatch about 20; `platform.sh`
 about 55; `steps.sh`, `steps-common.sh`, `manifest.sh` about 35; guards 40 (sh)
@@ -903,7 +943,7 @@ Ask the user these, with the recommendations, before the commits that need them.
 | D-3 | Canonical portable AI policy location | (a) a non-target directory read by the modify templates through the same literal include (e.g. `policy/claude-settings.json`, `policy/codex-config.toml`); (b) `home/.chezmoidata/` (merges into template data; Inference); (c) `home/.chezmoitemplates/` (parsed as templates). Recommended (a); `check-json`/`check-toml` and A1 retarget |
 | D-4 | Oracle for `codex-policy.json` once `CODEX_POLICY` goes | (a) frozen golden list in the test (19 owned paths with types, 3 retired) plus structural checks against the portable TOML; (b) structural checks only. Recommended (a) |
 | D-5 | Payload calls without `--now`/`-Now` | (a) error with one usage line, exit/return 2, no state, no option leak when sourced; (b) keep silent no-ops. Recommended (a) |
-| D-6 | `DOTFILES_DIR` | (a) remove it everywhere (profile fallbacks, `sync-payloads` fallbacks, P0-preflight warning, README knob); `sync-payloads` then needs a valid binding and an unmarked home runs `sh <checkout>/scripts/payload-update.sh --now`, as H7-payloads prints; (b) keep it for `sync-payloads` only. Recommended (a) |
+| D-6 | `DOTFILES_DIR` | (a) remove it as a knob everywhere (profile fallbacks, `sync-payloads` fallbacks, P0-preflight warning, README knob, docs/payloads.md, docs/testing.md, `tests/e2e/lib/flow-other.sh` and the suites that set it); `sync-payloads` then needs a valid binding and an unmarked home runs `sh <checkout>/scripts/payload-update.sh --now`, as H7-payloads prints; (b) keep it for `sync-payloads` only. Recommended (a). Either way, the paste-in helpers in bootstrap.md (`fetch_pinned`, `clone_listed`, the nvm block) read `${DOTFILES_DIR:-$HOME/dotfiles}` only to find the checkout, and D-1(a) relies on `fetch_pinned`: keep that as documented shell input or rename it to a local variable |
 | D-7 | docs/update-contract.md and docs/sherlock-kit.md | (a) rewrite update-contract.md as the durable native updater contract (from takeover.md "Updates and edits after takeover") and delete sherlock-kit.md if support-boundary.md's manual checklist covers its links; (b) delete both. Recommended (a) |
 | D-8 | `.gitignore` residue lines | (a) keep permanently as cheap guards; (b) remove after every host's residue is gone. Recommended (a) |
 | D-9 | Old payload files and `.git` receipts on hosts | (a) remove exact files in Phase C under D11 after listing them; (b) leave them. Recommended (a) for `.venv-sync` and receipts, (b) for payload files unless the user wants them gone |
@@ -913,7 +953,7 @@ Ask the user these, with the recommendations, before the commits that need them.
 | D-13 | Inventory authority after consolidation | (a) re-key the inventory table to native paths and keep it as test input; (b) move expected target sets into a small data file under `tests/fixtures/` and leave inventory.md historical. Recommended (b) |
 | D-14 | rc-pollution check | (a) scan live HOME rc files for installer blocks (read-only) and drop the checkout half; (b) retarget to `home/` unchanged; (c) drop it. Recommended (a) |
 | D-15 | Remaining binary and floor findings (B6) | (a) keep Unix's PATH chezmoi (S4-chezmoi reuses a floor-satisfying chezmoi by design) and guard `$PSStyle` so the pwsh 7.0 floor holds; (b) also pin Unix to `~/.local/bin/chezmoi`; (c) raise the pwsh floor to 7.2 instead of guarding. Recommended (a), as a small separate `fix:` commit |
-| D-16 | Rollout gating | (a) maintenance-gated canary on Lab, then host by host; (b) normal login propagation with post-checks. Recommended (a): B2 changes both profiles' bytes and B5 rewrites the layout the updater reads |
+| D-16 | Rollout gating | (a) maintenance-gated canary on Lab, then host by host; (b) normal login propagation with post-checks. Recommended (a): B2 changes both profiles' bytes and B5 rewrites the layout the updater reads. (b) conflicts with support-boundary.md (quiescence before any Stage 6 breaking publication) and fleet-rollout.md "Ordered execution" step 3 ("Do not publish the deletion to auto-updated main first"); choosing it would first need those documents changed |
 | D-17 | Takeover-from-Stow coverage | Conversion stays supported only from `bf99958`. (a) keep the takeover/recovery suites with synthetic links (`test_chezmoi_takeover_recovery.py:142`) and drop only cases that run `stow-all` or `dotfiles-update`; (b) delete link-conversion cases too. Recommended (a) |
 
 ## Not in Stage 6

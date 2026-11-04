@@ -39,7 +39,9 @@ updater refuses a dirty source at every login), and never run deletion work
 there. Confirm the Stage 5 records commits are on main (R2). Create the
 coordinator worktree under $HOME/dotfiles/.worktrees/<task>/ (for example
 stage6-coord) from current main; every write-capable worker gets its own branch
-and worktree under .worktrees/<task>/. Never two writers in one checkout.
+and worktree under .worktrees/<task>/. These do not dirty the checkout:
+.worktrees/ is ignored (.gitignore:25) and the updater's status check does not
+list ignored paths. Never two writers in one checkout.
 
 Windows gate first (R3). Unless status.md records it as done, win is still at
 7e344f2 with its Stage 5 steps pending. They are user-run: give the user these
@@ -49,10 +51,14 @@ dddc718 or later main; expected changed targets: 3 (profile.ps1, Codex config,
 Claude settings). (2) Check that the staged reinit-win.ps1 in Downloads has
 sha256 CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212; after
 that session's updater has finished and with no other chezmoi running, run
-pwsh -NoProfile -File <path>\reinit-win.ps1. (3) Optional:
-icacls <HOME>\.local\bin\chezmoi.exe /inheritance:d. (4) .\doctor.ps1. Then
-verify read-only and record it. No Stage 6 breaking revision may reach win
-before this passes. For the whole stage, commands that change the win home run
+pwsh -NoProfile -File <path>\reinit-win.ps1. (3) Optional: first confirm that
+icacls <HOME>\.local\bin\chezmoi.exe lists no CodexSandboxUsers entry, then
+icacls <HOME>\.local\bin\chezmoi.exe /inheritance:d (it copies inherited
+entries as explicit ones). (4) .\doctor.ps1. Then verify read-only and record
+it. reinit-win.ps1 needs pwsh 7.2+ and stops unless the source's
+HEAD:home/.chezmoi.toml.tmpl is dddc718's blob 9e26214c, so this gate precedes
+any commit that changes that template. No Stage 6 breaking revision may reach
+win before this passes. For the whole stage, commands that change the win home run
 as the ordinary user, typed by the user. The SSH route into win carries an
 administrator token: use it only for read-only metadata, never to write managed
 targets, the source checkout, chezmoi config or state, or ACLs. The one possible
@@ -104,8 +110,11 @@ exists. Quiesce with ~/.config/dotfiles/maintenance on the five remote hosts and
 canary Lab (D-16), then go host by host with one owner per host. Host updates
 are fast-forward only and nonforce: the login updater, or explicit native
 commands with the updater's full argument set plus --exclude=dirs
---force=false. Plain read-only chezmoi commands are fine now that the config
-owns persistentState; plain mutating ones never are. Never force, stash, rebase
+--force=false. Plain read-only chezmoi commands are fine on the five
+re-initialized Unix hosts, whose config owns persistentState; on win, until R3's
+re-init passes, even read-only ones need the full argument set (a plain one
+creates ~/.config/chezmoi/chezmoistate.boltdb). Plain mutating commands never
+are fine. Never force, stash, rebase
 or reset a host checkout; restore maintenance on failure. Run the plan's
 per-host acceptance, then retire only exact residue items, each with a private
 snapshot first, and record every host separately in status.md (revision before
@@ -116,19 +125,22 @@ provisioning gaps are not regressions and are not yours to fix.
 Sherlock. Before every cluster operation, and again after any summary or context
 compaction, read /etc/agents/AGENTS.md and the task's topic files (storage.md,
 slurm.md, software.md, policy.md) through the user's existing control master:
-check it with shk doctor from a project-pinned sherlock-kit, then read with
+check it with shk doctor (the controller's pinned shk, below), then read with
 ssh -oBatchMode=yes -oProxyCommand=false sherlock-plain cat <file>. Their
 numbered site rules take precedence. Never log in or authenticate for the user.
-Use only a project-pinned shk (dotfiles pins none: ask before adding one; never
-a global, another project's or a development copy, never ssh ... sbatch). Build
+Use the shk of the separately approved local controller project that pins
+sherlock-kit v0.6.0 (fleet-rollout.md, Sherlock paragraph; stage-4-evidence.md):
+it is already approved, so do not ask again. Dotfiles itself pins none and does
+not add one. Never a global or development copy, never ssh ... sbatch. Build
 environments only inside a Slurm allocation, never under $SCRATCH; light
 foreground git or chezmoi work on a login node only as the current rules allow.
 
 Marlowe. Interactive login shells use the micromamba login env
-($HOME/micromamba, env login, with tmux 3.6a, Python and Node); non-interactive
+($HOME/micromamba, env login, with tmux 3.6a and Python); non-interactive
 shells (ssh marlowe-plain) see /usr/bin/tmux 3.2a and the system tools. The site
-AppArmor profile block-node denies node on login nodes, so Claude's Node hooks
-fail open: accepted, and the Codex config stays deployed (inert). Never work
+AppArmor profile block-node denies node on login nodes (the env's node does not
+run), so Claude's Node hooks fail open: accepted, and the Codex config stays
+deployed (inert). Never work
 around the profile. Any env change runs in a Slurm job. Its filesystem keeps
 ACLs ('+'): never use cp -p there, and never assume $0 is a file when a script
 travels over ssh.
