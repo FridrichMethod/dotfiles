@@ -13,8 +13,9 @@ See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout
 
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 3.4, PowerShell 7 entrypoints
 and PowerShell 5.1's existing profile remain supported at their current floors;
-W1-chezmoi, which provides the Windows `chezmoi.exe`, needs PowerShell 7.1 or
-newer and fails closed on 7.0. Use separate native Windows and WSL
+W1-chezmoi, which provides the Windows `chezmoi.exe`, and `sync-payloads`
+downloads need PowerShell 7.1 or newer; on 7.0 both stop at once with a
+message naming 7.1. Use separate native Windows and WSL
 homes/checkouts. An independent local clone is required for Git writes when the
 installed checkout is under OneDrive.
 
@@ -267,7 +268,8 @@ the config; the login updaters pass every one. On Windows invoke
 updater uses only that file and skips with a warning naming
 [W1-chezmoi](../bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary) when it
 is missing, linked, or owned or writable by an account other than you, SYSTEM
-and Administrators.
+and Administrators. `doctor.ps1` then reports `native-config` as `human` and
+`setup-host.ps1` keeps W1-chezmoi todo until a private copy is there.
 
 `home/.chezmoi.toml.tmpl` owns `persistentState`; a host must pick it up only
 through a reviewed re-run of the init command above. Until then manual native

@@ -209,10 +209,13 @@ foreground, an unknown item failing the run, exit 75 no failure, the
 PowerShell 7) and the `person-status` wording. It exits 1 when an item failed
 and 0 otherwise, so `$LASTEXITCODE` is the run's status, not an installer's.
 Under maintenance a `-Now` run warns
-`dotfiles: payload update refused during maintenance.` and exits 1. Until
+`dotfiles: payload update refused during maintenance.` and exits 1. A `-Now`
+run needs PowerShell 7.1 or newer: its private download directory uses a
+.NET 5 API that PowerShell 7.0 (.NET Core 3.1) lacks, so on 7.0 it prints one
+line naming 7.1 and exits 1 before anything runs. Until
 Stage 6 a call without `-Now` (an older
 profile's call without arguments, or an older run's `-Auto` or `-Worker`)
-returns at once.
+returns at once, on any version.
 
 Run it and the functions below from an ordinary PowerShell: an installer run
 elevated would leave its git clone owned by Administrators, which Git then
@@ -231,7 +234,10 @@ reparse point, and validated by that source's `lib/chezmoi-guard.ps1`; an
 invalid binding prints
 `[dotfiles] Payload update refused: review the native source binding privately.`
 and sets `$LASTEXITCODE` to 1 without running a hook. Only an unmarked home
-uses `$env:DOTFILES_DIR`, else `~\dotfiles`. The `-Now` line runs the
+uses `$env:DOTFILES_DIR`, else `~\dotfiles`. A checkout without
+`scripts/payload-update.ps1` prints
+`[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.`
+and sets `$LASTEXITCODE` to 1. The `-Now` line runs the
 checkout its path names, without that check: on a native home use the
 functions, or the path of the source the binding names.
 
