@@ -73,7 +73,7 @@ bootstrap handoff check; it does not substitute for the procedure's native diff,
 second apply or application checks. Run from another checkout (a worktree or a
 second clone), setup-host keeps H7-native pending.
 
-The doctor's `native-config` row names the cause. `ok`: that handoff state.
+The doctor's `native-config` row names the cause. `ok`: the handoff state above.
 `warn`, which does not fail the run: the home is bound to another checkout,
 whose doctor it names, or `~/.config/chezmoi/chezmoistate.boltdb` exists, a
 separate state database that a chezmoi command without the updater's full
@@ -86,9 +86,39 @@ binding, an absent or linked local config, or no readable
 ### W1-chezmoi: Windows native chezmoi binary
 
 The Windows equivalent of S4-chezmoi verifies the pinned ZIP and extracts only
-`chezmoi.exe` to `~/.local/bin`. Bootstrap and doctor search this directory
-explicitly; use the full executable path when invoking chezmoi manually.
-No permanent PATH or profile edit, elevation or scheduled task is performed.
+`chezmoi.exe` to `~/.local/bin`. It hashes and extracts through one read-only
+handle and writes the file with an explicit protected DACL (FullControl for
+you, SYSTEM and Administrators, nothing inherited) before renaming it into
+place; it needs PowerShell 7.1 or newer and fails closed on 7.0. Dotfiles never
+changes the ACL of `~/.local` or `~/.local/bin`. Bootstrap and doctor search
+this directory explicitly, before PATH; use the full executable path when
+invoking chezmoi manually. No permanent PATH or profile edit, elevation or
+scheduled task is performed.
+
+The native login updater runs only this exact file, never a PATH match. It
+opens it with `FileShare.Read`, holds it until its chezmoi runs have exited,
+and requires a regular file with no link or junction at it, `.local` or
+`.local\bin` (checked before and after the open), an owner that is you, SYSTEM
+or Administrators, and no allow entry that gives any other account a write,
+delete, permission or owner change right (OWNER RIGHTS counts only for such an
+owner); owner and DACL are read from the held handle. Otherwise, also when the
+file is missing, it prints one warning naming this section and skips the
+update. This narrows the gap between check and start but does not close it:
+on a `windows-2025` hosted runner (elevated), NTFS refused to rename `.local`
+or `.local\bin` while the handle was held and allowed it after release, which
+protects only once the real file is held at its real path. A writer of `~/.local` that wins two sub-millisecond races
+(swapping `.local\bin` for a junction before the open, then a prepared
+directory back before the re-check) can still get a different `chezmoi.exe`
+started; the check does not make the path tamper-proof.
+
+W1-chezmoi reports done whenever it finds a working chezmoi at or above the
+floor, including one elsewhere on PATH, so it does not repair what the updater
+refuses. If the updater warns, inspect `~/.local/bin/chezmoi.exe`; delete it
+(or the link) when it is linked or not private (a linked `.local` or
+`.local\bin` must become a real directory), and uninstall or take off PATH any
+other chezmoi (winget, scoop), which W1-chezmoi would report done instead; then
+rerun `setup-host.ps1` so W1-chezmoi installs a private copy. A chezmoi that
+exists only elsewhere on PATH likewise makes the updater skip every login.
 
 ### HW-native: Windows native handover
 
@@ -457,8 +487,8 @@ lines do not repeat a non-default `--tier`; the closing `rerun` warning of
 The Windows twins take the same ideas as PowerShell parameters:
 `.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
 `.\setup-host.ps1 [-Host win] [-Tier LIST] [-Check] [-Yes] [-PrintManual] [-WhatIf]`
-(`-Host` defaults to `win`). Both need PowerShell 7 and never elevate
-themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
+(`-Host` defaults to `win`). Both need PowerShell 7 (W1-chezmoi 7.1 or newer)
+and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `native-config` (with
 `-LegacyStow`, `venv-sync`) and `payloads`, and `-Online` reports a signed-out
