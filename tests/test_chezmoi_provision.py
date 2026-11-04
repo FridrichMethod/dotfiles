@@ -160,6 +160,10 @@ step_S4_chezmoi_plan
                 self.assertIn("selects no single known [data].host; pass --host HOST", setup.stderr)
 
     def check_h7_native(self):
+        # --check refuses a machine that is not the host: pin Ubuntu (macOS CI).
+        os_release = self.base / "os-release"
+        os_release.write_text("ID=ubuntu\n")
+        self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
         return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-native")
 
     def test_bound_home_reports_h7_native_done(self):
