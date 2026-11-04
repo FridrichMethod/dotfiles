@@ -11,7 +11,7 @@
 #   missing   absent, or a structural requirement is not met
 #   warn      advisory: works, but differs from the documented setup
 #   skip      not checkable here (a PowerShell module on unix, macOS locale)
-#   human     a person must repair it (installer edits, stow before oh-my-zsh)
+#   human     a person must repair it (installer edits, dotfiles before oh-my-zsh)
 # Checks only read. git runs with --no-optional-locks, so it never refreshes
 # the index. Fonts are found by file name, never through fc-list, which
 # creates fontconfig caches under ~/.cache and in its prefix. venv-sync runs
@@ -54,23 +54,74 @@ bootstrap_mode_structural_checks() {
     done
 }
 
-# The binding guard is shared with the native updater; no second marker parser.
-bootstrap_native_ready() (
-    [ -r "$1/lib/chezmoi-guard.sh" ] || return 1
+# bootstrap_native_state ROOT: this home's native binding as one word: ok,
+# maintenance, unbound (no ~/.config/dotfiles/native), invalid (a marker the
+# guard rejects), "elsewhere PATH" (bound to the checkout PATH, not ROOT),
+# config (no regular ~/.config/chezmoi/chezmoi.toml) or guard (no readable
+# ROOT/lib/chezmoi-guard.sh). The binding guard is shared with the native
+# updater; no second marker parser.
+bootstrap_native_state() (
+    if [ ! -r "$1/lib/chezmoi-guard.sh" ]; then
+        printf '%s\n' guard
+        return 0
+    fi
     # shellcheck source=lib/chezmoi-guard.sh
     . "$1/lib/chezmoi-guard.sh"
-    ! dotfiles_maintenance_active "$HOME" || return 1
-    source=$(dotfiles_native_source "$HOME" 2>/dev/null) || return 1
-    [ "$source" = "$(cd "$1" && pwd -P)" ] || return 1
-    [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]
+    if dotfiles_maintenance_active "$HOME"; then
+        state=maintenance
+    elif ! source=$(dotfiles_native_source "$HOME" 2>/dev/null); then
+        state=unbound
+        ! dotfiles_native_owned "$HOME" || state=invalid
+    elif [ "$source" != "$(cd "$1" && pwd -P)" ]; then
+        state="elsewhere $source"
+    elif [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+        state=ok
+    else
+        state=config
+    fi
+    printf '%s\n' "$state"
 )
 
+# bootstrap_native_ready ROOT: 0 when this home is bound to ROOT with its
+# local config in place (setup-host's H7-native).
+bootstrap_native_ready() {
+    [ "$(bootstrap_native_state "$1")" = ok ]
+}
+
+# bootstrap_check_native_config ROOT: the native binding, named by cause. A
+# binding to another checkout (this doctor runs from a worktree or second
+# clone) and a stray state database that a chezmoi command without the
+# updater's arguments wrote only warn; the doctor never removes that file.
 bootstrap_check_native_config() {
-    if bootstrap_native_ready "$1"; then
-        bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
-    else
-        bootstrap_check_result human 'native handover incomplete or maintenance active; follow docs/chezmoi-migration/takeover.md'
-    fi
+    local state stray=$HOME/.config/chezmoi/chezmoistate.boltdb
+    state=$(bootstrap_native_state "$1")
+    case $state in
+        ok)
+            if [ -e "$stray" ] || [ -L "$stray" ]; then
+                bootstrap_check_result warn "native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place"
+            else
+                bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
+            fi
+            ;;
+        'elsewhere '*)
+            bootstrap_check_result warn "this home is bound to ${state#elsewhere }, not to this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its native state"
+            ;;
+        maintenance)
+            bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): native updates and payload installs stay off until the reviewed procedure removes it; follow docs/chezmoi-migration/takeover.md'
+            ;;
+        unbound)
+            bootstrap_check_result human "no native binding (~/.config/dotfiles/native): this home's native handover is not done; follow docs/chezmoi-migration/takeover.md"
+            ;;
+        invalid)
+            bootstrap_check_result human 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it, never overwrite it blindly, and follow docs/chezmoi-migration/takeover.md'
+            ;;
+        config)
+            bootstrap_check_result human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow docs/chezmoi-migration/takeover.md'
+            ;;
+        *)
+            bootstrap_check_result human "$1/lib/chezmoi-guard.sh is unreadable, so the native binding cannot be checked; use a complete checkout"
+            ;;
+    esac
 }
 
 # Files under common/ that third-party installers append to through the stow
@@ -628,7 +679,7 @@ bootstrap_check_path_order() {
         fi
     done
     if [ "$found" = 0 ]; then
-        bootstrap_check_result warn "PATH lacks ~/.local/bin; the stowed ~/.profile prepends it"
+        bootstrap_check_result warn "PATH lacks ~/.local/bin; the dotfiles ~/.profile prepends it"
         return 0
     fi
     for name in $BOOTSTRAP_LOCAL_BIN_TOOLS; do
@@ -702,15 +753,16 @@ bootstrap_check_rc_pollution() {
 }
 
 # bootstrap_check_omz_order: ~/.oh-my-zsh exists without oh-my-zsh.sh, the
-# state ./stow-all.sh leaves when it runs before the oh-my-zsh clone.
+# state applying the dotfiles (./stow-all.sh, or the native directory
+# preparation) leaves when it runs before the oh-my-zsh clone.
 bootstrap_check_omz_order() {
     local omz=$HOME/.oh-my-zsh
     if [ -d "$omz" ] && [ ! -f "$omz/oh-my-zsh.sh" ]; then
-        bootstrap_check_result human "oh-my-zsh.sh is missing from an existing ~/.oh-my-zsh (stow ran before the clone); follow the recovery recipe"
+        bootstrap_check_result human "oh-my-zsh.sh is missing from an existing ~/.oh-my-zsh (the dotfiles were applied before the clone); follow the recovery recipe"
     elif [ -f "$omz/oh-my-zsh.sh" ]; then
         bootstrap_check_result ok "found ~/.oh-my-zsh/oh-my-zsh.sh"
     else
-        bootstrap_check_result ok "no ~/.oh-my-zsh yet, so nothing was stowed into it"
+        bootstrap_check_result ok "no ~/.oh-my-zsh yet, so nothing was applied into it"
     fi
 }
 

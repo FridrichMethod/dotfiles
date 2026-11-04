@@ -159,6 +159,26 @@ step_S4_chezmoi_plan
                 self.assertEqual(setup.returncode, 2, setup.stderr)
                 self.assertIn("selects no single known [data].host; pass --host HOST", setup.stderr)
 
+    def check_h7_native(self):
+        return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-native")
+
+    def test_bound_home_reports_h7_native_done(self):
+        self.bind_native("[data]", "host = 'lab-ubuntu'")
+        # A stray state database warns in the doctor but never reopens the handover.
+        (self.home / ".config/chezmoi/chezmoistate.boltdb").write_text("")
+        before = self.home_snapshot()
+        result = self.check_h7_native()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertRegex(result.stdout, r"(?m)^H7-native done ")
+        self.assertEqual(self.home_snapshot(), before)
+        other = self.base / "other-checkout"
+        other.mkdir()
+        (other / ".chezmoiroot").write_text("home\n")
+        self.bind_native("[data]", "host = 'lab-ubuntu'", source=other.resolve())
+        result = self.check_h7_native()
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertRegex(result.stdout, r"(?m)^H7-native human ")
+
     def test_native_role_reader_accepts_chezmoi_init_output(self):
         # The doctor's text reader against the real init rendering (toToml).
         roles = ("common-only", "mac" if sys.platform == "darwin" else "lab-ubuntu")

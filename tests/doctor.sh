@@ -1036,11 +1036,12 @@ restore_common
 mv "$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh" "$TEST_TMP/omz.hidden"
 run_doctor omz-order -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row omz-order human '' 'docs/bootstrap.md X-recovery'
+assert_row omz-order human 'oh-my-zsh.sh is missing from an existing ~/.oh-my-zsh (the dotfiles were applied before the clone)' \
+    'docs/bootstrap.md X-recovery'
 assert_row oh-my-zsh missing
 mv "$TEST_HOME/.oh-my-zsh" "$TEST_TMP/omz-dir.hidden"
 run_doctor omz-absent -- --host lab-ubuntu --tsv
-assert_row omz-order ok
+assert_row omz-order ok 'no ~/.oh-my-zsh yet, so nothing was applied into it'
 assert_row oh-my-zsh missing
 mv "$TEST_TMP/omz-dir.hidden" "$TEST_HOME/.oh-my-zsh"
 mv "$TEST_TMP/omz.hidden" "$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh"
@@ -1159,7 +1160,9 @@ assert_quiet_events '--list probed tools with the real manifest on --platform ot
 # index, the login updater's fetch, a parallel session) may write there at
 # any time, and the read-only fixture cases below already cover the doctor's
 # own git, whose find includes the fixture's .git. The exit code depends on
-# what this machine has installed: 0 or 1, never 2.
+# what this machine has installed: 0 or 1, never 2. MODE legacy passes
+# --legacy-stow; native passes no mode flag, and its native-config row is
+# human in the empty home.
 REAL_HOME="$TEST_TMP/real-home"
 REAL_TMP="$TEST_TMP/real-tmp"
 REAL_REF="$TEST_TMP/real.ref"
@@ -1167,14 +1170,19 @@ REAL_MARKER="$TEST_TMP/real.marker"
 mkdir "$REAL_HOME" "$REAL_TMP"
 DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
 real_doctor_case() {
-    local fix changed
+    local fix changed mode=() required='git locale venv-sync rc-pollution' absent='native-config'
     CASE=$1
-    shift
+    if [ "$2" = legacy ]; then
+        mode=(--legacy-stow)
+    else
+        required='git locale native-config rc-pollution' absent='venv-sync stow-links'
+    fi
+    shift 2
     touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
     : >"$REAL_MARKER"
     : >"$EVENT_LOG"
     if env -i HOME="$REAL_HOME" PATH="$PATH" TMPDIR="$REAL_TMP" LC_ALL=C TERM=dumb \
-        "$BASH" "$REPO_ROOT/doctor.sh" --legacy-stow "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
+        "$BASH" "$REPO_ROOT/doctor.sh" ${mode[@]+"${mode[@]}"} "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
         RC=$?
@@ -1184,8 +1192,11 @@ real_doctor_case() {
         *) case_fail "exit $RC, expected 0 or 1" ;;
     esac
     assert_tsv_shape
-    for id in git locale venv-sync rc-pollution; do
+    for id in $required; do
         [ "$(tsv_field "$id" 1)" != '<no row>' ] || case_fail "no $id row"
+    done
+    for id in $absent submodule; do
+        assert_no_row "$id"
     done
     awk -F '\t' 'NR > 1 { print $5 }' "$OUT/$CASE.out" | LC_ALL=C sort -u >"$OUT/$CASE.fixes"
     while IFS= read -r fix; do
@@ -1205,8 +1216,10 @@ real_doctor_case() {
     changed=$(find "$REPO_ROOT" -name .git -prune -o -newer "$REAL_MARKER" -print)
     [ -z "$changed" ] || case_fail "the real doctor wrote into the checkout: $changed"
 }
-real_doctor_case real-debian --platform debian --tsv
-real_doctor_case real-other --platform other --tsv
+real_doctor_case real-debian legacy --platform debian --tsv
+real_doctor_case real-other legacy --platform other --tsv
+real_doctor_case real-native-debian native --platform debian --tsv
+real_doctor_case real-native-other native --platform other --tsv
 
 # --- read-only and offline -----------------------------------------------------
 
@@ -1281,11 +1294,93 @@ DOCTOR_MODE=
 NATIVE_DIR=$TEST_HOME/.config/dotfiles
 NATIVE_MARKER=$NATIVE_DIR/native
 NATIVE_CONFIG=$TEST_HOME/.config/chezmoi/chezmoi.toml
+STRAY_STATE=$TEST_HOME/.config/chezmoi/chezmoistate.boltdb
 mkdir -p "$NATIVE_DIR" "${NATIVE_CONFIG%/*}"
 bind_native() { printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$TEST_HOME" "$1" >"$NATIVE_MARKER"; }
 native_config() { printf '%s\n' "$@" >"$NATIVE_CONFIG"; }
 bind_native "$FIXTURE"
 native_config '[data]' "host = 'lab-ubuntu'"
+
+run_doctor native-baseline-tsv -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_tsv_shape
+[ ! -s "$OUT/$CASE.err" ] || case_fail '--tsv wrote to stderr'
+for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr claude codex \
+    locale native-config path-order rc-pollution omz-order nvm-homebrew payloads; do
+    assert_row "$id" ok '' -
+done
+assert_row native-config ok 'native binding and local config present' -
+for id in venv-sync stow-links submodule; do
+    assert_no_row "$id"
+done
+[ ! -e "$TEST_HOME/.local/state/gh/device-id" ] || case_fail 'gh --version wrote its telemetry device id'
+[ ! -e "$TEST_HOME/.tldrc" ] || case_fail 'tldr --version updated its page cache'
+assert_no_event NETWORK
+assert_no_event sync-python
+assert_no_event 'zsh -ic'
+
+run_doctor native-list -- --host lab-ubuntu --list
+assert_rc 0
+assert_out "$(printf 'native-config\tcore\tcheck\t-\tH7-native')"
+assert_out "$(printf 'path-order\tcore\tcheck\t-\tH7-native')"
+for id in venv-sync stow-links submodule; do
+    assert_no_out "$(printf '%s\t' "$id")"
+done
+assert_quiet_events 'native --list probed tools'
+
+# native-config names its cause. Only a home bound to another checkout (a
+# worktree or second clone runs this doctor) and a stray state database
+# warn; the rest is for a person.
+NATIVE_REF=$TEST_TMP/native.ref
+: >"$STRAY_STATE"
+: >"$NATIVE_REF"
+run_doctor native-config-stray -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row native-config warn "native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place" \
+    'docs/bootstrap.md H7-native'
+[ -f "$STRAY_STATE" ] || case_fail 'the doctor removed the stray state database'
+CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$NATIVE_REF" -print)
+[ -z "$CHANGED" ] || case_fail "doctor wrote into the fixture or home: $CHANGED"
+rm "$STRAY_STATE"
+mkdir -p "$STRAY_STATE"
+run_doctor native-config-stray-dir -- --host lab-ubuntu --tsv
+assert_row native-config warn '~/.config/chezmoi/chezmoistate.boltdb exists'
+rmdir "$STRAY_STATE"
+mkdir -p "$TEST_TMP/bound-elsewhere"
+printf 'home\n' >"$TEST_TMP/bound-elsewhere/.chezmoiroot"
+bind_native "$TEST_TMP/bound-elsewhere"
+run_doctor native-config-elsewhere -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row native-config warn "this home is bound to $TEST_TMP/bound-elsewhere, not to this checkout $FIXTURE; run $TEST_TMP/bound-elsewhere/doctor.sh for its native state" \
+    'docs/bootstrap.md H7-native'
+bind_native "$FIXTURE"
+: >"$NATIVE_DIR/maintenance"
+run_doctor native-config-maintenance -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row native-config human 'maintenance is active (~/.config/dotfiles/maintenance)' 'docs/bootstrap.md H7-native'
+rm "$NATIVE_DIR/maintenance"
+printf 'dotfiles-chezmoi-v1\n%s\n%s\nextra\n' "$TEST_HOME" "$FIXTURE" >"$NATIVE_MARKER"
+run_doctor native-config-invalid -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row native-config human 'the native binding ~/.config/dotfiles/native is not valid for this home' 'docs/bootstrap.md H7-native'
+rm "$NATIVE_MARKER"
+run_doctor native-config-unbound -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row native-config human 'no native binding (~/.config/dotfiles/native)' 'docs/bootstrap.md H7-native'
+bind_native "$FIXTURE"
+mv "$NATIVE_CONFIG" "$TEST_TMP/chezmoi.toml"
+ln -s "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
+run_doctor native-config-link -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row native-config human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file' 'docs/bootstrap.md H7-native'
+rm "$NATIVE_CONFIG"
+mv "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
+mv "$FIXTURE/lib/chezmoi-guard.sh" "$TEST_TMP/guard.hidden"
+run_doctor native-config-guard -- --host lab-ubuntu --tsv
+assert_rc 1
+assert_row native-config human "$FIXTURE/lib/chezmoi-guard.sh is unreadable, so the native binding cannot be checked" \
+    'docs/bootstrap.md H7-native'
+mv "$TEST_TMP/guard.hidden" "$FIXTURE/lib/chezmoi-guard.sh"
 
 # Without --host or --platform, a native-owned home's role is the one
 # [data].host of its native config, read as text. Its Stow receipt and
@@ -1379,6 +1474,41 @@ assert_rc 0
 assert_out "$(printf 'mac-clt\tcore\t')"
 native_config '[data]' "host = 'lab-ubuntu'"
 
-rm -r "$NATIVE_DIR" "${NATIVE_CONFIG%/*}"
+run_doctor native-path-no-local-bin "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row path-order warn 'PATH lacks ~/.local/bin; the dotfiles ~/.profile prepends it' 'docs/bootstrap.md H7-native'
+
+# The native default keeps the read-only, offline and no-TMPDIR promise,
+# with and without host resolution.
+: >"$MARKER"
+run_doctor native-ro-log -- --host lab-ubuntu
+assert_rc 0
+run_doctor native-ro-all -- --host lab-ubuntu --tier all --tsv
+assert_rc 1
+run_doctor native-ro-online -- --host lab-ubuntu --online --quiet
+assert_rc 0
+run_doctor native-ro-resolve -- --tsv
+assert_rc 0
+assert_row host-tool warn
+CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$MARKER" -print)
+[ -z "$CHANGED" ] || fail "native doctor wrote into the fixture or home: $CHANGED"
+chmod -R a-w "$TEST_HOME" "$FIXTURE"
+run_doctor native-read-only -- --host lab-ubuntu
+assert_rc 0
+! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
+assert_no_event NETWORK
+run_doctor native-read-only-resolve -- --tsv
+assert_rc 0
+! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
+chmod -R u+w "$TEST_HOME" "$FIXTURE"
+no_tmp_case native-no-tmp-log TMPDIR="$NO_TMP" -- --host lab-ubuntu
+assert_rc 0
+no_tmp_case native-no-tmp-tsv TMPDIR="$NO_TMP" -- --host lab-ubuntu --tier all --tsv
+assert_rc 1
+no_tmp_case native-no-tmp-list TMPDIR="$NO_TMP" -- --host lab-ubuntu --list
+assert_rc 0
+no_tmp_case native-no-tmp-resolve TMPDIR="$NO_TMP" -- --tsv
+assert_rc 0
+rm -r "$NATIVE_DIR" "${NATIVE_CONFIG%/*}" "$TEST_TMP/bound-elsewhere"
 
 echo "doctor=PASS"
