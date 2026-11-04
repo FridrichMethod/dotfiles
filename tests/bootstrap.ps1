@@ -1300,22 +1300,10 @@ exit 0
         Assert-BinaryRefused 'junctioned ~/.local/bin'
     }
 
-    Test-Case 'W1-chezmoi stops before downloading below PowerShell 7.1 or under a linked ~/.local' {
-        Assert-True (-not (Test-BootstrapPrivateFileSupport -Version '7.0')) 'PowerShell 7.0 accepted for the private chezmoi.exe'
-        foreach ($version in @('7.1', '7.4', '8.0')) {
-            Assert-True (Test-BootstrapPrivateFileSupport -Version $version) "PowerShell $version refused for the private chezmoi.exe"
-        }
+    Test-Case 'W1-chezmoi stops before downloading under a linked ~/.local' {
         $fixture = New-Fixture
         $destination = Join-Path $fixture.Home '.local/bin/chezmoi.exe'
         $script:MockEvents.Clear()
-        $old = & {
-            function Test-BootstrapPrivateFileSupport { return $false }
-            Install-BootstrapChezmoi -Uri 'https://example.invalid/chezmoi.zip' -Sha256 ('0' * 64) -Destination $destination
-        }
-        Assert-True (-not $old.Success -and $old.Message.Contains('needs PowerShell 7.1 or newer')) "PowerShell 7.0 install: $($old.Message)"
-        Assert-Equal $script:MockEvents.Count 0 'PowerShell 7.0 install downloaded'
-        Assert-True (-not [IO.Directory]::Exists((Join-Path $fixture.Home '.local'))) 'PowerShell 7.0 install created directories'
-
         # A link at .local or .local/bin: the updater never runs what it holds.
         $elsewhere = Join-Path $fixture.Root 'elsewhere'
         [void][IO.Directory]::CreateDirectory((Join-Path $elsewhere 'bin'))

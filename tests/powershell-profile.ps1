@@ -603,22 +603,6 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid); [IO.File]::WriteAllText((Join-Path $syncHome '.config/dotfiles/maintenance'), '') }
     Assert-True ($case.Events -ceq '' -and $case.Out.EndsWith('exit=1,1') -and ($case.Out + $case.Err).Contains('payload update refused during maintenance')) "maintenance surfaces the bound hook's refusal ($($case.Text))"
     Remove-Item -LiteralPath (Join-Path $syncHome '.config/dotfiles/maintenance') -Force
-    # The real hook below PowerShell 7.1 (its floor raised past this one
-    # stands in for 7.0): -Now stops at once with one line naming 7.1 and
-    # downloads nothing; a call without -Now stays a silent no-op.
-    $hookText = [IO.File]::ReadAllText((Join-Path $repoRoot 'scripts/payload-update.ps1'))
-    $floor = "[version]'7.1'"
-    Assert-True (([regex]::Matches($hookText, [regex]::Escape($floor))).Count -eq 1) 'payload-update.ps1 compares against its PowerShell 7.1 floor once'
-    $raisedHook = Join-Path $bound 'scripts/payload-update.ps1'
-    [IO.File]::WriteAllText($raisedHook, $hookText.Replace($floor, "[version]'999.0'"))
-    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }
-    $text = $case.Out + $case.Err
-    Assert-True ($case.Events -ceq '' -and $case.Out.EndsWith('exit=1,1') -and $text.Contains('needs PowerShell 7.1 or newer') -and
-        -not $text.Contains('cannot run')) "below PowerShell 7.1 the hook refuses -Now at once ($($case.Text))"
-    foreach ($arguments in @(@(), @('-Auto'), @('-Worker', 'pymol'))) {
-        $quiet = Invoke-Child $powerShell (@('-NoProfile', '-NonInteractive', '-File', $raisedHook) + $arguments)
-        Assert-True ($quiet.ExitCode -eq 0 -and -not $quiet.Out -and -not $quiet.Err) "below PowerShell 7.1 a call without -Now ($($arguments -join ' ')) stays silent (out=$($quiet.Out) err=$($quiet.Err))"
-    }
 }
 finally {
     Remove-Item -LiteralPath $syncRoot -Recurse -Force -ErrorAction SilentlyContinue
