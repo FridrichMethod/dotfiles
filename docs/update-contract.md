@@ -40,10 +40,9 @@ An explicitly empty Unix `DOTFILES_HOST` means common-only installation;
 other Unix host overlays are never guessed.
 
 Neither updater runs a submodule command (dotfiles has none) or installs a
-payload repo. The payload hooks (`scripts/payload-update.sh`,
-`scripts/payload-update.ps1`) run after the update hook in the same login,
-never pull or stow, keep their own state outside Git metadata and are switched
-off separately with `DOTFILES_PAYLOAD_AUTO_UPDATE=0`; see
+payload repo, and no login runs the payload hooks (`scripts/payload-update.sh`,
+`scripts/payload-update.ps1`): only a person does, through `sync-payloads` or
+`--now`/`-Now`. They never pull or stow and keep no state; see
 [payloads.md](payloads.md).
 
 ## Lock scope and remaining boundary
