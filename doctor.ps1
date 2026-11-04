@@ -20,9 +20,10 @@
     Only -LegacyStow checks venv-sync; native mode checks chezmoi and the
     home-bound native configuration signal, named by cause: a binding to
     another checkout and a stray ~/.config/chezmoi/chezmoistate.boltdb only
-    warn. Legacy venv-sync passes when the interpreter the AI config sync
-    helpers use (DOTFILES_SYNC_PYTHON when set, else .venv-sync) passes
-    lib/config_sync.py --runtime-check.
+    warn, and on Windows a bound home whose ~/.local/bin/chezmoi.exe the
+    login updater refuses is human. Legacy venv-sync passes when the
+    interpreter the AI config sync helpers use (DOTFILES_SYNC_PYTHON when
+    set, else .venv-sync) passes lib/config_sync.py --runtime-check.
 
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
@@ -167,11 +168,18 @@ function Get-DoctorNativeConfigResult {
     # doctor.sh's bootstrap_check_native_config: the native binding, named by
     # cause. A binding to another checkout and a stray state database that a
     # chezmoi command without the updater's arguments wrote only warn; the
-    # doctor never removes that file.
+    # doctor never removes that file. On Windows a bound home also needs the
+    # one chezmoi.exe the login updater runs (read-only check, before the
+    # stray database); Unix updaters use the PATH chezmoi.
     $native = Get-BootstrapNativeState -RepoRoot $RepoRoot
     $takeover = 'follow docs/chezmoi-migration/takeover.md'
     switch -CaseSensitive ($native.State) {
         'ok' {
+            if ($IsWindows -and -not (Test-BootstrapNativeChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
+                return New-DoctorResult human native-config core ("native binding and local config present, but the login updater refuses ~/.local/bin/chezmoi.exe " +
+                    '(missing, a link, under a linked directory, or not private to you, SYSTEM and Administrators) and never uses a PATH chezmoi, ' +
+                    'so native updates do not run; let setup-host.ps1 W1-chezmoi install a private copy') W1-chezmoi
+            }
             $stray = Join-Path $HOME '.config/chezmoi/chezmoistate.boltdb'
             if (Get-Item -LiteralPath $stray -Force -ErrorAction SilentlyContinue) {
                 return New-DoctorResult warn native-config core ("native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: " +
