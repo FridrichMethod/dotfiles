@@ -107,14 +107,15 @@ changing the shell's TMPDIR or following shared temporary-file symlinks.
 
 Install the missing clones with `./setup-host.sh --host <host> --check --only S3-clones`,
 then `./setup-host.sh --host <host> --yes --only S3-clones`, with
-`DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported. After stow,
-reload a running server with `tmux source-file ~/.tmux.conf`; new servers
-load it automatically. Plugins live in `~/.tmux/plugins/`, outside this
-checkout. Startup, reload, Stow and login hooks never install or update
-them. Without TPM, native tmux settings still work. See
+`DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported. After the
+dotfiles are applied, reload a running server with
+`tmux source-file ~/.tmux.conf`; new servers load it automatically. Plugins
+live in `~/.tmux/plugins/`, outside this checkout. Startup, reload, Stow and
+login hooks never install or update them. Without TPM, native tmux settings
+still work. See
 [S3-clones](bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones) for
 Other Linux installation and existing-clone behavior.
-Use the stowed `~/.tmux.conf` as the sole tmux config: TPM prefers
+Use the deployed `~/.tmux.conf` as the sole tmux config: TPM prefers
 `${XDG_CONFIG_HOME:-~/.config}/tmux/tmux.conf` when that file exists and would
 read its plugin declarations instead.
 
@@ -147,11 +148,12 @@ existing Python/fzf tools, clears inherited fzf options, and captures at most
 
 The Space menu groups Sessions, Windows, Panes and Tools, with layout
 save/restore, resize, fzf, extraction, floating shell and plugin/config
-actions. The stowed `~/.config/tmux/which-key.conf` is a manual native tmux
+actions. The deployed `~/.config/tmux/which-key.conf` is a manual native tmux
 configuration: upstream autobuild is disabled, so reload needs no Python
 menu generation, pip package or virtual environment. Upstream may copy its
 default config into ignored files in its own checkout on first load; the
-stowed menu is then applied. Edit the stowed file to customize the menu.
+deployed menu is then applied. To customize the menu, edit
+`common/tmux/.config/tmux/which-key.conf` in the checkout.
 
 The config uses tmux 3.4 popup, menu and style features without version
 checks; `config/bootstrap/tools.tsv` holds the floor, and older tmux is
