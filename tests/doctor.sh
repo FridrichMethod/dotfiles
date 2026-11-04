@@ -511,9 +511,10 @@ assert_tsv_shape
 [ ! -s "$OUT/$CASE.err" ] ||
     case_fail "--tsv wrote to stderr"
 for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr claude codex \
-    locale venv-sync submodule stow-links path-order rc-pollution omz-order nvm-homebrew payloads; do
+    locale venv-sync stow-links path-order rc-pollution omz-order nvm-homebrew payloads; do
     assert_row "$id" ok '' -
 done
+assert_no_row native-config
 assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
 assert_row alt ok "1.2.3 >= 1.0 at $FAKE_BIN/doctor-alt"
 assert_row brew-only ok "at $BREW_BIN/doctor-brew-only"
@@ -523,9 +524,8 @@ assert_row desk-tool warn 'not found; no terminal' 'docs/bootstrap.md S6-kitty'
 assert_row nerd-font warn
 assert_row host-tool warn
 assert_row psfzf skip '' -
-assert_row submodule ok 'no submodule and no retired submodule checkout' -
 assert_row payloads ok 'installed: kit, pymol, skills' -
-for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-auth zsh-smoke; do
+for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-auth zsh-smoke submodule; do
     assert_no_row "$id"
 done
 assert_event 'fzf --version'
@@ -860,46 +860,6 @@ assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$FAKE_BIN/sync-python' fails
 run_doctor venv-broken SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
 assert_rc 1
 assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
-
-# Dotfiles has no submodules: a .gitmodules is a warning, and so is each
-# retired submodule checkout a pull leaves behind, with how to check it and
-# the rm that removes it, alone or together; the doctor deletes nothing.
-printf '[submodule "x"]\n\tpath = x\n' >"$FIXTURE/.gitmodules"
-run_doctor gitmodules -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row submodule warn "$FIXTURE/.gitmodules exists, but dotfiles has no submodules (git rm .gitmodules)" \
-    'docs/bootstrap.md P0-preflight'
-rm "$FIXTURE/.gitmodules"
-RETIRED='common/codex/coding-agent-kit:common/codex/coding-agent-kit
-common/coding-agent-kit/coding-agent-kit:common/codex/coding-agent-kit
-common/pymol/PyMOLScripts:common/pymol/PyMOLScripts
-common/sherlock-kit/sherlock-kit:common/sherlock-kit/sherlock-kit'
-while IFS=: read -r checkout module; do
-    mkdir -p "$FIXTURE/$checkout"
-    printf 'gitdir: elsewhere\n' >"$FIXTURE/$checkout/.git"
-    run_doctor "retired-${checkout//\//-}" -- --host lab-ubuntu --tsv
-    assert_rc 0
-    assert_row submodule warn "retired submodule checkout $checkout: once it holds no work of yours (git -C \"$FIXTURE/$checkout\" status; git -C \"$FIXTURE/$checkout\" log --branches --not --remotes), rm -rf \"$FIXTURE/$checkout\" (its repository, .git/modules/$module, can go the same way once no other leftover uses it)" \
-        'docs/bootstrap.md P0-preflight'
-    case $(tsv_field submodule 4) in
-        *'retired submodule checkout'*'retired submodule checkout'*)
-            case_fail 'submodule detail names more than the one leftover'
-            ;;
-    esac
-    [[ -f "$FIXTURE/$checkout/.git" ]] || case_fail "the doctor removed $checkout"
-    rm -rf "${FIXTURE:?}/$checkout"
-done <<<"$RETIRED"
-while IFS=: read -r checkout _; do
-    mkdir -p "$FIXTURE/$checkout"
-done <<<"$RETIRED"
-run_doctor retired-all -- --host lab-ubuntu --tsv
-assert_rc 0
-while IFS=: read -r checkout _; do
-    assert_row submodule warn "rm -rf \"$FIXTURE/$checkout\""
-    [[ -d "$FIXTURE/$checkout" ]] || case_fail "the doctor removed $checkout"
-done <<<"$RETIRED"
-rm -rf "${FIXTURE:?}/common/coding-agent-kit" "${FIXTURE:?}/common/pymol" "${FIXTURE:?}/common/sherlock-kit" \
-    "${FIXTURE:?}/common/codex/coding-agent-kit"
 
 # The payload repos: each selected item passes its unix-probe row, and the
 # kit's Claude helpers are there; a shortfall warns with what to run (the

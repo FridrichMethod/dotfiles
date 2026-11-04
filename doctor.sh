@@ -6,11 +6,12 @@ set -euo pipefail
 #                    [--tsv] [--quiet] [--online] [--smoke] [--list]
 # Example: ./doctor.sh --host lab-ubuntu
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
-# has, plus structural checks (locale, .venv-sync, retired submodule
-# checkouts, stow links, PATH order, rc-file pollution, oh-my-zsh order,
-# Homebrew nvm and the payload repos of config/payloads.tsv). Read-only and
-# offline: it installs nothing, writes nothing and uses no network unless
-# --online (auth status probes) or --smoke (an interactive zsh) asks for it.
+# has, plus structural checks (locale, the native binding, PATH order,
+# rc-file pollution, oh-my-zsh order, Homebrew nvm and the payload repos of
+# config/payloads.tsv; with --legacy-stow, .venv-sync and stow links instead
+# of the native binding). Read-only and offline: it installs nothing, writes
+# nothing and uses no network unless --online (auth status probes) or
+# --smoke (an interactive zsh) asks for it.
 # The host defaults to DOTFILES_HOST, then to the host ./stow-all.sh recorded
 # for this home; it is never guessed. Common only, as the login updater reads
 # it (a set but empty DOTFILES_HOST, or a common-only install ./stow-all.sh
@@ -72,8 +73,9 @@ usage() {
         'Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [options]' \
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
-        'and of the structural setup (locale, venv-sync, submodule, stow-links,' \
-        'path-order, rc-pollution, omz-order, nvm-homebrew, payloads).' \
+        'and of the structural setup (locale, native-config, path-order, rc-pollution,' \
+        'omz-order, nvm-homebrew, payloads; --legacy-stow checks venv-sync and' \
+        'stow-links instead of native-config).' \
         '' \
         'Host selection (default: DOTFILES_HOST, else the host ./stow-all.sh recorded):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \

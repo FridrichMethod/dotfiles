@@ -30,7 +30,6 @@
 # shellcheck disable=SC2034 # read by doctor.sh
 BOOTSTRAP_STRUCTURAL_CHECKS='locale core H1-locale
 venv-sync core S4-setup-sync
-submodule core P0-preflight
 stow-links core H7-stow
 native-config core H7-native
 path-order core H7-stow
@@ -463,42 +462,6 @@ bootstrap_check_venv_sync() {
     fi
 }
 
-# The checkouts that a pull across a retired submodule leaves on a host where
-# it was checked out, each with its repository under .git/modules: the
-# pre-move coding-agent-kit checkout, the last coding-agent-kit and PyMOL
-# checkouts (the payload repos are installed now, docs/payloads.md) and the
-# sherlock-kit one. .gitignore and .stowrc keep them harmless; only their
-# owner removes them, so the doctor prints the rm and deletes nothing.
-BOOTSTRAP_RETIRED_CHECKOUTS='common/codex/coding-agent-kit common/codex/coding-agent-kit
-common/coding-agent-kit/coding-agent-kit common/codex/coding-agent-kit
-common/pymol/PyMOLScripts common/pymol/PyMOLScripts
-common/sherlock-kit/sherlock-kit common/sherlock-kit/sherlock-kit'
-
-# bootstrap_check_submodule ROOT: dotfiles has no submodules; a .gitmodules
-# names one anyway, or a retired submodule checkout is still there, is a
-# warning with what removes it.
-bootstrap_check_submodule() {
-    local lines line path module advice=''
-    if [ -f "$1/.gitmodules" ]; then
-        advice="$1/.gitmodules exists, but dotfiles has no submodules (git rm .gitmodules)"
-    fi
-    lines=$BOOTSTRAP_RETIRED_CHECKOUTS$BOOTSTRAP_NL
-    while [ -n "$lines" ]; do
-        line=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        bootstrap_split ' ' "$line" path module
-        [ -n "$path" ] || continue
-        if [ -e "$1/$path" ] || [ -L "$1/$path" ]; then
-            advice="${advice:+$advice; }retired submodule checkout $path: once it holds no work of yours (git -C \"$1/$path\" status; git -C \"$1/$path\" log --branches --not --remotes), rm -rf \"$1/$path\" (its repository, .git/modules/$module, can go the same way once no other leftover uses it)"
-        fi
-    done
-    if [ -n "$advice" ]; then
-        bootstrap_check_result warn "$advice"
-    else
-        bootstrap_check_result ok "no submodule and no retired submodule checkout"
-    fi
-}
-
 # The Claude helpers that common/claude/.claude/settings.json runs, which
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
@@ -778,7 +741,6 @@ bootstrap_check_structural() {
     case $1 in
         locale) bootstrap_check_locale "$3" ;;
         venv-sync) bootstrap_check_venv_sync "$2" ;;
-        submodule) bootstrap_check_submodule "$2" ;;
         stow-links) bootstrap_check_stow_links "$2" ;;
         native-config) bootstrap_check_native_config "$2" ;;
         path-order) bootstrap_check_path_order "$4" "$3" ;;

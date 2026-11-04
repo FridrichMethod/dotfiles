@@ -5,8 +5,8 @@
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
-    three structural checks (venv-sync, submodule, payloads), prints one
-    line per check and then a summary:
+    the structural checks native-config (with -LegacyStow, venv-sync) and
+    payloads, prints one line per check and then a summary:
 
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
 
@@ -100,7 +100,7 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # Ids the doctors report besides tools.tsv rows (doctor.sh's structural
 # checks, the -Online and --smoke rows); tools.tsv never uses them
 # (tests/test_bootstrap_manifest.py RESERVED_IDS).
-$ReservedIds = @('locale', 'venv-sync', 'submodule', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
+$ReservedIds = @('locale', 'venv-sync', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
     'nvm-homebrew', 'payloads', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'native-config')
 
 function Limit-DoctorResult {
@@ -167,28 +167,6 @@ function Get-DoctorStructuralResults {
         New-DoctorResult ok native-config core 'native binding and local config present; review configuration with scoped native diff' HW-native
     }
     else { New-DoctorResult human native-config core 'native handover incomplete or maintenance active; follow docs/chezmoi-migration/takeover.md' HW-native }
-
-    # Dotfiles has no submodules. The checkouts that a pull across a retired
-    # one leaves on a host where it was checked out, each with its
-    # repository under .git\modules: .gitignore and .stowrc keep them
-    # harmless, and only their owner removes them (docs/payloads.md).
-    $advice = @()
-    if ([IO.File]::Exists((Join-Path $RepoRoot '.gitmodules'))) {
-        $advice += "$(Join-Path $RepoRoot '.gitmodules') exists, but dotfiles has no submodules (git rm .gitmodules)"
-    }
-    foreach ($retired in @(
-            @('common/codex/coding-agent-kit', 'common/codex/coding-agent-kit'),
-            @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
-            @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
-            @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
-        $checkout = [IO.Path]::Combine($RepoRoot, $retired[0].Replace('/', [IO.Path]::DirectorySeparatorChar))
-        if (Get-Item -LiteralPath $checkout -Force -ErrorAction SilentlyContinue) {
-            $quoted = $checkout -replace "'", "''"
-            $advice += "retired submodule checkout $($retired[0]): once it holds no work of yours (git -C '$quoted' status; git -C '$quoted' log --branches --not --remotes), Remove-Item -LiteralPath '$quoted' -Recurse -Force (its repository, .git/modules/$($retired[1]), can go the same way once no other leftover uses it)"
-        }
-    }
-    if ($advice.Count) { New-DoctorResult warn submodule core ($advice -join '; ') P0-preflight }
-    else { New-DoctorResult ok submodule core 'no submodule and no retired submodule checkout' P0-preflight }
 
     Get-DoctorPayloadResult
 }

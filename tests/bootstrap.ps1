@@ -893,7 +893,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             Assert-Equal $cells[4] '-' "fix in '$line'"
             $cells[1]
         }
-        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('venv-sync', 'submodule', 'payloads')) -join ',') 'doctor ids'
+        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('venv-sync', 'payloads')) -join ',') 'doctor ids'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'doctor wrote files'
         $events = Get-FixtureEvents $fixture
         Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version') 'version probes did not run'
@@ -991,31 +991,6 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
         Assert-Exit $run 0 'working DOTFILES_SYNC_PYTHON without .venv-sync'
         Assert-True ($run.Lines -contains "ok`tvenv-sync`tcore`tDOTFILES_SYNC_PYTHON=$alternatePython passes the runtime check`t-") "override ok row: $($run.Stdout)"
-
-        # The retired submodule checkouts a pull leaves: a warning naming how
-        # to check each and the Remove-Item that removes it; nothing deleted.
-        foreach ($retired in @(@('common/codex/coding-agent-kit', 'common/codex/coding-agent-kit'),
-                @('common/coding-agent-kit/coding-agent-kit', 'common/codex/coding-agent-kit'),
-                @('common/pymol/PyMOLScripts', 'common/pymol/PyMOLScripts'),
-                @('common/sherlock-kit/sherlock-kit', 'common/sherlock-kit/sherlock-kit'))) {
-            # Native separators, as the doctor prints the path.
-            $checkout = [IO.Path]::Combine($fixture.Repo, $retired[0].Replace('/', [IO.Path]::DirectorySeparatorChar))
-            [void][IO.Directory]::CreateDirectory($checkout)
-            [IO.File]::WriteAllText((Join-Path $checkout '.git'), 'gitdir: elsewhere')
-            $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-            Assert-Exit $run 0 "the retired checkout $($retired[0]) only warns"
-            $quoted = $checkout -replace "'", "''"
-            $expected = "warn`tsubmodule`tcore`tretired submodule checkout $($retired[0]): once it holds no work of yours (git -C '$quoted' status; git -C '$quoted' log --branches --not --remotes), Remove-Item -LiteralPath '$quoted' -Recurse -Force (its repository, .git/modules/$($retired[1]), can go the same way once no other leftover uses it)`tdocs/bootstrap.md P0-preflight"
-            Assert-True ($run.Lines -contains $expected) "leftover row: $($run.Stdout)"
-            Assert-True (Test-Path -LiteralPath (Join-Path $checkout '.git')) 'doctor deleted the retired checkout'
-            Remove-Item -LiteralPath $checkout -Recurse -Force
-        }
-        [IO.File]::WriteAllText((Join-Path $fixture.Repo '.gitmodules'), '')
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^warn`tsubmodule`tcore`t.+\.gitmodules exists, but dotfiles has no submodules \(git rm \.gitmodules\)`t" }).Count -eq 1) "gitmodules row: $($run.Stdout)"
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.gitmodules') -Force
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-True ($run.Lines -contains "ok`tsubmodule`tcore`tno submodule and no retired submodule checkout`t-") "submodule row without leftovers: $($run.Stdout)"
 
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 1 'structural failures'
