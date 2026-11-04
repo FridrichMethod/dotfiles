@@ -42,7 +42,7 @@ For an explicitly retained legacy Stow home only:
 Stow checks conflicts before applying shared sync files, but may first remove
 exact dangling links from retired Sherlock packages. It does not promise a
 whole-home transaction. Failed/partial application never acknowledges a new
-revision. See the [bootstrap playbook](docs/bootstrap.md#quick-start) and
+revision. See the [bootstrap playbook](docs/bootstrap.md#legacy-quick-start) and
 [installer contract](docs/installer-contract.md).
 
 Legacy provisioning/doctor use `--legacy-stow`. They refuse native-owned homes.

@@ -115,7 +115,7 @@ changing the shell's TMPDIR or following shared temporary-file symlinks.
 Install the missing clones with `./setup-host.sh --host <host> --check --only S3-clones`,
 then `./setup-host.sh --host <host> --yes --only S3-clones`, with
 `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported (the second
-is inert until Stage 6). After the dotfiles are applied, reload a running
+is inert; Stage 6 removes it). After the dotfiles are applied, reload a running
 server with `tmux source-file ~/.tmux.conf`; new servers load it
 automatically. Plugins live in `~/.tmux/plugins/`, outside this checkout.
 Startup, reload, Stow and login hooks never install or update them. Without
