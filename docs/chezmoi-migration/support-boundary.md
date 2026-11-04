@@ -59,6 +59,59 @@ apply. Before any Stage 6 breaking publication, execute the quiescence and
 offline-home recovery procedure below: a declared cutoff alone cannot stop an
 old updater from fetching a deletion commit.
 
+## Stage 5 boundary
+
+Stage 5 reached main as `dddc718` on 2026-11-04 after exact CI 41832666587 (all
+three jobs) and bootstrap e2e 41832666818 (all seven hosts) passed on that
+commit. It removes no package path, Stow entrypoint or parser runtime, and
+`bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` stays the supported Stow recovery
+bridge. It changes the boundary as follows;
+[stage-5-ecosystem.md](stage-5-ecosystem.md#stage-5-outcome) has the evidence.
+
+- tmux: the floor is 3.4 (was 2.6). All seven version gates and the version
+  parsing are gone, so older tmux is unsupported. On Marlowe only the login
+  env's tmux 3.6a meets it; non-interactive shells there (`ssh marlowe-plain`)
+  still find `/usr/bin/tmux` 3.2a.
+- Payloads are explicit-only for every home, native or legacy (D7). No login,
+  profile or schedule installs or refreshes a payload repo; a person runs
+  `sync-payloads [ITEM...]` / `sync-skills`, or
+  `sh scripts/payload-update.sh --now` (Windows:
+  `scripts/payload-update.ps1 -Now`, unelevated). Until Stage 6
+  a no-arg or sourced call and the retired `--auto`, `--worker`, `-Auto` and
+  `-Worker` are silent no-ops, so rc files read before the pull keep working.
+  Old `ITEM.stamp`, `ITEM.failed` and `payload.log` files are ignored and never
+  removed automatically.
+- `AWESOME_SKILLS_AUTO_UPDATE`: support ended early, in Stage 5, with the
+  scheduler. The earlier promise to honor it through 2027-01-31 is withdrawn,
+  and the variable is ignored. Name the items on the command instead
+  (`sync-payloads kit pymol`); `DOTFILES_PAYLOAD_ITEMS` still sets the default
+  items.
+- `DOTFILES_PAYLOAD_AUTO_UPDATE`: nothing reads it any more. The `=0` exports
+  in the provisioning shells and the tests that check them stay, inert, until
+  Stage 6 removes them; they give it no new behavior.
+- `DOTFILES_HOST` and the Stow receipt are legacy only. Native-owned homes take
+  the role from the `[data]` `host` line of `~/.config/chezmoi/chezmoi.toml`,
+  read as text; a malformed one exits 2 asking for `--host`.
+- Windows login updates run only the private `~/.local/bin/chezmoi.exe`, after
+  reparse, owner and DACL checks on a held handle, never a PATH match. A chezmoi
+  found only elsewhere on PATH (winget, scoop) makes the updater skip each login
+  with a warning; the doctor's `native-config` row and W1-chezmoi report it.
+  The check narrows a directory-swap race; it does not close it.
+- The native config template owns `persistentState`; existing homes take the
+  key through a reviewed re-init. The five Unix hosts are done; the Windows
+  host's user-run update and re-init are pending.
+- Kept floors: Bash 3.2, PowerShell 7.0 entrypoints with the 5.1 profile,
+  Python 3.11, git presence-only, both Claude plugin IDs and the root
+  `CLAUDE.md` stub. A claimed PowerShell 7.1 need of W1-chezmoi was false and
+  its gates were removed. Two pre-existing PowerShell 7.2 dependencies are
+  recorded, not fixed: the PowerShell 7 profile sets `$PSStyle` without a
+  guard, and the legacy HW-stow check `Test-SetupStowed` reads `LinkTarget`
+  (.NET 6).
+- The doctors' submodule check and retired-checkout advice are gone; leftover
+  checkouts stay on disk for inspection by hand. The payload `stow-links`
+  refusal and its advice stay until Stage 6 (their early removal, D-g, was
+  dropped).
+
 ## Resolved user direction
 
 The user explicitly accepts ending automatic repair of historical layouts and
@@ -112,6 +165,11 @@ Most historical Stow repair can disappear with Stow itself in Stage 6. Earlier
 cohesive deletions are reasonable only if the stage already withdraws that support
 and they reduce work rather than refactor code about to be deleted.
 
+Stage 5 did its row: it simplified diagnostics (native host resolution, named
+`native-config` verdicts, the submodule check removed), ended the skills opt-out
+adapter, applied the tmux floor and, under its own user decision (D7), removed
+payload scheduling for every home. See [Stage 5 boundary](#stage-5-boundary).
+
 ## Historical-removal inventory
 
 | Unit | Current source/callers to inspect | Action and retained boundary |
@@ -120,10 +178,10 @@ and they reduce work rather than refactor code about to be deleted.
 | Retired kit/PyMOL package links | Unix retired-package/STOW_PATH loops; Windows `RetiredPackageLinks` / `Remove-RetiredPackageLink` | Remove transitions and fixtures; preserve upstream payload ownership and local edits |
 | Old Codex Git filter | `filter.codex-portable` cleanup in `stow-all.sh` | Remove source repair; manual checklist covers obsolete local Git config |
 | Generated Codex override | Exact-marker `AGENTS.override.md` cleanup in `stow-all.sh` | Remove automatic cleanup; warn that an existing override can still shadow instructions; never delete an arbitrary user override |
-| One-login shim | `scripts/awesome-skills-update.sh`, hook selectors and test entrypoint copies | Delete with old callers; do not recreate it for native deployment |
-| Payload legacy field | `stow-links` payload manifest row and retired-link consumers in payload scripts, `lib/bootstrap/checks.sh`, `doctor.ps1` | Remove historical repair advice; do not confuse it with current readiness checks sharing a similar name |
-| Old skills opt-out | `AWESOME_SKILLS_AUTO_UPDATE` adapter and doctor advice | Explicitly end the previous through-2027-01-31 promise when that stage ships; document current `DOTFILES_PAYLOAD_ITEMS` selection while still applicable |
-| Old checkout diagnostics | Retired path tables in `lib/bootstrap/checks.sh` and `doctor.ps1` | Remove obsolete advice; keep the current architecture's no-submodule invariant where still relevant |
+| One-login shim | `scripts/awesome-skills-update.sh`, hook selectors and test entrypoint copies | Stage 5 made it a pure no-op; delete it with its old callers in Stage 6; do not recreate it for native deployment |
+| Payload legacy field | `stow-links` payload manifest row and retired-link consumers in payload scripts, `lib/bootstrap/checks.sh`, `doctor.ps1` | Remove historical repair advice; do not confuse it with current readiness checks sharing a similar name. Kept through Stage 5 (its early removal, D-g, was dropped), so Stage 6 |
+| Old skills opt-out | `AWESOME_SKILLS_AUTO_UPDATE` adapter and doctor advice | Done in Stage 5 (`281e33f`): adapter and advice deleted with the payload scheduler, and the previous through-2027-01-31 promise withdrawn early. Select items by command arguments (`sync-payloads kit pymol`); `DOTFILES_PAYLOAD_ITEMS` still sets the default items |
+| Old checkout diagnostics | Retired path tables in `lib/bootstrap/checks.sh` and `doctor.ps1` | Done in Stage 5 (`d200d3f`): obsolete advice and the whole submodule check removed from both doctors; the no-submodule invariant is now a repository test (`tests/test_chezmoi_source_state.py`) |
 | Retired checkout ignores | Specific `.gitignore` / `.stowrc` entries | Cheap `.gitignore` guards may remain for actual local residue; keep Stow exclusions while old package enumeration remains supported |
 | Old logger fallback | Fallback definition in `scripts/dotfiles-update.sh` | Delete with old updater when the native adapter replaces it; retain quiet/error-safe shell startup |
 | Portable baseline migration API | `--migrate-portable`, `retain_missing`, portable writeback and dedicated tests | Declare retirement in Stage 3 and remove with the backend in Stage 6; never turn normal apply into source cleanup |
@@ -146,18 +204,22 @@ bounds or exact runtime pins merely to say "latest-only".
 
 | Candidate | Investigation and conditions | Stage |
 | --- | --- | --- |
-| tmux version gates | Current config gates features at 3.0, 3.2, 3.3 and 3.4; 3.4 is a code-derived candidate floor for those branches, not a claim about the latest release. Verify public features, package availability and actual tests before deleting gates. Update `tools.tsv`, tmux config, tests and docs together. | 1 selects; 2 maps; 5 applies unless a coherent earlier component change is ready |
-| Old Claude plugin ID | Official direction is pre-2.1.285 `agents-md@builtin`, current `cc-plugin-agents-md@builtin`; newer clients accept either. Stage 3 retains both. Verify a coherent client floor and native ancestor loading before Stage 5 removes either entry. Removing portable data does not delete live-only state. | 3 preserves both; 5 may apply a verified client decision |
+| tmux version gates | Current config gates features at 3.0, 3.2, 3.3 and 3.4; 3.4 is a code-derived candidate floor for those branches, not a claim about the latest release. Verify public features, package availability and actual tests before deleting gates. Update `tools.tsv`, tmux config, tests and docs together. | 1 selected; 2 mapped; done in 5 (`e6cfba2`): floor 3.4 in `tools.tsv` and `hpc-login-env.yml`, all seven gates and the version parsing removed with config, tests and docs; hosts run Lab/WSL 3.4, Mac 3.8, Sherlock 3.7 and Marlowe 3.6a (login envs); Linux CI fails without real tmux 3.4 |
+| Old Claude plugin ID | Official direction is pre-2.1.285 `agents-md@builtin`, current `cc-plugin-agents-md@builtin`; newer clients accept either. Stage 3 retains both. Verify a coherent client floor and native ancestor loading before Stage 5 removes either entry. Removing portable data does not delete live-only state. | 3 preserves both; 5 kept both (no verified client decision) |
 | Root `CLAUDE.md` stub | Keep the cheap import interoperability stub by default. Any later removal needs explicit convention change and verified ancestor loading from subdirectories; never conflate it with the substantive global Claude instructions. | Separate verified decision if justified |
 | Codex CLAUDE fallback | This supports other repositories' instruction files, not demonstrably old Codex versions. Do not delete it as part of a client-floor sweep. | Preserve unless separately justified |
-| Bash 3.2 branches | A higher floor is allowed if it materially simplifies surviving code. macOS must provision and actually invoke it; installing Homebrew Bash does not change `/bin/bash`, shebangs or CI commands. Keep offline/check and shell-state guarantees. BSD utilities are a platform concern. | 1 inventories; 5 decides/applies |
-| Python and Stow floors | Raise only for concrete remaining features or removable branches. Stow is being retired, so investing in a new Stow minimum may be wasted work. Python remains for tests/tmux stdlib code, not AI merge. | 1 inventories; 5/6 resolve |
-| PowerShell/Windows tools | Verify a concrete supported floor independently of platform support; preserve actual Windows requirements of surviving code. | 1 inventories; 5 applies if beneficial |
+| Bash 3.2 branches | A higher floor is allowed if it materially simplifies surviving code. macOS must provision and actually invoke it; installing Homebrew Bash does not change `/bin/bash`, shebangs or CI commands. Keep offline/check and shell-state guarantees. BSD utilities are a platform concern. | 1 inventoried; 5 kept 3.2 (the Mac's `/bin/bash` is 3.2.57, the macOS CI job runs `/bin/bash`, and day-zero setup-host runs before Homebrew exists) |
+| Python and Stow floors | Raise only for concrete remaining features or removable branches. Stow is being retired, so investing in a new Stow minimum may be wasted work. Python remains for tests/tmux stdlib code, not AI merge. | 1 inventoried; 5 kept Python 3.11 (Linux CI runs it) and Stow 2.3.1; Stow retires in 6 |
+| PowerShell/Windows tools | Verify a concrete supported floor independently of platform support; preserve actual Windows requirements of surviving code. | 1 inventoried; 5 kept 7.0 entrypoints and the 5.1 profile, removed a false 7.1 claim and its gates (`72c8346`, `934041e`), and recorded the pre-existing 7.2 dependencies (`$PSStyle` in the PowerShell 7 profile, `LinkTarget` in the legacy `Test-SetupStowed`) without fixing them |
 
 Do not delete current tmux missing-plugin, SSH/desktop clipboard, battery, private
 metric cache, menu quoting, reload or host-scoped recovery behavior with version
 gates. TPM's `@tpm_plugins` mechanism may serve present conditional-plugin needs;
-the word "legacy" does not prove obsolescence.
+the word "legacy" does not prove obsolescence. Stage 5 kept all of them when it
+removed the gates. One accepted change: extrakto's OSC 52 choice now reads the
+session environment like tmux-yank's, so a locally started server that an SSH
+client attaches to and reloads uses OSC 52 instead of the tmux buffer; a server
+started over SSH stays on OSC 52.
 
 ## Current behavior that is not historical-layout repair
 
@@ -170,10 +232,16 @@ the word "legacy" does not prove obsolescence.
   contract because kit 0.7 does not install there. Removing old 0.6 prose does not
   remove the platform guard. Upstream kit aliases are outside this repo's scope.
 - Current skill ownership probes and `sync-skills` need public-interface evidence
-  before removal; older comments alone are insufficient.
+  before removal; older comments alone are insufficient. Stage 5 kept both;
+  `sync-skills` now runs the validated native source.
 - The Windows stamp-publication retry fix in `42b2e71`, integrated by `1a9d30b`,
-  is current correctness, not obsolete-client support. Preserve it while that
-  publication code exists; retiring the entire scheduler is a different decision.
+  was current correctness, not obsolete-client support, while that publication
+  code existed. The obligation ended with the code: D7, the separate decision to
+  retire the entire scheduler, removed Windows stamp publication with it in
+  Stage 5 (`281e33f`), and no payload state is written any more.
+- The `DOTFILES_PAYLOAD_AUTO_UPDATE=0` exports of the provisioning shells are
+  inert since Stage 5 and stay only until Stage 6 removes them; do not give the
+  variable new behavior.
 
 The old standalone plan required retaining Stow, TOMLKit, custom receipts and
 writer guarantees because it did not change the deployment engine. Those
@@ -190,6 +258,8 @@ revisions rather than creating/moving tags merely for the handoff:
 2. Before an old installation fetches/applies the breaking revision, disable both
    dotfiles and payload auto-update hooks for its maintenance session, stop/wait
    for existing repo-owned workers and address its exact Windows scheduled task.
+   Only a pre-Stage-5 revision still has a payload auto-update hook and workers;
+   from `dddc718` on, payloads run only when a person starts them.
 3. Offer a controlled bridge from the last supported revision, or a clean current
    clone plus manual preparation of old HOME destinations. A fresh clone does not
    remove old HOME links or `AGENTS.override.md`.
