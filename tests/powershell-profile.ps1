@@ -534,6 +534,8 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
 '@
     # Invoke-SyncCase PREPARE: a fresh trace and marker, PREPARE, one child run.
     function Invoke-SyncCase([scriptblock]$Prepare) {
+        # A linked marker goes as a link (dangling ones too), never its target.
+        try { if ([IO.File]::GetAttributes($syncMarker) -band [IO.FileAttributes]::ReparsePoint) { [IO.File]::Delete($syncMarker) } } catch { }
         Remove-Item -LiteralPath $syncTrace, $syncMarker -Recurse -Force -ErrorAction Ignore
         & $Prepare
         $run = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $syncChild) -Environment @{
@@ -554,9 +556,43 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
         'other home'      = { [IO.File]::WriteAllText($syncMarker, "dotfiles-chezmoi-v1`n$syncRoot`n$($canonical[1])`n") }
         'directory'       = { $null = New-Item -ItemType Directory -Path $syncMarker }
     }
+    # A marker that is a link, dangling or to a valid marker, refuses too and
+    # never falls back to DOTFILES_DIR. A symbolic link on Windows needs
+    # elevation or Developer Mode (hosted runners are elevated).
+    $validCopy = Join-Path $syncRoot 'valid marker'
+    [IO.File]::WriteAllText($validCopy, $valid)
+    $linkProbe = Join-Path $syncRoot 'link probe'
+    try { $null = New-Item -ItemType SymbolicLink -Path $linkProbe -Target $validCopy -ErrorAction Stop; [IO.File]::Delete($linkProbe) }
+    catch { $linkProbe = $null }
+    if ($linkProbe) {
+        $gone = Join-Path $syncRoot 'removed marker'
+        $invalid['dangling link'] = {
+            [IO.File]::WriteAllText($gone, $valid)
+            $null = New-Item -ItemType SymbolicLink -Path $syncMarker -Target $gone
+            [IO.File]::Delete($gone)
+        }
+        $invalid['link to a valid marker'] = { $null = New-Item -ItemType SymbolicLink -Path $syncMarker -Target $validCopy }
+    }
+    else { Write-Output 'SKIP: linked sync-payloads markers (cannot create a symbolic link here)' }
     foreach ($entry in $invalid.GetEnumerator()) {
         $case = Invoke-SyncCase $entry.Value
         Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update refused: review the native source binding privately.')) "an invalid binding ($($entry.Key)) refuses without running a hook ($($case.Text))"
+    }
+    # A valid marker whose source has no guard refuses as well.
+    $boundGuard = Join-Path $bound 'lib/chezmoi-guard.ps1'
+    Move-Item -LiteralPath $boundGuard -Destination "$boundGuard.hidden"
+    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) } }
+    finally { Move-Item -LiteralPath "$boundGuard.hidden" -Destination $boundGuard }
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update refused: review the native source binding privately.')) "a bound source without its guard refuses without running a hook ($($case.Text))"
+    # A checkout without the hook fails with one line and exit 1, not a
+    # leftover 0, on an unmarked home and a native one alike.
+    foreach ($entry in @(@('unmarked', $stale, {}), @('native', $bound, { [IO.File]::WriteAllText($syncMarker, $valid) }))) {
+        $hookPath = Join-Path $entry[1] 'scripts/payload-update.ps1'
+        Move-Item -LiteralPath $hookPath -Destination "$hookPath.hidden"
+        try { $case = Invoke-SyncCase $entry[2] }
+        finally { Move-Item -LiteralPath "$hookPath.hidden" -Destination $hookPath }
+        Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update unavailable:') -and
+            -not $case.Err.Contains('CommandNotFound')) "a missing hook ($($entry[0])) fails with exit 1 ($($case.Text))"
     }
     # A hook that ends without exit leaves no stale exit status behind.
     [IO.File]::WriteAllText((Join-Path $bound 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")

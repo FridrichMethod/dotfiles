@@ -476,7 +476,10 @@ class WindowsTakeoverTests(unittest.TestCase):
         if not shell.is_file():
             self.skipTest("Windows PowerShell 5.1 not available")
         self.bind()
-        body = ". " + ps_string(ROOT / "lib/chezmoi-guard.ps1") + ";if(-not(Test-DotfilesNativeOwned " + ps_string(self.home) + ")){throw 'not owned'};exit 0"
+        # The updater's binary check lives in the guard too and must parse there.
+        body = ". " + ps_string(ROOT / "lib/chezmoi-guard.ps1") + ";if(-not(Test-DotfilesNativeOwned " + ps_string(self.home) + ")){throw 'not owned'}" + \
+            ";foreach($f in 'Test-DotfilesNativeChezmoiPath','Test-DotfilesTrustedFileSecurity','Open-DotfilesNativeChezmoi')" + \
+            "{if(-not(Get-Command $f -CommandType Function -ErrorAction SilentlyContinue)){throw ($f+' missing')}};exit 0"
         encoded = base64.b64encode(body.encode("utf-16le")).decode()
         # Match the PS7 fixture budget, including hosted e2e process startup.
         result = subprocess.run([str(shell), "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
@@ -635,22 +638,47 @@ class WindowsTakeoverTests(unittest.TestCase):
         installed = self.home / ".local/bin/chezmoi.exe"
         # Each step runs directly, so a refusal names its cause. Foreign read and
         # deny entries and OWNER RIGHTS (hosted runners add it) stay acceptable;
-        # a foreign owner or a foreign write bit does not.
-        result = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";$p=" + ps_string(installed) +
-                         ";if(-not(Test-DotfilesNativeChezmoiPath $p)){throw 'path refused'}" +
-                         ";$s=[IO.FileStream]::new($p,'Open','Read','Read')" +
-                         ";try{$sd=[IO.FileSystemAclExtensions]::GetAccessControl($s)}finally{$s.Dispose()}" +
-                         ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw ('trusted copy refused: '+" +
-                         "$sd.GetSecurityDescriptorSddlForm('Owner,Access'))}" +
-                         ";$users=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')" +
-                         ";foreach($r in @('S-1-5-32-545,ReadAndExecute,Allow','S-1-5-32-545,Write,Deny','S-1-3-4,FullControl,Allow'))" +
-                         "{$f=$r.Split(',');$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(" +
-                         "[Security.Principal.SecurityIdentifier]::new($f[0]),$f[1],$f[2]))}" +
-                         ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw 'foreign read, deny or OWNER RIGHTS entry refused'}" +
-                         ";$owner=$sd.GetOwner([Security.Principal.SecurityIdentifier]);$sd.SetOwner($users)" +
-                         ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign owner trusted'};$sd.SetOwner($owner)" +
-                         ";$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($users,'AppendData','Allow'))" +
-                         ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign append right trusted'}")
+        # a foreign owner or a foreign write bit does not. The guard alone
+        # provides the check, as the doctor and setup-host load it. A null DACL
+        # refuses, and so does each DACL entry .NET's rule projection skips,
+        # even for this user: an object ACE with no GUIDs (which the kernel
+        # applies like a plain allow entry, and only the entry-type check
+        # refuses), a compound ACE and an unknown (custom) ACE type.
+        result = self.guard("$p=" + ps_string(installed) +
+                            ";if(-not(Test-DotfilesNativeChezmoiPath $p)){throw 'path refused'}" +
+                            ";$s=[IO.FileStream]::new($p,'Open','Read','Read')" +
+                            ";try{$sd=[IO.FileSystemAclExtensions]::GetAccessControl($s)}finally{$s.Dispose()}" +
+                            ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw ('trusted copy refused: '+" +
+                            "$sd.GetSecurityDescriptorSddlForm('Owner,Access'))}" +
+                            ";$users=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')" +
+                            ";foreach($r in @('S-1-5-32-545,ReadAndExecute,Allow','S-1-5-32-545,Write,Deny','S-1-3-4,FullControl,Allow'))" +
+                            "{$f=$r.Split(',');$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(" +
+                            "[Security.Principal.SecurityIdentifier]::new($f[0]),$f[1],$f[2]))}" +
+                            ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw 'foreign read, deny or OWNER RIGHTS entry refused'}" +
+                            ";$owner=$sd.GetOwner([Security.Principal.SecurityIdentifier]);$sd.SetOwner($users)" +
+                            ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign owner trusted'};$sd.SetOwner($owner)" +
+                            ";$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($users,'AppendData','Allow'))" +
+                            ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign append right trusted'}" +
+                            ";function ConvertTo-FileSecurity($raw){$b=[byte[]]::new($raw.BinaryLength);$raw.GetBinaryForm($b,0)" +
+                            ";$f=[Security.AccessControl.FileSecurity]::new();$f.SetSecurityDescriptorBinaryForm($b);$f}" +
+                            ";$me=[Security.Principal.WindowsIdentity]::GetCurrent().User" +
+                            ";$n=ConvertTo-FileSecurity ([Security.AccessControl.RawSecurityDescriptor]::new(" +
+                            "'O:'+$me.Value+'G:'+$me.Value+'D:NO_ACCESS_CONTROL'))" +
+                            ";if(Test-DotfilesTrustedFileSecurity $n){throw 'null DACL trusted'}" +
+                            ";foreach($ace in @([Security.AccessControl.ObjectAce]::new('None','AccessAllowed',0x1F01FF,$me," +
+                            "'None',[Guid]::Empty,[Guid]::Empty,$false,$null)" +
+                            ",[Security.AccessControl.CompoundAce]::new('None',0x1F01FF,'Impersonation',$me)" +
+                            ",[Security.AccessControl.CustomAce]::new([Enum]::ToObject([Security.AccessControl.AceType],17)," +
+                            "'None',[byte[]]::new(4)))){" +
+                            "$acl=[Security.AccessControl.RawAcl]::new([Security.AccessControl.GenericAcl]::AclRevisionDS,2)" +
+                            ";$acl.InsertAce(0,[Security.AccessControl.CommonAce]::new('None','AccessAllowed',0x1F01FF,$me,$false,$null))" +
+                            ";$acl.InsertAce(1,$ace)" +
+                            ";$o=ConvertTo-FileSecurity ([Security.AccessControl.RawSecurityDescriptor]::new(" +
+                            "'DiscretionaryAclPresent,SelfRelative',$me,$me,$null,$acl))" +
+                            ";$kept=@([Security.AccessControl.RawSecurityDescriptor]::new($o.GetSecurityDescriptorBinaryForm(),0)" +
+                            ".DiscretionaryAcl|Where-Object{$_.GetType() -eq $ace.GetType()})" +
+                            ";if($kept.Count -ne 1){throw ($ace.GetType().Name+' not kept by .NET')}" +
+                            ";if(Test-DotfilesTrustedFileSecurity $o){throw ($ace.GetType().Name+' trusted')}}")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_held_binary_handle_blocks_renaming_its_parent_directories(self):

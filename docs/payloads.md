@@ -231,7 +231,10 @@ reparse point, and validated by that source's `lib/chezmoi-guard.ps1`; an
 invalid binding prints
 `[dotfiles] Payload update refused: review the native source binding privately.`
 and sets `$LASTEXITCODE` to 1 without running a hook. Only an unmarked home
-uses `$env:DOTFILES_DIR`, else `~\dotfiles`. The `-Now` line runs the
+uses `$env:DOTFILES_DIR`, else `~\dotfiles`. A checkout without
+`scripts/payload-update.ps1` prints
+`[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.`
+and sets `$LASTEXITCODE` to 1. The `-Now` line runs the
 checkout its path names, without that check: on a native home use the
 functions, or the path of the source the binding names.
 

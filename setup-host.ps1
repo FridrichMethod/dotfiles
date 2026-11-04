@@ -19,7 +19,8 @@
       W1-bat-theme    the pinned Catppuccin Mocha theme, sha256-checked, into
                       %APPDATA%\bat\themes, then bat cache --build
       W1-chezmoi      native default: the pinned, SHA256-checked chezmoi
-                      release, extracting only chezmoi.exe into ~\.local\bin
+                      release, extracting only chezmoi.exe into ~\.local\bin;
+                      done once the login updater would run that private copy
       W1-setup-sync   -LegacyStow only: .\setup-sync.ps1 -Python <the first
                       python3 or python on PATH that reports 3.11 or newer; a
                       Microsoft Store alias does not count> (the only write
@@ -314,8 +315,16 @@ function Get-SetupStepState {
             $rows = @(Get-SetupStepRows W1-chezmoi)
             if ($rows.Count -ne 1) { throw [IO.InvalidDataException]::new('tools.tsv needs one chezmoi row for win') }
             $state = Get-BootstrapToolStatus $rows[0]
-            if ($state.Status -ceq 'ok') { return New-SetupState $Id done "chezmoi $($state.Probe.Version) at $($state.Probe.Path)" }
-            return New-SetupState $Id todo 'install pinned, SHA256-verified chezmoi into ~/.local/bin; configuration handover is separate'
+            if ($state.Status -cne 'ok') {
+                return New-SetupState $Id todo 'install pinned, SHA256-verified chezmoi into ~/.local/bin; configuration handover is separate'
+            }
+            # On Windows the login updater runs only a private, regular
+            # ~/.local/bin/chezmoi.exe, never a PATH match (Unix runs PATH's).
+            if ($IsWindows -and -not (Test-BootstrapNativeChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
+                return New-SetupState $Id todo ("chezmoi $($state.Probe.Version) at $($state.Probe.Path) works, but the login updater runs only a private, " +
+                    'regular ~/.local/bin/chezmoi.exe, never a link or a PATH chezmoi: install the pinned, SHA256-verified copy there (a link stops the install)')
+            }
+            return New-SetupState $Id done "chezmoi $($state.Probe.Version) at $($state.Probe.Path)"
         }
         'W1-setup-sync' {
             if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }

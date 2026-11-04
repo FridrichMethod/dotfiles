@@ -81,7 +81,9 @@ a chezmoi command without the updater's full explicit argument set wrote (run
 every manual native command with that set, as takeover.md says; the doctor
 never removes the file, and setup-host still counts H7-native done). `human`: active maintenance, a missing or invalid
 binding, a local config that is absent or not a regular file (a link or a
-directory), or no readable `lib/chezmoi-guard.sh` in this checkout.
+directory), or no readable `lib/chezmoi-guard.sh` in this checkout; on Windows
+also a `~/.local/bin/chezmoi.exe` the login updater refuses
+([HW-native](#hw-native-windows-native-handover)).
 
 ### W1-chezmoi: Windows native chezmoi binary
 
@@ -89,7 +91,8 @@ The Windows equivalent of S4-chezmoi verifies the pinned ZIP and extracts only
 `chezmoi.exe` to `~/.local/bin`. It hashes and extracts through one read-only
 handle and writes the file with an explicit protected DACL (FullControl for
 you, SYSTEM and Administrators, nothing inherited) before renaming it into
-place; it needs PowerShell 7.1 or newer and fails closed on 7.0. Dotfiles never
+place, replacing a regular file. A link at `chezmoi.exe`, `.local\bin` or
+`.local` stops it before downloading, for inspection. Dotfiles never
 changes the ACL of `~/.local` or `~/.local/bin`. Bootstrap and doctor search
 this directory explicitly, before PATH; use the full executable path when
 invoking chezmoi manually. No permanent PATH or profile edit, elevation or
@@ -99,11 +102,13 @@ The native login updater runs only this exact file, never a PATH match. It
 opens it with `FileShare.Read`, holds it until its chezmoi runs have exited,
 and requires a regular file with no link or junction at it, `.local` or
 `.local\bin` (checked before and after the open), an owner that is you, SYSTEM
-or Administrators, and no allow entry that gives any other account a write,
-delete, permission or owner change right (OWNER RIGHTS counts only for such an
-owner); owner and DACL are read from the held handle. Otherwise, also when the
-file is missing, it prints one warning naming this section and skips the
-update. This narrows the gap between check and start but does not close it:
+or Administrators, a DACL that is present and holds only plain allow or deny
+entries (no object or compound entry, which .NET's access rules would skip),
+and no allow entry that gives any other account a write, delete, permission or
+owner change right (OWNER RIGHTS counts only for such an owner); owner and DACL
+are read from the held handle's raw descriptor. Otherwise, also when the file
+is missing, it prints one warning naming this section and skips the update.
+This narrows the gap between check and start but does not close it:
 on a `windows-2025` hosted runner (elevated), NTFS refused to rename `.local`
 or `.local\bin` while the handle was held, and the fixture's rename of
 `.local\bin` succeeded after release. This protects only once the real file
@@ -112,14 +117,16 @@ races (swapping `.local\bin` for a junction before the open, then a prepared
 directory back before the re-check) can still get a different `chezmoi.exe`
 started; the check does not make the path tamper-proof.
 
-W1-chezmoi reports done whenever it finds a working chezmoi at or above the
-floor, including one elsewhere on PATH, so it does not repair what the updater
-refuses. If the updater warns, inspect `~/.local/bin/chezmoi.exe`; delete it
-(or the link) when it is linked or not private (a linked `.local` or
-`.local\bin` must become a real directory), and uninstall or take off PATH any
-other chezmoi (winget, scoop), which W1-chezmoi would report done instead; then
-rerun `setup-host.ps1` so W1-chezmoi installs a private copy. A chezmoi that
-exists only elsewhere on PATH likewise makes the updater skip every login.
+W1-chezmoi is done only when a chezmoi at or above the floor works and the
+updater would run `~/.local/bin/chezmoi.exe`, by the same read-only check. A
+chezmoi only elsewhere on PATH (winget, scoop), which the updater never runs,
+or a copy that is linked or not private leaves it todo, and on a bound home
+`doctor.ps1`'s `native-config` row reports `human` naming this section. If the
+updater warns, inspect `~/.local/bin/chezmoi.exe`; remove a link there, and
+make a linked `.local` or `.local\bin` a real directory; then rerun
+`setup-host.ps1` so W1-chezmoi installs a private copy over a regular file.
+Another chezmoi on PATH may stay: neither the updater nor the manual commands
+of [takeover.md](chezmoi-migration/takeover.md) use it.
 
 ### HW-native: Windows native handover
 
@@ -130,7 +137,11 @@ and HW-auto-stow-task are emitted only with `-LegacyStow`. `doctor.ps1`'s
 `native-config` row gives the verdicts of
 [H7-native](#h7-native-reviewed-native-configuration-handover), with
 `lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the bound
-checkout counts as that checkout.
+checkout counts as that checkout. One verdict is Windows only: with the
+binding otherwise `ok`, the row is `human`, citing
+[W1-chezmoi](#w1-chezmoi-windows-native-chezmoi-binary), when the login updater
+would refuse `~/.local/bin/chezmoi.exe`. That check only opens the file for
+reading and comes before the stray state database warning.
 
 ## Legacy quick start
 
@@ -489,7 +500,7 @@ lines do not repeat a non-default `--tier`; the closing `rerun` warning of
 The Windows twins take the same ideas as PowerShell parameters:
 `.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
 `.\setup-host.ps1 [-Host win] [-Tier LIST] [-Check] [-Yes] [-PrintManual] [-WhatIf]`
-(`-Host` defaults to `win`). Both need PowerShell 7 (W1-chezmoi 7.1 or newer)
+(`-Host` defaults to `win`). Both need PowerShell 7
 and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `native-config` (with

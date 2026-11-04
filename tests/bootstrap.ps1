@@ -262,6 +262,34 @@ function Set-FixtureNativeBound {
     [IO.File]::WriteAllText($marker, $binding)
     [IO.File]::WriteAllText($config, "[data]`nhost = 'win'`n")
     New-ToolShim $Fixture.Bin 'chezmoi' 'chezmoi version v2.74.0, commit 0000000, built at 2026-01-01T00:00:00Z'
+    # On Windows the login updater, and so the doctor and W1-chezmoi, accept
+    # only a private, regular ~/.local/bin/chezmoi.exe, never the PATH shim.
+    if ($IsWindows -and $script:RealChezmoi) { Install-FixtureChezmoi (Join-Path $Fixture.Home '.local/bin/chezmoi.exe') }
+}
+
+function Install-FixtureChezmoi {
+    # A copy of the real chezmoi at Path with the explicit protected DACL
+    # W1-chezmoi writes (FullControl for this user, SYSTEM and
+    # Administrators, nothing inherited), never the runner's temporary ACL.
+    param([Parameter(Mandatory)][string]$Path)
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
+    [IO.File]::Copy($script:RealChezmoi, $Path, $true)
+    $security = [Security.AccessControl.FileSecurity]::new()
+    $security.SetAccessRuleProtection($true, $false)
+    foreach ($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')) {
+        $security.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
+                [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow))
+    }
+    [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($Path), $security)
+}
+
+function Test-RealChezmoiMissing {
+    # True, after a SKIP line, on Windows without a real chezmoi for
+    # Install-FixtureChezmoi; CI (DOTFILES_TEST_REQUIRE_CHEZMOI=1) fails instead.
+    if (-not $IsWindows -or $script:RealChezmoi) { return $false }
+    if ($env:DOTFILES_TEST_REQUIRE_CHEZMOI -eq '1') { throw 'Native Windows cases need a real chezmoi (DOTFILES_TEST_CHEZMOI or PATH).' }
+    Write-Host 'SKIP: native Windows cases need a real chezmoi (DOTFILES_TEST_CHEZMOI or PATH).'
+    return $true
 }
 
 function Invoke-Fixture {
@@ -440,6 +468,17 @@ function Get-WinToolIds {
 
 . (Join-Path $sourceRoot 'lib/bootstrap.ps1')
 . (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1')
+
+# The real chezmoi Install-FixtureChezmoi copies on Windows, resolved before
+# any case changes PATH: DOTFILES_TEST_CHEZMOI, else the chezmoi on this
+# process's PATH (Windows CI provisions one with
+# .github/scripts/install-test-chezmoi.py).
+$script:RealChezmoi = $env:DOTFILES_TEST_CHEZMOI
+if (-not $script:RealChezmoi) {
+    $found = Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue |
+        Where-Object { -not $IsWindows -or $_.Source -like '*.exe' } | Select-Object -First 1
+    if ($found) { $script:RealChezmoi = $found.Source }
+}
 
 # Builds a fixture checkout's .venv-sync, here and in the fixture's own
 # setup-sync.ps1 (a child process). Unix: a shell script that logs its
@@ -1078,7 +1117,8 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
     }
 
     Test-Case 'native doctor reports a healthy bound host, keeps gh telemetry off and writes nothing offline' {
-        # Native mode needs no .venv-sync, so this case never skips.
+        # Native mode needs no .venv-sync; on Windows it needs a real chezmoi.
+        if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture -SkipVenv
         Set-FixtureNativeBound $fixture
@@ -1104,7 +1144,10 @@ exit 0
         Assert-True ($run.Lines -contains "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-") "native-config row: $($run.Stdout)"
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'native doctor wrote files'
         $events = Get-FixtureEvents $fixture
-        Assert-True ($events -contains 'chezmoi --version' -and $events -contains 'gh --version') "version probes did not run: $($events -join '; ')"
+        Assert-True ($events -contains 'gh --version') "version probes did not run: $($events -join '; ')"
+        # On Windows the private ~/.local/bin/chezmoi.exe, the real chezmoi,
+        # answers before the PATH shim; elsewhere the shim does.
+        Assert-True (($events -contains 'chezmoi --version') -ne $IsWindows) "chezmoi probe (Windows: $IsWindows): $($events -join '; ')"
         Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native runtime checks'
         Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline native doctor used the network: $($events -join '; ')"
         $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
@@ -1114,6 +1157,7 @@ exit 0
     }
 
     Test-Case 'native-config names its cause; another checkout and a stray state database only warn' {
+        if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture -SkipVenv
         Set-FixtureNativeBound $fixture
@@ -1199,6 +1243,81 @@ exit 0
             Assert-True ((Get-NativeConfigRow $run).StartsWith("ok`tnative-config`t")) "$($entry[0]) row: $($run.Stdout)"
             $check = Invoke-Fixture $entry[1] setup-host.ps1 @{ Check = $true; LegacyStow = $false }
             Assert-True ([bool]($check.Lines -cmatch '^HW-native done ')) "$($entry[0]) HW-native: $($check.Stdout)"
+        }
+    }
+
+    Test-Case 'on Windows native-config and W1-chezmoi flag a ~/.local/bin/chezmoi.exe the login updater refuses' {
+        if (-not $IsWindows) {
+            Skip-Assertion 'the login updater binary check is Windows-only; Unix pwsh keeps the PATH chezmoi readiness.'
+            return
+        }
+        if (Test-RealChezmoiMissing) { return }
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture -SkipVenv
+        Set-FixtureNativeBound $fixture
+        $native = @{ Tsv = $true; LegacyStow = $false }
+        $installed = Join-Path $fixture.Home '.local/bin/chezmoi.exe'
+        function Get-NativeConfigRow($Run) { return @($Run.Lines | Where-Object { $_ -cmatch "^[a-z]+`tnative-config`t" }) -join '|' }
+        function Assert-BinaryRefused([string]$Label) {
+            # Read-only: the doctor opens the file for reading and closes it.
+            $before = Get-Snapshot (Get-FixtureRoots $fixture)
+            $run = Invoke-Fixture $fixture doctor.ps1 $native
+            Assert-Exit $run 1 $Label
+            $row = Get-NativeConfigRow $run
+            Assert-True ($row -cmatch "^human`tnative-config`tcore`t.*login updater refuses ~/\.local/bin/chezmoi\.exe.*W1-chezmoi.*`tdocs/bootstrap\.md W1-chezmoi$" -and
+                -not $row.Contains('S-1-')) "$Label native-config: $($run.Stdout)"
+            Assert-True ([bool]($run.Lines -cmatch "^ok`tchezmoi`t")) "$Label keeps the chezmoi tool row: $($run.Stdout)"
+            Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before "$Label doctor wrote files"
+            $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $false }
+            Assert-True ([bool]($check.Lines -cmatch '^W1-chezmoi todo .*login updater runs only a private')) "$Label W1-chezmoi: $($check.Stdout)"
+        }
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 0 'private copy'
+        Assert-True ((Get-NativeConfigRow $run).StartsWith("ok`tnative-config`t")) "private copy row: $($run.Stdout)"
+        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $false }
+        Assert-True ([bool]($check.Lines -cmatch '^W1-chezmoi done ')) "private copy W1-chezmoi: $($check.Stdout)"
+
+        # Only a PATH chezmoi (winget, scoop): refused, and this verdict comes
+        # before the stray state database warning.
+        [IO.File]::Delete($installed)
+        $stray = Join-Path $fixture.Home '.config/chezmoi/chezmoistate.boltdb'
+        [IO.File]::WriteAllText($stray, '')
+        Assert-BinaryRefused 'PATH-only chezmoi'
+        [IO.File]::Delete($stray)
+
+        # Another account may modify it (an inherited sandbox grant, say).
+        Install-FixtureChezmoi $installed
+        & (Join-Path $env:SystemRoot 'System32/icacls.exe') $installed /grant '*S-1-5-32-545:(M)' | Out-Null
+        Assert-True ($LASTEXITCODE -eq 0) 'icacls grant failed'
+        Assert-BinaryRefused 'foreign-writable copy'
+
+        # A private copy reached through a junction at ~/.local/bin.
+        $bin = Split-Path -Parent $installed
+        [IO.Directory]::Delete($bin, $true)
+        $elsewhere = Join-Path $fixture.Root 'elsewhere-bin'
+        Install-FixtureChezmoi (Join-Path $elsewhere 'chezmoi.exe')
+        [void](New-Item -ItemType Junction -Path $bin -Target $elsewhere)
+        Assert-BinaryRefused 'junctioned ~/.local/bin'
+    }
+
+    Test-Case 'W1-chezmoi stops before downloading under a linked ~/.local' {
+        $fixture = New-Fixture
+        $destination = Join-Path $fixture.Home '.local/bin/chezmoi.exe'
+        $script:MockEvents.Clear()
+        # A link at .local or .local/bin: the updater never runs what it holds.
+        $elsewhere = Join-Path $fixture.Root 'elsewhere'
+        [void][IO.Directory]::CreateDirectory((Join-Path $elsewhere 'bin'))
+        foreach ($entry in @(@('.local', $elsewhere), @('.local/bin', (Join-Path $elsewhere 'bin')))) {
+            $link = Join-Path $fixture.Home $entry[0]
+            [void][IO.Directory]::CreateDirectory((Split-Path -Parent $link))
+            if ($IsWindows) { [void](New-Item -ItemType Junction -Path $link -Target $entry[1]) }
+            else { [void](New-Item -ItemType SymbolicLink -Path $link -Target $entry[1]) }
+            $linked = Install-BootstrapChezmoi -Uri 'https://example.invalid/chezmoi.zip' -Sha256 ('0' * 64) -Destination $destination
+            Assert-True (-not $linked.Success -and $linked.Message.Contains('is a link')) "linked $($entry[0]): $($linked.Message)"
+            Assert-Equal $script:MockEvents.Count 0 "linked $($entry[0]) downloaded"
+            Assert-Equal @(Get-ChildItem -LiteralPath $elsewhere -Recurse -File -Force).Count 0 "linked $($entry[0]) wrote through the link"
+            # The link itself, never its target.
+            if ($IsWindows) { [IO.Directory]::Delete($link) } else { [IO.File]::Delete($link) }
         }
     }
 

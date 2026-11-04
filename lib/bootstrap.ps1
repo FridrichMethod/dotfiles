@@ -713,6 +713,26 @@ function Test-BootstrapNativeReady {
     return (Get-BootstrapNativeState -RepoRoot $RepoRoot).State -ceq 'ok'
 }
 
+function Test-BootstrapNativeChezmoi {
+    # Windows: true when the native login updater would run HomePath's
+    # ~/.local/bin/chezmoi.exe (Open-DotfilesNativeChezmoi of RepoRoot's
+    # lib/chezmoi-guard.ps1, on the destination a home binding resolves
+    # to): a regular file, no link at it, .local or .local\bin, owned by and
+    # writable only by this user, SYSTEM and Administrators. Read-only: the
+    # file is opened for reading and closed at once. False without the guard.
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$HomePath)
+    $guard = Join-Path $RepoRoot 'lib/chezmoi-guard.ps1'
+    if (-not [IO.File]::Exists($guard)) { return $false }
+    try {
+        . $guard
+        $held = Open-DotfilesNativeChezmoi -Destination (Resolve-DotfilesDirectory $HomePath)
+    }
+    catch { return $false }
+    if ($null -eq $held) { return $false }
+    $held.Dispose()
+    return $true
+}
+
 function New-BootstrapPrivateFile {
     # Create Path, which must not exist, open for writing. On Windows its DACL
     # is explicit and protected from creation on: FullControl for this user,
@@ -733,13 +753,23 @@ function Install-BootstrapChezmoi {
     # Verify the archive through the one read-only handle its executable is
     # then extracted from, so a path swap after the check changes nothing.
     # Extract only chezmoi.exe, into a private file beside Destination (never
-    # a DACL inherited from %TEMP%), then rename it into place.
+    # a DACL inherited from %TEMP%), then rename it into place. Before any
+    # download, refuse a link or non-regular file at Destination and a link
+    # at its directory or that directory's parent (~/.local/bin, ~/.local),
+    # under which the login updater runs nothing.
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$Sha256,
         [Parameter(Mandatory)][string]$Destination)
     $existing = Get-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
     if ($existing -and ($existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint))) {
         return New-BootstrapResult failed 'chezmoi destination is a link or non-regular file; inspect it before installing'
+    }
+    $parent = [IO.Path]::GetDirectoryName($Destination)
+    foreach ($directory in @([IO.Path]::GetDirectoryName($parent), $parent)) {
+        $item = Get-Item -LiteralPath $directory -Force -ErrorAction SilentlyContinue
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            return New-BootstrapResult failed "the chezmoi destination's directory $directory is a link; inspect it before installing"
+        }
     }
     $scratch = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-bootstrap-' + [Guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($scratch)

@@ -98,3 +98,67 @@ function Get-DotfilesNativeBinding {
         State = Join-Path $destination '.local/state/chezmoi/chezmoi.boltdb'
     }
 }
+
+# The native login updater's binary check (scripts/chezmoi-update.ps1), which
+# doctor.ps1 and setup-host.ps1's W1-chezmoi apply too. Read-only and used on
+# Windows only; like everything above, it parses under Windows PowerShell 5.1.
+function Test-DotfilesNativeChezmoiPath {
+    # True when .local and .local\bin are real directories and chezmoi.exe a
+    # regular file. GetAttributes reports a link itself, never its target.
+    param([Parameter(Mandatory)][string]$Path)
+    $bin = Split-Path -Parent $Path
+    foreach ($item in @((Split-Path -Parent $bin), $bin, $Path)) {
+        $attributes = [IO.File]::GetAttributes($item)
+        $isDirectory = [bool]($attributes -band [IO.FileAttributes]::Directory)
+        if (($attributes -band [IO.FileAttributes]::ReparsePoint) -or $isDirectory -ne ($item -ne $Path)) { return $false }
+    }
+    return $true
+}
+
+function Test-DotfilesTrustedFileSecurity {
+    # Owner is this user, SYSTEM or Administrators, and no allow entry gives
+    # any other SID WRITE_DATA, APPEND, WRITE_EA, WRITE_ATTRIBUTES, DELETE,
+    # WRITE_DAC, WRITE_OWNER, GENERIC_ALL or GENERIC_WRITE (0x500D0116).
+    # OWNER RIGHTS (S-1-3-4) applies only to that already trusted owner.
+    # Read from the raw descriptor, not .NET's rule projection, which skips
+    # every entry that is not a common ACE: a null DACL, or any DACL entry
+    # but a plain or callback allow or deny entry (an object, compound or
+    # unknown type), refuses. Deny entries only take rights away.
+    param([Parameter(Mandatory)][Security.AccessControl.FileSystemSecurity]$Security)
+    $descriptor = [Security.AccessControl.RawSecurityDescriptor]::new($Security.GetSecurityDescriptorBinaryForm(), 0)
+    $trusted = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
+    if ($null -eq $descriptor.Owner -or $trusted -notcontains $descriptor.Owner.Value) { return $false }
+    if ($null -eq $descriptor.DiscretionaryAcl) { return $false }
+    $trusted += 'S-1-3-4'
+    foreach ($ace in $descriptor.DiscretionaryAcl) {
+        if ($ace -isnot [Security.AccessControl.CommonAce]) { return $false }
+        if ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessDenied) { continue }
+        if ($ace.AceQualifier -ne [Security.AccessControl.AceQualifier]::AccessAllowed) { return $false }
+        if ($trusted -notcontains $ace.SecurityIdentifier.Value -and ($ace.AccessMask -band 0x500D0116)) { return $false }
+    }
+    return $true
+}
+
+function Open-DotfilesNativeChezmoi {
+    # The provisioned <destination>\.local\bin\chezmoi.exe, open for reading
+    # with FileShare.Read (nobody may write, rename or delete it while held),
+    # or $null when it is missing, a link, under a linked directory, or not
+    # private. The path is checked again after opening, and owner and DACL
+    # are read from the held handle. No PATH lookup ever happens.
+    param([Parameter(Mandatory)][string]$Destination)
+    $path = Join-Path $Destination '.local\bin\chezmoi.exe'
+    $stream = $null
+    try {
+        if (-not (Test-DotfilesNativeChezmoiPath $path)) { return $null }
+        $stream = [IO.FileStream]::new($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        if ((Test-DotfilesNativeChezmoiPath $path) -and
+            (Test-DotfilesTrustedFileSecurity ([IO.FileSystemAclExtensions]::GetAccessControl($stream)))) {
+            $held = $stream
+            $stream = $null
+            return $held
+        }
+        return $null
+    }
+    catch { return $null }
+    finally { if ($null -ne $stream) { $stream.Dispose() } }
+}
