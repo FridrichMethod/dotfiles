@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# Sherlock forbids detached login-node workers. Use sync-payloads explicitly
-# in an appropriate allocation; the general payload lifecycle is unchanged.
-export DOTFILES_PAYLOAD_AUTO_UPDATE=0
+# Sherlock forbids detached login-node workers: no login starts a payload
+# install, and sync-payloads runs in the foreground; use it where the site
+# rules allow.
 
 # Scratch groups
 export ALICE=/scratch/groups/ayting

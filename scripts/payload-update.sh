@@ -1,24 +1,23 @@
 #!/bin/sh
-# Keep the payload repos (coding-agent-kit, PyMOLScripts, awesome-skills)
-# installed and current through the install and update commands of
-# config/payloads.tsv; each repo owns its installation and locking, this hook
-# only decides when to call it (docs/payloads.md has the whole contract).
+# Install or update the payload repos (coding-agent-kit, PyMOLScripts,
+# awesome-skills) now, in the foreground, through the install and update
+# commands of config/payloads.tsv; each repo owns its installation, updates
+# and locking (docs/payloads.md has the whole contract).
 #
-# Sourced from the interactive rc files, once per session it runs
-# `sh scripts/payload-update.sh --auto`: an absent item installs in the
-# foreground; a refresh whose days row has passed, and any retry six hours
-# after a failure (ITEM.failed, reported by every later session and the
-# doctor), runs in one detached background run (--worker), started in /,
-# into payload.log.
-# `--now [ITEM...]` (the sync-payloads alias) runs items in the foreground
-# whatever their state and exits 1 when one failed. Knobs:
-# DOTFILES_PAYLOAD_AUTO_UPDATE=0 (no automatic runs), DOTFILES_PAYLOAD_ITEMS
-# (default: kit pymol skills), DOTFILES_PAYLOAD_TIMEOUT (seconds per
-# download, default 60), DOTFILES_DIR; AWESOME_SKILLS_AUTO_UPDATE=0 leaves
-# skills out of the automatic runs until 2027-01-31.
+# `sh scripts/payload-update.sh --now [ITEM...]`, which sync-payloads runs,
+# installs each absent item, updates each installed one and exits 1 when one
+# failed. Only a person runs it: no login or schedule does, it starts no
+# background run and it keeps no state of its own. Knobs:
+# DOTFILES_PAYLOAD_ITEMS (the items without arguments; default: kit pymol
+# skills), DOTFILES_PAYLOAD_TIMEOUT (seconds per download, default 60).
+#
+# Until Stage 6, any other call does nothing and returns 0, setting no
+# variable or option: rc files read before the pull that ended automatic
+# runs still source this file, directly or through
+# scripts/awesome-skills-update.sh, and an older run may still pass the
+# retired --auto or --worker.
 
-# Persistent operator maintenance covers future shells and detached workers.
-# Existing workers must still be identified and allowed to finish before takeover.
+# Persistent operator maintenance refuses an explicit run too.
 if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
     if [ "${1-}" = --now ]; then
         printf '%s\n' 'dotfiles: payload update refused during maintenance.' >&2
@@ -26,30 +25,9 @@ if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/m
     fi
     return 0 2>/dev/null || exit 0
 fi
-
-case ${1-} in
-    --auto | --now | --worker) ;;
-    *)
-        # Sourced from an interactive rc file.
-        case $- in
-            *i*) ;;
-            *) return 0 2>/dev/null || exit 0 ;;
-        esac
-        if [ -z "${_DOTFILES_PAYLOAD_CHECKED-}" ]; then
-            _DOTFILES_PAYLOAD_CHECKED=1
-            export _DOTFILES_PAYLOAD_CHECKED
-            if [ "${DOTFILES_PAYLOAD_AUTO_UPDATE:-1}" != 0 ]; then
-                # The login dispatcher selected this exact source from the home
-                # binding; do not switch back to a stale DOTFILES_DIR here.
-                sh "${_df_payload:-${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh}" --auto || :
-            fi
-        fi
-        return 0 2>/dev/null || exit 0
-        ;;
-esac
+[ "${1-}" = --now ] || return 0 2>/dev/null || exit 0
 
 set -fu
-mode=$1
 shift
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
 if [ -r "$repo/lib/terminal.sh" ]; then
@@ -58,10 +36,9 @@ if [ -r "$repo/lib/terminal.sh" ]; then
 else
     dotfiles_log() { printf '[dotfiles] [%s] %s\n' "$1" "$2" >&2; }
 fi
-# fail MESSAGE: --now exits 1; an automatic run never fails the shell.
+# fail MESSAGE: one error line, then exit 1.
 fail() {
     dotfiles_log error "$1"
-    [ "$mode" != --auto ] || exit 0
     exit 1
 }
 case ${HOME-} in
@@ -70,14 +47,6 @@ case ${HOME-} in
 esac
 config=$repo/config/payloads.tsv
 [ -r "$config" ] || fail "payload-update: missing $config."
-# XDG_STATE_HOME only when absolute, as the XDG spec says: a relative one would
-# name another directory from each working directory, the background run's /
-# included.
-case ${XDG_STATE_HOME-} in
-    /*) state=$XDG_STATE_HOME/dotfiles/payload ;;
-    *) state=$HOME/.local/state/dotfiles/payload ;;
-esac
-(umask 077 && mkdir -p "$state") || fail "payload-update: cannot create $state."
 tab=$(printf '\t')
 timeout=${DOTFILES_PAYLOAD_TIMEOUT:-60}
 case $timeout in
@@ -97,6 +66,16 @@ field() {
         esac
     done <"$config"
     value=
+    return 1
+}
+
+# known ITEM: config has a row for ITEM, whatever its field.
+known() {
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in
+            "$1$tab"*) return 0 ;;
+        esac
+    done <"$config"
     return 1
 }
 
@@ -218,17 +197,8 @@ stowed() {
     return 1
 }
 
-# record FILE: set last and code to the time and status FILE starts with.
-record() {
-    last='' code=''
-    IFS=' ' read -r last code _ 2>/dev/null <"$1" || :
-    case $last in
-        '' | *[!0-9]*) return 1 ;;
-    esac
-}
-
-# run ITEM: install ITEM when absent, else update it; stamp a success and
-# record a failure. Sets status to the command's exit status and returns it.
+# run ITEM: install ITEM when absent, else update it. Sets status to the
+# command's exit status and returns it.
 run() {
     status=1
     if stowed "$1"; then
@@ -236,7 +206,7 @@ run() {
         return 1
     fi
     action=update doing=updating
-    installed "$1" || action=install doing='installing (later updates run in the background)'
+    installed "$1" || action=install doing=installing
     field kit channel
     # shellcheck disable=SC2034 # for the evaluated command
     channel=$value
@@ -247,37 +217,14 @@ run() {
         return 1
     fi
     dotfiles_log step "$1: $doing"
-    start=0 status=0
-    [ "$mode" != --worker ] || start=$(wc -l <"$state/payload.log")
+    status=0
     eval "$value" || status=$?
     case $status in
-        0)
-            if (
-                umask 077
-                stamp_tmp=$(mktemp "$state/$1.stamp.tmp.XXXXXX") || exit 1
-                trap 'rm -f "$stamp_tmp"' 0
-                date +%s >"$stamp_tmp" && mv -f "$stamp_tmp" "$state/$1.stamp" &&
-                    rm -f "$state/$1.failed"
-            ); then
-                dotfiles_log ok "$1: $action done"
-            else
-                dotfiles_log error "$1: cannot record the success in $state"
-                status=1
-            fi
-            return "$status"
-            ;;
-        75)
-            dotfiles_log info "$1: another run holds its lock; the next session tries again"
-            return 75
-            ;;
+        0) dotfiles_log ok "$1: $action done" ;;
+        75) dotfiles_log info "$1: another run holds its lock; run sync-payloads $1 again once it has finished" ;;
         "$person") dotfiles_log error "$1: stopped for a person (exit $status): do what its message says, then run sync-payloads $1" ;;
         *) dotfiles_log error "$1: $action failed (exit $status); retry with: sync-payloads $1" ;;
     esac
-    (
-        umask 077
-        date +"%s $status" >"$state/$1.failed"
-        [ "$mode" != --worker ] || tail -n "+$((start + 1))" "$state/payload.log" | tail -n 20 >>"$state/$1.failed"
-    ) || dotfiles_log error "$1: cannot record the failure in $state"
     return "$status"
 }
 
@@ -286,58 +233,12 @@ if [ "$#" -eq 0 ]; then
     set -- ${DOTFILES_PAYLOAD_ITEMS-kit pymol skills}
 fi
 for item in "$@"; do
-    field "$item" days ||
+    known "$item" ||
         fail "payload-update: unknown item '$item'; config/payloads.tsv names kit, pymol and skills."
 done
 
-if [ "$mode" != --auto ]; then
-    failed=0
-    for item in "$@"; do
-        run "$item" || [ "$status" = 75 ] || failed=1
-    done
-    exit "$failed"
-fi
-
-# --auto: a first install now; a due refresh, and any retry six hours after
-# a failure, in one detached background run.
-case "${AWESOME_SKILLS_AUTO_UPDATE-} $* " in
-    "0 "*" skills "*)
-        dotfiles_log warn 'AWESOME_SKILLS_AUTO_UPDATE=0 leaves skills out until 2027-01-31, when it stops working; set DOTFILES_PAYLOAD_ITEMS="kit pymol" instead'
-        # shellcheck disable=SC2046 # a word list; set -f keeps it from globbing
-        set -- $(for item in "$@"; do [ "$item" = skills ] || printf '%s\n' "$item"; done)
-        ;;
-esac
-now=$(date +%s)
-later=
+failed=0
 for item in "$@"; do
-    if record "$state/$item.failed"; then
-        field "$item" person-status
-        what=failed hint=
-        [ "$code" != "$value" ] || what='stopped for a person' hint=' and do what it asks'
-        dotfiles_log warn "$item: its last run $what (exit $code, see $state/$item.failed); run sync-payloads $item$hint"
-        [ $((now - last)) -lt 21600 ] || later="$later $item"
-    elif ! installed "$item"; then
-        run "$item" || :
-    else
-        field "$item" days
-        case $value in
-            '' | *[!0-9]*) value=1 ;;
-        esac
-        if ! record "$state/$item.stamp" || [ $((now - last)) -ge $((value * 86400)) ]; then
-            later="$later $item"
-        fi
-    fi
+    run "$item" || [ "$status" = 75 ] || failed=1
 done
-[ -n "$later" ] || exit 0
-# The run starts in /, never in the caller's directory, which it would hold
-# for as long as it runs (a USB stick or an NFS mount could not be unmounted
-# meanwhile); every path it uses is absolute ($repo, $state, a download's
-# directory), so a relative TMPDIR first becomes the caller's. Started from
-# here, it never enters the shell's job table.
-case ${TMPDIR:-/} in
-    /*) ;;
-    *) TMPDIR=${PWD%/}/$TMPDIR && export TMPDIR ;;
-esac
-# shellcheck disable=SC2086 # a word list
-(cd / && exec sh "$repo/scripts/payload-update.sh" --worker $later) </dev/null >"$state/payload.log" 2>&1 &
-exit 0
+exit "$failed"

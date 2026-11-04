@@ -81,7 +81,7 @@ e2e_step_doctor_smoke() { e2e_doctor_from_login doctor-smoke ' --smoke'; }
 
 # e2e_step_payloads: the run line of the H7-payloads block, `sh
 # ~/dotfiles/scripts/payload-update.sh --now`, from the stowed login
-# environment, as a person runs it who keeps the hook on: every payload repo
+# environment, as a person runs it: every payload repo
 # of config/payloads.tsv installs from the network through its own
 # installer, under the block limit, since three installs run in a row. It
 # passes when that exits 0 and the doctor's payloads row is then ok and names

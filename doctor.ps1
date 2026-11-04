@@ -200,43 +200,35 @@ function Get-DoctorStructuralResults {
 function Get-DoctorPayloadResult {
     # Each item of DOTFILES_PAYLOAD_ITEMS (default: those with a
     # windows-install row of config/payloads.tsv, pymol skills) that installs
-    # here passes its windows-probe row; an item whose last run failed (the
-    # hook's ITEM.failed) or that waits for stow-all (a stow-links path still
-    # linked into the retired package) is named with what to run. Every
-    # shortfall only warns. An item without a windows-install row (the kit,
-    # which installs nothing on native Windows) is not checked, as the hook
-    # does not run it.
+    # here passes its windows-probe row; an item that waits for stow-all (a
+    # stow-links path still linked into the retired package) is named with
+    # what to run. Only a person installs the payload repos (sync-payloads),
+    # so every shortfall names that and only warns. An item without a
+    # windows-install row (the kit, which installs nothing on native Windows)
+    # is not checked, as the hook does not run it.
     $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
     $config = Join-Path $RepoRoot 'config/payloads.tsv'
     if (-not [IO.File]::Exists($config)) { return New-DoctorResult warn payloads ai "no readable $config" $step }
     $rows = @{}
+    $known = @{}
     $available = [Collections.Generic.List[string]]::new()
     foreach ($line in [IO.File]::ReadAllLines($config)) {
         $parts = $line.Split("`t", 3)
         if (-not $line.StartsWith('#') -and $parts.Count -eq 3 -and -not $rows.ContainsKey("$($parts[0])`t$($parts[1])")) {
+            $known[$parts[0]] = $true
             $rows["$($parts[0])`t$($parts[1])"] = $parts[2]
             if ($parts[1] -ceq 'windows-install') { $available.Add($parts[0]) }
         }
     }
     # A name config/payloads.tsv does not know stays, to be named below.
     $items = if ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) {
-        @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ -and ($_ -in $available -or -not $rows.ContainsKey("$_`tdays")) })
+        @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ -and ($_ -in $available -or -not $known.ContainsKey($_)) })
     }
     else { @($available) }
-    $state = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'dotfiles/payload' } else { Join-Path $HOME '.local/state/dotfiles/payload' }
     $short = @()
     $found = @()
     $issues = @()
     foreach ($item in $items) {
-        $failure = Join-Path $state "$item.failed"
-        if ([IO.File]::Exists($failure)) {
-            # Strict mode: a malformed record must not index past its fields.
-            $fields = @([IO.File]::ReadAllText($failure).Trim() -split '\s+')
-            $code = if ($fields.Count -gt 1) { $fields[1] } else { '?' }
-            $person = $rows["$item`tperson-status"]
-            if ($person -and $code -ceq $person) { $issues += "$item stopped for a person (exit $code, see $failure): run sync-payloads $item and do what it asks" }
-            else { $issues += "$item failed its last run (exit $code, see $failure): run sync-payloads $item" }
-        }
         $words = @("$($rows["$item`tstow-links"])".Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
         foreach ($path in @($words | Select-Object -Skip 1)) {
             $link = Get-Item -LiteralPath (Join-Path $HOME $path) -Force -ErrorAction SilentlyContinue
@@ -253,7 +245,7 @@ function Get-DoctorPayloadResult {
         else { $found += $item }
     }
     if ($short.Count) {
-        $issues += "not installed: $($short -join ', '): the next interactive PowerShell installs them, or run sync-payloads ITEM now"
+        $issues += "not installed: $($short -join ', '): run sync-payloads ITEM"
     }
     if ($issues.Count) { return New-DoctorResult warn payloads ai ($issues -join '; ') $step }
     if ($found.Count) { return New-DoctorResult ok payloads ai "installed: $($found -join ', ')" $step }

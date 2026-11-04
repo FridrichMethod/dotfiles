@@ -945,8 +945,9 @@ expect_text check-fresh out 'H1-locale done'
 expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-payloads judgment'
-expect_text check-fresh out "# on by default once stowed: the first interactive shell installs coding-agent-kit, PyMOLScripts and awesome-skills through their own installers (config/payloads.tsv), unless DOTFILES_PAYLOAD_AUTO_UPDATE=0 is in that shell's environment"
+expect_text check-fresh out '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them'
 expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.7'
+expect_text check-fresh out '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
 PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
 expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
@@ -958,9 +959,9 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
 }
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
 
-# The payload line runs the payload hook even in a provisioning shell, which
-# exports DOTFILES_PAYLOAD_AUTO_UPDATE=0 (curl is the stub; it logs each URL
-# and serves each repo a do-nothing installer), with bounded downloads.
+# The payload line runs every payload repo's installer, with bounded
+# downloads (curl is the stub; it logs each URL and serves each repo a
+# do-nothing installer).
 : >"$EVENT_LOG"
 : >"$CURL_ARGS_LOG"
 printf 'exit 0\n' >"$TEST_TMP/payload-installer.sh"
@@ -968,7 +969,7 @@ for repo in coding-agent-kit PyMOLScripts awesome-skills; do
     printf 'https://raw.githubusercontent.com/FridrichMethod/%s/main/install.sh\t%s\n' "$repo" "$TEST_TMP/payload-installer.sh"
 done >"$TEST_TMP/payload-url-map.tsv"
 env -i HOME="$TEST_TMP/payload-home" PATH="$FAKE_BIN:/usr/bin:/bin" EVENT_LOG="$EVENT_LOG" \
-    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$TEST_TMP/payload-url-map.tsv" DOTFILES_PAYLOAD_AUTO_UPDATE=0 \
+    CURL_ARGS_LOG="$CURL_ARGS_LOG" URL_MAP="$TEST_TMP/payload-url-map.tsv" \
     sh -c "$PAYLOAD_LINE" >/dev/null 2>&1 || true
 for repo in coding-agent-kit PyMOLScripts awesome-skills; do
     expect_event "curl:https://raw.githubusercontent.com/FridrichMethod/$repo/main/install.sh"

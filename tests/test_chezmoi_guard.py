@@ -40,59 +40,139 @@ class WriterGuardTests(unittest.TestCase):
                                             capture_output=True, timeout=15)
                     self.assertEqual(result.returncode, expected)
 
-    def test_sherlock_profile_disables_detached_payload_login_workers(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            result = subprocess.run(["sh", "-c", '. "$1"; printf "%s" "$DOTFILES_PAYLOAD_AUTO_UPDATE"',
-                                     "profile", str(ROOT / "sherlock/sh/.config/sh/.profile")],
-                                    env={"HOME": temporary, "PATH": os.defpath, "SCRATCH": "",
-                                         "DOTFILES_PAYLOAD_AUTO_UPDATE": "1"},
-                                    capture_output=True, stdin=subprocess.DEVNULL, timeout=15)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout, b"0")
-
-    def test_native_payload_dispatch_uses_bound_source_with_stale_dotfiles_dir(self):
+    def test_logins_start_no_payload_run_and_keep_the_update_dispatch(self):
+        # No profile path runs a payload hook, the bound source's or a stale
+        # DOTFILES_DIR's, with or without Sherlock's overlay, whose site rule
+        # forbids detached login-node workers; the update dispatch stays. zsh
+        # (the .zshrc tail) is in the native takeover suite.
         with tempfile.TemporaryDirectory() as temporary:
             # macOS TMPDIR may use /var rather than canonical /private/var.
             root = Path(temporary).resolve()
             home, source, stale = (root / name for name in ("home", "source", "stale"))
-            for path in (home / ".config/dotfiles", source / "scripts", source / "lib",
-                         source / "config", stale / "scripts"):
+            trace = root / "trace"
+            for path in (home / ".config/dotfiles", home / ".config/sh", source / "scripts",
+                         source / "lib", stale / "scripts"):
                 path.mkdir(parents=True)
             (source / ".chezmoiroot").write_text("home\n")
             shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
-            shutil.copyfile(ROOT / "scripts/payload-update.sh", source / "scripts/payload-update.sh")
-            shutil.copyfile(ROOT / "config/payloads.tsv", source / "config/payloads.tsv")
-            (source / "scripts/chezmoi-update.sh").write_text(":\n")
-            (stale / "scripts/payload-update.sh").write_text('touch "$HOME/wrong-source"\n')
-            (home / ".config/dotfiles/native").write_text(
-                f"dotfiles-chezmoi-v1\n{home}\n{source}\n")
-            state = home / "state"
-            env = {"HOME": str(home), "PATH": os.defpath, "TERM": "dumb",
-                   "DOTFILES_DIR": str(stale), "DOTFILES_PAYLOAD_ITEMS": "not-a-payload",
-                   "XDG_STATE_HOME": str(state)}
-            result = subprocess.run(["bash", "--noprofile", "--norc", "-i", "-c",
-                                     '. "$1"', "profile", str(ROOT / "common/sh/.profile")],
-                                    env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertFalse((home / "wrong-source").exists())
-            self.assertTrue((state / "dotfiles/payload").is_dir(), result.stderr)
+            for checkout, name in ((source, "bound"), (stale, "stale")):
+                for hook in ("chezmoi-update", "dotfiles-update", "payload-update"):
+                    (checkout / f"scripts/{hook}.sh").write_text(f'printf "%s\\n" "{name} {hook}" >>"$TRACE"\n')
+            marker, overlay = home / ".config/dotfiles/native", home / ".config/sh/.profile"
+            env = {"HOME": str(home), "PATH": os.defpath, "TERM": "dumb", "SCRATCH": "",
+                   "DOTFILES_DIR": str(stale), "TRACE": str(trace)}
+            for sherlock in (False, True):
+                if sherlock:
+                    shutil.copyfile(ROOT / "sherlock/sh/.config/sh/.profile", overlay)
+                for native in (True, False):
+                    if native:
+                        marker.write_text(f"dotfiles-chezmoi-v1\n{home}\n{source}\n")
+                    else:
+                        marker.unlink()
+                    for shell in ("sh", "bash"):
+                        with self.subTest(sherlock=sherlock, native=native, shell=shell):
+                            trace.unlink(missing_ok=True)
+                            flags = ["--noprofile", "--norc"] if shell == "bash" else []
+                            result = subprocess.run([shell, *flags, "-i", "-c", '. "$1"', "profile",
+                                                     str(ROOT / "common/sh/.profile")],
+                                                    env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                                    text=True, timeout=15)
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            self.assertEqual(trace.read_text().splitlines(),
+                                             ["bound chezmoi-update" if native else "stale dotfiles-update"])
 
-    def test_maintenance_blocks_new_payload_processes_before_state_creation(self):
+    def test_sync_payload_commands_run_only_the_validated_native_source(self):
+        # sync-payloads/sync-skills resolve the hook as the login dispatcher
+        # does: a valid marker's source wins over a stale DOTFILES_DIR, whose
+        # guard and hook never run; an invalid marker refuses before any hook;
+        # maintenance surfaces the bound hook's own refusal before any state.
+        # tests/shell-profile.sh covers an unmarked home's DOTFILES_DIR.
+        shells = [shell for shell in ("sh", "bash", "zsh") if shutil.which(shell)]
+        refusal = "[dotfiles] [error] Native home binding is invalid; payload update refused.\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            home, source, stale = (root / name for name in ("home", "bound source", "stale"))
+            trace, state = root / "trace", root / "state"
+            for path in (home / ".config/dotfiles", source / "scripts", source / "lib",
+                         stale / "scripts", stale / "lib"):
+                path.mkdir(parents=True)
+            (source / ".chezmoiroot").write_text("home\n")
+            shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
+            for checkout, name in ((source, "bound"), (stale, "stale")):
+                (checkout / "scripts/payload-update.sh").write_text(
+                    f'printf "{name} %s\\n" "$*" >>"$TRACE"\nexit 4\n')
+            (stale / "lib/chezmoi-guard.sh").write_text('printf "stale-guard\\n" >>"$TRACE"\n')
+            marker = home / ".config/dotfiles/native"
+            valid = f"dotfiles-chezmoi-v1\n{home}\n{source}\n".encode()
+            env = {"HOME": str(home), "PATH": os.defpath, "DOTFILES_DIR": str(stale),
+                   "TRACE": str(trace), "XDG_STATE_HOME": str(state)}
+            # eval: zsh does not expand an alias defined earlier in one -c string.
+            code = ('[ -z "${BASH_VERSION-}" ] || shopt -s expand_aliases; . "$1"; '
+                    'eval "sync-payloads kit pymol"; first=$?; eval sync-skills; '
+                    'printf "%s %s\\n" "$first" "$?"')
+
+            def run(shell):
+                trace.unlink(missing_ok=True)
+                result = subprocess.run([shell, *(["-f"] if shell == "zsh" else []), "-c", code,
+                                         "aliases", str(ROOT / "common/sh/.aliases")],
+                                        env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                        text=True, timeout=15)
+                return result, trace.read_text().splitlines() if trace.exists() else []
+
+            def bind(content=None, kind="file"):
+                if marker.is_symlink() or marker.is_file():
+                    marker.unlink()
+                elif marker.is_dir():
+                    marker.rmdir()
+                if kind == "symlink":
+                    (root / "linked marker").write_bytes(valid)
+                    marker.symlink_to(root / "linked marker")
+                elif kind == "directory":
+                    marker.mkdir()
+                elif content is not None:
+                    marker.write_bytes(content)
+
+            invalid = {"unterminated extra": (valid + b"extra", "file"),
+                       "other version": (valid.replace(b"-v1", b"-v2"), "file"),
+                       "relative source": (f"dotfiles-chezmoi-v1\n{home}\nstale\n".encode(), "file"),
+                       "other home": (f"dotfiles-chezmoi-v1\n{root}\n{source}\n".encode(), "file"),
+                       "symlink": (None, "symlink"), "directory": (None, "directory")}
+            for shell in shells:
+                with self.subTest(shell=shell, binding="valid non-default source"):
+                    bind(valid)
+                    result, events = run(shell)
+                    self.assertEqual((result.stdout, result.stderr), ("4 4\n", ""))
+                    self.assertEqual(events, ["bound --now kit pymol", "bound --now skills"])
+                for name, (content, kind) in invalid.items():
+                    with self.subTest(shell=shell, binding=name):
+                        bind(content, kind)
+                        result, events = run(shell)
+                        self.assertEqual((result.stdout, result.stderr), ("1 1\n", refusal * 2))
+                        self.assertEqual(events, [])
+            bind(valid)
+            (home / ".config/dotfiles/maintenance").touch()
+            shutil.copyfile(ROOT / "scripts/payload-update.sh", source / "scripts/payload-update.sh")
+            for shell in shells:
+                with self.subTest(shell=shell, binding="maintenance"):
+                    result, events = run(shell)
+                    self.assertEqual(result.stdout, "1 1\n")
+                    self.assertEqual(result.stderr,
+                                     "dotfiles: payload update refused during maintenance.\n" * 2)
+                    self.assertEqual(events, [])
+                    self.assertFalse(state.exists())
+
+    def test_maintenance_refuses_an_explicit_payload_run_before_it_starts(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
             marker = home / ".config/dotfiles/maintenance"
             marker.parent.mkdir(parents=True)
             marker.touch()
-            state = home / "state"
-            env = {"HOME": str(home), "PATH": os.defpath, "XDG_STATE_HOME": str(state),
-                   "DOTFILES_PAYLOAD_ITEMS": "not-a-payload"}
-            for mode in ("--auto", "--worker", "--now"):
-                with self.subTest(mode=mode):
-                    result = subprocess.run(["sh", str(ROOT / "scripts/payload-update.sh"), mode,
-                                             "not-a-payload"], env=env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, timeout=15)
-                    self.assertFalse(state.exists(), result.stderr)
-                    self.assertEqual(result.returncode, 1 if mode == "--now" else 0)
+            env = {"HOME": str(home), "PATH": os.defpath, "XDG_STATE_HOME": str(home / "state")}
+            result = subprocess.run(["sh", str(ROOT / "scripts/payload-update.sh"), "--now", "not-a-payload"],
+                                    env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, b"dotfiles: payload update refused during maintenance.\n")
+            self.assertEqual(sorted(path.name for path in home.iterdir()), [".config"])
 
     def test_direct_backend_refuses_before_portable_migration_write(self):
         with tempfile.TemporaryDirectory() as temporary:

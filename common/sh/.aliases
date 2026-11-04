@@ -16,11 +16,34 @@ alias ssh='TERM=xterm-256color ssh'
 # starts one background krenew (kstart) when installed
 alias kstanford='kinit -l 25h -r 7d zyli2002@stanford.edu && { ! command -v krenew >/dev/null 2>&1 || pgrep -u "$USER" -x krenew >/dev/null || krenew -K 60 -b; }'
 
-# Install or update the payload repos now, in the foreground, whatever their
-# refresh intervals: sync-payloads [kit] [pymol] [skills] (default: all);
-# sync-skills is sync-payloads skills
-alias sync-payloads='sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh" --now'
-alias sync-skills='sh "${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh" --now skills'
+# Install or update the payload repos now, in the foreground:
+# sync-payloads [kit] [pymol] [skills] (default: all); sync-skills is
+# sync-payloads skills. Like the login dispatch in ~/.profile, a native home
+# runs the hook of the source its binding names and refuses an invalid
+# binding; only an unmarked home uses DOTFILES_DIR.
+# shellcheck source=/dev/null
+_dotfiles_sync_payloads() (
+    _df_root=${DOTFILES_DIR:-$HOME/dotfiles}
+    if [ -e "$HOME/.config/dotfiles/native" ] || [ -L "$HOME/.config/dotfiles/native" ]; then
+        if ! _df_root=$(
+            [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
+            {
+                IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_root
+            } <"$HOME/.config/dotfiles/native" || exit 1
+            [ "$_df_version" = dotfiles-chezmoi-v1 ] || exit 1
+            [ "${_df_root#/}" != "$_df_root" ] || exit 1
+            [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
+            . "$_df_root/lib/chezmoi-guard.sh"
+            dotfiles_native_source "$HOME"
+        ); then
+            printf '%s\n' '[dotfiles] [error] Native home binding is invalid; payload update refused.' >&2
+            exit 1
+        fi
+    fi
+    sh "$_df_root/scripts/payload-update.sh" --now "$@"
+)
+alias sync-payloads='_dotfiles_sync_payloads'
+alias sync-skills='_dotfiles_sync_payloads skills'
 
 # Load host-specific alias additions (if any)
 if [ -r "$HOME/.config/sh/.aliases" ]; then

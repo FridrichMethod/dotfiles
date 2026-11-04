@@ -502,15 +502,14 @@ step_H7_payloads_check() {
     [ "${result%%"$BOOTSTRAP_TAB"*}" = ok ]
 }
 
-# The hook is on by default once stowed, and the provisioning shells export
-# DOTFILES_PAYLOAD_AUTO_UPDATE=0, which the --now run line ignores.
+# Nothing installs the payload repos at login: a person runs the --now line,
+# or sync-payloads in an interactive shell, to install and later update them.
 step_H7_payloads_plan() {
     steps_block_begin H7-payloads judgment
     printf '%s\n' \
-        "# on by default once stowed: the first interactive shell installs coding-agent-kit, PyMOLScripts and awesome-skills through their own installers (config/payloads.tsv), unless DOTFILES_PAYLOAD_AUTO_UPDATE=0 is in that shell's environment" \
+        '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them' \
         "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)" \
-        '# later shells refresh them in the background; to keep them off, export DOTFILES_PAYLOAD_AUTO_UPDATE=0' \
-        '# in the environment your terminals and ssh sessions start with. To run them once now, in the foreground:'
+        '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
     printf 'sh %s --now\n' "$(steps_quote "$STEPS_ROOT/scripts/payload-update.sh")"
     steps_block_end
 }

@@ -186,15 +186,15 @@ cmp "$STATE" "$TEST_TMP/expected-state"
 # by the packages common/coding-agent-kit and common/pymol) pulls the change
 # that makes them installed repos, through the real login updater and the
 # tail its pre-pull rc files run: the update hook, then the old skills hook
-# path, now the shim of the payload hook. The fast-forward deletes both
-# gitlinks but leaves their checkouts, which hold files ("unable to rmdir",
-# hidden by the updater); .gitignore keeps them out of git status, so the
-# restow runs in that login and removes the 16 links Stow made from the
-# packages; the payload hook then installs the kit and PyMOL (fakes here,
-# served from file:// URLs) in the same login, and the next login changes
-# nothing. Without the .gitignore lines the leftovers are untracked and the
-# updater stops at "Checkout changed during update", then at "Local changes"
-# at every later login.
+# path, now a shim that does nothing. The fast-forward deletes both gitlinks
+# but leaves their checkouts, which hold files ("unable to rmdir", hidden by
+# the updater); .gitignore keeps them out of git status, so the restow runs
+# in that login and removes the 16 links Stow made from the packages. The
+# login installs no payload; the person's explicit run afterwards installs
+# the kit and PyMOL (fakes here, served from file:// URLs), and the next
+# login changes nothing. Without the .gitignore lines the leftovers are
+# untracked and the updater stops at "Checkout changed during update", then
+# at "Local changes" at every later login.
 MIGRATION=$TEST_TMP/migration
 # A submodule clone refuses a local path unless file transport is allowed;
 # only these commands get it.
@@ -303,11 +303,19 @@ new_tree() {
 # login HOME NAME: the tail the rc files read before the pull run: the update
 # hook, then the old skills hook path.
 login() {
-    env -u _DOTFILES_CHECKED -u _DOTFILES_PAYLOAD_CHECKED HOME="$1" DOTFILES_DIR="$1/dotfiles" \
+    env -u _DOTFILES_CHECKED HOME="$1" DOTFILES_DIR="$1/dotfiles" \
         DOTFILES_AUTO_UPDATE=1 TMPDIR="$MIGRATION" \
         GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always \
         bash --noprofile --norc -ic '. "$DOTFILES_DIR/scripts/dotfiles-update.sh"
             . "$DOTFILES_DIR/scripts/awesome-skills-update.sh"' >"$MIGRATION/$2.log" 2>&1
+}
+# sync_payloads HOME NAME ITEM...: the person's explicit run (sync-payloads)
+# in that home; its status is the run's.
+sync_payloads() {
+    local home=$1 name=$2
+    shift 2
+    env HOME="$home" TMPDIR="$MIGRATION" sh "$home/dotfiles/scripts/payload-update.sh" --now "$@" \
+        >"$MIGRATION/$name.log" 2>&1
 }
 # migration_case NAME GUARDED: a remote whose main is the old layout, a host
 # stowed from it with both submodules checked out, then the change pushed and
@@ -374,8 +382,10 @@ MIGRATED_HEAD=$(git -C "$MIGRATION/guarded/work" rev-parse HEAD)
 [[ "$(git -C "$MIGRATED/dotfiles" rev-parse HEAD)" == "$MIGRATED_HEAD" ]]
 expect_log "$MIGRATION/guarded.login1.log" '[dotfiles] [ok] Pulled successfully.'
 expect_log "$MIGRATION/guarded.login1.log" '[dotfiles] [ok] Stow completed; open a new shell to load updated config.'
-expect_log "$MIGRATION/guarded.login1.log" '[dotfiles] [ok] kit: install done'
-expect_log "$MIGRATION/guarded.login1.log" '[dotfiles] [ok] pymol: install done'
+if grep -Fq 'install done' "$MIGRATION/guarded.login1.log"; then
+    echo 'ERROR: the login installed a payload repo' >&2
+    exit 1
+fi
 [[ "$(sed -n 4p "$MIGRATED/dotfiles/.git/dotfiles-sync-unix")" == "$MIGRATED_HEAD" ]]
 [[ -z "$(git -C "$MIGRATED/dotfiles" status --porcelain --untracked-files=normal)" ]]
 # The next login has nothing to do (bash -i without a terminal may still
@@ -384,6 +394,10 @@ if grep -Fq '[dotfiles]' "$MIGRATION/guarded.login2.log"; then
     cat "$MIGRATION/guarded.login2.log" >&2
     exit 1
 fi
+# With the old links gone, the explicit run installs the kit and PyMOL.
+sync_payloads "$MIGRATED" guarded.sync kit pymol
+expect_log "$MIGRATION/guarded.sync.log" '[dotfiles] [ok] kit: install done'
+expect_log "$MIGRATION/guarded.sync.log" '[dotfiles] [ok] pymol: install done'
 # The leftover checkouts stay, ignored and linked nowhere, with their
 # repositories; every old package link is gone and the payload repos'
 # installers own those paths now.
@@ -408,9 +422,6 @@ done <<<"$OLD_KIT_LINKS"
 [[ -f "$MIGRATED/.claude/coding-agent-kit/statusline.cjs" ]]
 [[ -f "$MIGRATED/.pymolrc" && ! -L "$MIGRATED/.pymolrc" && -f "$MIGRATED/.pymolrc.py" && ! -L "$MIGRATED/.pymolrc.py" ]]
 grep -Fxq '# fake .pymolrc' "$MIGRATED/.pymolrc"
-for item in kit pymol; do
-    [[ -s "$MIGRATED/.local/state/dotfiles/payload/$item.stamp" ]]
-done
 
 migration_case unguarded 0
 expect_log "$MIGRATION/unguarded.login1.log" '[dotfiles] [warn] Checkout changed during update; automatic stow skipped.'
@@ -418,19 +429,21 @@ expect_log "$MIGRATION/unguarded.login2.log" \
     "[dotfiles] [warn] Local changes in $MIGRATION/unguarded/home/dotfiles; automatic pull and stow skipped."
 [[ -n "$(git -C "$MIGRATION/unguarded/home/dotfiles" status --porcelain --untracked-files=normal)" ]]
 # Without the restow the old links stay, which the kit's installer would
-# refuse: the hook says to run stow-all instead of calling it and records
-# nothing.
+# refuse: the explicit run says to run stow-all instead of calling it, and
+# fails.
 # The hook names its checkout as pwd prints it: macOS's TMPDIR ends in a
 # slash, which TEST_TMP keeps doubled.
 UNGUARDED_REPO=$(cd "$MIGRATION/unguarded/home/dotfiles" && pwd)
-expect_log "$MIGRATION/unguarded.login1.log" \
+if sync_payloads "$MIGRATION/unguarded/home" unguarded.sync kit; then
+    echo 'ERROR: the explicit run passed the old kit links' >&2
+    exit 1
+fi
+expect_log "$MIGRATION/unguarded.sync.log" \
     "[dotfiles] [warn] kit: ~/.local/bin/claude-as is still a link the retired Stow package made, which its installer refuses; run $UNGUARDED_REPO/stow-all.sh with this host first"
-if grep -Fq 'fake kit:' "$MIGRATION/unguarded.login1.log"; then
+if grep -Fq 'fake kit:' "$MIGRATION/unguarded.sync.log"; then
     echo 'ERROR: the hook ran the kit installer past the old links' >&2
     exit 1
 fi
-[[ ! -e "$MIGRATION/unguarded/home/.local/state/dotfiles/payload/kit.stamp" &&
-    ! -e "$MIGRATION/unguarded/home/.local/state/dotfiles/payload/kit.failed" ]]
 
 # A real initialized Sherlock gitlink is then removed by a remote update.
 # Its checkout and module store survive, while the next login retires delivery.

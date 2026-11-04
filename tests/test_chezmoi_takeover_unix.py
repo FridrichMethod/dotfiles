@@ -392,7 +392,8 @@ class UnixTakeoverTests(unittest.TestCase):
                         self.assertFalse(log.exists())
                     else:
                         self.assertTrue(log.exists(), result.stderr)
-                        self.assertEqual(log.read_text().splitlines(), ["chezmoi-update", "payload-update"])
+                        # A login updates; payloads install only through sync-payloads.
+                        self.assertEqual(log.read_text().splitlines(), ["chezmoi-update"])
 
     def test_noninteractive_profile_skips_invalid_native_binding_quietly(self):
         with UpdateFixture() as f:

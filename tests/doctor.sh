@@ -865,48 +865,46 @@ assert_rc 1
 assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
 
 # The payload repos: each selected item passes its unix-probe row, and the
-# kit's Claude helpers are there; a shortfall warns with what to run (the
-# next interactive shell installs it) and, for the kit, what fails until
+# kit's Claude helpers are there; a shortfall warns with what to run (only a
+# person installs them, with sync-payloads) and, for the kit, what fails until
 # then, never fails.
 mv "$TEST_HOME/.claude/coding-agent-kit/notify.cjs" "$TEST_TMP/notify.hidden"
 rm "$TEST_HOME/.pymolrc.py"
+SYNC_ADVICE="run sync-payloads ITEM (sh $FIXTURE/scripts/payload-update.sh --now ITEM)"
 run_doctor payloads-short -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: the next interactive shell installs them, or run sync-payloads ITEM now (sh $FIXTURE/scripts/payload-update.sh --now ITEM); until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" \
+assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: $SYNC_ADVICE; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" \
     'docs/bootstrap.md H7-payloads'
 run_doctor payloads-selected DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
 assert_row payloads ok 'installed: skills' -
 run_doctor payloads-none DOTFILES_PAYLOAD_ITEMS= -- --host lab-ubuntu --tsv
 assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
-# The old hook's opt-out leaves skills out, as the payload hook does.
-run_doctor payloads-old-optout AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
-assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
+# The old skill hook's opt-out ended in Stage 5: the row no longer reads it.
+run_doctor payloads-awesome-ignored AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
+assert_row payloads ok 'installed: skills' -
 run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
-assert_row payloads warn 'not installed: kit: the next interactive shell installs them'
-# The hook's failure records (ITEM.failed), worded by the person-status row,
-# and a kit path still linked into the retired package, which waits for
-# stow-all, come first, each with what to run; only for selected items.
+assert_row payloads warn "not installed: kit: $SYNC_ADVICE"
+# A kit path still linked into the retired package, which waits for
+# stow-all, comes first with what to run; only for selected items. The
+# records the retired scheduler left (ITEM.failed, stamps, its log) are
+# ignored, never reported or removed.
 PAYLOAD_STATE=$TEST_HOME/.local/state/dotfiles/payload
 mkdir -p "$PAYLOAD_STATE" "$TEST_HOME/.local/bin"
 printf '1700000000 3\n[dotfiles] [error] skills: stopped for a person\n' >"$PAYLOAD_STATE/skills.failed"
 printf '1700000000 1\n' >"$PAYLOAD_STATE/kit.failed"
 ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$TEST_HOME/.local/bin/codex-as"
-RECORDS="kit failed its last run (exit 1, see $PAYLOAD_STATE/kit.failed): run sync-payloads kit; kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit; skills stopped for a person (exit 3, see $PAYLOAD_STATE/skills.failed): run sync-payloads skills and do what it asks; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol"
-run_doctor payloads-records -- --host lab-ubuntu --tsv
+run_doctor payloads-stow-link -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row payloads warn "$RECORDS" 'docs/bootstrap.md H7-payloads'
-# A relative XDG_STATE_HOME is ignored, as the hook ignores it, so the
-# records are found from any working directory.
-run_doctor payloads-records-relative-state XDG_STATE_HOME=relative/state -- --host lab-ubuntu --tsv
-assert_row payloads warn "$RECORDS" 'docs/bootstrap.md H7-payloads'
-# PyMOLScripts stops with 3 at a locally edited rc file, as awesome-skills
-# does at an interrupted update.
-printf '1700000000 3\n' >"$PAYLOAD_STATE/pymol.failed"
-run_doctor payloads-records-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
-assert_row payloads warn "pymol stopped for a person (exit 3, see $PAYLOAD_STATE/pymol.failed): run sync-payloads pymol and do what it asks; not installed: pymol: the next interactive shell"
-case $(tsv_field payloads 4) in
-    *kit* | *skills*) case_fail 'the payloads row named an unselected item' ;;
-esac
+STOW_LINK="kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit"
+assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
+[ "$(tsv_field payloads 4)" = "$STOW_LINK; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: $SYNC_ADVICE; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ] ||
+    case_fail "payloads detail [$(tsv_field payloads 4)]"
+run_doctor payloads-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
+[ "$(tsv_field payloads 4)" = "not installed: pymol: $SYNC_ADVICE" ] || case_fail "payloads detail [$(tsv_field payloads 4)]"
+run_doctor payloads-old-records DOTFILES_PAYLOAD_ITEMS=skills -- --host lab-ubuntu --tsv
+assert_row payloads ok 'installed: skills' -
+[[ -f "$PAYLOAD_STATE/skills.failed" && -f "$PAYLOAD_STATE/kit.failed" ]] || case_fail 'the doctor removed an old record'
 rm -r "$TEST_HOME/.local/state/dotfiles" "$TEST_HOME/.local/bin/codex-as"
 mv "$TEST_TMP/notify.hidden" "$TEST_HOME/.claude/coding-agent-kit/notify.cjs"
 printf '# fixture\n' >"$TEST_HOME/.pymolrc.py"

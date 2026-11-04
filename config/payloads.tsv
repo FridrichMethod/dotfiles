@@ -1,15 +1,13 @@
-# The first-party payload repos that the payload hooks keep installed and
-# current: scripts/payload-update.sh on Unix, scripts/payload-update.ps1 on
-# native Windows (docs/payloads.md). This file is the one place that names
-# their URLs, install paths and commands, and the coding-agent-kit channel
-# this configuration is written for; each command is the repo's own
-# documented install or update interface.
+# The first-party payload repos that the payload hooks install and update when
+# a person runs them (sync-payloads): scripts/payload-update.sh on Unix,
+# scripts/payload-update.ps1 on native Windows (docs/payloads.md). This file
+# is the one place that names their URLs, install paths and commands, and the
+# coding-agent-kit channel this configuration is written for; each command is
+# the repo's own documented install or update interface.
 # Tab-separated; columns: item field value. Fields:
 #   channel          the coding-agent-kit MAJOR.MINOR release channel
-#   days             refresh interval: an installed item is updated in the
-#                    background once its last success is this many days old
 #   unix-probe       succeeds once the item is installed; until then the hook
-#   windows-probe    runs its install command in the foreground
+#   windows-probe    runs its install command, after that its update command
 #   unix-install     the first-install command; an item without a
 #   windows-install  windows-install row is not available on native Windows
 #                    (the kit: coding-agent-kit runs on Linux, macOS and WSL)
@@ -41,18 +39,15 @@
 # the caller's directory or the download's) and return its exit status (75:
 # another run holds that repo's lock).
 kit	channel	0.7
-kit	days	1
 kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"
 kit	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.sh --channel "$channel"
 kit	unix-update	payload_script sh "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh" --update --channel "$channel"
-pymol	days	1
 pymol	person-status	3
 pymol	unix-probe	test -f "$HOME/.pymolrc" && test -f "$HOME/.pymolrc.py"
 pymol	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/PyMOLScripts/main/install.sh
 pymol	windows-probe	(Test-Path -LiteralPath (Join-Path $HOME '.pymolrc') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $HOME '.pymolrc.py') -PathType Leaf)
 pymol	windows-install	Invoke-DotfilesPayloadScript 'https://raw.githubusercontent.com/FridrichMethod/PyMOLScripts/main/install.ps1'
-skills	days	7
 skills	person-status	3
 skills	unix-probe	test -f "$HOME/.local/share/awesome-skills/claude.json" || test -f "$HOME/.local/share/awesome-skills/codex.json" || test -d "${XDG_DATA_HOME:-$HOME/.local/share}/awesome-skills/library"
 skills	unix-install	payload_script bash https://raw.githubusercontent.com/FridrichMethod/awesome-skills/main/install.sh
