@@ -64,6 +64,14 @@ class SourceContractTests(unittest.TestCase):
             found += [name for name in filenames if name.startswith(".chezmoiexternal.")]
         self.assertEqual(found, [])
 
+    def test_repository_tracks_no_submodules(self):
+        # The doctor no longer diagnoses retired submodule checkouts (D9); the
+        # native updater passes --recurse-submodules=false. Keep the invariant.
+        self.assertFalse((ROOT / ".gitmodules").exists())
+        listed = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-s"], check=True,
+                                stdout=subprocess.PIPE, text=True, timeout=30).stdout
+        self.assertEqual([line for line in listed.splitlines() if line.startswith("160000 ")], [])
+
     def test_unselected_invalid_and_incompatible_hosts_fail_before_writing(self):
         compatible = {
             "Linux": {"common-only", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"},
