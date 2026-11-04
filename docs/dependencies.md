@@ -17,7 +17,7 @@ remains only for the explicitly selected Stow compatibility path.
 | Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
 | Default parser setup | Python's `venv` and pip support; downloads the pinned wheel unless pre-provisioned offline |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
-| Payload repos ([payloads.md](payloads.md)) | The hook: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
+| Payload repos ([payloads.md](payloads.md)) | `scripts/payload-update.*`, which `sync-payloads` runs: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
 | Contributor checks | pre-commit, Node, Python/parser runtime; pinned lint tools; Stow integration; PowerShell required on Windows CI; Docker for the opt-in end-to-end bootstrap suite (`tests/e2e/run.sh`, see [testing.md](testing.md#end-to-end-bootstrap-opt-in)) |
 | Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
@@ -82,7 +82,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `file` | unix | fzf previews cannot detect file types |
 | `col` | unix | fzf-tab man page previews fail |
 | `man` | unix | man, colored-man-pages and fzf-tab man previews fail |
-| `tmux` | unix | tmux 2.6+ hostname-scoped recovery configuration and sessions are unavailable |
+| `tmux` | unix | tmux 3.4+ hostname-scoped recovery configuration and sessions are unavailable |
 | `homebrew` | mac | Brewfile bundles cannot run |
 | `linuxbrew` | wsl-ubuntu, lab-ubuntu | Brewfile bundles cannot run and the overlay brew shellenv line fails |
 | `python3` | all | setup-sync and the AI config sync helpers cannot run |
