@@ -304,16 +304,20 @@ lock: concurrent runs converge.
   a `windows-install` row, so neither the kit nor its helpers, and names an
   item the file does not know. It names each selected item that waits for
   `stow-all` (`... run <clone>/stow-all.sh <host>, then sync-payloads kit`).
-  Missing items end with `run sync-payloads ITEM` (on Unix also
-  `sh <clone>/scripts/payload-update.sh --now ITEM`) and, when the kit or one
-  of its helpers is missing, with what fails until then. All of it is `warn`,
+  Missing items end with `run sync-payloads ITEM`; on Unix the row also
+  names the hook to run by path: the running clone's on an unmarked home, the
+  bound source's on a native home (none while the binding does not resolve).
+  When the kit or one of its helpers is missing, it also says what fails until
+  then. All of it is `warn`,
   never `missing`. It only reads paths and files, never a record of an
   earlier run, so the doctor stays read-only.
 - `./setup-host.sh` prints H7-payloads as a non-blocking judgment block until
   the `payloads` row is `ok`. Its run line,
-  `sh '<clone>/scripts/payload-update.sh' --now`, installs the selected items
-  now and, run again later, updates them, as `sync-payloads` does in an
-  interactive shell.
+  `sh '<hook>' --now`, runs the running clone's hook on an unmarked home and
+  the bound source's on a native home, and installs the selected items now
+  and, run again later, updates them, as `sync-payloads` does in an
+  interactive shell. While a native home's binding does not resolve, the
+  block prints no run line and points at the doctor's `native-config` row.
 - `./setup-host.sh`, `setup-host.ps1`, `./stow-all.sh`, `stow-all.ps1` and
   the login updaters never run an installer of a payload repository.
 

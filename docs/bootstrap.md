@@ -2335,8 +2335,8 @@ fail-closed behavior beyond what is stated.
 - **Some distributions' tmux is below the 3.4 floor.** apt installs tmux
   3.2a on Ubuntu 22.04 and 3.3a on Debian 12, and RHEL 9's packages carry
   3.2a, so the doctor's `tmux` row is `outdated` and points at H1-apt-core
-  (or X-other-linux), which cannot raise it, and the shared config rejects
-  its 3.4 options when it loads. Provide tmux 3.4 or newer yourself: a newer
+  (or X-other-linux), which cannot raise it, and that tmux rejects the
+  shared config's 3.4-only options when it loads. Provide tmux 3.4 or newer yourself: a newer
   distribution release (Ubuntu 24.04 ships 3.4), conda-forge's `tmux` in a
   user env, as the HPC login env does, or Homebrew's (`brew install tmux`;
   the Linux Brewfiles leave it out). Keep the newer one first on PATH in every
