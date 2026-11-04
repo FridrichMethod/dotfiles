@@ -18,15 +18,17 @@
       W1-font         oh-my-posh font install CascadiaMono (needs oh-my-posh)
       W1-bat-theme    the pinned Catppuccin Mocha theme, sha256-checked, into
                       %APPDATA%\bat\themes, then bat cache --build
-      W1-setup-sync   .\setup-sync.ps1 -Python <the first python3 or python on
-                      PATH that reports 3.11 or newer; a Microsoft Store
-                      alias does not count> (the only write inside this
-                      checkout); done when the selected sync interpreter passes
-                      lib/config_sync.py --runtime-check
+      W1-chezmoi      native default: the pinned, SHA256-checked chezmoi
+                      release, extracting only chezmoi.exe into ~\.local\bin
+      W1-setup-sync   -LegacyStow only: .\setup-sync.ps1 -Python <the first
+                      python3 or python on PATH that reports 3.11 or newer; a
+                      Microsoft Store alias does not count> (the only write
+                      inside this checkout); done when the selected sync
+                      interpreter passes lib/config_sync.py --runtime-check
 
     A step runs when a selected tier needs it: tools.tsv rows whose Windows
     docs step is W1-winget, W1-psresources, W1-font or W1-bat-theme decide
-    their step's tiers; W1-setup-sync is core.
+    their step's tiers; W1-chezmoi and W1-setup-sync are core.
 
     W1-winget leaves out each package whose tool the doctor already reports
     ok in this session, whoever installed it (the package maps to its
@@ -41,18 +43,20 @@
     a preexisting file with different bytes is left untouched and fails apply.
 
     HUMAN blocks follow the shared grammar (HUMAN-BEGIN <step-id> <kind>,
-    command lines, HUMAN-END) for HW-clone, HW-stow, HW-auto-stow-task,
-    HW-execution-policy, HW-ssh-agent, HW-wsl and HW-auth. This script never
-    elevates itself, never runs stow-all.ps1 and never edits a profile or rc
-    file; elevated steps are left to a person.
+    command lines, HUMAN-END) for HW-clone, HW-native (HW-stow and
+    HW-auto-stow-task with -LegacyStow), HW-execution-policy, HW-ssh-agent,
+    HW-wsl and HW-auth. This script never elevates itself, never initializes
+    or applies configuration, never runs stow-all.ps1 and never edits a
+    profile or rc file; elevated steps are left to a person.
 
     Exit codes: 0 done (non-blocking HUMAN blocks may still be printed);
     1 a step failed; 2 usage error, invalid manifest, or refusal (a
     non-interactive run without -Yes, or a declined prompt); 3 work remains:
-    a blocking HUMAN step is pending (HW-clone or HW-stow), or, under
-    -Check, a step is still to apply. As in setup-host.sh, the other HUMAN
-    steps (HW-auto-stow-task, HW-execution-policy, HW-ssh-agent, HW-wsl,
-    HW-auth) are printed while pending but leave the exit code alone;
+    a blocking HUMAN step is pending (HW-clone or HW-native; HW-clone or
+    HW-stow with -LegacyStow), or, under -Check, a step is still to apply.
+    As in setup-host.sh, the other HUMAN steps (HW-execution-policy,
+    HW-ssh-agent, HW-wsl, HW-auth, and HW-auto-stow-task with -LegacyStow)
+    are printed while pending but leave the exit code alone;
     .\doctor.ps1 -Online then shows whether sign-in is done.
 
 .PARAMETER HostName
@@ -437,6 +441,8 @@ function Get-SetupHumanBlock {
     # self-contained command: no Set-Location or variable carries over.
     param([Parameter(Mandatory)][string]$Id)
     $repo = ConvertTo-SetupQuoted $RepoRoot
+    # Lines that rerun a script name the person's mode.
+    $modeFlag = if ($LegacyStow) { ' -LegacyStow' } else { '' }
     switch -CaseSensitive ($Id) {
         'HW-clone' {
             $powerShellNote = if ($LegacyStow) {
@@ -445,7 +451,7 @@ function Get-SetupHumanBlock {
                 '# Git and PowerShell 7 as the MSI in Program Files\PowerShell\7:'
             }
             return @{ Kind = 'judgment'; Lines = @(
-                    '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.'
+                    "# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1$modeFlag from the clone."
                     $powerShellNote
                     'winget install --id Git.Git -e --source winget'
                     'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix'
@@ -458,7 +464,7 @@ function Get-SetupHumanBlock {
                     '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.'
                     '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.'
                     '# Quiesce writers, snapshot exact targets, initialize with all paths explicit and establish the home binding.'
-                    '# Native regular-file updates need no elevation or auto-stow scheduled task.'
+                    '# Native regular-file updates need no elevation or scheduled task.'
                 ) }
         }
         'HW-stow' {
@@ -475,7 +481,7 @@ function Get-SetupHumanBlock {
         }
         'HW-execution-policy' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# Lets the stowed profiles and these scripts run. PowerShell 7 and Windows PowerShell 5.1 keep separate settings.'
+                    '# Lets the PowerShell profiles and these scripts run. PowerShell 7 and Windows PowerShell 5.1 keep separate settings.'
                     'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
                     'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
                 ) }
@@ -489,9 +495,14 @@ function Get-SetupHumanBlock {
                 ) }
         }
         'HW-wsl' {
+            $wslSource = if ($LegacyStow) {
+                '.\stow-all.ps1 win links win\wsl into your home.'
+            } else {
+                'The native handover (HW-native) deploys win\wsl into your home.'
+            }
             return @{ Kind = 'judgment'; Lines = @(
                     '# Optional, elevated PowerShell. Windows Terminal and WezTerm profiles need the distro named exactly Ubuntu.'
-                    '# .\stow-all.ps1 win links win\wsl into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
+                    "# $wslSource ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown."
                     '# ~\wsl.conf applies only when copied to /etc/wsl.conf inside the distro; the tracked one runs /usr/local/bin/mount-data.sh, which this repository does not ship, and hardcodes a default user.'
                     '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.'
                     'wsl --install -d Ubuntu'
@@ -499,7 +510,7 @@ function Get-SetupHumanBlock {
         }
         'HW-auth' {
             return @{ Kind = 'auth'; Lines = @(
-                    '# Sign in, then check with .\doctor.ps1 -Online. Skip gh auth setup-git: it would write the stowed ~\.gitconfig.'
+                    "# Sign in, then check with .\doctor.ps1$modeFlag -Online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage."
                     'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519'
                     'gh auth login --git-protocol ssh'
                     'claude auth login'

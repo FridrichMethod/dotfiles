@@ -1311,6 +1311,31 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
     }
 
+    Test-Case 'native HUMAN blocks hand over to chezmoi and never name Stow; rerun notes keep the mode' {
+        $fixture = New-Fixture
+        $manual = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true; LegacyStow = $false }
+        Assert-Exit $manual 0 'native print manual'
+        $blocks = Get-HumanBlocks $manual.Lines
+        Assert-Equal (($blocks | ForEach-Object Id) -join ',') 'HW-clone,HW-native,HW-execution-policy,HW-ssh-agent,HW-wsl,HW-auth' 'native HUMAN ids'
+        $stow = @($manual.Lines | Where-Object { $_ -match 'stow' })
+        Assert-Equal $stow.Count 0 "native HUMAN blocks name Stow: $($stow -join ' | ')"
+        $wsl = ($blocks | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
+        Assert-True ($wsl.Contains('# The native handover (HW-native) deploys win\wsl into your home.')) "native HW-wsl: $wsl"
+        $auth = ($blocks | Where-Object Id -eq 'HW-auth').Lines -join "`n"
+        Assert-True ($auth.Contains('Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.')) "native HW-auth: $auth"
+        Assert-True ($auth.Contains('check with .\doctor.ps1 -Online.')) "native HW-auth doctor line: $auth"
+        $clone = ($blocks | Where-Object Id -eq 'HW-clone').Lines -join "`n"
+        Assert-True ($clone.Contains('then rerun setup-host.ps1 from the clone.')) "native HW-clone: $clone"
+        $legacy = Get-HumanBlocks (Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }).Lines
+        $legacyWsl = ($legacy | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
+        Assert-True ($legacyWsl.Contains('# .\stow-all.ps1 win links win\wsl into your home.')) "legacy HW-wsl: $legacyWsl"
+        $legacyAuth = ($legacy | Where-Object Id -eq 'HW-auth').Lines -join "`n"
+        Assert-True ($legacyAuth.Contains('check with .\doctor.ps1 -LegacyStow -Online.')) "legacy HW-auth doctor line: $legacyAuth"
+        $legacyClone = ($legacy | Where-Object Id -eq 'HW-clone').Lines -join "`n"
+        Assert-True ($legacyClone.Contains('then rerun setup-host.ps1 -LegacyStow from the clone.')) "legacy HW-clone: $legacyClone"
+        Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
+    }
+
     Test-Case 'setup-host applies every todo step once, in order, then prints HUMAN blocks' {
         if ($machineTools) { Skip-Assertion 'oh-my-posh or the Nerd Font is installed on this machine; apply not checked.'; return }
         if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; apply not checked.'; return }

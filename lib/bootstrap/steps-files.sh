@@ -101,7 +101,7 @@ step_S3_clones_check() {
         esac
     done
     if [ -n "$STEPS_OMZ_RECOVERY" ]; then
-        STEP_DETAIL="$STEPS_OMZ_RECOVERY exists without oh-my-zsh.sh (stow ran before the clone); recover it by hand"
+        STEP_DETAIL="$STEPS_OMZ_RECOVERY exists without oh-my-zsh.sh (the dotfiles were applied before the clone); recover it by hand"
         return 3
     fi
     if [ -z "$todo$bad" ]; then
@@ -114,7 +114,8 @@ step_S3_clones_check() {
 }
 
 # steps_omz_recovery_block DEST: put an oh-my-zsh checkout under the dir that
-# ./stow-all.sh created first; the stowed custom/ files stay untracked there.
+# a configuration apply (stow-all or chezmoi) created first; the dotfiles'
+# custom/ files stay untracked there.
 steps_omz_recovery_block() {
     local dest url='' q lines row key row_url
     dest=$1
@@ -131,8 +132,9 @@ steps_omz_recovery_block() {
     [ -n "$url" ] || url=https://github.com/ohmyzsh/ohmyzsh.git
     q=$(steps_quote "$dest")
     steps_block_begin X-recovery judgment
-    printf '# %s exists without oh-my-zsh.sh: ./stow-all.sh ran before S3-clones.\n' "$dest"
-    printf '%s\n' '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh:'
+    printf '# %s exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones.\n' "$dest"
+    printf '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host %s%s:\n' \
+        "$STEPS_HOST" "$(steps_mode_flag)"
     printf 'git -C %s init\n' "$q"
     for key in core.eol=lf core.autocrlf=false fsck.zeroPaddedFilemode=ignore \
         fetch.fsck.zeroPaddedFilemode=ignore receive.fsck.zeroPaddedFilemode=ignore \

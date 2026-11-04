@@ -10,6 +10,12 @@ steps_quote() {
     printf '%q' "$1"
 }
 
+# steps_mode_flag: " --legacy-stow" in that compatibility mode, else nothing,
+# for HUMAN lines that rerun setup-host in the person's mode.
+steps_mode_flag() {
+    [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ] || printf ' --legacy-stow'
+}
+
 # steps_block_begin ID KIND / steps_block_end: the HUMAN block frame. Blocks
 # are printed, never executed; `#` lines are notes for the reader.
 steps_block_begin() {
@@ -373,7 +379,7 @@ steps_platform_mismatch() {
 }
 
 step_P0_preflight_check() {
-    local glibc platform detail dirty
+    local glibc platform detail dirty why
     glibc=$(bootstrap_glibc_version)
     platform=$(bootstrap_detect_platform)
     detail="host $STEPS_HOST, profile $STEPS_PROFILE, $(bootstrap_os) $STEPS_ARCH${glibc:+, glibc $glibc}, detected $platform, checkout $STEPS_ROOT"
@@ -386,7 +392,12 @@ step_P0_preflight_check() {
         dotfiles_log warn "git status fails in $STEPS_ROOT, so the rc-pollution guard cannot see installer edits"
         detail="$detail; git status failed"
     elif [ -n "$dirty" ]; then
-        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since an installer that appends to a stowed rc file edits this checkout (docs/bootstrap.md X-rc-protection)"
+        if [ "${BOOTSTRAP_LEGACY_STOW:-0}" = 1 ]; then
+            why='an installer that appends to a stowed rc file edits this checkout'
+        else
+            why='the native login update does not run from a checkout with uncommitted changes'
+        fi
+        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since $why (docs/bootstrap.md X-rc-protection)"
         detail="$detail; checkout has uncommitted changes"
     fi
     STEP_DETAIL=$detail
