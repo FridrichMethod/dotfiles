@@ -72,7 +72,7 @@ platform limits; the named focused suites contain the executable regressions.
 | `common/codex/.local/bin/codex-config-sync` | `codex-config-sync.sh`, `unix-installer.sh` | Portable allowlist, quoted/multiline TOML, unknown live tables and arrays, retired sandbox settings, no-op/fresh/legacy files and real --check/apply. |
 | `common/codex/.local/bin/codex-rules-sync` | `ai-config-sync.sh` | Opaque authoritative rules, empty-source failure, sibling and permission preservation, prompt-only policy and cross-client global-instruction alignment. |
 | `lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync` | `fcitx5-profile-sync.sh` | Authoritative materialization, no-op inode, safe staging/replacement, permissions and directory/special-file rejection. |
-| `common/tmux/`, tmux clone/probe rows | `tmux.sh`, `test_tmux.py` | matching Unix-only installation/probes; the `tools.tsv` floor 3.4 and no `#{version}` or `tmux -V` gate; real tmux with a temporary HOME and private socket: native Mocha/copy settings without TPM, no network/bootstrap on load, layout-only recovery options and a concrete hostname directory, fake TPM loaded from the bootstrap path, unconditional which-key/Catppuccin/FloaX registration and popup/menu styles, FloaX keys only with its script, idempotent conditional registration and desktop/SSH clipboard selection from the session environment (extrakto's OSC 52 on for a session-only SSH client, off after a session removal), native menu without autobuild, reloads and loader quoting with spaces in HOME, menu cwd quote/injection regression, private metric cache and symlink/permission refusal; skips real tmux only when absent (Linux CI installs apt's 3.4); tmux below 3.4 is unsupported, and real upstream popup/restore behavior requires an isolated manual smoke check |
+| `common/tmux/`, tmux clone/probe rows | `tmux.sh`, `test_tmux.py` | matching Unix-only installation/probes; the `tools.tsv` floor 3.4 and no `#{version}` or `tmux -V` gate; real tmux with a temporary HOME and private socket: native Mocha/copy settings without TPM, no network/bootstrap on load, layout-only recovery options and a concrete hostname directory, fake TPM loaded from the bootstrap path, unconditional which-key/Catppuccin/FloaX registration and popup/menu styles, FloaX keys only with its script, idempotent conditional registration and desktop/SSH clipboard selection from the session environment (extrakto's OSC 52 on for a session-only SSH client, off after a session removal of a server-global `SSH_CONNECTION`), native menu without autobuild, reloads and loader quoting with spaces in HOME, menu cwd quote/injection regression, private metric cache and symlink/permission refusal; skips real tmux only when absent (Linux CI installs apt's 3.4); tmux below 3.4 is unsupported, and real upstream popup/restore behavior requires an isolated manual smoke check |
 | `.stowrc` ignores, `.gitignore` | `test_stow_ignores.py`, `stow-ignores.sh`, `windows-installer.ps1` | Git/Stow 2.3/Stow 2.4/PowerShell ignore equivalence, whole components and near misses, tracked-file coverage, native fixture links and safe fixture Git isolation. |
 | `stow-all.sh` | `stow-all.sh`, `unix-installer.sh` | Host refusal and common-before-host order, all-input preflight, oh-my-zsh prerequisite, dry-run conflicts before sync, exact flags, SSH modes, safe retirement and revision acknowledgement; filesystem failures remain retryable. |
 | The retirement of both submodules: `.gitignore` and `.stowrc` lines for the leftover checkouts, no `.gitmodules` or gitlink, no tracked symlink, the no-op scripts/awesome-skills-update.sh shim | `unix-installer.sh`, `update-hooks.sh`, `update-hooks.ps1`, `ai-config-sync.sh`, `stow-ignores.sh`, `test_chezmoi_source_state.py`, `payload-update.sh` | Real local-remote update from legacy layouts, ignored leftover checkouts, exact retired links, a login that installs no payload and an explicit run that then converges, a shim that does nothing, and no automatic submodule commands or repository deletion. |
@@ -94,11 +94,11 @@ platform limits; the named focused suites contain the executable regressions.
 
 Windows updater mocks do not establish real Task Scheduler execution. Native
 NTFS fixtures use a local runner token, not OpenSSH network-logon trust. The
-held-handle rename fixture shows that the updater's check narrows, not
-closes, the window in which a writer of `~/.local` could swap its
-`chezmoi.exe`. Desktop
-notification delivery requires an interactive terminal; container/hosted-runner
-success does not establish fresh-machine or real-cluster acceptance.
+held-handle rename fixture shows the rename refusal; that narrows, but does
+not close, the window in which a writer of `~/.local` could swap its
+`chezmoi.exe`. Desktop notification delivery requires an interactive
+terminal; container/hosted-runner success does not establish fresh-machine
+or real-cluster acceptance.
 
 Interactive presentation helpers and network-transfer aliases remain outside
 this automation matrix. Add a focused test when promoting one to a supported

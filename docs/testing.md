@@ -27,11 +27,12 @@ locally, install the kit into a scratch home the same way, with
 nothing reaches your own, and set `DOTFILES_TEST_KIT_HOME` to it.
 
 Both gitleaks hooks read `.gitleaks.toml`, which extends the defaults with
-every `sk-ant-` token family and with any file under a `.secrets` directory or its native
-source encoding (`dot_secrets/`, also behind the `remove_`, `external_`,
-`exact_`, `private_` and `readonly_` attribute prefixes); only the age
-ciphertexts `home/private_dot_secrets/encrypted_private_claude-*.age` are
-allowed there.
+any `sk-ant-<kind><nn>` token family and with any file under a `.secrets`
+directory or its native source encoding (`dot_secrets/`, also behind the
+`remove_`, `external_`, `exact_`, `private_` and `readonly_` attribute
+prefixes); only the age ciphertexts
+`home/private_dot_secrets/encrypted_private_claude-<name>.age`, with a
+`<name>` of lowercase letters and digits, are allowed there.
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
@@ -81,11 +82,12 @@ skip on Windows remains separate from the cross-platform safety assertions.
 Stage 5 adds source and state guards. `test_chezmoi_source_state.py` fails on
 a `.chezmoiexternal.*` file or `.chezmoiexternals` directory under `home/`
 (externals download whenever the source state is read) and on a `.gitmodules`
-or a tracked gitlink. `test_chezmoi_update_config.py` requires init to write
-`persistentState` as `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash
-form (Unix and Windows destinations), to fold its case variants into that key
-(two of them fail init with the config unchanged), and to add only that key
-to a config the previous template wrote; a plain command naming only the
+or a tracked gitlink. `test_chezmoi_update_config.py` requires the template,
+and so init, to write `persistentState` as
+`<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash form (Unix and
+Windows destinations), to fold its case variants into that key (a config
+holding two of them fails init and is left unchanged), and to add only that
+key to a config the previous template wrote; a plain command naming only the
 config then shares the bound database without a stray
 `chezmoistate.boltdb`, while the updater's explicit `--persistent-state`
 still wins. `test_chezmoi_provision.py` resolves a native-owned home's role
@@ -102,11 +104,11 @@ exe or a junction at `.local\bin` or `.local` each print one warning, naming
 accepts foreign read and deny entries and OWNER RIGHTS but not a foreign
 owner or append right. A fixture records that NTFS refuses renaming
 `.local\bin` and `.local` while the updater's read handle on the exe is open
-and allows it after release (observed on the elevated hosted `windows-2025`
-runner). That narrows the swap window, not closes it: a writer of `~/.local`
-that swaps a junction in before the open and a prepared directory back
-before the re-check can still get another `chezmoi.exe` started, so these
-tests do not show the path tamper-proof.
+and allows renaming `.local\bin` after release (observed on the elevated
+hosted `windows-2025` runner). That narrows the swap window, not closes it:
+a writer of `~/.local` that swaps a junction in before the open and a
+prepared directory back before the re-check can still get another
+`chezmoi.exe` started, so these tests do not show the path tamper-proof.
 
 The `english-documentation` hook uses native `pygrep`, configured entirely in
 `.pre-commit-config.yaml`, to check selected Markdown, reStructuredText,
@@ -230,7 +232,7 @@ local clone remotes. Network commands outside `--online` fail the doctor
 suite; `sudo`, `chsh`, `stow`, `apt-get`, `conda` and `git lfs` are tripwires in
 the installer suite; find snapshots prove that the doctor and
 `setup-host.sh --check` write nothing. Most fixture cases pass
-`--legacy-stow`; a native section of each runs the default mode. There the
+`--legacy-stow`; native cases in each run the default mode. There the
 doctor reads a bound home's role from the one quoted `host` line of the
 `[data]` table of its local config, ignores the Stow receipt and
 `DOTFILES_HOST` (legacy only), exits 2 for a missing, repeated, unknown or
@@ -281,15 +283,18 @@ rules; these local shell tests do not establish cluster policy.
 `tests/tmux.sh` runs `tests/test_tmux.py`. Its static cases match the plugin
 rows to Unix installation and probes and require the `tools.tsv` floor 3.4
 with no `#{version}` or `tmux -V` gate under `common/tmux`. With a real tmux
-on PATH, the rest source the config on a private socket with a temporary
-`HOME` and a fake TPM. Among other things it loads offline, registers
-which-key, Catppuccin and FloaX and sets the popup and menu styles without
-conditions, binds FloaX's keys only once its script exists, and follows the
-session environment for the clipboard (an SSH client's session turns
-extrakto's OSC 52 on and drops tmux-yank; a session removal hides a
-server-global SSH value). That class skips only when tmux is absent; tmux
-older than 3.4 is unsupported. The Linux job installs apt's tmux (3.4 on
-`ubuntu-24.04`) so it runs there; the macOS job installs none.
+on PATH, the `TmuxConfiguration` class sources the config on a private
+socket with a temporary `HOME` (one case with a fake TPM). Among other
+things it loads offline, registers which-key, Catppuccin and FloaX and sets
+the popup and menu styles without conditions, binds FloaX's keys only once
+its script exists, and follows the session environment for the clipboard
+(an SSH client's session turns extrakto's OSC 52 on and drops tmux-yank; a
+session removal of a server-global `SSH_CONNECTION`, the only gate variable
+`update-environment` refreshes, gives `bg`, so a server started over SSH,
+which keeps `SSH_CLIENT` and `SSH_TTY` global, stays on OSC 52). That class
+skips only when tmux is absent; tmux older than 3.4 is unsupported. The
+Linux job installs apt's tmux (3.4 on `ubuntu-24.04`) so it runs there; the
+macOS job installs none.
 
 `tests/stow-ignores.sh` (and `tests/run.ps1`) runs `tests/test_stow_ignores.py`:
 it builds a name from each `.gitignore` pattern with no slash but a trailing
@@ -755,6 +760,7 @@ exit                                                        # back to the login 
 ./setup-host.sh --legacy-stow --host sherlock               # exits 0 and prints no "done applied:" line
 git -C ~/dotfiles status --porcelain                        # empty, here and after every step above
 exec "$HOME/micromamba/envs/login/bin/zsh" -l               # starts without an error line
+sh ~/dotfiles/scripts/payload-update.sh --now               # H7-payloads (criterion 7; no login runs it): exits 0
 ./doctor.sh --legacy-stow --host sherlock && ./doctor.sh --legacy-stow --host sherlock --smoke
 ```
 
