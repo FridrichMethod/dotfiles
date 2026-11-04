@@ -82,7 +82,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `file` | unix | fzf previews cannot detect file types |
 | `col` | unix | fzf-tab man page previews fail |
 | `man` | unix | man, colored-man-pages and fzf-tab man previews fail |
-| `tmux` | unix | tmux 2.6+ hostname-scoped recovery configuration and sessions are unavailable |
+| `tmux` | unix | tmux 3.4+ hostname-scoped recovery configuration and sessions are unavailable |
 | `homebrew` | mac | Brewfile bundles cannot run |
 | `linuxbrew` | wsl-ubuntu, lab-ubuntu | Brewfile bundles cannot run and the overlay brew shellenv line fails |
 | `python3` | all | setup-sync and the AI config sync helpers cannot run |

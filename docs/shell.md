@@ -73,19 +73,24 @@ dconf backend. Settings apply at X login, not by appending to a shell rc.
 
 ## tmux
 
-The shared config requires tmux 2.6+ and keeps its `Ctrl-b` prefix, mouse support, 100000 lines
+The shared config requires tmux 3.4+ and keeps its `Ctrl-b` prefix, mouse support, 100000 lines
 of scrollback and numbering from 1. [TPM](https://github.com/tmux-plugins/tpm)
 loads [resurrect](https://github.com/tmux-plugins/tmux-resurrect),
 [tmux-fzf](https://github.com/sainnhe/tmux-fzf) and
 [continuum](https://github.com/tmux-plugins/tmux-continuum). Catppuccin Mocha,
 extrakto, yank, FloaX, which-key, CPU/RAM and battery plugins add appearance
-and interaction where the tmux version and host support them. No full config
-framework or Oh My Tmux is needed.
+and interaction where the host supports them. No full config framework or
+Oh My Tmux is needed.
 
-The native fallback uses the same Mocha colors without requiring any plugin:
-transparent status background, mauve active pane borders, centered windows
-and PREFIX/COPY/ZOOM indicators. On tmux 3.2+, Catppuccin adds rounded window
-tabs and Nerd Font status capsules matching WezTerm and Kitty. Window caps use
+On Marlowe only the login env's tmux (3.6a) meets the floor. A non-interactive
+`ssh marlowe tmux ...` finds `/usr/bin/tmux` 3.2a, which rejects the 3.4
+options, and a 3.2a server sharing the default socket with a 3.6a client can
+fail to talk to it. Start tmux from an interactive login shell.
+
+Without any plugin, the native settings use Catppuccin's Mocha colors:
+transparent status background, mauve active pane borders, centered windows,
+Nerd Font status capsules and PREFIX/COPY/ZOOM indicators. Catppuccin adds
+rounded window tabs; both match WezTerm and Kitty. Window caps use
 explicit foreground colors and the default background, avoiding upstream's
 invalid `fg=none` styles with a transparent status line. Reloading the config
 updates both current and inactive window caps without restarting sessions.
@@ -118,8 +123,8 @@ Press `Ctrl-b`, release it, then use:
 | `Ctrl-r` | Restore the last saved layout |
 | `F` | Search/manage sessions, windows and panes with fzf |
 | `Tab` | Extract output text with fzf; Enter copies and Tab inserts |
-| `Space` | Open the custom which-key menu (tmux 3.0+) |
-| `Alt-f` | Toggle the persistent floating scratch shell (tmux 3.3+) |
+| `Space` | Open the custom which-key menu |
+| `Alt-f` | Toggle the persistent floating scratch shell |
 | `Alt-Shift-f` | Open the floating shell's resize/fullscreen/embed menu |
 | `y` / `Y` | Copy the command line / working directory with desktop yank |
 | `I` | Install plugins added to the config |
@@ -130,10 +135,12 @@ The prefix remains Ctrl-b. `p` still selects the previous window, `F` still
 opens fzf, and `?` still displays the native key reference. Copy mode uses
 vi movement and `y` to copy. Desktop yank requires an available clipboard
 backend; SSH sessions use native OSC 52 through the connected terminal.
-The terminal must allow clipboard writes. On tmux 3.2+, extrakto uses that
-transport for SSH copies; older SSH sessions keep text in the tmux buffer.
-Extrakto uses the existing Python/fzf tools, clears inherited fzf options,
-and captures at most 2000 recent lines per window pane.
+The terminal must allow clipboard writes. Extrakto uses that transport for SSH
+copies. Like the tmux-yank gate, its gate reads the environment of the session
+that loads or reloads the config: an SSH client's reload turns OSC 52 on, and a
+local reload of a server started over SSH turns it off. Extrakto uses the
+existing Python/fzf tools, clears inherited fzf options, and captures at most
+2000 recent lines per window pane.
 
 The Space menu groups Sessions, Windows, Panes and Tools, with layout
 save/restore, resize, fzf, extraction, floating shell and plugin/config
@@ -143,12 +150,12 @@ menu generation, pip package or virtual environment. Upstream may copy its
 default config into ignored files in its own checkout on first load; the
 stowed menu is then applied. Edit the stowed file to customize the menu.
 
-Modern files are version-gated with numeric comparisons, including multi-digit
-minor versions. Old tmux keeps the native theme and recovery. TPM statically
-scans ordinary `@plugin` declarations regardless of conditionals; the supported
-legacy `@tpm_plugins` option registers conditional plugins and is rebuilt on
-each reload. The main config loads Catppuccin only on 3.2+, which-key on 3.0+
-and FloaX on 3.3+; popup/menu style options are limited to 3.4+.
+The config uses tmux 3.4 popup, menu and style features without version
+checks; `config/bootstrap/tools.tsv` holds the floor, and older tmux is
+unsupported. TPM statically scans ordinary `@plugin` declarations regardless of
+conditionals; the supported legacy `@tpm_plugins` option registers extrakto and
+CPU/RAM, the probed battery and desktop-yank plugins, then which-key,
+Catppuccin and FloaX, and is rebuilt on each reload.
 
 Continuum saves every 15 minutes while an attached client's status line
 refreshes. It restores sessions, windows, panes, layouts and working
@@ -174,8 +181,8 @@ current upstream bindings to use the shipped `scripts/floax.sh` and
 is included in layout snapshots; its running programs follow the same
 layout-only restore policy as other sessions.
 
-tmux-fzf uses a popup on tmux 3.2+ and a split otherwise. It reuses the
-existing fzf dependency and limits its menu to tmux sessions/windows/panes.
+tmux-fzf opens in a popup. It reuses the existing fzf dependency and limits its
+menu to tmux sessions/windows/panes.
 On shared nodes, use native tmux commands for creating or renaming objects:
 upstream's new/rename dialogs use fixed `/tmp` pipe names that can collide.
 CopyQ is not required or installed; if already available on PATH, upstream

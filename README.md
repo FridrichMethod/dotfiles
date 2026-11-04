@@ -109,9 +109,9 @@ Unix shell packages; native Windows deploys 26 regular files. The
 
 ## tmux
 
-The shared tmux 2.6+ configuration uses TPM, resurrect, continuum and fzf,
+The shared tmux 3.4+ configuration uses TPM, resurrect, continuum and fzf,
 with a Catppuccin Mocha appearance, text extraction, clipboard helpers,
-a floating scratch terminal and a custom which-key menu on supported versions.
+a floating scratch terminal and a custom which-key menu; older tmux is unsupported.
 Plugins are provisioned through setup-host's S3-clones step; startup installs
 nothing. Recovery restores layouts and directories without restarting programs
 or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
@@ -234,7 +234,8 @@ pre-commit run --hook-stage manual gitleaks-history
 ```
 
 Tests use isolated homes and fakes. Native macOS and Windows jobs provide
-platform evidence; local skips do not establish native behavior. The
+platform evidence, and Linux CI runs the real-tmux tests with Ubuntu 24.04's
+tmux 3.4, the floor; local skips do not establish native behavior. The
 [testing guide](docs/testing.md) explains prerequisites, focused suites, CI,
 optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.
