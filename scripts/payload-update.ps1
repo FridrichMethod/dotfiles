@@ -16,7 +16,8 @@
     run's git clones would belong to Administrators.
 
     Until Stage 6, a call without -Now (an older profile's, or an older
-    run's -Auto or -Worker) does nothing.
+    run's -Auto or -Worker) does nothing. A -Now run needs PowerShell 7.1
+    or newer and on 7.0 exits 1 at once, saying so.
 .NOTES
     DOTFILES_PAYLOAD_ITEMS lists the items without arguments (default: those
     with a windows-install row, pymol skills); DOTFILES_PAYLOAD_TIMEOUT
@@ -43,6 +44,14 @@ if (Get-Item -LiteralPath $MaintenancePath -Force -ErrorAction SilentlyContinue)
 
 # Until Stage 6: the retired -Auto and -Worker, and a call without arguments.
 if (-not $Now) { return }
+
+# A download's private directory needs FileSystemAclExtensions.Create with an
+# access list, new in .NET 5: PowerShell 7.1 (7.0 runs on .NET Core 3.1).
+# Refuse at once rather than fail each download.
+if ([version]::new($PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor) -lt [version]'7.1') {
+    Write-Host "[dotfiles] [error] payload-update: needs PowerShell 7.1 or newer, not $($PSVersionTable.PSVersion); upgrade PowerShell, then run sync-payloads again"
+    exit 1
+}
 $Repo = Split-Path -Parent $PSScriptRoot
 
 $PayloadFailed = & { try {

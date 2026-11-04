@@ -733,6 +733,14 @@ function Test-BootstrapNativeChezmoi {
     return $true
 }
 
+function Test-BootstrapPrivateFileSupport {
+    # New-BootstrapPrivateFile's FileSystemAclExtensions.Create overload with
+    # an access list is new in .NET 5, so PowerShell 7.1; 7.0 runs on .NET
+    # Core 3.1, which lacks it.
+    param([version]$Version = [version]::new($PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor))
+    return $Version -ge [version]'7.1'
+}
+
 function New-BootstrapPrivateFile {
     # Create Path, which must not exist, open for writing. On Windows its DACL
     # is explicit and protected from creation on: FullControl for this user,
@@ -754,12 +762,16 @@ function Install-BootstrapChezmoi {
     # then extracted from, so a path swap after the check changes nothing.
     # Extract only chezmoi.exe, into a private file beside Destination (never
     # a DACL inherited from %TEMP%), then rename it into place. Before any
-    # download, refuse a link or non-regular file at Destination and a link
-    # at its directory or that directory's parent (~/.local/bin, ~/.local),
-    # under which the login updater runs nothing.
+    # download, refuse PowerShell older than 7.1, a link or non-regular file
+    # at Destination, and a link at its directory or that directory's parent
+    # (~/.local/bin, ~/.local), under which the login updater runs nothing.
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$Sha256,
         [Parameter(Mandatory)][string]$Destination)
+    if (-not (Test-BootstrapPrivateFileSupport)) {
+        return New-BootstrapResult failed ("W1-chezmoi needs PowerShell 7.1 or newer to write a private chezmoi.exe, not $($PSVersionTable.PSVersion); " +
+            'upgrade PowerShell, then rerun setup-host.ps1')
+    }
     $existing = Get-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
     if ($existing -and ($existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint))) {
         return New-BootstrapResult failed 'chezmoi destination is a link or non-regular file; inspect it before installing'

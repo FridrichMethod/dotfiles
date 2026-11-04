@@ -19,8 +19,9 @@
       W1-bat-theme    the pinned Catppuccin Mocha theme, sha256-checked, into
                       %APPDATA%\bat\themes, then bat cache --build
       W1-chezmoi      native default: the pinned, SHA256-checked chezmoi
-                      release, extracting only chezmoi.exe into ~\.local\bin;
-                      done once the login updater would run that private copy
+                      release, extracting only chezmoi.exe into ~\.local\bin
+                      (PowerShell 7.1 or newer); done once the login updater
+                      would run that private copy
       W1-setup-sync   -LegacyStow only: .\setup-sync.ps1 -Python <the first
                       python3 or python on PATH that reports 3.11 or newer; a
                       Microsoft Store alias does not count> (the only write
