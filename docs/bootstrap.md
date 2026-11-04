@@ -316,7 +316,7 @@ and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-
 into your shell first:
 
 ```sh
-# with your package manager: git zsh curl rsync tar file tmux man ssh, python3 >= 3.11, GNU Stow >= 2.3.1,
+# with your package manager: git zsh curl rsync tar file man ssh, tmux >= 3.4, python3 >= 3.11, GNU Stow >= 2.3.1,
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
@@ -1318,7 +1318,7 @@ code runs in shell or tmux startup, the same trust model as oh-my-zsh's auto-upd
   `tpm`, `tmux-resurrect`, `tmux-fzf`, `tmux-continuum`, `catppuccin-tmux`,
   `extrakto`, `tmux-yank`, `tmux-floax`, `tmux-which-key`, `tmux-cpu` and
   `tmux-battery` are `ok`. The clones are provisioned on all Unix hosts;
-  the tmux config enables features only on compatible tmux versions.
+  the tmux config needs tmux 3.4 or newer (the `tools.tsv` floor).
 - **Human:** no
 
 setup-host never modifies an existing clone: a destination that is a git
@@ -1346,7 +1346,7 @@ so the loop fast-forwards oh-my-zsh as well.
 For tmux, run `./setup-host.sh --host H --check --only S3-clones`, then
 `./setup-host.sh --host H --yes --only S3-clones` to install missing plugins.
 Keep `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported while
-provisioning. Once `.tmux.conf` is stowed, reload a running server with
+provisioning. Once `.tmux.conf` is in place, reload a running server with
 `tmux source-file ~/.tmux.conf`; otherwise the next tmux start loads it.
 There is no tmux startup download or automatic plugin update. Use TPM's
 `prefix + U` for an explicit update and `prefix + I` after declaring another
