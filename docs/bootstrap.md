@@ -106,10 +106,11 @@ file is missing, it prints one warning naming this section and skips the
 update. This narrows the gap between check and start but does not close it:
 on a `windows-2025` hosted runner (elevated), NTFS refused to rename `.local`
 or `.local\bin` while the handle was held and allowed it after release, which
-protects only once the real file is held at its real path. A writer of `~/.local` that wins two sub-millisecond races
-(swapping `.local\bin` for a junction before the open, then a prepared
-directory back before the re-check) can still get a different `chezmoi.exe`
-started; the check does not make the path tamper-proof.
+protects only once the real file is held at its real path. A writer of
+`~/.local` that wins two sub-millisecond races (swapping `.local\bin` for a
+junction before the open, then a prepared directory back before the re-check)
+can still get a different `chezmoi.exe` started; the check does not make the
+path tamper-proof.
 
 W1-chezmoi reports done whenever it finds a working chezmoi at or above the
 floor, including one elsewhere on PATH, so it does not repair what the updater
@@ -719,10 +720,11 @@ short and send the agent here. The rules they follow:
   improvises `chezmoi init --apply` or forces a whole home.
 - **Stow** (with `--legacy-stow`). `./stow-all.sh H` writes under `~/.claude`
   and `~/.codex` (and links `~/.ssh`). `~/.claude` is a protected path whose
-  writes Claude Code's auto mode cannot pre-approve, so the agent runs it only as its own visible
-  top-level command that the person approves, or leaves it to the person. Never
-  launder it through a wrapper script. Before the first stow, `stow` is not on
-  PATH, so the agent runs the H7-stow block's lines exactly as printed: its
+  writes Claude Code's auto mode cannot pre-approve, so the agent runs it only
+  as its own visible top-level command that the person approves, or leaves it
+  to the person. Never launder it through a wrapper script. Before the first
+  stow, `stow` is not on PATH, so the agent runs the H7-stow block's lines
+  exactly as printed: its
   `mv -n` lines first, if it has any (they move aside home files Stow would
   refuse; never `stow --adopt`), then the stow line, the one-shot `PATH=`
   prefix that [H7-stow](#h7-stow-stow-the-dotfiles) gives for the host and the
@@ -814,8 +816,8 @@ have a minimum), the overlay the person chose, and a complete checkout.
   removes them, and once one holds no work of yours you can delete it by hand
   ([leftover checkouts](payloads.md#leftover-checkouts)).
 - **Human:** yes (judgment: the person names the host overlay, and a clone
-  outside `~/dotfiles` also needs `DOTFILES_DIR` exported; setup-host prints no
-  block for this step)
+  outside `~/dotfiles` also needs `DOTFILES_DIR` exported until a native
+  binding names it; setup-host prints no block for this step)
 
 On `sherlock` and `marlowe` the doctor's `locale` check points here: the
 cluster provides its locales, so a missing `en_US.UTF-8` is the site's to fix
@@ -1784,9 +1786,10 @@ selects the items a run without arguments installs and the doctor checks.
   `sync-skills` runs only the skills; on a native-owned home they run the
   bound checkout's script and refuse an invalid binding. An installer's exit 75
   (its own lock is busy) is no failure; any other failure makes the run exit 1
-  and names what to run next. Active maintenance refuses a run. It needs `sh` and curl, or wget with an existing timeout/gtimeout
-  (Windows: PowerShell 7), plus what each installer needs, which its README
-  lists (Git for the kit and the skills).
+  and names what to run next. Active maintenance refuses a run. It needs `sh`
+  and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
+  plus what each installer needs, which its README lists (Git for the kit and
+  the skills).
 - **Verify:** the `payloads` row is `ok`.
 - **Human:** yes (judgment: whether and when to run unpinned scripts from
   branch heads)
@@ -1924,8 +1927,9 @@ config directory.
 
 Runs only with `-LegacyStow`. Setup, doctor and the sync wrappers honor
 `DOTFILES_SYNC_PYTHON` when it is set. A passing selected runtime completes
-the step without provisioning a checkout-local environment. An invalid override fails apply; repair or unset
-it rather than installing an unused default.
+the step without provisioning a checkout-local environment. An invalid
+override fails apply; repair or unset it rather than installing an unused
+default.
 
 - **Check:** `.\setup-host.ps1 -Check` checks the selected interpreter with
   `lib/config_sync.py --runtime-check`, alongside the other setup steps.
@@ -2015,11 +2019,11 @@ The judgment part: the native handover (HW-native) deploys `win/wsl/`'s
 `.wslconfig`, `wsl.conf` and `mount.vbs` into your Windows home (with
 `-LegacyStow`, `.\stow-all.ps1 win` links them). `.wslconfig` sizes memory and
 processors for one machine; review it. `wsl.conf` takes effect only as
-`/etc/wsl.conf` inside the distribution, and the tracked one runs `/usr/local/bin/mount-data.sh`, which
-this repository does not ship, and hardcodes a `[user] default=` name. Copy only
-what fits this machine into `/etc/wsl.conf` by hand (with sudo), then
-`wsl --shutdown`. `mount.vbs` mounts one specific physical disk; do not schedule
-it on another machine.
+`/etc/wsl.conf` inside the distribution, and the tracked one runs
+`/usr/local/bin/mount-data.sh`, which this repository does not ship, and
+hardcodes a `[user] default=` name. Copy only what fits this machine into
+`/etc/wsl.conf` by hand (with sudo), then `wsl --shutdown`. `mount.vbs` mounts
+one specific physical disk; do not schedule it on another machine.
 
 ### HW-auth: Windows authentication
 
