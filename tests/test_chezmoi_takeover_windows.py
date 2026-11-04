@@ -141,6 +141,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("[dotfiles] Native update skipped", output)
         self.assertIn("chezmoi.exe", output)
+        self.assertIn("docs/bootstrap.md W1-chezmoi", output)
         self.assertEqual(output.count("[dotfiles]"), 1, output)
         self.assertNotIn("S-1-", output)
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")

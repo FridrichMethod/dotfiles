@@ -125,7 +125,7 @@ function Invoke-DotfilesNativeUpdate {
         # chezmoi runs have exited (finally below); never a PATH match.
         $chezmoi = Open-DotfilesNativeChezmoi $binding.Destination
         if ($null -eq $chezmoi) {
-            [Console]::Error.WriteLine('[dotfiles] Native update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators; reinstall it with setup-host W1-chezmoi.')
+            [Console]::Error.WriteLine('[dotfiles] Native update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators (docs/bootstrap.md W1-chezmoi).')
             return
         }
         $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
