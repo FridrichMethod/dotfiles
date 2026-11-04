@@ -11,10 +11,12 @@ the current state in [status.md](status.md). Plain native apply changes existing
 directory modes; use the corrected file-only procedure below.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
-The native floor is chezmoi 2.74.0. Bash 3.2, tmux 2.6, PowerShell 7 entrypoints
-and PowerShell 5.1's existing profile remain supported at their current floors.
-Use separate native Windows and WSL homes/checkouts. An independent local clone
-is required for Git writes when the installed checkout is under OneDrive.
+The native floor is chezmoi 2.74.0. Bash 3.2, tmux 3.4, PowerShell 7 entrypoints
+and PowerShell 5.1's existing profile remain supported at their current floors;
+W1-chezmoi, which provides the Windows `chezmoi.exe`, needs PowerShell 7.1 or
+newer and fails closed on 7.0. Use separate native Windows and WSL
+homes/checkouts. An independent local clone is required for Git writes when the
+installed checkout is under OneDrive.
 
 ## Prepare the reviewed bridge
 
@@ -23,15 +25,16 @@ is required for Git writes when the installed checkout is under OneDrive.
    A fresh clone does not repair existing HOME links or generated overrides.
 2. Bring the checkout to the compatible bridge without deleting legacy paths.
    Before this bridge, historical scripts do not understand the marker below.
-   Keep `DOTFILES_AUTO_UPDATE=0` and `DOTFILES_PAYLOAD_AUTO_UPDATE=0` in the
-   maintenance session, and establish persistent opt-outs in the existing
+   Keep `DOTFILES_AUTO_UPDATE=0` in the maintenance session, with
+   `DOTFILES_PAYLOAD_AUTO_UPDATE=0` for pre-Stage-5 profile code (current code
+   ignores it), and establish persistent opt-outs in the existing
    user-controlled login environment if the old checkout cannot yet use the
    bridge. Inspect both actual profile callers; do not write through a Stow link
    into tracked source to create a machine-specific opt-out.
 3. Once the bridge is available, create the persistent marker below, then verify
-   a second fresh process cannot start either hook. Do not convert any target
-   until this works. Marker existence is enough, including an invalid file or
-   dangling link, so a partial handover remains closed to old writers.
+   a second fresh process starts no update or payload run. Do not convert any
+   target until this works. Marker existence is enough, including an invalid file
+   or dangling link, so a partial handover remains closed to old writers.
 
 ```sh
 umask 077
@@ -46,9 +49,12 @@ wildcard process operation is part of maintenance.
 Inspect the checkout's exact `git rev-parse --git-path dotfiles-sync-unix.lock`
 and its `pid`, then match owner, start time, full command and ancestry. A PID by
 itself may be stale/reused. Let the identified updater finish; do not kill an
-unrelated process. Inspect payload `--worker` / `-Worker` command lines and their
-exact source checkout too: payload workers have no consumer lock. Recheck after
-waiting. A marker prevents new workers; it cannot cancel one already executing.
+unrelated process. Payload `--worker` / `-Worker` processes exist only if
+pre-Stage-5 code started them before the checkout reached Stage 5, whose
+payload-update script ignores those switches. Inspect any such command line
+and its exact source checkout too: payload workers have no consumer lock.
+Recheck after waiting. A marker prevents new runs; it cannot cancel one already
+executing.
 
 On Windows, dot-source `scripts/dotfiles-auto-stow.ps1` without switches and use
 `Get-DotfilesTaskName -Repo $source`. Inspect that exact task's principal, action
@@ -143,7 +149,10 @@ following paths are fixed by the adapter contract, independent of XDG overrides:
 
 Run `init` with the explicit source, destination, config, cache and state arguments
 below. It uses the repository template to set the chosen role, source/destination,
-regular-file mode, disabled Git auto-add/commit/push and the tested fast-forward-only update command.
+the bound state database (`persistentState`, always
+`<destination>/.local/state/chezmoi/chezmoi.boltdb`, with a case variant folded
+into it; two variants make init refuse), regular-file mode, disabled Git
+auto-add/commit/push and the tested fast-forward-only update command.
 The template preserves local age/backend/data and unrelated settings through
 native TOML, including repeated init. It canonicalizes formatting and refuses
 local TOML date/time/datetime before changing the config, just as the Codex
@@ -177,7 +186,8 @@ entries. There is no effective equivalent configuration key in the tested
 release; bare `chezmoi apply` is not this procedure.
 Keep `--force=false` explicit on all non-conversion commands, including directory
 preparation, regular/full apply and diff; preserved local config may set force.
-Only an individually reviewed link conversion replaces it with `--force=true`.
+Only an individually reviewed link conversion, or the reviewed one-file
+reconcile below, replaces it with `--force=true`.
 
 Before file apply, obtain the exact native directory set with the same explicit
 arguments and `managed --include=dirs --nul-path-separator`. Inspect each path
@@ -206,17 +216,20 @@ whole home. Native failures may leave earlier targets changed; keep both markers
 
 Once every target is reviewed, run full `apply --exclude=dirs` with the same
 arguments, then run it again and require an empty nonsecret targeted
-`diff --exclude=dirs`. On Windows invoke
-the equivalent argument array using PowerShell without elevation, with closed
-stdin. Keep successful old SSH access until a genuinely fresh ordinary connection
-passes; site/MFA master-only checks retain their documented limit.
+`diff --exclude=dirs`. On Windows invoke `~/.local/bin/chezmoi.exe` by full
+path (if it is absent, follow
+[W1-chezmoi](../bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary) first)
+with the equivalent argument array using PowerShell without elevation,
+with closed stdin. Keep successful old SSH access until a genuinely fresh
+ordinary connection passes; site/MFA master-only checks retain their documented
+limit.
 
 Run applicable shell/profile/application and fresh-access checks while maintenance
 is active. A headless SSH command is not a GUI reload check. Then remove the exact
 maintenance file for controlled activation and test the thin updater from a fresh
 interactive process with `DOTFILES_AUTO_UPDATE` enabled and `_DOTFILES_CHECKED`
-unset; keep payload automatic updates disabled during this probe. A call skipped
-by maintenance or an opt-out proves only suppression. Inspect warnings and actual
+unset; no Stage 5 login starts a payload run. A call skipped by maintenance or an
+opt-out proves only suppression. Inspect warnings and actual
 source/state/target outcomes: the adapter intentionally preserves a usable shell
 exit status on failure. Restore maintenance immediately if activation fails.
 Only after acceptance restore intended session opt-outs. Keep the native marker
@@ -243,15 +256,38 @@ question. Arbitrary user Git hooks are not
 a globally bounded execution environment. Errors produce a generic warning;
 secret-bearing native output is not printed. A later session may retry.
 
-Run every manual native command with the updater's full explicit argument set:
-`--source`, `--working-tree`, `--destination`, `--config`, `--cache` and
-`--persistent-state` as in `scripts/chezmoi-update.sh`/`.ps1`. Without it,
-chezmoi v2.74 uses a separate state database,
-`$HOME/.config/chezmoi/chezmoistate.boltdb`, because `home/.chezmoi.toml.tmpl`
-sets no `persistentState` and native falls back to the config directory. A plain
-`chezmoi apply` or `chezmoi update` can then overwrite local edits without the
-changed-since-last-write refusal and later stall the login updater. Making the
-template set `persistentState` is a Stage 5 item requiring a reviewed re-init.
+Run every mutating manual native command (`init`, `apply`, `update`, `add`,
+`re-add`, `edit`, `merge`, `forget`, `state`) with the updater's full explicit
+argument set: `--source`, `--working-tree`, `--destination`, `--config`,
+`--cache` and `--persistent-state` as in `scripts/chezmoi-update.sh`/`.ps1`,
+and follow the `--exclude=dirs` and `--force=false` rules above. Explicit paths
+keep inherited XDG or chezmoi settings from redirecting a command and win over
+the config; the login updaters pass every one. On Windows invoke
+`~/.local/bin/chezmoi.exe` by full path, never `chezmoi` through PATH; the login
+updater uses only that file and skips with a warning naming
+[W1-chezmoi](../bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary) when it
+is missing, linked, or owned or writable by an account other than you, SYSTEM
+and Administrators.
+
+`home/.chezmoi.toml.tmpl` owns `persistentState`; a host must pick it up only
+through a reviewed re-run of the init command above. Until then manual native
+commands print `config file template has changed`, which is harmless; do not
+answer it with a plain `chezmoi init`. Before the re-init, a command without the
+full argument set also uses chezmoi v2.74's separate state database beside the
+config, `$HOME/.config/chezmoi/chezmoistate.boltdb`, so a plain `chezmoi apply`
+or `chezmoi update` can overwrite local edits without the
+changed-since-last-write refusal and later stall the login updater. After
+the re-init, plain commands share the bound config, source, destination and
+state database, and plain read-only checks (`status --exclude=dirs`,
+`diff --exclude=dirs`, `managed`, `data`, `execute-template`) need no path
+flags; keep `--force=false` on diff.
+
+On an otherwise healthy bound home, the doctor's native-config row warns,
+offline, while that `chezmoistate.boltdb` exists; it never removes the file.
+To clear the warning, privately record the file's sha256, mode and owner, run
+the reviewed re-init, require both full-argument and plain
+`status --exclude=dirs` to be empty, then move the file into a private record
+directory; never delete it.
 
 The update invocation also pins `--exclude=dirs` to preserve shared parent modes
 and ACLs. New files under existing prepared parents can update automatically.
@@ -262,9 +298,13 @@ exclusion, delete state, or run plain apply to bypass it. Reconcile and require
 full file convergence after preparing the exact missing directories.
 
 `DOTFILES_AUTO_UPDATE=0` disables native login updates. `DOTFILES_AUTO_STOW` and
-`DOTFILES_HOST` remain legacy-only. Payload lifecycle is unchanged except for
-maintenance; its separate Stage 5 decision is still open. No new scheduler,
-revision acknowledgement database or background supervisor is introduced.
+`DOTFILES_HOST` remain legacy-only. Payloads are explicit-only (Stage 5 decision
+D7): no login, profile or schedule installs or refreshes them, and
+`DOTFILES_PAYLOAD_AUTO_UPDATE` is inert. `sync-payloads [ITEM...]` runs
+`scripts/payload-update.sh --now` (Windows: `payload-update.ps1 -Now`) from the
+validated bound source in the foreground and refuses an invalid binding;
+maintenance refuses it too. No new scheduler, revision acknowledgement database
+or background supervisor is introduced.
 
 Regular-file edits no longer write through to Git. During the bridge, ordinary
 portable edits belong in the canonical legacy source and then native apply.
@@ -315,6 +355,12 @@ stay disabled until all restored targets are checked. Removing the native marker
 is an explicit last recovery step, never an automatic response to a failed apply.
 Do not revert Git and blindly restow, delete native state to clear conflicts, or
 discard backups. State loss requires inspected recovery before unattended update.
+After the bound state database is lost, run no plain read-write chezmoi command
+(`init`, `apply`, `update`, `add`, `edit`, `re-add`, `merge`, `forget`,
+`state`), even when chezmoi suggests `chezmoi init`: a plain `init` can
+recreate the bound database with only its config state, which re-arms the
+unattended updater without that recovery. Plain read-only commands (`status`,
+`diff`, `managed`, `data`, `execute-template`) are fine.
 
 An offline installation can skip this bridge and pull a future deletion commit;
 the support cutoff cannot prevent that. Preserve it, recover from a clean local
