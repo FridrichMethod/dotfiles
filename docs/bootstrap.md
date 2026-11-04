@@ -75,13 +75,13 @@ second clone), setup-host keeps H7-native pending.
 
 The doctor's `native-config` row names the cause. `ok`: the handoff state above.
 `warn`, which does not fail the run: the home is bound to another checkout,
-whose doctor it names, or `~/.config/chezmoi/chezmoistate.boltdb` exists, a
-separate state database that a chezmoi command without the updater's full
-explicit argument set wrote (run every manual native command with that set, as
-takeover.md says; the doctor never removes the file, and setup-host still
-counts H7-native done). `human`: active maintenance, a missing or invalid
-binding, an absent or linked local config, or no readable
-`lib/chezmoi-guard.sh` in this checkout.
+whose doctor it names, or, with the binding otherwise `ok`,
+`~/.config/chezmoi/chezmoistate.boltdb` exists, a separate state database that
+a chezmoi command without the updater's full explicit argument set wrote (run
+every manual native command with that set, as takeover.md says; the doctor
+never removes the file, and setup-host still counts H7-native done). `human`: active maintenance, a missing or invalid
+binding, a local config that is absent or not a regular file (a link or a
+directory), or no readable `lib/chezmoi-guard.sh` in this checkout.
 
 ### W1-chezmoi: Windows native chezmoi binary
 
@@ -105,12 +105,12 @@ owner); owner and DACL are read from the held handle. Otherwise, also when the
 file is missing, it prints one warning naming this section and skips the
 update. This narrows the gap between check and start but does not close it:
 on a `windows-2025` hosted runner (elevated), NTFS refused to rename `.local`
-or `.local\bin` while the handle was held and allowed it after release, which
-protects only once the real file is held at its real path. A writer of
-`~/.local` that wins two sub-millisecond races (swapping `.local\bin` for a
-junction before the open, then a prepared directory back before the re-check)
-can still get a different `chezmoi.exe` started; the check does not make the
-path tamper-proof.
+or `.local\bin` while the handle was held, and the fixture's rename of
+`.local\bin` succeeded after release. This protects only once the real file
+is held at its real path. A writer of `~/.local` that wins two sub-millisecond
+races (swapping `.local\bin` for a junction before the open, then a prepared
+directory back before the re-check) can still get a different `chezmoi.exe`
+started; the check does not make the path tamper-proof.
 
 W1-chezmoi reports done whenever it finds a working chezmoi at or above the
 floor, including one elsewhere on PATH, so it does not repair what the updater
@@ -479,8 +479,9 @@ but leave the exit code alone. Since H7-native (H7-stow with `--legacy-stow`)
 blocks, every run before the handover (the first stow) exits 3.
 
 Every printed line that runs setup-host or the doctor again (in the
-H1-xcode-clt, H1-homebrew, H2-alloc, S4-nvm, S5-claude and X-recovery blocks;
-on Windows in the HW-clone and HW-auth blocks and W1-winget's PATH warning)
+H1-xcode-clt, H1-homebrew, H1-linuxbrew, H2-alloc, S4-nvm, S5-claude,
+X-recovery and H7-doctor blocks; on Windows in the HW-clone and HW-auth blocks
+and W1-winget's PATH warning)
 keeps your mode: `--legacy-stow` (`-LegacyStow`) when you ran with it. Those
 lines do not repeat a non-default `--tier`; the closing `rerun` warning of
 `setup-host.sh` does.
@@ -1724,7 +1725,7 @@ interactive `claude` or `codex`.
 - **Check:** `ssh -T git@github.com; gh auth status; claude auth status; codex login status`
   (or `./doctor.sh --host H --online`)
 - **Install:**
-  - SSH key: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519` (the stowed ssh config
+  - SSH key: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519` (the dotfiles' ssh config
     uses exactly that file, with `IdentitiesOnly yes`).
   - GitHub: `gh auth login --git-protocol ssh` (browser or device code; it offers
     to upload the public key). Do not run `gh auth setup-git`: it rewrites
@@ -1782,9 +1783,10 @@ selects the items a run without arguments installs and the doctor checks.
   dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
   `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
-  update. In an interactive shell, `sync-payloads [ITEM...]` does the same and
-  `sync-skills` runs only the skills; on a native-owned home they run the
-  bound checkout's script and refuse an invalid binding. An installer's exit 75
+  update. In an interactive shell with the dotfiles applied,
+  `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
+  skills; on a native-owned home they run the bound checkout's script and
+  refuse an invalid binding. An installer's exit 75
   (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
@@ -1957,6 +1959,7 @@ The tracked profiles and scripts are local files, which `RemoteSigned` allows.
 
 ### HW-stow: Elevated stow
 
+Emitted only with `-LegacyStow`; natively, HW-native takes its place.
 `stow-all.ps1` creates the links; links made without elevation can be rejected
 by processes that enforce RedirectionGuard, such as current Windows OpenSSH
 (see the README's Windows section).
@@ -1976,8 +1979,9 @@ by processes that enforce RedirectionGuard, such as current Windows OpenSSH
 
 ### HW-auto-stow-task: Automatic stow task
 
-Optional. The login updater can restow after a pull through a current-user task
-that runs this checkout's scripts with highest privileges.
+Optional, and emitted only with `-LegacyStow`; native updates need no
+scheduled task. The legacy login updater can restow after a pull through a
+current-user task that runs this checkout's scripts with highest privileges.
 
 - **Check:** from `$HOME\dotfiles`:
   `. .\scripts\dotfiles-auto-stow.ps1; Get-DotfilesTaskStatus (Get-DotfilesTaskName $PWD.Path)`
@@ -2231,20 +2235,27 @@ compute its digest (`sha256sum FILE`, macOS `shasum -a 256 FILE`), update its
 
 **Homebrew-installed nvm.** `brew list nvm` succeeds and the doctor's
 `nvm-homebrew` check warns. Run `brew uninstall nvm` and delete the
-`$(brew --prefix nvm)/nvm.sh` lines Homebrew's caveat told you to add (if they
-landed in a stowed rc file, `git -C ~/dotfiles status` shows it; see
-X-rc-protection). Keep `~/.nvm`, whose `versions/` stay usable, then run
-`./setup-host.sh --host mac --only S4-nvm`; the pinned installer turns `~/.nvm`
-into its own checkout.
+`$(brew --prefix nvm)/nvm.sh` lines Homebrew's caveat told you to add (natively
+they are a local change at which the next login update stops; with
+`--legacy-stow` they landed in a stowed rc file, which
+`git -C ~/dotfiles status` shows; see X-rc-protection). Keep `~/.nvm`, whose
+`versions/` stay usable, then run `./setup-host.sh --host mac --only S4-nvm`;
+the pinned installer turns `~/.nvm` into its own checkout.
 
 **`~/.zshrc.pre-oh-my-zsh`.** The upstream oh-my-zsh installer ran: it moved
-your stowed `~/.zshrc` link to `~/.zshrc.pre-oh-my-zsh`, wrote its template
-`~/.zshrc`, and may have changed your login shell. Check with
-`ls -l ~/.zshrc ~/.zshrc.pre-oh-my-zsh`; move the template aside
-(`mv ~/.zshrc ~/.zshrc.omz-template`); remove `~/.zshrc.pre-oh-my-zsh` only if
-it is the link into `~/dotfiles`; then `./stow-all.sh H`, with the
-[H7-stow](#h7-stow-stow-the-dotfiles) prefix when `stow` is not on PATH, and, if
-needed, [H7-chsh](#h7-chsh-login-shell).
+your `~/.zshrc` (natively a regular file, with `--legacy-stow` the Stow link)
+to `~/.zshrc.pre-oh-my-zsh`, wrote its template `~/.zshrc`, and may have
+changed your login shell. Check with `ls -l ~/.zshrc ~/.zshrc.pre-oh-my-zsh`
+and move the template aside (`mv ~/.zshrc ~/.zshrc.omz-template`). On a native
+home, move `~/.zshrc.pre-oh-my-zsh` back to `~/.zshrc` (a nonforce apply
+refuses an absent target it wrote, as it refuses an edited one), review it with
+a private targeted native diff, and apply only that target with the full
+argument set, `--exclude=dirs` and `--force=false`
+([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover));
+never `./stow-all.sh`. With `--legacy-stow`, remove `~/.zshrc.pre-oh-my-zsh`
+only if it is the link into `~/dotfiles`, then run `./stow-all.sh H`, with the
+[H7-stow](#h7-stow-stow-the-dotfiles) prefix when `stow` is not on PATH. Then,
+if needed, [H7-chsh](#h7-chsh-login-shell).
 
 ## Known limitations
 
