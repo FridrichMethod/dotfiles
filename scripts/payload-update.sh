@@ -12,10 +12,10 @@
 # skills), DOTFILES_PAYLOAD_TIMEOUT (seconds per download, default 60).
 #
 # Until Stage 6, any other call does nothing and returns 0, setting no
-# variable or option: rc files read before the pull that ended automatic
-# runs still source this file, directly or through
-# scripts/awesome-skills-update.sh, and an older run may still pass the
-# retired --auto or --worker.
+# variable or option: shells that read their rc files before the pull that
+# ended automatic runs still source this file, and an older run may still
+# pass the retired --auto or --worker. The old
+# scripts/awesome-skills-update.sh entry point is now a no-op of its own.
 
 # Persistent operator maintenance refuses an explicit run too.
 if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then

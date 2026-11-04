@@ -12,8 +12,10 @@ set -euo pipefail
 # printed as HUMAN blocks for a person (or one visible top-level agent
 # command). The only write inside the checkout is .venv-sync, made by
 # ./setup-sync.sh in --legacy-stow compatibility mode. --check writes nothing and makes no network calls.
-# On hpc, both login and AI-sync envs build only inside an allocation and
-# outside SCRATCH/GROUP_SCRATCH; an existing login env does not bypass this.
+# On hpc, the login env (and, with --legacy-stow, the AI-sync env) builds only
+# inside an allocation and outside SCRATCH/GROUP_SCRATCH. Natively an existing
+# login env needs no allocation; with --legacy-stow it does not bypass the
+# AI-sync env's allocation.
 # Exit: 0 every selected step done (non-blocking HUMAN reminders may still
 # print), 1 a step failed, 2 usage or refusal (also as root, or on a machine
 # that is not HOST), 3 work remains: a blocking HUMAN step pending, or auto
