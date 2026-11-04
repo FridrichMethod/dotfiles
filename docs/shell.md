@@ -92,7 +92,10 @@ On Marlowe only the login env's tmux (3.6a) meets the floor. A non-interactive
 shell there, such as `ssh marlowe-plain tmux ...`, finds `/usr/bin/tmux` 3.2a,
 which rejects the 3.4 options, and a 3.2a server sharing the default socket
 with a 3.6a client can fail to talk to it. Start tmux from an interactive login
-shell.
+shell. For the same reason a non-interactive doctor there, such as
+`ssh marlowe-plain 'cd ~/dotfiles && ./doctor.sh'`, reports tmux 3.2a as
+`outdated` and exits 1: run the doctor from an interactive login shell
+(`ssh marlowe`), where it finds 3.6a.
 
 Without any plugin, the native settings use Catppuccin's Mocha colors:
 transparent status background, mauve active pane borders, centered windows,

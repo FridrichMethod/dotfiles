@@ -2097,7 +2097,8 @@ quick start runs them as one sequence.
 - **Install:** with the distribution's package manager, the equivalents of
   [`apt/common.txt`](../config/bootstrap/apt/common.txt) and the Brewfile tools,
   meeting every floor in [`tools.tsv`](../config/bootstrap/tools.tsv) (distro
-  fzf, eza and gh are often older), and the `en_US.UTF-8` locale (`locale-gen`
+  fzf, eza, gh and tmux are often older; for tmux see
+  [Known limitations](#known-limitations)), and the `en_US.UTF-8` locale (`locale-gen`
   or `localedef`, as the distribution does it); or install Homebrew on Linux
   yourself and run
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1 brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade`
@@ -2320,6 +2321,17 @@ fail-closed behavior beyond what is stated.
   `./setup-sync.sh --python` with it
   ([S4-setup-sync](#s4-setup-sync-ai-sync-runtime)). The doctor's `python3`
   row still points at H1-apt-core, which cannot raise the version.
+- **Some distributions' tmux is below the 3.4 floor.** apt installs tmux
+  3.2a on Ubuntu 22.04 and 3.3a on Debian 12, and RHEL 9's packages carry
+  3.2a, so the doctor's `tmux` row is `outdated` and points at H1-apt-core
+  (or X-other-linux), which cannot raise it, and the shared config rejects
+  its 3.4 options when it loads. Provide tmux 3.4 or newer yourself: a newer
+  distribution release (Ubuntu 24.04 ships 3.4), conda-forge's `tmux` in a
+  user env, as the HPC login env does, or Homebrew's (`brew install tmux`;
+  the Linux Brewfiles leave it out). Keep the newer one first on PATH in every
+  shell that starts or attaches tmux: a server and a client of different
+  versions sharing the default socket can fail to talk (the
+  [Marlowe note](shell.md#tmux)).
 - **Windows Terminal re-serializes its stowed settings.** Terminal saves
   `settings.json` back through the [HW-stow](#hw-stow-elevated-stow) link
   whenever the file it loads is not in its own form, which leaves the clone
