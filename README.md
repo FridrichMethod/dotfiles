@@ -237,7 +237,9 @@ pre-commit run --hook-stage manual gitleaks-history
 
 Tests use isolated homes and fakes. Native macOS and Windows jobs provide
 platform evidence, and Linux CI runs the real-tmux tests with Ubuntu 24.04's
-tmux 3.4, the floor; local skips do not establish native behavior. The
+tmux 3.4, the floor, and fails if they would skip
+(`DOTFILES_TEST_REQUIRE_TMUX=1`); local skips do not establish native
+behavior. The
 [testing guide](docs/testing.md) explains prerequisites, focused suites, CI,
 optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.

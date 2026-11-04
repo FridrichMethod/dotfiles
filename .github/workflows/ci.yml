@@ -15,6 +15,10 @@ jobs:
     name: Linux behavior and lint
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # This is the only job with a real tmux (apt's 3.4): its cases must fail,
+    # not skip unseen inside the pre-commit pass, if tmux goes missing.
+    env:
+      DOTFILES_TEST_REQUIRE_TMUX: "1"
     steps:
       # Full depth, every branch and tag, for the gitleaks history scan.
       - uses: actions/checkout@v6
