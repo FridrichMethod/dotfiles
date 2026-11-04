@@ -15,11 +15,17 @@ regex = '''\b(sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_\-]{32,})'''
 keywords = ["sk-ant-"]
 
 # claude-as reads its tokens from ~/.secrets; no file under a .secrets
-# directory belongs in this public repository, whatever it contains.
+# directory belongs in this public repository, whatever it contains. The
+# native source encodes that directory as [attribute_]dot_secrets/; only the
+# eight age ciphertexts of the approved static scope may live there.
 [[rules]]
 id = "secrets-directory"
-description = "File under a .secrets directory"
-path = '''(^|/)\.secrets/'''
+description = "File under a .secrets directory or its native source encoding"
+path = '''(^|/)(\.secrets|((remove|external|exact|private|readonly)_)*dot_secrets)/'''
+
+[[rules.allowlists]]
+description = "Approved native age ciphertexts"
+paths = ['''^home/private_dot_secrets/encrypted_private_claude-[a-z0-9]+\.age$''']
 
 # Exact values the defaults flag that are not secrets: the public GitHub CLI
 # apt signing-key fingerprints quoted in the bootstrap pins and docs, and the
