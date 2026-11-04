@@ -87,7 +87,9 @@ class WriterGuardTests(unittest.TestCase):
         # guard and hook never run; an invalid marker refuses before any hook;
         # maintenance surfaces the bound hook's own refusal before any state.
         # tests/shell-profile.sh covers an unmarked home's DOTFILES_DIR.
-        shells = [shell for shell in ("sh", "bash", "zsh") if shutil.which(shell)]
+        # Absolute paths: the children run with PATH=os.defpath, which may lack a
+        # shell found here (an HPC login env provides zsh).
+        shells = {name: path for name in ("sh", "bash", "zsh") if (path := shutil.which(name))}
         refusal = "[dotfiles] [error] Native home binding is invalid; payload update refused.\n"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -113,7 +115,7 @@ class WriterGuardTests(unittest.TestCase):
 
             def run(shell):
                 trace.unlink(missing_ok=True)
-                result = subprocess.run([shell, *(["-f"] if shell == "zsh" else []), "-c", code,
+                result = subprocess.run([shells[shell], *(["-f"] if shell == "zsh" else []), "-c", code,
                                          "aliases", str(ROOT / "common/sh/.aliases")],
                                         env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                         text=True, timeout=15)
