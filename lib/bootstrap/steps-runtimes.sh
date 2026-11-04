@@ -153,7 +153,7 @@ steps_nvm_block() {
         printf 'git -C %s fetch --depth=1 https://github.com/nvm-sh/nvm.git %s\n' "$q" "$2"
         printf 'git -C %s -c advice.detachedHead=false checkout --detach %s\n' "$q" "$2"
     fi
-    printf '# then run ./setup-host.sh --host %s again\n' "$STEPS_HOST"
+    printf '# then run ./setup-host.sh --host %s%s again\n' "$STEPS_HOST" "$(steps_mode_flag)"
     steps_block_end
 }
 

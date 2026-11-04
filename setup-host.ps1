@@ -545,7 +545,8 @@ function Invoke-SetupStep {
             Update-BootstrapSessionPath
             $missing = @(Get-SetupMissingNames @(Get-SetupStepRows W1-winget))
             if ($missing.Count) {
-                Write-DotfilesLog warn "W1-winget: not on this session's PATH yet: $($missing -join ', '); open a new shell, then run .\doctor.ps1"
+                $doctorFlag = if ($LegacyStow) { ' -LegacyStow' } else { '' }
+                Write-DotfilesLog warn "W1-winget: not on this session's PATH yet: $($missing -join ', '); open a new shell, then run .\doctor.ps1$doctorFlag"
             }
             return $result
         }

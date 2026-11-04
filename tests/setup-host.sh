@@ -242,8 +242,7 @@ run_native_case() {
     CASE_FLAGS=(--legacy-stow)
 }
 
-# stow_mentions NAME: lines of NAME's stderr, and of its HUMAN blocks other
-# than H7-payloads (its wording waits on the payload decision), that name
+# stow_mentions NAME: lines of NAME's stderr and HUMAN blocks that name
 # Stow. The fixture paths are removed first: a random mktemp suffix or a
 # TMPDIR could spell "stow" by chance.
 stow_mentions() {
@@ -252,8 +251,8 @@ stow_mentions() {
             while ((i = index(s, tmp)) > 0) s = substr(s, 1, i - 1) substr(s, i + length(tmp))
             return s
         }
-        /^HUMAN-BEGIN / { inside = 1; skip = ($2 == "H7-payloads") }
-        (FILENAME ~ /[.]err$/ || (inside && !skip)) && tolower(strip($0)) ~ /stow/ { print FILENAME ": " $0 }
+        /^HUMAN-BEGIN / { inside = 1 }
+        (FILENAME ~ /[.]err$/ || inside) && tolower(strip($0)) ~ /stow/ { print FILENAME ": " $0 }
         /^HUMAN-END$/ { inside = 0 }
     ' "$TEST_TMP/$1.out" "$TEST_TMP/$1.err"
 }
@@ -1899,6 +1898,7 @@ expect_no_events nvm-foreign-check
 run_case nvm-foreign -- --host lab-ubuntu --yes --only S4-nvm
 expect_rc nvm-foreign 3
 expect_line nvm-foreign 'HUMAN-BEGIN S4-nvm judgment'
+expect_line nvm-foreign '# then run ./setup-host.sh --host lab-ubuntu --legacy-stow again'
 expect_no_event 'nvm-sourced'
 expect_no_event 'nvm:'
 expect_no_event "curl:$URL_NVM"
