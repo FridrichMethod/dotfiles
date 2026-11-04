@@ -91,11 +91,8 @@ The Windows equivalent of S4-chezmoi verifies the pinned ZIP and extracts only
 `chezmoi.exe` to `~/.local/bin`. It hashes and extracts through one read-only
 handle and writes the file with an explicit protected DACL (FullControl for
 you, SYSTEM and Administrators, nothing inherited) before renaming it into
-place, replacing a regular file. It needs PowerShell 7.1 or newer: the
-`FileSystemAclExtensions.Create` overload that takes an access list is .NET 5,
-and PowerShell 7.0 runs on .NET Core 3.1, so on 7.0 it stops before downloading
-with a message naming 7.1. A link at `chezmoi.exe`, `.local\bin` or `.local`
-also stops it before downloading, for inspection. Dotfiles never
+place, replacing a regular file. A link at `chezmoi.exe`, `.local\bin` or
+`.local` stops it before downloading, for inspection. Dotfiles never
 changes the ACL of `~/.local` or `~/.local/bin`. Bootstrap and doctor search
 this directory explicitly, before PATH; use the full executable path when
 invoking chezmoi manually. No permanent PATH or profile edit, elevation or
@@ -503,7 +500,7 @@ lines do not repeat a non-default `--tier`; the closing `rerun` warning of
 The Windows twins take the same ideas as PowerShell parameters:
 `.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
 `.\setup-host.ps1 [-Host win] [-Tier LIST] [-Check] [-Yes] [-PrintManual] [-WhatIf]`
-(`-Host` defaults to `win`). Both need PowerShell 7 (W1-chezmoi 7.1 or newer)
+(`-Host` defaults to `win`). Both need PowerShell 7
 and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
 an invalid manifest; its structural checks are `native-config` (with

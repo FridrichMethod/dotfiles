@@ -12,10 +12,8 @@ directory modes; use the corrected file-only procedure below.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 3.4, PowerShell 7 entrypoints
-and PowerShell 5.1's existing profile remain supported at their current floors;
-W1-chezmoi, which provides the Windows `chezmoi.exe`, and `sync-payloads`
-downloads need PowerShell 7.1 or newer; on 7.0 both stop at once with a
-message naming 7.1. Use separate native Windows and WSL
+and PowerShell 5.1's existing profile remain supported at their current floors
+(W1-chezmoi and `sync-payloads` included). Use separate native Windows and WSL
 homes/checkouts. An independent local clone is required for Git writes when the
 installed checkout is under OneDrive.
 

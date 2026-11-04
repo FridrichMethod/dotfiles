@@ -209,13 +209,10 @@ foreground, an unknown item failing the run, exit 75 no failure, the
 PowerShell 7) and the `person-status` wording. It exits 1 when an item failed
 and 0 otherwise, so `$LASTEXITCODE` is the run's status, not an installer's.
 Under maintenance a `-Now` run warns
-`dotfiles: payload update refused during maintenance.` and exits 1. A `-Now`
-run needs PowerShell 7.1 or newer: its private download directory uses a
-.NET 5 API that PowerShell 7.0 (.NET Core 3.1) lacks, so on 7.0 it prints one
-line naming 7.1 and exits 1 before anything runs. Until
+`dotfiles: payload update refused during maintenance.` and exits 1. Until
 Stage 6 a call without `-Now` (an older
 profile's call without arguments, or an older run's `-Auto` or `-Worker`)
-returns at once, on any version.
+returns at once.
 
 Run it and the functions below from an ordinary PowerShell: an installer run
 elevated would leave its git clone owned by Administrators, which Git then

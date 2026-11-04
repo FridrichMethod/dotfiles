@@ -103,8 +103,9 @@ exe or a junction at `.local\bin` or `.local` each print one warning, naming
 `docs/bootstrap.md W1-chezmoi` and no SID, and apply nothing. A unit case,
 loading only `lib/chezmoi-guard.ps1` (which also loads under Windows
 PowerShell 5.1), accepts foreign read and deny entries and OWNER RIGHTS but
-not a foreign owner or append right, a null DACL or an object ACE, which
-.NET's access rules would skip. A fixture records that NTFS refuses renaming
+not a foreign owner or append right, a null DACL, or an object, compound or
+custom ACE (even for you), which .NET's access rules would skip. A fixture
+records that NTFS refuses renaming
 `.local\bin` and `.local` while the updater's read handle on the exe is open
 and allows renaming `.local\bin` after release (observed on the elevated
 hosted `windows-2025` runner). That narrows the swap window, not closes it:
@@ -177,10 +178,8 @@ a stale `DOTFILES_DIR` checkout or its guard; only an unmarked home uses
 `DOTFILES_DIR`; six invalid markers, two linked ones (dangling or to a valid
 marker, where a symbolic link can be made) and a bound source without its
 guard refuse without running a hook; a checkout without the hook fails with
-exit 1; maintenance surfaces the real hook's refusal, and the real hook with
-its PowerShell 7.1 floor raised past the running version refuses `-Now` at
-once while calls without `-Now` stay silent; the hook's exit status passes
-through, and one that ends without `exit` reports 0, not the caller's
+exit 1; maintenance surfaces the real hook's refusal; the hook's exit status
+passes through, and one that ends without `exit` reports 0, not the caller's
 `$LASTEXITCODE`.
 It unit-tests the history filter in both directions, the eza glob expansion
 and the `$LASTEXITCODE` prompt wrapper,
@@ -272,8 +271,8 @@ Windows those cases give the fixture home a private copy of the real chezmoi
 (`DOTFILES_TEST_CHEZMOI`, else PATH's) as `~/.local/bin/chezmoi.exe`, and a
 PATH-only chezmoi, a copy other users may modify and a junctioned
 `~/.local/bin` each make `native-config` `human` and W1-chezmoi todo, with no
-writes. W1-chezmoi stops before downloading below PowerShell 7.1 (a stand-in
-version check) and under a linked `.local` or `.local/bin`. Its other
+writes. W1-chezmoi stops before downloading under a linked `.local` or
+`.local/bin`. Its other
 W1-chezmoi case swaps the archive right after the by-path hash check and
 requires a sha256 mismatch with nothing installed, then a clean install that
 leaves only `chezmoi.exe`, whose DACL on Windows must be protected and grant
