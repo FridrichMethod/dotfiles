@@ -12,9 +12,11 @@ directory modes; use the corrected file-only procedure below.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 3.4, PowerShell 7 entrypoints
-and PowerShell 5.1's existing profile remain supported at their current floors.
-Use separate native Windows and WSL homes/checkouts. An independent local clone
-is required for Git writes when the installed checkout is under OneDrive.
+and PowerShell 5.1's existing profile remain supported at their current floors;
+W1-chezmoi, which provides the Windows `chezmoi.exe`, needs PowerShell 7.1 or
+newer and fails closed on 7.0. Use separate native Windows and WSL
+homes/checkouts. An independent local clone is required for Git writes when the
+installed checkout is under OneDrive.
 
 ## Prepare the reviewed bridge
 
@@ -48,10 +50,11 @@ Inspect the checkout's exact `git rev-parse --git-path dotfiles-sync-unix.lock`
 and its `pid`, then match owner, start time, full command and ancestry. A PID by
 itself may be stale/reused. Let the identified updater finish; do not kill an
 unrelated process. Payload `--worker` / `-Worker` processes exist only if
-pre-Stage-5 code started them before the checkout reached Stage 5, whose hook
-ignores those switches. Inspect any such command line and its exact source
-checkout too: payload workers have no consumer lock. Recheck after waiting. A
-marker prevents new runs; it cannot cancel one already executing.
+pre-Stage-5 code started them before the checkout reached Stage 5, whose
+payload-update script ignores those switches. Inspect any such command line
+and its exact source checkout too: payload workers have no consumer lock.
+Recheck after waiting. A marker prevents new runs; it cannot cancel one already
+executing.
 
 On Windows, dot-source `scripts/dotfiles-auto-stow.ps1` without switches and use
 `Get-DotfilesTaskName -Repo $source`. Inspect that exact task's principal, action
@@ -147,9 +150,9 @@ following paths are fixed by the adapter contract, independent of XDG overrides:
 Run `init` with the explicit source, destination, config, cache and state arguments
 below. It uses the repository template to set the chosen role, source/destination,
 the bound state database (`persistentState`, always
-`<destination>/.local/state/chezmoi/chezmoi.boltdb`, with case variants folded
-into it), regular-file mode, disabled Git auto-add/commit/push and the tested
-fast-forward-only update command.
+`<destination>/.local/state/chezmoi/chezmoi.boltdb`, with a case variant folded
+into it; two variants make init refuse), regular-file mode, disabled Git
+auto-add/commit/push and the tested fast-forward-only update command.
 The template preserves local age/backend/data and unrelated settings through
 native TOML, including repeated init. It canonicalizes formatting and refuses
 local TOML date/time/datetime before changing the config, just as the Codex
@@ -183,7 +186,8 @@ entries. There is no effective equivalent configuration key in the tested
 release; bare `chezmoi apply` is not this procedure.
 Keep `--force=false` explicit on all non-conversion commands, including directory
 preparation, regular/full apply and diff; preserved local config may set force.
-Only an individually reviewed link conversion replaces it with `--force=true`.
+Only an individually reviewed link conversion, or the reviewed one-file
+reconcile below, replaces it with `--force=true`.
 
 Before file apply, obtain the exact native directory set with the same explicit
 arguments and `managed --include=dirs --nul-path-separator`. Inspect each path
@@ -213,7 +217,9 @@ whole home. Native failures may leave earlier targets changed; keep both markers
 Once every target is reviewed, run full `apply --exclude=dirs` with the same
 arguments, then run it again and require an empty nonsecret targeted
 `diff --exclude=dirs`. On Windows invoke `~/.local/bin/chezmoi.exe` by full
-path with the equivalent argument array using PowerShell without elevation,
+path (if it is absent, follow
+[W1-chezmoi](../bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary) first)
+with the equivalent argument array using PowerShell without elevation,
 with closed stdin. Keep successful old SSH access until a genuinely fresh
 ordinary connection passes; site/MFA master-only checks retain their documented
 limit.
@@ -222,7 +228,7 @@ Run applicable shell/profile/application and fresh-access checks while maintenan
 is active. A headless SSH command is not a GUI reload check. Then remove the exact
 maintenance file for controlled activation and test the thin updater from a fresh
 interactive process with `DOTFILES_AUTO_UPDATE` enabled and `_DOTFILES_CHECKED`
-unset; no login starts a payload run. A call skipped by maintenance or an
+unset; no Stage 5 login starts a payload run. A call skipped by maintenance or an
 opt-out proves only suppression. Inspect warnings and actual
 source/state/target outcomes: the adapter intentionally preserves a usable shell
 exit status on failure. Restore maintenance immediately if activation fails.
@@ -260,9 +266,10 @@ the config; the login updaters pass every one. On Windows invoke
 `~/.local/bin/chezmoi.exe` by full path, never `chezmoi` through PATH; the login
 updater uses only that file and skips with a warning naming
 [W1-chezmoi](../bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary) when it
-is missing, linked or not private.
+is missing, linked, or owned or writable by an account other than you, SYSTEM
+and Administrators.
 
-`home/.chezmoi.toml.tmpl` owns `persistentState`; a host picks it up only
+`home/.chezmoi.toml.tmpl` owns `persistentState`; a host must pick it up only
 through a reviewed re-run of the init command above. Until then manual native
 commands print `config file template has changed`, which is harmless; do not
 answer it with a plain `chezmoi init`. Before the re-init, a command without the
@@ -273,8 +280,14 @@ changed-since-last-write refusal and later stall the login updater. After
 the re-init, plain commands share the bound config, source, destination and
 state database, and plain read-only checks (`status --exclude=dirs`,
 `diff --exclude=dirs`, `managed`, `data`, `execute-template`) need no path
-flags. The doctor's native-config row warns, offline, while that
-`chezmoistate.boltdb` exists; it never removes the file.
+flags; keep `--force=false` on diff.
+
+On an otherwise healthy bound home, the doctor's native-config row warns,
+offline, while that `chezmoistate.boltdb` exists; it never removes the file.
+To clear the warning, privately record the file's sha256, mode and owner, run
+the reviewed re-init, require both full-argument and plain
+`status --exclude=dirs` to be empty, then move the file into a private record
+directory; never delete it.
 
 The update invocation also pins `--exclude=dirs` to preserve shared parent modes
 and ACLs. New files under existing prepared parents can update automatically.
@@ -287,10 +300,11 @@ full file convergence after preparing the exact missing directories.
 `DOTFILES_AUTO_UPDATE=0` disables native login updates. `DOTFILES_AUTO_STOW` and
 `DOTFILES_HOST` remain legacy-only. Payloads are explicit-only (Stage 5 decision
 D7): no login, profile or schedule installs or refreshes them, and
-`DOTFILES_PAYLOAD_AUTO_UPDATE` is inert. `sync-payloads [ITEM...]` runs the
-payload hook of the validated bound source in the foreground and refuses an
-invalid binding; maintenance refuses it too. No new scheduler, revision
-acknowledgement database or background supervisor is introduced.
+`DOTFILES_PAYLOAD_AUTO_UPDATE` is inert. `sync-payloads [ITEM...]` runs
+`scripts/payload-update.sh --now` (Windows: `payload-update.ps1 -Now`) from the
+validated bound source in the foreground and refuses an invalid binding;
+maintenance refuses it too. No new scheduler, revision acknowledgement database
+or background supervisor is introduced.
 
 Regular-file edits no longer write through to Git. During the bridge, ordinary
 portable edits belong in the canonical legacy source and then native apply.
