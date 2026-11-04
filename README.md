@@ -206,7 +206,7 @@ validated bound source and refuses an invalid binding; only unmarked homes use
 `DOTFILES_DIR`. Exit 75 (another run holds the repository's lock) is no
 failure. Exit 3 for configured person-status items requires following the
 upstream installer's message; locally edited PyMOL rc files are preserved.
-Other failures print a retry line, and the run exits 1. This remains two
+Exit 3 and other failures print a retry line, and the run exits 1. This remains two
 rolling PyMOL rc copies, not a version manager. Downloads are bounded and run
 from fresh private staging directories, never from a pipe. See the
 [payload contract](docs/payloads.md) for bounds, selection, trust and exact
