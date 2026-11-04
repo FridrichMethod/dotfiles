@@ -70,7 +70,18 @@ Follow [takeover.md](chezmoi-migration/takeover.md). Provisioning does not own t
 operation and prints no blanket apply command. A valid native binding matching
 this checkout and regular local config, with maintenance absent, satisfies the
 bootstrap handoff check; it does not substitute for the procedure's native diff,
-second apply or application checks.
+second apply or application checks. Run from another checkout (a worktree or a
+second clone), setup-host keeps H7-native pending.
+
+The doctor's `native-config` row names the cause. `ok`: that handoff state.
+`warn`, which does not fail the run: the home is bound to another checkout,
+whose doctor it names, or `~/.config/chezmoi/chezmoistate.boltdb` exists, a
+separate state database that a chezmoi command without the updater's full
+explicit argument set wrote (run every manual native command with that set, as
+takeover.md says; the doctor never removes the file, and setup-host still
+counts H7-native done). `human`: active maintenance, a missing or invalid
+binding, an absent or linked local config, or no readable
+`lib/chezmoi-guard.sh` in this checkout.
 
 ### W1-chezmoi: Windows native chezmoi binary
 
@@ -83,8 +94,12 @@ No permanent PATH or profile edit, elevation or scheduled task is performed.
 
 Follow [takeover.md](chezmoi-migration/takeover.md), including actual
 CurrentUserAllHosts discovery in both shells and ordinary-user destination ACL
-checks. The new regular-file path needs no elevated restow task. HW-stow and
-HW-auto-stow-task are emitted only with `-LegacyStow`.
+checks. Native regular-file updates need no elevation or scheduled task. HW-stow
+and HW-auto-stow-task are emitted only with `-LegacyStow`. `doctor.ps1`'s
+`native-config` row gives the verdicts of
+[H7-native](#h7-native-reviewed-native-configuration-handover), with
+`lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the bound
+checkout counts as that checkout.
 
 ## Legacy quick start
 
@@ -300,19 +315,26 @@ exec zsh -l
 ./doctor.sh --help
 ```
 
-`--list` resolves the host like every other mode: without `--host` or
-`--platform` it needs `DOTFILES_HOST` or a host `./stow-all.sh` recorded for
-this home, and exits 2 otherwise (for example in a fresh clone or a linked
-worktree). Common only, as the login updater reads it, is either a
-`DOTFILES_HOST` that is set but empty or, without `DOTFILES_HOST`, a
-common-only install that `./stow-all.sh` (no host argument) recorded for this
-home and kernel: the doctor then checks the platform it detects (`macos`,
-`debian`, `hpc` or `other`) without an overlay, exactly as `--platform` would,
-and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
+`--list` resolves the host like every other mode, and `--host` or `--platform`
+always wins. On a native-owned home (one with `~/.config/dotfiles/native`, in
+any form) the host is the one quoted `host` line of the `[data]` table in
+`~/.config/chezmoi/chezmoi.toml`, read as text, without chezmoi or git;
+`DOTFILES_HOST` and the host `./stow-all.sh` recorded are legacy only and not
+read there. A missing, repeated, unknown or otherwise spelled role, or a linked
+or absent config, exits 2 asking for `--host`. On any other home it needs
+`DOTFILES_HOST` or a host `./stow-all.sh` recorded for this home, and exits 2
+otherwise (for example in a fresh clone or a linked worktree). Common only is
+`common-only` as that `[data].host`, or elsewhere, as the legacy login updater
+reads it, either a `DOTFILES_HOST` that is set but empty or, without
+`DOTFILES_HOST`, a common-only install that `./stow-all.sh` (no host argument)
+recorded for this home and kernel: the doctor then checks the platform it
+detects (`macos`, `debian`, `hpc` or `other`) without an overlay, exactly as
+`--platform` would, and warns that it did. An empty `DOTFILES_HOST` also
+overrides a recorded host.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) means the detected platform without an overlay. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a native-owned home its `[data].host`; elsewhere `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; common only (`common-only` as that `[data].host`, a set but empty `DOTFILES_HOST`, or a recorded common-only install) means the detected platform without an overlay. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
@@ -326,15 +348,15 @@ for example `[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md S2-
 `ok` and `skip` rows end at the detail. Without `--tsv`, a summary line with
 the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
-`tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
-`submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order`,
-`nvm-homebrew` and `payloads`. Dotfiles has no submodules: `submodule` warns
-while a `.gitmodules` exists or a retired submodule checkout is still in the
-clone, naming for each how to check that it holds no work and the `rm -rf`
-that removes it ([leftover checkouts](payloads.md#leftover-checkouts)); it
-never deletes anything. `payloads` warns, never fails, while an item of
+`tools.tsv` rows the doctor runs structural checks: `locale`, `native-config`,
+`path-order`, `rc-pollution`, `omz-order`, `nvm-homebrew` and `payloads`; with
+`--legacy-stow`, `venv-sync` and `stow-links` instead of `native-config`.
+`native-config` names the state of this home's native binding by cause
+([H7-native](#h7-native-reviewed-native-configuration-handover)). `payloads`
+warns, never fails, while an item of
 `DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
-installed kit lacks a Claude helper ([H7-payloads](#h7-payloads-payload-repos)).
+installed kit lacks a Claude helper, and names `sync-payloads ITEM`
+([H7-payloads](#h7-payloads-payload-repos)).
 The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
@@ -361,7 +383,7 @@ at HW-clone).
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor; `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) exits 2 asking for `--host` |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (a native-owned home's `[data].host`; `DOTFILES_HOST` is legacy only); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and common only (`common-only` as that `[data].host`, a set but empty `DOTFILES_HOST`, or a recorded common-only install) exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |
@@ -405,7 +427,7 @@ because wget follows a redirect to plain http.
 | --- | --- |
 | 0 | Done: every selected step is done or does not apply; non-blocking HUMAN blocks may still be printed |
 | 1 | A step failed |
-| 2 | Usage error or refusal: unknown host (or none: no `--host`, an empty `DOTFILES_HOST`, nothing recorded), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
+| 2 | Usage error or refusal: unknown host (or none: no `--host`, a native config without one known `[data].host`, an empty `DOTFILES_HOST`, nothing recorded), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
 | 3 | Work remains: a blocking HUMAN step is pending, or automatic steps are still to apply (under `--check`, after a declined prompt, or while they wait on a HUMAN step); handle the printed blocks and run it again |
 
 `--list` shows which HUMAN steps block. A pending blocking step (Xcode CLT,
@@ -429,11 +451,12 @@ The Windows twins take the same ideas as PowerShell parameters:
 (`-Host` defaults to `win`). Both need PowerShell 7 and never elevate
 themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
-an invalid manifest; its structural checks are `venv-sync`, `submodule` and
-`payloads`, and `-Online` reports a signed-out tool as `warn`, as on Unix
-(its auth probes, too, may write the tools' own state).
-`.\setup-host.ps1` exits 3 while HW-clone or HW-stow is pending; the other HW
-blocks are printed but leave the exit code alone. Its `-Check` prints only
+an invalid manifest; its structural checks are `native-config` (with
+`-LegacyStow`, `venv-sync`) and `payloads`, and `-Online` reports a signed-out
+tool as `warn`, as on Unix (its auth probes, too, may write the tools' own
+state). `.\setup-host.ps1` exits 3 while HW-clone or HW-native is pending
+(HW-clone or HW-stow with `-LegacyStow`); the other HW blocks are printed but
+leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
 ending in `blocks completion` or `does not block`) and, like the Unix
 `--check`, exits 3 while a step is todo, so a `-Check` that exits 0 has
@@ -499,8 +522,9 @@ kind.
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
   `nvim` and `pre-commit` rows are presence-only; S2-brew-bundle probes a
   Brewfile's tools with the same function), finds fonts by file name
-  instead of through `fc-list` (which creates fontconfig caches), and runs the
-  `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Both Unix
+  instead of through `fc-list` (which creates fontconfig caches), and, with
+  `--legacy-stow`, runs the `venv-sync` interpreter with `-I -B`, so it writes
+  no bytecode. Both Unix
   scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
   them around each probe and restore yours): recent gh releases otherwise write
   `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
@@ -514,8 +538,8 @@ kind.
   the Unix scripts use no here-documents or here-strings, which macOS's Bash
   3.2 backs with files in the system temporary directory.
   `tests/doctor.sh` runs the real doctor with the real manifest on the machine
-  running the tests (`--platform debian` and `other`, an empty `HOME`) and
-  checks that it changed nothing.
+  running the tests (`--platform debian` and `other`, an empty `HOME`), in the
+  native default and with `--legacy-stow`, and checks that it changed nothing.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
   `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
   rc file. The only write it causes inside the checkout is `.venv-sync`, through
@@ -728,18 +752,20 @@ have a minimum), the overlay the person chose, and a complete checkout.
 - **Check:** `uname -sm; cat /etc/os-release 2>/dev/null || sw_vers; ldd --version 2>/dev/null | head -n 1; git -C ~/dotfiles status --porcelain`
 - **Install:** `git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles`
   (the login hooks default to `DOTFILES_DIR=$HOME/dotfiles`). The checkout has
-  no submodules; the payload repos install later, through their own
-  installers ([H7-payloads](#h7-payloads-payload-repos)).
-- **Verify:** the status is empty and the doctor's `submodule` check is `ok`.
-  setup-host's P0-preflight line records the OS, architecture, glibc and
-  detected platform, and warns about a `DOTFILES_DIR` that names another
-  checkout or uncommitted changes in the checkout
+  no submodules; the payload repos install only when you run them, through
+  their own installers ([H7-payloads](#h7-payloads-payload-repos)).
+- **Verify:** the status is empty. setup-host's P0-preflight line records the
+  OS, architecture, glibc and detected platform, and warns about a
+  `DOTFILES_DIR` that names another checkout or uncommitted changes in the
+  checkout: the native login update does not run from a checkout with
+  uncommitted changes, and with `--legacy-stow` an installer that appends to a
+  stowed rc file edits the checkout
   ([X-rc-protection](#x-rc-protection-rc-file-protection)). On an older clone
-  a `submodule` warning names a retired submodule checkout that a pull left
-  behind (`common/codex/coding-agent-kit`,
+  `git -C ~/dotfiles status --porcelain --ignored -- common` lists the retired
+  submodule checkouts a pull left behind (`common/codex/coding-agent-kit`,
   `common/coding-agent-kit/coding-agent-kit`, `common/pymol/PyMOLScripts`,
-  `common/sherlock-kit/sherlock-kit`): it is harmless, and once it holds no
-  work of yours, run the `rm -rf` the warning prints
+  `common/sherlock-kit/sherlock-kit`): they are harmless, nothing reports or
+  removes them, and once one holds no work of yours you can delete it by hand
   ([leftover checkouts](payloads.md#leftover-checkouts)).
 - **Human:** yes (judgment: the person names the host overlay, and a clone
   outside `~/dotfiles` also needs `DOTFILES_DIR` exported; setup-host prints no
@@ -1738,8 +1764,9 @@ elevated command is the person's.
 ### HW-clone: Clone the repository
 
 The checkout tracks no symlink, so Git for Windows needs neither
-`core.symlinks` nor Developer Mode; the links in your home are what the
-elevated HW-stow creates. The login updater pulls the checkout, so it must be
+`core.symlinks` nor Developer Mode; the native handover writes regular files,
+and with `-LegacyStow` the links in your home are what the elevated HW-stow
+creates. The login updater pulls the checkout, so it must be
 a git clone, not an extracted archive.
 
 - **Check:** `Test-Path $HOME\dotfiles\.git; git -C $HOME\dotfiles status --porcelain`
@@ -1758,8 +1785,8 @@ a git clone, not an extracted archive.
   (`winget show --id Microsoft.PowerShell -e --versions` lists them).
   Clone onto NTFS, never into a WSL distribution. An older clone made with
   `core.symlinks` and `--recurse-submodules` needs nothing: its leftover
-  submodule checkouts are harmless, and the doctor's `submodule` row prints
-  how to remove them ([leftover checkouts](payloads.md#leftover-checkouts)).
+  submodule checkouts are harmless
+  ([leftover checkouts](payloads.md#leftover-checkouts)).
 - **Verify:** `Test-Path` prints `True` and the status is empty.
 - **Human:** yes (judgment: the person installs Git and PowerShell 7 and
   clones before `setup-host.ps1` can run from the clone; it blocks on this
