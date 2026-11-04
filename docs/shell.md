@@ -59,7 +59,10 @@ LASTEXITCODE, which zoxide's directory tracking can reset. The tracked theme
 lives under win/oh-my-posh, uses a release-tagged schema and ASCII glyph escapes,
 and supports shell integration/transient prompts. Re-render it after upgrades.
 Windows Terminal settings remain a Stow symlink; UI saves follow it, but a
-Terminal restart is required for changes to load. See [Windows installation](windows-installer.md).
+Terminal restart is required for changes to load. Since v1.10.2383.0 Terminal
+resolves the link before its atomic save
+(`til::io::write_utf8_string_to_file_atomic`), so the save writes through it;
+the same rename would sever a hard link. See [Windows installation](windows-installer.md).
 
 ## Lab input settings
 

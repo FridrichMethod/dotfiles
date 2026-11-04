@@ -40,7 +40,8 @@ from this checkout, stop and say so.
 7. Exit 3 means work remains: a blocking HUMAN block is pending, or steps are
    still to apply. Re-run step 5 after each block until H7-native is the only one
    left.
-8. Review H7-payloads before starting a new login. Follow the H7-native block
+8. Run the H7-payloads line only if the person wants the payload repos now;
+   no login installs them. Follow the H7-native block
    and `docs/chezmoi-migration/takeover.md`: explicit local host data, native
    paths, quiescence, private backups and the home-bound writer signal. Do not
    improvise `init --apply` or force a whole home. setup-host only provisions
@@ -58,8 +59,11 @@ Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 
 Native mode is the default and installs the verified chezmoi release without
 creating `.venv-sync` or running setup-sync. Doctor checks the native binding
-and tool, without requiring the Stow/parser runtime. It remains offline and
-write-free; native diff/apply is a separate operation.
+and tool, without requiring the Stow/parser runtime; a binding to another
+checkout or a stray `~/.config/chezmoi/chezmoistate.boltdb` only warns. On a
+native-owned home the default host is the local config's `[data].host`
+(`DOTFILES_HOST` is legacy only). It remains offline and write-free; native
+diff/apply is a separate operation.
 
 Use `--legacy-stow` on BOTH Unix commands, or `-LegacyStow` on BOTH Windows
 commands, only for the supported compatibility path. That path retains
