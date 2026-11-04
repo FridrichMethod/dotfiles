@@ -52,9 +52,61 @@ function Invoke-DotfilesNativeProcess {
     finally { $process.Dispose() }
 }
 
+function Test-DotfilesNativeChezmoiPath {
+    # True when .local and .local\bin are real directories and chezmoi.exe a
+    # regular file. GetAttributes reports a link itself, never its target.
+    param([Parameter(Mandatory)][string]$Path)
+    $bin = Split-Path -Parent $Path
+    foreach ($item in @((Split-Path -Parent $bin), $bin, $Path)) {
+        $attributes = [IO.File]::GetAttributes($item)
+        $isDirectory = [bool]($attributes -band [IO.FileAttributes]::Directory)
+        if (($attributes -band [IO.FileAttributes]::ReparsePoint) -or $isDirectory -ne ($item -ne $Path)) { return $false }
+    }
+    return $true
+}
+
+function Test-DotfilesTrustedFileSecurity {
+    # Owner is this user, SYSTEM or Administrators, and no allow entry gives
+    # any other SID WRITE_DATA, APPEND, WRITE_EA, WRITE_ATTRIBUTES, DELETE,
+    # WRITE_DAC, WRITE_OWNER, GENERIC_ALL or GENERIC_WRITE (0x500D0116).
+    param([Parameter(Mandatory)][Security.AccessControl.FileSystemSecurity]$Security)
+    $trusted = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
+    if ($trusted -notcontains $Security.GetOwner([Security.Principal.SecurityIdentifier]).Value) { return $false }
+    foreach ($rule in $Security.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        if ($rule.AccessControlType -eq 'Allow' -and $trusted -notcontains $rule.IdentityReference.Value -and
+            ([int]$rule.FileSystemRights -band 0x500D0116)) { return $false }
+    }
+    return $true
+}
+
+function Open-DotfilesNativeChezmoi {
+    # The provisioned <destination>\.local\bin\chezmoi.exe, open for reading
+    # with FileShare.Read (nobody may write, rename or delete it while held),
+    # or $null when it is missing, a link, under a linked directory, or not
+    # private. The path is checked again after opening, and owner and DACL
+    # are read from the held handle. No PATH lookup ever happens.
+    param([Parameter(Mandatory)][string]$Destination)
+    $path = Join-Path $Destination '.local\bin\chezmoi.exe'
+    $stream = $null
+    try {
+        if (-not (Test-DotfilesNativeChezmoiPath $path)) { return $null }
+        $stream = [IO.FileStream]::new($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        if ((Test-DotfilesNativeChezmoiPath $path) -and
+            (Test-DotfilesTrustedFileSecurity ([IO.FileSystemAclExtensions]::GetAccessControl($stream)))) {
+            $held = $stream
+            $stream = $null
+            return $held
+        }
+        return $null
+    }
+    catch { return $null }
+    finally { if ($null -ne $stream) { $stream.Dispose() } }
+}
+
 function Invoke-DotfilesNativeUpdate {
     param([string]$HomePath = $HOME)
     if ($env:_DOTFILES_CHECKED -or $env:DOTFILES_AUTO_UPDATE -eq '0') { return }
+    $chezmoi = $null
     try {
         if (Test-DotfilesMaintenance $HomePath) { return }
         $env:_DOTFILES_CHECKED = '1'
@@ -67,10 +119,13 @@ function Invoke-DotfilesNativeUpdate {
             [Console]::Error.WriteLine('[dotfiles] Native update skipped: use the documented independent-clone procedure for OneDrive.')
             return
         }
-        $chezmoiCommand = Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        $chezmoi = if ($chezmoiCommand) { $chezmoiCommand.Source }
-            else { Join-Path $binding.Destination '.local/bin/chezmoi.exe' }
-        if (-not [IO.File]::Exists($chezmoi)) { throw 'Native chezmoi executable is unavailable.' }
+        # Only the provisioned executable, verified and held open until both
+        # chezmoi runs have exited (finally below); never a PATH match.
+        $chezmoi = Open-DotfilesNativeChezmoi $binding.Destination
+        if ($null -eq $chezmoi) {
+            [Console]::Error.WriteLine('[dotfiles] Native update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators; reinstall it with setup-host W1-chezmoi.')
+            return
+        }
         $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
         $root = Invoke-DotfilesNativeProcess $git.Source @('-C', $binding.Source, 'rev-parse', '--show-toplevel') $binding
         if ($root.Code -ne 0 -or -not $root.Output.Trim() -or
@@ -87,14 +142,15 @@ function Invoke-DotfilesNativeUpdate {
             '(eq (toJson .chezmoi.config.update.args) (toJson (list "-c" "rebase.autoStash=false" "-c" "merge.autoStash=false" "pull" "--ff-only" "--no-rebase" "--no-autostash" "--no-recurse-submodules"))) ' +
             '(not .chezmoi.config.update.recurseSubmodules) .chezmoi.config.update.apply ' +
             '(not .chezmoi.config.git.autoadd) (not .chezmoi.config.git.autocommit) (not .chezmoi.config.git.autopush) }}'
-        $config = Invoke-DotfilesNativeProcess $chezmoi ($arguments + @('execute-template', $safeConfig)) $binding
+        $config = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('execute-template', $safeConfig)) $binding
         if ($config.Code -ne 0 -or $config.Output.Trim() -cne 'true') { throw 'Native update configuration is unsafe.' }
-        $updated = Invoke-DotfilesNativeProcess $chezmoi ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $binding
+        $updated = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $binding
         if ($updated.Code -ne 0) { throw 'Native update failed.' }
     }
     catch {
         [Console]::Error.WriteLine('[dotfiles] Native update skipped or failed; review the source, configuration and destination privately.')
     }
+    finally { if ($null -ne $chezmoi) { $chezmoi.Dispose() } }
 }
 
 if ($MyInvocation.InvocationName -ne '.' -and -not [Console]::IsOutputRedirected) {
