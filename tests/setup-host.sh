@@ -170,9 +170,9 @@ snapshot() {
 
 # case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
 # setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
-# WSL); a VAR=VALUE overrides a default of the same name. setup-host runs
-# under the Bash running this file ($BASH), so `bash-3.2 tests/setup-host.sh`
-# tests it under Bash 3.2 too.
+# WSL, no system or Homebrew font dirs); a VAR=VALUE overrides a default of
+# the same name. setup-host runs under the Bash running this file ($BASH),
+# so `bash-3.2 tests/setup-host.sh` tests it under Bash 3.2 too.
 case_command() {
     local extra=()
     while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
@@ -197,6 +197,7 @@ case_command() {
         BOOTSTRAP_OS_RELEASE="$OS_DEBIAN"
         BOOTSTRAP_PROC_VERSION="$PROC_NATIVE"
         BOOTSTRAP_BREW_CANDIDATES="$CASE_BREW/bin/brew"
+        BOOTSTRAP_SYSTEM_FONT_DIRS=
         FAKE_DPKG_INSTALLED="$DPKG_ALL"
         ${extra[@]+"${extra[@]}"}
         "$BASH" "$FIXTURE/setup-host.sh" --legacy-stow "$@")
@@ -1222,6 +1223,21 @@ expect_text check-cloned out 'S3-clones done 4 clones present, left as they are'
 expect_text check-cloned out 'H7-stow human blocked by S2-brew-bundle'
 expect_no_text check-cloned out 'HUMAN-BEGIN H7-stow'
 expect_no_events check-cloned
+
+# --- S6-nerd-font: a font the doctor finds is installed ----------------------
+
+new_home sysfont
+mkdir -p "$TEST_TMP/system-fonts/CascadiaMono"
+printf 'fixture font\n' >"$TEST_TMP/system-fonts/CascadiaMono/CaskaydiaMonoNerdFont-Regular.ttf"
+run_case sysfont BOOTSTRAP_SYSTEM_FONT_DIRS="$TEST_TMP/system-fonts" -- --host lab-ubuntu --check --only S6-nerd-font
+expect_rc sysfont 0
+expect_text sysfont out "S6-nerd-font done font CaskaydiaMonoNerdFont at $TEST_TMP/system-fonts/CascadiaMono/CaskaydiaMonoNerdFont-Regular.ttf"
+expect_no_events sysfont
+[ ! -e "$CASE_HOME/.local/share/fonts" ] || fail 'S6-nerd-font planned a second, user copy'
+run_case sysfont-none -- --host lab-ubuntu --check --only S6-nerd-font
+expect_rc sysfont-none 3
+expect_text sysfont-none out "S6-nerd-font todo CaskaydiaMonoNerdFont is not installed in $CASE_HOME/.local/share/fonts/CaskaydiaMonoNerdFont"
+expect_no_events sysfont-none
 
 # --- H7-stow: home files Stow would refuse are moved aside first -------------
 
