@@ -631,8 +631,9 @@ class WindowsTakeoverTests(unittest.TestCase):
     def test_trust_decision_reads_owner_and_dacl_from_the_held_handle(self):
         self.setup_native()
         installed = self.home / ".local/bin/chezmoi.exe"
-        # Each step runs directly, so a refusal names its cause; foreign read
-        # and deny entries stay acceptable, a foreign owner or write bit does not.
+        # Each step runs directly, so a refusal names its cause. Foreign read and
+        # deny entries and OWNER RIGHTS (hosted runners add it) stay acceptable;
+        # a foreign owner or a foreign write bit does not.
         result = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";$p=" + ps_string(installed) +
                          ";if(-not(Test-DotfilesNativeChezmoiPath $p)){throw 'path refused'}" +
                          ";$s=[IO.FileStream]::new($p,'Open','Read','Read')" +
@@ -640,9 +641,10 @@ class WindowsTakeoverTests(unittest.TestCase):
                          ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw ('trusted copy refused: '+" +
                          "$sd.GetSecurityDescriptorSddlForm('Owner,Access'))}" +
                          ";$users=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')" +
-                         ";foreach($r in @('ReadAndExecute,Allow','Write,Deny')){$f=$r.Split(',')" +
-                         ";$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($users,$f[0],$f[1]))}" +
-                         ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw 'foreign read or deny entry refused'}" +
+                         ";foreach($r in @('S-1-5-32-545,ReadAndExecute,Allow','S-1-5-32-545,Write,Deny','S-1-3-4,FullControl,Allow'))" +
+                         "{$f=$r.Split(',');$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(" +
+                         "[Security.Principal.SecurityIdentifier]::new($f[0]),$f[1],$f[2]))}" +
+                         ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw 'foreign read, deny or OWNER RIGHTS entry refused'}" +
                          ";$owner=$sd.GetOwner([Security.Principal.SecurityIdentifier]);$sd.SetOwner($users)" +
                          ";if(Test-DotfilesTrustedFileSecurity $sd){throw 'foreign owner trusted'};$sd.SetOwner($owner)" +
                          ";$sd.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($users,'AppendData','Allow'))" +

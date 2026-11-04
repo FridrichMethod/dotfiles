@@ -69,9 +69,11 @@ function Test-DotfilesTrustedFileSecurity {
     # Owner is this user, SYSTEM or Administrators, and no allow entry gives
     # any other SID WRITE_DATA, APPEND, WRITE_EA, WRITE_ATTRIBUTES, DELETE,
     # WRITE_DAC, WRITE_OWNER, GENERIC_ALL or GENERIC_WRITE (0x500D0116).
+    # OWNER RIGHTS (S-1-3-4) applies only to that already trusted owner.
     param([Parameter(Mandatory)][Security.AccessControl.FileSystemSecurity]$Security)
     $trusted = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
     if ($trusted -notcontains $Security.GetOwner([Security.Principal.SecurityIdentifier]).Value) { return $false }
+    $trusted += 'S-1-3-4'
     foreach ($rule in $Security.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
         if ($rule.AccessControlType -eq 'Allow' -and $trusted -notcontains $rule.IdentityReference.Value -and
             ([int]$rule.FileSystemRights -band 0x500D0116)) { return $false }
