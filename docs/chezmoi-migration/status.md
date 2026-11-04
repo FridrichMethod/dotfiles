@@ -29,9 +29,10 @@ current.
   review-fix round fixed the same class in `tests/shell-profile.sh` (`c1479bf`).
 - Every worker branch started at coordinator base `3b54132`: `b9f9d61` plus
   three guards. Gitleaks covers the native `[attribute_]dot_secrets` source
-  encoding, with only the eight approved Claude age ciphertexts allowlisted; one
-  test refuses chezmoi externals and another refuses submodules (no
-  `.gitmodules`, no gitlinks).
+  encoding; its allowlist is one path pattern that matches only
+  `home/private_dot_secrets/encrypted_private_claude-*.age` (the eight approved
+  Claude age ciphertexts). One test refuses chezmoi externals and another
+  refuses submodules (no `.gitmodules`, no gitlinks).
 - After landing, every `ci/stage5*`, `e2e-ci/stage5` and `stage5/*` worker
   branch and worktree was deleted; `main` and the coordinator's records branch
   `stage5/coord` remained.
@@ -52,7 +53,7 @@ review and its two fix branches.
 | WINUPD | `3f24a8d` | The Windows login updater runs only `<destination>\.local\bin\chezmoi.exe`, after reparse, owner and DACL checks on a held FileShare.Read handle, with no PATH fallback; W1-chezmoi hashes and extracts through one handle and writes a protected DACL. A CI fixture (windows-2025, elevated) observed NTFS refusing to rename `.local\bin` and `.local` while the handle was held, and allowing a rename of `.local\bin` after release. The double junction-swap window is narrowed, not closed |
 | NATIVECFG | `718470d` | `home/.chezmoi.toml.tmpl` owns `persistentState`, set to `printf "%s/.local/state/chezmoi/chezmoi.boltdb" .chezmoi.destDir` and listed for case-insensitive dedupe; the updaters keep their explicit flags, which win |
 | TMUX | `f4a862a` | Floor 2.6 -> 3.4 in `tools.tsv` and `hpc-login-env.yml`; all seven version gates and the version parsing are removed; extrakto's OSC 52 gate reads the session environment like tmux-yank (`update-environment` refreshes only `SSH_CONNECTION`, so a server started over SSH stays on OSC 52) |
-| winfix | `c326812` | Review medium: trust helpers moved to `lib/chezmoi-guard.ps1`; the raw DACL check refuses a null DACL and any allow or deny ACE that is not a CommonAce; on Windows the doctor's native-config row reports human, and W1-chezmoi stays todo, when the updater would refuse `~/.local/bin/chezmoi.exe`, including when chezmoi is found only on PATH |
+| winfix | `c326812` | Review medium: trust helpers moved to `lib/chezmoi-guard.ps1`; the raw DACL check refuses a null DACL and any DACL entry other than a common (plain or callback) allow or deny ACE, so object, compound and unknown entries refuse; on Windows the doctor's native-config row reports human, and W1-chezmoi stays todo, when the updater would refuse `~/.local/bin/chezmoi.exe`, including when chezmoi is found only on PATH |
 | unixfix | `57c6390` | `tests/shell-profile.sh` runs shells by absolute path; the chezmoi-native hook also selects `lib/bootstrap/{checks,steps-human}.sh`; the doctor's payload advice and H7-payloads use the bound source's hook on native homes (none while unresolved); `DOTFILES_TEST_REQUIRE_TMUX=1` in Linux CI turns a missing or old tmux into a failure |
 
 Coordinator follow-ups widened the hook selectors and their need map, added tmux
@@ -67,9 +68,9 @@ the questions.
 
 | Decision | Choice | Reason |
 | --- | --- | --- |
-| D7 payload lifecycle | Explicit-only for every home, native and legacy | The scheduler was already off or failing on three of six hosts (Sherlock's site override, Marlowe's retry loop waiting for a person, no completed Windows run). Each upstream installer's install command is also its update command, with its own lock or convergence, so a consumer scheduler adds no correctness. Explicit runs remove detached login-node processes without a site override |
+| D7 payload lifecycle | Explicit-only for every home, native and legacy | The scheduler was already off or failing on three of six hosts (Sherlock's site override, Marlowe's retry loop waiting for a person, no completed Windows run). Each upstream owns its update path (the kit's `install.sh --update`; a rerun of the installer for awesome-skills and PyMOLScripts) with its own lock or convergence, so a consumer scheduler adds no correctness. Explicit runs remove detached login-node processes without a site override |
 | Codex `tui.status_line` | Stays owned; one-file reconcile runbook in [takeover.md](takeover.md#reconcile-an-owned-ai-config-key) | The WSL stall came from an app-server writing back a whole stale file, so any commit that changes rendered Codex config can meet it, and Codex saves several owned keys from its own UI. Seed-only for one key would stop propagation without removing the stall; the stop is conflict protection working as designed |
-| Marlowe Node hooks and Codex | Accept the failing Claude Node hooks (site AppArmor profile `block-node`); keep deploying the inert Codex config | No change to the parity-tested templates or target totals; the Git hook-bypass guard documents itself as no security boundary; non-Node helpers would be an upstream coding-agent-kit change; the config is ready if Codex is ever provisioned |
+| Marlowe Node hooks and Codex | Accept the failing Claude Node hooks (site AppArmor profile `block-node`); keep deploying the Codex config | No change to the parity-tested templates or target totals; the Git hook-bypass guard documents itself as no security boundary; non-Node helpers would be an upstream coding-agent-kit change. No Codex CLI is on Marlowe's PATH, but Codex app-servers do run there and read the deployed config (23 long-lived ones at the Stage 5 probe, one during the rollout) |
 | Windows updater binary | Run only the exact `chezmoi.exe` after owner and DACL checks; dotfiles edits no `~/.local` ACL; no per-login hash pin | The updater took the first PATH match, and PATHEXT puts `.COM` first, so a `chezmoi.com` that the Codex sandbox group can create in `~/.local/bin` through its inherited Modify grant would have run with the user's token. Owner and DACL checks reject every substitute the sandbox can place. A hash pin conflicts with the minimum-version rule and would not close the remaining race. The sandbox grants are Codex-managed and also reach other profile directories, so narrowing `~/.local/bin` alone would not restore the boundary |
 | `persistentState` | Owned in the config template, plus a reviewed re-init on all six hosts | Removes the silent state fork: a plain mutating command used a second, empty database, lost the changed-since-last-write refusal and could later stall the updater. Flags win, so the login updater is unaffected and the template could land before any re-init, which is the already-accepted repeat-init operation. Mutating commands keep the full argument set, because `--exclude=dirs`, `--less-interactive` and `--force=false` have no config equivalent |
 | tmux floor | 3.4, after a Marlowe action | 3.4 is the version tested on Lab and WSL and testable in hosted Linux CI; it removes all seven gates and the version parsing; 2.6 had never been tested and no host ran anything older than 3.2a; the only observed cost was Marlowe's login env. System tmux on Ubuntu 22.04, Debian 12 and RHEL 9 becomes unsupported |
@@ -121,7 +122,7 @@ only on PATH, at every login. Two other mediums were downgraded to low, and all
 other findings were low. The winfix and unixfix branches above carry the fixes.
 The rollout dimension simulated the update in throwaway native homes with a
 real bare remote, chezmoi v2.74.0 and the hosts' old updaters; it predicted the
-per-host target counts that the rollout below then observed.
+per-host changed-target counts that the rollout below then observed.
 
 Correction: WINUPD's W1-chezmoi was described as needing PowerShell 7.1, and
 the review extended that to `payload-update.ps1 -Now`. The fix round first
@@ -201,7 +202,9 @@ on win when they were staged. The exact sequence is in
 - Rollout tooling: the re-init must not use `cp -p` on Marlowe's filesystem
   (permission and ACL preservation are unsupported) and must not assume `$0` is
   a file when the script arrives over SSH. Both were fixed before those hosts
-  ran; the failed attempts stopped before init and changed nothing.
+  ran; the failed attempts stopped before init and changed no config, state
+  or target. The update step's backup still used `cp -p` on Marlowe and logged
+  the same warning, but its copies matched by `cmp` with mode 0600.
 - Asset audit: no chezmoi external suits the asset steps, which stay in
   setup-host.
 
@@ -369,7 +372,7 @@ Stage 5 inputs, none blocking this checkpoint, with their Stage 5 outcomes:
 - Marlowe login nodes: accept and document, give Marlowe Claude settings without
   Node hooks, or port the helpers off Node; descope Codex there or use a non-Node
   binary. Never bypass the site profile. Resolved: accept and document; the
-  inert Codex config stays.
+  Codex config stays (no Codex CLI on PATH there, but Codex app-servers read it).
 - Make the config template set `persistentState` (requires reviewed re-init), or
   keep the full-argument rule. Done: the template owns it and the five Unix
   hosts are re-initialized; win is pending.

@@ -176,8 +176,10 @@ classifier still apply. The guard documents itself as no security boundary, so
 the loss is user experience: a blank status line, no notifications and no usage
 records for `claude-as --account-info`. Stage 5 accepted this without a
 Marlowe-specific settings branch; non-Node helpers would be an upstream
-coding-agent-kit change. Dotfiles still deploys Marlowe's inert Codex
-configuration, and the Codex client is deliberately not provisioned there.
+coding-agent-kit change. Dotfiles still deploys Marlowe's Codex
+configuration. The Codex CLI is deliberately not provisioned on its PATH, but
+Codex app-servers do run there and read that configuration, so the Codex
+write-back check applies on Marlowe too.
 
 Sherlock's observed glibc 2.17 cannot run the generic v2.74 Linux artifact. The
 official SHA256-verified static musl build passed an isolated version probe;
@@ -204,9 +206,10 @@ and Marlowe lacks native Codex on the inspected PATH.
 
 ## Stage 5 rollout as run (2026-11-04)
 
-Stage 5 needed no takeover. Each host fast-forwarded `main` from its current
-revision to `dddc718` through its own login updater, then took one reviewed
-re-init that adds the owned `persistentState` key. One operation owner ran the
+Stage 5 needed no takeover. Each Unix host reached `dddc718` through its own
+login updater (Lab's checkout had already been fast-forwarded by the landing,
+so its updater only applied the six targets), then took one reviewed re-init
+that adds the owned `persistentState` key. One operation owner ran the
 hosts one at a time. Results and per-host revisions are in
 [status.md](status.md#stage-5-completion-record-2026-11-04).
 
@@ -277,15 +280,15 @@ Per Unix host:
      and both ACLs are unchanged; a plain
      `execute-template '{{ .chezmoi.config.persistentState }}'` names the bound
      database; a stray `chezmoistate.boltdb`, if any, is moved into the record,
-     never deleted; full-argument and plain `status --exclude=dirs` are empty
-     with empty stderr; and no stray database reappears. Rollback is an
-     in-place copy of the recorded config.
+     never deleted; full-argument `status --exclude=dirs` is empty, and plain
+     `status --exclude=dirs` is empty with empty stderr; and no stray database
+     reappears. Rollback is an in-place copy of the recorded config.
 6. Run the offline doctor from an interactive login shell. On Marlowe that is
    `ssh marlowe`, not `marlowe-plain` ([below](#marlowe-tmux-36a)).
 
 Two portability lessons came from the first re-init attempts. Both were fixed
 before the re-init ran on those hosts, and the failed attempts stopped before
-init and changed nothing:
+init and changed no config, state or target:
 
 - Copy the record without `cp -p`. Marlowe's filesystem refuses permission and
   ACL preservation (`Operation not supported`); a copy made under umask 077 is
@@ -293,6 +296,10 @@ init and changed nothing:
 - Do not assume `$0` is a file. A script sent over SSH as
   `sh -c "$script" probe` sees `$0` as `probe`; copy the script into the record
   only when `$0` is a regular file.
+
+The update step's backup (step 2) still used `cp -p` and printed the same
+`Operation not supported` warning on Marlowe; its copies still matched by
+`cmp`, with mode 0600.
 
 The Codex write-back check found no `MM` on any host, although one Codex
 app-server ran on each HPC host during the update.
@@ -320,17 +327,21 @@ and exits 1. Start tmux and run the doctor from an interactive login shell
 ### Pending Windows steps
 
 win stays at `7e344f2` until the user runs these steps in an ordinary,
-non-elevated pwsh 7, because the re-init needs the user's own token. No Codex
+non-elevated pwsh 7.2 or later (the script declares `#Requires -Version 7.2`;
+win has 7.6.9), because the re-init needs the user's own token. No Codex
 process ran on win when the steps were staged; quit any Codex desktop app that
 connects to win before step 1.
 
 1. Open an ordinary interactive pwsh session and let its login update finish.
-   It runs the old `7e344f2` updater, which fast-forwards to `dddc718`; three
-   targets are expected to change: `Documents\PowerShell\profile.ps1`,
-   `~/.codex/config.toml` and `~/.claude/settings.json`.
-2. Open a second ordinary interactive session. Its login runs the new updater,
-   which uses only `~/.local/bin/chezmoi.exe` after the owner and DACL checks.
-   It must not print a `[dotfiles] Native update skipped` warning.
+   It is expected to run the old `7e344f2` updater, which fast-forwards to
+   `dddc718`; three targets are expected to change:
+   `Documents\PowerShell\profile.ps1`, `~/.codex/config.toml` and
+   `~/.claude/settings.json`.
+2. Open a second ordinary interactive session. Its login is expected to run the
+   new updater, which uses only `~/.local/bin/chezmoi.exe` after the owner and
+   DACL checks. It must not print a `[dotfiles] Native update skipped` warning.
+   These roles come from the review's rollout simulation and reasoning, not
+   from a run on win.
 3. Check the staged script's hash, then run it from that ordinary session:
 
    ```powershell
