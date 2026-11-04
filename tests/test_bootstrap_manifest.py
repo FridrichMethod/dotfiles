@@ -102,6 +102,11 @@ PSMODULE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 GITHUB_RE = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$")
 PINNED_URL_RE = re.compile(r"/(?:[0-9a-f]{40}|(?:rust-)?v?[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)/")
 HEADING_RE = re.compile(r"^### ([A-Za-z0-9-]+):")
+# The step lists of setup-host.sh (STEPS_REGISTRY in lib/bootstrap/steps.sh)
+# and setup-host.ps1 (each list assigned once per mode: legacy, then native).
+REGISTRY_RE = re.compile(r"^STEPS_REGISTRY='([^']*)'", re.M)
+PS_STEP_LIST_RE = re.compile(r"^[ \t]*\$(AutomatedSteps|HumanSteps|BlockingHumanSteps) = @\(([^)\r\n]*)\)", re.M)
+PS_ITEM_RE = re.compile(r"'([^']*)'")
 APT_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]+$")
 WINGET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_+-]*(\.[A-Za-z0-9][A-Za-z0-9_+-]*)+$")
 BREW_RE = re.compile(r'^(brew|cask) "([a-z0-9][a-z0-9@+._/-]*)"(?: if OS\.(mac|linux)\?)?$')
@@ -560,6 +565,38 @@ def check_docs(repo, tools, errors):
         report(errors, "docs-deps", "docs/dependencies.md", row["id"] not in cells and f"no table cell for {row['id']}")
 
 
+def check_step_lists(repo, errors):
+    """STEPS_REGISTRY and both setup-host.ps1 modes name only contract ids, and every non-X- id."""
+    named, where = set(), "lib/bootstrap/steps.sh"
+    match = REGISTRY_RE.search(read_text(repo / where, where, errors) or "")
+    rows = [line.split()[0] for line in (match.group(1).splitlines() if match else []) if line.strip()]
+    report(errors, "step-lists", where, not rows and "no STEPS_REGISTRY='...' rows")
+    for step in sorted({s for s in rows if rows.count(s) > 1}):
+        report(errors, "step-lists", where, f"STEPS_REGISTRY repeats {step}")
+    for step in sorted(set(rows) - set(STEP_IDS)):
+        report(errors, "step-lists", where, f"{step} is not a contract step id")
+    named.update(rows)
+    where = "setup-host.ps1"
+    lists = {"AutomatedSteps": [], "HumanSteps": [], "BlockingHumanSteps": []}
+    for name, body in PS_STEP_LIST_RE.findall(read_text(repo / where, where, errors) or ""):
+        lists[name].append(PS_ITEM_RE.findall(body))
+    for name, found in lists.items():
+        report(errors, "step-lists", where, len(found) != 2 and
+               f"${name} is assigned {len(found)} times, expected 2 (legacy, then native)")
+        for ids in found:
+            named.update(ids)
+            for step in sorted(set(ids) - set(STEP_IDS)):
+                report(errors, "step-lists", where, f"${name} names {step}, not a contract step id")
+    for mode, index in (("legacy", 0), ("native", 1)):
+        human, blocking = lists["HumanSteps"], lists["BlockingHumanSteps"]
+        if len(human) > index and len(blocking) > index:
+            extra = sorted(set(blocking[index]) - set(human[index]))
+            report(errors, "step-lists", where, extra and f"{mode} blocking steps not in $HumanSteps: {', '.join(extra)}")
+    for step in STEP_IDS:
+        report(errors, "step-lists", "STEP_IDS", not step.startswith("X-") and step not in named and
+               f"{step} has a docs heading but no step list names it")
+
+
 def split_skill(path, rel, errors):
     text = read_text(path, rel, errors)
     if text is None or not text.startswith("---\n") or "\n---\n" not in text[3:]:
@@ -612,6 +649,7 @@ def validate(config_dir, repo_root):
     check_coverage(tools, aliases, manual, sources, errors)
     check_file_text(config, errors)
     check_docs(repo, tools, errors)
+    check_step_lists(repo, errors)
     check_skills(repo, errors)
     return errors
 
@@ -634,7 +672,8 @@ class RejectionTests(unittest.TestCase):
         self.repo = self.temp / "repo"
         self.config = self.repo / "config/bootstrap"
         shutil.copytree(ROOT / "config/bootstrap", self.config)
-        for rel in ("docs/bootstrap.md", "docs/dependencies.md", SKILL_CLAUDE, SKILL_CODEX):
+        for rel in ("docs/bootstrap.md", "docs/dependencies.md", SKILL_CLAUDE, SKILL_CODEX,
+                    "lib/bootstrap/steps.sh", "setup-host.ps1"):
             (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / rel, self.repo / rel)
         self.assertEqual(self.errors(), [])
@@ -643,7 +682,7 @@ class RejectionTests(unittest.TestCase):
         return validate(self.config, self.repo)
 
     def path(self, rel):
-        return self.repo / rel if str(rel).startswith((".", "docs")) else self.config / rel
+        return self.repo / rel if str(rel).startswith((".", "docs", "lib", "setup-host")) else self.config / rel
 
     def replace(self, rel, old, new):
         path = self.path(rel)
@@ -741,6 +780,26 @@ class RejectionTests(unittest.TestCase):
             ("docs-headings", "duplicate", lambda: self.append("docs/bootstrap.md", "\n### S3-clones: again\n")),
             ("docs-headings", "unknown", lambda: self.append("docs/bootstrap.md", "\n### S3-bat-cache: stale\n")),
             ("docs-deps", "missing id", lambda: self.replace("docs/dependencies.md", "| `fzf-tab` |", "| fzf tab |")),
+        ])
+
+    def test_step_lists(self):
+        steps, setup = "lib/bootstrap/steps.sh", "setup-host.ps1"
+        doctor_row = "\nH7-doctor judgment - no macos,debian,hpc'"
+        self.check([
+            ("step-lists", "unknown registry id",
+             lambda: self.replace(steps, "\nH7-doctor judgment", "\nH7-doctors judgment")),
+            ("step-lists", "registry drops a contract id", lambda: self.replace(steps, doctor_row, "'")),
+            ("step-lists", "repeated registry id",
+             lambda: self.replace(steps, doctor_row, "\nH7-doctor judgment - no macos,debian,hpc" + doctor_row)),
+            ("step-lists", "registry not found", lambda: self.replace(steps, "STEPS_REGISTRY='", 'STEPS_REGISTRY="')),
+            ("step-lists", "unknown native windows id",
+             lambda: self.replace(setup, "'HW-clone', 'HW-native', ", "'HW-clone', 'HW-natve', ")),
+            ("step-lists", "native blocking not human",
+             lambda: self.replace(setup, "$BlockingHumanSteps = @('HW-clone', 'HW-native')",
+                                  "$BlockingHumanSteps = @('HW-clone', 'W1-chezmoi')")),
+            ("step-lists", "one mode only",
+             lambda: self.replace(setup, "    $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', "
+                                         "'W1-bat-theme', 'W1-chezmoi')\n", "")),
         ])
 
     def test_clones(self):
