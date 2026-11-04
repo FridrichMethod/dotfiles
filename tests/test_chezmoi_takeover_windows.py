@@ -640,8 +640,10 @@ class WindowsTakeoverTests(unittest.TestCase):
         # deny entries and OWNER RIGHTS (hosted runners add it) stay acceptable;
         # a foreign owner or a foreign write bit does not. The guard alone
         # provides the check, as the doctor and setup-host load it. A null DACL
-        # and an allow entry .NET's rule projection skips (an object ACE with
-        # no GUIDs, which the kernel applies like a plain allow entry) refuse.
+        # refuses, and so does each DACL entry .NET's rule projection skips,
+        # even for this user: an object ACE with no GUIDs (which the kernel
+        # applies like a plain allow entry, and only the entry-type check
+        # refuses), a compound ACE and an unknown (custom) ACE type.
         result = self.guard("$p=" + ps_string(installed) +
                             ";if(-not(Test-DotfilesNativeChezmoiPath $p)){throw 'path refused'}" +
                             ";$s=[IO.FileStream]::new($p,'Open','Read','Read')" +
@@ -663,15 +665,20 @@ class WindowsTakeoverTests(unittest.TestCase):
                             ";$n=ConvertTo-FileSecurity ([Security.AccessControl.RawSecurityDescriptor]::new(" +
                             "'O:'+$me.Value+'G:'+$me.Value+'D:NO_ACCESS_CONTROL'))" +
                             ";if(Test-DotfilesTrustedFileSecurity $n){throw 'null DACL trusted'}" +
-                            ";$acl=[Security.AccessControl.RawAcl]::new([Security.AccessControl.GenericAcl]::AclRevisionDS,2)" +
+                            ";foreach($ace in @([Security.AccessControl.ObjectAce]::new('None','AccessAllowed',0x1F01FF,$me," +
+                            "'None',[Guid]::Empty,[Guid]::Empty,$false,$null)" +
+                            ",[Security.AccessControl.CompoundAce]::new('None',0x1F01FF,'Impersonation',$me)" +
+                            ",[Security.AccessControl.CustomAce]::new([Enum]::ToObject([Security.AccessControl.AceType],17)," +
+                            "'None',[byte[]]::new(4)))){" +
+                            "$acl=[Security.AccessControl.RawAcl]::new([Security.AccessControl.GenericAcl]::AclRevisionDS,2)" +
                             ";$acl.InsertAce(0,[Security.AccessControl.CommonAce]::new('None','AccessAllowed',0x1F01FF,$me,$false,$null))" +
-                            ";$acl.InsertAce(1,[Security.AccessControl.ObjectAce]::new('None','AccessAllowed',0x1F01FF," +
-                            "[Security.Principal.SecurityIdentifier]::new('S-1-1-0'),'None',[Guid]::Empty,[Guid]::Empty,$false,$null))" +
+                            ";$acl.InsertAce(1,$ace)" +
                             ";$o=ConvertTo-FileSecurity ([Security.AccessControl.RawSecurityDescriptor]::new(" +
                             "'DiscretionaryAclPresent,SelfRelative',$me,$me,$null,$acl))" +
-                            ";$text=$o.GetSecurityDescriptorSddlForm('Access')" +
-                            ";if($text -notmatch '\\(OA;'){throw ('object ACE not kept by .NET: '+$text)}" +
-                            ";if(Test-DotfilesTrustedFileSecurity $o){throw 'object ACE trusted'}")
+                            ";$kept=@([Security.AccessControl.RawSecurityDescriptor]::new($o.GetSecurityDescriptorBinaryForm(),0)" +
+                            ".DiscretionaryAcl|Where-Object{$_.GetType() -eq $ace.GetType()})" +
+                            ";if($kept.Count -ne 1){throw ($ace.GetType().Name+' not kept by .NET')}" +
+                            ";if(Test-DotfilesTrustedFileSecurity $o){throw ($ace.GetType().Name+' trusted')}}")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_held_binary_handle_blocks_renaming_its_parent_directories(self):
