@@ -49,7 +49,7 @@ status matched exactly before and after. Earlier `/tmp` paths in historical
 records describe where those operations actually ran. Follow-up 2026-11-03: the
 68 top-level `/tmp` evidence entries these records cite were copied with modes and
 a readback-verified SHA256 manifest to the private, unpushed lab-ubuntu store
-`$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/`
+`~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/`
 (manifest `../tmp-evidence-manifest.sha256`). Consult that copy, not `/tmp`.
 Global Codex/Claude instructions now require `.worktrees/` for persistent work,
 permit `/tmp` for brief disposable tasks, and require prompt cleanup after
@@ -68,7 +68,7 @@ active `.worktrees/` coordinator, to be removed after final verified integration
 Follow-up 2026-11-03: that coordinator was removed after closure, as recorded below.
 Future stages start from canonical main. Unrelated ignored environments/payloads and still-used private
 operators/native test binaries were preserved. Local receipt:
-`$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02/cleanup-complete.json`.
+`~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-checkpoint-15068b9-02/cleanup-complete.json`.
 
 The worktree policy is committed as `493f39545a63f69c32648b97936736286fa43dcd`.
 Moving the coordinator under the real home exposed two legacy-sync argument
@@ -108,7 +108,7 @@ later commits changed only documentation and `.gitleaks.toml`. The Stage 4
 coordinator worktree and branch were then removed. In total 27 task worktrees,
 26 merged local task branches and 7 task-owned remote CI/e2e branches were removed;
 only the main worktree and main branch remained. Final private record:
-`$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02/FINAL-HANDOFF.md`.
+`~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-checkpoint-15068b9-02/FINAL-HANDOFF.md`.
 A later consolidation check verified all six hosts clean and converged at
 `a5d9ad7` through the normal native updater; see [status.md](status.md), Stages 1-4
 consolidation checkpoint, for the per-host table.

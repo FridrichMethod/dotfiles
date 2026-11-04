@@ -32,7 +32,7 @@ reset/stash/discard or overwrite unrelated edits.
 
 Committed Stages 1-4 also live in the persistent main Git object store and remote;
 they do not depend on /tmp surviving. The user-requested private checkpoint at
-$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02
+~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-checkpoint-15068b9-02
 preserves all 28 migration worktree patches/untracked files, original modes and
 handoff records, plus safe operator/review exports. Its readback hashes passed.
 It is a historical local checkpoint, not current host status or a remote backup
@@ -85,7 +85,7 @@ callers change. Consult the final Stage 4 ledger/review/resolutions recorded in
 status. The former /tmp/chezmoi-stage4-ledger.md and /tmp/chezmoi-stage4-review.md
 are preserved, with the rest of the cited /tmp evidence, on lab-ubuntu only, in the
 private unpushed
-$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/
+~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/tmp-evidence/
 (manifest ../tmp-evidence-manifest.sha256). Read them there; they are local
 supplemental evidence, not substitutes for the aggregate or completion record.
 

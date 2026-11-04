@@ -241,11 +241,17 @@ No startup time was measured, so no speedup is claimed.
 
 - win: its login update to `dddc718`, the `persistentState` re-init and the
   doctor, all user-run.
-- The private recovery store is still at Lab's
-  `$HOME/dotfiles/.git/chezmoi-migration-recovery/`. It moves to
-  `~/.local/state/dotfiles-chezmoi-migration-recovery/` only after these records
-  land: copy with modes and subdirectory names, verify every manifest by
-  readback, remove the original, then update every doc path that cites it.
+- Done at the end of Stage 5: Lab's private recovery store moved from
+  `$HOME/dotfiles/.git/chezmoi-migration-recovery/` to
+  `~/.local/state/dotfiles-chezmoi-migration-recovery/`. It was copied with
+  modes and subdirectory names (9,306 entries: 1,317 directories, 7,539 files,
+  450 symlinks); every entry's type, mode, size or link target and every
+  file's SHA-256 compared equal; the store's own manifests read back at the
+  new path (13,662 entries ok, 0 bad; 2 entries name `/tmp` objects outside
+  the store by design); no symlink pointed into the old path; then the
+  original was removed and every doc path that cited it updated. The Stage 5
+  session materials were added beside it as `20261104-stage5-dddc718/`
+  (462 private files with their own `manifest.sha256`).
 - The findings above stay open.
 - Stage 6 starts from [start-stage-6.md](start-stage-6.md) and follows
   [stage-6-retirement.md](stage-6-retirement.md). Its gates include a converged
@@ -285,7 +291,8 @@ Program checks are availability checks only. No application login, credential
 server or GUI authentication was tested. Cluster access reused existing masters.
 Private before/after evidence stays on each host under
 `~/.local/state/dotfiles-consolidation-20261103/` and in the coordinator's
-unpushed `.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/`.
+unpushed `.git/chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/`
+(since Stage 5 at `~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-consolidation-a5d9ad7/`).
 A separate session then landed `130d240`, a shared Codex status line that changes
 `~/.codex/config.toml` on every host. The consolidation commits change no
 rendered output for these converged files. Login updaters fast-forward to both.
@@ -394,8 +401,8 @@ Stage 5 inputs, none blocking this checkpoint, with their Stage 5 outcomes:
   `$HOME/dotfiles/.git/chezmoi-migration-recovery/` to
   `~/.local/state/dotfiles-chezmoi-migration-recovery/`, keeping modes and
   subdirectory names. Verify every manifest by readback before removing the
-  original, and update every doc path that cites it. Still pending: the store
-  stays at the old path until the Stage 5 records land.
+  original, and update every doc path that cites it. Done after the Stage 5
+  records landed; see the Stage 5 record (unfinished gates).
 
 ### Stages 1-4 component map
 
@@ -490,7 +497,8 @@ all three platforms, and local and remote main fast-forwarded to `a5d9ad7`.
 Committed Stages 1-4 are stored in the main checkout's persistent Git object
 store and published on origin/main; the `/tmp` worktrees are not their only
 copy. At the user's preservation checkpoint, all 28 migration worktrees were
-saved under `$HOME/dotfiles/.git/chezmoi-migration-recovery/20261103-checkpoint-15068b9-02`:
+saved under `~/.local/state/dotfiles-chezmoi-migration-recovery/20261103-checkpoint-15068b9-02`
+(at `$HOME/dotfiles/.git/chezmoi-migration-recovery/` until the end of Stage 5):
 full staged/unstaged binary patches, 562 nonignored untracked files with original
 modes, original Stage 3/tmux patches and handoff records. The 653-file core
 manifest passed readback verification. Separate private Lab, Windows, Sherlock

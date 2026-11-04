@@ -135,10 +135,10 @@ CodexSandboxUsers Modify grants on `~/.local`, `Documents\PowerShell`,
 pre-existing PowerShell 7.2 dependencies are in
 [support-boundary.md](support-boundary.md#stage-5-boundary).
 
-Lab's private recovery store is still at
-`$HOME/dotfiles/.git/chezmoi-migration-recovery/`. Its planned move to
-`~/.local/state/dotfiles-chezmoi-migration-recovery/` follows these records and
-has not happened yet.
+Lab's private recovery store moved at the end of Stage 5 from
+`$HOME/dotfiles/.git/chezmoi-migration-recovery/` to
+`~/.local/state/dotfiles-chezmoi-migration-recovery/`, verified by full
+readback ([status.md](status.md#unfinished-gates-and-stage-6-readiness)).
 
 ## Entry state and gates
 

@@ -138,7 +138,7 @@ repos, unmerged work or a checkout or module store with local commits.
 | Local Git filter | `filter.codex-portable` in `<source>/.git/config` | Remove that section only |
 | `*.pre-dotfiles` files | HOME paths moved aside by old H7-stow `mv -n` | User data: leave |
 | Windows restow task | `Dotfiles-Restow-<16 hex>`, disabled | Deregister before B2 reaches win (below) |
-| Recovery evidence | Lab's private recovery store at `$HOME/dotfiles/.git/chezmoi-migration-recovery/`; Stage 4 private host backups; Stage 5 evidence under `~/.local/state/dotfiles-stage5-rollout/` and `~/.local/state/dotfiles-stage5-reinit/`; Marlowe `~/.local/state/dotfiles-marlowe-tmux-*` | Not residue: keep, with every historical manifest |
+| Recovery evidence | Lab's private recovery store at `~/.local/state/dotfiles-chezmoi-migration-recovery/` (incl. the Stage 5 session archive `20261104-stage5-dddc718/`); Stage 4 private host backups; Stage 5 evidence under `~/.local/state/dotfiles-stage5-rollout/` and `~/.local/state/dotfiles-stage5-reinit/`; Marlowe `~/.local/state/dotfiles-marlowe-tmux-*` | Not residue: keep, with every historical manifest |
 
 ### Windows restow task
 

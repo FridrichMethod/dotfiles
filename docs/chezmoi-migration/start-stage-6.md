@@ -151,7 +151,8 @@ OAuth or app-written auth state, private identities or decrypted content;
 compare AI configs privately and log only equal/not equal and key names. The
 eight approved Claude age ciphertexts stay; win enrollment stays false. Keep all
 recovery backups and historical manifests: Lab's private recovery store at
-$HOME/dotfiles/.git/chezmoi-migration-recovery/ (read its README and manifests
+~/.local/state/dotfiles-chezmoi-migration-recovery/ (moved there from
+$HOME/dotfiles/.git/ at the end of Stage 5; read its README and manifests
 before any recovery; never apply its old whole patches to newer main), the
 Stage 4 private host backups, the Stage 5 evidence under
 ~/.local/state/dotfiles-stage5-rollout/ and ~/.local/state/dotfiles-stage5-reinit/
