@@ -36,14 +36,17 @@ provide a trustworthy remembered host: rerun `stow-all.sh [host-dir]`, or set
 
 `DOTFILES_AUTO_UPDATE=0` disables the entire hook. `DOTFILES_AUTO_STOW=0` allows
 pulls but does not install or acknowledge the new HEAD.
-An explicitly empty Unix `DOTFILES_HOST` means common-only installation;
-other Unix host overlays are never guessed.
+`DOTFILES_HOST` is legacy only: `scripts/dotfiles-update.sh` and `.ps1` read
+it, while a native-owned home's `scripts/chezmoi-update.sh`/`.ps1` never does
+(its host is `[data].host` in its chezmoi config). An explicitly empty Unix
+`DOTFILES_HOST` means common-only installation; other Unix host overlays are
+never guessed.
 
 Neither updater runs a submodule command (dotfiles has none) or installs a
-payload repo. The payload hooks (`scripts/payload-update.sh`,
-`scripts/payload-update.ps1`) run after the update hook in the same login,
-never pull or stow, keep their own state outside Git metadata and are switched
-off separately with `DOTFILES_PAYLOAD_AUTO_UPDATE=0`; see
+payload repo, and no login installs or updates one (a call from an older rc
+file or profile to `scripts/payload-update.sh` or `scripts/payload-update.ps1`
+does nothing): only a person does, through `sync-payloads` or
+`--now`/`-Now`. Those scripts never pull or stow and keep no state; see
 [payloads.md](payloads.md).
 
 ## Lock scope and remaining boundary
@@ -94,7 +97,7 @@ real Task Scheduler execution or OpenSSH network-logon symlink trust.
 
 ## Windows worker operations
 
-**On Windows** - `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1`, only in an interactive console (not for `-File`/`-Command` scripts, `-NonInteractive` or piped stdin), and skips redirected stdout. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
+**On Windows** - on an unmarked (legacy) home, `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1`, only in an interactive console (not for `-File`/`-Command` scripts, `-NonInteractive` or piped stdin), and skips redirected stdout. A native-owned home runs `scripts/chezmoi-update.ps1` there instead ([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover)) and uses no worker: `-Register` and `stow-all.ps1` refuse it. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
 
 ```powershell
 cd "$HOME\dotfiles"

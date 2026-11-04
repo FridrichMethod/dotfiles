@@ -49,8 +49,9 @@ packages (`common/coding-agent-kit`, `common/pymol`), each only while its
 target text is exactly the path it wrote, dangling or not, and the four
 directories only those packages filled once they are empty (a declined
 removal is a warning, so the revision is not acknowledged); it installs no
-payload repo. On native Windows the payload hook installs PyMOLScripts in
-their place, and coding-agent-kit installs nothing
+payload repo. On native Windows a person installs PyMOLScripts in their place
+with `sync-payloads` or `scripts/payload-update.ps1 -Now` from an unelevated
+PowerShell 7, and coding-agent-kit installs nothing
 ([payloads.md](payloads.md#migration)).
 
 `tests/windows-installer.ps1` requires native Windows, Git for Windows, the

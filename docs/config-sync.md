@@ -86,8 +86,8 @@ state. The home-bound `.config/dotfiles/native` marker makes all four
 legacy sync wrappers and the Python backend refuse an explicit LIVE destination,
 including `--check` and `--migrate-portable`, before reads/writes. An unrelated
 explicit destination does not inherit the invoking HOME's guard. Maintenance
-also blocks legacy writers and future dotfiles/payload hook processes. Failed
-apply keeps ownership; removing a guard requires inspected recovery.
+also blocks legacy writers, future dotfiles updates and explicit payload runs.
+Failed apply keeps ownership; removing a guard requires inspected recovery.
 
 The native API has no `--migrate-portable` or source writeback. Before takeover,
 review a historically polluted portable source privately, preserve its unknown
