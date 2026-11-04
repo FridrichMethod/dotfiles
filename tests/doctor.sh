@@ -48,7 +48,7 @@ mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
     "$FAKE_BIN" "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
 cp "$REPO_ROOT/doctor.sh" "$FIXTURE/doctor.sh"
 cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/config_sync.py" \
-    "$FIXTURE/lib/"
+    "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 # The real step headings: every doc step a manifest row cites must have one.
 cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
@@ -249,9 +249,10 @@ printf '# Global Working Preferences\n\nFixture portable Codex instructions.\n' 
     >"$FIXTURE/common/codex/.codex/AGENTS.md"
 cp "$FAKE_BIN/sync-python" "$FIXTURE/.venv-sync/bin/python"
 printf '.venv-sync/\n' >"$FIXTURE/.gitignore"
+printf 'home\n' >"$FIXTURE/.chezmoiroot"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 "$REAL_GIT" -C "$FIXTURE" init -q
-"$REAL_GIT" -C "$FIXTURE" add .gitignore common
+"$REAL_GIT" -C "$FIXTURE" add .gitignore .chezmoiroot common
 "$REAL_GIT" -C "$FIXTURE" -c user.name=fixture -c user.email=fixture@example.invalid \
     commit -q -m fixture
 STATE_FILE="$FIXTURE/.git/dotfiles-sync-unix"
@@ -307,7 +308,9 @@ BASE_ENV=(
 # run_doctor CASE [VAR=VALUE ...] -- [doctor arguments]: a clean environment
 # (env -i) plus BASE_ENV and the overrides; stdout/stderr land in $OUT. The
 # doctor runs under the Bash running this file ($BASH), so `bash-3.2
-# tests/doctor.sh` tests the doctor under Bash 3.2 too.
+# tests/doctor.sh` tests the doctor under Bash 3.2 too. DOCTOR_MODE is the
+# mode flag, --legacy-stow until the native section clears it.
+DOCTOR_MODE=--legacy-stow
 run_doctor() {
     CASE=$1
     shift
@@ -318,7 +321,7 @@ run_doctor() {
     done
     [ "$#" -eq 0 ] || shift
     : >"$EVENT_LOG"
-    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" --legacy-stow "$@" \
+    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" ${DOCTOR_MODE:+"$DOCTOR_MODE"} "$@" \
         >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
@@ -1269,5 +1272,113 @@ no_tmp_case no-tmp-help TMPDIR="$NO_TMP" -- --help
 assert_rc 0
 no_tmp_case no-tmp-usage TMPDIR="$NO_TMP" -- --tier gui
 assert_rc 2
+
+# --- native mode (the default) ------------------------------------------------
+
+# The home is bound to the fixture checkout by the native marker, and its
+# local config selects the role. Every case below runs without a mode flag.
+DOCTOR_MODE=
+NATIVE_DIR=$TEST_HOME/.config/dotfiles
+NATIVE_MARKER=$NATIVE_DIR/native
+NATIVE_CONFIG=$TEST_HOME/.config/chezmoi/chezmoi.toml
+mkdir -p "$NATIVE_DIR" "${NATIVE_CONFIG%/*}"
+bind_native() { printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$TEST_HOME" "$1" >"$NATIVE_MARKER"; }
+native_config() { printf '%s\n' "$@" >"$NATIVE_CONFIG"; }
+bind_native "$FIXTURE"
+native_config '[data]' "host = 'lab-ubuntu'"
+
+# Without --host or --platform, a native-owned home's role is the one
+# [data].host of its native config, read as text. Its Stow receipt and
+# DOTFILES_HOST (legacy only) never apply, and an unclear role is a usage
+# error, never a guess.
+printf '%s\n' "$TEST_HOME" Linux sherlock test-head >"$STATE_FILE"
+run_doctor native-host-receipt-ignored -- --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_no_row login-tool
+run_doctor native-host-env-ignored DOTFILES_HOST=sherlock -- --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_no_row login-tool
+run_doctor native-host-env-empty-ignored DOTFILES_HOST= -- --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'DOTFILES_HOST'
+run_doctor native-host-env-unknown-ignored DOTFILES_HOST=nowhere -- --tsv
+assert_rc 0
+assert_row host-tool warn
+run_doctor native-host-explicit DOTFILES_HOST=lab-ubuntu -- --host sherlock --tsv
+assert_row lmod warn
+assert_no_row host-tool
+run_doctor native-host-platform -- --platform other --tsv
+assert_rc 0
+assert_no_row host-tool
+native_config "sourceDir = '/x'" '[data]' '  host = "sherlock"  # role' '[data.extra]' "host = 'mac'" \
+    '[git]' 'autoAdd = false'
+run_doctor native-host-format -- --tsv
+assert_row lmod warn
+assert_no_row host-tool
+printf '[data]\r\nhost = "lab-ubuntu"\r\n' >"$NATIVE_CONFIG"
+run_doctor native-host-crlf -- --tsv
+assert_rc 0
+assert_row host-tool warn
+printf '[data]\nhost="lab-ubuntu"' >"$NATIVE_CONFIG"
+run_doctor native-host-no-newline -- --tsv
+assert_rc 0
+assert_row host-tool warn
+# expect_native_host_error CASE CONFIG_LINE...: that config selects no role.
+expect_native_host_error() {
+    local name=$1
+    shift
+    native_config "$@"
+    expect_usage_error "$name" 'none recorded for this home: its native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST' --
+}
+expect_native_host_error native-host-none '[git]' 'autoAdd = false'
+expect_native_host_error native-host-twice '[data]' "host = 'lab-ubuntu'" "host = 'mac'"
+expect_native_host_error native-host-unknown '[data]' "host = 'fedora'"
+expect_native_host_error native-host-empty '[data]' "host = ''"
+expect_native_host_error native-host-other-key '[data]' "hostname = 'mac'"
+expect_native_host_error native-host-other-table '[data.extra]' "host = 'mac'"
+expect_native_host_error native-host-unquoted '[data]' 'host = mac'
+expect_native_host_error native-host-trailing '[data]' "host = 'mac' x"
+expect_native_host_error native-host-unterminated '[data]' "host = 'mac"
+expect_native_host_error native-host-multiline '[data]' 'host = """mac"""'
+native_config '[data]' "host = 'lab-ubuntu'"
+mv "$NATIVE_CONFIG" "$TEST_TMP/chezmoi.toml"
+ln -s "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
+expect_usage_error native-host-link 'selects no single known [data].host' --
+rm "$NATIVE_CONFIG"
+expect_usage_error native-host-absent 'selects no single known [data].host' --
+mv "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
+# Even an invalid marker selects the native record: native-config explains
+# the marker, and the receipt is not a fallback.
+native_config '[git]'
+printf 'not a binding\n' >"$NATIVE_MARKER"
+expect_usage_error native-host-invalid-marker 'selects no single known [data].host' --
+bind_native "$FIXTURE"
+native_config '[data]' "host = 'win'"
+expect_usage_error native-host-win 'pwsh -File doctor.ps1 -Host win' --
+# common-only as the role means common only, as for an unmarked home.
+native_config '[data]' "host = 'common-only'"
+run_doctor native-host-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+assert_rc 0
+assert_tsv_shape
+assert_err 'the native config of this home selects [data].host common-only (no host overlay): checking as --platform debian; pass --host HOST for an overlay'
+assert_not_in "$OUT/$CASE.err" 'stow-all'
+assert_no_row login-tool
+assert_no_row host-tool
+run_doctor native-host-common-only-host -- --host lab-ubuntu --tsv
+assert_rc 0
+assert_row host-tool warn
+assert_not_in "$OUT/$CASE.err" 'common-only'
+rm -f "$STATE_FILE"
+# The role needs no git, so a Mac whose git is the CLT stub resolves it.
+native_config '[data]' "host = 'mac'"
+run_doctor native-host-no-git BOOTSTRAP_UNAME_S=Darwin "BOOTSTRAP_CLT_SHIMS=$FAKE_BIN/git:/usr/bin/git" -- --list
+assert_rc 0
+assert_out "$(printf 'mac-clt\tcore\t')"
+native_config '[data]' "host = 'lab-ubuntu'"
+
+rm -r "$NATIVE_DIR" "${NATIVE_CONFIG%/*}"
 
 echo "doctor=PASS"
