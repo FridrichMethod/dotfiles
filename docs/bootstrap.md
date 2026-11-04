@@ -4,16 +4,16 @@
 
 `./doctor.sh` and `./setup-host.sh` (on native Windows, `.\doctor.ps1` and
 `.\setup-host.ps1`) are the explicit, fail-closed entry points that take a
-fresh machine to the state the stowed configs assume. The doctor is read-only
+fresh machine to the state the dotfiles assume. The doctor is read-only
 and offline: for every tool it reports `ok`, `missing` or `outdated` and names
 the step below that fixes it. The installer runs pinned, checksummed steps that
 need no root, and prints everything that needs a person (sudo, a browser login,
 a GUI dialog, a Slurm allocation, a login-shell change, a judgment call) as a
 HUMAN block instead of running it. Profiles, `./stow-all.sh` and the login
 update hooks never install a tool; only these entry points do, and only when
-you run them. (The payload hook, which the stowed profiles call, installs and
-updates only this repository's three first-party payload repos, through their
-own installers, and is on by default once stowed; see
+you run them. (This repository's three first-party payload repos install and
+update, through their own installers, only when a person runs the payload
+command; no login, profile or schedule does; see
 [H7-payloads](#h7-payloads-payload-repos).)
 
 [`config/bootstrap/`](../config/bootstrap/) is the single source for
@@ -70,21 +70,67 @@ Follow [takeover.md](chezmoi-migration/takeover.md). Provisioning does not own t
 operation and prints no blanket apply command. A valid native binding matching
 this checkout and regular local config, with maintenance absent, satisfies the
 bootstrap handoff check; it does not substitute for the procedure's native diff,
-second apply or application checks.
+second apply or application checks. Run from another checkout (a worktree or a
+second clone), setup-host keeps H7-native pending.
+
+The doctor's `native-config` row names the cause. `ok`: the handoff state above.
+`warn`, which does not fail the run: the home is bound to another checkout,
+whose doctor it names, or, with the binding otherwise `ok`,
+`~/.config/chezmoi/chezmoistate.boltdb` exists, a separate state database that
+a chezmoi command without the updater's full explicit argument set wrote (run
+every manual native command with that set, as takeover.md says; the doctor
+never removes the file, and setup-host still counts H7-native done). `human`: active maintenance, a missing or invalid
+binding, a local config that is absent or not a regular file (a link or a
+directory), or no readable `lib/chezmoi-guard.sh` in this checkout.
 
 ### W1-chezmoi: Windows native chezmoi binary
 
 The Windows equivalent of S4-chezmoi verifies the pinned ZIP and extracts only
-`chezmoi.exe` to `~/.local/bin`. Bootstrap and doctor search this directory
-explicitly; use the full executable path when invoking chezmoi manually.
-No permanent PATH or profile edit, elevation or scheduled task is performed.
+`chezmoi.exe` to `~/.local/bin`. It hashes and extracts through one read-only
+handle and writes the file with an explicit protected DACL (FullControl for
+you, SYSTEM and Administrators, nothing inherited) before renaming it into
+place; it needs PowerShell 7.1 or newer and fails closed on 7.0. Dotfiles never
+changes the ACL of `~/.local` or `~/.local/bin`. Bootstrap and doctor search
+this directory explicitly, before PATH; use the full executable path when
+invoking chezmoi manually. No permanent PATH or profile edit, elevation or
+scheduled task is performed.
+
+The native login updater runs only this exact file, never a PATH match. It
+opens it with `FileShare.Read`, holds it until its chezmoi runs have exited,
+and requires a regular file with no link or junction at it, `.local` or
+`.local\bin` (checked before and after the open), an owner that is you, SYSTEM
+or Administrators, and no allow entry that gives any other account a write,
+delete, permission or owner change right (OWNER RIGHTS counts only for such an
+owner); owner and DACL are read from the held handle. Otherwise, also when the
+file is missing, it prints one warning naming this section and skips the
+update. This narrows the gap between check and start but does not close it:
+on a `windows-2025` hosted runner (elevated), NTFS refused to rename `.local`
+or `.local\bin` while the handle was held, and the fixture's rename of
+`.local\bin` succeeded after release. This protects only once the real file
+is held at its real path. A writer of `~/.local` that wins two sub-millisecond
+races (swapping `.local\bin` for a junction before the open, then a prepared
+directory back before the re-check) can still get a different `chezmoi.exe`
+started; the check does not make the path tamper-proof.
+
+W1-chezmoi reports done whenever it finds a working chezmoi at or above the
+floor, including one elsewhere on PATH, so it does not repair what the updater
+refuses. If the updater warns, inspect `~/.local/bin/chezmoi.exe`; delete it
+(or the link) when it is linked or not private (a linked `.local` or
+`.local\bin` must become a real directory), and uninstall or take off PATH any
+other chezmoi (winget, scoop), which W1-chezmoi would report done instead; then
+rerun `setup-host.ps1` so W1-chezmoi installs a private copy. A chezmoi that
+exists only elsewhere on PATH likewise makes the updater skip every login.
 
 ### HW-native: Windows native handover
 
 Follow [takeover.md](chezmoi-migration/takeover.md), including actual
 CurrentUserAllHosts discovery in both shells and ordinary-user destination ACL
-checks. The new regular-file path needs no elevated restow task. HW-stow and
-HW-auto-stow-task are emitted only with `-LegacyStow`.
+checks. Native regular-file updates need no elevation or scheduled task. HW-stow
+and HW-auto-stow-task are emitted only with `-LegacyStow`. `doctor.ps1`'s
+`native-config` row gives the verdicts of
+[H7-native](#h7-native-reviewed-native-configuration-handover), with
+`lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the bound
+checkout counts as that checkout.
 
 ## Legacy quick start
 
@@ -123,20 +169,21 @@ the block lists each such file with an `mv -n` line that moves it aside, to
 run before the stow line. Never use `stow --adopt`, which would overwrite the
 tracked copies with them.
 
-Keep the login hooks quiet while provisioning, in every shell you use for it:
-`export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`. Otherwise the
-first interactive shell pulls the checkout and starts the unpinned installers
-of the payload repos in the middle of the bootstrap. The export reaches only
-the shells that inherit it: once you have stowed, a new terminal, a new login
-or an `ssh sherlock` from a workstation starts without it and installs them,
-so decide on [H7-payloads](#h7-payloads-payload-repos) before you open one.
+Keep the login update hook quiet while provisioning, in every shell you use for
+it: `export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` (the second
+is inert: nothing reads it any more). Otherwise the first interactive shell
+after the stow pulls the checkout in the middle of the bootstrap. No shell
+installs the payload repos: they install only when you run the
+[H7-payloads](#h7-payloads-payload-repos) line, whenever you choose.
 
 `./setup-host.sh` exits 3 while work remains: a blocking HUMAN step is pending,
 or automatic steps are still to apply. [H7-stow](#h7-stow-stow-the-dotfiles)
 blocks, so re-run it after each block until H7-stow is the only one still
 blocking, stow with the line its block prints, and run it once more; then it
 exits 0 and reprints only the non-blocking blocks (login shell, sign-in, the
-payload repos, the final doctor run). `--check` exits 3 whenever a step is still to do,
+payload repos, the final doctor run). Without `--legacy-stow`, H7-native
+(HW-native on Windows) takes H7-stow's place: run the handover instead of the
+stow. `--check` exits 3 whenever a step is still to do,
 so a `--check` that exits 0 has nothing left to apply.
 
 ### macOS
@@ -152,7 +199,7 @@ export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./setup-host.sh --legacy-stow --host mac      # again after each block, until only H7-stow still blocks
 PATH="/opt/homebrew/bin:$PATH" ./stow-all.sh mac    # H7-stow (Intel: PATH="/usr/local/bin:$PATH")
 ./setup-host.sh --legacy-stow --host mac      # exits 0 now
-# H7-payloads: decide before you open a new terminal
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --legacy-stow --host mac --smoke
 ```
@@ -184,7 +231,7 @@ export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu   # H7-stow
 ./setup-host.sh --legacy-stow --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
-# H7-payloads: decide before you open a new terminal
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --legacy-stow --host wsl-ubuntu --smoke
 ```
@@ -219,7 +266,7 @@ exit                                               # back to the login node
 # H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.bash_profile), then:
 PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock   # H7-stow
 ./setup-host.sh --legacy-stow --host sherlock                    # exits 0 now
-# H7-payloads: decide before the next login or `ssh sherlock`
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec "$HOME/micromamba/envs/login/bin/zsh" -l
 ./doctor.sh --legacy-stow --host sherlock --smoke
 ```
@@ -249,9 +296,9 @@ $env:DOTFILES_AUTO_UPDATE = '0'; $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
 .\setup-host.ps1 -LegacyStow -Host win      # exit 3 until HW-stow is done
 # in an elevated PowerShell 7 (Run as administrator), from $HOME\dotfiles:
 .\stow-all.ps1 win
-# H7-payloads: decide before you open a new terminal; its first ordinary PowerShell installs the payload repos
 # open a new terminal, then from $HOME\dotfiles:
 .\setup-host.ps1 -LegacyStow -Host win      # exits 0 now; prints the non-blocking HW blocks
+# H7-payloads (optional, any time, unelevated): .\scripts\payload-update.ps1 -Now
 .\doctor.ps1 -LegacyStow -Host win
 ```
 
@@ -270,7 +317,7 @@ and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-
 into your shell first:
 
 ```sh
-# with your package manager: git zsh curl rsync tar file tmux man ssh, python3 >= 3.11, GNU Stow >= 2.3.1,
+# with your package manager: git zsh curl rsync tar file man ssh, tmux >= 3.4, python3 >= 3.11, GNU Stow >= 2.3.1,
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
@@ -285,7 +332,7 @@ mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 ./setup-sync.sh                                                    # S4-setup-sync
 # H7-stow: move aside each file Stow reports (mv -n ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt
 ./stow-all.sh                              # H7-stow without a host argument: common only
-# H7-payloads: decide before you open a new terminal
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --platform other --smoke
 ```
@@ -300,19 +347,26 @@ exec zsh -l
 ./doctor.sh --help
 ```
 
-`--list` resolves the host like every other mode: without `--host` or
-`--platform` it needs `DOTFILES_HOST` or a host `./stow-all.sh` recorded for
-this home, and exits 2 otherwise (for example in a fresh clone or a linked
-worktree). Common only, as the login updater reads it, is either a
-`DOTFILES_HOST` that is set but empty or, without `DOTFILES_HOST`, a
-common-only install that `./stow-all.sh` (no host argument) recorded for this
-home and kernel: the doctor then checks the platform it detects (`macos`,
-`debian`, `hpc` or `other`) without an overlay, exactly as `--platform` would,
-and warns that it did. An empty `DOTFILES_HOST` also overrides a recorded host.
+`--list` resolves the host like every other mode, and `--host` or `--platform`
+always wins. On a native-owned home (one with `~/.config/dotfiles/native`, in
+any form) the host is the one quoted `host` line of the `[data]` table in
+`~/.config/chezmoi/chezmoi.toml`, read as text, without chezmoi or git;
+`DOTFILES_HOST` and the host `./stow-all.sh` recorded are legacy only and not
+read there. A missing, repeated, unknown or otherwise spelled role, or a linked
+or absent config, exits 2 asking for `--host`. On any other home it needs
+`DOTFILES_HOST` or a host `./stow-all.sh` recorded for this home, and exits 2
+otherwise (for example in a fresh clone or a linked worktree). Common only is
+`common-only` as that `[data].host`, or elsewhere, as the legacy login updater
+reads it, either a `DOTFILES_HOST` that is set but empty or, without
+`DOTFILES_HOST`, a common-only install that `./stow-all.sh` (no host argument)
+recorded for this home and kernel: the doctor then checks the platform it
+detects (`macos`, `debian`, `hpc` or `other`) without an overlay, exactly as
+`--platform` would, and warns that it did. An empty `DOTFILES_HOST` also
+overrides a recorded host.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) means the detected platform without an overlay. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a native-owned home its `[data].host`; elsewhere `DOTFILES_HOST`, else the host `./stow-all.sh` recorded for this home and kernel; common only (`common-only` as that `[data].host`, a set but empty `DOTFILES_HOST`, or a recorded common-only install) means the detected platform without an overlay. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
@@ -326,15 +380,15 @@ for example `[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md S2-
 `ok` and `skip` rows end at the detail. Without `--tsv`, a summary line with
 the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
-`tools.tsv` rows the doctor runs structural checks: `locale`, `venv-sync`,
-`submodule`, `stow-links`, `path-order`, `rc-pollution`, `omz-order`,
-`nvm-homebrew` and `payloads`. Dotfiles has no submodules: `submodule` warns
-while a `.gitmodules` exists or a retired submodule checkout is still in the
-clone, naming for each how to check that it holds no work and the `rm -rf`
-that removes it ([leftover checkouts](payloads.md#leftover-checkouts)); it
-never deletes anything. `payloads` warns, never fails, while an item of
+`tools.tsv` rows the doctor runs structural checks: `locale`, `native-config`,
+`path-order`, `rc-pollution`, `omz-order`, `nvm-homebrew` and `payloads`; with
+`--legacy-stow`, `venv-sync` and `stow-links` instead of `native-config`.
+`native-config` names the state of this home's native binding by cause
+([H7-native](#h7-native-reviewed-native-configuration-handover)). `payloads`
+warns, never fails, while an item of
 `DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
-installed kit lacks a Claude helper ([H7-payloads](#h7-payloads-payload-repos)).
+installed kit lacks a Claude helper, and names `sync-payloads ITEM`
+([H7-payloads](#h7-payloads-payload-repos)).
 The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
@@ -361,7 +415,7 @@ at HW-clone).
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor; `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and common only (a set but empty `DOTFILES_HOST`, or a recorded common-only install) exits 2 asking for `--host` |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (a native-owned home's `[data].host`; `DOTFILES_HOST` is legacy only); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and common only (`common-only` as that `[data].host`, a set but empty `DOTFILES_HOST`, or a recorded common-only install) exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |
@@ -386,12 +440,12 @@ exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
 `/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
 `~/.local/bin` (micromamba, codex, claude, kitty), then on hpc
 `~/micromamba/envs/login/bin`, so the login env comes first on hpc, as in the
-stowed shells, and elsewhere what setup-host linked into `~/.local/bin` wins.
-(The stowed workstation shells run `brew shellenv` and the conda hook after
-`~/.profile`, so there Homebrew and conda come before `~/.local/bin`.) A
-pre-stow run thus sees what earlier steps installed; neither script writes
-this to an rc file. The doctor's `path-order` check judges the PATH you
-started it with: it warns when a command setup-host puts in `~/.local/bin`
+dotfiles' shells, and elsewhere what setup-host linked into `~/.local/bin` wins.
+(The dotfiles' workstation shells run `brew shellenv` and the conda hook after
+`~/.profile`, so there Homebrew and conda come before `~/.local/bin`.) A run
+before the dotfiles are applied thus sees what earlier steps installed;
+neither script writes this to an rc file. The doctor's `path-order` check
+judges the PATH you started it with: it warns when a command setup-host puts in `~/.local/bin`
 (`claude`, `codex`, `micromamba`, `kitty`, `kitten`) is shadowed by another
 executable of the same name earlier on PATH (two installs of one tool), the
 login env on hpc excepted, or when `~/.local/bin` is missing.
@@ -405,35 +459,45 @@ because wget follows a redirect to plain http.
 | --- | --- |
 | 0 | Done: every selected step is done or does not apply; non-blocking HUMAN blocks may still be printed |
 | 1 | A step failed |
-| 2 | Usage error or refusal: unknown host (or none: no `--host`, an empty `DOTFILES_HOST`, nothing recorded), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
+| 2 | Usage error or refusal: unknown host (or none: no `--host`, a native config without one known `[data].host`, an empty `DOTFILES_HOST`, nothing recorded), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
 | 3 | Work remains: a blocking HUMAN step is pending, or automatic steps are still to apply (under `--check`, after a declined prompt, or while they wait on a HUMAN step); handle the printed blocks and run it again |
 
 `--list` shows which HUMAN steps block. A pending blocking step (Xcode CLT,
 Homebrew, apt packages, Linuxbrew, the Slurm allocation, the Claude Code
-installer, stow) holds back the steps that need it and makes the run exit 3,
+installer, the native handover or, with `--legacy-stow`, stow) holds back the
+steps that need it and makes the run exit 3,
 and so does an automatic step that needs a person's decision first: it shows
 as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
 conflicting Homebrew formula or cask in S2-brew-bundle, an `nvm.sh` S4-nvm will not
 source). S2-brew-bundle on a Homebrew prefix you cannot write (a shared
 Linuxbrew) likewise shows as `human`, not `todo`, and prints a blocking `sudo`
 block for the prefix's owner instead of running brew. A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
-dependents too (`H7-stow human blocked by S2-brew-bundle (skipped)`); one that
+dependents too (`H7-native human blocked by S2-brew-bundle (skipped)`); one that
 `--tier` or `--only` leaves out does not. Non-blocking blocks (locale, fcitx5,
 site modules, `chsh`, sign-in, the payload repos, the final doctor run) are printed
-but leave the exit code alone. Since H7-stow blocks, every run before the
-first stow exits 3.
+but leave the exit code alone. Since H7-native (H7-stow with `--legacy-stow`)
+blocks, every run before the handover (the first stow) exits 3.
+
+Every printed line that runs setup-host or the doctor again (in the
+H1-xcode-clt, H1-homebrew, H1-linuxbrew, H2-alloc, S4-nvm, S5-claude,
+X-recovery and H7-doctor blocks; on Windows in the HW-clone and HW-auth blocks
+and W1-winget's PATH warning)
+keeps your mode: `--legacy-stow` (`-LegacyStow`) when you ran with it. Those
+lines do not repeat a non-default `--tier`; the closing `rerun` warning of
+`setup-host.sh` does.
 
 The Windows twins take the same ideas as PowerShell parameters:
 `.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
 `.\setup-host.ps1 [-Host win] [-Tier LIST] [-Check] [-Yes] [-PrintManual] [-WhatIf]`
-(`-Host` defaults to `win`). Both need PowerShell 7 and never elevate
-themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
+(`-Host` defaults to `win`). Both need PowerShell 7 (W1-chezmoi 7.1 or newer)
+and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
-an invalid manifest; its structural checks are `venv-sync`, `submodule` and
-`payloads`, and `-Online` reports a signed-out tool as `warn`, as on Unix
-(its auth probes, too, may write the tools' own state).
-`.\setup-host.ps1` exits 3 while HW-clone or HW-stow is pending; the other HW
-blocks are printed but leave the exit code alone. Its `-Check` prints only
+an invalid manifest; its structural checks are `native-config` (with
+`-LegacyStow`, `venv-sync`) and `payloads`, and `-Online` reports a signed-out
+tool as `warn`, as on Unix (its auth probes, too, may write the tools' own
+state). `.\setup-host.ps1` exits 3 while HW-clone or HW-native is pending
+(HW-clone or HW-stow with `-LegacyStow`); the other HW blocks are printed but
+leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
 ending in `blocks completion` or `does not block`) and, like the Unix
 `--check`, exits 3 while a step is todo, so a `-Check` that exits 0 has
@@ -483,7 +547,7 @@ The first line names the step and the kind. Every other line up to
 | `alloc` | The person | A Slurm allocation; heavy work on hpc runs only inside one |
 | `chsh` | The person | Changes the login shell and asks for the password |
 | `inspect` | The person reads, then runs | A vendor script that cannot be pinned by digest: read it before it runs |
-| `judgment` | The person decides | A choice with tradeoffs: stowing, the payload repos, site modules, the final doctor run, execution policy, WSL, a checkout that is not a git clone |
+| `judgment` | The person decides | A choice with tradeoffs: the native handover or stowing, the payload repos, site modules, the final doctor run, execution policy, WSL, a checkout that is not a git clone |
 
 Any block whose note says it needs an elevated PowerShell (stow, the automatic
 stow task, WSL, the ssh-agent service) is the person's to run, whatever its
@@ -499,8 +563,9 @@ kind.
   The doctor never runs a tool whose version flag writes (the `brew`, `codex`,
   `nvim` and `pre-commit` rows are presence-only; S2-brew-bundle probes a
   Brewfile's tools with the same function), finds fonts by file name
-  instead of through `fc-list` (which creates fontconfig caches), and runs the
-  `venv-sync` interpreter with `-I -B`, so it writes no bytecode. Both Unix
+  instead of through `fc-list` (which creates fontconfig caches), and, with
+  `--legacy-stow`, runs the `venv-sync` interpreter with `-I -B`, so it writes
+  no bytecode. Both Unix
   scripts export `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1` (the Windows twins set
   them around each probe and restore yours): recent gh releases otherwise write
   `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
@@ -514,12 +579,13 @@ kind.
   the Unix scripts use no here-documents or here-strings, which macOS's Bash
   3.2 backs with files in the system temporary directory.
   `tests/doctor.sh` runs the real doctor with the real manifest on the machine
-  running the tests (`--platform debian` and `other`, an empty `HOME`) and
-  checks that it changed nothing.
+  running the tests (`--platform debian` and `other`, an empty `HOME`), in the
+  native default and with `--legacy-stow`, and checks that it changed nothing.
 - The installer never invokes `sudo`, `chsh`, `stow`, `./stow-all.sh`,
-  `conda init`, `micromamba shell init` or `git lfs install`, and never edits an
-  rc file. The only write it causes inside the checkout is `.venv-sync`, through
-  `./setup-sync.sh`.
+  `conda init`, `micromamba shell init` or `git lfs install`, never initializes
+  or applies native configuration, and never edits an rc file. The only write
+  it causes inside the checkout is `.venv-sync`, through `./setup-sync.sh` with
+  `--legacy-stow`.
 - No `curl | sh`: every script is downloaded to a scratch directory first, and
   only `inspect` rows (today just Claude Code's installer) have no digest. A
   HUMAN block runs a downloaded script only behind a digest gate: the pinned
@@ -620,9 +686,10 @@ short and send the agent here. The rules they follow:
   `--platform other`, and the setup steps are the manual ones in
   [X-other-linux](#x-other-linux-other-linux-distributions).
 - **Quiet hooks.** Every command runs with
-  `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`. The person's own new
-  terminals do not inherit that; the agent raises
-  [H7-payloads](#h7-payloads-payload-repos) before the stow.
+  `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` (the second is
+  inert). Nothing installs the payload repos unless someone runs the
+  [H7-payloads](#h7-payloads-payload-repos) line, so the agent asks the person
+  whether to run it.
 - **Plan first.** `./doctor.sh --host H --tsv` and
   `./setup-host.sh --host H --check`, shown to the person, before any apply.
   The apply is `./setup-host.sh --host H --yes`, because an agent's shell has
@@ -649,21 +716,25 @@ short and send the agent here. The rules they follow:
   `bash <path>` line only after the person approves it in chat, as one visible
   top-level command, or leaves it to the person. **`judgment`** blocks: the
   agent explains the choice and lets the person make it.
-- **Stow.** `./stow-all.sh H` writes under `~/.claude` and `~/.codex` (and
-  links `~/.ssh`). `~/.claude` is a protected path whose writes Claude Code's
-  auto mode cannot pre-approve, so the agent runs it only as its own visible
-  top-level command that the person approves, or leaves it to the person. Never
-  launder it through a wrapper script. Before the first stow, `stow` is not on
-  PATH, so the agent runs the H7-stow block's lines exactly as printed: its
+- **Handover.** Natively, the agent follows the H7-native block and
+  [takeover.md](chezmoi-migration/takeover.md) with the person; it never
+  improvises `chezmoi init --apply` or forces a whole home.
+- **Stow** (with `--legacy-stow`). `./stow-all.sh H` writes under `~/.claude`
+  and `~/.codex` (and links `~/.ssh`). `~/.claude` is a protected path whose
+  writes Claude Code's auto mode cannot pre-approve, so the agent runs it only
+  as its own visible top-level command that the person approves, or leaves it
+  to the person. Never launder it through a wrapper script. Before the first
+  stow, `stow` is not on PATH, so the agent runs the H7-stow block's lines
+  exactly as printed: its
   `mv -n` lines first, if it has any (they move aside home files Stow would
   refuse; never `stow --adopt`), then the stow line, the one-shot `PATH=`
   prefix that [H7-stow](#h7-stow-stow-the-dotfiles) gives for the host and the
   clone's `stow-all.sh H`.
 - **Exit 3** means work remains: a blocking HUMAN step is pending, or automatic
-  steps are still to apply, and H7-stow blocks. The agent re-runs setup-host
-  after each block until H7-stow is the only one left, then stows, then runs
-  setup-host once more, which exits 0. A `--check` that exits 0 has nothing
-  left to do.
+  steps are still to apply, and H7-native (H7-stow with `--legacy-stow`)
+  blocks. The agent re-runs setup-host after each block until that step is the
+  only one left, then does the handover (or stows), then runs setup-host once
+  more, which exits 0. A `--check` that exits 0 has nothing left to do.
 - **Never** `git lfs install`, `gh auth setup-git`, `conda init`,
   `micromamba shell init`, the upstream oh-my-zsh installer, rc-file edits,
   commits or pushes. After each installer, `git -C ~/dotfiles status --porcelain`
@@ -686,8 +757,8 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
 3. Ask me which host this is: mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win,
    or another Linux (then follow X-other-linux). Never guess. On win, use the
    PowerShell twins in every step below: .\doctor.ps1 -Host win -Tsv,
-   .\setup-host.ps1 -Host win -Check, then -Yes; the stow is the HW-stow block
-   (an elevated shell, so mine to run), and the finish is .\doctor.ps1 -Host win.
+   .\setup-host.ps1 -Host win -Check, then -Yes; the handover is the HW-native
+   block, and the finish is .\doctor.ps1 -Host win.
 4. Run every command with DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0.
 5. Run ./doctor.sh --host H --tsv and ./setup-host.sh --host H --check and show me the plan.
 6. After I agree, run ./setup-host.sh --host H --yes. For each HUMAN block
@@ -702,11 +773,13 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    digest-gated line only after I approve it, or leave it to me;
    judgment: explain the choice and let me decide.
 7. Exit 3 means work remains (a blocking HUMAN step, or steps still to apply).
-   Re-run setup-host after each block until H7-stow is the only one left. Ask
-   me about H7-payloads, then run the H7-stow block's lines exactly as printed
-   (any mv -n lines, then PATH prefix and stow-all.sh H; never stow --adopt),
-   each only as its own visible command after I approve it. Re-run setup-host;
-   it should exit 0.
+   Re-run setup-host after each block until H7-native (HW-native on win) is the
+   only one left. Ask me about H7-payloads. Then go through the H7-native block
+   and docs/chezmoi-migration/takeover.md with me; never improvise
+   chezmoi init --apply or force a whole home. (With --legacy-stow on every
+   command, H7-stow takes its place: run its lines exactly as printed, any mv -n
+   lines first, never stow --adopt, each only as its own visible command after
+   I approve it.) Re-run setup-host; it should exit 0.
 8. Finish with ./doctor.sh --host H --smoke, then report what changed, what is
    still pending, and every failure with its docs/bootstrap.md step id.
 Never run git lfs install, gh auth setup-git, conda init or micromamba shell init,
@@ -728,22 +801,24 @@ have a minimum), the overlay the person chose, and a complete checkout.
 - **Check:** `uname -sm; cat /etc/os-release 2>/dev/null || sw_vers; ldd --version 2>/dev/null | head -n 1; git -C ~/dotfiles status --porcelain`
 - **Install:** `git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles`
   (the login hooks default to `DOTFILES_DIR=$HOME/dotfiles`). The checkout has
-  no submodules; the payload repos install later, through their own
-  installers ([H7-payloads](#h7-payloads-payload-repos)).
-- **Verify:** the status is empty and the doctor's `submodule` check is `ok`.
-  setup-host's P0-preflight line records the OS, architecture, glibc and
-  detected platform, and warns about a `DOTFILES_DIR` that names another
-  checkout or uncommitted changes in the checkout
+  no submodules; the payload repos install only when you run them, through
+  their own installers ([H7-payloads](#h7-payloads-payload-repos)).
+- **Verify:** the status is empty. setup-host's P0-preflight line records the
+  OS, architecture, glibc and detected platform, and warns about a
+  `DOTFILES_DIR` that names another checkout or uncommitted changes in the
+  checkout: the native login update does not run from a checkout with
+  uncommitted changes, and with `--legacy-stow` an installer that appends to a
+  stowed rc file edits the checkout
   ([X-rc-protection](#x-rc-protection-rc-file-protection)). On an older clone
-  a `submodule` warning names a retired submodule checkout that a pull left
-  behind (`common/codex/coding-agent-kit`,
+  `git -C ~/dotfiles status --porcelain --ignored -- common` lists the retired
+  submodule checkouts a pull left behind (`common/codex/coding-agent-kit`,
   `common/coding-agent-kit/coding-agent-kit`, `common/pymol/PyMOLScripts`,
-  `common/sherlock-kit/sherlock-kit`): it is harmless, and once it holds no
-  work of yours, run the `rm -rf` the warning prints
+  `common/sherlock-kit/sherlock-kit`): they are harmless, nothing reports or
+  removes them, and once one holds no work of yours you can delete it by hand
   ([leftover checkouts](payloads.md#leftover-checkouts)).
 - **Human:** yes (judgment: the person names the host overlay, and a clone
-  outside `~/dotfiles` also needs `DOTFILES_DIR` exported; setup-host prints no
-  block for this step)
+  outside `~/dotfiles` also needs `DOTFILES_DIR` exported until a native
+  binding names it; setup-host prints no block for this step)
 
 On `sherlock` and `marlowe` the doctor's `locale` check points here: the
 cluster provides its locales, so a missing `en_US.UTF-8` is the site's to fix
@@ -1127,10 +1202,11 @@ files already carry the hook block.
 
 ### H2-alloc: Slurm allocation
 
-Applies to `sherlock` and `marlowe`. Build both the login env and the checkout's
-AI-sync env on a compute node. setup-host refuses S2-login-env and
-S4-setup-sync while `SLURM_JOB_ID` is unset and either env needs building,
-and prints this block even when the login env already exists.
+Applies to `sherlock` and `marlowe`. Build the login env on a compute node, and
+with `--legacy-stow` the checkout's AI-sync env too. setup-host refuses
+S2-login-env (and, with `--legacy-stow`, S4-setup-sync) while `SLURM_JOB_ID` is
+unset and its env needs building. An existing login env satisfies this step;
+with `--legacy-stow` it prints this block until the AI-sync env exists too.
 
 - **Check:** `echo "${SLURM_JOB_ID:-none}"`
 - **Install:** Sherlock: `sh_dev -t 1:00:00`. Marlowe: an interactive job with
@@ -1138,7 +1214,8 @@ and prints this block even when the login env already exists.
   partition and account Marlowe requires). Then, inside the job, export the two
   `*_AUTO_UPDATE=0` variables and `CONDA_PKGS_DIRS`
   ([S2-login-env](#s2-login-env-hpc-login-environment)) and re-run setup-host;
-  the block prints it with the clone's full path, so it runs from any directory.
+  the block prints it with the clone's full path (and `--legacy-stow` in that
+  mode), so it runs from any directory.
 - **Verify:** `echo "$SLURM_JOB_ID"` is non-empty and `hostname` is a compute node.
 - **Human:** yes (alloc: queueing and resources are the person's call)
 
@@ -1219,7 +1296,8 @@ cluster; vendor binaries and conda-forge builds each need a minimum glibc.
 
 ### S3-clones: oh-my-zsh, theme and plugin clones
 
-Applies to every Unix host, **before** `./stow-all.sh`. Rows in
+Applies to every Unix host, **before** the dotfiles are applied (the native
+handover, or `./stow-all.sh`). Rows in
 [`git-clones.tsv`](../config/bootstrap/git-clones.tsv) own repository names,
 destinations and branches. Clone oh-my-zsh first; ZSH_CUSTOM defaults to
 ~/.oh-my-zsh/custom for the theme and zsh plugins; tmux plugins live under
@@ -1243,7 +1321,7 @@ code runs in shell or tmux startup, the same trust model as oh-my-zsh's auto-upd
   `tpm`, `tmux-resurrect`, `tmux-fzf`, `tmux-continuum`, `catppuccin-tmux`,
   `extrakto`, `tmux-yank`, `tmux-floax`, `tmux-which-key`, `tmux-cpu` and
   `tmux-battery` are `ok`. The clones are provisioned on all Unix hosts;
-  the tmux config enables features only on compatible tmux versions.
+  the tmux config needs tmux 3.4 or newer (the `tools.tsv` floor).
 - **Human:** no
 
 setup-host never modifies an existing clone: a destination that is a git
@@ -1271,7 +1349,7 @@ so the loop fast-forwards oh-my-zsh as well.
 For tmux, run `./setup-host.sh --host H --check --only S3-clones`, then
 `./setup-host.sh --host H --yes --only S3-clones` to install missing plugins.
 Keep `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported while
-provisioning. Once `.tmux.conf` is stowed, reload a running server with
+provisioning. Once `.tmux.conf` is in place, reload a running server with
 `tmux source-file ~/.tmux.conf`; otherwise the next tmux start loads it.
 There is no tmux startup download or automatic plugin update. Use TPM's
 `prefix + U` for an explicit update and `prefix + I` after declaring another
@@ -1393,9 +1471,10 @@ before the first interactive `claude`.
 
 ### S4-setup-sync: AI-sync runtime
 
-Applies to every Unix host (Windows: W1-setup-sync). `./setup-sync.sh` creates
-the checkout-local `.venv-sync` with the hash-pinned `tomlkit` that
-`./stow-all.sh` needs; it is the only write setup-host causes inside the clone.
+Applies with `--legacy-stow` to every Unix host (Windows: W1-setup-sync, with
+`-LegacyStow`). `./setup-sync.sh` creates the checkout-local `.venv-sync` with
+the hash-pinned `tomlkit` that `./stow-all.sh` needs; it is the only write
+setup-host causes inside the clone.
 It needs Python 3.11 or newer. Setup, doctor and the sync wrappers use
 `DOTFILES_SYNC_PYTHON` whenever it is set, otherwise the checkout-local
 interpreter. A valid explicitly selected runtime completes this step without
@@ -1529,7 +1608,11 @@ belongs to the Windows terminal, not the distribution.
   Homebrew's `share/fonts`.
 - **Install:** automatic via setup-host.sh: extract into
   `$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont` (default
-  `~/.local/share/fonts/...`), then `fc-cache -f`. By hand:
+  `~/.local/share/fonts/...`), then `fc-cache -f`. Like the doctor's row, the
+  step counts a file named like `CaskaydiaMonoNerdFont` in the user, system or
+  Homebrew font directories as installed
+  (`font CaskaydiaMonoNerdFont at PATH`), so it never adds a second user copy.
+  By hand:
   `f=$(fetch_pinned nerd-font) && d=~/.local/share/fonts/CaskaydiaMonoNerdFont && mkdir -p "$d" && tar -C "$d" -xJf "$f" && fc-cache -f`
 - **Verify:** the check prints a font file and `fc-list | grep -i 'CaskaydiaMono Nerd Font'`
   lists the family; prompt and `eza` icons render in kitty and WezTerm.
@@ -1557,8 +1640,9 @@ them there, unpack the same tarball into your home on that host by hand.
 
 ### H7-stow: Stow the dotfiles
 
-Applies to every Unix host (Windows: HW-stow), after S3-clones and
-S4-setup-sync. `./stow-all.sh H` runs the Claude and Codex sync helpers (writing
+Applies with `--legacy-stow` to every Unix host (Windows: HW-stow), after
+S3-clones and S4-setup-sync; natively, H7-native takes its place.
+`./stow-all.sh H` runs the Claude and Codex sync helpers (writing
 `~/.claude/settings.json`, `~/.codex/config.toml` and
 `~/.codex/rules/portable.rules`), links `common/` and then the overlay into
 `$HOME`, tightens `~/.ssh` modes and records the host for the doctor and the
@@ -1641,14 +1725,15 @@ interactive `claude` or `codex`.
 - **Check:** `ssh -T git@github.com; gh auth status; claude auth status; codex login status`
   (or `./doctor.sh --host H --online`)
 - **Install:**
-  - SSH key: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519` (the stowed ssh config
+  - SSH key: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519` (the dotfiles' ssh config
     uses exactly that file, with `IdentitiesOnly yes`).
   - GitHub: `gh auth login --git-protocol ssh` (browser or device code; it offers
-    to upload the public key). Do not run `gh auth setup-git`: it writes
-    `git config --global`, which goes through the stowed `~/.gitconfig` into
-    `common/git/.gitconfig`. Hosts that need gh as a credential helper already
-    name it by full path in their `.gitconfig_local`: lab-ubuntu the Linuxbrew
-    gh, marlowe the login env's.
+    to upload the public key). Do not run `gh auth setup-git`: it rewrites
+    `~/.gitconfig`, which the dotfiles manage (natively a local change at which
+    the next login update stops; with `--legacy-stow` it goes through the
+    stowed link into `common/git/.gitconfig`). Hosts that need gh as a
+    credential helper already name it by full path in their
+    `.gitconfig_local`: lab-ubuntu the Linuxbrew gh, marlowe the login env's.
   - Claude Code: run `claude` once in a terminal, or `claude auth login`.
   - Codex: `codex login` (`codex login --device-auth` on a headless host).
   - Kerberos for Sherlock and Marlowe: `kinit <SUNetID>@stanford.edu` on the
@@ -1669,55 +1754,47 @@ interactive `claude` or `codex`.
 
 ### H7-payloads: Payload repos
 
-Applies to every host. Once stowed, every interactive shell (zsh through
-`.zshrc`, bash and sh login shells through `.profile`; on native Windows the
-PowerShell 7 profile, in ordinary unelevated sessions) runs the payload hook,
-`scripts/payload-update.sh` (`scripts/payload-update.ps1`), once per session.
-It installs coding-agent-kit (the account launchers and the Claude helpers
-that `settings.json` runs; Unix only, nothing on native Windows), PyMOLScripts
-(`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills (`~/.claude/skills`,
-`~/.codex/skills`, `~/.agents/skills/awesome-skills`) through each repository's
-own installer, named in
-[`config/payloads.tsv`](../config/payloads.tsv): an absent one in the
-foreground, so you see the first install, and later refreshes in one detached
-background run (the kit and PyMOL daily, the skills weekly). Each install
+Applies to every host. coding-agent-kit (the account launchers and the Claude
+helpers that `settings.json` runs; Unix only, nothing on native Windows),
+PyMOLScripts (`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills
+(`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills/awesome-skills`)
+install and update only when a person runs `scripts/payload-update.sh --now`
+(`scripts/payload-update.ps1 -Now`): in the foreground, it installs each
+absent item and updates each installed one through the repository's own
+installer, named in [`config/payloads.tsv`](../config/payloads.tsv). No login,
+profile or schedule installs or refreshes them, on any home, and the script
+keeps no state of its own: files older automatic runs left (`ITEM.stamp`,
+`ITEM.failed`, `payload.log`) are ignored and never removed. Each run
 downloads its repository's unpinned `main` install script; the kit's installs
 the newest patch release of the channel the file declares.
 [payloads.md](payloads.md) is the contract.
 
-It is **on by default**: it runs unless `DOTFILES_PAYLOAD_AUTO_UPDATE=0` is in
-that shell's environment. The quick start's export reaches only shells that
-inherit it, so after the stow a new terminal, a new login, or the first
-`ssh sherlock` or `ssh marlowe` from a workstation runs it. Its downloads are
-the ones near the bootstrap that are not pinned, so decide before the first
-new shell after the stow. Every rc file in this repository is tracked, so
-there is no local file to turn it off in: to keep it off, export
-`DOTFILES_PAYLOAD_AUTO_UPDATE=0` in the environment that the terminal or the
-ssh session starts with, or narrow it with `DOTFILES_PAYLOAD_ITEMS` (for
-example `kit pymol`). setup-host prints this as a non-blocking judgment block
-until the doctor's `payloads` row is `ok`; `setup-host.ps1` prints no block,
-and `doctor.ps1`'s `payloads` row points here.
+setup-host prints this as a non-blocking judgment block until the doctor's
+`payloads` row is `ok`; `setup-host.ps1` prints no block, and `doctor.ps1`'s
+`payloads` row points here. `DOTFILES_PAYLOAD_ITEMS` (for example `kit pymol`)
+selects the items a run without arguments installs and the doctor checks.
 
 - **Check:** the doctor's `payloads` row (`./doctor.sh --host H`,
   `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
-  (`doctor.ps1` checks only PyMOLScripts and awesome-skills).
-- **Install:** opt-out, as above; nothing to do to keep it on. To run it once
-  now, in the foreground, use the line the setup-host block prints, which works
-  before the stow too and also in a shell that exports
-  `DOTFILES_PAYLOAD_AUTO_UPDATE=0`: `sh ~/dotfiles/scripts/payload-update.sh --now`
-  (Windows, from an ordinary PowerShell 7:
-  `& $HOME\dotfiles\scripts\payload-update.ps1 -Now`). In a stowed shell,
+  (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
+  warns and names `sync-payloads ITEM`.
+- **Install:** the line the setup-host block prints, which works before the
+  dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
+  (Windows, from an ordinary unelevated PowerShell 7:
+  `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
+  update. In an interactive shell with the dotfiles applied,
   `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
-  skills. It needs `sh` and curl, or wget with an existing timeout/gtimeout
-  (Windows: PowerShell 7), plus what
-  each installer needs, which its README lists (Git for the kit and the
-  skills).
-- **Verify:** the `payloads` row is `ok`; the last background refresh is in
-  `${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/payload.log`
-  (Windows `%LOCALAPPDATA%\dotfiles\payload\payload.log`).
-- **Human:** yes (judgment: it is on by default once stowed and runs unpinned
-  scripts from branch heads; decide before the first new shell after the stow)
+  skills; on a native-owned home they run the bound checkout's script and
+  refuse an invalid binding. An installer's exit 75
+  (its own lock is busy) is no failure; any other failure makes the run exit 1
+  and names what to run next. Active maintenance refuses a run. It needs `sh`
+  and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
+  plus what each installer needs, which its README lists (Git for the kit and
+  the skills).
+- **Verify:** the `payloads` row is `ok`.
+- **Human:** yes (judgment: whether and when to run unpinned scripts from
+  branch heads)
 
 ### H7-doctor: Final doctor run
 
@@ -1738,8 +1815,9 @@ elevated command is the person's.
 ### HW-clone: Clone the repository
 
 The checkout tracks no symlink, so Git for Windows needs neither
-`core.symlinks` nor Developer Mode; the links in your home are what the
-elevated HW-stow creates. The login updater pulls the checkout, so it must be
+`core.symlinks` nor Developer Mode; the native handover writes regular files,
+and with `-LegacyStow` the links in your home are what the elevated HW-stow
+creates. The login updater pulls the checkout, so it must be
 a git clone, not an extracted archive.
 
 - **Check:** `Test-Path $HOME\dotfiles\.git; git -C $HOME\dotfiles status --porcelain`
@@ -1758,8 +1836,8 @@ a git clone, not an extracted archive.
   (`winget show --id Microsoft.PowerShell -e --versions` lists them).
   Clone onto NTFS, never into a WSL distribution. An older clone made with
   `core.symlinks` and `--recurse-submodules` needs nothing: its leftover
-  submodule checkouts are harmless, and the doctor's `submodule` row prints
-  how to remove them ([leftover checkouts](payloads.md#leftover-checkouts)).
+  submodule checkouts are harmless
+  ([leftover checkouts](payloads.md#leftover-checkouts)).
 - **Verify:** `Test-Path` prints `True` and the status is empty.
 - **Human:** yes (judgment: the person installs Git and PowerShell 7 and
   clones before `setup-host.ps1` can run from the clone; it blocks on this
@@ -1849,10 +1927,11 @@ config directory.
 
 ### W1-setup-sync: AI-sync runtime on Windows
 
-Setup, doctor and the sync wrappers honor `DOTFILES_SYNC_PYTHON` when it is
-set. A passing selected runtime completes the step without provisioning a
-checkout-local environment. An invalid override fails apply; repair or unset
-it rather than installing an unused default.
+Runs only with `-LegacyStow`. Setup, doctor and the sync wrappers honor
+`DOTFILES_SYNC_PYTHON` when it is set. A passing selected runtime completes
+the step without provisioning a checkout-local environment. An invalid
+override fails apply; repair or unset it rather than installing an unused
+default.
 
 - **Check:** `.\setup-host.ps1 -Check` checks the selected interpreter with
   `lib/config_sync.py --runtime-check`, alongside the other setup steps.
@@ -1880,6 +1959,7 @@ The tracked profiles and scripts are local files, which `RemoteSigned` allows.
 
 ### HW-stow: Elevated stow
 
+Emitted only with `-LegacyStow`; natively, HW-native takes its place.
 `stow-all.ps1` creates the links; links made without elevation can be rejected
 by processes that enforce RedirectionGuard, such as current Windows OpenSSH
 (see the README's Windows section).
@@ -1889,7 +1969,7 @@ by processes that enforce RedirectionGuard, such as current Windows OpenSSH
   `$HOME\dotfiles`: `.\stow-all.ps1 win`. The HW-stow block prints it with the
   clone's full path, `& '<clone>\stow-all.ps1' win`, so it runs from any
   directory.
-- **Verify:** `.\doctor.ps1 -Host win` passes. Setup marks HW-stow done only
+- **Verify:** `.\doctor.ps1 -LegacyStow -Host win` passes. Setup marks HW-stow done only
   when the installer's Windows receipt matches this home, the `win` host and
   current HEAD, and `.gitconfig`, `.gitconfig_local` and both PowerShell
   profile links point to this checkout. A single Git link is insufficient;
@@ -1899,8 +1979,9 @@ by processes that enforce RedirectionGuard, such as current Windows OpenSSH
 
 ### HW-auto-stow-task: Automatic stow task
 
-Optional. The login updater can restow after a pull through a current-user task
-that runs this checkout's scripts with highest privileges.
+Optional, and emitted only with `-LegacyStow`; native updates need no
+scheduled task. The legacy login updater can restow after a pull through a
+current-user task that runs this checkout's scripts with highest privileges.
 
 - **Check:** from `$HOME\dotfiles`:
   `. .\scripts\dotfiles-auto-stow.ps1; Get-DotfilesTaskStatus (Get-DotfilesTaskName $PWD.Path)`
@@ -1938,14 +2019,15 @@ and WSL quick start with host `wsl-ubuntu`.
 - **Human:** yes (judgment: optional; it needs an elevated shell and maybe a
   reboot, and the tracked `wsl.conf` needs review, below)
 
-The judgment part: `win/wsl/` stows `.wslconfig`, `wsl.conf` and `mount.vbs`
-into your Windows home. `.wslconfig` sizes memory and processors for one
-machine; review it. `wsl.conf` takes effect only as `/etc/wsl.conf` inside the
-distribution, and the tracked one runs `/usr/local/bin/mount-data.sh`, which
-this repository does not ship, and hardcodes a `[user] default=` name. Copy only
-what fits this machine into `/etc/wsl.conf` by hand (with sudo), then
-`wsl --shutdown`. `mount.vbs` mounts one specific physical disk; do not schedule
-it on another machine.
+The judgment part: the native handover (HW-native) deploys `win/wsl/`'s
+`.wslconfig`, `wsl.conf` and `mount.vbs` into your Windows home (with
+`-LegacyStow`, `.\stow-all.ps1 win` links them). `.wslconfig` sizes memory and
+processors for one machine; review it. `wsl.conf` takes effect only as
+`/etc/wsl.conf` inside the distribution, and the tracked one runs
+`/usr/local/bin/mount-data.sh`, which this repository does not ship, and
+hardcodes a `[user] default=` name. Copy only what fits this machine into
+`/etc/wsl.conf` by hand (with sudo), then `wsl --shutdown`. `mount.vbs` mounts
+one specific physical disk; do not schedule it on another machine.
 
 ### HW-auth: Windows authentication
 
@@ -1955,8 +2037,10 @@ it on another machine.
   `gh auth login --git-protocol ssh`; Git Credential Manager comes with Git for
   Windows and `win/git/.gitconfig_local` selects it; `claude` once, or
   `claude auth login`; `codex login`. For Sherlock and Marlowe, the terminal
-  profiles ssh from inside WSL, so `kinit` there.
-- **Verify:** `.\doctor.ps1 -Host win -Online` shows the auth probes `ok`.
+  profiles ssh from inside WSL, so `kinit` there. Skip `gh auth setup-git`:
+  it would rewrite `~\.gitconfig`, which the dotfiles manage.
+- **Verify:** `.\doctor.ps1 -Host win -Online` (with `-LegacyStow` in that
+  mode, as the block prints it) shows the auth probes `ok`.
 - **Human:** yes (auth: browser logins and key passphrases)
 
 ## Optional and other platforms
@@ -2029,9 +2113,14 @@ quick start runs them as one sequence.
 
 ### X-rc-protection: rc-file protection
 
-`~/.zshrc`, `~/.bashrc`, `~/.profile` and `~/.gitconfig` are Stow symlinks, so
-anything a third-party installer appends lands in `common/` and dirties the
-checkout. The doctor's `rc-pollution` check reports `human` for
+On a native home `~/.zshrc`, `~/.bashrc`, `~/.profile` and `~/.gitconfig` are
+regular files that chezmoi manages: anything a third-party installer appends
+is a local change at which the next login update stops, so later targets stay
+stale until you review it with a private targeted native diff
+([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover)).
+With `--legacy-stow` they are Stow symlinks, so the append lands in `common/`
+and dirties the checkout. The doctor's `rc-pollution` check reads the checkout
+(it cannot see a native file's append): it reports `human` for
 `~/.zshrc.pre-oh-my-zsh`, and for a `# >>> Codex installer >>>` block, any
 conda or mamba initialize block or an nvm loader in a `common/` rc file, and
 `warn` for other uncommitted changes under `common/`. Keep every installer away
@@ -2048,8 +2137,9 @@ from rc files:
 - Homebrew: `NONINTERACTIVE=1`, and never paste its `brew shellenv` "Next steps"
   lines.
 - Never `git lfs install` (the `lfs` filter is already in `common/git/.gitconfig`
-  and the command rewrites the stowed `~/.gitconfig`), never `gh auth setup-git`
-  (same file), never `conda init`, never the upstream oh-my-zsh installer.
+  and the command rewrites `~/.gitconfig`, which the dotfiles manage), never
+  `gh auth setup-git` (same file), never `conda init`, never the upstream
+  oh-my-zsh installer.
 
 PATH belongs in `common/sh/.profile`, which already puts `~/.local/bin` first;
 AGENTS.md's shell conventions say to discard installer PATH blocks and keep
@@ -2058,7 +2148,8 @@ only their intent there.
 setup-host enforces this for its own steps: it records the checkout's state
 before each step and fails the step when anything changed, comparing file
 content, so an edit to a file that was already modified still fails. Start from
-a clean checkout; P0-preflight warns when it is not.
+a clean checkout; P0-preflight warns when it is not, also because the native
+login update does not run from a checkout with uncommitted changes.
 
 - **Check:** `git -C ~/dotfiles status --porcelain` (must print nothing)
 - **Install:** if it lists a file, read `git -C ~/dotfiles diff <file>`. When the
@@ -2079,9 +2170,11 @@ a clean checkout; P0-preflight warns when it is not.
 - **Verify:** the doctor check that pointed here is `ok`.
 - **Human:** yes (judgment: each recipe moves or replaces files)
 
-**oh-my-zsh after stow.** `~/.oh-my-zsh/custom/` exists (Stow made it) but
-`~/.oh-my-zsh/oh-my-zsh.sh` does not, so S3-clones refuses. Turn the directory
-into the checkout in place, keeping the stowed links:
+**oh-my-zsh after the dotfiles.** `~/.oh-my-zsh/custom/` exists (Stow, or a
+native directory preparation, made it) but `~/.oh-my-zsh/oh-my-zsh.sh` does
+not, so S3-clones refuses and the doctor's `omz-order` check says "the dotfiles
+were applied before the clone". Turn the directory into the checkout in place,
+keeping the dotfiles' custom files:
 
 ```sh
 git -C ~/.oh-my-zsh init
@@ -2092,10 +2185,11 @@ git -C ~/.oh-my-zsh config oh-my-zsh.remote origin
 git -C ~/.oh-my-zsh config oh-my-zsh.branch master
 ```
 
-Then re-run `./setup-host.sh --host H` for the theme and plugin clones. When
-S3-clones refuses, setup-host prints this recipe with your paths as an
-X-recovery block, with the clone settings of
-[S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones) set before the fetch.
+Then re-run `./setup-host.sh --host H` (with `--legacy-stow` in that mode) for
+the theme and plugin clones. When S3-clones refuses, setup-host prints this
+recipe with your paths as an X-recovery block, with the clone settings of
+[S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones) set before the fetch
+and that rerun line.
 
 **Clone destination that is not a git checkout.** S3-clones fails with
 "DEST exists and is not a git checkout": a plugin or theme directory that was
@@ -2141,20 +2235,27 @@ compute its digest (`sha256sum FILE`, macOS `shasum -a 256 FILE`), update its
 
 **Homebrew-installed nvm.** `brew list nvm` succeeds and the doctor's
 `nvm-homebrew` check warns. Run `brew uninstall nvm` and delete the
-`$(brew --prefix nvm)/nvm.sh` lines Homebrew's caveat told you to add (if they
-landed in a stowed rc file, `git -C ~/dotfiles status` shows it; see
-X-rc-protection). Keep `~/.nvm`, whose `versions/` stay usable, then run
-`./setup-host.sh --host mac --only S4-nvm`; the pinned installer turns `~/.nvm`
-into its own checkout.
+`$(brew --prefix nvm)/nvm.sh` lines Homebrew's caveat told you to add (natively
+they are a local change at which the next login update stops; with
+`--legacy-stow` they landed in a stowed rc file, which
+`git -C ~/dotfiles status` shows; see X-rc-protection). Keep `~/.nvm`, whose
+`versions/` stay usable, then run `./setup-host.sh --host mac --only S4-nvm`;
+the pinned installer turns `~/.nvm` into its own checkout.
 
 **`~/.zshrc.pre-oh-my-zsh`.** The upstream oh-my-zsh installer ran: it moved
-your stowed `~/.zshrc` link to `~/.zshrc.pre-oh-my-zsh`, wrote its template
-`~/.zshrc`, and may have changed your login shell. Check with
-`ls -l ~/.zshrc ~/.zshrc.pre-oh-my-zsh`; move the template aside
-(`mv ~/.zshrc ~/.zshrc.omz-template`); remove `~/.zshrc.pre-oh-my-zsh` only if
-it is the link into `~/dotfiles`; then `./stow-all.sh H`, with the
-[H7-stow](#h7-stow-stow-the-dotfiles) prefix when `stow` is not on PATH, and, if
-needed, [H7-chsh](#h7-chsh-login-shell).
+your `~/.zshrc` (natively a regular file, with `--legacy-stow` the Stow link)
+to `~/.zshrc.pre-oh-my-zsh`, wrote its template `~/.zshrc`, and may have
+changed your login shell. Check with `ls -l ~/.zshrc ~/.zshrc.pre-oh-my-zsh`
+and move the template aside (`mv ~/.zshrc ~/.zshrc.omz-template`). On a native
+home, move `~/.zshrc.pre-oh-my-zsh` back to `~/.zshrc` (a nonforce apply
+refuses an absent target it wrote, as it refuses an edited one), review it with
+a private targeted native diff, and apply only that target with the full
+argument set, `--exclude=dirs` and `--force=false`
+([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover));
+never `./stow-all.sh`. With `--legacy-stow`, remove `~/.zshrc.pre-oh-my-zsh`
+only if it is the link into `~/dotfiles`, then run `./stow-all.sh H`, with the
+[H7-stow](#h7-stow-stow-the-dotfiles) prefix when `stow` is not on PATH. Then,
+if needed, [H7-chsh](#h7-chsh-login-shell).
 
 ## Known limitations
 
