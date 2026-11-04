@@ -181,6 +181,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --legacy-stow)
+            # shellcheck disable=SC2034 # read by lib/bootstrap
             BOOTSTRAP_LEGACY_STOW=1
             shift
             ;;

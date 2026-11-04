@@ -169,7 +169,10 @@ while [[ $# -gt 0 ]]; do
         --online) ONLINE=1 ;;
         --smoke) SMOKE=1 ;;
         --list) LIST=1 ;;
-        --legacy-stow) BOOTSTRAP_LEGACY_STOW=1 ;;
+        --legacy-stow)
+            # shellcheck disable=SC2034 # read by lib/bootstrap/checks.sh
+            BOOTSTRAP_LEGACY_STOW=1
+            ;;
         -h | --help)
             usage
             exit 0
