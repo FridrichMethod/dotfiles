@@ -100,7 +100,8 @@ class PayloadDownload(unittest.TestCase):
                 continue
             command = f"payload_script sh '{source}'" if kind == "sh" else f"Invoke-DotfilesPayloadScript '{source}'"
             platform = "unix" if kind == "sh" else "windows"
-            lines.extend((f"{name}\tdays\t1", f"{name}\t{platform}-probe\t{'false' if kind == 'sh' else '$false'}",
+            # Any row names a known item; none of them needs a days row.
+            lines.extend((f"{name}\t{platform}-probe\t{'false' if kind == 'sh' else '$false'}",
                           f"{name}\t{platform}-install\t{command}"))
         (self.repo / "config/payloads.tsv").write_text("\n".join(lines) + "\n")
 

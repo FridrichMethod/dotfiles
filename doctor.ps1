@@ -206,17 +206,19 @@ function Get-DoctorPayloadResult {
     $config = Join-Path $RepoRoot 'config/payloads.tsv'
     if (-not [IO.File]::Exists($config)) { return New-DoctorResult warn payloads ai "no readable $config" $step }
     $rows = @{}
+    $known = @{}
     $available = [Collections.Generic.List[string]]::new()
     foreach ($line in [IO.File]::ReadAllLines($config)) {
         $parts = $line.Split("`t", 3)
         if (-not $line.StartsWith('#') -and $parts.Count -eq 3 -and -not $rows.ContainsKey("$($parts[0])`t$($parts[1])")) {
+            $known[$parts[0]] = $true
             $rows["$($parts[0])`t$($parts[1])"] = $parts[2]
             if ($parts[1] -ceq 'windows-install') { $available.Add($parts[0]) }
         }
     }
     # A name config/payloads.tsv does not know stays, to be named below.
     $items = if ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) {
-        @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ -and ($_ -in $available -or -not $rows.ContainsKey("$_`tdays")) })
+        @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ -and ($_ -in $available -or -not $known.ContainsKey($_)) })
     }
     else { @($available) }
     $state = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'dotfiles/payload' } else { Join-Path $HOME '.local/state/dotfiles/payload' }

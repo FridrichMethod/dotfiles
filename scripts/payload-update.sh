@@ -100,6 +100,16 @@ field() {
     return 1
 }
 
+# known ITEM: config has a row for ITEM, whatever its field.
+known() {
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in
+            "$1$tab"*) return 0 ;;
+        esac
+    done <"$config"
+    return 1
+}
+
 # payload_script INTERPRETER SOURCE [ARG...]: run SOURCE with ARG, stdin
 # closed, and return its status. A URL is first downloaded, within the
 # timeout, into a fresh directory that only this user can enter and that holds
@@ -286,7 +296,7 @@ if [ "$#" -eq 0 ]; then
     set -- ${DOTFILES_PAYLOAD_ITEMS-kit pymol skills}
 fi
 for item in "$@"; do
-    field "$item" days ||
+    known "$item" ||
         fail "payload-update: unknown item '$item'; config/payloads.tsv names kit, pymol and skills."
 done
 

@@ -72,12 +72,14 @@ $PayloadFailed = & { try {
     $timeout = 60
     if (-not [int]::TryParse("$env:DOTFILES_PAYLOAD_TIMEOUT", [ref]$timeout) -or $timeout -lt 1) { $timeout = 60 }
     $rows = @{}
-    # The items that install here: those with a windows-install row, in
-    # config order.
+    # The items config/payloads.tsv has any row for, and those that install
+    # here: the ones with a windows-install row, in config order.
+    $known = @{}
     $available = [Collections.Generic.List[string]]::new()
     foreach ($line in [IO.File]::ReadAllLines((Join-Path $Repo 'config/payloads.tsv'))) {
         $parts = $line.Split("`t", 3)
         if (-not $line.StartsWith('#') -and $parts.Count -eq 3 -and -not $rows.ContainsKey("$($parts[0])`t$($parts[1])")) {
+            $known[$parts[0]] = $true
             $rows["$($parts[0])`t$($parts[1])"] = $parts[2]
             if ($parts[1] -ceq 'windows-install') { $available.Add($parts[0]) }
         }
@@ -250,7 +252,7 @@ $PayloadFailed = & { try {
     elseif ($null -ne $env:DOTFILES_PAYLOAD_ITEMS) { @($env:DOTFILES_PAYLOAD_ITEMS -split '\s+' | Where-Object { $_ }) }
     else { @($available) }
     foreach ($name in $names) {
-        if (-not $rows.ContainsKey("$name`tdays")) {
+        if (-not $known.ContainsKey($name)) {
             Write-DotfilesLog error "payload-update: unknown item '$name'; config/payloads.tsv names kit, pymol and skills."
             return $true
         }
