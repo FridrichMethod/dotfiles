@@ -161,6 +161,19 @@ compilation and environment creation require allocation; no detached login-node
 updater/supervisor is permitted. Keep site-specific updater behavior compliant.
 Read the applicable rules on Marlowe before installation or substantive changes.
 
+Marlowe publishes no `/etc/agents` rules. Its site AppArmor profile `block-node`
+denies `node` (and some IDE and agent binaries) on login nodes; never work
+around it. The three Claude Code commands that run coding-agent-kit's Node
+helpers there (the PreToolUse Git hook-bypass guard, Notification and
+statusLine) therefore exit 127 on login nodes. Claude Code treats that as a
+non-blocking hook error: the action proceeds, while permissions and the auto-mode
+classifier still apply. The guard documents itself as no security boundary, so
+the loss is user experience: a blank status line, no notifications and no usage
+records for `claude-as --account-info`. Stage 5 accepted this without a
+Marlowe-specific settings branch; non-Node helpers would be an upstream
+coding-agent-kit change. Dotfiles still deploys Marlowe's inert Codex
+configuration, and the Codex client is deliberately not provisioned there.
+
 Sherlock's observed glibc 2.17 cannot run the generic v2.74 Linux artifact. The
 official SHA256-verified static musl build passed an isolated version probe;
 `77bb03e` selects it without changing the existing destination convention.
