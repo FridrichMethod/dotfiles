@@ -123,7 +123,7 @@ chezmoi update with explicit paths, `--exclude=dirs`, fast-forward-only Git, clo
 conflict handling. It refuses dirty source, missing/empty native state and OneDrive
 source writes; failures warn and leave the shell usable. Unmarked homes retain
 the legacy updater in the [update contract](docs/update-contract.md). A persistent
-maintenance marker blocks both update and payload hooks during takeover.
+maintenance marker blocks the update hook and explicit payload runs during takeover.
 Windows Terminal still needs a restart to load settings changes.
 
 | Variable | Effect |
@@ -131,9 +131,8 @@ Windows Terminal still needs a restart to load settings changes.
 | `DOTFILES_AUTO_UPDATE=0` | Disable the dotfiles login updater |
 | `DOTFILES_AUTO_STOW=0` | Legacy only: permit pulls without automatic restow |
 | `DOTFILES_DIR` | Legacy checkout selection; native uses its home-bound marker |
-| `DOTFILES_HOST` | Legacy only: override remembered Unix host; native uses local data |
+| `DOTFILES_HOST` | Legacy only: override remembered Unix host; native uses local `[data].host` |
 | `DOTFILES_COLOR` | `auto`, `always` or `never`; NO_COLOR/TERM=dumb disable color |
-| `DOTFILES_PAYLOAD_AUTO_UPDATE=0` | Disable the separate automatic payload hook |
 
 Set opt-outs before shell startup. Do not run manual and automatic installers
 concurrently. [Shell startup](docs/shell.md) covers nvm, conda, PATH ordering,
@@ -189,7 +188,7 @@ live edit of an owned key stops native login updates at that file until it is
 
 ## Payload repos
 
-The session-once payload hook calls each repository's own installer:
+`sync-payloads` calls each repository's own installer:
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit),
 [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) and
 [awesome-skills](https://github.com/FridrichMethod/awesome-skills).
@@ -200,19 +199,22 @@ awesome-skills manages its own copies under `~/.claude/skills/`,
 `~/.codex/skills/` and `~/.agents/skills/awesome-skills/`; Codex reads both of
 its roots. Selection and migration stay with that repository's installer.
 
-Absent items install in the foreground; due updates run in one detached
-background process. Success stamps are separate from `ITEM.failed` records;
-failures are reported on later sessions and retried in the background after
-six hours. Exit 75 writes neither. Exit 3 for configured person-status items
-requires following the upstream installer's message; locally edited PyMOL rc
-files are preserved. This remains two rolling PyMOL rc copies, not a version
-manager. Downloaded scripts run from fresh private staging directories, never
-from a pipe. See the [payload contract](docs/payloads.md) for bounds, state,
-selection, trust and exact migration behavior.
+No login, profile or schedule installs or refreshes the payload repos. A person
+runs `sync-payloads`, which installs absent items and updates installed ones in
+the foreground and keeps no state. On a native home it runs the hook of the
+validated bound source and refuses an invalid binding; only unmarked homes use
+`DOTFILES_DIR`. Exit 75 (another run holds the repository's lock) is no
+failure. Exit 3 for configured person-status items requires following the
+upstream installer's message; locally edited PyMOL rc files are preserved.
+Other failures print a retry line, and the run exits 1. This remains two
+rolling PyMOL rc copies, not a version manager. Downloads are bounded and run
+from fresh private staging directories, never from a pipe. See the
+[payload contract](docs/payloads.md) for bounds, selection, trust and exact
+migration behavior.
 
 ```sh
-sync-payloads [kit] [pymol] [skills]  # foreground, ignore refresh interval
-sync-skills
+sync-payloads [kit] [pymol] [skills]  # foreground: install or update
+sync-skills                           # sync-payloads skills
 ```
 
 On native Windows use these profile functions or `scripts/payload-update.ps1 -Now` in an ordinary, unelevated PowerShell. It manages PyMOLScripts and

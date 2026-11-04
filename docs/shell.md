@@ -39,8 +39,11 @@ changes. No configuration change migrates or deletes existing Cargo contents.
 The PowerShell profile installs nothing. Interactive setup requires console
 stdin/stdout, loaded PSReadLine and a non-agent session. Script invocations,
 redirected output and piped input skip setup and console code-page changes.
-Agent detection matches zsh. Interactive tails run the update hook before the
-payload hook; native Windows has no kit installation. See [payloads](payloads.md).
+Agent detection matches zsh. The interactive tail, which agent terminals keep,
+runs only the update hook; no payload hook runs there. Interactive setup defines
+`sync-payloads` and `sync-skills`, which install or update the payload repos
+only when a person runs them; native Windows has no kit installation. See
+[payloads](payloads.md).
 
 Tab cycles completions; Up/Down search history by prefix. RightArrow at the
 end of the line accepts a prediction, and F2 switches prediction views. With
