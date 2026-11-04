@@ -70,8 +70,8 @@ one batch, each with the plan's options and its recommendation first, and record
 the answers in status.md. Do not ask again for blanket commit, publication or
 rollout authority: D11 and AGENTS.md "Workflows and checks" grant it within
 their limits. Ask before anything those rules forbid or that cannot be undone.
-The auto-mode classifier has required an explicit user confirmation for main
-pushes; ask for it at the landing step.
+The auto-mode classifier may require an explicit user confirmation for a main
+push; if it does, ask for it at the landing step.
 
 Workflow, phased, with a todo list. Phase 0 is read-only and parallel where
 independent: re-derive the plan's callers at your base, run fleet gates F1-F12
@@ -112,8 +112,8 @@ are fast-forward only and nonforce: the login updater, or explicit native
 commands with the updater's full argument set plus --exclude=dirs
 --force=false. Plain read-only chezmoi commands are fine on the five
 re-initialized Unix hosts, whose config owns persistentState; on win, until R3's
-re-init passes, even read-only ones need the full argument set (a plain one
-creates ~/.config/chezmoi/chezmoistate.boltdb). Plain mutating commands never
+re-init passes, use the full argument set even for read-only ones (plain ones
+print chezmoi's template-changed warning). Plain mutating commands never
 are fine. Never force, stash, rebase
 or reset a host checkout; restore maintenance on failure. Run the plan's
 per-host acceptance, then retire only exact residue items, each with a private
@@ -140,7 +140,8 @@ Marlowe. Interactive login shells use the micromamba login env
 shells (ssh marlowe-plain) see /usr/bin/tmux 3.2a and the system tools. The site
 AppArmor profile block-node denies node on login nodes (the env's node does not
 run), so Claude's Node hooks fail open: accepted, and the Codex config stays
-deployed (inert). Never work
+deployed (no Codex CLI is on PATH there, but remotely started Codex
+app-servers read it). Never work
 around the profile. Any env change runs in a Slurm job. Its filesystem keeps
 ACLs ('+'): never use cp -p there, and never assume $0 is a file when a script
 travels over ssh.
