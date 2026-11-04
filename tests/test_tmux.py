@@ -219,11 +219,17 @@ class TmuxConfiguration(unittest.TestCase):
         floax.parent.mkdir(parents=True)
         floax.write_text("#!/bin/sh\n")
         floax.chmod(0o755)
-        # Like tmux-yank, extrakto's OSC 52 choice must see a session-only SSH
-        # client; tmux expands "$VAR" itself from the global environment.
+        # Like tmux-yank, extrakto's OSC 52 choice follows the session
+        # environment: a session-only SSH client turns it on, and a session
+        # removal hides a server-global SSH value (a server started over SSH,
+        # reloaded locally). tmux expands "$VAR" itself from the global one.
         self.tmux("set-environment", "-t", "fixture", "SSH_CONNECTION", "fixture-ssh")
         self.source()
         self.assertEqual(self.option("@extrakto_clip_mode"), "tmux_osc52")
+        self.tmux("set-environment", "-g", "SSH_CONNECTION", "fixture-ssh")
+        self.tmux("set-environment", "-t", "fixture", "-r", "SSH_CONNECTION")
+        self.source()
+        self.assertEqual(self.option("@extrakto_clip_mode"), "bg")
         self.assertIn("scripts/floax.sh", self.tmux("list-keys", "-T", "prefix", "M-f"))
         tools = shlex.split(self.tmux("display-message", "-p", "#{@wk_menu_tools}"))
         self.assertIn("Floating shell (M-f)", tools)

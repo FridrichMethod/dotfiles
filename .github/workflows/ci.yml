@@ -39,7 +39,7 @@ jobs:
       - name: Install Unix test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes stow
+          sudo apt-get install --yes stow tmux
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.sh
       - name: Provision verified native chezmoi test runtime
