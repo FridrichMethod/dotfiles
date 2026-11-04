@@ -21,7 +21,7 @@ dependencies:
   - git-lfs
   - gh>=2.50.0
   - stow>=2.3.1
-  - tmux>=2.6
+  - tmux>=3.4
   - rsync
   - curl
   - file
