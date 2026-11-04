@@ -11,9 +11,9 @@ need no root, and prints everything that needs a person (sudo, a browser login,
 a GUI dialog, a Slurm allocation, a login-shell change, a judgment call) as a
 HUMAN block instead of running it. Profiles, `./stow-all.sh` and the login
 update hooks never install a tool; only these entry points do, and only when
-you run them. (The payload hook, which the stowed profiles call, installs and
-updates only this repository's three first-party payload repos, through their
-own installers, and is on by default once stowed; see
+you run them. (This repository's three first-party payload repos install and
+update, through their own installers, only when a person runs the payload
+command; no login, profile or schedule does; see
 [H7-payloads](#h7-payloads-payload-repos).)
 
 [`config/bootstrap/`](../config/bootstrap/) is the single source for
@@ -138,13 +138,12 @@ the block lists each such file with an `mv -n` line that moves it aside, to
 run before the stow line. Never use `stow --adopt`, which would overwrite the
 tracked copies with them.
 
-Keep the login hooks quiet while provisioning, in every shell you use for it:
-`export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`. Otherwise the
-first interactive shell pulls the checkout and starts the unpinned installers
-of the payload repos in the middle of the bootstrap. The export reaches only
-the shells that inherit it: once you have stowed, a new terminal, a new login
-or an `ssh sherlock` from a workstation starts without it and installs them,
-so decide on [H7-payloads](#h7-payloads-payload-repos) before you open one.
+Keep the login update hook quiet while provisioning, in every shell you use for
+it: `export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` (the second
+is inert: nothing reads it any more). Otherwise the first interactive shell
+after the stow pulls the checkout in the middle of the bootstrap. No shell
+installs the payload repos: they install only when you run the
+[H7-payloads](#h7-payloads-payload-repos) line, whenever you choose.
 
 `./setup-host.sh` exits 3 while work remains: a blocking HUMAN step is pending,
 or automatic steps are still to apply. [H7-stow](#h7-stow-stow-the-dotfiles)
@@ -169,7 +168,7 @@ export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 ./setup-host.sh --legacy-stow --host mac      # again after each block, until only H7-stow still blocks
 PATH="/opt/homebrew/bin:$PATH" ./stow-all.sh mac    # H7-stow (Intel: PATH="/usr/local/bin:$PATH")
 ./setup-host.sh --legacy-stow --host mac      # exits 0 now
-# H7-payloads: decide before you open a new terminal
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --legacy-stow --host mac --smoke
 ```
@@ -201,7 +200,7 @@ export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" ./stow-all.sh wsl-ubuntu   # H7-stow
 ./setup-host.sh --legacy-stow --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
-# H7-payloads: decide before you open a new terminal
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --legacy-stow --host wsl-ubuntu --smoke
 ```
@@ -236,7 +235,7 @@ exit                                               # back to the login node
 # H7-stow: first its mv -n lines (the /etc/skel ~/.bashrc and ~/.bash_profile), then:
 PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock   # H7-stow
 ./setup-host.sh --legacy-stow --host sherlock                    # exits 0 now
-# H7-payloads: decide before the next login or `ssh sherlock`
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec "$HOME/micromamba/envs/login/bin/zsh" -l
 ./doctor.sh --legacy-stow --host sherlock --smoke
 ```
@@ -266,9 +265,9 @@ $env:DOTFILES_AUTO_UPDATE = '0'; $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
 .\setup-host.ps1 -LegacyStow -Host win      # exit 3 until HW-stow is done
 # in an elevated PowerShell 7 (Run as administrator), from $HOME\dotfiles:
 .\stow-all.ps1 win
-# H7-payloads: decide before you open a new terminal; its first ordinary PowerShell installs the payload repos
 # open a new terminal, then from $HOME\dotfiles:
 .\setup-host.ps1 -LegacyStow -Host win      # exits 0 now; prints the non-blocking HW blocks
+# H7-payloads (optional, any time, unelevated): .\scripts\payload-update.ps1 -Now
 .\doctor.ps1 -LegacyStow -Host win
 ```
 
@@ -302,7 +301,7 @@ mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 ./setup-sync.sh                                                    # S4-setup-sync
 # H7-stow: move aside each file Stow reports (mv -n ~/.bashrc ~/.bashrc.pre-dotfiles), never stow --adopt
 ./stow-all.sh                              # H7-stow without a host argument: common only
-# H7-payloads: decide before you open a new terminal
+# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --platform other --smoke
 ```
@@ -655,9 +654,10 @@ short and send the agent here. The rules they follow:
   `--platform other`, and the setup steps are the manual ones in
   [X-other-linux](#x-other-linux-other-linux-distributions).
 - **Quiet hooks.** Every command runs with
-  `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`. The person's own new
-  terminals do not inherit that; the agent raises
-  [H7-payloads](#h7-payloads-payload-repos) before the stow.
+  `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` (the second is
+  inert). Nothing installs the payload repos unless someone runs the
+  [H7-payloads](#h7-payloads-payload-repos) line, so the agent asks the person
+  whether to run it.
 - **Plan first.** `./doctor.sh --host H --tsv` and
   `./setup-host.sh --host H --check`, shown to the person, before any apply.
   The apply is `./setup-host.sh --host H --yes`, because an agent's shell has
@@ -1721,55 +1721,45 @@ interactive `claude` or `codex`.
 
 ### H7-payloads: Payload repos
 
-Applies to every host. Once stowed, every interactive shell (zsh through
-`.zshrc`, bash and sh login shells through `.profile`; on native Windows the
-PowerShell 7 profile, in ordinary unelevated sessions) runs the payload hook,
-`scripts/payload-update.sh` (`scripts/payload-update.ps1`), once per session.
-It installs coding-agent-kit (the account launchers and the Claude helpers
-that `settings.json` runs; Unix only, nothing on native Windows), PyMOLScripts
-(`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills (`~/.claude/skills`,
-`~/.codex/skills`, `~/.agents/skills/awesome-skills`) through each repository's
-own installer, named in
-[`config/payloads.tsv`](../config/payloads.tsv): an absent one in the
-foreground, so you see the first install, and later refreshes in one detached
-background run (the kit and PyMOL daily, the skills weekly). Each install
+Applies to every host. coding-agent-kit (the account launchers and the Claude
+helpers that `settings.json` runs; Unix only, nothing on native Windows),
+PyMOLScripts (`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills
+(`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills/awesome-skills`)
+install and update only when a person runs `scripts/payload-update.sh --now`
+(`scripts/payload-update.ps1 -Now`): in the foreground, it installs each
+absent item and updates each installed one through the repository's own
+installer, named in [`config/payloads.tsv`](../config/payloads.tsv). No login,
+profile or schedule installs or refreshes them, on any home, and the script
+keeps no state of its own: files older automatic runs left (`ITEM.stamp`,
+`ITEM.failed`, `payload.log`) are ignored and never removed. Each run
 downloads its repository's unpinned `main` install script; the kit's installs
 the newest patch release of the channel the file declares.
 [payloads.md](payloads.md) is the contract.
 
-It is **on by default**: it runs unless `DOTFILES_PAYLOAD_AUTO_UPDATE=0` is in
-that shell's environment. The quick start's export reaches only shells that
-inherit it, so after the stow a new terminal, a new login, or the first
-`ssh sherlock` or `ssh marlowe` from a workstation runs it. Its downloads are
-the ones near the bootstrap that are not pinned, so decide before the first
-new shell after the stow. Every rc file in this repository is tracked, so
-there is no local file to turn it off in: to keep it off, export
-`DOTFILES_PAYLOAD_AUTO_UPDATE=0` in the environment that the terminal or the
-ssh session starts with, or narrow it with `DOTFILES_PAYLOAD_ITEMS` (for
-example `kit pymol`). setup-host prints this as a non-blocking judgment block
-until the doctor's `payloads` row is `ok`; `setup-host.ps1` prints no block,
-and `doctor.ps1`'s `payloads` row points here.
+setup-host prints this as a non-blocking judgment block until the doctor's
+`payloads` row is `ok`; `setup-host.ps1` prints no block, and `doctor.ps1`'s
+`payloads` row points here. `DOTFILES_PAYLOAD_ITEMS` (for example `kit pymol`)
+selects the items a run without arguments installs and the doctor checks.
 
 - **Check:** the doctor's `payloads` row (`./doctor.sh --host H`,
   `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
-  (`doctor.ps1` checks only PyMOLScripts and awesome-skills).
-- **Install:** opt-out, as above; nothing to do to keep it on. To run it once
-  now, in the foreground, use the line the setup-host block prints, which works
-  before the stow too and also in a shell that exports
-  `DOTFILES_PAYLOAD_AUTO_UPDATE=0`: `sh ~/dotfiles/scripts/payload-update.sh --now`
-  (Windows, from an ordinary PowerShell 7:
-  `& $HOME\dotfiles\scripts\payload-update.ps1 -Now`). In a stowed shell,
-  `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
-  skills. It needs `sh` and curl, or wget with an existing timeout/gtimeout
-  (Windows: PowerShell 7), plus what
-  each installer needs, which its README lists (Git for the kit and the
-  skills).
-- **Verify:** the `payloads` row is `ok`; the last background refresh is in
-  `${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/payload/payload.log`
-  (Windows `%LOCALAPPDATA%\dotfiles\payload\payload.log`).
-- **Human:** yes (judgment: it is on by default once stowed and runs unpinned
-  scripts from branch heads; decide before the first new shell after the stow)
+  (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
+  warns and names `sync-payloads ITEM`.
+- **Install:** the line the setup-host block prints, which works before the
+  dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
+  (Windows, from an ordinary unelevated PowerShell 7:
+  `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
+  update. In an interactive shell, `sync-payloads [ITEM...]` does the same and
+  `sync-skills` runs only the skills; on a native-owned home they run the
+  bound checkout's script and refuse an invalid binding. An installer's exit 75
+  (its own lock is busy) is no failure; any other failure makes the run exit 1
+  and names what to run next. Active maintenance refuses a run. It needs `sh` and curl, or wget with an existing timeout/gtimeout
+  (Windows: PowerShell 7), plus what each installer needs, which its README
+  lists (Git for the kit and the skills).
+- **Verify:** the `payloads` row is `ok`.
+- **Human:** yes (judgment: whether and when to run unpinned scripts from
+  branch heads)
 
 ### H7-doctor: Final doctor run
 
