@@ -109,8 +109,8 @@ bridge. It changes the boundary as follows;
   (.NET 6).
 - The doctors' submodule check and retired-checkout advice are gone; leftover
   checkouts stay on disk for inspection by hand. The payload `stow-links`
-  refusal and its advice stay until Stage 6 (their early removal, D-g, was
-  dropped).
+  refusal and its advice stay unchanged until Stage 6 (a proposed Stage 5
+  rewording of that advice for native-owned homes was dropped).
 
 ## Resolved user direction
 
@@ -179,7 +179,7 @@ payload scheduling for every home. See [Stage 5 boundary](#stage-5-boundary).
 | Old Codex Git filter | `filter.codex-portable` cleanup in `stow-all.sh` | Remove source repair; manual checklist covers obsolete local Git config |
 | Generated Codex override | Exact-marker `AGENTS.override.md` cleanup in `stow-all.sh` | Remove automatic cleanup; warn that an existing override can still shadow instructions; never delete an arbitrary user override |
 | One-login shim | `scripts/awesome-skills-update.sh`, hook selectors and test entrypoint copies | Stage 5 made it a pure no-op; delete it with its old callers in Stage 6; do not recreate it for native deployment |
-| Payload legacy field | `stow-links` payload manifest row and retired-link consumers in payload scripts, `lib/bootstrap/checks.sh`, `doctor.ps1` | Remove historical repair advice; do not confuse it with current readiness checks sharing a similar name. Kept through Stage 5 (its early removal, D-g, was dropped), so Stage 6 |
+| Payload legacy field | `stow-links` payload manifest row and retired-link consumers in payload scripts, `lib/bootstrap/checks.sh`, `doctor.ps1` | Remove historical repair advice; do not confuse it with current readiness checks sharing a similar name. Kept unchanged through Stage 5 (a proposed rewording of its advice for native-owned homes was dropped), so Stage 6 |
 | Old skills opt-out | `AWESOME_SKILLS_AUTO_UPDATE` adapter and doctor advice | Done in Stage 5 with the payload scheduler: the hook adapter and its notice (`281e33f`) and the doctor's read and advice (`a8ca3ff`) deleted, and the previous through-2027-01-31 promise withdrawn early. Select items by command arguments (`sync-payloads kit pymol`); `DOTFILES_PAYLOAD_ITEMS` still sets the default items |
 | Old checkout diagnostics | Retired path tables in `lib/bootstrap/checks.sh` and `doctor.ps1` | Done in Stage 5 (`d200d3f`): obsolete advice and the whole submodule check removed from both doctors; the no-submodule invariant is now a repository test (`tests/test_chezmoi_source_state.py`) |
 | Retired checkout ignores | Specific `.gitignore` / `.stowrc` entries | Cheap `.gitignore` guards may remain for actual local residue; keep Stow exclusions while old package enumeration remains supported |
@@ -204,7 +204,7 @@ bounds or exact runtime pins merely to say "latest-only".
 
 | Candidate | Investigation and conditions | Stage |
 | --- | --- | --- |
-| tmux version gates | Current config gates features at 3.0, 3.2, 3.3 and 3.4; 3.4 is a code-derived candidate floor for those branches, not a claim about the latest release. Verify public features, package availability and actual tests before deleting gates. Update `tools.tsv`, tmux config, tests and docs together. | 1 selected; 2 mapped; done in 5 (`e6cfba2`): floor 3.4 in `tools.tsv` and `hpc-login-env.yml`, all seven gates and the version parsing removed with config, tests and docs; hosts run Lab/WSL 3.4, Mac 3.8, Sherlock 3.7 and Marlowe 3.6a (login envs); Linux CI fails without real tmux 3.4 |
+| tmux version gates | Current config gates features at 3.0, 3.2, 3.3 and 3.4; 3.4 is a code-derived candidate floor for those branches, not a claim about the latest release. Verify public features, package availability and actual tests before deleting gates. Update `tools.tsv`, tmux config, tests and docs together. | 1 selected; 2 mapped; done in 5, landed together in `dddc718`: floor 3.4 in `tools.tsv` and `hpc-login-env.yml`, all seven gates and the version parsing removed with config and tests (`e6cfba2`), Linux CI's real tmux (`69f8652`, `33508e7`) and the docs; hosts run Lab/WSL 3.4, Mac 3.8, Sherlock 3.7 and Marlowe 3.6a (login envs); Linux CI fails without real tmux 3.4 |
 | Old Claude plugin ID | Official direction is pre-2.1.285 `agents-md@builtin`, current `cc-plugin-agents-md@builtin`; newer clients accept either. Stage 3 retains both. Verify a coherent client floor and native ancestor loading before Stage 5 removes either entry. Removing portable data does not delete live-only state. | 3 preserves both; 5 kept both (no verified client decision) |
 | Root `CLAUDE.md` stub | Keep the cheap import interoperability stub by default. Any later removal needs explicit convention change and verified ancestor loading from subdirectories; never conflate it with the substantive global Claude instructions. | Separate verified decision if justified |
 | Codex CLAUDE fallback | This supports other repositories' instruction files, not demonstrably old Codex versions. Do not delete it as part of a client-floor sweep. | Preserve unless separately justified |

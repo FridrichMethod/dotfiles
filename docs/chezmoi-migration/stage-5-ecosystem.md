@@ -54,7 +54,8 @@ failing Node hooks (the site's block-node AppArmor profile) and keeps the inert
 Codex config; Windows runs only the exact provisioned `chezmoi.exe` after an
 owner/DACL check, with no `~/.local` ACL edits and no hash pin; the native config
 template owns `persistentState`, followed by a reviewed re-init on each of the
-six hosts; the tmux floor is 3.4, with a Marlowe tmux install and cache cleanup.
+six hosts (Windows pending); the tmux floor is 3.4, with a Marlowe tmux install
+and cache cleanup.
 
 Measured with `git diff --numstat b9f9d61..dddc718`: code 29 files +788/-602
 (net +186); tests 22 files +1923/-792 (net +1131); docs 14 files +1031/-636
@@ -64,9 +65,12 @@ baseline: root entrypoints 3006 to 3067 lines, `lib/` 6370 to 6646, `scripts/`
 28490 to 29621, docs 11807 to 12202, all tracked text 62496 to 64218. The payload
 package alone was implementation +184/-377 (net -193) and tests +500/-653 (net
 -153). The code growth sits in `lib/`: Windows binary trust
-(`lib/chezmoi-guard.ps1` +64, `lib/bootstrap.ps1` +113/-16) and native host
-resolution (`lib/bootstrap/platform.sh` +82/-6). No startup time was measured;
-no speedup is claimed.
+(`lib/chezmoi-guard.ps1` +64), `lib/bootstrap.ps1` +113/-16 (per-commit
+numstat: binary trust `9836f27` and `90d10ac` +80/-11, native-config verdicts
+`3b89dbf` +39/-11, and a PowerShell 7.1 gate added and reverted in `d55b78b`
+and `72c8346` that nets to zero) and native host resolution
+(`lib/bootstrap/platform.sh` +82/-6). No startup time was measured; no speedup
+is claimed.
 
 Host rollout (2026-11-04). Evidence stays on each host under
 `~/.local/state/dotfiles-stage5-rollout/u-<ts>/` and
@@ -238,7 +242,7 @@ landed result at `dddc718`.
 | `sherlock/sh/.config/sh/.profile` `DOTFILES_PAYLOAD_AUTO_UPDATE=0` | Retain the site override while any automatic scheduler exists. Explicit `sync-payloads` remains available subject to site/allocation rules. | `tests/shell-profile.sh`; no detached login-node worker. If D7 removes all automatic calls, remove only the redundant variable with a documented equivalent no-worker guarantee. | Removed (`281e33f`); only a comment remains. Correction to the evidence column: the no-worker guarantee is pinned by `tests/payload-update.sh` (`--now` never detaches) and `test_chezmoi_guard.py` `test_logins_start_no_payload_run_and_keep_the_update_dispatch` (Sherlock overlay on and off), not by `tests/shell-profile.sh`. |
 | `scripts/dotfiles-update.sh`, `.ps1`, `scripts/dotfiles-auto-stow.ps1`, legacy profile fallback | Stage 6 deletion, not Stage 5 refactoring: still serve unmarked supported homes/registered tasks. Their locks, revision receipts, retry logic and elevation handling are already absent from the native path. | `tests/update-hooks.sh`, `.ps1`, `tests/windows-installer*`; quiesce and deregister only the exact owned task under the reviewed operator procedure. | Stage 6; unchanged. The Windows restow task stays disabled. |
 | `stow-all.sh`, `.ps1`, `.stowrc`, `lib/windows-link-trust.ps1`; retired-link/filter/generated-override repair | Stage 6 deletion with old deployment. Keep current compatibility and refusal checks until its support ends; do not port repair to native apply. | Includes `filter.codex-portable`, exact generated `AGENTS.override.md`, retired Sherlock/kit/PyMOL link repair. Foreign files/links and user overrides remain untouched. | Stage 6; unchanged. |
-| `scripts/awesome-skills-update.sh`; `config/payloads.tsv` `stow-links`; readers in both payload hooks and doctors | Stage 6 deletion with the last supported historical caller; earlier removal only with an explicit cohesive withdrawal and proof of no supported dependency. | Do not confuse historical payload links with current Stow readiness or native destination-baseline safety. Cheap ignored-residue entries may remain. | Stage 6. The shim is now a pure no-op (`:`) until then (`281e33f`). The `stow-links` refusal and its advice in both hooks and doctors stay (the proposed early removal, D-g, was dropped). |
+| `scripts/awesome-skills-update.sh`; `config/payloads.tsv` `stow-links`; readers in both payload hooks and doctors | Stage 6 deletion with the last supported historical caller; earlier removal only with an explicit cohesive withdrawal and proof of no supported dependency. | Do not confuse historical payload links with current Stow readiness or native destination-baseline safety. Cheap ignored-residue entries may remain. | Stage 6. The shim is now a pure no-op (`:`) until then (`281e33f`). The `stow-links` refusal and its advice in both hooks and doctors stay unchanged (a proposed Stage 5 rewording of that advice for native-owned homes was dropped). |
 | `setup-sync.sh`, `.ps1`, `requirements-sync.txt`, `lib/sync-runtime.sh`, `lib/config_sync.py`, `.venv-sync`, `DOTFILES_SYNC_PYTHON` | Stage 6 mandatory retirement after the last supported legacy caller. Stage 5 creates no new parser environment and removes no still-required runtime. | Four exact wrappers: `common/claude/.local/bin/claude-settings-sync`, `common/codex/.local/bin/codex-config-sync`, `common/codex/.local/bin/codex-rules-sync`, `lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync`. Retire their runner/CI/hooks/tests together. | Stage 6; unchanged. Stage 5 created no environment; legacy suites reused the existing `.venv-sync` read-only through `DOTFILES_SYNC_PYTHON`. |
 | `home/` literal includes into `common/`, host packages and portable AI policies; two raw asset copies | Retain through Stage 5. Edit the canonical legacy input when a justified ecosystem change changes rendered config; keep parity. | Stage 6 materializes once and removes old physical paths. No independently editable policy copies or hidden source generator. | Retained. Stage 5 edited only canonical inputs (`common/sh/.aliases`, `.profile`, `common/zsh/.zshrc`, three tmux files, the Sherlock profile, the PowerShell 7 profile) and `home/.chezmoi.toml.tmpl`; no bridge, package path or role total changed ([inventory.md](inventory.md)). |
 
@@ -317,11 +321,12 @@ and retained tests that accidentally keep a retired mechanism alive.
   minimum probes, tests and docs in one coherent change. A newer Bash must be
   actually invoked on macOS/CI; installing it alone does not replace `/bin/bash`.
   Preserve platforms, current feature fallbacks and cheap interoperability stubs.
-  Done: tmux 3.4 by user decision in one change (`e6cfba2`), with Marlowe's
-  login env given tmux 3.6a before landing; hosts run Lab/WSL 3.4, Mac 3.8,
-  Sherlock 3.7 and Marlowe 3.6a. Bash 3.2 (the Mac's `/bin/bash` is 3.2.57, and
-  the macOS CI job runs `/bin/bash`), PowerShell 7.0 with the 5.1 profile,
-  Python 3.11 and both Claude plugin IDs are kept.
+  Done: tmux 3.4 by user decision, landed together in `dddc718` (config,
+  provisioning and tests `e6cfba2`; Linux CI `69f8652`, `33508e7`; docs), with
+  Marlowe's login env given tmux 3.6a before landing; hosts run Lab/WSL 3.4,
+  Mac 3.8, Sherlock 3.7 and Marlowe 3.6a. Bash 3.2 (the Mac's `/bin/bash` is
+  3.2.57, and the macOS CI job runs `/bin/bash`), PowerShell 7.0 with the 5.1
+  profile, Python 3.11 and both Claude plugin IDs are kept.
 - [x] Propose bounded externals for suitable assets first, such as a verified
   theme file. For each external record destination, current owner/updater, local
   edit handling, whether `.git` is needed, ref/checksum policy and update timing.
@@ -504,9 +509,10 @@ capabilities: automatic payload installs and refreshes at login on every home;
 Sherlock's override; payload stamps, failure records, log and timed retry; the
 doctor's submodule and retired-checkout advice; `DOTFILES_HOST` and the Stow
 receipt on native-owned homes; any PATH `chezmoi` for the Windows login
-updater; tmux below 3.4. Tested minimums: tmux 3.4 (Linux CI's apt tmux, Lab
-and WSL), Bash 3.2 (macOS CI `/bin/bash`), Python 3.11 (Linux CI). PowerShell
-7.0 stays the declared floor, but CI runs the hosted runner's pwsh, not 7.0.
+updater; tmux below 3.4. Tested minimums: tmux 3.4 (Linux CI's apt tmux; Lab
+and WSL hosts also have 3.4), Bash 3.2 (macOS CI `/bin/bash`), Python 3.11
+(Linux CI). PowerShell 7.0 stays the declared floor, but CI runs the hosted
+runner's pwsh, not 7.0.
 Stage 6 is next: [stage-6-retirement.md](stage-6-retirement.md) carries its
 gates, including the Windows host converged on the landed revision, no unmarked
 home, a fresh-home native install procedure for e2e, and its open decisions
