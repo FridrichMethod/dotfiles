@@ -1113,6 +1113,56 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         finally { $script:DownloadBytes = $null }
     }
 
+    Test-Case 'native chezmoi install extracts what it hashed through one handle into a private executable' {
+        $fixture = New-Fixture
+        $bytes = @{}
+        foreach ($name in @('fixture', 'swapped')) {
+            $archive = Join-Path $fixture.State "$name.zip"
+            $zip = [IO.Compression.ZipFile]::Open($archive, [IO.Compression.ZipArchiveMode]::Create)
+            try {
+                $stream = [IO.StreamWriter]::new($zip.CreateEntry('chezmoi.exe').Open())
+                try { $stream.Write("$name chezmoi.exe") } finally { $stream.Dispose() }
+            }
+            finally { $zip.Dispose() }
+            $bytes[$name] = [IO.File]::ReadAllBytes($archive)
+        }
+        $script:DownloadBytes = $bytes['fixture']
+        $digest = (Get-FileHash -LiteralPath (Join-Path $fixture.State 'fixture.zip') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $destination = Join-Path $fixture.Home '.local/bin/chezmoi.exe'
+        try {
+            # A writer of the temporary directory replaces the archive right
+            # after its by-path check; the extracted bytes must not follow it.
+            $swapped = & {
+                function Get-FileHash {
+                    [CmdletBinding()] param([string]$LiteralPath, [string]$Algorithm)
+                    Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm $Algorithm
+                    [IO.File]::WriteAllBytes($LiteralPath, $bytes['swapped'])
+                }
+                Install-BootstrapChezmoi -Uri 'https://example.invalid/chezmoi.zip' -Sha256 $digest -Destination $destination
+            }
+            Assert-True (-not $swapped.Success -and $swapped.Message.Contains('sha256 mismatch')) "swapped archive accepted: $($swapped.Message)"
+            Assert-True (-not [IO.File]::Exists($destination)) 'swapped archive installed an executable'
+            $good = Install-BootstrapChezmoi -Uri 'https://example.invalid/chezmoi.zip' -Sha256 $digest -Destination $destination
+            Assert-True $good.Success "native install failed: $($good.Message)"
+            Assert-Equal ([IO.File]::ReadAllText($destination)) 'fixture chezmoi.exe' 'native executable bytes'
+            Assert-Equal (@(Get-ChildItem -LiteralPath (Split-Path -Parent $destination) -Force -Name) -join ',') 'chezmoi.exe' 'staging left beside the executable'
+            if ($IsWindows) {
+                # Never a DACL inherited from %TEMP% or ~/.local/bin: exactly
+                # this user, SYSTEM and Administrators, explicit and protected.
+                $acl = Get-Acl -LiteralPath $destination
+                Assert-True $acl.AreAccessRulesProtected 'chezmoi.exe DACL inherits'
+                $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
+                        "$($_.IdentityReference.Value):$($_.AccessControlType):$($_.FileSystemRights):$($_.IsInherited)"
+                    } | Sort-Object)
+                $expected = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544' |
+                        ForEach-Object { "${_}:Allow:FullControl:False" } | Sort-Object)
+                Assert-Equal ($rules -join ',') ($expected -join ',') 'chezmoi.exe DACL'
+            }
+            else { Skip-Assertion 'protected chezmoi.exe DACL is Windows-only.' }
+        }
+        finally { $script:DownloadBytes = $null }
+    }
+
     Test-Case 'native setup and doctor omit the legacy parser and elevated stow path' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
