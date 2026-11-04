@@ -1,5 +1,14 @@
 # Fresh-session prompt: Stage 5
 
+> Completed. Stage 5 landed at `dddc718` on 2026-11-04 after exact CI
+> 41832666587 and bootstrap e2e 41832666818. Its packages, user decisions,
+> review, host results and open gates (Windows is pending its user-run steps)
+> are in [status.md](status.md#stage-5-completion-record-2026-11-04); the
+> rollout procedure as run is in
+> [fleet-rollout.md](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04). The
+> next session starts from [start-stage-6.md](start-stage-6.md). The prompt
+> below is the original handoff, kept as history; do not run it again.
+
 ```text
 Implement only Stage 5 of the chezmoi migration when the current stage handoff
 permits it. Do not restart completed Stages 1-3 or the Stage 4 bridge, treat

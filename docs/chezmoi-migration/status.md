@@ -1,15 +1,269 @@
 # Migration state and next-session record
 
+## Stage 5 completion record (2026-11-04)
+
+This section is the current state. Stage 5 ran 2026-11-03..04 and landed: local
+and remote main fast-forwarded from `b9f9d61` to
+`dddc71831944acdf80813532f5935867093dd59b` (85 commits, 69 files, +3765/-2043),
+without force or history rewrite. Five Unix hosts reached `dddc718` through
+their actual login updater and passed the reviewed `persistentState` re-init.
+Windows still waits for its user-run login update and re-init; it is not
+converged. Native chezmoi stays v2.74.0. Stage 6 has not started; its plan is
+[stage-6-retirement.md](stage-6-retirement.md) and its fresh-session prompt is
+[start-stage-6.md](start-stage-6.md). The stage records after this one are
+history; the stage summary, decisions and retirement gate further down stay
+current.
+
+### Landing and gates
+
+- Exact-SHA gates on `dddc718`: CI run 41832666587 passed all three jobs (Linux
+  behavior and lint, macOS system Bash, native Windows PowerShell), and
+  bootstrap e2e run 41832666818 passed for all seven hosts (lab-ubuntu,
+  wsl-ubuntu, sherlock, marlowe and other in containers; mac and win on hosted
+  runners). Locally `tests/run.sh --ci` printed `test-suite=PASS` and
+  `pre-commit run --all-files` passed all 39 hooks. `tests/run.ps1 -CI` runs
+  only in CI, since Lab has no pwsh.
+- An earlier e2e run, 41805691258 on `69f8652`, failed only on sherlock and
+  marlowe: a new test found zsh on the test PATH but ran it under
+  `PATH=os.defpath`. `a29a749` runs each shell by its absolute path; the
+  review-fix round fixed the same class in `tests/shell-profile.sh` (`c1479bf`).
+- Every worker branch started at coordinator base `3b54132`: `b9f9d61` plus
+  three guards. Gitleaks covers the native `[attribute_]dot_secrets` source
+  encoding; its allowlist is one path pattern that matches only
+  `home/private_dot_secrets/encrypted_private_claude-*.age` (the eight approved
+  Claude age ciphertexts). One test refuses chezmoi externals and another
+  refuses submodules (no `.gitmodules`, no gitlinks).
+- After landing, every `ci/stage5*`, `e2e-ci/stage5` and `stage5/*` worker
+  branch and worktree was deleted; `main` and the coordinator's records branch
+  `stage5/coord` remained.
+
+### Packages
+
+Each worker built its package test-first in its own worktree on frozen paths.
+Each branch was reviewed independently, was CI-green and was merged `--no-ff`
+in this order. Coordinator follow-ups and five doc branches (`a3db962`,
+`626fabd`, `eca7a2e`, `5052ca4`, `5a4ef33`) came next, then the adversarial
+review and its two fix branches.
+
+| Package | Merge | What changed |
+| --- | --- | --- |
+| PROV | `8353a07` | Native H2-alloc is satisfied by an existing login env; every printed rerun note keeps `--legacy-stow`/`-LegacyStow`, S4-nvm and W1-winget included; native HUMAN text names no Stow; S6-nerd-font counts system and Homebrew fonts; a parity test checks `STEPS_REGISTRY` and both `setup-host.ps1` step lists against the contract step ids |
+| DIAG | `c8a8d1d` | A native-owned home resolves its host from the `[data]` `host` line of `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2); `DOTFILES_HOST` and the Stow receipt are legacy only; the doctor's submodule check is deleted (D9); native-config verdicts are ok, warn (bound to another checkout, or a stray `~/.config/chezmoi/chezmoistate.boltdb`, never removed) or human |
+| PAYLOAD (D7) | `d9c0009` | Payloads are explicit-only for every home. Removed: the login scheduler (`--auto`/`--worker` paths, session markers, the `DOTFILES_PAYLOAD_AUTO_UPDATE` gate, `days` rows, age/retry, `ITEM.stamp`/`ITEM.failed`/`payload.log` writers and readers, detached spawn, Windows stamp publication), the `AWESOME_SKILLS_AUTO_UPDATE` adapter and the Sherlock override. Kept: `sync-payloads`/`sync-skills` bound to the validated native source, `--now`/`-Now`, maintenance refusal, private bounded staging, no pipe-to-shell, busy (75), person and failure results, and the `stow-links` refusal (Stage 6). Until Stage 6, a no-arg or sourced call and `--auto`/`--worker`/`-Auto`/`-Worker` are silent no-ops and `scripts/awesome-skills-update.sh` is a no-op shim. Old host records are ignored, never removed. `scripts/payload-update.sh` went from 343 to 244 lines, `.ps1` from 333 to 235 |
+| WINUPD | `3f24a8d` | The Windows login updater runs only `<destination>\.local\bin\chezmoi.exe`, after reparse, owner and DACL checks on a held FileShare.Read handle, with no PATH fallback; W1-chezmoi hashes and extracts through one handle and writes a protected DACL. A CI fixture (windows-2025, elevated) observed NTFS refusing to rename `.local\bin` and `.local` while the handle was held, and allowing a rename of `.local\bin` after release. The double junction-swap window is narrowed, not closed |
+| NATIVECFG | `718470d` | `home/.chezmoi.toml.tmpl` owns `persistentState`, set to `printf "%s/.local/state/chezmoi/chezmoi.boltdb" .chezmoi.destDir` and listed for case-insensitive dedupe; the updaters keep their explicit flags, which win |
+| TMUX | `f4a862a` | Floor 2.6 -> 3.4 in `tools.tsv` and `hpc-login-env.yml`; all seven version gates and the version parsing are removed; extrakto's OSC 52 gate reads the session environment like tmux-yank (`update-environment` refreshes only `SSH_CONNECTION`, so a server started over SSH stays on OSC 52) |
+| winfix | `c326812` | Review medium: trust helpers moved to `lib/chezmoi-guard.ps1`; the raw DACL check refuses a null DACL and any DACL entry other than a common (plain or callback) allow or deny ACE, so object, compound and unknown entries refuse; on Windows the doctor's native-config row reports human, and W1-chezmoi stays todo, when the updater would refuse `~/.local/bin/chezmoi.exe`, including when chezmoi is found only on PATH |
+| unixfix | `57c6390` | `tests/shell-profile.sh` runs shells by absolute path; the chezmoi-native hook also selects `lib/bootstrap/{checks,steps-human}.sh`; the doctor's payload advice and H7-payloads use the bound source's hook on native homes (none while unresolved); `DOTFILES_TEST_REQUIRE_TMUX=1` in Linux CI turns a missing or old tmux into a failure |
+
+Coordinator follow-ups widened the hook selectors and their need map, added tmux
+to the Linux CI apt line, and updated `AGENTS.md` (27,982 bytes), both mirrored
+skills and README.
+
+### User decisions
+
+The user answered seven explicit questions and chose the recommended option
+each time. The reasons come from the read-only decision research done before
+the questions.
+
+| Decision | Choice | Reason |
+| --- | --- | --- |
+| D7 payload lifecycle | Explicit-only for every home, native and legacy | The scheduler was already off or failing on three of six hosts (Sherlock's site override, Marlowe's retry loop waiting for a person, no completed Windows run). Each upstream owns its update path (the kit's `install.sh --update`; a rerun of the installer for awesome-skills and PyMOLScripts) with its own lock or convergence, so a consumer scheduler adds no correctness. Explicit runs remove detached login-node processes without a site override |
+| Codex `tui.status_line` | Stays owned; one-file reconcile runbook in [takeover.md](takeover.md#reconcile-an-owned-ai-config-key) | The WSL stall came from an app-server writing back a whole stale file, so any commit that changes rendered Codex config can meet it, and Codex saves several owned keys from its own UI. Seed-only for one key would stop propagation without removing the stall; the stop is conflict protection working as designed |
+| Marlowe Node hooks and Codex | Accept the failing Claude Node hooks (site AppArmor profile `block-node`); keep deploying the Codex config | No change to the parity-tested templates or target totals; the Git hook-bypass guard documents itself as no security boundary; non-Node helpers would be an upstream coding-agent-kit change. No Codex CLI is on Marlowe's PATH, but Codex app-servers do run there and read the deployed config (23 long-lived ones at the Stage 5 probe, one during the rollout) |
+| Windows updater binary | Run only the exact `chezmoi.exe` after owner and DACL checks; dotfiles edits no `~/.local` ACL; no per-login hash pin | The updater took the first PATH match, and PATHEXT puts `.COM` first, so a `chezmoi.com` that the Codex sandbox group can create in `~/.local/bin` through its inherited Modify grant would have run with the user's token. Owner and DACL checks reject every substitute the sandbox can place. A hash pin conflicts with the minimum-version rule and would not close the remaining race. The sandbox grants are Codex-managed and also reach other profile directories, so narrowing `~/.local/bin` alone would not restore the boundary |
+| `persistentState` | Owned in the config template, plus a reviewed re-init on all six hosts | Removes the silent state fork: a plain mutating command used a second, empty database, lost the changed-since-last-write refusal and could later stall the updater. Flags win, so the login updater is unaffected and the template could land before any re-init, which is the already-accepted repeat-init operation. Mutating commands keep the full argument set, because `--exclude=dirs`, `--less-interactive` and `--force=false` have no config equivalent |
+| tmux floor | 3.4, after a Marlowe action | 3.4 is the version tested on Lab and WSL and testable in hosted Linux CI; it removes all seven gates and the version parsing; 2.6 had never been tested and no host ran anything older than 3.2a; the only observed cost was Marlowe's login env. System tmux on Ubuntu 22.04, Debian 12 and RHEL 9 becomes unsupported |
+| Marlowe tmux | Install tmux into Marlowe's login env, then clean up the caches | Required by the 3.4 floor before landing; done as a reviewed allocation-only transaction ([fleet-rollout.md](fleet-rollout.md#marlowe-tmux-36a)) |
+
+Bash 3.2, the PowerShell 7.0 entrypoints with the 5.1 profile, Python 3.11 and
+presence-only git stay as they were.
+
+### Coordinator rulings
+
+- Host resolution reads `[data].host` as text, without chezmoi or git, and
+  `--host` still wins. `DOTFILES_HOST` is legacy only; unmarked homes keep their
+  old behavior byte for byte.
+- The whole submodule check is deleted and `submodule` left every reserved-id
+  list. Leftover retired checkouts are inspected by hand; the invariant test
+  keeps the repository free of submodules.
+- The payload `stow-links` advice texts stay until Stage 6.
+  `DOTFILES_PAYLOAD_AUTO_UPDATE` is inert: nothing reads it, and the
+  provisioning exports and their tests stay until Stage 6. Support for
+  `AWESOME_SKILLS_AUTO_UPDATE` ended with the scheduler; the earlier promise to
+  keep it until 2027-01-31 is withdrawn. Name the items instead, for example
+  `sync-payloads kit pymol`.
+- The rc-pollution check and `lib/bootstrap/steps-guard.sh` stay as cheap
+  tripwires. Bat theme behavior is unchanged; its Unix and Windows difference is
+  recorded, not changed.
+- The extrakto OSC 52 change is accepted. In practice only a locally started
+  server that an SSH client attaches to and reloads now uses OSC 52 instead of
+  the tmux buffer.
+- The Windows residual is stated as narrowed, not closed: a writer of
+  `~/.local` that wins two sub-millisecond windows (a junction swap before the
+  open, a swap back before the re-check) can still get another `chezmoi.exe`
+  started. No doc claims the path is tamper-proof.
+- After the bound state database is lost, run no plain read-write chezmoi
+  command: a plain `init` would create a configState-only bound database that
+  re-arms the unattended updater. Follow the inspected recovery; plain read-only
+  commands are fine.
+- Docs, `AGENTS.md`, skills, CI and runners stayed coordinator-owned. Legacy
+  suites reused the existing `DOTFILES_SYNC_PYTHON` read-only; no sync
+  environment was created.
+
+### Adversarial review
+
+After the doc merges, a read-only review covered `b9f9d61..5a4ef33` in seven
+dimensions: Unix shell, PowerShell, security, contracts, tests and CI, docs and
+rollout. A skeptic re-checked each finding. The result was 0 critical or high
+and 1 confirmed medium: on Windows the doctor and W1-chezmoi reported ok while
+the login updater would refuse `~/.local/bin/chezmoi.exe`, or a chezmoi found
+only on PATH, at every login. Two other mediums were downgraded to low, and all
+other findings were low. The winfix and unixfix branches above carry the fixes.
+The rollout dimension simulated the update in throwaway native homes with a
+real bare remote, chezmoi v2.74.0 and the hosts' old updaters; it predicted the
+per-host changed-target counts that the rollout below then observed.
+
+Correction: WINUPD's W1-chezmoi was described as needing PowerShell 7.1, and
+the review extended that to `payload-update.ps1 -Now`. The fix round first
+added 7.1 gates for both (`d55b78b`, documented in `7cdf6de`). The claim was
+false: .NET Core 3.1, which pwsh 7.0 uses, already has both
+`FileSystemAclExtensions.Create` overloads (corefx backports `92013f79e` and
+`0f547d70b`, in v3.1.0). `72c8346` removed the gates and `934041e` the claims;
+the PowerShell floor stays 7.0. Found on the way, preexisting and not fixed:
+`profile.ps1` sets `$PSStyle` (7.2+) unguarded, and `setup-host.ps1`'s
+`Test-SetupStowed` reads `LinkTarget` (.NET 6).
+
+### Host rollout (2026-11-04)
+
+No takeover, init of a new home or secret step was repeated. Each Unix host
+took a private backup, ran its actual login updater, took the reviewed
+`persistentState` re-init and ran the doctor; the procedure as run is in
+[fleet-rollout.md](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04). The
+config hashes are sha256 prefixes of `~/.config/chezmoi/chezmoi.toml` before and
+after the re-init.
+
+| Host | Revision | Targets changed; managed | Re-init config sha256 | Doctor after |
+| --- | --- | --- | --- | --- |
+| lab-ubuntu | `b9f9d61` -> `dddc718` | 6: `.aliases`, `.profile`, `.zshrc`, `.tmux.conf`, tmux `modern.conf` and `which-key.conf`; 67 managed | `fbec085f...` -> `4a96c888...` | 79 ok, 0 warn, exit 0; host from `[data].host` |
+| wsl-ubuntu | `4abad00` -> `dddc718` | The same 6; 63 managed | `2ae80cc6...` -> `d8c94d49...` | Login shell: only the 11 missing tmux plugin clones (preexisting) |
+| mac | `4abad00` -> `dddc718` | The same 6; 64 managed | `e5de343c...` -> `ac90fc13...` | 11 missing tmux plugin clones; kitty, stylua and schrodinger warnings (preexisting) |
+| sherlock | `7e344f2` -> `dddc718` | 9: the 6, `~/.config/sh/.profile`, Codex config and Claude settings; 62 managed | `96c8e3e1...` -> `94f92bf7...` | Preexisting login-env and clone gaps; payloads warn `not installed: skills` (the D7 advice) |
+| marlowe | `7e344f2` -> `dddc718` | 8: the 6, Codex config and Claude settings; 62 managed | `762fc8ff...` -> `bd63182c...`; ACL `+` kept | Interactive: tmux ok (3.6a); node version unknown (AppArmor, accepted); login-env gaps |
+| win | `7e344f2`, pending | Expected 3: `profile.ps1`, Codex config and Claude settings | Pending the user-run `reinit-win.ps1` | Pending |
+
+On all five Unix hosts the updater returned 0. After the re-init, both
+full-argument and plain `status --exclude=dirs` were empty, and both AI configs
+equalled rendered output. Their mode, owner, group, link count and ACL were
+unchanged, and the eight secret files kept inode, mtime, size, mode and owner.
+Maintenance stayed absent, the marker unchanged, and no stray
+`chezmoistate.boltdb` existed. On Sherlock and Marlowe the only Codex delta was
+the owned `tui.status_line`, and the only Claude delta `statusLine.command`,
+both from `bcf5c0d`; Lab, WSL and Mac had those already. No Codex write-back
+(`MM`) appeared, although one Codex app-server ran on each HPC host. Lab's
+source was the canonical checkout that the landing had already fast-forwarded;
+its updater applied the six targets. Evidence stays on each host under
+`~/.local/state/dotfiles-stage5-rollout/u-<timestamp>/` and
+`~/.local/state/dotfiles-stage5-reinit/`.
+
+Before landing, Marlowe's login env received tmux 3.6a and libevent 2.1.12 in
+allocation-only jobs (dry-run 554658, install 554712 COMPLETED 0:0): 59 -> 61
+package records with the original 59 byte-identical, 49 new-file modes
+repaired and about 931 MiB of private caches removed. Evidence:
+`~/.local/state/dotfiles-marlowe-tmux-{dryrun-20261103-01,install-20261104-01}/`
+on Marlowe. `/usr/bin/tmux` stays 3.2a for non-interactive shells such as
+`ssh marlowe-plain`; see [shell.md](../shell.md#tmux).
+
+Windows is pending. The user received these steps: two ordinary interactive
+pwsh logins, the staged `reinit-win.ps1` in Downloads with sha256
+`CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212`, an optional
+`icacls /inheritance:d` on `chezmoi.exe`, and the doctor. No Codex process ran
+on win when they were staged. The exact sequence is in
+[fleet-rollout.md](fleet-rollout.md#pending-windows-steps).
+
+### Findings not fixed in Stage 5
+
+- Preexisting provisioning gaps that need a person-run setup-host: tmux plugin
+  clones missing on WSL, Mac, Sherlock and Marlowe; login-env packages missing
+  on Sherlock and Marlowe (git-lfs, git-delta, tldr, chafa, aria2, uv and
+  others); Marlowe's login env diverges from `hpc-login-env.yml`; Marlowe's
+  Claude Code is stuck at 2.1.150; Mac warns about kitty, stylua and schrodinger.
+- Payload host leftovers: Sherlock's skills are not installed, and its
+  scratch-backed `~/.cache` link is still refused; the Codex skills roots on
+  Mac, WSL and Marlowe count more than 1990 entries and need a person to prune
+  them; old `ITEM.stamp`, `ITEM.failed` and `payload.log` files remain on hosts,
+  ignored.
+- Windows: `chezmoi.exe` was re-extracted at 2026-11-03T19:27:56Z (attribution
+  unknown). Its DACL is inherited, so a propagation from `~/.local` (the Codex
+  sandbox Modify grant) would make the updater refuse it; the doctor now shows
+  that case. The CodexSandboxUsers Modify grants on `~/.local`,
+  `Documents\PowerShell`, `AppData`, the Startup folder and `%TEMP%` remain a
+  user decision. The PowerShell 7.2 dependencies above are preexisting.
+- Rollout tooling: the re-init must not use `cp -p` on Marlowe's filesystem
+  (permission and ACL preservation are unsupported) and must not assume `$0` is
+  a file when the script arrives over SSH. Both were fixed before those hosts
+  ran; the failed attempts stopped before init and changed no config, state
+  or target. The update step's backup still used `cp -p` on Marlowe and logged
+  the same warning, but its copies matched by `cmp` with mode 0600.
+- Asset audit: no chezmoi external suits the asset steps, which stay in
+  setup-host.
+
+### Measured line deltas
+
+`git diff --numstat b9f9d61..dddc718`: code 29 files +788/-602 (net +186),
+tests 22 files +1923/-792 (net +1131), docs 14 files +1031/-636 (net +395),
+CI and config 4 files +23/-13 (net +10). PAYLOAD alone: implementation
++184/-377 (net -193), tests +500/-653 (net -153). Line totals of the Stage 5
+audit categories:
+
+| Category | `b9f9d61` | `dddc718` |
+| --- | --- | --- |
+| A: root entrypoints | 3006 | 3067 |
+| B: `lib/` | 6370 | 6646 |
+| C: `scripts/` | 1437 | 1238 |
+| X1: `*.sh`, `*.ps1`, `*.py` outside tests | 11435 | 11603 |
+| `tests/` | 28490 | 29621 |
+| docs | 11807 | 12202 |
+| All tracked text | 62496 | 64218 |
+
+No startup time was measured, so no speedup is claimed.
+
+### Retained until Stage 6
+
+- The payload transition no-ops, the `scripts/awesome-skills-update.sh` shim,
+  the inert `DOTFILES_PAYLOAD_AUTO_UPDATE` exports, and the `stow-links`
+  refusal with its advice texts.
+- Everything in the Stages 1-4 "Retained for Stage 6" list below: legacy
+  packages, `stow-all.*`, `.stowrc`, the parser chain and the old updaters with
+  the disabled Windows restow task.
+
+### Unfinished gates and Stage 6 readiness
+
+- win: its login update to `dddc718`, the `persistentState` re-init and the
+  doctor, all user-run.
+- The private recovery store is still at Lab's
+  `$HOME/dotfiles/.git/chezmoi-migration-recovery/`. It moves to
+  `~/.local/state/dotfiles-chezmoi-migration-recovery/` only after these records
+  land: copy with modes and subdirectory names, verify every manifest by
+  readback, remove the original, then update every doc path that cites it.
+- The findings above stay open.
+- Stage 6 starts from [start-stage-6.md](start-stage-6.md) and follows
+  [stage-6-retirement.md](stage-6-retirement.md). Its gates include a converged
+  win, no unmarked home, a fresh-home native install procedure for e2e, and the
+  plan's open decisions D-1..D-17.
+
 ## Stages 1-4 consolidation checkpoint (2026-11-03)
 
-This section is the current state. The Stage 4 closure below and the
+This section was the current state until Stage 5; the Stage 5 record above
+supersedes its host table, accepted limits and open items. The Stage 4 closure
+below and the
 [acceptance table](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures)
-record how and at which revision each host was accepted. Stages 5/6 have not
-started. The closure `a5d9ad7` passed exact CI 41719265671 on Linux, macOS and
-native Windows, plus main-push CI 41721427618. The latest applicable bootstrap
-e2e is 41702352195 on `493f395`; later closure commits changed only docs and
-`.gitleaks.toml`. The consolidation commit that adds this section lands only
-after its own exact CI.
+record how and at which revision each host was accepted. Stage 5 had not
+started at this checkpoint. The closure `a5d9ad7` passed exact CI 41719265671
+on Linux, macOS and native Windows, plus main-push CI 41721427618. The latest
+applicable bootstrap e2e is 41702352195 on `493f395`; later closure commits
+changed only docs and `.gitleaks.toml`. The consolidation commit that adds this
+section lands only after its own exact CI.
 
 Each host was probed, then advanced through its normal native updater where
 needed. Fast-forward only, nonforce, `--exclude=dirs`; no takeover, identity
@@ -82,11 +336,14 @@ and secret paths/modes held. Fixed in the consolidation commit:
 - Evidence these docs cite under `/tmp` (68 entries) was copied with modes and a
   verified sha256 manifest to that private consolidation directory.
 
-Accepted limits, unchanged now:
+Accepted limits at this checkpoint, with what Stage 5 changed:
 
 - Native commands without the updater's explicit argument set use a separate
   `~/.config/chezmoi/chezmoistate.boltdb`; always pass the full set
-  ([takeover.md](takeover.md#updates-and-edits-after-takeover)).
+  ([takeover.md](takeover.md#updates-and-edits-after-takeover)). Closed in
+  Stage 5 on every host that took the re-init: the template owns
+  `persistentState`, so plain commands share the bound database, while mutating
+  commands keep the full argument set. Windows still waits for its re-init.
 - An HTTPS connect to a silently dropped route is bounded only by OS/curl defaults.
 - Replacing an enrolled token in place stalls that host's updater until the new
   ciphertext lands; follow the runbook in [secrets-and-ssh.md](secrets-and-ssh.md).
@@ -94,36 +351,51 @@ Accepted limits, unchanged now:
   backups and rehearsal destination were deleted after hash verification; their
   manifests and receipts remain. No other host held copies.
 - Windows Codex sandbox grants are app-created; dotfiles manages no directory ACLs.
-- Retired submodule leftovers and legacy wrapper links stay until Stage 6.
+  Stage 5 hardened the updater instead: it runs only a verified
+  `~/.local/bin/chezmoi.exe`.
+- Retired submodule leftovers and legacy wrapper links stay until Stage 6. The
+  doctor's submodule check is gone since Stage 5; inspect leftovers by hand.
 - A change to a Codex key that dotfiles owns can race a Codex app-server that
   starts around the login update, as on WSL above. Quitting every Codex client
   that can start one on that host, remote desktop apps included, before that
   first login should avoid it; otherwise reconcile the one file as described
-  there.
+  there. Stage 5 kept `tui.status_line` owned and made that reconcile the
+  runbook in [takeover.md](takeover.md#reconcile-an-owned-ai-config-key).
 
-Stage 5 inputs, none blocking this checkpoint:
+Stage 5 inputs, none blocking this checkpoint, with their Stage 5 outcomes:
 
 - D7 payload lifecycle, including Sherlock's `~/.cache` refusal, Marlowe's
   Codex skills root limit and Windows' first foreground skills install.
+  Resolved: payloads are explicit-only for every home, so no login installs
+  anything. Sherlock's refusal and Codex skills roots above 1990 entries (now
+  Mac, WSL and Marlowe) still need a person.
 - Marlowe login nodes: accept and document, give Marlowe Claude settings without
   Node hooks, or port the helpers off Node; descope Codex there or use a non-Node
-  binary. Never bypass the site profile.
+  binary. Never bypass the site profile. Resolved: accept and document; the
+  Codex config stays (no Codex CLI on PATH there, but Codex app-servers read it).
 - Make the config template set `persistentState` (requires reviewed re-init), or
-  keep the full-argument rule.
+  keep the full-argument rule. Done: the template owns it and the five Unix
+  hosts are re-initialized; win is pending.
 - Windows: review the inherited sandbox Modify grant on `~/.local/bin` or verify
   the executable before running it, then prefer the exact provisioned
   `chezmoi.exe` over the first PATH match; name the parent ACL model of any new
-  target under an existing parent.
+  target under an existing parent. Done in code: the exact `chezmoi.exe` with
+  owner and DACL checks on a held handle, no PATH fallback, and a protected
+  W1-chezmoi DACL. The grant itself stays a user decision, and the parent-ACL
+  rule for new win targets still applies.
 - Widen the gitleaks secrets-directory rule to the encoded `private_dot_secrets/`
-  source path; the source-guard unit test already blocks plaintext there.
+  source path; the source-guard unit test already blocks plaintext there. Done
+  in `4f71bd2`.
 - Decide whether `tui.status_line` stays an owned Codex key, enforced on every
   update, or becomes a default seeded only when absent, so that Codex's own
-  rewrites cannot stop the login updater.
+  rewrites cannot stop the login updater. Resolved: it stays owned, with the
+  one-file reconcile runbook.
 - Last step of Stage 5, after its final docs land: move Lab's private
   `$HOME/dotfiles/.git/chezmoi-migration-recovery/` to
   `~/.local/state/dotfiles-chezmoi-migration-recovery/`, keeping modes and
   subdirectory names. Verify every manifest by readback before removing the
-  original, and update every doc path that cites it.
+  original, and update every doc path that cites it. Still pending: the store
+  stays at the old path until the Stage 5 records land.
 
 ### Stages 1-4 component map
 
@@ -203,7 +475,7 @@ Local and remote main reached runtime correction
 `tests/run.sh --ci`, frozen full pre-commit and independent review also passed.
 Integration includes all earlier outcome commits through `12262e6`. Current
 per-host evidence and limits are in [stage-4-evidence.md](stage-4-evidence.md).
-Stages 5/6 have not started.
+Stages 5/6 had not started at this closure.
 
 Worktree-policy commit `493f39545a63f69c32648b97936736286fa43dcd` passed all three
 jobs of CI 41702351649 and all eight bootstrap e2e 41702352195 jobs. The two
@@ -372,8 +644,8 @@ before the main fast-forward.
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
 | 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e; closure `a5d9ad7` passed exact CI 41719265671 | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
-| 5 | Not started | Depends on integration scope | None |
-| 6 | Not started | Native-only deletion candidate and actual retirement not implemented | None |
+| 5 | Six packages, two review-fix branches and docs landed at `dddc718`; exact CI 41832666587 and bootstrap e2e 41832666818 passed | Five Unix hosts at `dddc718` through the actual updater, with the reviewed `persistentState` re-init; Marlowe's login env has tmux 3.6a; win pending its user-run login update and re-init | [Stage 5 record](#stage-5-completion-record-2026-11-04), [rollout](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04) |
+| 6 | Not started; next stage | Native-only deletion candidate and actual retirement not implemented | Plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
 
 ## Decisions and open choices
 
@@ -389,7 +661,8 @@ evidence in the durable checkpoint. The original main tmux edits were preserved
 in the coordinated landing. The user explicitly authorized commits, publication
 and rollout; no blanket authorization question remains. Recovery custody is
 established; exact candidate CI/e2e and concrete host gates still apply.
-The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
+Stage 5 completed at `dddc718` ([record](#stage-5-completion-record-2026-11-04));
+the next session starts Stage 6 from [start-stage-6.md](start-stage-6.md).
 
 | ID | Decision | State / owner |
 | --- | --- | --- |
@@ -399,10 +672,10 @@ The [Stage 5 prompt](start-stage-5.md) is prepared, but Stage 5 has not started.
 | D4 | Preserve ownership, local state, policy values, malformed-input failure and explicit host selection | Required across stages |
 | D5 | Private native AI configs; readonly/stricter existing targets reviewed during takeover | Verify attributes/modes on selected release; Windows ACL evidence separate |
 | D6 | Keep login automatic dotfiles updates through only a thin adapter calling chezmoi | Explicit user choice during planning: preserve login updates; do not ask again |
-| D7 | Prefer explicit payload delegation and remove consumer scheduling | Proposed Stage 5 simplification; distinguish from D6, which concerns dotfiles updates |
+| D7 | Prefer explicit payload delegation and remove consumer scheduling | Resolved by the user in Stage 5: explicit-only payloads for every home; the scheduler is removed and its transition no-ops go in Stage 6. Distinct from D6, which concerns dotfiles updates |
 | D8 | Select chezmoi v2.74.0 as tested native floor | Official Linux/Mac/Windows binaries verified/exercised; CI pins artifacts; Stage 2 declares candidate-source minimum |
 | D9 | Stop automatic historical-layout repair and obsolete-tool support; require manual upgrades outside the declared boundary instead of waiting for all hosts | Explicit user direction confirmed with the originating review session; incorporated in support-boundary.md |
-| D10 | Select concrete tested minimum versions before removing old-tool branches; preserve supported OSes and current safety semantics | Stage 1 inventory, coherent component changes through Stage 5 |
+| D10 | Select concrete tested minimum versions before removing old-tool branches; preserve supported OSes and current safety semantics | Stage 1 inventory; Stage 5 raised tmux to 3.4 after Marlowe's login env got 3.6a, and kept Bash 3.2, PowerShell 7.0 with the 5.1 profile, Python 3.11 and presence-only git |
 | D11 | Agents execute migration, tests and precise legacy retirement on the six hosts in Stages 4/6; do not defer reachable-host work to a later manual user task | Explicit user authorization; persists across sessions; concrete auth/privilege/site blockers remain |
 | D12 | Include allowlisted secrets and private SSH information through native encryption/vault integration; preserve app-written auth state | User-requested scope; Stage 1 classifies consumers and tests; Stage 4 enrolls real values |
 | D13 | Builtin age, separate native host identities, explicit per-file recipient scopes | Eight static Claude files approved for five Unix hosts plus R; all five identities generated locally. Apple Passwords custody confirmed on another device and retrieved R decrypts all eight. Published in `74985d08` and accepted on all five Unix hosts; Windows enrollment stays false |
@@ -411,10 +684,11 @@ D6 is resolved: the user selected keeping login automatic updates with a thin
 chezmoi adapter. Stage 4 must implement that direction, with noninteractive
 conflict/error handling and fast-forward Git behavior. Do not replace it with
 manual-only updates or ask for the same preference again. D7 is a different
-decision about upstream payload installation/update scheduling; resolve it with
-a concrete proposal in Stage 5 without blocking Stage 1-4 work. D9 does not change
-D6 or settle D7. The old standalone compatibility-removal prompt is superseded;
-its remaining work is assigned within these stages.
+decision about upstream payload installation/update scheduling; Stage 5 resolved
+it as explicit-only payloads for every home and left D6's login dotfiles updates
+unchanged. D9 does not change D6 or settle D7. The old standalone
+compatibility-removal prompt is superseded; its remaining work is assigned
+within these stages.
 
 D11 supersedes earlier blanket wording that all real-host work needs a new
 authorization. Execute the authorized rollout after the relevant stage checks;

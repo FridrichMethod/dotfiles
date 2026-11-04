@@ -1,5 +1,10 @@
 # Agent-executed rollout on the six target hosts
 
+The Stage 5 rollout of 2026-11-04 is recorded
+[below](#stage-5-rollout-as-run-2026-11-04): five Unix hosts reached `dddc718`
+through their actual login updater and took the reviewed `persistentState`
+re-init; Windows waits for its [user-run steps](#pending-windows-steps).
+
 Stage 4 actual acceptance observations are in
 [stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures);
 the current per-host state is in [status.md](status.md).
@@ -171,8 +176,10 @@ classifier still apply. The guard documents itself as no security boundary, so
 the loss is user experience: a blank status line, no notifications and no usage
 records for `claude-as --account-info`. Stage 5 accepted this without a
 Marlowe-specific settings branch; non-Node helpers would be an upstream
-coding-agent-kit change. Dotfiles still deploys Marlowe's inert Codex
-configuration, and the Codex client is deliberately not provisioned there.
+coding-agent-kit change. Dotfiles still deploys Marlowe's Codex
+configuration. The Codex CLI is deliberately not provisioned on its PATH, but
+Codex app-servers do run there and read that configuration, so the Codex
+write-back check applies on Marlowe too.
 
 Sherlock's observed glibc 2.17 cannot run the generic v2.74 Linux artifact. The
 official SHA256-verified static musl build passed an isolated version probe;
@@ -196,6 +203,165 @@ and all five task-installed clients removed; Sherlock never installed one.
 Do not reopen its canceled toolkit/allocation proposal. Launcher provisioning
 and account acceptance remain separate host checks: Sherlock now has kit 0.7.0,
 and Marlowe lacks native Codex on the inspected PATH.
+
+## Stage 5 rollout as run (2026-11-04)
+
+Stage 5 needed no takeover. Each Unix host reached `dddc718` through its own
+login updater (Lab's checkout had already been fast-forwarded by the landing,
+so its updater only applied the six targets), then took one reviewed re-init
+that adds the owned `persistentState` key. One operation owner ran the
+hosts one at a time. Results and per-host revisions are in
+[status.md](status.md#stage-5-completion-record-2026-11-04).
+
+Read the site rules before Sherlock work: `/etc/agents/AGENTS.md` and its topic
+files, over the existing master (`sherlock-plain`), never by a new login. The
+Stage 5 host probe read `AGENTS.md` and the policy, storage, software and slurm
+topic files before any command. The Sherlock and Marlowe steps were light
+foreground commands on a login node, with no job, detached process or
+environment build. Marlowe publishes no site agent rules; its tmux install
+ran only inside allocation jobs ([below](#marlowe-tmux-36a)).
+
+Per Unix host:
+
+1. Probe read-only: the binding marker, the source HEAD and cleanliness,
+   full-argument status, the managed count, rendered equality of both AI
+   configs, payload state, running Codex app-servers and tool versions. A
+   Codex app-server matters whenever the update changes rendered Codex config,
+   as `bcf5c0d` did on Sherlock, Marlowe and win.
+2. Back up privately in `~/.local/state/dotfiles-stage5-rollout/u-<timestamp>/`
+   (0700, umask 077): copies of `~/.codex/config.toml` and
+   `~/.claude/settings.json`, checked with `cmp`, and a manifest of their mode,
+   owner, group, link count, extra ACL entries and sha256, the eight secret
+   files' inode, mtime, size, mode and owner, the maintenance marker and the
+   binding marker.
+3. Run the actual updater in a fresh interactive shell with stdin closed and
+   no inherited session guard or disable switch, where `$SOURCE` is line 3 of
+   `~/.config/dotfiles/native`. The script also set the now inert payload
+   variable:
+
+   ```sh
+   env -u _DOTFILES_CHECKED -u DOTFILES_AUTO_UPDATE -u ENV DOTFILES_PAYLOAD_AUTO_UPDATE=0 \
+       sh -i -c '. "$1/scripts/chezmoi-update.sh"' sh "$SOURCE" </dev/null
+   ```
+
+   A host already at the target with an empty status skips this step. On
+   Sherlock (`sherlock-plain`) and Marlowe (`marlowe` with `RemoteCommand=none`
+   and no TTY) the script ran from the login env's interactive login zsh, so
+   PATH matched an ordinary login; that outer shell's own updater was off
+   (`DOTFILES_AUTO_UPDATE=0`).
+4. Verify: HEAD is the target, the checkout is clean with no local-only
+   commits, and the managed count is unchanged. Full-argument
+   `status --exclude=dirs` shows nothing but the harmless `config file template
+   has changed` warning. Both AI configs equal `chezmoi cat` with unchanged
+   metadata. A key diff of the Codex TOML allows changes only under owned
+   policy paths and requires every unowned key to survive; a key diff of the
+   Claude JSON lists its changes. Secrets, maintenance marker and binding marker
+   are unchanged. Codex write-back check: no `MM` for `~/.codex/config.toml`
+   after the update; an `MM` goes to the one-file reconcile in
+   [takeover.md](takeover.md#reconcile-an-owned-ai-config-key), never to a
+   routine force.
+5. Re-init in that shell after its login update, with no other chezmoi
+   running:
+   - Precheck, read-only: the regular three-line marker names this canonical
+     HOME; the provisioned chezmoi is v2.74.0 (`~/.local/bin/chezmoi`; on Mac
+     `/opt/homebrew/bin/chezmoi`); the bound source is a clean checkout root
+     whose `home/.chezmoi.toml.tmpl` is the reviewed blob `9e26214`; the config
+     is a regular file without a `persistentState` key; the bound database is a
+     nonempty regular file; `XDG_CONFIG_HOME` is unset or the default; and
+     full-argument status is empty.
+   - Record privately in `~/.local/state/dotfiles-stage5-reinit/` (0700): a
+     copy of the config, its key names, and the ACLs of the config and the
+     database.
+   - Run the [takeover.md](takeover.md) init with the full explicit argument
+     set: `--source`, `--working-tree`, `--destination`, `--config`, `--cache`,
+     `--persistent-state`, `--mode=file --no-tty --error-on-conflict
+     --force=false --no-pager --use-builtin-diff`.
+   - Postcheck: `persistentState` is the only added key, nothing else changed
+     and both ACLs are unchanged; a plain
+     `execute-template '{{ .chezmoi.config.persistentState }}'` names the bound
+     database; a stray `chezmoistate.boltdb`, if any, is moved into the record,
+     never deleted; full-argument `status --exclude=dirs` is empty, and plain
+     `status --exclude=dirs` is empty with empty stderr; and no stray database
+     reappears. Rollback is an in-place copy of the recorded config.
+6. Run the offline doctor from an interactive login shell. On Marlowe that is
+   `ssh marlowe`, not `marlowe-plain` ([below](#marlowe-tmux-36a)).
+
+Two portability lessons came from the first re-init attempts. Both were fixed
+before the re-init ran on those hosts, and the failed attempts stopped before
+init and changed no config, state or target:
+
+- Copy the record without `cp -p`. Marlowe's filesystem refuses permission and
+  ACL preservation (`Operation not supported`); a copy made under umask 077 is
+  private anyway.
+- Do not assume `$0` is a file. A script sent over SSH as
+  `sh -c "$script" probe` sees `$0` as `probe`; copy the script into the record
+  only when `$0` is a regular file.
+
+The update step's backup (step 2) still used `cp -p` and printed the same
+`Operation not supported` warning on Marlowe; its copies still matched by
+`cmp`, with mode 0600.
+
+The Codex write-back check found no `MM` on any host, although one Codex
+app-server ran on each HPC host during the update.
+
+### Marlowe tmux 3.6a
+
+The 3.4 floor needed tmux in Marlowe's login env before landing. Both steps
+were reviewed allocation jobs, never login-node work, and nothing touched the
+site AppArmor profile. Solver dry-run job 554658 changed nothing. Install job
+554712 (COMPLETED 0:0) added tmux 3.6a and libevent 2.1.12 from verified
+archives with no removals. Package records went from 59 to 61 with the original
+59 byte-identical. The 49 new files lost their upstream group write (0664 to
+0644 and 0775 to 0755), the new-file-only rule of job 553043. At the user's
+request, both private caches, about 931 MiB, were deleted afterwards. Evidence
+on Marlowe: `~/.local/state/dotfiles-marlowe-tmux-dryrun-20261103-01/` and
+`~/.local/state/dotfiles-marlowe-tmux-install-20261104-01/`.
+
+Interactive login shells put the login env first and get 3.6a. Non-interactive
+shells, such as `ssh marlowe-plain tmux ...` or
+`ssh marlowe-plain 'cd ~/dotfiles && ./doctor.sh'`, still find `/usr/bin/tmux`
+3.2a, which rejects the 3.4 options; that doctor then reports tmux as outdated
+and exits 1. Start tmux and run the doctor from an interactive login shell
+(`ssh marlowe`); see [shell.md](../shell.md#tmux).
+
+### Pending Windows steps
+
+win stays at `7e344f2` until the user runs these steps in an ordinary,
+non-elevated pwsh 7.2 or later (the script declares `#Requires -Version 7.2`;
+win has 7.6.9), because the re-init needs the user's own token. No Codex
+process ran on win when the steps were staged; quit any Codex desktop app that
+connects to win before step 1.
+
+1. Open an ordinary interactive pwsh session and let its login update finish.
+   It is expected to run the old `7e344f2` updater, which fast-forwards to
+   `dddc718`; three targets are expected to change:
+   `Documents\PowerShell\profile.ps1`, `~/.codex/config.toml` and
+   `~/.claude/settings.json`.
+2. Open a second ordinary interactive session. Its login is expected to run the
+   new updater, which uses only `~/.local/bin/chezmoi.exe` after the owner and
+   DACL checks. It must not print a `[dotfiles] Native update skipped` warning.
+   These roles come from the review's rollout simulation and reasoning, not
+   from a run on win.
+3. Check the staged script's hash, then run it from that ordinary session:
+
+   ```powershell
+   (Get-FileHash "$HOME\Downloads\reinit-win.ps1" -Algorithm SHA256).Hash
+   # expected: CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212
+   pwsh -NoProfile -File "$HOME\Downloads\reinit-win.ps1"
+   ```
+
+   It refuses an elevated token, verifies and holds `chezmoi.exe` as the
+   updater does, requires the reviewed template blob and an empty full-argument
+   status, and records the old config in `~/.config/chezmoi/stage5-reinit/`,
+   not under `~/.local`, because of the inherited sandbox grant there. It then
+   runs the full-argument init and the same postchecks as on Unix.
+4. Optional: `icacls "$HOME\.local\bin\chezmoi.exe" /inheritance:d` turns the
+   file's inherited ACEs into explicit ones, so a later propagation from
+   `~/.local` cannot add the sandbox Modify grant that would make the updater
+   refuse it.
+5. Run `.\doctor.ps1` from the checkout; native-config should be ok.
+
+Until then Windows is pending, not converged.
 
 ## Recording and incomplete targets
 

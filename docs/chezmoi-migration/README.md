@@ -1,18 +1,22 @@
 # Chezmoi migration handoff
 
-Status: Stage 4 native takeover is accepted on all six hosts, with all eight
-approved static credentials enrolled on the five Unix hosts. Runtime `bf99958`,
-encrypted source `74985d08` and formatting correction `15068b9` passed their
-exact hosted CI/e2e gates before main landing and relevant host operations.
-Recovery custody is established. Actual outcomes, historical partial operations
-and application limits are recorded in [status.md](status.md).
-Stages 5/6 have not started. Read that record
-before starting work. Initial research baseline: `738f619`; consolidation baseline:
-`1a9d30b`. The completed review's old-layout/tool-support plan is now integrated in
-[support-boundary.md](support-boundary.md); do not execute its old standalone prompt.
-Stage 4 operation uses [takeover.md](takeover.md); the next-stage handoff is
-[start-stage-5.md](start-stage-5.md), for a separately requested Stage 5 session. The original
-[Stage 1 prompt](start-stage-1.md) remains historical context.
+Status: Stage 5 (ecosystem simplification) is done. It landed at `dddc718`
+after exact CI 41832666587 and bootstrap e2e 41832666818; the five Unix hosts
+reached it through their login updater and took the reviewed `persistentState`
+re-init, and Windows still waits for its user-run login update and re-init.
+Stage 4 native takeover is accepted on all six hosts, with all eight approved
+static credentials enrolled on the five Unix hosts. Runtime `bf99958`, encrypted
+source `74985d08` and formatting correction `15068b9` passed their exact hosted
+CI/e2e gates before main landing and relevant host operations. Recovery custody
+is established. Actual outcomes, historical partial operations and application
+limits are recorded in [status.md](status.md). Stage 6 is next and has not
+started: read that record, then the fresh-session prompt
+[start-stage-6.md](start-stage-6.md). Initial research baseline: `738f619`;
+consolidation baseline: `1a9d30b`. The completed review's old-layout/tool-support
+plan is now integrated in [support-boundary.md](support-boundary.md); do not
+execute its old standalone prompt. Takeover and recovery use
+[takeover.md](takeover.md). The [Stage 5 prompt](start-stage-5.md) and the
+original [Stage 1 prompt](start-stage-1.md) remain historical context.
 
 ## User intent and scope
 
@@ -108,7 +112,7 @@ equivalence. A failure of a retained requirement is not permission to weaken it.
 | Failure handling | Invalid target transform must fail without replacing that target; clear errors | No whole-home transaction, custom journal or rollback daemon |
 | Checks | A reduced project's offline check remains offline; test homes isolated | Chezmoi preview is not advertised as globally write-free; native cache/state is allowed in explicitly isolated locations |
 | Provisioning | Person-triggered installs, visible privileged steps, no authentication, HPC allocation boundaries | Native manifests and small adapters; retire redundant framework behavior |
-| Payloads | Upstream ownership, platform/channel selection, honest errors, local edits | Prefer explicit upstream delegation; reconsider consumer-side scheduling rather than reproducing it in run scripts |
+| Payloads | Upstream ownership, platform/channel selection, honest errors, local edits | Explicit upstream delegation only (D7, resolved in Stage 5): `sync-payloads` runs the upstream installers in the foreground; no consumer-side scheduling |
 
 Keep all existing Claude/Codex permission-policy VALUES unchanged. This migration
 does not authorize weakening allow/ask/deny policy or replacing project guidance.
@@ -134,8 +138,8 @@ remains an import stub. Mirrored first-party skills remain identical.
 | [2. Source state](stage-2-source-state.md) | Complete ordinary-file and host model with temporary legacy-source bridge | Implemented candidate and exact source checks | Candidate source, tested in temporary homes |
 | [3. Native configuration](stage-3-native-config.md) | Native AI modifies; complete candidate needs no sync venv | Implemented with explicit safe input refusals | Isolated native fixtures; Stage 4 performs takeover |
 | [4. Takeover](stage-4-takeover.md) | Declared cutoff, tested handover, real canary takeover, secret enrollment, thin login adapter | Ordered work packages with paths, guards, recovery and platform gates | Agent executes under the user's recorded six-host authorization |
-| [5. Ecosystem simplification](stage-5-ecosystem.md) | Smaller provisioning/diagnostics/payload integration and verified old-tool branch removal | Exact retained/deleted caller map and fresh-session handoff | Preserve the declared support contract; D7 remains a separate decision |
-| [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Framework | Roll out to all reachable unblocked hosts; record exceptions without an all-host waiting gate |
+| [5. Ecosystem simplification](stage-5-ecosystem.md) | Smaller provisioning/diagnostics/payload integration and verified old-tool branch removal | Done at `dddc718`; [completion record](status.md#stage-5-completion-record-2026-11-04) | D7 resolved as explicit-only payloads; five Unix hosts updated and re-initialized; win pending its user-run steps |
+| [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Next; [fresh-session prompt](start-stage-6.md) | Roll out to all reachable unblocked hosts; record exceptions without an all-host waiting gate |
 
 Stages run in this order. Code completion and real-host operations are different
 facts: record both. Old installations may become unsupported at the declared
