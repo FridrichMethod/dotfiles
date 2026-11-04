@@ -517,6 +517,25 @@ bootstrap_check_venv_sync() {
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 
+# bootstrap_payload_hook ROOT: the payload hook a person runs by path. On a
+# native-owned home that is the hook of the source its binding names, which
+# sync-payloads runs, never ROOT's unless bound to ROOT; 1 when the binding
+# does not resolve (maintenance, invalid, or no guard in ROOT). Elsewhere
+# ROOT's.
+bootstrap_payload_hook() {
+    local state
+    if ! bootstrap_native_home; then
+        printf '%s\n' "$1/scripts/payload-update.sh"
+        return 0
+    fi
+    state=$(bootstrap_native_state "$1")
+    case $state in
+        ok | config) printf '%s\n' "$(cd "$1" && pwd -P)/scripts/payload-update.sh" ;;
+        'elsewhere '*) printf '%s\n' "${state#elsewhere }/scripts/payload-update.sh" ;;
+        *) return 1 ;;
+    esac
+}
+
 # bootstrap_check_payloads ROOT [HOST]: each item of DOTFILES_PAYLOAD_ITEMS
 # (default kit pymol skills) passes its unix-probe row of
 # ROOT/config/payloads.tsv and an installed kit left the Claude helpers; an
@@ -524,7 +543,7 @@ BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 # retired package) is named with what to run. Only a person installs the
 # payload repos (sync-payloads), so every shortfall names that and only warns.
 bootstrap_check_payloads() {
-    local config=$1/config/payloads.tsv items item line probe links package path
+    local config=$1/config/payloads.tsv items item line probe links package path hook
     local short='' found='' issues=''
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
@@ -566,7 +585,10 @@ bootstrap_check_payloads() {
         fi
     done
     if [ -n "$short" ]; then
-        issues="$issues; not installed: ${short#, }: run sync-payloads ITEM (sh $1/scripts/payload-update.sh --now ITEM)"
+        issues="$issues; not installed: ${short#, }: run sync-payloads ITEM"
+        if hook=$(bootstrap_payload_hook "$1"); then
+            issues="$issues (sh $hook --now ITEM)"
+        fi
         case $short in
             *kit*) issues="$issues; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ;;
         esac

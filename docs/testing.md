@@ -143,7 +143,8 @@ suites just to establish environment isolation.
 The entrypoint test also checks pre-commit's files/exclude selection, the
 inputs each named hook must run on (among them the sync engine, the payload
 scripts and shim, `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`,
-`doctor.sh` and `setup-host.sh`), and coverage of the complete shell-suite
+`checks.sh` and `steps-human.sh` (the H7-native verdict), `doctor.sh` and
+`setup-host.sh`), and coverage of the complete shell-suite
 list. The e2e-harness and e2e-harness-windows hooks cover harness
 unit/fixture tests; these hooks do not run Docker or install into the real
 home. Linux CI first checks prerequisites without running behavior tests,
@@ -304,9 +305,11 @@ its script exists, and follows the session environment for the clipboard
 session removal of a server-global `SSH_CONNECTION`, the only gate variable
 `update-environment` refreshes, gives `bg`, so a server started over SSH,
 which keeps `SSH_CLIENT` and `SSH_TTY` global, stays on OSC 52). That class
-skips only when tmux is absent; tmux older than 3.4 is unsupported. The
-Linux job installs apt's tmux (3.4 on `ubuntu-24.04`) so it runs there; the
-macOS job installs none.
+skips when tmux is absent or older than 3.4 (unsupported), and fails
+instead with `DOTFILES_TEST_REQUIRE_TMUX=1`. The Linux job installs apt's
+tmux (3.4 on `ubuntu-24.04`) and sets that variable, so the class runs there
+and cannot skip unseen inside the pre-commit pass; the macOS job installs
+none.
 
 `tests/stow-ignores.sh` (and `tests/run.ps1`) runs `tests/test_stow_ignores.py`:
 it builds a name from each `.gitignore` pattern with no slash but a trailing

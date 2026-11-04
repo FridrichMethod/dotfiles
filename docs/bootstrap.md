@@ -1498,7 +1498,9 @@ checkout outside `$SCRATCH` and `$GROUP_SCRATCH`: setup-host refuses to build
 the sync env there, including through a symlink. A working env can be checked
 and used on a login node without rebuilding it.
 
-- **Check:** `./setup-host.sh --host <host> --check --only S4-setup-sync` (offline and write-free).
+- **Check:** `./setup-host.sh --legacy-stow --host <host> --check --only S4-setup-sync`
+  (offline and write-free; without the flag the step does not exist and
+  setup-host exits 2).
 - **Install:** automatic via setup-host.sh. By hand, by platform:
   macOS `./setup-sync.sh --python /opt/homebrew/bin/python3` (Intel:
   `/usr/local/bin/python3`; Apple's `/usr/bin/python3` is too old);
@@ -1513,7 +1515,7 @@ and used on a login node without rebuilding it.
   hpc `./setup-sync.sh --python "$HOME/micromamba/envs/login/bin/python3"`.
 - **Verify:** it prints `AI-sync runtime ready`; the doctor's `venv-sync` check,
   which runs the same `--runtime-check` (on `DOTFILES_SYNC_PYTHON` when that is
-  set), is `ok`.
+  set) and exists only in `./doctor.sh --legacy-stow --host <host>`, is `ok`.
 - **Human:** no
 
 ## Phase 5: AI CLIs
@@ -1700,9 +1702,9 @@ with `~/dotfiles` spelled out. Once stowed, new shells find `stow` without it.
   retired Sherlock packages may already have been removed during preflight
   ([migration](sherlock-kit.md)).
 - **Verify:** `ls -l ~/.zshrc ~/.profile ~/.gitconfig` shows links into
-  `~/dotfiles/common/`; in a new shell the doctor's `stow-links`,
-  and `path-order`
-  checks are `ok` (path-order warns only when a command in
+  `~/dotfiles/common/`; in a new shell the `stow-links` and `path-order`
+  checks of `./doctor.sh --legacy-stow --host H` (only that mode has
+  `stow-links`) are `ok` (path-order warns only when a command in
   `~/.local/bin` is shadowed by a second install earlier on PATH: remove the
   one you do not use).
 - **Readiness:** setup marks H7-stow done only when the installer's Git-local
@@ -1789,16 +1791,21 @@ selects the items a run without arguments installs and the doctor checks.
   `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
   (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
-  warns and names `sync-payloads ITEM`.
+  warns and names `sync-payloads ITEM` and, on Unix, the `--now` line of the
+  hook to run: on a native-owned home the hook of the source its binding
+  names, never the checkout the doctor runs from, and none while the binding
+  does not resolve.
 - **Install:** the line the setup-host block prints, which works before the
   dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
   `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
-  update. In an interactive shell with the dotfiles applied,
-  `sync-payloads [ITEM...]` does the same and `sync-skills` runs only the
-  skills; on a native-owned home they run the bound checkout's script and
-  refuse an invalid binding. An installer's exit 75
-  (its own lock is busy) is no failure; any other failure makes the run exit 1
+  update. On a native-owned home the block names the script of the source the
+  binding names (and says so), never the checkout setup-host runs from, and
+  only a note while the binding does not resolve. In an interactive shell
+  with the dotfiles applied, `sync-payloads [ITEM...]` does the same and
+  `sync-skills` runs only the skills; on a native-owned home they run the
+  bound checkout's script and refuse an invalid binding. An installer's exit
+  75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
   plus what each installer needs, which its README lists (Git for the kit and
@@ -1944,8 +1951,9 @@ the step without provisioning a checkout-local environment. An invalid
 override fails apply; repair or unset it rather than installing an unused
 default.
 
-- **Check:** `.\setup-host.ps1 -Check` checks the selected interpreter with
-  `lib/config_sync.py --runtime-check`, alongside the other setup steps.
+- **Check:** `.\setup-host.ps1 -LegacyStow -Check` checks the selected
+  interpreter with `lib/config_sync.py --runtime-check`, alongside the other
+  setup steps; without `-LegacyStow` the plan has no W1-setup-sync line.
 - **Install:** automatic via setup-host.ps1:
   `.\setup-sync.ps1 -Python <path>`, with the first `python3` or `python` on
   PATH that reports 3.11 or newer; a Microsoft Store alias does not count. When
@@ -2100,7 +2108,8 @@ quick start runs them as one sequence.
 - **Install:** with the distribution's package manager, the equivalents of
   [`apt/common.txt`](../config/bootstrap/apt/common.txt) and the Brewfile tools,
   meeting every floor in [`tools.tsv`](../config/bootstrap/tools.tsv) (distro
-  fzf, eza and gh are often older), and the `en_US.UTF-8` locale (`locale-gen`
+  fzf, eza, gh and tmux are often older; for tmux see
+  [Known limitations](#known-limitations)), and the `en_US.UTF-8` locale (`locale-gen`
   or `localedef`, as the distribution does it); or install Homebrew on Linux
   yourself and run
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1 brew bundle --file=config/bootstrap/brew/<tier>.Brewfile --no-upgrade`
@@ -2323,6 +2332,17 @@ fail-closed behavior beyond what is stated.
   `./setup-sync.sh --python` with it
   ([S4-setup-sync](#s4-setup-sync-ai-sync-runtime)). The doctor's `python3`
   row still points at H1-apt-core, which cannot raise the version.
+- **Some distributions' tmux is below the 3.4 floor.** apt installs tmux
+  3.2a on Ubuntu 22.04 and 3.3a on Debian 12, and RHEL 9's packages carry
+  3.2a, so the doctor's `tmux` row is `outdated` and points at H1-apt-core
+  (or X-other-linux), which cannot raise it, and the shared config rejects
+  its 3.4 options when it loads. Provide tmux 3.4 or newer yourself: a newer
+  distribution release (Ubuntu 24.04 ships 3.4), conda-forge's `tmux` in a
+  user env, as the HPC login env does, or Homebrew's (`brew install tmux`;
+  the Linux Brewfiles leave it out). Keep the newer one first on PATH in every
+  shell that starts or attaches tmux: a server and a client of different
+  versions sharing the default socket can fail to talk (the
+  [Marlowe note](shell.md#tmux)).
 - **Windows Terminal re-serializes its stowed settings.** Terminal saves
   `settings.json` back through the [HW-stow](#hw-stow-elevated-stow) link
   whenever the file it loads is not in its own form, which leaves the clone

@@ -19,6 +19,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "common/tmux/.tmux.conf"
 TMUX = shutil.which("tmux")
+TMUX_FLOOR = (3, 4)
+# Linux CI sets this: there a missing or below-floor tmux fails instead of
+# skipping every real-tmux case unseen.
+REQUIRE_TMUX = os.environ.get("DOTFILES_TEST_REQUIRE_TMUX") == "1"
 PLUGINS = {
     "tmux-plugins/tpm": "tpm",
     "tmux-plugins/tmux-resurrect": "resurrect.tmux",
@@ -98,8 +102,33 @@ class VersionFloor(unittest.TestCase):
         self.assertEqual(manifest("tools.tsv")["tmux"]["floor"], "3.4")
 
 
-@unittest.skipUnless(TMUX and os.name == "posix", "optional real tmux is unavailable")
+def real_tmux_problem():
+    """Why the real-tmux cases cannot run here, or None."""
+    if os.name != "posix":
+        return "real tmux runs only on POSIX"
+    if not TMUX:
+        return "tmux is not on PATH"
+    try:
+        reported = subprocess.run([TMUX, "-V"], capture_output=True, text=True,
+                                  timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        return f"{TMUX} -V failed: {error}"
+    # "tmux 3.4", "tmux 3.2a", "tmux next-3.6"; "tmux master" has no number.
+    version = re.search(r"(\d+)\.(\d+)", reported)
+    if not version or (int(version[1]), int(version[2])) < TMUX_FLOOR:
+        return f"{TMUX} reports {reported!r}, not tmux 3.4 or newer"
+    return None
+
+
 class TmuxConfiguration(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        problem = real_tmux_problem()
+        if problem and REQUIRE_TMUX:
+            raise AssertionError(f"DOTFILES_TEST_REQUIRE_TMUX=1, but {problem}")
+        if problem:
+            raise unittest.SkipTest(f"optional real tmux is unavailable: {problem}")
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="tmux-", dir="/tmp")
         self.addCleanup(temporary.cleanup)

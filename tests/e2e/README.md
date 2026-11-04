@@ -1,7 +1,7 @@
 # End-to-end bootstrap suite
 
 Opt-in: runs the day-zero bootstrap for real, from a fresh home, on every host
-overlay, the way the quick starts of [docs/bootstrap.md](../../docs/bootstrap.md#quick-start)
+overlay, the way the quick starts of [docs/bootstrap.md](../../docs/bootstrap.md#legacy-quick-start)
 tell a person to, and checks its [acceptance checklist](../../docs/bootstrap.md#acceptance-checklist).
 `./tests/run.sh` and pre-commit never run it; they run only the fast unit test
 `tests/e2e-harness.sh`, which drives the harness against stubs. The full

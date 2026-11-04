@@ -504,13 +504,25 @@ step_H7_payloads_check() {
 
 # Nothing installs the payload repos at login: a person runs the --now line,
 # or sync-payloads in an interactive shell, to install and later update them.
+# On a native home the line names the hook of the source the binding names
+# (bootstrap_payload_hook), as sync-payloads does; without one, only notes.
 step_H7_payloads_plan() {
+    local hook
     steps_block_begin H7-payloads judgment
     printf '%s\n' \
         '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them' \
-        "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)" \
-        '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
-    printf 'sh %s --now\n' "$(steps_quote "$STEPS_ROOT/scripts/payload-update.sh")"
+        "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)"
+    if ! hook=$(bootstrap_payload_hook "$STEPS_ROOT"); then
+        printf '%s\n' "# this native home's binding does not resolve from this checkout (the doctor's native-config row says why); once it does, run sync-payloads [ITEM...] in an interactive shell"
+        steps_block_end
+        return 0
+    fi
+    if bootstrap_native_home; then
+        printf '# this native home is bound to %s: the line below runs that source'\''s hook, as sync-payloads does\n' \
+            "${hook%/scripts/payload-update.sh}"
+    fi
+    printf '%s\n' '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+    printf 'sh %s --now\n' "$(steps_quote "$hook")"
     steps_block_end
 }
 

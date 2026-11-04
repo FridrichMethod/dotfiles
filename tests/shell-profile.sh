@@ -10,6 +10,9 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-shell-profile.XXXXXX")"
 trap 'rm -rf "$TEST_TMP"' EXIT
 mkdir "$TEST_TMP/home"
+# Cases that reset PATH to /usr/bin:/bin run each shell by the full path found
+# here: an HPC login env or Homebrew may provide one only outside it.
+ZSH_BIN=$(command -v zsh 2>/dev/null) || ZSH_BIN=
 
 # Source the actual profile in empty homes so host overlays and login hooks
 # cannot affect either the test or the developer's session.
@@ -160,11 +163,11 @@ done
 # Homebrew's bin ahead of nvm's does it move nvm's bin back, just ahead of
 # Homebrew's. Otherwise it must not assign PATH, which would empty the
 # command hash table: a hashed marker command has to survive.
-if command -v zsh >/dev/null 2>&1; then
+if [ -n "$ZSH_BIN" ]; then
     # shellcheck disable=SC2016
     printf '%s\n' 'print -r -- "$*" >>"$NVM_DIR/nvm.sh.args"' 'nvm() { :; }' >"$nvm_dir/nvm.sh"
     if ! env -u NVM_BIN -u NVM_INC -u HOMEBREW_PREFIX NVM_DIR="$nvm_dir" HOME="$TEST_TMP/home" \
-        zsh -f -c '
+        "$ZSH_BIN" -f -c '
             nvm_zsh=$1 node_bin=$2
             NVM_BIN=$node_bin HOMEBREW_PREFIX=/opt/brew
             PATH=/opt/x:/opt/brew/bin:/opt/brew/sbin:$node_bin:/usr/bin:/bin
@@ -207,7 +210,7 @@ fi
 # in the first shell, and nvm.zsh moves nvm's back ahead of it. Without nvm
 # nothing restores the order that `brew shellenv` changes in the second
 # shell, but PATH must still not grow.
-if command -v zsh >/dev/null 2>&1; then
+if [ -n "$ZSH_BIN" ]; then
     zhome=$TEST_TMP/zsh-home brew=$TEST_TMP/brew
     mkdir -p "$zhome/.config/zsh" "$zhome/.oh-my-zsh/custom" "$brew/bin" "$brew/sbin" \
         "$TEST_TMP/condabin" "$TEST_TMP/env/bin" "$TEST_TMP/login/bin"
@@ -250,7 +253,7 @@ if command -v zsh >/dev/null 2>&1; then
         '[[ -z $ACTIVATE || $LVL != 1 ]] || path=("$ACTIVATE" "${(@)path:#$ACTIVATE}")' \
         'print -rl -- "$PATH" "$FPATH" "$INFOPATH" "$NVM_BIN" "${commands[node]}" >$OUT$LVL' \
         '((LVL < 3)) || return 0' \
-        'LVL=$((LVL + 1)) zsh -d -i -c '\''source $NEST'\''' >"$TEST_TMP/nest.zsh"
+        'LVL=$((LVL + 1)) "$TEST_ZSH" -d -i -c '\''source $NEST'\''' >"$TEST_TMP/nest.zsh"
     printf '24\n' >"$nvm_dir/alias/default"
     nvm_bin=$(node_bin v24.11.1)
     for variant in default env brew-first mac no-nvm; do
@@ -263,8 +266,8 @@ if command -v zsh >/dev/null 2>&1; then
             no-nvm) nvm_home=$TEST_TMP/no-nvm head='' want_nvm_bin='' node=$brew/bin/node same=2 ;;
         esac
         noise=$(env -i HOME="$zhome" PATH=/usr/bin:/bin TERM=dumb NVM_DIR="$nvm_home" \
-            DOTFILES_DIR="$TEST_TMP/no-checkout" NEST="$TEST_TMP/nest.zsh" OUT="$out" \
-            ACTIVATE="$activate" MAC="$mac" LVL=1 zsh -d -i -c 'source $NEST' </dev/null 2>&1 |
+            DOTFILES_DIR="$TEST_TMP/no-checkout" NEST="$TEST_TMP/nest.zsh" OUT="$out" TEST_ZSH="$ZSH_BIN" \
+            ACTIVATE="$activate" MAC="$mac" LVL=1 "$ZSH_BIN" -d -i -c 'source $NEST' </dev/null 2>&1 |
             grep -v '^stty: ' || true)
         ok=1
         [ "$noise" = "$want_noise" ] && cmp -s "$out$same" "${out}2" && cmp -s "$out$same" "${out}3" ||
@@ -289,7 +292,7 @@ if command -v zsh >/dev/null 2>&1; then
     # shellcheck disable=SC2016
     if ! env -i HOME="$zhome" PATH=/usr/bin:/bin NVM_DIR="$nvm_dir" \
         DOTFILES_DIR="$TEST_TMP/no-checkout" \
-        zsh -d -c 'source ~/.zshrc && [[ ${(t)path}${(t)PATH} != *unique* ]]' 2>&1; then
+        "$ZSH_BIN" -d -c 'source ~/.zshrc && [[ ${(t)path}${(t)PATH} != *unique* ]]' 2>&1; then
         echo "FAIL non-interactive .zshrc left PATH unique" >&2
         nvm_failures=$((nvm_failures + 1))
     fi
@@ -307,7 +310,7 @@ fi
 # are evaluated as fzf-tab does, in zsh with $word and $desc set.
 preview_failures=0
 TLDR_ONLINE_LOG=$TEST_TMP/tldr-online.log
-if command -v zsh >/dev/null 2>&1; then
+if [ -n "$ZSH_BIN" ]; then
     # write_tldr DIR ACCEPTED [ONLINE_LOG]: a fake tldr in DIR that accepts
     # only ACCEPTED and, given ONLINE_LOG, appends to it the arguments of each
     # call made without TLDR_AUTO_UPDATE_DISABLED.
@@ -333,7 +336,7 @@ SH
     # evaluated with the fake tldr of DIR first on PATH.
     preview() {
         env -i HOME="$TEST_TMP/home" PATH="$1:/usr/bin:/bin" TERM=dumb \
-            zsh -f -c '
+            "$ZSH_BIN" -f -c '
                 source $1
                 zstyle -s $2 fzf-preview preview || exit 97
                 word=$3 desc=$3
@@ -392,7 +395,8 @@ sync_binding="dotfiles-chezmoi-v1
 $(cd -P "$sync_home" && pwd -P)
 $(cd -P "$TEST_TMP/bound" && pwd -P)"
 for test_shell in sh dash bash zsh; do
-    command -v "$test_shell" >/dev/null 2>&1 || continue
+    # The cases run with PATH=/usr/bin:/bin, so run the shell by full path.
+    test_shell_path=$(command -v "$test_shell") || continue
     case $test_shell in
         bash) sync_flags=(--noprofile --norc -i) ;;
         zsh) sync_flags=(-f -i) ;;
@@ -403,7 +407,7 @@ for test_shell in sh dash bash zsh; do
         [ "$checkout" = legacy ] || printf '%s\n' "$sync_binding" >"$sync_home/.config/dotfiles/native"
         # shellcheck disable=SC2016
         out=$(env -i HOME="$sync_home" PATH=/usr/bin:/bin TERM=dumb DOTFILES_DIR="$TEST_TMP/legacy" \
-            SYNC_TRACE="$TEST_TMP/sync-trace" "$test_shell" "${sync_flags[@]}" -c '. "$1"
+            SYNC_TRACE="$TEST_TMP/sync-trace" "$test_shell_path" "${sync_flags[@]}" -c '. "$1"
                 eval "sync-payloads kit pymol"; first=$?; eval sync-skills
                 printf "%s %s %s\n" "$first" "$?" "$(set | grep -c "^_df_")"' aliases \
             "$REPO_ROOT/common/sh/.aliases" </dev/null 2>"$TEST_TMP/sync-err") || :
