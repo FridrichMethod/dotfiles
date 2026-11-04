@@ -172,6 +172,7 @@ need = {
                        'tests/fixtures/chezmoi/secrets/README.md', 'tests/chezmoi.sh',
                        'tests/chezmoi.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1',
                        '.github/scripts/install-test-chezmoi.py', 'lib/bootstrap/platform.sh',
+                       'lib/bootstrap/checks.sh', 'lib/bootstrap/steps-human.sh',
                        'doctor.sh', 'setup-host.sh'],
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh'],
     'shell-profile': ['common/sh/.profile', 'common/sh/.aliases', 'lib/chezmoi-guard.sh'],

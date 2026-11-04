@@ -89,7 +89,7 @@ repos:
         entry: tests/chezmoi.sh
         language: script
         pass_filenames: false
-        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(config_sync[.]py|sync-runtime[.]sh|chezmoi-guard[.](sh|ps1)|bootstrap/platform[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|dotfiles-update|dotfiles-auto-stow|payload-update)[.](sh|ps1)|stow-all[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
+        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(config_sync[.]py|sync-runtime[.]sh|chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|dotfiles-update|dotfiles-auto-stow|payload-update)[.](sh|ps1)|stow-all[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh

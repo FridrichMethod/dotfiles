@@ -140,7 +140,8 @@ suites just to establish environment isolation.
 The entrypoint test also checks pre-commit's files/exclude selection, the
 inputs each named hook must run on (among them the sync engine, the payload
 scripts and shim, `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`,
-`doctor.sh` and `setup-host.sh`), and coverage of the complete shell-suite
+`checks.sh` and `steps-human.sh` (the H7-native verdict), `doctor.sh` and
+`setup-host.sh`), and coverage of the complete shell-suite
 list. The e2e-harness and e2e-harness-windows hooks cover harness
 unit/fixture tests; these hooks do not run Docker or install into the real
 home. Linux CI first checks prerequisites without running behavior tests,
