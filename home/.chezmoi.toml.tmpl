@@ -12,7 +12,7 @@
 {{- $config := fromToml (replace "\r\n" "\n" (include .chezmoi.configFile)) -}}
 {{- template "config-validate-temporals" $config -}}
 {{- /* Native config keys are case-insensitive; do not leave duplicate aliases. */ -}}
-{{- range $canonical := list "sourceDir" "destDir" "mode" "git" "update" "data" -}}
+{{- range $canonical := list "sourceDir" "destDir" "persistentState" "mode" "git" "update" "data" -}}
   {{- $found := false -}}
   {{- range $key, $value := $config -}}
     {{- if eq (lower $key) (lower $canonical) -}}
@@ -27,6 +27,8 @@
 {{- end -}}
 {{- $config = setValueAtPath (list "sourceDir") .chezmoi.workingTree $config -}}
 {{- $config = setValueAtPath (list "destDir") .chezmoi.destDir $config -}}
+{{- /* Plain native commands share the login updater's state database. */ -}}
+{{- $config = setValueAtPath (list "persistentState") (printf "%s/.local/state/chezmoi/chezmoi.boltdb" .chezmoi.destDir) $config -}}
 {{- $config = setValueAtPath (list "mode") "file" $config -}}
 {{- $owned := dict "git" (dict "autoAdd" false "autoCommit" false "autoPush" false)
     "update" (dict "command" "git" "args" (list "-c" "rebase.autoStash=false" "-c" "merge.autoStash=false" "pull" "--ff-only" "--no-rebase" "--no-autostash" "--no-recurse-submodules") "recurseSubmodules" false) -}}
