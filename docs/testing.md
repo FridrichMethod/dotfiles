@@ -11,12 +11,12 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
+| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow and tmux from apt, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
 | `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow, verified chezmoi v2.74.0; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
 | `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12, Node 24 and verified chezmoi v2.74.0; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
 
 Each Unix job first installs the real coding-agent-kit of the channel that
-`config/payloads.tsv` declares, with the payload hook's own command,
+`config/payloads.tsv` declares, with the explicit payload command,
 `HOME=$RUNNER_TEMP/kit-home sh scripts/payload-update.sh --now kit`. It then
 exports that home as `DOTFILES_TEST_KIT_HOME`, which the cases that need an
 installed kit read; without it, as in the Windows job (the kit installs
@@ -25,6 +25,13 @@ only, never in a test, and a failed install fails the job. To run them
 locally, install the kit into a scratch home the same way, with
 `XDG_DATA_HOME`, `XDG_STATE_HOME` and `BASH_COMPLETION_USER_DIR` unset so
 nothing reaches your own, and set `DOTFILES_TEST_KIT_HOME` to it.
+
+Both gitleaks hooks read `.gitleaks.toml`, which extends the defaults with
+every `sk-ant-` token family and with any file under a `.secrets` directory or its native
+source encoding (`dot_secrets/`, also behind the `remove_`, `external_`,
+`exact_`, `private_` and `readonly_` attribute prefixes); only the age
+ciphertexts `home/private_dot_secrets/encrypted_private_claude-*.age` are
+allowed there.
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
@@ -71,6 +78,36 @@ added to Stage 2. Shared auth/trust/payload siblings stay unmanaged. Local tempo
 refusal tests run on every OS; the historical Unix timezone characterization
 skip on Windows remains separate from the cross-platform safety assertions.
 
+Stage 5 adds source and state guards. `test_chezmoi_source_state.py` fails on
+a `.chezmoiexternal.*` file or `.chezmoiexternals` directory under `home/`
+(externals download whenever the source state is read) and on a `.gitmodules`
+or a tracked gitlink. `test_chezmoi_update_config.py` requires init to write
+`persistentState` as `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash
+form (Unix and Windows destinations), to fold its case variants into that key
+(two of them fail init with the config unchanged), and to add only that key
+to a config the previous template wrote; a plain command naming only the
+config then shares the bound database without a stray
+`chezmoistate.boltdb`, while the updater's explicit `--persistent-state`
+still wins. `test_chezmoi_provision.py` resolves a native-owned home's role
+for the doctor and setup-host from `[data].host`, ignoring `DOTFILES_HOST`,
+reads chezmoi init's real rendering of it, and keeps H7-native done on a
+bound home with a stray state database.
+
+On native Windows, `test_chezmoi_takeover_windows.py` also pins the login
+updater to `~/.local/bin/chezmoi.exe`: a `chezmoi.com` or `chezmoi.cmd`
+earlier on PATH or beside it never runs, a valid exe runs with no chezmoi on
+PATH, and a missing exe, a foreign owner, a foreign Modify grant, a symlinked
+exe or a junction at `.local\bin` or `.local` each print one warning, naming
+`docs/bootstrap.md W1-chezmoi` and no SID, and apply nothing. A unit case
+accepts foreign read and deny entries and OWNER RIGHTS but not a foreign
+owner or append right. A fixture records that NTFS refuses renaming
+`.local\bin` and `.local` while the updater's read handle on the exe is open
+and allows it after release (observed on the elevated hosted `windows-2025`
+runner). That narrows the swap window, not closes it: a writer of `~/.local`
+that swaps a junction in before the open and a prepared directory back
+before the re-check can still get another `chezmoi.exe` started, so these
+tests do not show the path tamper-proof.
+
 The `english-documentation` hook uses native `pygrep`, configured entirely in
 `.pre-commit-config.yaml`, to check selected Markdown, reStructuredText,
 plain-text documentation and README-style files in this repository. It checks
@@ -98,13 +135,16 @@ core.bare remain unchanged. `tests/test-entrypoints.sh` invokes that focused
 fixture instead of rerunning complete manifest, payload or Windows installer
 suites just to establish environment isolation.
 
-The entrypoint test also checks pre-commit's files/exclude selection, required
-engine/config/payload triggers, and coverage of the complete shell-suite list.
-The e2e-harness and e2e-harness-windows hooks cover harness unit/fixture tests;
-these hooks do not run Docker or install into the real home. Linux CI first
-checks prerequisites without running behavior tests, then performs one full
-pre-commit behavior/lint pass. macOS retains the complete tests/run.sh --ci
-pass with system Bash/BSD tools; native Windows retains tests/run.ps1 -CI.
+The entrypoint test also checks pre-commit's files/exclude selection, the
+inputs each named hook must run on (among them the sync engine, the payload
+scripts and shim, `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`,
+`doctor.sh` and `setup-host.sh`), and coverage of the complete shell-suite
+list. The e2e-harness and e2e-harness-windows hooks cover harness
+unit/fixture tests; these hooks do not run Docker or install into the real
+home. Linux CI first checks prerequisites without running behavior tests,
+then performs one full pre-commit behavior/lint pass. macOS retains the
+complete tests/run.sh --ci pass with system Bash/BSD tools; native Windows
+retains tests/run.ps1 -CI.
 Local developer hooks remain scoped to changed sources. These are invocation
 boundaries, not a measured claim of elapsed-time improvement.
 
@@ -126,8 +166,15 @@ oh-my-posh theme without loading the live profile. It walks the AST to pin the
 exact interactive guard and keep setup in its then-branch, checks agent-session
 parity against `common/zsh/.zshrc`, keeps the conda stub lazy (removed before
 the hook runs) and identical in both profiles, installs out of the profile and
-Windows PowerShell 5.1 syntax ASCII-only. It unit-tests the history filter in
-both directions, the eza glob expansion and the `$LASTEXITCODE` prompt wrapper,
+Windows PowerShell 5.1 syntax ASCII-only, and requires that the login tail
+runs no payload hook. It runs `sync-payloads` and `sync-skills`, lifted into
+a child with a fake home: a valid native marker runs its source's hook, never
+a stale `DOTFILES_DIR` checkout or its guard; only an unmarked home uses
+`DOTFILES_DIR`; six invalid markers refuse without running a hook; maintenance
+surfaces the real hook's refusal; the hook's exit status passes through, and
+one that ends without `exit` reports 0, not the caller's `$LASTEXITCODE`.
+It unit-tests the history filter in both directions, the eza glob expansion
+and the `$LASTEXITCODE` prompt wrapper,
 parses and completes conda under Windows PowerShell 5.1, dot-sources the
 PowerShell 7 profile in a redirected child with a fake home and a 60 s timeout,
 and renders the primary, transient and secondary prompts with any inherited
@@ -147,7 +194,19 @@ fzf-tab does, with a fake C client (the `tldr` formula Homebrew removed in
 tlrc (only `--color always`): both must show the colored page, a
 client's missing-page error must never reach the preview, and the C client
 must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
-fetches a missing page from GitHub.
+fetches a missing page from GitHub. Last, it runs `sync-payloads kit pymol`
+and `sync-skills` from `common/sh/.aliases` in interactive sh, dash, Bash and
+`zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid native
+marker runs its source's hook and an unmarked home `DOTFILES_DIR`'s, with the
+arguments and exit status passed through, silently and without leaving a
+helper variable. `tests/test_chezmoi_guard.py` adds the refusals under sh,
+Bash and zsh: a valid marker's source wins over a stale `DOTFILES_DIR`, whose
+guard and hook never run; an invalid marker (an unterminated extra line,
+another version, a relative source, another home, a symlink, a directory)
+refuses before any hook; and maintenance refuses before any state is
+written. It also requires that no login through `common/sh/.profile`, with
+or without Sherlock's overlay, runs a payload hook, while the update dispatch
+stays.
 
 `tests/test_ai_integration.py` evaluates the account preview of
 `custom/fzf-tab.zsh` under the context fzf-tab really looks up; with
@@ -162,18 +221,33 @@ The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh`
 unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs
 the standard-library validator `tests/test_bootstrap_manifest.py`, which checks
 `config/bootstrap/`, the step headings of `docs/bootstrap.md`, the tool table
-of `docs/dependencies.md` and the two identical project skills.
+of `docs/dependencies.md`, the two identical project skills, and that
+`STEPS_REGISTRY` and both modes' step lists in `setup-host.ps1` name only
+contract step ids, with every id but the `X-` ones in some list.
 `tests/doctor.sh` and `tests/setup-host.sh` run the entry points under `env -i`
 against fixture checkouts, homes and Homebrew prefixes with stubbed tools and
 local clone remotes. Network commands outside `--online` fail the doctor
 suite; `sudo`, `chsh`, `stow`, `apt-get`, `conda` and `git lfs` are tripwires in
 the installer suite; find snapshots prove that the doctor and
-`setup-host.sh --check` write nothing. `tests/doctor.sh` also runs the real
-`./doctor.sh` with the real manifest against the test machine's own tools
-(`--platform debian` and `--platform other` with `--tsv`, an empty temporary
-`HOME`): every line must keep the TSV contract, the exit code must be 0 or 1,
-and the home, `TMPDIR` and checkout must stay unchanged, so a runner whose
-tools print unexpected versions or write state on `--version` fails CI. The
+`setup-host.sh --check` write nothing. Most fixture cases pass
+`--legacy-stow`; a native section of each runs the default mode. There the
+doctor reads a bound home's role from the one quoted `host` line of the
+`[data]` table of its local config, ignores the Stow receipt and
+`DOTFILES_HOST` (legacy only), exits 2 for a missing, repeated, unknown or
+malformed one, treats `common-only` as common only, names the cause in its
+`native-config` row (only another checkout's binding and a stray
+`chezmoistate.boltdb`, which it leaves in place, merely warn) and keeps the
+offline, write-free and no-`TMPDIR` promises. The native setup-host cases
+print HUMAN text that names no Stow and rerun notes without a mode flag (the
+legacy cases' notes keep `--legacy-stow`), and let an existing login env
+satisfy H2-alloc with the AI-sync interpreter as a tripwire; S6-nerd-font
+counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
+also runs the real `./doctor.sh` with the real manifest against the test
+machine's own tools, in legacy and native mode (`--platform debian` and
+`--platform other` with `--tsv`, an empty temporary `HOME`): every line must
+keep the TSV contract, the exit code must be 0 or 1, and the home, `TMPDIR`
+and checkout must stay unchanged, so a runner whose tools print unexpected
+versions or write state on `--version` fails CI. The
 checkout scan skips `.git`, where any other git process may write meanwhile;
 the fixture cases cover the doctor's own git. An empty home cannot show
 writes that depend on state, so fixture fakes model them: gh writes its
@@ -181,8 +255,16 @@ device id unless `GH_TELEMETRY=0`, and the tldr C client refreshes a stale
 page cache unless `TLDR_AUTO_UPDATE_DISABLED` is set.
 `tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
 against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
-Windows job runs that suite and the validator from `tests/run.ps1`. None of
-them downloads anything or touches the runner's home. Fresh-machine runs are
+Windows job runs that suite and the validator from `tests/run.ps1`. Its
+native cases mirror the Unix ones (a healthy bound host with gh telemetry off
+and no writes, the `native-config` causes, a checkout reached through a
+junction or symlink counting as the bound one, HUMAN text without Stow). Its
+W1-chezmoi case swaps the archive right after the by-path hash check and
+requires a sha256 mismatch with nothing installed, then a clean install that
+leaves only `chezmoi.exe`, whose DACL on Windows must be protected and grant
+exactly the user, SYSTEM and Administrators full control (a `SKIP:`
+elsewhere). None of them downloads anything or touches the runner's home.
+Fresh-machine runs are
 the opt-in [end-to-end suite](#end-to-end-bootstrap-opt-in) below, which checks
 the [acceptance checklist](bootstrap.md#acceptance-checklist) for real.
 
@@ -195,6 +277,19 @@ Ubuntu PATH-selected/custom and per-user Linuxbrew, and Marlowe's durable
 CARGO_HOME without eager Cargo directory creation. No live rc, installer or
 user credentials are used. Sherlock cache placement remains subject to site
 rules; these local shell tests do not establish cluster policy.
+
+`tests/tmux.sh` runs `tests/test_tmux.py`. Its static cases match the plugin
+rows to Unix installation and probes and require the `tools.tsv` floor 3.4
+with no `#{version}` or `tmux -V` gate under `common/tmux`. With a real tmux
+on PATH, the rest source the config on a private socket with a temporary
+`HOME` and a fake TPM. Among other things it loads offline, registers
+which-key, Catppuccin and FloaX and sets the popup and menu styles without
+conditions, binds FloaX's keys only once its script exists, and follows the
+session environment for the clipboard (an SSH client's session turns
+extrakto's OSC 52 on and drops tmux-yank; a session removal hides a
+server-global SSH value). That class skips only when tmux is absent; tmux
+older than 3.4 is unsupported. The Linux job installs apt's tmux (3.4 on
+`ubuntu-24.04`) so it runs there; the macOS job installs none.
 
 `tests/stow-ignores.sh` (and `tests/run.ps1`) runs `tests/test_stow_ignores.py`:
 it builds a name from each `.gitignore` pattern with no slash but a trailing
@@ -247,34 +342,49 @@ longer arbitrary delay stands in for completion evidence.
 installers served from `file://` URLs: the real `config/payloads.tsv` with its
 `https://raw.githubusercontent.com/FridrichMethod/` prefix pointed at a local
 directory (a URL anywhere else fails the suite) and a curl that refuses every
-other scheme. It covers the first interactive shell installing every item in
-the foreground, in order and on the declared channel, with stdin closed; a
-fresh session doing nothing; the session marker, the opt-out and
-non-interactive shells; `DOTFILES_PAYLOAD_ITEMS`; the background refresh with
-each item's update command and the log; a live worker blocking a second one;
-a failed install writing ITEM.failed without a success stamp, later sessions
-reporting it without another foreground run, and retrying in the background
-after six hours;
-exit 75; `--now`, the aliases, a failed download, the wget fallback, each
-download staged alone in a fresh private directory, every installer starting
-in `/`, outside the caller's working directory, where git finds no planted
-`TMPDIR/.git` (dotfiles chooses only the directory an installer starts in;
-git it runs from elsewhere is its own), the background run starting in `/`
-with every path it uses absolute, a relative `XDG_STATE_HOME` ignored; and
-the rc files and the transition shim sourcing the hook.
+other URL but a loopback port. Nothing installs unless a person runs it:
+sourcing the hook from an interactive Bash, zsh or sh (directly, from a
+function as the old login dispatcher did, and through the
+`scripts/awesome-skills-update.sh` shim), a call without `--now` and the
+retired `--auto` and `--worker` do nothing, print nothing, write no state and
+leave the shell's flags, options and traps alone, and a login through
+`common/sh/.profile` runs no installer. `--now` installs the default items in
+config order, the kit on the declared channel with stdin closed, runs each
+installed item's update command the next time, keeps no state of its own and
+returns only once its installer has finished. The suite also covers
+`DOTFILES_PAYLOAD_ITEMS` (empty selects none, an unknown item fails before
+anything runs); a failed install's retry line and exit 1 while the other
+items still run; exit 75 as no failure; the person-status rows; a kit path
+still linked into the retired Stow package, which stops the kit but not
+PyMOL; a stalled download ending within `DOTFILES_PAYLOAD_TIMEOUT` without a
+second download; each download staged alone in a fresh private directory of
+`TMPDIR` (under its absolute path when `TMPDIR` is relative), removed
+afterwards even when its installer fails; every installer, a download or the
+kit's installed update, starting in `/`, outside the caller's working
+directory, where git finds no planted `TMPDIR/.git` (dotfiles chooses only the
+directory an installer starts in; git it runs from elsewhere is its own); a
+failed download, the wget fallback and a host with neither; and the
+`sync-payloads` and `sync-skills` aliases. `tests/test_payload_download.py`
+adds loopback deadlines for curl, wget (behind `timeout` or `gtimeout`;
+without either it fails before any request) and PowerShell, and the
+failed-download latch, with no staging or state left behind.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
-run naming the kit says it is not available there and records nothing, a
-download's directory is private (mode 0700; on Windows an access list that
-grants only this account and inherits nothing) and one that cannot be made
-runs nothing, every installer and the background run run in `$PSHOME`, out
-of the caller's working directory and the download's, and fixture-only rows
-keep the `windows-update` and `stow-links` fields covered.
+call without `-Now`, or with the retired `-Auto` or `-Worker`, does nothing
+and says nothing; a run naming the kit says it is not available there and
+runs nothing for it; no run records anything; a download's directory is
+private (mode 0700; on Windows an access list that grants only this account
+and inherits nothing) and one that cannot be made runs nothing; every
+installer, a download or an installed script, runs in `$PSHOME`, out of the
+caller's working directory and the download's; and fixture-only rows keep the
+`windows-update` and `stow-links` fields covered.
 `tests/unix-installer.sh` also runs the [migration](payloads.md#migration) of
 a host stowed with both submodules through the real login updater, Git and
 Stow: the leftover checkouts stay ignored, the restow removes the 16 retired
-links, the payload hook installs the kit and PyMOL in that login, and the
-next login changes nothing.
+links, that login installs no payload repo, the next login changes nothing,
+and an explicit `--now kit pymol` then installs both. Where the leftovers
+stopped the restow (a checkout without those `.gitignore` lines), the explicit
+run refuses the kit with the stow-all advice and fails.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
@@ -305,11 +415,19 @@ environment checks, documented in `windows-installer.md` and
 ## End-to-end bootstrap (opt-in)
 
 `tests/e2e/` runs the day-zero bootstrap for real, from a fresh home, on every
-host overlay, the way a person following the [quick start](bootstrap.md#quick-start)
-would, and checks the acceptance criteria below. It is opt-in: `./tests/run.sh`
-never runs it (only the fast unit tests `tests/e2e-harness.sh` and, wherever
-pwsh exists, `tests/e2e-harness.ps1`, which drive the harness and its Windows
-twin against stubs), and neither does pre-commit. A run installs packages,
+host overlay, the way a person following the [legacy quick start](bootstrap.md#legacy-quick-start)
+would (`--legacy-stow`, `-LegacyStow` on Windows), and checks the acceptance
+criteria below. Then, without migrating that home, it provisions the native
+binary (`native-provision`: S4-chezmoi, or on Windows a native
+`setup-host.ps1 -Yes` that may install only W1-chezmoi and must stop at
+HW-native), requires a native `--check` (`-Check`) that writes nothing
+(`native-check`), and runs `tests/chezmoi.sh` or `tests/chezmoi.ps1` with
+that binary required (`native-fixtures`); `other` skips the first two and
+runs the third only with a chezmoi supplied through `DOTFILES_TEST_CHEZMOI`
+or PATH. It is opt-in: `./tests/run.sh` never runs it (only the fast unit
+tests `tests/e2e-harness.sh` and, wherever pwsh exists,
+`tests/e2e-harness.ps1`, which drive the harness and its Windows twin against
+stubs), and neither does pre-commit. A run installs packages,
 clones plugins and builds a login env, so it needs the network and takes from
 ten minutes to an hour per host; [tests/e2e/README.md](../tests/e2e/README.md)
 is the short how-to.
@@ -367,8 +485,8 @@ Each image has only what a fresh install of that kind has (Ubuntu and Fedora:
 `git`, `curl`, `sudo` and certificates; the clusters: Lmod, `git`, `curl` and
 the OS utilities), never what the bootstrap installs, and a home made by
 `useradd -m`, so the `/etc/skel` rc files are there for H7-stow's `mv -n`
-lines. The setup-host loop is `./setup-host.sh --host H --yes` after
-`./doctor.sh --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
+lines. The setup-host loop is `./setup-host.sh --legacy-stow --host H --yes`
+after `./doctor.sh --legacy-stow --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 prescribes; the `other` flow installs the distribution packages with `dnf`,
 takes `fetch_pinned` and `clone_listed` from the fenced block of
 [Downloads and clones by hand](bootstrap.md#downloads-and-clones-by-hand) in
@@ -482,10 +600,10 @@ around: a fresh machine should never print it. The loop reruns setup-host after
 each block, at most eight times; exit 0 ends it, exit 3 without a runnable
 block fails as "no progress", and exit 1 or 2 fails naming the step.
 
-On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -Host win
--Yes` (again at most eight runs, exit 3 without a runnable block failing as
-"no progress"), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the
-same `<id>:<kind>`:
+On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -LegacyStow
+-Host win -Yes` (again at most eight runs, exit 3 without a runnable block
+failing as "no progress"), with the policy of `tests/e2e/lib/blocks.ps1`,
+keyed on the same `<id>:<kind>`:
 
 | Block | Action |
 | --- | --- |
@@ -506,16 +624,16 @@ The seven criteria, and how `inside.sh` asserts each; every failure names its
 step in `summary.tsv`:
 
 1. **The doctor passes.** From a login environment (`bash -lc 'exec zsh -il
-   -c ...'`), `./doctor.sh --host H` exits 0 for the default tiers, then
-   `--smoke` exits 0 (`--platform other` on `other`).
-2. **The read-only modes write nothing.** Around `./doctor.sh --tsv` and
-   `./setup-host.sh --host H --check`, `TMPDIR` is a fresh empty directory
-   that must stay empty with its mtime unchanged, and `find "$HOME" -newer
-   <marker>` (pruning `~/dotfiles/.git`) must print nothing, with the entry
-   count unchanged.
-3. **A second apply is a no-op.** After the loop, `./setup-host.sh --host H
-   --yes` exits 0, prints no `<id> done applied:` line, and the home snapshot
-   shows nothing newer.
+   -c ...'`), `./doctor.sh --legacy-stow --host H` exits 0 for the default
+   tiers, then `--smoke` exits 0 (`--platform other` on `other`).
+2. **The read-only modes write nothing.** Around `./doctor.sh --legacy-stow
+   --tsv` and `./setup-host.sh --legacy-stow --host H --check`, `TMPDIR` is a
+   fresh empty directory that must stay empty with its mtime unchanged, and
+   `find "$HOME" -newer <marker>` (pruning `~/dotfiles/.git`) must print
+   nothing, with the entry count unchanged.
+3. **A second apply is a no-op.** After the loop, `./setup-host.sh
+   --legacy-stow --host H --yes` exits 0, prints no `<id> done applied:`
+   line, and the home snapshot shows nothing newer.
 4. **The checkout stays clean.** `git -C ~/dotfiles status --porcelain` is
    empty after every step; a dirty tree fails that step.
 5. **Nothing privileged or stateful ran outside a HUMAN block**, by four
@@ -558,9 +676,9 @@ step in `summary.tsv`:
    is a setup phase, so criterion 5 covers it: an installer that runs sudo or
    stow, or changes an rc file, fails the audits.
 
-Each host also runs its negative cases as separate steps (`negative:<token>`):
-the platform refusals (`--host wsl-ubuntu --check` in the lab container and
-the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster (Lmod's profile.d
+Each host also runs its negative cases as separate steps (`negative:<token>`),
+all with `--legacy-stow`: the platform refusals (`--host wsl-ubuntu --check`
+in the lab container and the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster (Lmod's profile.d
 exports `BASH_ENV`, which every bash script sources on start and which
 re-exports `LMOD_DIR`), `sudo -n ./setup-host.sh` as root, each exit 2), `alloc-first` (the first hpc apply exits 3 and prints the
 `H2-alloc` block) and `common-only` (after the host-less stow, `./doctor.sh`
@@ -612,7 +730,7 @@ leave it off.
 ### Real clusters
 
 Sherlock and Marlowe cannot run the containers (no Docker on a login node, and
-`E2E_NATIVE` is honoured only on macOS), so the owner runs the
+`E2E_NATIVE` is honoured only on macOS), so the owner runs the legacy
 [Sherlock and Marlowe quick start](bootstrap.md#sherlock-and-marlowe) by hand
 once per cluster and checks the criteria above the same way. Log in without
 the RemoteCommand (`ssh sherlock-plain`, `ssh marlowe-plain`), then:
@@ -621,23 +739,23 @@ the RemoteCommand (`ssh sherlock-plain`, `ssh marlowe-plain`), then:
 uname -a; cat /etc/os-release; ldd --version | head -n 1   # record these with the run
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
-./doctor.sh --host sherlock --tsv                           # or marlowe; exit 1 is expected now
+./doctor.sh --legacy-stow --host sherlock --tsv             # or marlowe; exit 1 is expected now
 marker=$(mktemp) && sleep 1
-./setup-host.sh --host sherlock --check                     # exit 3
+./setup-host.sh --legacy-stow --host sherlock --check       # exit 3
 find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # must print nothing
-./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
+./setup-host.sh --legacy-stow --host sherlock               # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
 echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the stow
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
 # Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet
-./setup-host.sh --host sherlock                             # builds the login env; exit 3 at H7-stow
+./setup-host.sh --legacy-stow --host sherlock               # builds the login env; exit 3 at H7-stow
 exit                                                        # back to the login node
 # H7-stow block: its mv -n lines, then PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock
-./setup-host.sh --host sherlock                             # exits 0 and prints no "done applied:" line
+./setup-host.sh --legacy-stow --host sherlock               # exits 0 and prints no "done applied:" line
 git -C ~/dotfiles status --porcelain                        # empty, here and after every step above
 exec "$HOME/micromamba/envs/login/bin/zsh" -l               # starts without an error line
-./doctor.sh --host sherlock && ./doctor.sh --host sherlock --smoke
+./doctor.sh --legacy-stow --host sherlock && ./doctor.sh --legacy-stow --host sherlock --smoke
 ```
 
 Nothing but the HUMAN blocks ran `stow` or edited an rc file when the stow
