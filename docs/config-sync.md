@@ -210,7 +210,9 @@ estimated thread cost item. Codex CLI 0.166.0 exposes cost only for Enterprise
 workspaces and omits it when unavailable. `context-used` reports context window
 occupancy, independently of cumulative tokens. Other `tui` settings, including
 colors, theme and onboarding state, remain local. `/statusline` edits the live
-layout; the next dotfiles apply restores the shared array.
+layout. A legacy sync restores the shared array; on a native home a live edit of
+any owned key stops the nonforce login update at `~/.codex/config.toml` until it
+is reconciled as in [takeover.md](chezmoi-migration/takeover.md#reconcile-an-owned-ai-config-key).
 
 Portable values replace these paths only. Other live keys, tables, comments,
 multiline strings and arrays of tables are retained by TOMLKit's document model.

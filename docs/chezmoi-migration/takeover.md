@@ -272,6 +272,35 @@ Review live app changes with a private targeted diff/merge. Do not blindly
 `add` an AI config or replace its modify template with a snapshot of local state.
 Source consolidation belongs to Stage 6.
 
+### Reconcile an owned AI-config key
+
+Dotfiles owns the Codex and Claude keys listed in
+[config-sync.md](../config-sync.md); `tui.status_line` stays owned (Stage 5).
+When a live owned value differs from the last applied one, the nonforce login
+update stops at that file and later targets stay stale. Causes: a local UI
+choice (Codex `/statusline`, a persisted model or effort), or a Codex
+app-server that started just before the update and wrote its in-memory copy of
+`~/.codex/config.toml` back, as on WSL after `bcf5c0d`. The race does not depend
+on the key: any commit that changes rendered Codex config can meet it.
+
+Reconcile one file, never with a routine force:
+
+1. Stop or let idle the Codex app-servers on that host, including those started
+   by a remote desktop client on another machine.
+2. Privately compare the live file with `chezmoi cat` of the target under the
+   full argument set; record only the differing key names.
+3. Back up the file privately with its mode and owner.
+4. If a differing value is a deliberate local choice, change the tracked
+   portable value through a reviewed commit, or accept the portable value.
+5. Apply only that target with the full argument set, `--exclude=dirs` and
+   `--force`.
+6. Verify an empty status, a file equal to its target, and unchanged mode and
+   owner; then restart the app-servers stopped in step 1.
+
+Before rolling out a commit that changes rendered `~/.codex/config.toml`, ask
+the user to quit Codex desktop apps that connect to the target hosts, and check
+each host's status for that file after its first login update.
+
 ## Recovery preserves edits made since backup
 
 Keep maintenance active and the native marker present after any partial failure.

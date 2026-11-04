@@ -183,7 +183,9 @@ The shared Codex CLI status line shows cumulative session tokens,
 alongside model, directory, thread, Git branch, context usage and
 weekly limits. Estimated thread cost appears only when supported by the account
 (Enterprise workspaces in Codex CLI 0.166.0). Edit `tui.status_line` in the tracked
-Codex config to change the shared layout; other TUI preferences remain local.
+Codex config to change the shared layout; other TUI preferences remain local. A
+live edit of an owned key stops native login updates at that file until it is
+[reconciled](docs/chezmoi-migration/takeover.md#reconcile-an-owned-ai-config-key).
 
 ## Payload repos
 
