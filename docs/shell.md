@@ -86,9 +86,10 @@ and interaction where the host supports them. No full config framework or
 Oh My Tmux is needed.
 
 On Marlowe only the login env's tmux (3.6a) meets the floor. A non-interactive
-`ssh marlowe tmux ...` finds `/usr/bin/tmux` 3.2a, which rejects the 3.4
-options, and a 3.2a server sharing the default socket with a 3.6a client can
-fail to talk to it. Start tmux from an interactive login shell.
+shell there, such as `ssh marlowe-plain tmux ...`, finds `/usr/bin/tmux` 3.2a,
+which rejects the 3.4 options, and a 3.2a server sharing the default socket
+with a 3.6a client can fail to talk to it. Start tmux from an interactive login
+shell.
 
 Without any plugin, the native settings use Catppuccin's Mocha colors:
 transparent status background, mauve active pane borders, centered windows,
@@ -107,12 +108,12 @@ changing the shell's TMPDIR or following shared temporary-file symlinks.
 
 Install the missing clones with `./setup-host.sh --host <host> --check --only S3-clones`,
 then `./setup-host.sh --host <host> --yes --only S3-clones`, with
-`DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported. After the
-dotfiles are applied, reload a running server with
-`tmux source-file ~/.tmux.conf`; new servers load it automatically. Plugins
-live in `~/.tmux/plugins/`, outside this checkout. Startup, reload, Stow and
-login hooks never install or update them. Without TPM, native tmux settings
-still work. See
+`DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported (the second
+is inert until Stage 6). After the dotfiles are applied, reload a running
+server with `tmux source-file ~/.tmux.conf`; new servers load it
+automatically. Plugins live in `~/.tmux/plugins/`, outside this checkout.
+Startup, reload, Stow and login hooks never install or update them. Without
+TPM, native tmux settings still work. See
 [S3-clones](bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones) for
 Other Linux installation and existing-clone behavior.
 Use the deployed `~/.tmux.conf` as the sole tmux config: TPM prefers
@@ -140,11 +141,13 @@ opens fzf, and `?` still displays the native key reference. Copy mode uses
 vi movement and `y` to copy. Desktop yank requires an available clipboard
 backend; SSH sessions use native OSC 52 through the connected terminal.
 The terminal must allow clipboard writes. Extrakto uses that transport for SSH
-copies. Like the tmux-yank gate, its gate reads the environment of the session
-that loads or reloads the config: an SSH client's reload turns OSC 52 on, and a
-local reload of a server started over SSH turns it off. Extrakto uses the
-existing Python/fzf tools, clears inherited fzf options, and captures at most
-2000 recent lines per window pane.
+copies. Like the tmux-yank gate, its gate looks for `SSH_CONNECTION`,
+`SSH_CLIENT` or `SSH_TTY` in the environment of the session that loads or
+reloads the config, so an SSH client's reload turns OSC 52 on. Of the three, a
+local attach removes only `SSH_CONNECTION` from the session; a server started
+from an SSH login keeps the other two globally and stays on OSC 52. Extrakto
+uses the existing Python/fzf tools, clears inherited fzf options, and captures
+at most 2000 recent lines per window pane.
 
 The Space menu groups Sessions, Windows, Panes and Tools, with layout
 save/restore, resize, fzf, extraction, floating shell and plugin/config
@@ -153,7 +156,9 @@ configuration: upstream autobuild is disabled, so reload needs no Python
 menu generation, pip package or virtual environment. Upstream may copy its
 default config into ignored files in its own checkout on first load; the
 deployed menu is then applied. To customize the menu, edit
-`common/tmux/.config/tmux/which-key.conf` in the checkout.
+`common/tmux/.config/tmux/which-key.conf` in the checkout. A legacy link sees
+the edit at once; a native home receives it through the login update once it
+is committed, since that update refuses a dirty checkout.
 
 The config uses tmux 3.4 popup, menu and style features without version
 checks; `config/bootstrap/tools.tsv` holds the floor, and older tmux is
