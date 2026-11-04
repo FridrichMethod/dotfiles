@@ -309,20 +309,19 @@ if ($IsInteractive -and -not $IsAgentSession) {
 }
 Remove-Variable IsAgentSession
 
-# --- Dotfiles auto-update check and payload repos ----------------------
+# --- Dotfiles auto-update check -------------------------------------------
 # Last, mirroring the tail of common/zsh/.zshrc, so the prompt and modules
-# above are ready first. Like zsh, which returns before them for
+# above are ready first. Like zsh, which returns before it for
 # non-interactive shells, a script run in a console or piped in never
-# fetches, stows or installs. The session-once and no-console guards live in
-# scripts/dotfiles-update.ps1 and scripts/payload-update.ps1 so each keeps one
-# contract with its Unix twin; the payload hook starts its refreshes in a
-# hidden, detached pwsh, so the prompt never waits for them.
+# fetches or stows. The session-once and no-console guards live in
+# scripts/dotfiles-update.ps1 so it keeps one contract with its Unix twin.
+# The payload repos install only when a person runs sync-payloads.
 if ($IsInteractive) {
     & {
         try {
             # A native source can be an independent clone. Read only the source
             # hint here so its guard can validate the complete binding; never
-            # execute a retired checkout's guard, updater or payload worker.
+            # execute a retired checkout's guard or updater.
             $DotfilesMaintenance = $null
             try { $DotfilesMaintenance = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/maintenance') -Force -ErrorAction Stop }
             catch [System.Management.Automation.ItemNotFoundException] { }
@@ -355,8 +354,6 @@ if ($IsInteractive) {
                 Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
             } else { Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1' }
             if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
-            $DotfilesPayload = Join-Path $DotfilesDir 'scripts/payload-update.ps1'
-            if (Test-Path -LiteralPath $DotfilesPayload) { & $DotfilesPayload }
         }
         catch { [Console]::Error.WriteLine('[dotfiles] Profile hooks skipped: review the native source binding privately.') }
     }

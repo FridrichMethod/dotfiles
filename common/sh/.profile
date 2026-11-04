@@ -150,13 +150,8 @@ _dotfiles_login_updates() {
         # shellcheck source=/dev/null
         . "$_df_update"
     fi
-    # Keep payload scheduling separate from the native dotfiles update policy.
-    _df_payload=$_df_hook_root/scripts/payload-update.sh
-    if [ -r "$_df_payload" ]; then
-        # shellcheck source=/dev/null
-        . "$_df_payload"
-    fi
-    unset _df_hook_root _df_update _df_payload
+    # The payload repos install only when a person runs sync-payloads.
+    unset _df_hook_root _df_update
 }
 if [ -z "${ZSH_VERSION:-}" ]; then
     _dotfiles_login_updates

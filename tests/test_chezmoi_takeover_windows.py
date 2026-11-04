@@ -376,7 +376,8 @@ class WindowsTakeoverTests(unittest.TestCase):
                 "if($tail.Count -ne 1){throw 'profile tail not found'};Invoke-Expression $tail[0].Extent.Text")
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(trace.read_text().splitlines(), ["dotfiles-update", "payload-update"])
+        # A login updates; payloads install only through sync-payloads.
+        self.assertEqual(trace.read_text().splitlines(), ["dotfiles-update"])
         trace.unlink()
         # A native source may be independent from a stale DOTFILES_DIR/default.
         native_repo = self.f.root / "bound source"
@@ -394,7 +395,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.marker.write_bytes(("dotfiles-chezmoi-v1\n" + str(self.home) + "\n" + str(native_repo) + "\n").encode())
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(trace.read_text().splitlines(), ["native-chezmoi-update", "native-payload-update"])
+        self.assertEqual(trace.read_text().splitlines(), ["native-chezmoi-update"])
         trace.unlink()
         self.marker.write_text("malformed marker cannot fall back\n")
         result = self.ps(body)

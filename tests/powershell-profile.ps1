@@ -2,8 +2,7 @@
 # PowerShell profile and oh-my-posh theme contract. Runs with -NoProfile and
 # never loads the live profile: static checks walk the AST, unit checks run
 # single pieces lifted from it, and the load checks dot-source the tracked
-# files in child processes with a fake HOME and the update and payload hooks
-# disabled.
+# files in child processes with a fake HOME and the update hook disabled.
 [CmdletBinding()]
 param()
 
@@ -164,16 +163,9 @@ $afterGate = if ($updateGate.Count -eq 1) {
 Assert-True ($updateCall.Count -eq 1 -and $updateGate.Count -eq 1 -and [object]::ReferenceEquals($updateGate[0].Parent, $parsed7.Ast.EndBlock) -and
     (Test-InsideNode $updateCall[0] $updateGate[0].Clauses[0].Item2) -and
     -not ($afterGate | Where-Object { $_ -isnot [System.Management.Automation.Language.PipelineAst] -or $_.Extent.Text -notmatch '^Remove-Variable\b' })) 'the update check runs last, only in the then-branch of if ($IsInteractive)'
-# The payload hook runs right after it, in the same then-branch (it starts its
-# refreshes in a hidden, detached pwsh, so the prompt never waits for them).
-Assert-True ($tail.Contains('scripts/payload-update.ps1')) 'the tail runs scripts/payload-update.ps1'
-$payloadCall = @(Get-Commands $parsed7.Ast | Where-Object {
-        $_.InvocationOperator -eq 'Ampersand' -and $_.CommandElements[0].Extent.Text -eq '$DotfilesPayload'
-    })
-Assert-True ($payloadCall.Count -eq 1 -and $updateCall.Count -eq 1 -and $updateGate.Count -eq 1 -and
-    (Test-InsideNode $payloadCall[0] $updateGate[0].Clauses[0].Item2) -and
-    $payloadCall[0].Extent.StartOffset -gt $updateCall[0].Extent.StartOffset) 'the payload hook runs after the update check, only in the then-branch of if ($IsInteractive)'
-# The manual triggers are interactive setup.
+# No payload hook runs at login: the payload repos install only when a person
+# runs the manual triggers, which are interactive setup.
+Assert-True (-not $tail.Contains('payload-update')) 'the tail runs no payload hook'
 foreach ($name in 'sync-payloads', 'sync-skills') {
     $definition = @($parsed7.Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
                 $n.Name -eq "global:$name" }.GetNewClosure(), $true))
@@ -616,7 +608,6 @@ if ($IsWindows) {
 '@
     $result = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $child) -Environment @{
         DOTFILES_AUTO_UPDATE = '0'
-        DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
         DOTFILES_DIR = Join-Path $fakeHome 'no-dotfiles'
         DOTFILES_TEST_HOME = $fakeHome
         DOTFILES_TEST_PROFILE = $profile7

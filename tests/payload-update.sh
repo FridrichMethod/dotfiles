@@ -98,13 +98,18 @@ done
 SH
 # PyMOLScripts' and awesome-skills' installers read a configs/ or scripts/
 # directory beside themselves as a checkout's, so their fakes record the
-# directory they run from: its path, mode and entries.
+# directory they run from: its path, mode and entries. FAKE_PYMOL_DELAY makes
+# PyMOL's take that many seconds before it marks itself finished.
 cat >"$REMOTE/PyMOLScripts/main/install.sh" <<'SH'
 #!/bin/sh
 printf 'pymol-install [%s]\n' "$*" >>"$EVENTS"
 here=$(dirname -- "$0")
 printf '%s\n%s\n%s\n' "$here" "$(ls -ld -- "$here" | cut -c1-10)" "$(ls -A -- "$here")" >"$EVENTS.pymol-dir"
 record-cwd pymol
+if [ -n "${FAKE_PYMOL_DELAY-}" ]; then
+    sleep "$FAKE_PYMOL_DELAY"
+    : >"$EVENTS.pymol-finished"
+fi
 [ "${FAKE_PYMOL_STATUS:-0}" = 0 ] || exit "$FAKE_PYMOL_STATUS"
 : >"$HOME/.pymolrc"
 : >"$HOME/.pymolrc.py"
@@ -129,7 +134,6 @@ new_home() {
     EVENTS=$TEST_TMP/events$CASE
     OUT=$TEST_TMP/out$CASE
     ERR=$TEST_TMP/err$CASE
-    STATE=$HOME_DIR/.local/state/dotfiles/payload
     mkdir -p "$HOME_DIR"
     : >"$EVENTS"
 }
@@ -141,41 +145,27 @@ in_env() {
         REAL_CURL="$REAL_CURL" TMPDIR="$TEST_TMP" "$@"
 }
 
-# source_hook SHELL [ENV...]: source the hook from an interactive SHELL, as
-# the rc files do, then report its session marker.
-source_hook() {
-    local shell=$1
-    shift
-    case $shell in
-        bash) set -- "$@" bash --noprofile --norc -i -c ;;
-        zsh) set -- "$@" zsh -f -i -c 'setopt extended_glob nounset glob_dots; eval "$1"' zsh ;;
-        sh) set -- "$@" sh -i -c ;;
-    esac
-    in_env "$@" '. "$DOTFILES_DIR/scripts/payload-update.sh"; printf "marker=%s\n" "${_DOTFILES_PAYLOAD_CHECKED-}"' \
-        >"$OUT" 2>"$ERR" || fail "sourcing the hook from $shell failed"
-    # Only the hook's own log lines reach the terminal, never a shell error.
-    if grep -q 'payload-update\.sh' "$ERR"; then
-        fail "the hook printed a shell error under $shell"
-    fi
-}
-
-# [VAR=VALUE...] now ITEM...: run the manual mode; sets STATUS.
+# [VAR=VALUE...] now ITEM...: run the hook as sync-payloads does; sets STATUS.
 now() {
     STATUS=0
     in_env sh "$FIXTURE/scripts/payload-update.sh" --now "$@" >"$OUT" 2>"$ERR" || STATUS=$?
 }
 
-events() { cat "$EVENTS"; }
 expect_events() {
     [[ "$(grep -v '^curl$' "$EVENTS" || :)" == "$1" ]] || fail "expected events: $1"
 }
 expect_text() {
     grep -Fq -- "$2" "$1" || fail "${1##*/} lacks: $2"
 }
-stamp_age() {
-    printf '%s\n' "$(($(date +%s) - $2))" >"$STATE/$1.stamp"
+expect_line() {
+    grep -Fxq -- "$2" "$1" || fail "${1##*/} lacks the line: $2"
 }
-# wait_for COMMAND...: COMMAND succeeds within ten seconds (a background run).
+# expect_no_state: no run wrote payload state of its own (stamps, failure
+# records or a log) into the case's home.
+expect_no_state() {
+    [[ ! -e "$HOME_DIR/.local/state" ]] || fail "$1 created $HOME_DIR/.local/state"
+}
+# wait_for COMMAND...: COMMAND succeeds within ten seconds.
 wait_for() {
     local attempt
     for ((attempt = 0; attempt < 200; attempt++)); do
@@ -185,205 +175,158 @@ wait_for() {
     fail "timed out waiting for: $*"
 }
 
-# A fresh home: the first interactive shell installs every item in the
-# foreground, in config order, the kit on the declared channel, stdin closed,
-# and stamps each success; the marker reaches the shell.
+# sourced SHELL: source the hook from an interactive SHELL as the rc files
+# read before the pull that brought explicit-only payloads do: directly,
+# from a function as the old login dispatcher did, and through the
+# awesome-skills-update.sh shim. Prints "unchanged" when the shell's flags,
+# options and traps are as before and no session marker was set.
+sourced() {
+    local shell=$1
+    shift
+    case $shell in
+        bash) set -- bash --noprofile --norc -i -c ;;
+        zsh) set -- zsh -f -i -c 'setopt extended_glob nounset glob_dots; eval "$1"' zsh ;;
+        sh) set -- sh -i -c ;;
+    esac
+    # shellcheck disable=SC2016 # expanded by the sourcing shell
+    in_env "$@" 'saved_flags=$-; saved_options=$(set +o); saved_traps=$(trap)
+        . "$DOTFILES_DIR/scripts/payload-update.sh"
+        old_dispatch() { _df_payload=$DOTFILES_DIR/scripts/payload-update.sh; . "$_df_payload"; unset _df_payload; }
+        old_dispatch
+        . "$DOTFILES_DIR/scripts/awesome-skills-update.sh"
+        if [ "$-" = "$saved_flags" ] && [ "$(set +o)" = "$saved_options" ] && [ "$(trap)" = "$saved_traps" ] &&
+            [ -z "${_DOTFILES_PAYLOAD_CHECKED+set}" ]; then echo unchanged; fi' \
+        >"$OUT" 2>"$ERR" || fail "sourcing the hook from $shell failed"
+}
+
+# Nothing installs a payload repo unless a person runs it: a call without
+# --now does nothing, prints nothing and returns 0 until Stage 6. The rc files
+# read before the pull source the hook (directly, from the old login
+# dispatcher or through the shim), and an older run may still start the
+# retired --auto or --worker: none of them installs anything, writes state or
+# changes the sourcing shell's options.
 for shell in bash zsh sh; do
     command -v "$shell" >/dev/null 2>&1 || {
         printf 'SKIP: %s not installed\n' "$shell"
         continue
     }
     new_home
-    source_hook "$shell"
-    expect_events "kit-install [--channel 0.7] stdin=[]
+    sourced "$shell"
+    expect_events ''
+    [[ "$(cat "$OUT")" == unchanged ]] || fail "sourcing the hook changed the $shell session: $(cat "$OUT")"
+    if grep -v -e 'job control' -e 'terminal process group' -e 'access tty' -e '^stty: ' "$ERR" | grep -q .; then
+        fail "sourcing the hook printed under $shell"
+    fi
+    expect_no_state "sourcing the hook under $shell"
+done
+new_home
+for mode in '' --auto '--worker kit pymol skills'; do
+    STATUS=0
+    # shellcheck disable=SC2086 # the mode's words
+    in_env sh "$FIXTURE/scripts/payload-update.sh" $mode >"$OUT" 2>"$ERR" || STATUS=$?
+    [[ "$STATUS" == 0 && ! -s "$OUT" && ! -s "$ERR" ]] || fail "a call with [$mode] was not a quiet no-op (exit $STATUS)"
+done
+expect_events ''
+expect_no_state 'a call without --now'
+# A login runs none either; the update dispatch is all that remains there.
+in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/common/sh/.profile" >"$OUT" 2>"$ERR" ||
+    fail 'common/sh/.profile failed'
+expect_events ''
+expect_no_state 'a login'
+
+# --now installs the default items in config order, the kit on the declared
+# channel, stdin closed; an installed item runs its update command (the
+# kit's installed current/install.sh --update, the others' install command).
+# It keeps no state of its own.
+new_home
+now
+[[ "$STATUS" == 0 ]] || fail '--now failed'
+expect_events "kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes"
-    expect_text "$OUT" 'marker=1'
-    expect_text "$OUT" '[dotfiles] [step] kit: installing (later updates run in the background)'
-    expect_text "$OUT" '[dotfiles] [ok] skills: install done'
-    for item in kit pymol skills; do
-        [[ -s "$STATE/$item.stamp" ]] || fail "$shell: no $item stamp after its install"
-    done
-    [[ ! -e "$STATE/payload.log" ]] || fail "$shell: a first install started a background run"
-    [[ -z "$(find "$TEST_TMP" -maxdepth 1 -name 'dotfiles-payload.*')" ]] || fail 'a download was left behind'
-done
-
-# Once installed and fresh, a new session does nothing at all.
+expect_line "$OUT" '[dotfiles] [step] kit: installing'
+expect_line "$OUT" '[dotfiles] [ok] skills: install done'
+[[ -z "$(find "$TEST_TMP" -maxdepth 1 -name 'dotfiles-payload.*')" ]] || fail 'a download was left behind'
 : >"$EVENTS"
-source_hook bash
-expect_events ''
-[[ ! -e "$STATE/payload.log" ]] || fail 'a fresh install started a background run'
+now
+expect_events 'kit-update [--update --channel 0.7]
+pymol-install []
+skills-install [] bash=yes'
+expect_line "$OUT" '[dotfiles] [step] kit: updating'
+expect_line "$OUT" '[dotfiles] [ok] kit: update done'
+expect_no_state '--now'
 
-# Once per session, opt-out, non-interactive: nothing runs.
+# --now never detaches: every installer runs in the foreground, so the run
+# returns only once its installer has finished. Together with the login
+# above, no payload process outlives a session (Sherlock's site rule).
 new_home
-source_hook bash _DOTFILES_PAYLOAD_CHECKED=1
-expect_events ''
-source_hook bash DOTFILES_PAYLOAD_AUTO_UPDATE=0
-expect_events ''
-expect_text "$OUT" 'marker=1'
-in_env sh -c '. "$DOTFILES_DIR/scripts/payload-update.sh"; printf "marker=%s\n" "${_DOTFILES_PAYLOAD_CHECKED-}"' >"$OUT" 2>"$ERR"
-expect_events ''
-expect_text "$OUT" 'marker='
-# A nested interactive shell inherits the marker: no second attempt, even at
-# an item the first one failed to install.
-in_env DOTFILES_PAYLOAD_ITEMS=pymol FAKE_PYMOL_STATUS=1 bash --noprofile --norc -i -c \
-    '. "$DOTFILES_DIR/scripts/payload-update.sh"; bash --noprofile --norc -i -c ". \"\$DOTFILES_DIR/scripts/payload-update.sh\""' \
-    >"$OUT" 2>"$ERR"
-expect_events 'pymol-install []'
+FAKE_PYMOL_DELAY=1 now pymol
+[[ "$STATUS" == 0 && -e "$EVENTS.pymol-finished" ]] || fail '--now returned before its installer finished'
 
-# DOTFILES_PAYLOAD_ITEMS selects the items; empty selects none.
+# DOTFILES_PAYLOAD_ITEMS selects the default items; empty selects none; an
+# unknown item fails before anything runs.
 new_home
-source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit'
+DOTFILES_PAYLOAD_ITEMS='skills kit' now
 expect_events 'skills-install [] bash=yes
 kit-install [--channel 0.7] stdin=[]'
-new_home
-source_hook bash DOTFILES_PAYLOAD_ITEMS=
+: >"$EVENTS"
+DOTFILES_PAYLOAD_ITEMS='' now
+[[ "$STATUS" == 0 ]] || fail 'an empty selection failed'
 expect_events ''
-new_home
-source_hook bash DOTFILES_PAYLOAD_ITEMS='kit nope'
-expect_events ''
-expect_text "$ERR" "unknown item 'nope'"
-
-# An installed item whose interval passed is refreshed in one detached
-# background run, with the update command (the kit's installed
-# current/install.sh --update, the others' install command), into the log.
-new_home
-source_hook bash
-: >"$EVENTS"
-stamp_age kit 86400
-stamp_age pymol 3600
-stamp_age skills $((6 * 86400))
-source_hook bash
-wait_for grep -q 'kit: update done' "$STATE/payload.log"
-expect_events 'kit-update [--update --channel 0.7]'
-[[ ! -s "$OUT" || "$(cat "$OUT")" == marker=1 ]] || fail 'a background refresh printed in the shell'
-stamp_age skills $((7 * 86400))
-stamp_age pymol 86400
-: >"$EVENTS"
-source_hook bash
-wait_for grep -q 'skills: update done' "$STATE/payload.log"
-expect_events 'pymol-install []
-skills-install [] bash=yes'
-
-# A failed first install writes no stamp but ITEM.failed (time and exit
-# status), says how to retry and never fails the shell. Every later session
-# prints one line about it and does not retry it in the foreground; six
-# hours after the failure it is retried in the background, and a success
-# removes the record. Exit 75 (another run holds the repo's lock) is
-# neither.
-new_home
-source_hook bash FAKE_KIT_STATUS=1
-expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 1); retry with: sync-payloads kit'
-expect_text "$OUT" 'marker=1'
-[[ ! -e "$STATE/kit.stamp" && -e "$STATE/pymol.stamp" ]] || fail 'a failed install was stamped'
-read -r _ code <"$STATE/kit.failed"
-[[ "$code" == 1 ]] || fail 'the failure record lacks the exit status'
-: >"$EVENTS"
-source_hook bash
-expect_events ''
-expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 1, see $STATE/kit.failed); run sync-payloads kit"
-[[ ! -e "$STATE/payload.log" ]] || fail 'a fresh failure was retried'
-printf '%s 1\n' "$(($(date +%s) - 21600))" >"$STATE/kit.failed"
-source_hook bash
-wait_for grep -q 'kit: install done' "$STATE/payload.log"
-expect_events 'kit-install [--channel 0.7] stdin=[]'
-[[ ! -e "$STATE/kit.failed" && -e "$STATE/kit.stamp" ]] || fail 'a success kept the failure record'
-# A failed background run keeps the end of its output in the record, which
-# the next session reports.
-stamp_age kit 86400
-source_hook bash FAKE_KIT_STATUS=4
-wait_for grep -q 'kit-update: fake output' "$STATE/kit.failed"
-read -r _ code <"$STATE/kit.failed"
-[[ "$code" == 4 ]] || fail 'a background failure recorded the wrong status'
-expect_text "$STATE/kit.failed" '[dotfiles] [error] kit: update failed (exit 4); retry with: sync-payloads kit'
-source_hook bash
-expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 4, see $STATE/kit.failed)"
-stamp_age pymol 86400
-: >"$EVENTS"
-FAKE_PYMOL_STATUS=75 now pymol
-[[ "$STATUS" == 0 ]] || fail '--now failed on exit 75'
-expect_text "$OUT" 'pymol: another run holds its lock'
-[[ "$(cat "$STATE/pymol.stamp")" -lt "$(($(date +%s) - 3600))" && ! -e "$STATE/pymol.failed" ]] ||
-    fail 'exit 75 was stamped or recorded'
-
-# --now runs the named items whatever their intervals, records and the
-# opt-out; it fails for a failed item and an unknown one.
-new_home
-DOTFILES_PAYLOAD_AUTO_UPDATE=0 now kit
-[[ "$STATUS" == 0 ]] || fail '--now kit failed'
-expect_events 'kit-install [--channel 0.7] stdin=[]'
-: >"$EVENTS"
-now kit
-expect_events 'kit-update [--update --channel 0.7]'
-FAKE_KIT_STATUS=3 now skills kit
-[[ "$STATUS" == 1 ]] || fail '--now did not fail for a failed item'
+DOTFILES_PAYLOAD_ITEMS='kit nope' now
+[[ "$STATUS" == 1 ]] || fail 'an unknown item in the selection was accepted'
 now nope
 [[ "$STATUS" == 1 ]] || fail '--now accepted an unknown item'
 expect_text "$ERR" "unknown item 'nope'"
+expect_events ''
 
-# An exit with the item's person-status row (awesome-skills' 3: an
-# interrupted update it cannot undo alone; PyMOLScripts' 3: a locally edited
-# rc file it will not overwrite) is worded as one that waits for a person, in
-# the run and in every later session; the same exit from an item without that
+# A failed install says how to retry and fails the run, and the other items
+# still run; nothing is recorded. Exit 75 (another run holds the repo's
+# lock) is no failure. An exit with the item's person-status row
+# (awesome-skills' 3: an interrupted update it cannot undo alone;
+# PyMOLScripts' 3: a locally edited rc file it will not overwrite) is worded
+# as one that waits for a person; the same exit from an item without that
 # row is an ordinary failure.
 new_home
+FAKE_KIT_STATUS=1 now
+[[ "$STATUS" == 1 ]] || fail '--now did not fail for a failed item'
+expect_events 'kit-install [--channel 0.7] stdin=[]
+pymol-install []
+skills-install [] bash=yes'
+expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 1); retry with: sync-payloads kit'
+FAKE_PYMOL_STATUS=75 now pymol
+[[ "$STATUS" == 0 ]] || fail '--now failed on exit 75'
+expect_line "$OUT" '[dotfiles] [info] pymol: another run holds its lock; run sync-payloads pymol again once it has finished'
 FAKE_SKILLS_STATUS=3 now skills
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for an exit that waits for a person'
 expect_text "$ERR" '[dotfiles] [error] skills: stopped for a person (exit 3): do what its message says, then run sync-payloads skills'
-[[ -s "$STATE/skills.failed" && ! -e "$STATE/skills.stamp" ]] || fail 'exit 3 was not recorded'
 FAKE_KIT_STATUS=3 now kit
 expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 3); retry with: sync-payloads kit'
 FAKE_PYMOL_STATUS=3 now pymol
-[[ "$STATUS" == 1 && -s "$STATE/pymol.failed" ]] || fail 'a PyMOL exit 3 was not a recorded failure'
+[[ "$STATUS" == 1 ]] || fail 'a PyMOL exit 3 was not a failure'
 expect_text "$ERR" '[dotfiles] [error] pymol: stopped for a person (exit 3): do what its message says, then run sync-payloads pymol'
-source_hook bash DOTFILES_PAYLOAD_ITEMS='skills kit pymol'
-expect_text "$ERR" "[dotfiles] [warn] skills: its last run stopped for a person (exit 3, see $STATE/skills.failed); run sync-payloads skills and do what it asks"
-expect_text "$ERR" "[dotfiles] [warn] kit: its last run failed (exit 3, see $STATE/kit.failed); run sync-payloads kit"
-expect_text "$ERR" "[dotfiles] [warn] pymol: its last run stopped for a person (exit 3, see $STATE/pymol.failed); run sync-payloads pymol and do what it asks"
-# Every later session says so again, until a run succeeds.
-source_hook bash DOTFILES_PAYLOAD_ITEMS=pymol
-expect_text "$ERR" "[dotfiles] [warn] pymol: its last run stopped for a person (exit 3, see $STATE/pymol.failed)"
-now skills pymol
-[[ "$STATUS" == 0 && -e "$STATE/skills.stamp" && ! -e "$STATE/skills.failed" && ! -e "$STATE/pymol.failed" ]] ||
-    fail 'a success kept the failure record'
+expect_no_state 'a failed run'
 
 # A legacy link the retired coding-agent-kit Stow package made at a kit
-# path: until stow-all removes it, the kit's installer would refuse it, so
-# the hook says to run stow-all instead of calling it, and records nothing.
-# PyMOL's installer replaces its own old links, so it still runs.
+# path: the kit's installer would refuse it, so the hook says to run stow-all
+# instead of calling it, and the run fails; PyMOL's installer replaces its
+# own old links, so it still runs. A link elsewhere stops nothing.
 new_home
 mkdir -p "$HOME_DIR/.local/bin"
 ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$HOME_DIR/.local/bin/codex-as"
-source_hook bash DOTFILES_PAYLOAD_ITEMS='kit pymol'
-expect_events 'pymol-install []'
-expect_text "$ERR" "[dotfiles] [warn] kit: ~/.local/bin/codex-as is still a link the retired Stow package made, which its installer refuses; run $FIXTURE/stow-all.sh with this host first (the next login's automatic stow does), then sync-payloads kit"
-[[ ! -e "$STATE/kit.failed" ]] || fail 'a refusal for stow-all was recorded as a failure'
-now kit
+now kit pymol
 [[ "$STATUS" == 1 ]] || fail '--now ran the kit past a legacy link'
 expect_events 'pymol-install []'
+expect_text "$ERR" "[dotfiles] [warn] kit: ~/.local/bin/codex-as is still a link the retired Stow package made, which its installer refuses; run $FIXTURE/stow-all.sh with this host first (the next login's automatic stow does), then sync-payloads kit"
 rm "$HOME_DIR/.local/bin/codex-as"
 ln -s "$HOME_DIR/elsewhere/codex-as" "$HOME_DIR/.local/bin/codex-as"
 now kit
 expect_events 'pymol-install []
 kit-install [--channel 0.7] stdin=[]'
 
-# AWESOME_SKILLS_AUTO_UPDATE=0, the old hook's opt-out, still leaves skills
-# out of the automatic runs, with one notice, until 2027-01-31; a manual
-# run and a selection without skills ignore it.
-new_home
-source_hook bash AWESOME_SKILLS_AUTO_UPDATE=0
-expect_events 'kit-install [--channel 0.7] stdin=[]
-pymol-install []'
-expect_text "$ERR" '[dotfiles] [warn] AWESOME_SKILLS_AUTO_UPDATE=0 leaves skills out until 2027-01-31, when it stops working; set DOTFILES_PAYLOAD_ITEMS="kit pymol" instead'
-source_hook bash AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='kit pymol'
-if grep -q AWESOME_SKILLS_AUTO_UPDATE "$ERR"; then fail 'the notice came without skills selected'; fi
-: >"$EVENTS"
-AWESOME_SKILLS_AUTO_UPDATE=0 now skills
-expect_events 'skills-install [] bash=yes'
-
 # A download that stalls (a 127.0.0.1 port that accepts and never answers)
 # ends within DOTFILES_PAYLOAD_TIMEOUT, and the run tries no other download,
-# so a login waits once; the next session backs off without a download.
+# so a person waits once.
 python3 -I -c 'import socket, time
 s = socket.socket()
 s.bind(("127.0.0.1", 0))
@@ -397,21 +340,18 @@ cp -R "$FIXTURE" "$STALLED"
 sed "s#file://$REMOTE/#http://127.0.0.1:$(cat "$TEST_TMP/port")/#g" "$FIXTURE/config/payloads.tsv" >"$STALLED/config/payloads.tsv"
 new_home
 started=$(date +%s)
-source_hook bash DOTFILES_DIR="$STALLED" DOTFILES_PAYLOAD_TIMEOUT=3
+STATUS=0
+in_env DOTFILES_PAYLOAD_TIMEOUT=3 sh "$STALLED/scripts/payload-update.sh" --now >"$OUT" 2>"$ERR" || STATUS=$?
 elapsed=$(($(date +%s) - started))
-[[ "$elapsed" -lt 7 ]] || fail "a stalled download held the shell for ${elapsed}s"
+[[ "$elapsed" -lt 7 ]] || fail "a stalled download held the run for ${elapsed}s"
+[[ "$STATUS" == 1 ]] || fail 'a stalled download did not fail the run'
 expect_text "$ERR" "cannot download http://127.0.0.1:$(cat "$TEST_TMP/port")/coding-agent-kit/main/install.sh (within 3s)"
 expect_text "$ERR" "skipped http://127.0.0.1:$(cat "$TEST_TMP/port")/PyMOLScripts/main/install.sh: a download already failed in this run"
 [[ "$(grep -c '^curl$' "$EVENTS")" == 1 ]] || fail 'the run tried a second download'
-for item in kit pymol skills; do
-    [[ -e "$STATE/$item.failed" ]] || fail "no failure record for $item"
-done
-: >"$EVENTS"
-source_hook bash DOTFILES_DIR="$STALLED" DOTFILES_PAYLOAD_TIMEOUT=3
-[[ ! -s "$EVENTS" && ! -e "$STATE/payload.log" ]] || fail 'the next session did not back off'
 kill "$STALL"
 wait "$STALL" 2>/dev/null || :
 STALL=
+rm -r "$STALLED"
 
 # A download runs alone in a fresh directory of TMPDIR that only this user can
 # enter, removed after the run: what another user planted in a shared TMPDIR
@@ -486,48 +426,21 @@ else
     printf 'SKIP: no git in /usr/bin or /bin; the planted TMPDIR/.git case did not run.\n' >&2
 fi
 
-# The background run itself starts in / too, never in the caller's working
-# directory, which it would otherwise hold for as long as it runs (a USB
-# stick or an NFS mount could not be unmounted meanwhile), and every path it
-# uses is absolute: a relative TMPDIR still names the caller's directory. A
-# fixture whose pymol probe appends where it runs: the automatic run probes
-# in the caller's directory, the background run in its own.
-CWDFIX=$TEST_TMP/cwd-fixture
-cp -R "$FIXTURE" "$CWDFIX"
-tab=$'\t'
-sed "s#^pymol${tab}unix-probe${tab}#&pwd -P >>\"\$EVENTS.probe-cwd\"; #" "$FIXTURE/config/payloads.tsv" \
-    >"$CWDFIX/config/payloads.tsv"
-grep -q 'probe-cwd' "$CWDFIX/config/payloads.tsv" || fail 'the probe fixture does not record its working directory'
+# A relative TMPDIR names a directory of the caller's: the download is
+# staged there under its absolute path, and the installer still runs in /.
 new_home
-now pymol
-stamp_age pymol 86400
 mkdir -p "$TEST_TMP/caller/tmp"
 pushd "$TEST_TMP/caller" >/dev/null
-source_hook bash DOTFILES_DIR="$CWDFIX" DOTFILES_PAYLOAD_ITEMS=pymol TMPDIR=tmp
+STATUS=0
+in_env TMPDIR=tmp sh "$FIXTURE/scripts/payload-update.sh" --now pymol >"$OUT" 2>"$ERR" || STATUS=$?
 popd >/dev/null
-wait_for grep -q 'pymol: update done' "$STATE/payload.log"
-[[ "$(cat "$EVENTS.probe-cwd")" == "$TEST_TMP/caller"$'\n'/ ]] ||
-    fail "the background run did not start in / (probed in: $(tr '\n' ' ' <"$EVENTS.probe-cwd"))"
+[[ "$STATUS" == 0 && "$(cat "$EVENTS.pymol-cwd")" == / ]] || fail "a relative TMPDIR run failed or ran in $(cat "$EVENTS.pymol-cwd")"
 read -r here <"$EVENTS.pymol-dir"
 case $here in
     "$TEST_TMP"/caller/tmp/dotfiles-payload.*) ;;
-    *) fail "the background run staged pymol in $here, not in the caller's relative TMPDIR" ;;
+    *) fail "pymol was staged in $here, not in the caller's relative TMPDIR" ;;
 esac
-rm -r "$TEST_TMP/caller" "$CWDFIX"
-
-# A relative XDG_STATE_HOME is ignored, as the XDG spec says, so the records
-# are the same from every working directory; an absolute one is followed.
-new_home
-mkdir "$TEST_TMP/relative"
-pushd "$TEST_TMP/relative" >/dev/null
-XDG_STATE_HOME=state now pymol
-popd >/dev/null
-[[ "$STATUS" == 0 && -s "$STATE/pymol.stamp" && ! -e "$TEST_TMP/relative/state" ]] ||
-    fail 'a relative XDG_STATE_HOME was followed'
-rm -r "$TEST_TMP/relative"
-XDG_STATE_HOME=$HOME_DIR/xdg-state now pymol
-[[ "$STATUS" == 0 && -s "$HOME_DIR/xdg-state/dotfiles/payload/pymol.stamp" ]] ||
-    fail 'an absolute XDG_STATE_HOME was not followed'
+rm -r "$TEST_TMP/caller"
 
 # A download that fails runs nothing and leaves no temporary file.
 new_home
@@ -557,25 +470,9 @@ sync-payloads pymol' _ "$REPO_ROOT/common/sh/.aliases" >"$OUT" 2>"$ERR" || fail 
 expect_events 'skills-install [] bash=yes
 pymol-install []'
 
-# The rc files source the hook; ~/.profile does for bash (zsh sources it from
-# the .zshrc tail, after fpath has the kit's completion directory). The
-# transition shim at the old hook's path, which rc files read before the pull
-# source, runs it too.
-new_home
-in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/common/sh/.profile" >"$OUT" 2>"$ERR" ||
-    fail 'common/sh/.profile failed'
-expect_events 'kit-install [--channel 0.7] stdin=[]
-pymol-install []
-skills-install [] bash=yes'
-new_home
-in_env bash --noprofile --norc -i -c '. "$DOTFILES_DIR/scripts/awesome-skills-update.sh"' >"$OUT" 2>"$ERR" ||
-    fail 'the transition shim failed'
-expect_events 'kit-install [--channel 0.7] stdin=[]
-pymol-install []
-skills-install [] bash=yes'
+# The kit's zsh completions: .zshrc puts their directory on fpath before
+# oh-my-zsh's compinit.
 ZSHRC=$REPO_ROOT/common/zsh/.zshrc
-# Actual bash/zsh native dispatch and maintenance are exercised by the native
-# takeover suite; payload scheduling above exercises the shared profile caller.
 fpath_line=$(grep -n '^fpath+=$HOME/.local/share/zsh/site-functions$' "$ZSHRC" | cut -d: -f1)
 omz_line=$(grep -n '^source $ZSH/oh-my-zsh.sh$' "$ZSHRC" | cut -d: -f1)
 [[ -n "$fpath_line" && -n "$omz_line" && "$fpath_line" -lt "$omz_line" ]] ||
