@@ -3,7 +3,8 @@
 The Stage 5 rollout of 2026-11-04 is recorded
 [below](#stage-5-rollout-as-run-2026-11-04): five Unix hosts reached `dddc718`
 through their actual login updater and took the reviewed `persistentState`
-re-init; Windows waits for its [user-run steps](#pending-windows-steps).
+re-init; Windows followed the same day through a user-approved limited-token
+task ([below](#windows-rollout-as-run-2026-11-04)).
 
 Stage 4 actual acceptance observations are in
 [stage-4-evidence.md](stage-4-evidence.md#actual-fleet-outcomes-separate-from-fixtures);
@@ -324,24 +325,47 @@ shells, such as `ssh marlowe-plain tmux ...` or
 and exits 1. Start tmux and run the doctor from an interactive login shell
 (`ssh marlowe`); see [shell.md](../shell.md#tmux).
 
-### Pending Windows steps
+### Windows rollout as run (2026-11-04)
 
-win stays at `7e344f2` until the user runs these steps in an ordinary,
-non-elevated pwsh 7.2 or later (the script declares `#Requires -Version 7.2`;
-win has 7.6.9), because the re-init needs the user's own token. No Codex
-process ran on win when the steps were staged; quit any Codex desktop app that
-connects to win before step 1.
+win reached `57fbc45` (`dddc718` code plus the Stage 5 records) and took the
+re-init on 2026-11-04; the results are in
+[status.md](status.md#host-rollout-2026-11-04). Instead of typing the manual
+steps below, the user explicitly approved in the session a one-off scheduled
+task:
+
+- Principal: the logged-on user, LogonType Interactive, RunLevel Limited; the
+  run reported `elevated=False` at Medium Mandatory Level.
+- The administrator SSH session only wrote the task script and registered,
+  started (once, `Start-ScheduledTask`) and deleted the task. Every change to
+  managed targets, chezmoi config and state and the `chezmoi.exe` ACL ran under
+  the user's limited token.
+- Limits: it needs the user logged on and the user's explicit approval of that
+  one task, and the task is deleted after the run. It is not a standing channel:
+  the administrator token never writes managed targets, chezmoi config or state,
+  or ACLs.
+- The task ran the manual steps in order: pass 1 with the checkout's
+  `7e344f2` updater, as a first login would (fast-forward to `57fbc45`); pass 2
+  with the new exact-exe updater (no `Native update skipped` warning);
+  `reinit-win.ps1` with the same checks; `icacls /inheritance:d` (no
+  CodexSandboxUsers entry was present); `doctor.ps1 -Quiet` (exit 0).
+- Evidence on win: `~\.config\dotfiles-stage5-task\` (`run.ps1`, `run.log`) and
+  `~\.config\chezmoi\stage5-reinit\`.
+
+#### Manual Windows steps (fallback)
+
+For a Windows host that cannot use such a task, the user runs these in an
+ordinary, non-elevated pwsh 7.2 or later (the script declares
+`#Requires -Version 7.2`; win has 7.6.9), because the re-init needs the user's
+own token. Quit any Codex desktop app that connects to the host before step 1.
 
 1. Open an ordinary interactive pwsh session and let its login update finish.
-   It is expected to run the old `7e344f2` updater, which fast-forwards to
-   `dddc718`; three targets are expected to change:
+   On a host at `7e344f2` it runs the old updater, which fast-forwards to
+   current main; on win three targets were expected to change:
    `Documents\PowerShell\profile.ps1`, `~/.codex/config.toml` and
    `~/.claude/settings.json`.
-2. Open a second ordinary interactive session. Its login is expected to run the
-   new updater, which uses only `~/.local/bin/chezmoi.exe` after the owner and
-   DACL checks. It must not print a `[dotfiles] Native update skipped` warning.
-   These roles come from the review's rollout simulation and reasoning, not
-   from a run on win.
+2. Open a second ordinary interactive session. Its login runs the new updater,
+   which uses only `~/.local/bin/chezmoi.exe` after the owner and DACL checks.
+   It must not print a `[dotfiles] Native update skipped` warning.
 3. Check the staged script's hash, then run it from that ordinary session:
 
    ```powershell
@@ -351,17 +375,17 @@ connects to win before step 1.
    ```
 
    It refuses an elevated token, verifies and holds `chezmoi.exe` as the
-   updater does, requires the reviewed template blob and an empty full-argument
-   status, and records the old config in `~/.config/chezmoi/stage5-reinit/`,
-   not under `~/.local`, because of the inherited sandbox grant there. It then
-   runs the full-argument init and the same postchecks as on Unix.
+   updater does, requires the reviewed template blob (`9e26214c`, `dddc718`'s)
+   and an empty full-argument status, and records the old config in
+   `~/.config/chezmoi/stage5-reinit/`, not under `~/.local`, because of the
+   inherited sandbox grant there. It then runs the full-argument init and the
+   same postchecks as on Unix.
 4. Optional: `icacls "$HOME\.local\bin\chezmoi.exe" /inheritance:d` turns the
    file's inherited ACEs into explicit ones, so a later propagation from
    `~/.local` cannot add the sandbox Modify grant that would make the updater
-   refuse it.
+   refuse it. First confirm that plain `icacls` lists no CodexSandboxUsers
+   entry, which would otherwise become permanent.
 5. Run `.\doctor.ps1` from the checkout; native-config should be ok.
-
-Until then Windows is pending, not converged.
 
 ## Recording and incomplete targets
 

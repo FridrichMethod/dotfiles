@@ -35,8 +35,9 @@ entry, category or role total. It modified only canonical inputs
 `home/.chezmoi.toml.tmpl`, which now owns `persistentState`; the state database
 stays local metadata, not a managed target. The ownership, caller, contract,
 deletion and tool tables below record the Stage 5 results; the per-file mapping
-is unchanged. Five Unix hosts converged on `dddc718`; Windows is pending its
-user-run update and re-init ([Stage 5 outcome](stage-5-ecosystem.md#stage-5-outcome)).
+is unchanged. Five Unix hosts converged on `dddc718` and Windows on `57fbc45`
+(the same code plus the Stage 5 records), all six re-initialized
+([Stage 5 outcome](stage-5-ecosystem.md#stage-5-outcome)).
 
 ## Derivation, applicability and notation
 
@@ -313,7 +314,7 @@ candidate, not an automatic deletion instruction.
 | Retained | Native login updater binary: Unix as in S4; Windows runs only the private `~/.local/bin/chezmoi.exe` after reparse, owner and DACL checks on a held handle, never a PATH match (narrowed, not closed: a double junction swap remains possible); W1-chezmoi writes it with a protected DACL, and the doctor and W1-chezmoi flag an exe the updater refuses | S4 adapter; S5 binary trust (`6e2f6df`, `9836f27`, `90d10ac`) |
 | Deliberately native | Regular-file deployment and native edit/add/merge/apply; GUI saves become destination drift; no Stow write-through promise | S2 model; S4 recovery guidance |
 | Deliberately native | Native JSON/TOML duplicate-key/numeric semantics and serialization; comments/order/whitespace can change; no old first-apply bytes/inode/mtime/fsync/CAS guarantees | S1 observed evidence; S3 implementation |
-| Deliberately native | Native file writing/cache/state, no whole-HOME transaction or global write-free-preview claim; private AI files rather than arbitrary mode intersections. Since S5 the config template owns `persistentState` = `<destDir>/.local/state/chezmoi/chezmoi.boltdb`, so plain native commands share the updater's state (updater flags still win); `cacheDir` stays local | S1/S3 probes; S4 takeover review; S5 `69a743b` and six-host re-init (Windows pending) |
+| Deliberately native | Native file writing/cache/state, no whole-HOME transaction or global write-free-preview claim; private AI files rather than arbitrary mode intersections. Since S5 the config template owns `persistentState` = `<destDir>/.local/state/chezmoi/chezmoi.boltdb`, so plain native commands share the updater's state (updater flags still win); `cacheDir` stays local | S1/S3 probes; S4 takeover review; S5 `69a743b` and six-host re-init (all six done) |
 | Temporary compatibility | Current Stow source paths, source bridge, legacy wrappers/runtime and preflight, `DOTFILES_HOST`/remembered old role and old updater until takeover. Since S5 `DOTFILES_HOST` and the receipt are legacy only: native-owned homes take the role from `[data].host` | S2/S3 coexistence; S4 switch; S5 native host resolution (`4b46737`); S6 removal |
 | Temporary compatibility | Historical repair, baseline migration API/writeback, old shim (a pure no-op since S5), payload transition no-ops and `stow-links` refusal, inert `DOTFILES_PAYLOAD_AUTO_UPDATE=0` provisioning exports | S3 declare native API retirement; S5 deleted the old checkout diagnostics and the opt-out adapter; S6 deletes the rest (below) |
 | Deferred product choice | Exact Claude floor/old-ID removal (both IDs kept through S5) | Later verified client decision; no arbitrary floor increase |

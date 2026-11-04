@@ -2,7 +2,7 @@
 
 > Completed. Stage 5 landed at `dddc718` on 2026-11-04 after exact CI
 > 41832666587 and bootstrap e2e 41832666818. Its packages, user decisions,
-> review, host results and open gates (Windows is pending its user-run steps)
+> review, host results (Windows finished on 2026-11-04) and open findings
 > are in [status.md](status.md#stage-5-completion-record-2026-11-04); the
 > rollout procedure as run is in
 > [fleet-rollout.md](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04). The

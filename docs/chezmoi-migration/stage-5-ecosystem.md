@@ -4,8 +4,8 @@
 > under [README.md](README.md). Start from current main, which is the integration
 > artifact, and [start-stage-5.md](start-stage-5.md), never a bare baseline HEAD.
 >
-> **Status:** landed on main `dddc718` on 2026-11-04. The Windows host's user-run
-> update and re-init are still pending; see [Stage 5 outcome](#stage-5-outcome).
+> **Status:** landed on main `dddc718` on 2026-11-04. The Windows host finished
+> its update and re-init the same day; see [Stage 5 outcome](#stage-5-outcome).
 > The plan below is kept as written; each table and checklist records its result.
 
 **Goal:** Reduce remaining lifecycle code by adopting native chezmoi/package-manager
@@ -54,7 +54,7 @@ failing Node hooks (the site's block-node AppArmor profile) and keeps the inert
 Codex config; Windows runs only the exact provisioned `chezmoi.exe` after an
 owner/DACL check, with no `~/.local` ACL edits and no hash pin; the native config
 template owns `persistentState`, followed by a reviewed re-init on each of the
-six hosts (Windows pending); the tmux floor is 3.4, with a Marlowe tmux install
+six hosts (all done); the tmux floor is 3.4, with a Marlowe tmux install
 and cache cleanup.
 
 Measured with `git diff --numstat b9f9d61..dddc718`: code 29 files +788/-602
@@ -84,7 +84,7 @@ per-host record.
 | mac | `4abad00` to `dddc718` | 6 (64) | done | 11 tmux plugin clones missing; kitty, stylua, schrodinger warnings (pre-existing) |
 | sherlock | `7e344f2` to `dddc718` | 9 (62) | done | pre-existing login-env and clone gaps; payloads warn "not installed: skills" (D7 advice) |
 | marlowe | `7e344f2` to `dddc718` | 8 (62) | done; ACL `+` kept | interactive: tmux ok (3.6a); node version unknown (AppArmor, accepted); login-env gaps |
-| win | `7e344f2`; update pending | expected 3 | pending (user-run) | pending |
+| win | `7e344f2` to `57fbc45` | not captured (expected 3; managed count not measured) | done (limited-token task) | 32 ok, 1 warn (payloads "not installed: skills"), exit 0 |
 
 The six targets on every Unix host are `.aliases`, `.profile`, `.zshrc`,
 `.tmux.conf`, tmux `modern.conf` and `which-key.conf`. Sherlock also took
@@ -106,17 +106,19 @@ affected ran (re-init must not use `cp -p` on Marlowe's filesystem, which does
 not support that permission/ACL preservation, and must not assume `$0` is a file
 when sent over SSH); the failed attempts stopped before init and changed nothing.
 
-**Windows is pending, not done.** It stays at `7e344f2` until the user, in
-order: (1) opens two ordinary (non-elevated) pwsh 7 sessions one after the
-other, so the login updater fast-forwards to `dddc718` (expected targets:
-`profile.ps1`, Codex config, Claude settings) and the new exact-exe updater then
-runs once; (2) from an ordinary pwsh with no other chezmoi running, checks that
-`~\Downloads\reinit-win.ps1` has SHA256
-`CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212` and runs
-`pwsh -NoProfile -File` on it; (3) optionally runs
-`icacls "$HOME\.local\bin\chezmoi.exe" /inheritance:d`, so a grant later
-propagated from `~/.local` cannot reach the exe's inherited DACL; (4) runs
-`.\doctor.ps1`. No Codex process ran on win when the script was staged.
+**Windows finished on 2026-11-04**, through a one-off scheduled task the user
+approved instead of typing the steps: the logged-on user's limited token
+(Interactive, RunLevel Limited, not elevated) made every change, and the
+administrator SSH session only wrote the task script and registered, started and
+deleted the task. The old `7e344f2` updater moved win to `57fbc45` (`dddc718`
+code plus the Stage 5 records), then the new exact-exe updater ran with no
+warning; `reinit-win.ps1` added only `persistentState`, with empty full and
+plain status and no stray database; `icacls /inheritance:d` left explicit
+entries only on `chezmoi.exe`; the doctor exited 0. The per-file list of changed
+targets and the managed count were not measured. Record in
+[status.md](status.md#host-rollout-2026-11-04); method, limits and the manual
+fallback steps in
+[fleet-rollout.md](fleet-rollout.md#windows-rollout-as-run-2026-11-04).
 
 Findings recorded, not fixed in Stage 5: pre-existing person-run provisioning
 gaps (tmux plugin clones missing on wsl, mac, sherlock and marlowe; login-env
@@ -127,9 +129,10 @@ leftovers: Sherlock has no skills install (its `~/.cache` to `/scratch` symlink
 refusal is unchanged); the Codex skills roots on mac, wsl and marlowe exceed
 1990 entries and need a person to prune; old `ITEM.stamp`, `ITEM.failed` and
 `payload.log` files remain and are ignored. Windows: `chezmoi.exe` was
-re-extracted at 2026-11-03T19:27:56Z (attribution unknown) and its DACL is
+re-extracted at 2026-11-03T19:27:56Z (attribution unknown) and its DACL was
 inherited, so a propagation from `~/.local` (the Codex sandbox Modify grant)
-would make the updater refuse it, which the doctor now shows; the
+would have made the updater refuse it, which the doctor shows (the rollout's
+`icacls /inheritance:d` left explicit entries only); the
 CodexSandboxUsers Modify grants on `~/.local`, `Documents\PowerShell`,
 `AppData`, the Startup folder and `%TEMP%` remain a user decision; the
 pre-existing PowerShell 7.2 dependencies are in
@@ -488,8 +491,8 @@ Checks on the final aggregate: `tests/run.sh --ci` PASS and all 39 pre-commit
 hooks locally; native `tests/run.ps1 -CI` in the Windows job of CI run
 41832666587; the review's one confirmed medium was fixed before landing. macOS
 CI runs no real tmux, and this record has no Stage 5 rerun of the Mac tmux 3.8
-baseline. No Stage 4 host gate is open; the Stage 5 Windows rollout is pending
-([outcome](#stage-5-outcome)).
+baseline. No Stage 4 host gate is open, and the Stage 5 Windows rollout finished
+on 2026-11-04 ([outcome](#stage-5-outcome)).
 
 ## Exit and next handoff
 

@@ -98,8 +98,8 @@ bridge. It changes the boundary as follows;
   with a warning; the doctor's `native-config` row and W1-chezmoi report it.
   The check narrows a directory-swap race; it does not close it.
 - The native config template owns `persistentState`; existing homes take the
-  key through a reviewed re-init. The five Unix hosts are done; the Windows
-  host's user-run update and re-init are pending.
+  key through a reviewed re-init. All six hosts are done (Windows on
+  2026-11-04).
 - Kept floors: Bash 3.2, PowerShell 7.0 entrypoints with the 5.1 profile,
   Python 3.11, git presence-only, both Claude plugin IDs and the root
   `CLAUDE.md` stub. A claimed PowerShell 7.1 need of W1-chezmoi was false and

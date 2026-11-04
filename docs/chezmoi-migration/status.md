@@ -7,9 +7,11 @@ and remote main fast-forwarded from `b9f9d61` to
 `dddc71831944acdf80813532f5935867093dd59b` (85 commits, 69 files, +3765/-2043),
 without force or history rewrite. Five Unix hosts reached `dddc718` through
 their actual login updater and passed the reviewed `persistentState` re-init.
-Windows still waits for its user-run login update and re-init; it is not
-converged. Native chezmoi stays v2.74.0. Stage 6 has not started; its plan is
-[stage-6-retirement.md](stage-6-retirement.md) and its fresh-session prompt is
+Windows followed on 2026-11-04 through a one-off limited-token task the user
+approved: its own updater moved it to `57fbc45` (`dddc718` code plus the Stage 5
+records) and it passed the same re-init, so all six hosts are converged and
+re-initialized. Native chezmoi stays v2.74.0. Stage 6 has not started; its plan
+is [stage-6-retirement.md](stage-6-retirement.md) and its fresh-session prompt is
 [start-stage-6.md](start-stage-6.md). The stage records after this one are
 history; the stage summary, decisions and retirement gate further down stay
 current.
@@ -150,7 +152,7 @@ after the re-init.
 | mac | `4abad00` -> `dddc718` | The same 6; 64 managed | `e5de343c...` -> `ac90fc13...` | 11 missing tmux plugin clones; kitty, stylua and schrodinger warnings (preexisting) |
 | sherlock | `7e344f2` -> `dddc718` | 9: the 6, `~/.config/sh/.profile`, Codex config and Claude settings; 62 managed | `96c8e3e1...` -> `94f92bf7...` | Preexisting login-env and clone gaps; payloads warn `not installed: skills` (the D7 advice) |
 | marlowe | `7e344f2` -> `dddc718` | 8: the 6, Codex config and Claude settings; 62 managed | `762fc8ff...` -> `bd63182c...`; ACL `+` kept | Interactive: tmux ok (3.6a); node version unknown (AppArmor, accepted); login-env gaps |
-| win | `7e344f2`, pending | Expected 3: `profile.ps1`, Codex config and Claude settings | Pending the user-run `reinit-win.ps1` | Pending |
+| win | `7e344f2` -> `57fbc45` (`dddc718` code plus the Stage 5 records) | Not captured per file (expected 3: `profile.ps1`, Codex config and Claude settings); managed count not measured | `7B0BECF9...` -> `BEFEC13E...` | 32 ok, 1 warn (payloads `not installed: skills`), 0 human, exit 0 |
 
 On all five Unix hosts the updater returned 0. After the re-init, both
 full-argument and plain `status --exclude=dirs` were empty, and both AI configs
@@ -174,12 +176,36 @@ repaired and about 931 MiB of private caches removed. Evidence:
 on Marlowe. `/usr/bin/tmux` stays 3.2a for non-interactive shells such as
 `ssh marlowe-plain`; see [shell.md](../shell.md#tmux).
 
-Windows is pending. The user received these steps: two ordinary interactive
-pwsh logins, the staged `reinit-win.ps1` in Downloads with sha256
-`CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212`, an optional
-`icacls /inheritance:d` on `chezmoi.exe`, and the doctor. No Codex process ran
-on win when they were staged. The exact sequence is in
-[fleet-rollout.md](fleet-rollout.md#pending-windows-steps).
+Windows finished on 2026-11-04. Instead of typing the steps, the user approved
+in the session a one-off scheduled task: principal the logged-on user, LogonType
+Interactive, RunLevel Limited; the run reported `elevated=False` at Medium
+Mandatory Level. The administrator SSH session only wrote the task script and
+registered, started (once) and deleted the task; every change to managed
+targets, chezmoi config and state and the exe ACL ran under the user's limited
+token. Pass 1 ran the checkout's `7e344f2` updater, as a first login would:
+exit 0, no output, HEAD `7e344f2` -> `57fbc45`. Pass 2 ran the new exact-exe
+updater: exit 0, no output, no `Native update skipped` warning. `reinit-win.ps1`
+(sha256 `CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212`) ran
+`chezmoi.exe` sha256
+`6AAF1AC7EAD89225C6B99421169C49943A71DDFBF88F1D18820E9667240E61E1`; the config
+sha256 went from `7B0BECF9...` (as at the Stage 5 probe) to
+`BEFEC13E5D91EBE572C7917377D9B06892FA4E83AE475CD4590AF72C394BA9A3`, owned by
+the user. Config and state kept owner and SDDL, `persistentState` was the only
+added key and nothing else changed, a plain read of `persistentState` names the
+bound database, full-argument and plain status were empty and no stray
+`chezmoistate.boltdb` existed. `icacls /inheritance:d` on `chezmoi.exe` (no
+CodexSandboxUsers entry was present) left explicit SYSTEM, Administrators and
+user (F) entries and no inherited ones. The doctor (`doctor.ps1 -Quiet`) exited
+0 with 32 ok, 0 outdated, 0 missing, 1 warn and 0 human. Final full-argument
+status: empty; checkout clean at `57fbc45`. Not measured: the per-file list of
+changed targets and the managed count (the latter a Stage 6 Phase 0 recheck,
+F7).
+Evidence on win: `~\.config\dotfiles-stage5-task\` (`run.ps1` sha256
+`A16EC4E30559BA472FFFE633A09AD0CD3BB4005A73EF0D2DB34AFA73DB4575E9`, `run.log`)
+and the re-init record `~\.config\chezmoi\stage5-reinit\`. The disabled
+`Dotfiles-Restow-<16 hex>` task is unchanged (Stage 6). Method, limits and the
+manual fallback steps are in
+[fleet-rollout.md](fleet-rollout.md#windows-rollout-as-run-2026-11-04).
 
 ### Findings not fixed in Stage 5
 
@@ -194,9 +220,10 @@ on win when they were staged. The exact sequence is in
   them; old `ITEM.stamp`, `ITEM.failed` and `payload.log` files remain on hosts,
   ignored.
 - Windows: `chezmoi.exe` was re-extracted at 2026-11-03T19:27:56Z (attribution
-  unknown). Its DACL is inherited, so a propagation from `~/.local` (the Codex
-  sandbox Modify grant) would make the updater refuse it; the doctor now shows
-  that case. The CodexSandboxUsers Modify grants on `~/.local`,
+  unknown). Its DACL was inherited, so a propagation from `~/.local` (the Codex
+  sandbox Modify grant) would have made the updater refuse it; the doctor shows
+  that case. The win rollout's `icacls /inheritance:d` left explicit entries
+  only. The CodexSandboxUsers Modify grants on `~/.local`,
   `Documents\PowerShell`, `AppData`, the Startup folder and `%TEMP%` remain a
   user decision. The PowerShell 7.2 dependencies above are preexisting.
 - Rollout tooling: the re-init must not use `cp -p` on Marlowe's filesystem
@@ -239,8 +266,9 @@ No startup time was measured, so no speedup is claimed.
 
 ### Unfinished gates and Stage 6 readiness
 
-- win: its login update to `dddc718`, the `persistentState` re-init and the
-  doctor, all user-run.
+- Done after landing: win's login update (to `57fbc45`), `persistentState`
+  re-init and doctor on 2026-11-04 ([above](#host-rollout-2026-11-04)). Its
+  managed count was not measured; Stage 6 Phase 0 rechecks it (F7).
 - Done at the end of Stage 5: Lab's private recovery store moved from
   `$HOME/dotfiles/.git/chezmoi-migration-recovery/` to
   `~/.local/state/dotfiles-chezmoi-migration-recovery/`. It was copied with
@@ -254,9 +282,9 @@ No startup time was measured, so no speedup is claimed.
   (462 private files with their own `manifest.sha256`).
 - The findings above stay open.
 - Stage 6 starts from [start-stage-6.md](start-stage-6.md) and follows
-  [stage-6-retirement.md](stage-6-retirement.md). Its gates include a converged
-  win, no unmarked home, a fresh-home native install procedure for e2e, and the
-  plan's open decisions D-1..D-17.
+  [stage-6-retirement.md](stage-6-retirement.md). Its converged-win gate (R3)
+  passed on 2026-11-04; its other gates include no unmarked home, a fresh-home
+  native install procedure for e2e, and the plan's open decisions D-1..D-17.
 
 ## Stages 1-4 consolidation checkpoint (2026-11-03)
 
@@ -350,7 +378,8 @@ Accepted limits at this checkpoint, with what Stage 5 changed:
   ([takeover.md](takeover.md#updates-and-edits-after-takeover)). Closed in
   Stage 5 on every host that took the re-init: the template owns
   `persistentState`, so plain commands share the bound database, while mutating
-  commands keep the full argument set. Windows still waits for its re-init.
+  commands keep the full argument set. Windows took it on 2026-11-04, so this
+  holds on all six hosts.
 - An HTTPS connect to a silently dropped route is bounded only by OS/curl defaults.
 - Replacing an enrolled token in place stalls that host's updater until the new
   ciphertext lands; follow the runbook in [secrets-and-ssh.md](secrets-and-ssh.md).
@@ -381,8 +410,8 @@ Stage 5 inputs, none blocking this checkpoint, with their Stage 5 outcomes:
   binary. Never bypass the site profile. Resolved: accept and document; the
   Codex config stays (no Codex CLI on PATH there, but Codex app-servers read it).
 - Make the config template set `persistentState` (requires reviewed re-init), or
-  keep the full-argument rule. Done: the template owns it and the five Unix
-  hosts are re-initialized; win is pending.
+  keep the full-argument rule. Done: the template owns it and all six hosts
+  are re-initialized (win on 2026-11-04).
 - Windows: review the inherited sandbox Modify grant on `~/.local/bin` or verify
   the executable before running it, then prefer the exact provisioned
   `chezmoi.exe` over the first PATH match; name the parent ACL model of any new
@@ -652,7 +681,7 @@ before the main fast-forward.
 | 2 | Ordinary source and explicit host implemented; final validation record below | Isolated fixtures only; no takeover | Exact seven-role sets/bytes/modes and native platform checks |
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
 | 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e; closure `a5d9ad7` passed exact CI 41719265671 | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
-| 5 | Six packages, two review-fix branches and docs landed at `dddc718`; exact CI 41832666587 and bootstrap e2e 41832666818 passed | Five Unix hosts at `dddc718` through the actual updater, with the reviewed `persistentState` re-init; Marlowe's login env has tmux 3.6a; win pending its user-run login update and re-init | [Stage 5 record](#stage-5-completion-record-2026-11-04), [rollout](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04) |
+| 5 | Six packages, two review-fix branches and docs landed at `dddc718`; exact CI 41832666587 and bootstrap e2e 41832666818 passed | Five Unix hosts at `dddc718` through the actual updater, with the reviewed `persistentState` re-init; Marlowe's login env has tmux 3.6a; win at `57fbc45` (same code plus the Stage 5 records) through its own updater and the same re-init on 2026-11-04, by a user-approved limited-token task | [Stage 5 record](#stage-5-completion-record-2026-11-04), [rollout](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04) |
 | 6 | Not started; next stage | Native-only deletion candidate and actual retirement not implemented | Plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
 
 ## Decisions and open choices

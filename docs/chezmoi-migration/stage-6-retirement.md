@@ -23,8 +23,8 @@ stdlib/platform behavior tests.
 [status.md](status.md)). Also follow [fleet rollout](fleet-rollout.md) and
 [secrets and SSH](secrets-and-ssh.md).
 
-**State:** Not started. Stage 5 landed on main as `b9f9d61..dddc718`; the
-Windows host's Stage 5 login update and re-init are still pending (gate R3).
+**State:** Not started. Stage 5 landed on main as `b9f9d61..dddc718`; all six
+hosts took its login update and re-init, Windows last on 2026-11-04 (gate R3).
 
 Notation: every `file:line` is at `dddc718`. **Confirmed** = seen in code at the
 cited line; **Inference** = reasoned from code, not executed; **Uncertain** =
@@ -58,37 +58,21 @@ removing current source paths; do not build a fleet registry or legacy detector.
 | --- | --- | --- |
 | R1 | Stage 5 integrated with exact-SHA gates | Done. Main `dddc718` (85 commits, 69 files, +3765/-2043 from `b9f9d61`, no force). Exact-SHA `ci.yml` run 41832666587 passed all three jobs (Linux behavior and lint, macOS system Bash, Windows native PowerShell); `bootstrap-e2e` run 41832666818 passed all seven hosts (five containers, mac and win runners). Local `tests/run.sh --ci` PASS; `pre-commit run --all-files` passed 39 hooks; `tests/run.ps1 -CI` runs only in CI |
 | R2 | Stage 5 records on main | The status.md Stage 5 record and the migration records (inventory, stage-5-ecosystem, support-boundary, fleet-rollout, this plan, the Stage 6 prompt) land in the Stage 5 records commits. Confirm they are on main before Stage 6 edits the same files |
-| R3 | Windows converged on Stage 5 | **Pending, user-run** (steps below). No Stage 6 breaking revision may reach win before it passes |
+| R3 | Windows converged on Stage 5 | **Passed 2026-11-04**: win reached `57fbc45` (`dddc718` code plus the Stage 5 records) through its own updater, took the `persistentState` re-init, and its doctor exited 0 ([status.md](status.md#host-rollout-2026-11-04)). Its managed count was not measured: a Phase 0 recheck (F7) |
 | R4 | Fresh-home native install procedure, documented and executable by an agent | **Open**; deliverable of A4. `step_H7_native_plan` (`lib/bootstrap/steps-human.sh:574-582`) and bootstrap.md H7-native/HW-native still defer to takeover.md, which converts existing Stow homes |
 | R5 | Stow recovery bridge and cutoff documented | Present: `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` is the last supported Stow release and the first accepted native release (support-boundary.md, "Stage 4 candidate boundary"). B7 restates it in README |
 | R6 | Isolation | Work only in `.worktrees/<task>/` worktrees or independent clones. Lab's `$HOME/dotfiles` main checkout is the bound native source of Lab's home and is shared with Codex: never edit, switch branches or leave it dirty (the native updater refuses a dirty source, `scripts/chezmoi-update.sh:57`). Worktrees under its `.worktrees/` do not dirty it: the path is ignored (`.gitignore:25`) and that status check does not list ignored paths |
 | R7 | Landing authority | AGENTS.md "Workflows and checks": exact candidate on `ci/**` (and `e2e-ci/**`), every job green, then fast-forward `main`. The auto-mode classifier has required an explicit user confirmation for `main` pushes in earlier sessions; plan for it at the landing step |
 | R8 | Decisions | D-1..D-17 answered by the user before the commits that depend on them |
 
-Windows Stage 5 steps (R3). The user runs them from an ordinary, non-elevated
-PowerShell 7; the administrator SSH channel never writes managed targets:
-
-1. Two ordinary pwsh logins: the login updater moves the bound source from
-   `7e344f2` to `dddc718` (or later main). Expected changed targets: 3
-   (`profile.ps1`, Codex config, Claude settings).
-2. Check that the staged `reinit-win.ps1` in Downloads has sha256
-   `CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212`
-   (`Get-FileHash`). After that session's login updater has finished and with no
-   other chezmoi running, run `pwsh -NoProfile -File <path>\reinit-win.ps1`. It
-   prints only hashes, owners, key names, booleans and nonsecret paths. It needs
-   pwsh 7.2 or later (`#Requires -Version 7.2`; win has 7.6.9) and stops unless
-   the source's `HEAD:home/.chezmoi.toml.tmpl` is blob `9e26214c` (`dddc718`'s),
-   so R3 must run before any commit that changes that template reaches main.
-3. Optional: `icacls <HOME>\.local\bin\chezmoi.exe /inheritance:d`, which keeps
-   the file's current entries but stops later inheritance from `~/.local` (a
-   propagated Codex sandbox Modify grant would make the updater refuse it).
-   First run `icacls <HOME>\.local\bin\chezmoi.exe` and confirm that no entry
-   names `CodexSandboxUsers`: `/inheritance:d` copies the inherited entries as
-   explicit ones, so a grant already present would become permanent.
-4. `.\doctor.ps1` (native): `native-config` ok.
-
-The agent then records, read-only: revision, config sha256 before and after,
-managed count, empty native status, and whether a Codex process was running.
+R3 ran on 2026-11-04 as a one-off scheduled task with the logged-on user's
+limited token (Interactive, RunLevel Limited), which the user explicitly
+approved and which was deleted after the run; the administrator SSH session only
+wrote the task script and registered, started and deleted the task, and wrote
+no managed target, chezmoi config or state, or ACL. Method and limits are in
+[fleet-rollout.md](fleet-rollout.md#windows-rollout-as-run-2026-11-04), which
+keeps the manual user-typed steps as the fallback. What remains for win is the
+read-only Phase 0 recheck (F1-F12, including the unmeasured F7 count).
 
 ### Fleet gates
 
@@ -99,10 +83,7 @@ argument set (`scripts/chezmoi-update.sh:62-67`) plus `--exclude=dirs
 --force=false`. After the Stage 5 re-init the config owns `persistentState`, so
 plain read-only commands (`status`, `diff`, `managed`, `data`,
 `execute-template`) no longer fork state; never run a plain mutating command.
-That holds only on the five re-initialized Unix hosts: on win, until R3's
-re-init passes (F11), even read-only commands need the full explicit argument
-set, because a plain one reads and creates the default
-`~/.config/chezmoi/chezmoistate.boltdb` instead of the bound state.
+That holds on all six hosts since win's re-init on 2026-11-04 (F11).
 
 | # | Check | Expected |
 | --- | --- | --- |
@@ -112,11 +93,11 @@ set, because a plain one reads and creates the default
 | F4 | `git -C <source> status --porcelain --untracked-files=all` | Empty |
 | F5 | Source HEAD | The last green main |
 | F6 | Native `status --exclude=dirs` | Empty |
-| F7 | Native `managed --exclude=dirs` count | Lab 67, Mac 64, WSL 63, Sherlock 62, Marlowe 62 (Stage 5 after-state); Win 26 (Stage 4; recheck after R3) |
+| F7 | Native `managed --exclude=dirs` count | Lab 67, Mac 64, WSL 63, Sherlock 62, Marlowe 62 (Stage 5 after-state); Win 26 (Stage 4; not measured in its Stage 5 rollout, so a Phase 0 recheck) |
 | F8 | `~/.claude/settings.json`, `~/.codex/config.toml` vs rendered output | Equal (private comparison; record only equal/not equal and key names) |
-| F9 | `./doctor.sh` / `.\doctor.ps1` (native) | `native-config` ok; every other row as in the Stage 5 after-state. Lab exited 0 with 79 ok; the other hosts carry recorded pre-existing provisioning gaps, which are not Stage 6 blockers and must not be reported as regressions |
-| F10 | `~/.config/chezmoi/chezmoistate.boltdb` | Absent (none on the five Unix hosts after Stage 5) |
-| F11 | `persistentState` key in the bound config | Present (five Unix re-inits done; win pending, R3) |
+| F9 | `./doctor.sh` / `.\doctor.ps1` (native) | `native-config` ok; every other row as in the Stage 5 after-state. Lab exited 0 with 79 ok; win exited 0 with 32 ok and 1 warn (payloads `not installed: skills`); the other hosts carry recorded pre-existing provisioning gaps, which are not Stage 6 blockers and must not be reported as regressions |
+| F10 | `~/.config/chezmoi/chezmoistate.boltdb` | Absent (none on any of the six hosts after Stage 5) |
+| F11 | `persistentState` key in the bound config | Present on all six (win's re-init on 2026-11-04, R3) |
 | F12 | No unmarked home in use | The six targets are the whole supported fleet. Another clone found later is outside the boundary and is recorded, not repaired |
 
 ### Host residue
@@ -138,7 +119,7 @@ repos, unmerged work or a checkout or module store with local commits.
 | Local Git filter | `filter.codex-portable` in `<source>/.git/config` | Remove that section only |
 | `*.pre-dotfiles` files | HOME paths moved aside by old H7-stow `mv -n` | User data: leave |
 | Windows restow task | `Dotfiles-Restow-<16 hex>`, disabled | Deregister before B2 reaches win (below) |
-| Recovery evidence | Lab's private recovery store at `~/.local/state/dotfiles-chezmoi-migration-recovery/` (incl. the Stage 5 session archive `20261104-stage5-dddc718/`); Stage 4 private host backups; Stage 5 evidence under `~/.local/state/dotfiles-stage5-rollout/` and `~/.local/state/dotfiles-stage5-reinit/`; Marlowe `~/.local/state/dotfiles-marlowe-tmux-*` | Not residue: keep, with every historical manifest |
+| Recovery evidence | Lab's private recovery store at `~/.local/state/dotfiles-chezmoi-migration-recovery/` (incl. the Stage 5 session archive `20261104-stage5-dddc718/`); Stage 4 private host backups; Stage 5 evidence under `~/.local/state/dotfiles-stage5-rollout/` and `~/.local/state/dotfiles-stage5-reinit/` (win: `~\.config\dotfiles-stage5-task\` and `~\.config\chezmoi\stage5-reinit\`); Marlowe `~/.local/state/dotfiles-marlowe-tmux-*` | Not residue: keep, with every historical manifest |
 
 ### Windows restow task
 
@@ -806,7 +787,8 @@ rules first):
 3. Doctor with no `venv-sync` or `stow-links` rows at all; `native-config` ok;
    other rows unchanged from the Stage 5 after-state.
 4. A fresh interactive login runs the native updater once, with no stderr
-   warning (win: an ordinary pwsh run by the user); maintenance absent afterwards.
+   warning (win: an ordinary pwsh run by the user, or a one-off limited-token
+   task the user approves, deleted after); maintenance absent afterwards.
 5. Shell smoke: `zsh -ic true`, `bash -ic true`; on win PowerShell 7 and 5.1
    profile load.
 6. Win: `Get-ScheduledTask -TaskName 'Dotfiles-Restow-*'` returns nothing.
@@ -895,8 +877,9 @@ docs 11,807 -> 12,202; all tracked text 62,496 -> 64,218.
    keep `.venv-sync` or retired checkouts makes the updater's
    `--untracked-files=all` check refuse every login (`scripts/chezmoi-update.sh:57`).
    Keep the lines (D-8).
-3. **Windows not converged.** Crossing the breaking revision on win before R3
-   leaves its Stage 5 re-init and updater acceptance unproven under new code.
+3. **Windows converged, partly unmeasured.** R3 passed on 2026-11-04, but its
+   managed count was not measured; Phase 0 rechecks F1-F12 on win, read-only,
+   before any Stage 6 revision reaches it.
 4. **Dangling privileged task** on win if B2 lands before deregistration.
 5. **Rendered drift from consolidation.** Lost `-text` on the WSL files, an
    accidental `.tmpl` on `kitty.conf` or `prompt.omp.json`, or lost attributes
@@ -922,9 +905,10 @@ docs 11,807 -> 12,202; all tracked text 62,496 -> 64,218.
 11. **e2e common-only gap**: the `other` flow deploys with by-hand setup-sync and
     a host-less `stow-all.sh`; after Stage 6 it needs D-1.
 12. **Windows token limits**: the task deregistration may need the user's
-    elevated pwsh. The Windows chezmoi.exe DACL is inherited; a propagated Codex
-    sandbox grant from `~/.local` would make the updater refuse it (the doctor now
-    shows it); recheck before the canary.
+    elevated pwsh. Since the Stage 5 rollout (`icacls /inheritance:d`) the
+    Windows chezmoi.exe DACL has explicit entries only, so a later grant on
+    `~/.local` no longer propagates to it; recheck it before the canary (the
+    doctor shows a DACL the updater would refuse).
 13. **Lab shared checkout**: Lab receives Stage 6 only through its updater or an
     explicit native update after `main` moves.
 14. **Host tooling**: no `cp -p` on Marlowe's filesystem (it cannot preserve
@@ -986,8 +970,8 @@ Recorded findings for the user, not retirement work:
   in fleet-rollout.md: Windows direct access was repaired and verified; lab
   self-SSH rejection does not block local access. Do not assume the planning
   snapshot still holds or that a reused master proves fresh login. Follow
-  cluster rules and record specific access/allocation blockers. Win must first
-  pass its pending Stage 5 steps (R3).
+  cluster rules and record specific access/allocation blockers. Win passed its
+  Stage 5 gate R3 on 2026-11-04; its F7 managed count still needs measuring.
 - [ ] Quiesce reachable hosts before crossing the cutoff. Execute one final-source
   canary, then the other reachable unblocked hosts, with one owner per target and
   private recovery snapshots. Preserve current access until new access is proven

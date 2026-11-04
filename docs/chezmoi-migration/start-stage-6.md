@@ -3,7 +3,7 @@
 Paste the block below into a new session to run Stage 6, the legacy retirement.
 It assumes the Stage 5 records are on main. The canonical plan is
 [stage-6-retirement.md](stage-6-retirement.md); the prompt adds the session
-rules, the pending Windows gate and the host constraints.
+rules and the host constraints.
 
 ```text
 ultracode
@@ -43,25 +43,18 @@ and worktree under .worktrees/<task>/. These do not dirty the checkout:
 .worktrees/ is ignored (.gitignore:25) and the updater's status check does not
 list ignored paths. Never two writers in one checkout.
 
-Windows gate first (R3). Unless status.md records it as done, win is still at
-7e344f2 with its Stage 5 steps pending. They are user-run: give the user these
-steps for their own ordinary, non-elevated pwsh 7 and wait for the result.
-(1) Two ordinary pwsh logins, so the login updater moves the bound source to
-dddc718 or later main; expected changed targets: 3 (profile.ps1, Codex config,
-Claude settings). (2) Check that the staged reinit-win.ps1 in Downloads has
-sha256 CED552AB2A4F8099CC5F7478A6CD4AFB7BEC7AF2FD2B4B85C42509A2F550A212; after
-that session's updater has finished and with no other chezmoi running, run
-pwsh -NoProfile -File <path>\reinit-win.ps1. (3) Optional: first confirm that
-icacls <HOME>\.local\bin\chezmoi.exe lists no CodexSandboxUsers entry, then
-icacls <HOME>\.local\bin\chezmoi.exe /inheritance:d (it copies inherited
-entries as explicit ones). (4) .\doctor.ps1. Then verify read-only and record
-it. reinit-win.ps1 needs pwsh 7.2+ and stops unless the source's
-HEAD:home/.chezmoi.toml.tmpl is dddc718's blob 9e26214c, so this gate precedes
-any commit that changes that template. No Stage 6 breaking revision may reach
-win before this passes. For the whole stage, commands that change the win home run
-as the ordinary user, typed by the user. The SSH route into win carries an
-administrator token: use it only for read-only metadata, never to write managed
-targets, the source checkout, chezmoi config or state, or ACLs. The one possible
+Windows. Gate R3 passed on 2026-11-04 (status.md, Stage 5 host rollout): win
+reached 57fbc45 (dddc718 code plus the Stage 5 records) through its own updater,
+took the persistentState re-init and its doctor exited 0. Only the read-only
+Phase 0 recheck remains (F1-F12; its F7 managed count was not measured). For the
+whole stage, commands that change the win home run as the ordinary user: typed
+by the user, or a one-off scheduled task with the logged-on user's limited token
+(Interactive, RunLevel Limited) that the user explicitly approves for that run,
+that needs the user logged on and that is deleted after it (fleet-rollout.md,
+Windows rollout as run). The SSH route into win carries an administrator token:
+use it only for read-only metadata and, with that approval, to write such a
+task's script and register, start and delete it; never to write managed targets,
+the source checkout, chezmoi config or state, or ACLs. The one possible
 exception, deregistering the disabled Dotfiles-Restow-<16 hex> task, follows the
 plan's procedure and needs the user's approval of that exact command.
 
@@ -102,25 +95,23 @@ and every bootstrap-e2e job on that exact SHA; then fast-forward main only (no
 force, no rewrite) and delete the ci/** and e2e-ci/** branches. Land Phase A
 before Phase B.
 
-Hosts (Phase C), only after the final aggregate landed green and R3 passed.
-Lab is local (its self-SSH is rejected); use the existing SSH routes and the
-plain aliases for clusters (sherlock-plain, marlowe-plain); re-resolve SSH
-config each session. Deregister the Windows task first, while its script still
-exists. Quiesce with ~/.config/dotfiles/maintenance on the five remote hosts and
-canary Lab (D-16), then go host by host with one owner per host. Host updates
-are fast-forward only and nonforce: the login updater, or explicit native
-commands with the updater's full argument set plus --exclude=dirs
---force=false. Plain read-only chezmoi commands are fine on the five
-re-initialized Unix hosts, whose config owns persistentState; on win, until R3's
-re-init passes, use the full argument set even for read-only ones (plain ones
-print chezmoi's template-changed warning). Plain mutating commands never
-are fine. Never force, stash, rebase
-or reset a host checkout; restore maintenance on failure. Run the plan's
-per-host acceptance, then retire only exact residue items, each with a private
-snapshot first, and record every host separately in status.md (revision before
-and after, checks, removed residue, blockers). An unreachable or blocked host
-stays an explicit exception, never false success. The recorded pre-existing
-provisioning gaps are not regressions and are not yours to fix.
+Hosts (Phase C), only after the final aggregate landed green and R3 passed. Lab
+is local (its self-SSH is rejected); use the existing SSH routes and the plain
+aliases for clusters (sherlock-plain, marlowe-plain); re-resolve SSH config each
+session. Deregister the Windows task first, while its script still exists.
+Quiesce with ~/.config/dotfiles/maintenance on the five remote hosts and canary
+Lab (D-16), then go host by host with one owner per host. Host updates are
+fast-forward only and nonforce: the login updater, or explicit native commands
+with the updater's full argument set plus --exclude=dirs --force=false. Plain
+read-only chezmoi commands are fine on all six hosts, whose config owns
+persistentState since the Stage 5 re-init; plain mutating commands never are.
+Never force, stash, rebase or reset a host checkout; restore maintenance on
+failure. Run the plan's per-host acceptance, then retire only exact residue
+items, each with a private snapshot first, and record every host separately in
+status.md (revision before and after, checks, removed residue, blockers). An
+unreachable or blocked host stays an explicit exception, never false success.
+The recorded pre-existing provisioning gaps are not regressions and are not
+yours to fix.
 
 Sherlock. Before every cluster operation, and again after any summary or context
 compaction, read /etc/agents/AGENTS.md and the task's topic files (storage.md,
@@ -156,8 +147,10 @@ $HOME/dotfiles/.git/ at the end of Stage 5; read its README and manifests
 before any recovery; never apply its old whole patches to newer main), the
 Stage 4 private host backups, the Stage 5 evidence under
 ~/.local/state/dotfiles-stage5-rollout/ and ~/.local/state/dotfiles-stage5-reinit/
-on each host, and Marlowe's ~/.local/state/dotfiles-marlowe-tmux-*/. Stage 6
-never deletes or rewrites them.
+on each Unix host (win: ~\.config\dotfiles-stage5-task\ and
+~\.config\chezmoi\stage5-reinit\), and Marlowe's
+~/.local/state/dotfiles-marlowe-tmux-*/. Stage 6 never deletes or rewrites
+them.
 
 Out of scope: the findings the plan lists under "Not in Stage 6" (tmux plugin
 clones, login-env packages, Codex skills pruning, Sherlock skills, the Windows
