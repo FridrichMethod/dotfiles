@@ -120,13 +120,21 @@ function Test-DotfilesTrustedFileSecurity {
     # any other SID WRITE_DATA, APPEND, WRITE_EA, WRITE_ATTRIBUTES, DELETE,
     # WRITE_DAC, WRITE_OWNER, GENERIC_ALL or GENERIC_WRITE (0x500D0116).
     # OWNER RIGHTS (S-1-3-4) applies only to that already trusted owner.
+    # Read from the raw descriptor, not .NET's rule projection, which skips
+    # every entry that is not a common ACE: a null DACL, or any DACL entry
+    # but a plain or callback allow or deny entry (an object, compound or
+    # unknown type), refuses. Deny entries only take rights away.
     param([Parameter(Mandatory)][Security.AccessControl.FileSystemSecurity]$Security)
+    $descriptor = [Security.AccessControl.RawSecurityDescriptor]::new($Security.GetSecurityDescriptorBinaryForm(), 0)
     $trusted = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
-    if ($trusted -notcontains $Security.GetOwner([Security.Principal.SecurityIdentifier]).Value) { return $false }
+    if ($null -eq $descriptor.Owner -or $trusted -notcontains $descriptor.Owner.Value) { return $false }
+    if ($null -eq $descriptor.DiscretionaryAcl) { return $false }
     $trusted += 'S-1-3-4'
-    foreach ($rule in $Security.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
-        if ($rule.AccessControlType -eq 'Allow' -and $trusted -notcontains $rule.IdentityReference.Value -and
-            ([int]$rule.FileSystemRights -band 0x500D0116)) { return $false }
+    foreach ($ace in $descriptor.DiscretionaryAcl) {
+        if ($ace -isnot [Security.AccessControl.CommonAce]) { return $false }
+        if ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessDenied) { continue }
+        if ($ace.AceQualifier -ne [Security.AccessControl.AceQualifier]::AccessAllowed) { return $false }
+        if ($trusted -notcontains $ace.SecurityIdentifier.Value -and ($ace.AccessMask -band 0x500D0116)) { return $false }
     }
     return $true
 }
