@@ -927,11 +927,11 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-True (@($all.Lines | Where-Object { $_ -cmatch "^missing`twezterm`tdesktop`tmissing: .+`tdocs/bootstrap.md W1-winget$" }).Count -eq 1) 'wezterm TSV row'
         # The payload repos that install on native Windows (the rows with a
         # windows-install entry, so not the kit): a shortfall warns with what
-        # to run (the next interactive PowerShell installs it), never fails.
+        # to run (only a person installs them, with sync-payloads), never fails.
         $pymolPy = Join-Path $fixture.Home '.pymolrc.py'
         # -Force: off Windows a dot file is hidden to PowerShell.
         Remove-Item -LiteralPath $pymolPy -Force
-        $short = 'not installed: pymol: the next interactive PowerShell installs them, or run sync-payloads ITEM now'
+        $short = 'not installed: pymol: run sync-payloads ITEM'
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'a payload shortfall only warns'
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$short`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
@@ -942,13 +942,13 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tDOTFILES_PAYLOAD_ITEMS selects no payload`t-") "kit-only row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit nope skills' }
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): the next interactive PowerShell installs them, or run sync-payloads ITEM now`tdocs/bootstrap.md H7-payloads") "unknown item row: $($run.Stdout)"
-        # The hook's failure records (ITEM.failed), worded by person-status,
-        # and a stow-links path still linked into its retired package, which
-        # waits for stow-all, come first with what to run; only for selected
-        # items that install here (a kit record a v0.6 install left is not
-        # one). No Windows item of the real file has a stow-links row, so this
-        # fixture's copy gives pymol one, at a path its windows-probe does not
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run sync-payloads ITEM`tdocs/bootstrap.md H7-payloads") "unknown item row: $($run.Stdout)"
+        # A stow-links path still linked into its retired package, which
+        # waits for stow-all, comes first with what to run; only for selected
+        # items that install here. The records the retired scheduler left
+        # (ITEM.failed) are ignored, never reported or removed. No Windows
+        # item of the real file has a stow-links row, so this fixture's copy
+        # gives pymol one, at a path its windows-probe does not
         # test: PowerShell 7.6's Test-Path -PathType Leaf counts a dangling
         # link as a file, so a link at a probed rc file would read as
         # installed and drop pymol from the not installed clause.
@@ -965,12 +965,11 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         else { & ln -s '../dotfiles/common/pymol/.pymolrc.py' $legacy }
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'payload failures only warn'
-        $expected = "pymol failed its last run (exit 1, see $(Join-Path $state 'pymol.failed')): run sync-payloads pymol; " +
-            'pymol waits for stow-all: ~/.dotfiles-test-legacy-pymolrc is still a link the retired pymol Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads pymol; ' +
-            "skills stopped for a person (exit 3, see $(Join-Path $state 'skills.failed')): run sync-payloads skills and do what it asks; $short"
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$expected`tdocs/bootstrap.md H7-payloads") "records row: $($run.Stdout)"
+        $expected = 'pymol waits for stow-all: ~/.dotfiles-test-legacy-pymolrc is still a link the retired pymol Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads pymol; ' + $short
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$expected`tdocs/bootstrap.md H7-payloads") "stow-links row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tskills stopped for a person (exit 3, see $(Join-Path $state 'skills.failed')): run sync-payloads skills and do what it asks`tdocs/bootstrap.md H7-payloads") "unselected records row: $($run.Stdout)"
+        Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "old records row: $($run.Stdout)"
+        Assert-True ((Test-Path -LiteralPath (Join-Path $state 'skills.failed')) -and (Test-Path -LiteralPath (Join-Path $state 'pymol.failed'))) 'the doctor removed an old record'
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles') -Recurse -Force
         [IO.File]::Delete($legacy)
         [IO.File]::WriteAllText($config, $original)

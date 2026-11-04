@@ -506,45 +506,28 @@ BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 # bootstrap_check_payloads ROOT [HOST]: each item of DOTFILES_PAYLOAD_ITEMS
 # (default kit pymol skills) passes its unix-probe row of
 # ROOT/config/payloads.tsv and an installed kit left the Claude helpers; an
-# item whose last run failed (the hook's ITEM.failed) or that waits for
-# stow-all (a stow-links path still linked into the retired package) is named
-# with what to run. Every shortfall only warns.
+# item that waits for stow-all (a stow-links path still linked into the
+# retired package) is named with what to run. Only a person installs the
+# payload repos (sync-payloads), so every shortfall names that and only warns.
 bootstrap_check_payloads() {
-    local config=$1/config/payloads.tsv items item line probe person links package path last code
-    local state=$HOME/.local/state/dotfiles/payload short='' found='' issues=''
-    # XDG_STATE_HOME only when absolute, as the hook reads it.
-    case ${XDG_STATE_HOME-} in
-        /*) state=$XDG_STATE_HOME/dotfiles/payload ;;
-    esac
+    local config=$1/config/payloads.tsv items item line probe links package path
+    local short='' found='' issues=''
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
         return 0
     fi
-    items=" ${DOTFILES_PAYLOAD_ITEMS-kit pymol skills} "
-    # The old hook's opt-out, which the payload hook honors until 2027-01-31.
-    [ "${AWESOME_SKILLS_AUTO_UPDATE-}" != 0 ] || items=${items/ skills / }
-    items="${items# } "
+    items="${DOTFILES_PAYLOAD_ITEMS-kit pymol skills} "
     while [ -n "$items" ]; do
         item=${items%% *}
         items=${items#* }
         [ -n "$item" ] || continue
-        probe='' person='' links=''
+        probe='' links=''
         while IFS= read -r line || [ -n "$line" ]; do
             case $line in
                 "$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"*) probe=${line#"$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"} ;;
-                "$item${BOOTSTRAP_TAB}person-status$BOOTSTRAP_TAB"*) person=${line#"$item${BOOTSTRAP_TAB}person-status$BOOTSTRAP_TAB"} ;;
                 "$item${BOOTSTRAP_TAB}stow-links$BOOTSTRAP_TAB"*) links=${line#"$item${BOOTSTRAP_TAB}stow-links$BOOTSTRAP_TAB"} ;;
             esac
         done <"$config"
-        if [ -f "$state/$item.failed" ]; then
-            last='' code=''
-            IFS=' ' read -r last code _ <"$state/$item.failed" || :
-            if [ -n "$person" ] && [ "$code" = "$person" ]; then
-                issues="$issues; $item stopped for a person (exit $code, see $state/$item.failed): run sync-payloads $item and do what it asks"
-            else
-                issues="$issues; $item failed its last run (exit $code, see $state/$item.failed): run sync-payloads $item"
-            fi
-        fi
         package=${links%% *}
         for path in ${links#"$package"}; do
             case $(readlink "$HOME/$path" 2>/dev/null) in
@@ -569,7 +552,7 @@ bootstrap_check_payloads() {
         fi
     done
     if [ -n "$short" ]; then
-        issues="$issues; not installed: ${short#, }: the next interactive shell installs them, or run sync-payloads ITEM now (sh $1/scripts/payload-update.sh --now ITEM)"
+        issues="$issues; not installed: ${short#, }: run sync-payloads ITEM (sh $1/scripts/payload-update.sh --now ITEM)"
         case $short in
             *kit*) issues="$issues; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ;;
         esac
