@@ -40,6 +40,27 @@ status: Lab, WSL, Sherlock and Marlowe through the actual updater, Mac and
 Windows through ordinary logins. Only `~/.codex/config.toml` gained the status
 line; `~/.claude/settings.json` stayed byte-identical.
 
+The same separate session then landed `bcf5c0d`, which shortens that status line
+and enables Claude colors; `4abad00` corrected these docs. A later read-only
+check found Lab, WSL and Mac at `4abad00` and Sherlock, Marlowe and Windows
+still at `7e344f2`, all six with an empty status and both AI configs equal to
+rendered output. The last three apply `bcf5c0d` at their next interactive login.
+
+On WSL the first `bcf5c0d` update raced Codex. As observed, a Codex app-server
+writes its in-memory copy of `~/.codex/config.toml` back shortly after it starts.
+One that the Mac Codex desktop app started on WSL at 16:41:11 read the old file
+one second before the login updater wrote the new status line, and wrote the old
+one back at 16:41:18. Status then showed `MM` for that file, so every later
+nonforce login update would stop there. The reconcile
+was a reviewed one-file operation, not a routine force: stop the idle WSL
+app-servers, confirm privately that `tui.status_line` was the only differing key,
+back up the file, apply only that target with the updater's full argument set,
+`--exclude=dirs` and `--force`, then restart the app-servers that had started
+before the reconcile. Status became empty, the file equal to its target, mode
+0600 and owner unchanged. Later app-server starts rewrote identical bytes. On
+Windows, the `7e344f2` update added the line while the Codex desktop app had
+been running for days, and nothing reverted it.
+
 ### Review outcome
 
 The pass reviewed `1a9d30b..a5d9ad7` for AI transforms, writer guards and the
@@ -74,6 +95,11 @@ Accepted limits, unchanged now:
   manifests and receipts remain. No other host held copies.
 - Windows Codex sandbox grants are app-created; dotfiles manages no directory ACLs.
 - Retired submodule leftovers and legacy wrapper links stay until Stage 6.
+- A change to a Codex key that dotfiles owns can race a Codex app-server that
+  starts around the login update, as on WSL above. Quitting every Codex client
+  that can start one on that host, remote desktop apps included, before that
+  first login should avoid it; otherwise reconcile the one file as described
+  there.
 
 Stage 5 inputs, none blocking this checkpoint:
 
@@ -90,6 +116,14 @@ Stage 5 inputs, none blocking this checkpoint:
   target under an existing parent.
 - Widen the gitleaks secrets-directory rule to the encoded `private_dot_secrets/`
   source path; the source-guard unit test already blocks plaintext there.
+- Decide whether `tui.status_line` stays an owned Codex key, enforced on every
+  update, or becomes a default seeded only when absent, so that Codex's own
+  rewrites cannot stop the login updater.
+- Last step of Stage 5, after its final docs land: move Lab's private
+  `$HOME/dotfiles/.git/chezmoi-migration-recovery/` to
+  `~/.local/state/dotfiles-chezmoi-migration-recovery/`, keeping modes and
+  subdirectory names. Verify every manifest by readback before removing the
+  original, and update every doc path that cites it.
 
 ### Stages 1-4 component map
 

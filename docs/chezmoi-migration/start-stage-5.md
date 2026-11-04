@@ -136,7 +136,12 @@ persistentState in the config template with a reviewed re-init, or keep the
 full-argument rule; see takeover.md), and a portable transport watchdog is only a
 design question. The Claude settings modifier now matches the Codex typed no-op
 preservation, so Claude Code's own insertion-order rewrites no longer stop nonforce
-login updates.
+login updates. Codex is different: as observed, an app-server writes its in-memory
+copy of ~/.codex/config.toml back shortly after starting. On WSL one that the Mac
+Codex app started a second before the bcf5c0d login update wrote the old owned
+tui.status_line back and left status MM until a reviewed one-file reconcile (see
+status.md). Decide whether tui.status_line stays owned or becomes a seed-only
+default; never clear such a stop with a routine force.
 
 Preserve the directory correction: native file apply, diff and update explicitly
 use --exclude=dirs; no effective config-key replacement was found in v2.74.
@@ -322,6 +327,12 @@ Update status, inventory, canonical docs, mirrored skills and ownership/removal
 tables with actual outcomes. Measure code/test reductions; do not claim startup
 speedups without measurement. Record every surviving helper's reason and every
 remaining legacy caller. Expand Stage 6 into the exact final deletion and
-native-only verification plan plus its fresh-session prompt. Stop after Stage 5;
+native-only verification plan plus its fresh-session prompt. As the last step,
+after the final Stage 5 docs land, move Lab's private
+$HOME/dotfiles/.git/chezmoi-migration-recovery/ to
+~/.local/state/dotfiles-chezmoi-migration-recovery/, keeping modes and
+subdirectory names: copy, verify every manifest by readback, then remove the
+original. Update every doc path that cites it, including the Stage 6 prompt.
+The user chose this move; it is not a deletion of evidence. Stop after Stage 5;
 report incomplete Stage 4/host/recovery gates explicitly rather than erasing them.
 ```
