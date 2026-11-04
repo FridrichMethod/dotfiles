@@ -374,5 +374,49 @@ SH
     fi
 fi
 
-[ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] || exit 1
+# sync-payloads and sync-skills (common/sh/.aliases) in each interactive
+# shell, zsh without interactivecomments too (oh-my-zsh sets it, a bare zsh
+# does not): a valid native binding runs its source's hook, an unmarked home
+# DOTFILES_DIR's, with the arguments and exit status passed through; sourcing
+# is silent and leaves no helper variable behind.
+sync_failures=0 sync_home=$TEST_TMP/sync-home
+mkdir -p "$sync_home/.config/dotfiles"
+for checkout in bound legacy; do
+    mkdir -p "$TEST_TMP/$checkout/scripts" "$TEST_TMP/$checkout/lib"
+    printf '%s\n' "printf '$checkout %s\\n' \"\$*\" >>\"\$SYNC_TRACE\"" 'exit 4' \
+        >"$TEST_TMP/$checkout/scripts/payload-update.sh"
+done
+printf 'home\n' >"$TEST_TMP/bound/.chezmoiroot"
+cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/bound/lib/"
+sync_binding="dotfiles-chezmoi-v1
+$(cd -P "$sync_home" && pwd -P)
+$(cd -P "$TEST_TMP/bound" && pwd -P)"
+for test_shell in sh dash bash zsh; do
+    command -v "$test_shell" >/dev/null 2>&1 || continue
+    case $test_shell in
+        bash) sync_flags=(--noprofile --norc -i) ;;
+        zsh) sync_flags=(-f -i) ;;
+        *) sync_flags=(-i) ;;
+    esac
+    for checkout in bound legacy; do
+        rm -f "$sync_home/.config/dotfiles/native" "$TEST_TMP/sync-trace"
+        [ "$checkout" = legacy ] || printf '%s\n' "$sync_binding" >"$sync_home/.config/dotfiles/native"
+        # shellcheck disable=SC2016
+        out=$(env -i HOME="$sync_home" PATH=/usr/bin:/bin TERM=dumb DOTFILES_DIR="$TEST_TMP/legacy" \
+            SYNC_TRACE="$TEST_TMP/sync-trace" "$test_shell" "${sync_flags[@]}" -c '. "$1"
+                eval "sync-payloads kit pymol"; first=$?; eval sync-skills
+                printf "%s %s %s\n" "$first" "$?" "$(set | grep -c "^_df_")"' aliases \
+            "$REPO_ROOT/common/sh/.aliases" </dev/null 2>"$TEST_TMP/sync-err") || :
+        noise=$(grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' "$TEST_TMP/sync-err" || :)
+        trace=$(cat "$TEST_TMP/sync-trace" 2>/dev/null || :)
+        if [ "$out" != '4 4 0' ] || [ -n "$noise" ] ||
+            [ "$trace" != "$checkout --now kit pymol"$'\n'"$checkout --now skills" ]; then
+            printf 'FAIL sync-payloads %s (%s): out=[%s] noise=[%s] trace=[%s]\n' "$checkout" \
+                "$test_shell" "$out" "$noise" "$(printf '%s' "$trace" | tr '\n' ';')" >&2
+            sync_failures=$((sync_failures + 1))
+        fi
+    done
+done
+
+[ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] && [ "$sync_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

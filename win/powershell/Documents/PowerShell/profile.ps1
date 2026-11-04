@@ -234,12 +234,39 @@ if ($IsInteractive -and -not $IsAgentSession) {
         function global:la { Get-ChildItem -Force @args }
     }
 
-    # Install or update the payload repos now, in the foreground, whatever
-    # their refresh intervals (scripts/payload-update.ps1): sync-payloads
-    # [pymol] [skills], both by default (coding-agent-kit installs nothing on
-    # native Windows); sync-skills is sync-payloads skills.
+    # Install or update the payload repos now, in the foreground
+    # (scripts/payload-update.ps1): sync-payloads [pymol] [skills], both by
+    # default (coding-agent-kit installs nothing on native Windows);
+    # sync-skills is sync-payloads skills. As at the tail, a native home runs
+    # the hook of the source its validated binding names and refuses an
+    # invalid binding; only an unmarked home uses DOTFILES_DIR.
     function global:sync-payloads {
-        $dotfiles = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
+        try {
+            $native = $null
+            try { $native = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/native') -Force -ErrorAction Stop }
+            catch [System.Management.Automation.ItemNotFoundException] { }
+            if ($native) {
+                if ($native -isnot [IO.FileInfo] -or ($native.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                    throw 'Native marker must be a regular file.'
+                }
+                $text = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($native.FullName))
+                if ($text -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') { throw 'Invalid native marker.' }
+                $source = $Matches[2]
+                if (-not [IO.Path]::IsPathFullyQualified($source)) { throw 'Native source must be absolute.' }
+                $guard = Join-Path $source 'lib/chezmoi-guard.ps1'
+                if (-not (Test-Path -LiteralPath $guard -PathType Leaf)) { throw 'Native source guard is unavailable.' }
+                . $guard
+                $dotfiles = (Get-DotfilesNativeBinding -HomePath $HOME).Source
+            }
+            else { $dotfiles = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' } }
+        }
+        catch {
+            [Console]::Error.WriteLine('[dotfiles] Payload update refused: review the native source binding privately.')
+            $global:LASTEXITCODE = 1
+            return
+        }
+        # The hook's status, not one an earlier command left behind.
+        $global:LASTEXITCODE = 0
         & (Join-Path $dotfiles 'scripts/payload-update.ps1') -Now @args
     }
     function global:sync-skills { sync-payloads skills }

@@ -506,6 +506,81 @@ else {
     Write-Output 'SKIP: PSReadLine unavailable'
 }
 
+Write-Output '--- payload commands follow the home binding'
+# sync-payloads and sync-skills, lifted into a child with a fake HOME, run the
+# hook of the source a valid native marker names (never a stale DOTFILES_DIR
+# checkout or its guard) and pass its exit status through; an invalid marker
+# refuses without running any hook; only an unmarked home uses DOTFILES_DIR;
+# maintenance surfaces the bound hook's own refusal.
+$syncRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-sync-test-" + [guid]::NewGuid().ToString('N'))
+try {
+    $syncHome = Join-Path $syncRoot 'home'
+    $bound = Join-Path $syncRoot 'bound source'
+    $stale = Join-Path $syncRoot 'stale'
+    $syncTrace = Join-Path $syncRoot 'trace'
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $bound 'scripts'),
+        (Join-Path $bound 'lib'), (Join-Path $bound '.git'), (Join-Path $stale 'scripts'), (Join-Path $stale 'lib')
+    [IO.File]::WriteAllText((Join-Path $bound '.chezmoiroot'), "home`n")
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'lib/chezmoi-guard.ps1') -Destination (Join-Path $bound 'lib/chezmoi-guard.ps1')
+    foreach ($checkout in @{ Path = $bound; Name = 'bound' }, @{ Path = $stale; Name = 'stale' }) {
+        [IO.File]::WriteAllText((Join-Path $checkout.Path 'scripts/payload-update.ps1'),
+            "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value ('$($checkout.Name) ' + (`$args -join ' '))`nexit 4`n")
+    }
+    [IO.File]::WriteAllText((Join-Path $stale 'lib/chezmoi-guard.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'stale-guard'`n")
+    $canonical = & { . (Join-Path $repoRoot 'lib/chezmoi-guard.ps1'); $args | ForEach-Object { Resolve-DotfilesDirectory $_ } } $syncHome $bound
+    $syncMarker = Join-Path $syncHome '.config/dotfiles/native'
+    $valid = "dotfiles-chezmoi-v1`n$($canonical[0])`n$($canonical[1])`n"
+    $syncChild = @'
+Set-Variable -Name HOME -Value $env:DOTFILES_TEST_HOME -Force -Scope Global
+$ast = [Management.Automation.Language.Parser]::ParseFile($env:DOTFILES_TEST_PROFILE, [ref]$null, [ref]$null)
+foreach ($name in 'sync-payloads', 'sync-skills') {
+    Invoke-Expression $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq "global:$name" }.GetNewClosure(), $true).Extent.Text
+}
+$global:LASTEXITCODE = 7; sync-payloads pymol; $first = $LASTEXITCODE
+$global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
+'@
+    # Invoke-SyncCase PREPARE: a fresh trace and marker, PREPARE, one child run.
+    function Invoke-SyncCase([scriptblock]$Prepare) {
+        Remove-Item -LiteralPath $syncTrace, $syncMarker -Recurse -Force -ErrorAction Ignore
+        & $Prepare
+        $run = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $syncChild) -Environment @{
+            DOTFILES_TEST_HOME = $syncHome; DOTFILES_TEST_PROFILE = $profile7; DOTFILES_TEST_TRACE = $syncTrace; DOTFILES_DIR = $stale
+        }
+        $events = if (Test-Path -LiteralPath $syncTrace) { @(Get-Content -LiteralPath $syncTrace) -join '|' } else { '' }
+        [pscustomobject]@{ Out = $run.Out; Err = $run.Err; Events = $events; Text = "out=$($run.Out) err=$($run.Err) events=$events" }
+    }
+    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }
+    Assert-True ($case.Events -ceq 'bound -Now pymol|bound -Now skills' -and $case.Out -ceq 'exit=4,4' -and -not $case.Err) "a valid binding runs its source's hook, not DOTFILES_DIR's ($($case.Text))"
+    $case = Invoke-SyncCase { }
+    Assert-True ($case.Events -ceq 'stale -Now pymol|stale -Now skills' -and $case.Out -ceq 'exit=4,4') "an unmarked home uses DOTFILES_DIR ($($case.Text))"
+    $invalid = [ordered]@{
+        'extra line'      = { [IO.File]::WriteAllText($syncMarker, $valid + "`n") }
+        'other version'   = { [IO.File]::WriteAllText($syncMarker, $valid.Replace('-v1', '-v2')) }
+        'CRLF'            = { [IO.File]::WriteAllText($syncMarker, $valid.Replace("`n", "`r`n")) }
+        'relative source' = { [IO.File]::WriteAllText($syncMarker, "dotfiles-chezmoi-v1`n$($canonical[0])`nstale`n") }
+        'other home'      = { [IO.File]::WriteAllText($syncMarker, "dotfiles-chezmoi-v1`n$syncRoot`n$($canonical[1])`n") }
+        'directory'       = { $null = New-Item -ItemType Directory -Path $syncMarker }
+    }
+    foreach ($entry in $invalid.GetEnumerator()) {
+        $case = Invoke-SyncCase $entry.Value
+        Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update refused: review the native source binding privately.')) "an invalid binding ($($entry.Key)) refuses without running a hook ($($case.Text))"
+    }
+    # A hook that ends without exit leaves no stale exit status behind.
+    [IO.File]::WriteAllText((Join-Path $bound 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
+    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }
+    Assert-True ($case.Events -ceq 'quiet|quiet' -and $case.Out -ceq 'exit=0,0') "a hook without exit reports 0, not the caller's last status ($($case.Text))"
+    # The real hook's maintenance refusal.
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/payload-update.ps1') -Destination (Join-Path $bound 'scripts/payload-update.ps1') -Force
+    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid); [IO.File]::WriteAllText((Join-Path $syncHome '.config/dotfiles/maintenance'), '') }
+    Assert-True ($case.Events -ceq '' -and $case.Out.EndsWith('exit=1,1') -and ($case.Out + $case.Err).Contains('payload update refused during maintenance')) "maintenance surfaces the bound hook's refusal ($($case.Text))"
+    Remove-Item -LiteralPath (Join-Path $syncHome '.config/dotfiles/maintenance') -Force
+}
+finally {
+    Remove-Item -LiteralPath $syncRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath Function:\Invoke-SyncCase -ErrorAction SilentlyContinue
+}
+
 Write-Output '--- bounded, silent redirected load'
 $fakeHome = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-profile-test-" + [guid]::NewGuid().ToString('N'))
 try {
