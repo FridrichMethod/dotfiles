@@ -18,7 +18,8 @@
 # Floors: fzf 0.58.0 (--style full, --input-label in fzf.zsh and fzf-tab.zsh),
 # eza 0.18.20, fd 8.3.0 (--strip-cwd-prefix), python3 3.11 (setup-sync.sh),
 # node 22.0 (18 and 20 are end of life), stow 2.3.1 (.stowrc parsing),
-# shfmt 3.13.0 (first zsh dialect), gh 2.50.0, pwsh 7.0 (#Requires -Version 7.0).
+# shfmt 3.13.0 (first zsh dialect), gh 2.50.0, pwsh 7.0 (#Requires -Version 7.0),
+# tmux 3.4 (common/tmux sets menu-style and opens popups and menus ungated).
 id	tier	hosts	probe	version_flag	floor	absent	doc
 git	core	all	git	--version	-	cannot clone, update or stow the dotfiles	P0-preflight
 bash	core	unix	bash	--version	-	doctor.sh, setup-host.sh and stow-all.sh cannot run	P0-preflight
@@ -30,7 +31,7 @@ tar	core	unix	tar	--version	-	archive installs and the targz aliases fail	H1-apt
 file	core	unix	file	--version	-	fzf previews cannot detect file types	H1-apt-core
 col	core	unix	col	-	-	fzf-tab man page previews fail	H1-apt-core
 man	core	unix	man	-	-	man, colored-man-pages and fzf-tab man previews fail	H1-apt-core
-tmux	core	unix	tmux	-V	2.6	tmux hostname-scoped recovery configuration and sessions are unavailable	H1-apt-core
+tmux	core	unix	tmux	-V	3.4	tmux hostname-scoped recovery configuration and sessions are unavailable	H1-apt-core
 # A fresh Homebrew is off PATH until the stowed rc files run brew shellenv, so
 # doctor and setup-host first prepend the directory of bootstrap_brew_bin
 # (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to

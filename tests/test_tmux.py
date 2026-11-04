@@ -86,6 +86,18 @@ class PluginProvisioning(unittest.TestCase):
                 self.assertEqual(probes[name]["doc"], "S3-clones")
 
 
+class VersionFloor(unittest.TestCase):
+    def test_manifest_floor_replaces_runtime_version_gates(self):
+        # The config uses tmux 3.4 menu styles, popups and display-menu without
+        # checks; hpc-login-env.yml mirrors this floor (test_bootstrap_manifest).
+        for path in sorted((ROOT / "common/tmux").rglob("*")):
+            if path.is_file():
+                with self.subTest(path=str(path.relative_to(ROOT))):
+                    self.assertNotRegex(path.read_text(encoding="utf-8"),
+                                        r"#\{version\}|tmux\s+-V")
+        self.assertEqual(manifest("tools.tsv")["tmux"]["floor"], "3.4")
+
+
 @unittest.skipUnless(TMUX and os.name == "posix", "optional real tmux is unavailable")
 class TmuxConfiguration(unittest.TestCase):
     def setUp(self):
@@ -184,11 +196,37 @@ class TmuxConfiguration(unittest.TestCase):
         self.source()
         self.assertEqual(self.option("@tmux-which-key-disable-autobuild"), "1")
         self.assertFalse((self.home / ".tmux/plugins/tmux-which-key").exists())
-        version = tuple(map(int, re.match(r"(\d+)\.(\d+)", self.tmux("-V").split()[1]).groups()))
-        if version >= (3, 0):
-            binding = self.tmux("list-keys", "-T", "prefix", "Space")
-            self.assertIn("display-menu", binding)
-            self.assertIn("+Sessions", binding)
+        binding = self.tmux("list-keys", "-T", "prefix", "Space")
+        self.assertIn("display-menu", binding)
+        self.assertIn("+Sessions", binding)
+
+    def test_floor_features_load_unconditionally(self):
+        self.source()
+        self.assertEqual(self.option("@tpm_plugins").split()[-3:], [
+            "alexwforsythe/tmux-which-key", "catppuccin/tmux", "omerxx/tmux-floax"])
+        for name, value in {
+            "popup-style": "bg=#1e1e2e,fg=#cdd6f4", "popup-border-style": "fg=#cba6f7",
+            "popup-border-lines": "rounded", "menu-style": "bg=#1e1e2e,fg=#cdd6f4",
+            "menu-selected-style": "bg=#cba6f7,fg=#1e1e2e,bold",
+            "menu-border-style": "fg=#cba6f7", "menu-border-lines": "rounded",
+            "@extrakto_clip_mode": "bg",
+        }.items():
+            with self.subTest(option=name):
+                self.assertEqual(self.option(name), value)
+        # FloaX's corrected bindings load only once its shipped script exists.
+        self.assertEqual(self.tmux("list-keys", "-T", "prefix", "M-f", check=False), "")
+        floax = self.home / ".tmux/plugins/tmux-floax/scripts/floax.sh"
+        floax.parent.mkdir(parents=True)
+        floax.write_text("#!/bin/sh\n")
+        floax.chmod(0o755)
+        # Like tmux-yank, extrakto's OSC 52 choice must see a session-only SSH
+        # client; tmux expands "$VAR" itself from the global environment.
+        self.tmux("set-environment", "-t", "fixture", "SSH_CONNECTION", "fixture-ssh")
+        self.source()
+        self.assertEqual(self.option("@extrakto_clip_mode"), "tmux_osc52")
+        self.assertIn("scripts/floax.sh", self.tmux("list-keys", "-T", "prefix", "M-f"))
+        tools = shlex.split(self.tmux("display-message", "-p", "#{@wk_menu_tools}"))
+        self.assertIn("Floating shell (M-f)", tools)
 
     def test_optional_plugin_registration_is_idempotent_and_remote_aware(self):
         for command in ("fzf", "pbcopy"):
@@ -220,8 +258,6 @@ class TmuxConfiguration(unittest.TestCase):
 
     def test_menu_actions_preserve_quoted_directory_without_executing_its_text(self):
         self.source()
-        if not self.option("@wk_menu_windows"):
-            self.skipTest("native menus require tmux 3.0+")
         directory = self.root / 'space \\"; set -g @cwd-injected yes; #'
         directory.mkdir()
         origin = self.tmux("new-window", "-P", "-F", "#{pane_id}",
