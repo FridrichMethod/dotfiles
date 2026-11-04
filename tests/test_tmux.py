@@ -221,8 +221,10 @@ class TmuxConfiguration(unittest.TestCase):
         floax.chmod(0o755)
         # Like tmux-yank, extrakto's OSC 52 choice follows the session
         # environment: a session-only SSH client turns it on, and a session
-        # removal hides a server-global SSH value (a server started over SSH,
-        # reloaded locally). tmux expands "$VAR" itself from the global one.
+        # removal hides a server-global SSH_CONNECTION. (update-environment
+        # refreshes only SSH_CONNECTION of the gate's variables, so a server
+        # started over SSH keeps SSH_CLIENT/SSH_TTY and stays on OSC 52.) tmux
+        # expands "$VAR" itself from the global environment.
         self.tmux("set-environment", "-t", "fixture", "SSH_CONNECTION", "fixture-ssh")
         self.source()
         self.assertEqual(self.option("@extrakto_clip_mode"), "tmux_osc52")
