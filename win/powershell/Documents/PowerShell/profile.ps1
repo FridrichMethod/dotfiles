@@ -265,9 +265,15 @@ if ($IsInteractive -and -not $IsAgentSession) {
             $global:LASTEXITCODE = 1
             return
         }
+        $hook = Join-Path $dotfiles 'scripts/payload-update.ps1'
+        if (-not (Test-Path -LiteralPath $hook -PathType Leaf)) {
+            [Console]::Error.WriteLine('[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.')
+            $global:LASTEXITCODE = 1
+            return
+        }
         # The hook's status, not one an earlier command left behind.
         $global:LASTEXITCODE = 0
-        & (Join-Path $dotfiles 'scripts/payload-update.ps1') -Now @args
+        & $hook -Now @args
     }
     function global:sync-skills { sync-payloads skills }
 
