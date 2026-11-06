@@ -95,6 +95,47 @@ class ClaudeNativeTests(unittest.TestCase):
             self.assert_converges(fixture, target, content)
             self.assertEqual(snapshot(fixture.source), before)
 
+    def test_stale_host_settings_render_the_portable_policy(self):
+        # The live file tests/ai-config-sync.sh merged, now rendered natively:
+        # policy keys come from the portable file, plugin-copied hooks clear,
+        # and machine-local keys stay.
+        copied = [{"hooks": [{"type": "command", "command": "old-plugin-copy"}]}]
+        live = {
+            "permissions": {"defaultMode": "acceptEdits", "allow": ["Bash(local-only *)"],
+                            "ask": ["Bash(old-policy *)"],
+                            "additionalDirectories": ["/machine-only/project"]},
+            "runtimeOnly": {"keep": True},
+            "autoMode": {"classifyAllShell": False, "environment": ["machine-only context"]},
+            "effortLevel": "medium",
+            "statusLine": {"type": "command", "command": "old-status-line"},
+            "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "npx old-guard"}]}],
+                      "SessionStart": copied, "Stop": copied, "SessionEnd": copied, "PostToolUse": []},
+            "model": "machine-local-model",
+        }
+        with self.fixture() as fixture:
+            target = self.prepare(fixture, json.dumps(live).encode())
+            portable = json.loads((fixture.source / PORTABLE).read_bytes())
+            content = self.apply(fixture, target)
+            rendered = json.loads(content)
+            self.assertEqual(rendered["permissions"]["defaultMode"], "auto")
+            for name in ("allow", "ask", "deny"):
+                self.assertEqual(rendered["permissions"][name], portable["permissions"][name], name)
+            self.assertEqual(rendered["permissions"]["additionalDirectories"], ["/machine-only/project"])
+            self.assertIs(rendered["autoMode"]["classifyAllShell"], True)
+            self.assertEqual(rendered["autoMode"]["environment"], ["machine-only context"])
+            self.assertEqual(rendered["effortLevel"], portable["effortLevel"])
+            self.assertEqual(rendered["statusLine"], portable["statusLine"])
+            for event in ("PreToolUse", "Notification"):
+                self.assertEqual(rendered["hooks"][event], portable["hooks"][event], event)
+            for event in ("SessionStart", "Stop", "SessionEnd", "PostToolUse"):
+                self.assertEqual(rendered["hooks"][event], [], event)
+            self.assertEqual(rendered["runtimeOnly"], {"keep": True})
+            self.assertEqual(rendered["model"], "machine-local-model")
+            self.assertEqual(rendered["attribution"], {"commit": "", "pr": ""})
+            for plugin_id in ("agents-md@builtin", "cc-plugin-agents-md@builtin"):
+                self.assertEqual(rendered["pluginConfigs"][plugin_id], portable["pluginConfigs"][plugin_id])
+            self.assert_converges(fixture, target, content)
+
     def test_missing_empty_and_whitespace_initialize_canonical_policy(self):
         for initial in (None, b"", b" \r\n\t"):
             with self.subTest(initial=initial), self.fixture() as fixture:

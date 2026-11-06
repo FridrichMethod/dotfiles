@@ -90,6 +90,7 @@ tests=(
     terminal.sh
     shell-profile.sh
     tmux.sh
+    ai-policy.sh
     config-sync.sh
     ai-config-sync.sh
     ai-integration.sh

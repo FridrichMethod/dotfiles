@@ -108,6 +108,13 @@ repos:
         language: script
         pass_filenames: false
         files: ^(common/tmux/.*|config/bootstrap/(git-clones|tools)\.tsv|tests/(tmux\.sh|test_tmux\.py))$|^tests/lib/environment\.(sh|ps1)$
+      - id: ai-policy
+        name: portable AI policy, global guides and the CLAUDE.md stub
+        entry: tests/ai-policy.sh
+        language: script
+        pass_filenames: false
+        files: ^(common/claude/\.claude/(settings\.json|CLAUDE\.md)|common/codex/\.codex/(AGENTS\.md|rules/portable\.rules)|CLAUDE\.md|AGENTS\.md|tests/(ai-policy\.sh|test_ai_policy\.py))$|^tests/lib/environment\.(sh|ps1)$
+        types: []
       - id: structured-config-sync
         name: structured configuration merge and safe writes
         entry: tests/config-sync.sh
@@ -186,11 +193,11 @@ repos:
         pass_filenames: false
         files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/config_sync\.py|lib/(terminal|windows-link-trust)\.ps1|tests/(terminal|windows-installer-controls)\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$|^tests/lib/environment\.(sh|ps1)$
       - id: powershell-profile
-        name: PowerShell profile contract and prompt theme
+        name: PowerShell profile contract, prompt theme, parse gate and Terminal settings
         entry: tests/powershell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(win/powershell/.*|win/oh-my-posh/.*|common/zsh/\.zshrc|lib/chezmoi-guard\.ps1|scripts/payload-update\.ps1|tests/powershell-profile\.(sh|ps1))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(win/(powershell|oh-my-posh|terminal)/.*|common/zsh/\.zshrc|(doctor|setup-host)\.ps1|lib/(chezmoi-guard|terminal)\.ps1|scripts/(chezmoi-update|payload-update)\.ps1|tests/(powershell-profile\.(sh|ps1)|run\.ps1|terminal\.ps1))$|^tests/lib/environment\.(sh|ps1)$
       - id: update-hooks
         name: automatic update and stow behavior
         entry: tests/update-hooks.sh

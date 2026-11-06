@@ -1,6 +1,5 @@
 """Native Codex ownership and TOML safety, using only disposable native homes."""
 
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -10,11 +9,39 @@ import unittest
 from chezmoi_source_support import ROOT, SourceFixture, expected_entries, snapshot
 
 
-_spec = importlib.util.spec_from_file_location("codex_legacy_policy", ROOT / "lib/config_sync.py")
-_legacy = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_legacy)
-POLICY = _legacy.CODEX_POLICY
-RETIRED = _legacy.CODEX_RETIRED
+# Frozen oracle for home/.chezmoidata/codex-policy.json, independent of it:
+# changing the owned or retired set is a reviewed edit of both files.
+POLICY = (
+    (("model",), "string"),
+    (("model_reasoning_effort",), "string"),
+    (("plan_mode_reasoning_effort",), "string"),
+    (("personality",), "string"),
+    (("default_permissions",), "string"),
+    (("approval_policy",), "string"),
+    (("approvals_reviewer",), "string"),
+    (("project_doc_fallback_filenames",), "string-array"),
+    (("features", "network_proxy"), "bool"),
+    (("features", "multi_agent"), "bool"),
+    (("features", "memories"), "bool"),
+    (("permissions", "workspace-net", "description"), "string"),
+    (("permissions", "workspace-net", "extends"), "string"),
+    (("permissions", "workspace-net", "network", "enabled"), "bool"),
+    (("permissions", "workspace-net", "network", "allow_local_binding"), "bool"),
+    (("permissions", "workspace-net", "network", "domains", "*"), "string"),
+    (("memories", "generate_memories"), "bool"),
+    (("memories", "use_memories"), "bool"),
+    (("tui", "status_line"), "string-array"),
+)
+RETIRED = (
+    ("sandbox_mode",),
+    ("sandbox_workspace_write",),
+    ("features", "js_repl"),
+)
+TYPE_CHECKS = {
+    "string": lambda value: type(value) is str,
+    "bool": lambda value: type(value) is bool,
+    "string-array": lambda value: type(value) is list and all(type(item) is str for item in value),
+}
 PORTABLE = ROOT / "common/codex/.codex/config.toml"
 MANIFEST = ROOT / "home/.chezmoidata/codex-policy.json"
 HOST = "win" if os.name == "nt" else "common-only"
@@ -39,17 +66,35 @@ def policy_text(changes=None, missing=None):
     return "\n".join(lines) + "\n"
 
 
+def leaves(table, prefix=()):
+    for key, value in table.items():
+        if isinstance(value, dict):
+            yield from leaves(value, prefix + (key,))
+        else:
+            yield prefix + (key,), value
+
+
 class CodexPolicyMetadataTests(unittest.TestCase):
-    def test_metadata_has_exact_legacy_paths_and_types_without_values(self):
+    def test_metadata_matches_the_frozen_paths_and_types_without_values(self):
         self.assertTrue(MANIFEST.is_file(), "native Codex ownership manifest is missing")
         expected = {"codexPolicy": {
-            "owned": [{"path": list(path), "type": {str: "string", bool: "bool", list: "string-array"}[kind]}
-                      for path, kind in POLICY],
+            "owned": [{"path": list(path), "type": kind} for path, kind in POLICY],
             "retired": [list(path) for path in RETIRED],
         }}
         self.assertEqual(json.loads(MANIFEST.read_text(encoding="utf-8")), expected)
-        self.assertEqual(len(expected["codexPolicy"]["owned"]), 19)
-        self.assertEqual(len(expected["codexPolicy"]["retired"]), 3)
+        self.assertEqual((len(POLICY), len(RETIRED)), (19, 3))
+
+    def test_portable_leaves_are_exactly_the_owned_paths_with_their_types(self):
+        # An unowned portable key would never deploy (unknown portable fields
+        # do not become policy); a retired one would fight the removal.
+        actual = dict(leaves(tomllib.loads(PORTABLE.read_text(encoding="utf-8"))))
+        self.assertEqual(set(actual), {path for path, _kind in POLICY})
+        for path, kind in POLICY:
+            with self.subTest(owned=path):
+                self.assertTrue(TYPE_CHECKS[kind](actual[path]), f"{path} is not {kind}")
+        for path in RETIRED:
+            with self.subTest(retired=path):
+                self.assertFalse(any(owned[:len(path)] == path for owned, _kind in POLICY))
 
 
 class CodexNativeTests(unittest.TestCase):
@@ -270,7 +315,7 @@ local_model = 4
 
     def test_every_required_policy_path_is_present_and_typed(self):
         for path, kind in POLICY:
-            invalid = ([False, 1] if kind is list else (False if kind is str else "true"))
+            invalid = {"string-array": [False, 1], "string": False, "bool": "true"}[kind]
             for name, portable in (("missing", policy_text(missing=path)),
                                    ("wrong-type", policy_text({path: invalid}))):
                 with self.subTest(path=path, case=name), SourceFixture(HOST) as fixture:

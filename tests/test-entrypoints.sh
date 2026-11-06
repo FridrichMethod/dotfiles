@@ -143,6 +143,10 @@ engine = ['lib/config_sync.py', 'lib/sync-runtime.sh']
 need = {
     'structured-config-sync': engine + ['common/codex/.codex/config.toml'],
     'ai-config-sync': engine,
+    'ai-policy': ['tests/ai-policy.sh', 'tests/test_ai_policy.py', 'common/claude/.claude/settings.json',
+                  'common/claude/.claude/CLAUDE.md', 'common/codex/.codex/AGENTS.md',
+                  'common/codex/.codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
+                  'tests/lib/environment.sh'],
     'codex-config-sync': engine + ['common/codex/.codex/config.toml'],
     'payload-update': ['scripts/payload-update.sh', 'scripts/awesome-skills-update.sh', 'config/payloads.tsv',
                        'common/sh/.aliases', 'common/sh/.profile', 'common/zsh/.zshrc', 'lib/terminal.sh',
@@ -176,7 +180,11 @@ need = {
                        'doctor.sh', 'setup-host.sh'],
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh'],
     'shell-profile': ['common/sh/.profile', 'common/sh/.aliases', 'lib/chezmoi-guard.sh'],
-    'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1'],
+    'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1', 'tests/powershell-profile.sh',
+                           'doctor.ps1', 'setup-host.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
+                           'tests/run.ps1', 'tests/terminal.ps1',
+                           'win/terminal/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/'
+                           'LocalState/settings.json'],
     'unix-installer-integration': ['scripts/awesome-skills-update.sh'],
     'doctor': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'setup-host': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],

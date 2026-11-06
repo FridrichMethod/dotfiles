@@ -17,6 +17,9 @@ from chezmoi_source_support import (
 from chezmoi_support import ChezmoiFixture
 
 
+KIT_PATHS = (".claude/dotfiles", ".claude/coding-agent-kit", ".local/bin/codex-as", ".local/bin/claude-as")
+
+
 class SourceContractTests(unittest.TestCase):
     def test_literal_bridge_in_linked_worktree_with_spaces(self):
         # Catch sourceDir/workingTree confusion and accidental template evaluation.
@@ -119,7 +122,12 @@ class SourceContractTests(unittest.TestCase):
             managed = fixture.run("managed", "--include=files", "--nul-path-separator")
             self.assert_success(managed)
             # Native managed output uses platform separators; inventory uses '/'.
-            self.assertEqual({path.replace("\\", "/") for path in managed.stdout.split("\0") if path}, set(expected))
+            managed_files = {path.replace("\\", "/") for path in managed.stdout.split("\0") if path}
+            # The payload repos install the launchers and Claude helpers; no
+            # role manages them (formerly the Stow check in ai-config-sync.sh).
+            self.assertEqual({path for path in managed_files for kit in KIT_PATHS
+                              if path == kit or path.startswith(kit + "/")}, set())
+            self.assertEqual(managed_files, set(expected))
             unmanaged = {
                 ".ssh/id_fixture": b"synthetic private sibling\n",
                 ".ssh/known_hosts": b"synthetic host trust sibling\n",

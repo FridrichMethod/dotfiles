@@ -72,6 +72,14 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.p
 & python -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_integration.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'AI integration tests failed.' }
 
+Write-Output '==> test_ai_policy.py'
+if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_policy.py') -PathType Leaf)) {
+    throw 'Required AI policy test suite is missing.'
+}
+# Standard library only, so the plain interpreter runs it without the sync runtime.
+& python -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_policy.py' -v
+if ($LASTEXITCODE -ne 0) { throw 'Portable AI policy tests failed.' }
+
 Write-Output '==> test_bootstrap_manifest.py'
 & python -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }

@@ -162,6 +162,16 @@ runs the PowerShell parser, terminal-output, installer confirmation, update beha
 PowerShell behavior tests directly and fails if any assigned suite fails; it
 does not depend on Bash discovering an optional PowerShell executable.
 
+`tests/powershell-profile.sh` first checks the Windows Terminal
+`settings.json` with Python alone: strict ASCII JSON, the Windows PowerShell
+and Command Prompt built-in stubs listed and hidden, and
+`Windows.Terminal.PowershellCore` never disabled. With pwsh it then parses
+`doctor.ps1`, `setup-host.ps1`, `lib/chezmoi-guard.ps1`, `lib/terminal.ps1`,
+`scripts/chezmoi-update.ps1`, `scripts/payload-update.ps1`, `tests/run.ps1`
+and `tests/terminal.ps1` in one process before it runs
+`tests/powershell-profile.ps1`. That is the pwsh 7 parser; Windows PowerShell
+5.1 syntax still needs the Windows job.
+
 `tests/terminal.sh` exercises actual Unix pseudo-terminals as well as redirected
 stdout/stderr, including forced color, `NO_COLOR`, `TERM=dumb`, literal percent
 signs and silent sourcing. `tests/terminal.ps1` covers the matching PowerShell
@@ -360,6 +370,19 @@ output, including the account descriptions, before ending the interaction.
 Creating the output file alone is not readiness: the fake fzf may buffer it.
 Delayed-output cases keep the same preview assertions; no fixed sleep or
 longer arbitrary delay stands in for completion evidence.
+
+`tests/ai-policy.sh` (and `tests/run.ps1`) runs `tests/test_ai_policy.py`,
+standard library only, against the portable sources: the exact Claude allow
+set and the `ask`/`deny` tiers AGENTS.md fixes, `defaultMode` `auto`,
+`autoMode.classifyAllShell` and the literal `$defaults`, `effortLevel`, the
+cleared plugin hooks, empty attribution, both agents-md plugin IDs and no
+portable `model`; prompt-only portable Codex rules without host paths or
+routine commands and with every guardrail; global `CLAUDE.md` and `AGENTS.md`
+that differ only in the destructive-action bullets and share one version-free
+Stanford Sherlock section; and the root `CLAUDE.md` stub. A mutation case per
+check proves it rejects its drift. With Codex on PATH it also asks
+`codex execpolicy check` for the expected decisions; otherwise those cases
+skip.
 
 `tests/payload-update.sh` drives `scripts/payload-update.sh` against fake
 installers served from `file://` URLs: the real `config/payloads.tsv` with its

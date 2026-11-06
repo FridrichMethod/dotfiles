@@ -32,8 +32,10 @@ and surrogate pairs remain supported. Empty/whitespace live JSON initializes
 an object; malformed, trailing or non-object JSON fails.
 
 Codex applies only the typed owned paths and removes only the retired paths
-listed below. `home/.chezmoidata/codex-policy.json` contains paths/types only,
-with a parity test against `CODEX_POLICY` and `CODEX_RETIRED`. The template reads
+listed below. `home/.chezmoidata/codex-policy.json` contains paths/types only;
+`tests/test_chezmoi_codex.py` pins it to a frozen list (19 owned paths with
+types, 3 retired) and requires the portable TOML's leaves to be exactly the
+owned paths with those types. The template reads
 that manifest literally; local template data cannot expand ownership. Unknown
 portable fields do not become policy. Every existing ancestor must be a table
 before assignment. Quoted dotted keys, literal `"*"`, int64, unknown tables and
