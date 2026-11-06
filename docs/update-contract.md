@@ -7,12 +7,12 @@ update; the manual commands, takeover and recovery live in
 
 ## Trigger
 
-- Only interactive shells update. `common/sh/.profile` dispatches for sh and
-  Bash; zsh dispatches from the tail of `~/.zshrc`, after ssh-agent and the
-  host environment are ready; PowerShell 7 dispatches from the tail of its
-  profile, only under `$IsInteractive` (console stdin and stdout and a loaded
-  PSReadLine), so `-File`, `-Command`, `-NonInteractive` and piped input never
-  update. The Windows PowerShell 5.1 profile has no update hook.
+- Only interactive shells update. `~/.profile` (`home/dot_profile`) dispatches
+  for sh and Bash; zsh dispatches from the tail of `~/.zshrc`, after ssh-agent
+  and the host environment are ready; PowerShell 7 dispatches from the tail of
+  its profile, only under `$IsInteractive` (console stdin and stdout and a
+  loaded PSReadLine), so `-File`, `-Command`, `-NonInteractive` and piped input
+  never update. The Windows PowerShell 5.1 profile has no update hook.
 - One attempt per session: the updater exports `_DOTFILES_CHECKED`, and a
   nested shell that inherits it does not try again.
 - `DOTFILES_AUTO_UPDATE=0` disables the hook.

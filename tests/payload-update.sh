@@ -246,8 +246,8 @@ for shell in bash zsh sh; do
     expect_no_state "sourcing the hook under $shell"
 done
 # A login runs none either; the update dispatch is all that remains there.
-in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/common/sh/.profile" >"$OUT" 2>"$ERR" ||
-    fail 'common/sh/.profile failed'
+in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/home/dot_profile" >"$OUT" 2>"$ERR" ||
+    fail 'home/dot_profile failed'
 expect_events ''
 expect_no_state 'a login'
 
@@ -469,13 +469,13 @@ mkdir -p "$HOME_DIR/.config/dotfiles"
 printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$HOME_DIR" "$FIXTURE" >"$HOME_DIR/.config/dotfiles/native"
 in_env bash --noprofile --norc -c 'shopt -s expand_aliases; . "$1"
 sync-skills
-sync-payloads pymol' _ "$REPO_ROOT/common/sh/.aliases" >"$OUT" 2>"$ERR" || fail 'the aliases failed'
+sync-payloads pymol' _ "$REPO_ROOT/home/dot_aliases" >"$OUT" 2>"$ERR" || fail 'the aliases failed'
 expect_events 'skills-install [] bash=yes
 pymol-install []'
 
 # The kit's zsh completions: .zshrc puts their directory on fpath before
 # oh-my-zsh's compinit.
-ZSHRC=$REPO_ROOT/common/zsh/.zshrc
+ZSHRC=$REPO_ROOT/home/dot_zshrc
 fpath_line=$(grep -n '^fpath+=$HOME/.local/share/zsh/site-functions$' "$ZSHRC" | cut -d: -f1)
 omz_line=$(grep -n '^source $ZSH/oh-my-zsh.sh$' "$ZSHRC" | cut -d: -f1)
 [[ -n "$fpath_line" && -n "$omz_line" && "$fpath_line" -lt "$omz_line" ]] ||

@@ -5,10 +5,10 @@ six hosts.
 
 ## Scope and layout
 
-- Shared defaults live in `common/`.
+- The native chezmoi source is `home/` (`.chezmoiroot`); source names encode `$HOME` paths and attributes (`dot_`, `executable_`, `private_`, `empty_`), and `home/.chezmoiignore` selects each role's targets.
 - Keep persistent worktrees in `.worktrees/`. Follow the global guides for temporary work, preservation and post-integration cleanup.
-- Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, and `win/`. Other Linux distributions have no overlay; they select native `common-only`.
-- Packages mirror `$HOME` paths (for example `.config/...`, `.ssh/...`).
+- Role variants live in `home/.hosts/<role>/<target path>`, read raw by one-line role-keyed templates; portable AI policy lives in `home/.policy/`. chezmoi never deploys a source dot-directory. Other Linux distributions use the `common-only` role.
+- One source file per target: plain files stay plain (no `.tmpl`, even with `{{` inside), and `tests/fixtures/chezmoi/targets.tsv` lists every target.
 - Root scripts are person-facing setup/check entry points; `scripts/` contains login and person-run hooks, `lib/` sourced/imported code, and `config/` their data. Place files by their caller.
 
 
@@ -16,7 +16,7 @@ six hosts.
 
 - Keep secrets and machine-specific absolute paths out of version control.
 - Write documentation, guides and skills in English using printable ASCII, tabs and line breaks only; the English-documentation hook enforces the character set. Payload repos use their own checks.
-- Preserve the layering: `common/` first, host overlay second.
+- Preserve the layering: shared `home/` files first, then the role variant from `home/.hosts/<role>/`.
 - Update `README.md`, `setup-host` usage and script comments together when setup behavior changes.
 
 ## Weight and dependencies
@@ -44,12 +44,11 @@ Keep this guide below 28,000 bytes; move explanatory material to canonical docs,
 
 After modifying any file, run `pre-commit run --all-files` to ensure changes pass CI checks before committing.
 
-The [chezmoi migration](docs/chezmoi-migration/README.md) is staged. Stage 4 keeps
-explicit local `[data].host`, native AI transforms and literal legacy inputs until
-Stage 6. Preserve unsupported-input refusal, exact ownership/policy parity and
-WebP/terminfo byte parity. Provisioning is native only, without a sync venv.
-Maintenance blocks future dotfiles updates AND payload runs.
-Keep legacy paths for supported old callers until Stage 6. First apply
+The [chezmoi migration](docs/chezmoi-migration/README.md) is staged. The native
+source uses explicit local `[data].host` and native AI transforms. Preserve
+unsupported-input refusal, exact ownership/policy parity and the pinned
+WebP/terminfo bytes. Provisioning is native only, without a sync venv.
+Maintenance blocks future dotfiles updates AND payload runs. First apply
 is not an ownership guard: review exact targets and private snapshots first.
 Real takeover follows exact candidate CI gates and existing D11 authority;
 commits/publication require active authorization. Enroll only privately selected
@@ -63,13 +62,13 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 
 ## Shell conventions
 
-- Keep POSIX logic in `common/sh/` and host `*/sh/` paths.
+- Keep POSIX logic in `home/dot_profile`, `home/dot_aliases` and the role files under `home/.hosts/*/.config/sh/`.
 - Use Bash/Zsh-specific syntax only in matching shell files.
 - Preserve override sourcing patterns from shared files:
-  - `common/sh/.aliases` sources `~/.config/sh/.aliases`
-  - `common/sh/.profile` sources `~/.config/sh/.profile`
+  - `~/.aliases` (`home/dot_aliases`) sources `~/.config/sh/.aliases`
+  - `~/.profile` (`home/dot_profile`) sources `~/.config/sh/.profile`
 - Keep startup flow quiet and idempotent; avoid duplicate side effects.
-- PATH belongs in `common/sh/.profile`, which prepends `$HOME/bin` and `$HOME/.local/bin` behind a duplicate guard. `common/zsh/.zshrc` sources `~/.profile` near its top, right after the `typeset -U` block, so zsh inherits it too. Add new entries there, or in a host `*/sh/.profile`, never by appending to a shell rc.
+- PATH belongs in `~/.profile` (`home/dot_profile`), which prepends `$HOME/bin` and `$HOME/.local/bin` behind a duplicate guard. `~/.zshrc` (`home/dot_zshrc`) sources `~/.profile` near its top, right after the `typeset -U` block, so zsh inherits it too. Add new entries there, or in a role `home/.hosts/*/.config/sh/.profile`, never by appending to a shell rc.
 - Discard installer-appended PATH blocks in deployed rc files by default. Express their intent portably via `$HOME` and duplicate guards in the profile; do not retain machine-home literals or repeated exports.
 - Keep nvm free of the oh-my-zsh nvm plugin, lazy wrappers and `.nvmrc` auto-switching. Resolve default aliases with the read builtin in the profile without sourcing nvm; support exact/partial/node/stable and chains, leaving `lts/-N` unresolved. Support only `~/.nvm` and `${XDG_CONFIG_HOME:-~/.config}/nvm`. Keep PATH uniqueness scoped to zsh setup, fpath/INFOPATH unique, nvm ahead of brew/conda before oh-my-zsh, inherited NVM_BIN parent order intact, and no command-hash rebuild after plugins. `custom/nvm.zsh` loads `--no-use` and completion and repairs only brew-plugin reordering. Set plugin options before oh-my-zsh loads; pre-source ssh-agent options. See [shell startup](docs/shell.md).
 - Do not use here-documents, here-strings or process substitution anywhere in `doctor.sh`, `setup-host.sh`, `lib/terminal.sh` or `lib/bootstrap/*.sh`, including apply-only paths. Bash 3.2 otherwise creates temp files or retains descriptors. Use BOOTSTRAP_NL splitting, bootstrap_split and pipes/bootstrap_text_has; keep bootstrap-manifest enforcement.
@@ -93,22 +92,22 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 
 ## Git and SSH conventions
 
-- Keep shared Git config in `common/git/.gitconfig`.
-- Keep host-local Git overrides in `*/git/.gitconfig_local`.
+- Keep shared Git config in `home/dot_gitconfig`.
+- Keep host-local Git overrides in `home/.hosts/*/.gitconfig_local`.
 - Preserve include chain: `[include] path = ~/.gitconfig_local`.
-- Keep SSH root config minimal in `common/ssh/.ssh/config`:
+- Keep SSH root config minimal in `home/dot_ssh/config`:
   - `Include ~/.ssh/config.d/*.conf`
 - Keep SSH targets split by concern in `.ssh/config.d/*.conf`.
 - Do not commit secrets or private key material.
 
 ## AI assistant configuration
 
-- Keep shared user-global files in these packages:
-  - `common/claude/.claude/CLAUDE.md`
-  - `common/claude/.claude/settings.json`
-  - `common/codex/.codex/AGENTS.md`
-  - `common/codex/.codex/config.toml`
-  - `common/codex/.codex/rules/portable.rules`
+- Keep shared user-global files in these native sources; `.claude/settings.json` `claudeMdExcludes` keeps both guides from loading as nested project guides:
+  - `home/dot_claude/CLAUDE.md`
+  - `home/.policy/claude-settings.json` (read by `home/dot_claude/modify_private_settings.json`)
+  - `home/dot_codex/AGENTS.md`
+  - `home/.policy/codex-config.toml` (read by `home/dot_codex/modify_private_config.toml`)
+  - `home/dot_codex/rules/portable.rules`
 - coding-agent-kit owns Unix launchers, completions and Claude Node helpers under `~/.claude/coding-agent-kit/`; dotfiles ships no kit config. Linux/macOS/WSL only: no Windows install/check rows. Native Windows missing helpers exit 0 silently, existing 0.6 copies still run, and Unix missing helpers fail visibly. Preserve these platform guards.
 - Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
 - The repository root `CLAUDE.md` is only an `@AGENTS.md` import stub for Claude Code; `AGENTS.md` is the single repository guide for every agent. Add or change repository policy in `AGENTS.md`, never in the stub.
@@ -122,9 +121,9 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 - Do not vendor third-party Markdown payloads copied into `~/.claude/rules/`; plugin checkouts may be used as an audit source, but Claude does not load plugin-bundled rules automatically. Keep reviewed cross-host instructions in the global `CLAUDE.md`.
 - Never track credentials, OAuth state, sessions, histories, project trust, caches, downloaded plugins, generated memories, runtime marketplace paths, or machine-specific absolute paths.
 - Codex config.toml and Claude settings.json deploy through the two native modify templates as private regular files, portable keys winning and live-only state retained; see [native contract](docs/config-sync.md).
-- Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; native apply deploys it as an ordinary file without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
+- Keep reviewed Codex exec-policy guardrails in `home/dot_codex/rules/portable.rules`; native apply deploys it as an ordinary file without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
 - When shared config, permission or rule behavior changes, update the portable sources, README and focused tests together.
-- A target has one owner. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
+- A target has one owner. Keep one portable policy file per tool in `home/.policy/`; never add a host-specific second copy.
 - Keep third-party skill payloads out of dotfiles; awesome-skills' own installer, which sync-payloads runs, owns only its installed copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/` (Codex reads both roots) on each host.
 
 ## Payload repos
@@ -137,19 +136,19 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 - Keep status output in lib/terminal.sh/.ps1, with DOTFILES_COLOR=auto|always|never; nonempty NO_COLOR and TERM=dumb disable it. Preserve plain redirected logs, PowerShell stream capture and caller preferences. Under auto only, recognize p10k instant-prompt capture through __p9k_instant_prompt_active and a numeric still-terminal saved fd; all other hidden terminals stay plain. Never pass a nonnumeric fd to dash -t. Add no formatting dependency.
 
 - Interactive logins update only a home bound by `~/.config/dotfiles/native`, after the maintenance check, through the bound source's `scripts/chezmoi-update.sh`/`.ps1` ([update-contract.md](docs/update-contract.md)); an unmarked home runs nothing and prints nothing, with no checkout fallback. `DOTFILES_AUTO_UPDATE=0` disables the hook. Windows runs only the private `~/.local/bin/chezmoi.exe`, never a PATH match.
-- Packages hold regular files only, so Windows clones need no `core.symlinks`. Keep the `.gitignore` lines of the retired submodule checkouts and `/.venv-sync/` until every host's residue is verified gone (Stage 6 Phase C).
+- The source holds regular files only, so Windows clones need no `core.symlinks`. Keep the `.gitignore` lines of the retired submodule checkouts and `/.venv-sync/` until every host's residue is verified gone (Stage 6 Phase C).
 
 ## Windows
 
 - Native chezmoi deploys regular files unelevated after actual profile/ACL preflight; there is no elevated or scheduled task.
-- Windows receives an explicit subset of `common/` (`home/.chezmoiignore`), not every package. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell files must stay out of a Windows `$HOME`; extend the subset only for tools that run natively on Windows.
-- `win/` packages mirror `$HOME` paths like every other package, including `Documents\PowerShell\` and `AppData\Local\Packages\`. No installer special-casing is needed because both live under `$HOME`.
+- Windows receives an explicit subset of the shared targets (`home/.chezmoiignore`), not every target. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell files must stay out of a Windows `$HOME`; extend the subset only for tools that run natively on Windows.
+- Windows targets live under `home/` like every other target, including `Documents/PowerShell/` and `AppData/Local/Packages/`. No installer special-casing is needed because both live under `$HOME`.
 - Windows Terminal `settings.json` is a regular file chezmoi applies; a UI save is destination drift to reconcile ([shell](docs/shell.md)). Edits need a Terminal restart.
 - Keep machine-specific user-profile paths out of tracked Windows files: write `Join-Path $HOME ...`, not `C:\Users\<name>\...`. Both PowerShell profiles load conda lazily through a `function global:conda` stub; `conda init powershell` would add an eager, absolute-path hook block, so treat it as drift to fix, not to commit.
 - Keep PowerShell interactive setup in the then-branch of one `if ($IsInteractive -and -not $IsAgentSession)` block. Compute IsInteractive once from console stdin/stdout and PSReadLine; piped input, -File/-Command and -NonInteractive must skip setup, hooks and code-page changes. Match agent detection to zsh. The update hook stays in the interactive tail (agent terminals retain it); no payload hook runs there, and sync-payloads/sync-skills run only when typed (windows-install rows only). Probe optional executables on PATH, not Get-Command. Initialize oh-my-posh after key handlers, then zoxide, then a LASTEXITCODE-restoring prompt wrapper. Keep both lazy conda stubs/completers identical: remove the stub before hook execution, restore it if loading fails, and support mid-line completion. Preserve powershell-profile tests and [shell behavior](docs/shell.md).
-- The oh-my-posh theme lives at `win/oh-my-posh/.config/oh-my-posh/prompt.omp.json` and is written for the installed oh-my-posh: keep `$schema` pinned to that release's tag (the MSIX package can update itself through App Installer, so re-check the pin), keep the file ASCII with `\uXXXX` glyph escapes, and re-render it after upgrading oh-my-posh.
+- The oh-my-posh theme lives at `home/dot_config/oh-my-posh/prompt.omp.json` (a plain file: it contains `{{`) and is written for the installed oh-my-posh: keep `$schema` pinned to that release's tag (the MSIX package can update itself through App Installer, so re-check the pin), keep the file ASCII with `\uXXXX` glyph escapes, and re-render it after upgrading oh-my-posh.
 - Windows Terminal `settings.json` stays strict JSON and ASCII. Keep machine-generated fragment GUIDs out of it; disable duplicate dynamic profile sources with `disabledProfileSources` instead, and never disable `Windows.Terminal.PowershellCore`.
-- `.gitattributes` pins `eol=lf` because Git for Windows enables `core.autocrlf` in its system config. Files that must keep CRLF are marked `-text` individually.
+- `.gitattributes` pins `eol=lf` because Git for Windows enables `core.autocrlf` in its system config. Files that must keep CRLF are marked `-text` individually: `home/dot_wslconfig` and `home/mount.vbs` keep CRLF.
 
 ## Workflows and checks
 

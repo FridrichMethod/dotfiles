@@ -314,11 +314,13 @@ validated bound source in the foreground and refuses an invalid binding;
 maintenance refuses it too. No new scheduler, revision acknowledgement database
 or background supervisor is introduced.
 
-Regular-file edits no longer write through to Git. During the bridge, ordinary
-portable edits belong in the canonical legacy source and then native apply.
-Review live app changes with a private targeted diff/merge. Do not blindly
-`add` an AI config or replace its modify template with a snapshot of local state.
-Source consolidation belongs to Stage 6.
+Regular-file edits no longer write through to Git. Edit the native source
+(ordinary files under `home/`, role variants under `home/.hosts/<role>/`,
+portable AI policy under `home/.policy/`), commit, then apply. Review live app
+changes with a private targeted diff/merge. Do not blindly `add` an AI config or
+replace its modify template with a snapshot of local state; `chezmoi edit` of a
+role-variant target opens its one-line template, so edit the `.hosts` file
+instead.
 
 ### Reconcile an owned AI-config key
 

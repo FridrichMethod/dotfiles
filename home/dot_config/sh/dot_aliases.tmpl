@@ -1,1 +1,1 @@
-{{- include (joinPath .chezmoi.workingTree .host "sh/.config/sh/.aliases") -}}
+{{- include (printf ".hosts/%s/.config/sh/.aliases" .host) -}}

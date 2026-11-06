@@ -194,7 +194,7 @@ Installer; the theme's `$schema` pin moves with the installed release.
 
 ### Not managed here
 
-Third-party plugins enabled in `common/claude/.claude/settings.json` can need
+Third-party plugins enabled in `home/.policy/claude-settings.json` can need
 runtimes of their own that `config/bootstrap/` does not install or check: the
 `telegram` plugin runs under bun, and the `*-lsp` plugins (TypeScript, Pyright,
 rust-analyzer, clangd, Lua) need their language servers on PATH. Install those

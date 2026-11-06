@@ -1,5 +1,5 @@
 # lab-ubuntu additions to apt/common.txt (H1-apt-core). The fcitx5 set matches
-# lab-ubuntu/fcitx5/.config/fcitx5/profile (pinyin, mozc); H1-fcitx5 then runs
+# home/dot_config/fcitx5/private_profile (pinyin, mozc); H1-fcitx5 then runs
 # im-config -n fcitx5 and asks for a relogin.
 # pinned 2026-10-09
 xclip

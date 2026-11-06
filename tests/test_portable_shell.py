@@ -35,7 +35,7 @@ class PortableShellTests(unittest.TestCase):
         vi = bindir / "vi"
         vi.write_text("#!/bin/sh\nprintf native\n")
         vi.chmod(0o755)
-        source = (ROOT / "common/sh/.aliases").read_text()
+        source = (ROOT / "home/dot_aliases").read_text()
         self.assertEqual(self.run_shell(source, "eval vi", extra={"PATH": str(bindir)}), "native")
         nvim = bindir / "nvim"
         nvim.write_text("#!/bin/sh\nprintf neovim\n")
@@ -55,7 +55,7 @@ class PortableShellTests(unittest.TestCase):
                 if not shutil.which(shell):
                     continue
                 with self.subTest(host=host, shell=shell):
-                    source = (ROOT / host / shell / f".config/{shell}/.{shell}rc").read_text()
+                    source = (ROOT / "home/.hosts" / host / f".config/{shell}/.{shell}rc").read_text()
                     source = source.replace("/home/linuxbrew/.linuxbrew", str(Path(self.temp.name) / "absent-brew"))
                     source = source.replace("/usr/share/lmod/lmod/init/zsh", str(Path(self.temp.name) / "absent-lmod"))
                     got = self.run_shell(source, 'printf "%s:%s" "${CONDA_PORTABLE-no}" "${MAMBA_PORTABLE-no}"', shell)
@@ -74,7 +74,7 @@ class PortableShellTests(unittest.TestCase):
                 if not shutil.which(shell):
                     continue
                 with self.subTest(host=host, shell=shell):
-                    source = (ROOT / host / shell / f".config/{shell}/.{shell}rc").read_text()
+                    source = (ROOT / "home/.hosts" / host / f".config/{shell}/.{shell}rc").read_text()
                     source = source.replace("/home/linuxbrew/.linuxbrew", str(Path(self.temp.name) / "absent-brew"))
                     source = source.replace("/apps/miniconda3", str(self.home / "miniconda3"))
                     source = source.replace("/usr/share/lmod/lmod/init/zsh", str(Path(self.temp.name) / "absent-lmod"))
@@ -83,13 +83,13 @@ class PortableShellTests(unittest.TestCase):
                     self.assertEqual(got, "<argument with spaces>")
 
     def test_juliaup_home_path_is_idempotent(self):
-        source = (ROOT / "wsl-ubuntu/sh/.config/sh/.profile").read_text()
+        source = (ROOT / "home/.hosts/wsl-ubuntu/.config/sh/.profile").read_text()
         got = self.run_shell(source, '. "$1"; printf "%s" "$PATH"')
         self.assertEqual(got.split(":").count(str(self.home / ".juliaup/bin")), 1)
 
     def test_marlowe_cargo_home_is_durable_and_not_eagerly_created(self):
         scratch = Path(self.temp.name) / "scratch"
-        source = (ROOT / "marlowe/sh/.config/sh/.profile").read_text()
+        source = (ROOT / "home/.hosts/marlowe/.config/sh/.profile").read_text()
         source = source.replace("/scratch/$PROJECT_ID", str(scratch))
         for extra, want in [({}, "unset"), ({"CARGO_HOME": str(self.home / "cargo")}, str(self.home / "cargo"))]:
             self.assertEqual(self.run_shell(source, 'printf "%s" "${CARGO_HOME-unset}"', extra=extra), want)
@@ -106,7 +106,7 @@ class PortableShellTests(unittest.TestCase):
             for shell in ["bash", "zsh"]:
                 if not shutil.which(shell):
                     continue
-                source = (ROOT / host / shell / f".config/{shell}/.{shell}rc").read_text()
+                source = (ROOT / "home/.hosts" / host / f".config/{shell}/.{shell}rc").read_text()
                 source = source.replace("/home/linuxbrew/.linuxbrew", str(Path(self.temp.name) / "absent-brew"))
                 source = source.replace("/apps/miniconda3", str(Path(self.temp.name) / "absent-conda"))
                 for path in ["/usr/bin:/bin", str(prefix / "bin") + ":/usr/bin:/bin"]:
@@ -125,7 +125,7 @@ class PortableShellTests(unittest.TestCase):
                 if not shutil.which(shell):
                     continue
                 with self.subTest(host=host, shell=shell):
-                    source = (ROOT / host / shell / f".config/{shell}/.{shell}rc").read_text()
+                    source = (ROOT / "home/.hosts" / host / f".config/{shell}/.{shell}rc").read_text()
                     source = source.replace("/home/linuxbrew/.linuxbrew", str(Path(self.temp.name) / "absent-brew"))
                     source = source.replace("/apps/miniconda3", str(Path(self.temp.name) / "absent-conda"))
                     got = self.run_shell(source, 'printf "%s" "${BREW_DISCOVERED-no}"', shell,
@@ -133,7 +133,7 @@ class PortableShellTests(unittest.TestCase):
                     self.assertEqual(got, "custom")
 
     def test_mac_homebrew_profile(self):
-        original = (ROOT / "mac/sh/.config/sh/.profile").read_text()
+        original = (ROOT / "home/.hosts/mac/.config/sh/.profile").read_text()
         for prefix_name in ["arm", "intel"]:
             prefix = Path(self.temp.name) / prefix_name
             brew = prefix / "bin/brew"

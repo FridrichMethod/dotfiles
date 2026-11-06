@@ -8,7 +8,7 @@
     {{- range . -}}{{- template "codex-validate-temporals" . -}}{{- end -}}
   {{- end -}}
 {{- end -}}
-{{- $portableTOML := include (joinPath .chezmoi.workingTree "common/codex/.codex/config.toml") -}}
+{{- $portableTOML := include ".policy/codex-config.toml" -}}
 {{- $portable := fromToml (replace "\r\n" "\n" $portableTOML) -}}
 {{- $live := fromToml (replace "\r\n" "\n" .chezmoi.stdin) -}}
 {{- template "codex-validate-temporals" $portable -}}

@@ -105,15 +105,14 @@ bootstrap_check_native_config() {
     esac
 }
 
-# Files under common/ that third-party installers append to through the stow
-# symlinks in $HOME.
-BOOTSTRAP_RC_FILES='common/zsh/.zshrc
-common/zsh/.zshenv
-common/zsh/.zprofile
-common/sh/.profile
-common/bash/.bashrc
-common/bash/.bash_profile
-common/bash/.bash_aliases'
+# Shell rc files in $HOME that third-party installers append to.
+BOOTSTRAP_RC_FILES='.zshrc
+.zshenv
+.zprofile
+.profile
+.bashrc
+.bash_profile
+.bash_aliases'
 
 # bootstrap_check_result STATUS DETAIL: print STATUS<TAB>DETAIL on one line
 # (tabs, carriage returns and newlines in DETAIL become spaces).
@@ -461,7 +460,7 @@ bootstrap_check_locale() {
     fi
 }
 
-# The Claude helpers that common/claude/.claude/settings.json runs, which
+# The Claude helpers that home/.policy/claude-settings.json runs, which
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 
@@ -596,13 +595,13 @@ bootstrap_check_path_order() {
     fi
 }
 
-# bootstrap_check_rc_pollution ROOT: traces of installers that edit rc files:
-# ~/.zshrc.pre-oh-my-zsh (upstream oh-my-zsh installer), a Codex installer,
-# conda/mamba initialize or nvm loader block in a common/ rc file (they reach
-# it through the stow symlink), and uncommitted changes under common/.
+# bootstrap_check_rc_pollution: traces, in the live rc files of $HOME, of
+# installers that edit them: ~/.zshrc.pre-oh-my-zsh (the upstream oh-my-zsh
+# installer) and a Codex installer, conda/mamba initialize or nvm loader
+# block. Read-only; setup-host guards the checkout itself (steps-guard.sh).
 # shellcheck disable=SC2016 # the nvm marker is literal installer text
 bootstrap_check_rc_pollution() {
-    local root=$1 findings='' files file dirty='' count first git_bin
+    local findings='' files file
     if [ -e "$HOME/.zshrc.pre-oh-my-zsh" ] || [ -L "$HOME/.zshrc.pre-oh-my-zsh" ]; then
         findings="$findings; ~/.zshrc.pre-oh-my-zsh exists (the upstream oh-my-zsh installer replaced ~/.zshrc)"
     fi
@@ -610,37 +609,23 @@ bootstrap_check_rc_pollution() {
     while [ -n "$files" ]; do
         file=${files%%"$BOOTSTRAP_NL"*}
         files=${files#*"$BOOTSTRAP_NL"}
-        if [ -z "$file" ] || [ ! -f "$root/$file" ]; then
+        if [ -z "$file" ] || [ ! -f "$HOME/$file" ]; then
             continue
         fi
-        if grep -Fq -e '>>> Codex installer >>>' "$root/$file" 2>/dev/null; then
-            findings="$findings; $file has a Codex installer block"
+        if grep -Fq -e '>>> Codex installer >>>' "$HOME/$file" 2>/dev/null; then
+            findings="$findings; ~/$file has a Codex installer block"
         fi
-        if grep -Fq -e '>>> conda initialize >>>' -e '>>> mamba initialize >>>' "$root/$file" 2>/dev/null; then
-            findings="$findings; $file has a conda or mamba initialize block"
+        if grep -Fq -e '>>> conda initialize >>>' -e '>>> mamba initialize >>>' "$HOME/$file" 2>/dev/null; then
+            findings="$findings; ~/$file has a conda or mamba initialize block"
         fi
-        if grep -Fq -e '# This loads nvm' -e '[ -s "$NVM_DIR/nvm.sh" ]' "$root/$file" 2>/dev/null; then
-            findings="$findings; $file has an nvm installer loader"
+        if grep -Fq -e '# This loads nvm' -e '[ -s "$NVM_DIR/nvm.sh" ]' "$HOME/$file" 2>/dev/null; then
+            findings="$findings; ~/$file has an nvm installer loader"
         fi
     done
-    if git_bin=$(bootstrap_find_command git); then
-        if dirty=$("$git_bin" --no-optional-locks -C "$root" status --porcelain -- common </dev/null 2>/dev/null); then
-            if [ -n "$dirty" ]; then
-                count=$(printf '%s\n' "$dirty" | grep -c .) || count=0
-                first=$(printf '%s\n' "$dirty" | sed -n 1p)
-                dirty="$count uncommitted change(s) under common/, first: ${first#???}"
-            fi
-        else
-            dirty=
-        fi
-    fi
     if [ -n "$findings" ]; then
-        [ -z "$dirty" ] || findings="$findings; $dirty"
         bootstrap_check_result human "${findings#; }"
-    elif [ -n "$dirty" ]; then
-        bootstrap_check_result warn "$dirty (an installer may have edited a stowed file)"
     else
-        bootstrap_check_result ok "no installer blocks in the common rc files and common/ is clean"
+        bootstrap_check_result ok 'no installer blocks in the home rc files'
     fi
 }
 
@@ -684,7 +669,7 @@ bootstrap_check_structural() {
         locale) bootstrap_check_locale "$3" ;;
         native-config) bootstrap_check_native_config "$2" ;;
         path-order) bootstrap_check_path_order "$4" "$3" ;;
-        rc-pollution) bootstrap_check_rc_pollution "$2" ;;
+        rc-pollution) bootstrap_check_rc_pollution ;;
         omz-order) bootstrap_check_omz_order ;;
         nvm-homebrew) bootstrap_check_nvm_homebrew ;;
         payloads) bootstrap_check_payloads "$2" ;;

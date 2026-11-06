@@ -369,7 +369,7 @@ class WindowsTakeoverTests(unittest.TestCase):
                 self.marker.unlink()
 
     def test_profile_dispatch_uses_marker_and_maintenance_in_fresh_shells(self):
-        profile = ROOT / "win/powershell/Documents/PowerShell/profile.ps1"
+        profile = ROOT / "home/Documents/PowerShell/profile.ps1"
         # A checkout at the old default ~/dotfiles, with every hook and a real
         # guard: an unmarked home must still run none of them.
         fake_repo = self.home / "dotfiles"

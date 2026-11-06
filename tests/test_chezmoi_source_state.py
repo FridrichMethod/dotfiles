@@ -1,5 +1,6 @@
-"""Native candidate source contracts; all state belongs to disposable fixtures."""
+"""Native source contracts; all state belongs to disposable fixtures."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,44 +12,73 @@ import unittest
 
 from chezmoi_source_support import (
     AI_MUTABLE, COUNTS, ROOT, ROLES, SourceFixture, copy_controls, expected_entries,
-    fixture_git_env, indexed_modes, inventory, inventory_problems, snapshot,
+    fixture_git_env, role_set, snapshot, target_problems, target_rows, tracked_home,
 )
 
 from chezmoi_support import ChezmoiFixture
 
 
 KIT_PATHS = (".claude/dotfiles", ".claude/coding-agent-kit", ".local/bin/codex-as", ".local/bin/claude-as")
+LEGACY_TREES = ("common", *ROLES[1:])
+# The only templates that remain: one raw role-variant include each.
+ROLE_TEMPLATES = {
+    "dot_config/bash/dot_bashrc.tmpl": ".config/bash/.bashrc",
+    "dot_config/sh/dot_aliases.tmpl": ".config/sh/.aliases",
+    "dot_config/sh/dot_profile.tmpl": ".config/sh/.profile",
+    "dot_config/zsh/dot_zshrc.tmpl": ".config/zsh/.zshrc",
+    "dot_gitconfig_local.tmpl": ".gitconfig_local",
+    "dot_ssh/config.d/legacy.conf.tmpl": ".ssh/config.d/legacy.conf",
+}
+POLICY_INCLUDES = {
+    "home/dot_claude/modify_private_settings.json": 'include ".policy/claude-settings.json"',
+    "home/dot_codex/modify_private_config.toml": 'include ".policy/codex-config.toml"',
+}
+RAW_ASSETS = {
+    "home/dot_codex/pets/tom/spritesheet.webp": "78179015093038c8d83542c18c1c976932ee6da06ca42b9b231e008e84b2019c",
+    "home/dot_terminfo/t/tmux-256color": "55808427614130a53e9a3dcd93519eefb3d017bcc6c0751182d59638517e86cd",
+}
+
+
+def git_in(directory, env, *args):
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("git prerequisite: the linked-worktree contracts require git")
+    return subprocess.run([git, "-c", "user.name=Fixture", "-c",
+                           "user.email=fixture@example.invalid", "-c",
+                           "commit.gpgsign=false", "-c", "core.hooksPath=",
+                           *args], cwd=directory, env=env, check=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+
+
+def linked_worktree(fixture, files):
+    """Commit FILES in "original repository"; return a linked worktree with spaces."""
+    repository = fixture.root / "original repository"
+    for name in (".chezmoiroot", ".chezmoiversion"):
+        (repository / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / name, repository / name)
+    for name, content in files.items():
+        (repository / name).parent.mkdir(parents=True, exist_ok=True)
+        (repository / name).write_bytes(content)
+    env = fixture_git_env(fixture.env)
+    git_in(repository, env, "init", "--template=")
+    git_in(repository, env, "add", ".")
+    git_in(repository, env, "commit", "-m", "Synthetic include fixture")
+    linked = fixture.root / "linked worktree with spaces"
+    git_in(repository, env, "worktree", "add", "--detach", str(linked))
+    return repository, linked
 
 
 class SourceContractTests(unittest.TestCase):
-    def test_literal_bridge_in_linked_worktree_with_spaces(self):
+    def test_working_tree_include_in_linked_worktree_with_spaces(self):
+        # Guards the init guard's validate-host include (home/.chezmoi.toml.tmpl:1),
+        # which keeps .chezmoi.workingTree because the source root does not move.
         # Catch sourceDir/workingTree confusion and accidental template evaluation.
-        git = shutil.which("git")
-        self.assertIsNotNone(git, "git is required for the linked-worktree contract")
         with ChezmoiFixture() as fixture:
-            repository = fixture.root / "original repository"
-            repository.mkdir()
-            (repository / "home").mkdir()
-            shutil.copyfile(ROOT / ".chezmoiroot", repository / ".chezmoiroot")
-            shutil.copyfile(ROOT / ".chezmoiversion", repository / ".chezmoiversion")
             original = b'quotes="literal"\n{{ not_a_template }}\r\n'
-            (repository / "canonical.txt").write_bytes(original)
-            (repository / "home/dot_probe.tmpl").write_text(
-                '{{- include (joinPath .chezmoi.workingTree "canonical.txt") -}}\n',
-                encoding="utf-8",
-            )
-            env = fixture_git_env(fixture.env)
-            def run_git(*args):
-                subprocess.run([git, "-c", "user.name=Fixture", "-c",
-                                "user.email=fixture@example.invalid", "-c",
-                                "commit.gpgsign=false", "-c", "core.hooksPath=",
-                                *args], cwd=repository, env=env, check=True,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
-            run_git("init", "--template=")
-            run_git("add", ".")
-            run_git("commit", "-m", "Synthetic bridge fixture")
-            linked = fixture.root / "linked worktree with spaces"
-            run_git("worktree", "add", "--detach", str(linked))
+            repository, linked = linked_worktree(fixture, {
+                "canonical.txt": original,
+                "home/dot_probe.tmpl": b'{{- include (joinPath .chezmoi.workingTree "canonical.txt") -}}\n',
+            })
             fixture.source = linked
             result = fixture.run("apply")
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -56,6 +86,41 @@ class SourceContractTests(unittest.TestCase):
             self.assertEqual((repository / "canonical.txt").read_bytes(), original)
             self.assertEqual((linked / "canonical.txt").read_bytes(), original)
             self.assertEqual(fixture.run("diff").stdout, "")
+
+    def test_relative_include_reads_hidden_inputs_in_linked_worktree_with_spaces(self):
+        # Role variants and policy are raw includes relative to sourceDir (home/),
+        # never the template's directory or the working tree, and a source
+        # dot-directory is never a target.
+        with ChezmoiFixture() as fixture:
+            original = b'quotes="literal"\n{{ not_a_template }}\r\n'
+            policy = b'{"x": "{{ .host }}"}\n'
+            files = {
+                "home/.hosts/lab-ubuntu/.config/sh/.profile": original,
+                "home/dot_config/sh/.hosts/lab-ubuntu/.config/sh/.profile": b"decoy\n",
+                "home/.policy/probe.json": policy,
+                "home/dot_config/sh/dot_profile.tmpl":
+                    b'{{- include (printf ".hosts/%s/.config/sh/.profile" .host) -}}\n',
+                "home/dot_probe.tmpl": b'{{- include ".policy/probe.json" -}}\n',
+            }
+            repository, linked = linked_worktree(fixture, files)
+            fixture.source = linked
+            fixture.config.write_text('[data]\nhost = "lab-ubuntu"\n', encoding="utf-8")
+            managed = fixture.run("managed", "--include=all", "--nul-path-separator")
+            self.assert_success(managed)
+            self.assertEqual({path.replace("\\", "/") for path in managed.stdout.split("\0") if path},
+                             {".config", ".config/sh", ".config/sh/.profile", ".probe"})
+            self.assert_success(fixture.run("apply"))
+            self.assertEqual((fixture.destination / ".config/sh/.profile").read_bytes(), original)
+            self.assertEqual((fixture.destination / ".probe").read_bytes(), policy)
+            alternate = fixture.root / "alternate working tree"
+            (alternate / "home/.hosts/lab-ubuntu/.config/sh").mkdir(parents=True)
+            (alternate / "home/.hosts/lab-ubuntu/.config/sh/.profile").write_bytes(b"alternate\n")
+            self.assert_success(fixture.run("--working-tree", str(alternate), "apply"))
+            self.assertEqual((fixture.destination / ".config/sh/.profile").read_bytes(), original)
+            self.assertEqual(fixture.run("diff").stdout, "")
+            for name, content in files.items():
+                self.assertEqual((repository / name).read_bytes(), content)
+                self.assertEqual((linked / name).read_bytes(), content)
 
     def test_source_declares_no_externals(self):
         # Externals download while the source state is read, even with
@@ -108,9 +173,40 @@ class SourceContractTests(unittest.TestCase):
     def assert_success(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_inventory_matches_exact_index_paths_applicability_and_counts(self):
-        # Every package path is a native target source; the C helpers retired with the parser chain.
-        self.assertEqual(inventory_problems(inventory(), indexed_modes()), [])
+    def test_target_table_matches_tracked_inputs_roles_and_counts(self):
+        # tests/fixtures/chezmoi/targets.tsv is the authority (D-13): every row's
+        # per-role source is tracked and every hidden input feeds one target.
+        self.assertEqual(target_problems(target_rows(), tracked_home()), [])
+        for hosts in ("", "mac,mac", "guess", "unix,win"):
+            with self.subTest(hosts=hosts), self.assertRaises(ValueError):
+                role_set(hosts)
+
+    def test_only_role_templates_remain_and_none_reads_the_working_tree(self):
+        tracked = tracked_home()
+        templates = {path.removeprefix("home/") for path in tracked
+                     if path.endswith(".tmpl") and path != "home/.chezmoi.toml.tmpl"}
+        self.assertEqual(templates, set(ROLE_TEMPLATES))
+        for template, target in ROLE_TEMPLATES.items():
+            with self.subTest(template=template):
+                self.assertEqual((ROOT / "home" / template).read_bytes(),
+                                 b'{{- include (printf ".hosts/%s/' + target.encode() + b'" .host) -}}\n')
+        self.assertEqual(set(ROLE_TEMPLATES.values()),
+                         {row[0] for row in target_rows() if "{host}" in row[2]})
+        for path, include in POLICY_INCLUDES.items():
+            with self.subTest(modify=path):
+                self.assertEqual((ROOT / path).read_text(encoding="utf-8").count(include), 1)
+        readers = sorted(path for path in tracked
+                         if b".chezmoi.workingTree" in (ROOT / path).read_bytes())
+        self.assertEqual(readers, ["home/.chezmoi.toml.tmpl"])
+
+    def test_legacy_trees_and_raw_duplicates_are_gone(self):
+        # Git, not the filesystem: ignored retired checkouts may remain (D-8).
+        listed = subprocess.run(["git", "ls-files", "-z", "--", *LEGACY_TREES], cwd=ROOT,
+                                env=fixture_git_env(), check=True, capture_output=True, timeout=30)
+        self.assertEqual(listed.stdout, b"")
+        for path, digest in RAW_ASSETS.items():
+            with self.subTest(asset=path):
+                self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest)
 
     def check_role(self, role, os_override=None):
         with SourceFixture(role, native_os=os_override) as fixture:
@@ -122,16 +218,20 @@ class SourceContractTests(unittest.TestCase):
             unsupported = fixture.run("managed", "--include=symlinks,scripts", "--nul-path-separator")
             self.assert_success(unsupported)
             self.assertEqual(unsupported.stdout, "")
-            modes = indexed_modes()
             managed = fixture.run("managed", "--include=files", "--nul-path-separator")
             self.assert_success(managed)
-            # Native managed output uses platform separators; inventory uses '/'.
+            # Native managed output uses platform separators; the table uses '/'.
             managed_files = {path.replace("\\", "/") for path in managed.stdout.split("\0") if path}
             # The payload repos install the launchers and Claude helpers; no
             # role manages them (formerly the Stow check in ai-config-sync.sh).
             self.assertEqual({path for path in managed_files for kit in KIT_PATHS
                               if path == kit or path.startswith(kit + "/")}, set())
             self.assertEqual(managed_files, set(expected))
+            directories = fixture.run("managed", "--include=dirs", "--nul-path-separator")
+            self.assert_success(directories)
+            self.assertEqual({path.replace("\\", "/").split("/", 1)[0]
+                              for path in directories.stdout.split("\0") if path} & {".hosts", ".policy"},
+                             set())
             unmanaged = {
                 ".ssh/id_fixture": b"synthetic private sibling\n",
                 ".ssh/known_hosts": b"synthetic host trust sibling\n",
@@ -173,9 +273,9 @@ class SourceContractTests(unittest.TestCase):
                         self.assertEqual(target.read_bytes(), (ROOT / entry.source).read_bytes(), name)
                     if os.name != "nt":
                         mode = target.stat().st_mode & 0o777
-                        if name in AI_MUTABLE or name == ".config/fcitx5/profile":
+                        if entry.mode == "private":
                             self.assertEqual(mode, 0o600, oct(mode))
-                        elif modes[entry.source] == "100755":
+                        elif entry.mode == "executable":
                             # Native executable attributes respect the caller's
                             # umask: 0700 is valid under umask 077.
                             self.assertEqual(mode & 0o700, 0o700, oct(mode))
@@ -207,26 +307,28 @@ class SourceContractTests(unittest.TestCase):
             with self.subTest(supplemental_os=simulated_os, role=role):
                 self.check_role(role, simulated_os)
 
-    def test_raw_assets_have_declared_legacy_owner_and_exact_bytes(self):
-        assets = {
-            "dot_codex/pets/tom/spritesheet.webp": "common/codex/.codex/pets/tom/spritesheet.webp",
-            "dot_terminfo/t/tmux-256color": "sherlock/terminfo/.terminfo/t/tmux-256color",
-        }
-        for native, legacy in assets.items():
-            with self.subTest(asset=native):
-                self.assertEqual((ROOT / "home" / native).read_bytes(), (ROOT / legacy).read_bytes())
-        # JSON metadata remains text and follows the bridge like other text.
-        self.assertFalse((ROOT / "home/dot_codex/pets/tom/pet.json").exists())
-        self.assertTrue((ROOT / "home/dot_codex/pets/tom/pet.json.tmpl").is_file())
+    def test_template_looking_text_stays_plain(self):
+        # A .tmpl would parse these braces; check_role proves they render verbatim.
+        for path in ("home/dot_config/kitty/kitty.conf", "home/dot_config/oh-my-posh/prompt.omp.json"):
+            with self.subTest(source=path):
+                self.assertIn(b"{{", (ROOT / path).read_bytes())
+                self.assertFalse((ROOT / f"{path}.tmpl").exists())
+        self.assertTrue((ROOT / "home/dot_codex/pets/tom/pet.json").is_file())
+        self.assertFalse((ROOT / "home/dot_codex/pets/tom/pet.json.tmpl").exists())
 
     def test_crlf_and_zero_byte_contracts_are_real_test_inputs(self):
-        for legacy in ("win/wsl/.wslconfig", "win/wsl/mount.vbs"):
-            with self.subTest(legacy=legacy):
-                content = (ROOT / legacy).read_bytes()
-                self.assertIn(b"\r\n", content)
+        windows = ("home/dot_wslconfig", "home/mount.vbs")
+        for path in windows:
+            with self.subTest(source=path):
+                self.assertIn(b"\r\n", (ROOT / path).read_bytes())
+        attributes = subprocess.run(["git", "check-attr", "text", "--", *windows], cwd=ROOT,
+                                    env=fixture_git_env(), check=True, capture_output=True,
+                                    text=True, timeout=30)
+        self.assertEqual(attributes.stdout.splitlines(), [f"{path}: text: unset" for path in windows])
         for name in ("tcsh", "xonsh"):
-            self.assertEqual((ROOT / f"common/{name}/.{name}rc").read_bytes(), b"")
-            self.assertTrue((ROOT / f"home/empty_dot_{name}rc.tmpl").is_file())
+            with self.subTest(empty=name):
+                self.assertEqual((ROOT / f"home/empty_dot_{name}rc").read_bytes(), b"")
+                self.assertFalse((ROOT / f"home/empty_dot_{name}rc.tmpl").exists())
 
     def test_init_and_native_data_require_explicit_role(self):
         native_role = "win" if os.name == "nt" else "common-only"

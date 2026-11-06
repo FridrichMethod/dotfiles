@@ -1,7 +1,7 @@
 {
   "claudeMdExcludes": [
-    "**/dotfiles/common/claude/.claude/CLAUDE.md",
-    "**/dotfiles/common/codex/.codex/AGENTS.md"
+    "**/home/dot_claude/CLAUDE.md",
+    "**/home/dot_codex/AGENTS.md"
   ],
   "permissions": {
     "allow": [

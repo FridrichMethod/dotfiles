@@ -2,10 +2,10 @@
 # shellcheck disable=SC2034 # STEPS_RC and STEPS_ERROR are read by steps.sh
 # The rc-pollution guard of setup-host.sh (docs/bootstrap.md X-rc-protection).
 # Every auto step and every HUMAN-block download runs through steps_guarded,
-# which fails the step when it changed the checkout: an installer appending to
-# a stowed rc file (~/.zshrc links into common/zsh/.zshrc) edits a tracked
-# file. Sourced only (after steps.sh); defines functions and changes no shell
-# options. Bash 3.2 compatible and `set -u` safe.
+# which fails the step when it changed the checkout, the native source a
+# login update requires clean. Sourced only (after steps.sh); defines
+# functions and changes no shell options. Bash 3.2 compatible and `set -u`
+# safe.
 
 # steps_git_status: `git status --porcelain` of the checkout with every
 # untracked file on its own line and UTF-8 names unquoted. Read-only:

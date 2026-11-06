@@ -2,15 +2,15 @@
 
 ## Native configuration and Stage 4 handover
 
-The isolated chezmoi candidate adds `home/dot_claude/modify_private_settings.json`
-and `home/dot_codex/modify_private_config.toml`. They use the native
-`chezmoi:modify-template` directive, have no `.tmpl` suffix, read canonical
-portable values with literal includes from the existing `common/` files and
+The native source has `home/dot_claude/modify_private_settings.json` and
+`home/dot_codex/modify_private_config.toml`. They use the native
+`chezmoi:modify-template` directive, have no `.tmpl` suffix, read the portable
+policy raw with a source-relative `include` of `home/.policy/claude-settings.json`
+and `home/.policy/codex-config.toml` (a dot-directory chezmoi never deploys), and
 let chezmoi write private regular files. Native deployment invokes no Python,
-external jq, custom writer or virtual environment; Stage 6 retired the legacy
-Python helpers and their parser runtime. Stage 4 adds the reviewed
-[takeover procedure](chezmoi-migration/takeover.md). Candidate CI and rollout
-results are recorded separately in the migration status.
+external jq, TOMLKit, custom writer or sync environment. Stage 4 adds the
+reviewed [takeover procedure](chezmoi-migration/takeover.md). Candidate CI and
+rollout results are recorded separately in the migration status.
 
 Claude retains recursive object merge with portable leaves winning and arrays
 replaced wholesale, including empty arrays. Local model, additionalDirectories
@@ -90,10 +90,10 @@ The native API has no source writeback. Before takeover, review a historically
 polluted portable source privately, preserve its unknown state in a separate
 private backup, and reconcile the intended live config and owned portable values
 explicitly. Do not import an entire application directory or use normal apply as
-source cleanup. Edit the canonical `common/` policy values, inspect a nonsecret
-targeted native diff and apply. For live-only edits, use the application's
-file/editor and review the resulting native diff; do not `add` a mutable target
-over its modify template. Stage 6 moves the canonical inputs once.
+source cleanup. To change portable policy, edit `home/.policy/`, inspect a
+nonsecret targeted native diff and apply. For live-only edits, use the
+application's file/editor and review the resulting native diff; do not `add` a
+mutable target over its modify template.
 
 ## Merge ownership
 

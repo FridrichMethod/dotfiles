@@ -42,7 +42,7 @@ TYPE_CHECKS = {
     "bool": lambda value: type(value) is bool,
     "string-array": lambda value: type(value) is list and all(type(item) is str for item in value),
 }
-PORTABLE = ROOT / "common/codex/.codex/config.toml"
+PORTABLE = ROOT / "home/.policy/codex-config.toml"
 MANIFEST = ROOT / "home/.chezmoidata/codex-policy.json"
 HOST = "win" if os.name == "nt" else "common-only"
 
@@ -105,7 +105,7 @@ class CodexNativeTests(unittest.TestCase):
         if live is not None:
             target.write_bytes(live.encode("utf-8"))
         if portable is not None:
-            (fixture.source / "common/codex/.codex/config.toml").write_bytes(portable.encode("utf-8"))
+            (fixture.source / "home/.policy/codex-config.toml").write_bytes(portable.encode("utf-8"))
         return target
 
     def apply(self, fixture, target):

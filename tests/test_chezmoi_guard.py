@@ -65,7 +65,7 @@ class WriterGuardTests(unittest.TestCase):
                    "TRACE": str(trace)}
             for sherlock in (False, True):
                 if sherlock:
-                    shutil.copyfile(ROOT / "sherlock/sh/.config/sh/.profile", overlay)
+                    shutil.copyfile(ROOT / "home/.hosts/sherlock/.config/sh/.profile", overlay)
                 for native in (True, False):
                     if native:
                         marker.write_text(f"dotfiles-chezmoi-v1\n{home}\n{source}\n")
@@ -76,7 +76,7 @@ class WriterGuardTests(unittest.TestCase):
                             trace.unlink(missing_ok=True)
                             flags = ["--noprofile", "--norc"] if shell == "bash" else []
                             result = subprocess.run([shell, *flags, "-i", "-c", '. "$1"', "profile",
-                                                     str(ROOT / "common/sh/.profile")],
+                                                     str(ROOT / "home/dot_profile")],
                                                     env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                                     text=True, timeout=15)
                             self.assertEqual(result.returncode, 0, result.stderr)
@@ -123,7 +123,7 @@ class WriterGuardTests(unittest.TestCase):
             def run(shell):
                 trace.unlink(missing_ok=True)
                 result = subprocess.run([shells[shell], *(["-f"] if shell == "zsh" else []), "-c", code,
-                                         "aliases", str(ROOT / "common/sh/.aliases")],
+                                         "aliases", str(ROOT / "home/dot_aliases")],
                                         env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                         text=True, timeout=15)
                 return result, trace.read_text().splitlines() if trace.exists() else []

@@ -106,12 +106,12 @@ check_overlay() {
 }
 
 BASH_BIN=$(command -v bash)
-for file in wsl-ubuntu/bash/.config/bash/.bashrc lab-ubuntu/bash/.config/bash/.bashrc; do
+for file in home/.hosts/wsl-ubuntu/.config/bash/.bashrc home/.hosts/lab-ubuntu/.config/bash/.bashrc; do
     check_overlay bash "$file"
 done
 
 if ZSH_BIN=$(command -v zsh); then
-    for file in wsl-ubuntu/zsh/.config/zsh/.zshrc lab-ubuntu/zsh/.config/zsh/.zshrc; do
+    for file in home/.hosts/wsl-ubuntu/.config/zsh/.zshrc home/.hosts/lab-ubuntu/.config/zsh/.zshrc; do
         check_overlay zsh "$file"
     done
 else

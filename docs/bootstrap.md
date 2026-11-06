@@ -1072,9 +1072,9 @@ that shell only.
   administrator account)
 
 Never paste the installer's "Next steps" `brew shellenv` lines into an rc file,
-never `brew install openssh` (`mac/ssh` uses Apple's `UseKeychain`, which
-Homebrew's OpenSSH rejects), and never `brew install nvm` (see
-[S4-nvm](#s4-nvm-nvm-and-nodejs)).
+never `brew install openssh` (`home/dot_ssh/config.d/mac.conf` uses Apple's
+`UseKeychain`, which Homebrew's OpenSSH rejects), and never `brew install nvm`
+(see [S4-nvm](#s4-nvm-nvm-and-nodejs)).
 
 ### H1-apt-core: apt prerequisites
 
@@ -1096,7 +1096,7 @@ gh 2.45) and renames bat and fd to `batcat` and `fdfind`. Ubuntu's apt gh is
 too old and is not used, even where it is installed: the Linuxbrew gh of the
 `cli` Brewfile comes first on PATH in the dotfiles shells, and it is what git's
 github.com credential helper calls on lab-ubuntu, by its full path
-`/home/linuxbrew/.linuxbrew/bin/gh` in `lab-ubuntu/git/.gitconfig_local`
+`/home/linuxbrew/.linuxbrew/bin/gh` in `home/.hosts/lab-ubuntu/.gitconfig_local`
 (git started from a GUI or another non-login context may not have Linuxbrew
 on PATH). gh needs no sudo on any host.
 
@@ -1116,7 +1116,7 @@ or `/home/linuxbrew`, not to a Windows-side shim under `/mnt/c`.
 
 ### H1-locale: en_US.UTF-8 locale
 
-Applies to `wsl-ubuntu` and `lab-ubuntu`. `common/sh/.profile` exports
+Applies to `wsl-ubuntu` and `lab-ubuntu`. `~/.profile` (`home/dot_profile`) exports
 `LANG=en_US.UTF-8`; without the generated locale every shell warns.
 
 - **Check:** `locale -a | grep -qix 'en_US.utf8' && echo ok`
@@ -1474,11 +1474,11 @@ they are not on PATH, and H7-auth names them only once they are.
 **Node.js.** On `marlowe`, `node` comes from the login env
 ([S2-login-env](#s2-login-env-hpc-login-environment): conda-forge `nodejs`,
 `>=22.0` in the yml; the newest build on 2026-10-09 was 26.x). On `sherlock`,
-it comes from Lmod `ml nodejs/24.13.0`, which `sherlock/zsh/.config/zsh/.zshrc`
+it comes from Lmod `ml nodejs/24.13.0`, which `home/.hosts/sherlock/.config/zsh/.zshrc`
 loads after putting the login env on PATH, so the module wins. There is no nvm
 on hpc.
 
-**Lmod pins.** The `ml ...` line in `sherlock/zsh/.config/zsh/.zshrc` names
+**Lmod pins.** The `ml ...` line in `home/.hosts/sherlock/.config/zsh/.zshrc` names
 exact module versions (`ml spider <name>` lists what exists); a bump is a
 reviewed change. Marlowe's overlay loads no modules.
 
@@ -1510,7 +1510,7 @@ destinations and branches. Clone oh-my-zsh first; ZSH_CUSTOM defaults to
 ~/.tmux/plugins/. Nothing here is pinned:
 each row's `ref` is the repository's default branch (`master` or `main`),
 and every clone tracks it, the way oh-my-zsh's own
-auto-update (`zstyle ':omz:update' mode auto` in `common/zsh/.zshrc`) keeps
+auto-update (`zstyle ':omz:update' mode auto` in `home/dot_zshrc`) keeps
 `~/.oh-my-zsh` on `master`. Downloads stay sha256-pinned in
 [`installers.tsv`](../config/bootstrap/installers.tsv), the Catppuccin bat
 theme file of S3-bat-theme included. The trade-off: unpinned theme and plugin
@@ -1580,7 +1580,7 @@ first (S2-brew-bundle or S2-login-env).
 
 ### S3-dirs: Vim state directories
 
-Applies to every Unix host. `common/vim/.vimrc` keeps undo files in
+Applies to every Unix host. `home/dot_vimrc` keeps undo files in
 `~/.vim/undo` and swap and backup files in `~/.vim/tmp`.
 
 - **Check:** `test -d ~/.vim/undo && test -d ~/.vim/tmp && echo ok`
@@ -1599,7 +1599,7 @@ with its defaults.
 Applies to `mac`, `wsl-ubuntu` and `lab-ubuntu` (hpc: S2-modules; Windows:
 winget's `OpenJS.NodeJS.LTS`). Node.js is required by the Claude Code hooks and
 status line; its floor in `tools.tsv` is 22 (18 and 20 are end of life).
-`common/sh/.profile` resolves nvm's `default` alias without sourcing `nvm.sh`,
+`home/dot_profile` resolves nvm's `default` alias without sourcing `nvm.sh`,
 so the alias must exist. Setup and doctor use the same discovery order:
 a nonempty `NVM_DIR`, then an existing `~/.nvm`, then an existing
 `${XDG_CONFIG_HOME:-$HOME/.config}/nvm`. With no installation, setup targets
@@ -1657,7 +1657,7 @@ a nonempty `NVM_DIR`, then an existing `~/.nvm`, then an existing
 **An nvm that is already there.** S4-nvm is `done` whenever `$NVM_DIR`'s
 `default` alias selects an installed node at the floor, whatever installed
 nvm: those are files, and nothing needs `nvm.sh`. It follows chained, exact,
-partial, `node`/`stable` and named LTS aliases as `common/sh/.profile` does;
+partial, `node`/`stable` and named LTS aliases as `home/dot_profile` does;
 an empty, cyclic or unresolved alias, or a default below the floor, stays
 pending even when a newer node is installed. When the default needs repair,
 setup-host has to source `nvm.sh`, and then an `nvm.sh` that is not the pinned,
@@ -1844,7 +1844,7 @@ interactive `claude` or `codex`.
     workstation (krb5 is a host tool, X-host-tools); the ssh config delegates the
     ticket. The block setup-host prints on sherlock and marlowe also lists
     `kinit`, for a session on the cluster that has no delegated ticket. The
-    `kstanford` alias (`common/sh/.aliases`) requests a 25 h ticket renewable
+    `kstanford` alias (`home/dot_aliases`) requests a 25 h ticket renewable
     for 7 days and, when kstart's `krenew` is installed, starts one background
     `krenew -K 60` that renews it until then; after that, run it again.
   - lab-ubuntu: Git Credential Manager with `credentialStore = gpg` needs a gpg
@@ -2072,8 +2072,9 @@ and WSL quick start with host `wsl-ubuntu`.
 - **Human:** yes (judgment: optional; it needs an elevated shell and maybe a
   reboot, and the tracked `wsl.conf` needs review, below)
 
-The judgment part: the native handover (HW-native) deploys `win/wsl/`'s
-`.wslconfig`, `wsl.conf` and `mount.vbs` into your Windows home. `.wslconfig`
+The judgment part: the native handover (HW-native) deploys `home/dot_wslconfig`,
+`home/wsl.conf` and `home/mount.vbs` as `.wslconfig`, `wsl.conf` and
+`mount.vbs` into your Windows home. `.wslconfig`
 sizes memory and processors for one machine; review it. `wsl.conf` takes
 effect only as `/etc/wsl.conf` inside the distribution, and the tracked one runs
 `/usr/local/bin/mount-data.sh`, which this repository does not ship, and
@@ -2087,7 +2088,7 @@ one specific physical disk; do not schedule it on another machine.
   (or `.\doctor.ps1 -Host win -Online`)
 - **Install:** `ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519`;
   `gh auth login --git-protocol ssh`; Git Credential Manager comes with Git for
-  Windows and `win/git/.gitconfig_local` selects it; `claude` once, or
+  Windows and `home/.hosts/win/.gitconfig_local` selects it; `claude` once, or
   `claude auth login`; `codex login`. For Sherlock and Marlowe, the terminal
   profiles ssh from inside WSL, so `kinit` there. Skip `gh auth setup-git`:
   it would rewrite `~\.gitconfig`, which the dotfiles manage.
@@ -2128,9 +2129,9 @@ environments; the local binaries are for manual runs.
 
 ### X-other-linux: Other Linux distributions
 
-There are only six overlays; `fedora/` and `ubuntu/` do not exist. On any other
-Linux, deploy the `common-only` role (`common/` without an overlay) and install
-the packages yourself. An Ubuntu or Debian machine that is neither WSL nor the
+There are only six overlay roles; no `fedora` or `ubuntu` role exists. On any
+other Linux, deploy the `common-only` role (the shared targets without a role
+variant) and install the packages yourself. An Ubuntu or Debian machine that is neither WSL nor the
 lab desktop can use `--platform debian` for the doctor's rows.
 `./setup-host.sh` needs a host overlay, so its four platform-neutral steps are
 done by hand; the sequence at the end of this section runs them in order (the
@@ -2196,12 +2197,11 @@ regular files that chezmoi manages: anything a third-party installer appends
 is a local change at which the next login update stops, so later targets stay
 stale until you review it with a private targeted native diff
 ([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover)).
-The doctor's `rc-pollution` check reads the checkout
-(it cannot see a native file's append): it reports `human` for
-`~/.zshrc.pre-oh-my-zsh`, and for a `# >>> Codex installer >>>` block, any
-conda or mamba initialize block or an nvm loader in a `common/` rc file, and
-`warn` for other uncommitted changes under `common/`. Keep every installer away
-from rc files:
+The doctor's `rc-pollution` check reads the rc files in `$HOME` (read-only):
+it reports `human` for `~/.zshrc.pre-oh-my-zsh`, and for a
+`# >>> Codex installer >>>` block, any conda or mamba initialize block or an nvm
+loader in `~/.zshrc`, `~/.zshenv`, `~/.zprofile`, `~/.profile`, `~/.bashrc`,
+`~/.bash_profile` or `~/.bash_aliases`. Keep every installer away from rc files:
 
 - nvm: `PROFILE=/dev/null`.
 - uv's standalone installer: `UV_NO_MODIFY_PATH=1` (the bootstrap installs uv
@@ -2213,14 +2213,14 @@ from rc files:
   bootstrap never runs it).
 - Homebrew: `NONINTERACTIVE=1`, and never paste its `brew shellenv` "Next steps"
   lines.
-- Never `git lfs install` (the `lfs` filter is already in `common/git/.gitconfig`
+- Never `git lfs install` (the `lfs` filter is already in `home/dot_gitconfig`
   and the command rewrites `~/.gitconfig`, which the dotfiles manage), never
   `gh auth setup-git` (same file), never `conda init`, never the upstream
   oh-my-zsh installer.
 
-PATH belongs in `common/sh/.profile`, which already puts `~/.local/bin` first;
-AGENTS.md's shell conventions say to discard installer PATH blocks and keep
-only their intent there.
+PATH belongs in `~/.profile` (`home/dot_profile`), which already puts
+`~/.local/bin` first; AGENTS.md's shell conventions say to discard installer
+PATH blocks and keep only their intent there.
 
 setup-host enforces this for its own steps: it records the checkout's state
 before each step and fails the step when anything changed, comparing file
@@ -2347,7 +2347,7 @@ fail-closed behavior beyond what is stated.
   only as `EnableScripts=0` is not detected, so its non-blocking judgment
   block may not be printed; `Get-ExecutionPolicy -List` still shows it.
 - **lab-ubuntu zsh overlay outside an interactive shell.** Sourcing
-  `lab-ubuntu/zsh/.config/zsh/.zshrc` in a non-interactive `zsh` with Linuxbrew
+  `home/.hosts/lab-ubuntu/.config/zsh/.zshrc` in a non-interactive `zsh` with Linuxbrew
   and the `/apps/miniconda3` mamba hook present prints
   `compinit: initialization aborted` and `command not found: compdef`. This
   predates the bootstrap; interactive shells are fine, and
@@ -2408,11 +2408,11 @@ Deferred on purpose; each is a separate change.
 - **StyLua hook without Rust.** `.pre-commit-config.yaml` uses the StyLua
   hook id `stylua`, which builds StyLua with cargo, so a contributor needs
   Rust; switch to the `stylua-github` id, which downloads the release binary.
-- **Windows ssh RemoteCommand.** `win/ssh/.ssh/config.d/legacy.conf` still
+- **Windows ssh RemoteCommand.** `home/.hosts/win/.ssh/config.d/legacy.conf` still
   runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
   the login-env form the other overlays use
   (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
-- **`win/wsl` is not a `$HOME`-shaped package.** Native apply deploys
+- **The WSL files are not all `$HOME` files.** Native apply deploys
   `wsl.conf` and `mount.vbs` into `%USERPROFILE%`, where neither does
   anything: `wsl.conf` only works as `/etc/wsl.conf` inside the distribution,
   and its `mount-data.sh` is not shipped

@@ -273,7 +273,7 @@ assert_eq "$(expand '$ZSH_CUSTOM/plugins/x' ZSH=/opt/omz)" /opt/omz/custom/plugi
 assert_eq "$(expand '$ZSH_CUSTOM/plugins/x' ZSH=/opt/omz ZSH_CUSTOM=/srv/custom)" /srv/custom/plugins/x 'ZSH_CUSTOM set'
 assert_eq "$(expand '$NVM_DIR/nvm.sh')" "$TEST_HOME/.nvm/nvm.sh" 'NVM_DIR default'
 assert_eq "$(expand '$NVM_DIR/nvm.sh' NVM_DIR=/srv/nvm)" /srv/nvm/nvm.sh 'NVM_DIR set'
-# Match common/sh/.profile: explicit nonempty NVM_DIR, conventional dir,
+# Match home/dot_profile: explicit nonempty NVM_DIR, conventional dir,
 # then an existing official XDG dir. Probes only inspect paths.
 NVM_HOME="$TEST_TMP/nvm-home"
 mkdir -p "$NVM_HOME/.config/nvm" "$NVM_HOME/xdg/nvm"

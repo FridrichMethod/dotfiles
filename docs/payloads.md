@@ -28,7 +28,7 @@ own state are in its README; this file covers only how dotfiles calls them.
 | `pymol` | PyMOLScripts | `~/.pymolrc` and `~/.pymolrc.py` | the same two files in `$HOME` |
 | `skills` | awesome-skills | its skill copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/`, with selection and visibility managed by its installer | the same, through its `install.ps1` |
 
-`common/claude/.claude/settings.json` runs the helpers by their home-relative
+`home/.policy/claude-settings.json` runs the helpers by their home-relative
 path, for example
 `node -e "const f=require('os').homedir()+'/.claude/coding-agent-kit/statusline.cjs';if(process.platform!=='win32'||require('fs').existsSync(f))require(f).main()"`,
 so they need Node.js 22 or newer on PATH. On Unix a missing helper stays
@@ -36,7 +36,7 @@ visible: the command exits 1, so Claude Code shows no status line and a
 non-blocking hook error. On native Windows, where the kit installs nothing,
 the command exits 0 silently while the helper is missing (a blank status
 line, no hook), and a copy an older kit release (0.6) left in
-`~\.claude\coding-agent-kit\` still runs. `common/zsh/.zshrc` appends
+`~\.claude\coding-agent-kit\` still runs. `home/dot_zshrc` appends
 `~/.local/share/zsh/site-functions` to `fpath` before oh-my-zsh runs
 `compinit`, so the kit's zsh completions load.
 
@@ -123,7 +123,7 @@ login, profile or schedule installs or updates a payload repo (any other call
 is a usage error, see below), and the script keeps no state of its own.
 
 ```sh
-sync-payloads [kit] [pymol] [skills]                      # common/sh/.aliases; follows the home binding
+sync-payloads [kit] [pymol] [skills]                      # home/dot_aliases; follows the home binding
 sync-skills                                               # sync-payloads skills
 sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]   # default: DOTFILES_PAYLOAD_ITEMS
 ```
@@ -131,7 +131,7 @@ sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]   # default: DOTFILES_PA
 `sync-payloads` and `sync-skills` are aliases of interactive shells. In a
 native home they run the hook of the source `~/.config/dotfiles/native`
 names, validated with that source's `lib/chezmoi-guard.sh` exactly as the
-login dispatch in `common/sh/.profile` does; an invalid binding prints
+login dispatch in `home/dot_profile` does; an invalid binding prints
 `[dotfiles] [error] Native home binding is invalid; payload update refused.`
 and returns 1 without running any checkout's hook. An unmarked home has no
 binding: they print
@@ -189,7 +189,7 @@ override.
 ### Native Windows
 
 `scripts/payload-update.ps1` is the twin, and only a person runs it too: the
-tail of `win/powershell/Documents/PowerShell/profile.ps1` runs only the update
+tail of `home/Documents/PowerShell/profile.ps1` runs only the update
 hook. Its items are those with a `windows-install` row, PyMOLScripts and
 awesome-skills: the kit has none, since it installs nothing on native
 Windows, so a run that names it, as an argument or in
@@ -438,10 +438,10 @@ dotfiles adds:
   none of them.
 - Dotfiles ships no `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml`,
   so the kit's defaults apply (`codex-as --show-config` prints them). If a host
-  ever needs one, let one package of that host's overlay own the whole file,
-  never a common file plus a host copy, and set `codex_home` and `secrets_dir`
+  ever needs one, let one source file own the whole target, never a shared
+  file plus a host copy, and set `codex_home` and `secrets_dir`
   before the first enrolment there, because account links are absolute.
-- The fzf-tab preview in `common/zsh/.oh-my-zsh/custom/fzf-tab.zsh` shows
+- The fzf-tab preview in `home/dot_oh-my-zsh/custom/fzf-tab.zsh` shows
   the kit's `--info NAME` for an account, offline and without opening a
   credential, so emails and labels show in previews, screen shares and agent
   transcripts; no token is printed. It calls the older spelling,

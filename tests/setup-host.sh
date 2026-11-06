@@ -664,7 +664,7 @@ SHA_MICROMAMBA=$(sha "$FIXTURES/artifacts/micromamba")
 SHA_MICROMAMBA_BAD=$(sha "$ARTIFACTS/micromamba-bad")
 SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
 
-mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/common/zsh"
+mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/home"
 cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
 cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
@@ -699,7 +699,7 @@ write_clones
         chezmoi archive "$URL_CHEZMOI" "$(sha "$ARTIFACTS/chezmoi.tar.gz")" '$HOME/.local/bin/chezmoi' mac,wsl-ubuntu,lab-ubuntu,sherlock,marlowe any core -
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
-printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
+printf '%s\n' '# fixture zshrc' >"$FIXTURE/home/dot_zshrc"
 mkdir -p "$FIXTURE/scripts"
 cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/payload-update.sh"
 cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
@@ -1725,7 +1725,7 @@ rm -f "$CONTRIB_BREWFILE"
 # absolute probe to a temporary fixture so no real prefix participates.
 GH_CONFIG="$TEST_TMP/gh-config"
 GH_REQUIRED="$TEST_TMP/required-gh/bin/gh"
-GH_HELPER=$("$REAL_GIT" config -f "$REPO_ROOT/lab-ubuntu/git/.gitconfig_local" \
+GH_HELPER=$("$REAL_GIT" config -f "$REPO_ROOT/home/.hosts/lab-ubuntu/.gitconfig_local" \
     --get-all credential.https://github.com.helper | sed -n 's/^!\([^ ]*\) .*/\1/p')
 [ -n "$GH_HELPER" ] || fail 'the lab GitHub credential helper is absent'
 mkdir -p "$GH_CONFIG"
@@ -1849,7 +1849,7 @@ for alias in v24.11.1 24 v24.11 node stable 'lts/*' current; do
     expect_rc nvm-default-valid 0
     expect_no_events nvm-default-valid
     selected=$(HOME="$CASE_HOME" NVM_DIR="$CASE_HOME/.nvm" NVM_BIN='' PATH="$SYS_BIN" \
-        "$BASH" -c '. "$1"; node --version' _ "$REPO_ROOT/common/sh/.profile")
+        "$BASH" -c '. "$1"; node --version' _ "$REPO_ROOT/home/dot_profile")
     [ "$selected" = v24.11.1 ] || fail "default $alias selected [$selected] in the dotfiles profile"
 done
 for alias in v20.19.0 v99.0.0 missing ''; do
@@ -1925,41 +1925,41 @@ expect_no_events native-recovery
 # --- rc-pollution guard ------------------------------------------------------
 
 new_home pollution
-run_case pollution BREW_POLLUTE="$FIXTURE/common/zsh/.zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
+run_case pollution BREW_POLLUTE="$FIXTURE/home/dot_zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
 expect_rc pollution 1
 expect_text pollution err 'S2-brew-bundle failed: changed files in'
-expect_text pollution err 'common/zsh/.zshrc'
-"$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
+expect_text pollution err 'home/dot_zshrc'
+"$REAL_GIT" -C "$FIXTURE" checkout -q -- home/dot_zshrc
 
 # The guard compares content: a file that was already modified keeps its
 # status line, and a file added inside an untracked dir would hide behind
 # `?? dir/` in the default status.
-printf '# a local edit\n' >>"$FIXTURE/common/zsh/.zshrc"
+printf '# a local edit\n' >>"$FIXTURE/home/dot_zshrc"
 new_home pollution-dirty
-run_case pollution-dirty BREW_POLLUTE="$FIXTURE/common/zsh/.zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
+run_case pollution-dirty BREW_POLLUTE="$FIXTURE/home/dot_zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
 expect_rc pollution-dirty 1
-expect_text pollution-dirty err "uncommitted changes in $FIXTURE: common/zsh/.zshrc;"
+expect_text pollution-dirty err "uncommitted changes in $FIXTURE: home/dot_zshrc;"
 expect_text pollution-dirty err 'review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)'
-expect_text pollution-dirty err "S2-brew-bundle failed: changed files in $FIXTURE: common/zsh/.zshrc"
+expect_text pollution-dirty err "S2-brew-bundle failed: changed files in $FIXTURE: home/dot_zshrc"
 # The native updater does not run from a dirty checkout; P0 says so there.
 new_home native-dirty
 run_case native-dirty -- --host lab-ubuntu --check --only S3-dirs
 expect_rc native-dirty 3
-expect_text native-dirty err "uncommitted changes in $FIXTURE: common/zsh/.zshrc; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
+expect_text native-dirty err "uncommitted changes in $FIXTURE: home/dot_zshrc; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
 expect_no_text native-dirty err 'stowed'
-"$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
+"$REAL_GIT" -C "$FIXTURE" checkout -q -- home/dot_zshrc
 
-mkdir -p "$FIXTURE/common/extra"
-printf '# untracked\n' >"$FIXTURE/common/extra/a.zsh"
+mkdir -p "$FIXTURE/home/extra"
+printf '# untracked\n' >"$FIXTURE/home/extra/a.zsh"
 new_home pollution-new
-run_case pollution-new BREW_POLLUTE="$FIXTURE/common/extra/b.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
+run_case pollution-new BREW_POLLUTE="$FIXTURE/home/extra/b.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
 expect_rc pollution-new 1
-expect_text pollution-new err "S2-brew-bundle failed: changed files in $FIXTURE: common/extra/b.zsh"
+expect_text pollution-new err "S2-brew-bundle failed: changed files in $FIXTURE: home/extra/b.zsh"
 new_home pollution-untracked
-run_case pollution-untracked BREW_POLLUTE="$FIXTURE/common/extra/a.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
+run_case pollution-untracked BREW_POLLUTE="$FIXTURE/home/extra/a.zsh" -- --host lab-ubuntu --yes --only S2-brew-bundle
 expect_rc pollution-untracked 1
-expect_text pollution-untracked err "S2-brew-bundle failed: changed files in $FIXTURE: common/extra/a.zsh"
-rm -rf "$FIXTURE/common/extra"
+expect_text pollution-untracked err "S2-brew-bundle failed: changed files in $FIXTURE: home/extra/a.zsh"
+rm -rf "$FIXTURE/home/extra"
 [ -z "$("$REAL_GIT" -C "$FIXTURE" status --porcelain)" ] || fail 'the pollution cases left the fixture checkout dirty'
 
 # --- --only, --skip and --keep-going -----------------------------------------

@@ -67,8 +67,9 @@ profile skips the setting.
 oh-my-posh initializes after PSReadLine key handlers because it owns Enter and
 Ctrl+C; zoxide follows because it wraps the prompt. A final wrapper preserves
 LASTEXITCODE, which zoxide's directory tracking can reset. The tracked theme
-lives under win/oh-my-posh, uses a release-tagged schema and ASCII glyph escapes,
-and supports shell integration/transient prompts. Re-render it after upgrades.
+lives in home/dot_config/oh-my-posh, uses a release-tagged schema and ASCII
+glyph escapes, and supports shell integration/transient prompts. Re-render it
+after upgrades.
 Windows Terminal settings are a regular file that chezmoi applies; a Terminal
 UI save edits it in place and shows up as destination drift (`chezmoi diff`) to
 reconcile under the takeover procedure, and a Terminal restart is required for
@@ -168,9 +169,9 @@ configuration: upstream autobuild is disabled, so reload needs no Python
 menu generation, pip package or virtual environment. Upstream may copy its
 default config into ignored files in its own checkout on first load; the
 deployed menu is then applied. To customize the menu, edit
-`common/tmux/.config/tmux/which-key.conf` in the checkout. A native home
-receives it through the login update once it is committed, since that update
-refuses a dirty checkout.
+`home/dot_config/tmux/which-key.conf` in the checkout; a native home receives it
+through the login update once it is committed, since that update refuses a dirty
+checkout.
 
 The config uses tmux 3.4 popup, menu and style features without version
 checks; `config/bootstrap/tools.tsv` holds the floor, and older tmux is

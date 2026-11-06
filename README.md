@@ -1,15 +1,14 @@
 # Dotfiles
 
 Cross-platform configuration for macOS, WSL/Ubuntu, Stanford Sherlock, Marlowe
-and native Windows, deployed by native chezmoi as regular files. Shared defaults
-in `common/` and host overlays remain the canonical sources until Stage 6
-consolidates them under `home/`.
+and native Windows, deployed by native chezmoi as regular files. The native
+source lives in `home/`.
 Secret enrollment is explicit and encrypted; mutable auth/runtime state stays local.
 
 ## Quick Start
 
 Clone once per home/platform. Native source selection uses explicit local
-`[data].host`; the checkout remains available for updates and literal source reads.
+`[data].host`; the checkout is the source chezmoi reads and stays available for updates.
 For release/rollout gates and actual host outcomes, read the
 [migration status](docs/chezmoi-migration/status.md).
 
@@ -71,24 +70,19 @@ you. It never authenticates for you or hides privileged commands in a script.
 For a session outside the clone, use the
 [agent prompt](docs/bootstrap.md#prompt-for-an-agent-started-outside-the-clone).
 
-## Hosts and packages
+## Source layout
 
-| Layer | Purpose |
+| Path | Purpose |
 | --- | --- |
-| [common](common/) | Shells, Git/SSH, terminals, editor, AI defaults and utility configuration |
-| [mac](mac/) | macOS paths, shell and connection overrides |
-| [wsl-ubuntu](wsl-ubuntu/) | WSL shell, integration and connection overrides |
-| [lab-ubuntu](lab-ubuntu/) | Lab Ubuntu, shared applications and fcitx5 |
-| [sherlock](sherlock/) | Stanford HPC shell/module settings and terminal data |
-| [marlowe](marlowe/) | Marlowe shell, Git and cache settings |
-| [win](win/) | PowerShell, Git/SSH, prompt, Terminal and WSL settings |
+| [home](home/) | Native chezmoi source (`.chezmoiroot`): one file per target under its chezmoi source name (`dot_`, `executable_`, `private_`, `empty_`) |
+| `home/.hosts/<role>/` | Role variants of `~/.config/{sh,bash,zsh}` rc files, `~/.gitconfig_local` and `~/.ssh/config.d/legacy.conf`, read raw by one-line role-keyed templates |
+| `home/.policy/` | Portable Claude and Codex policy, read raw by the two modify templates |
+| `home/.chezmoiignore` | The targets of each role: `common-only`, `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock`, `marlowe`, `win` |
 
-Packages mirror HOME paths; chezmoi deploys them as regular files from `home/`,
-composing common and host files for the role in local `[data].host`. Git
-overrides use `~/.gitconfig_local`; SSH delegates to `~/.ssh/config.d/*.conf`. A
-target has one owner: move a full host-specific file out of common rather than
-defining it in both layers. Windows receives an explicit common subset and no
-Unix shell files (`home/.chezmoiignore`); it deploys 26 regular files. The
+chezmoi never deploys a source dot-directory, so `.hosts/` and `.policy/` stay
+inputs. Git overrides use `~/.gitconfig_local`; SSH delegates to
+`~/.ssh/config.d/*.conf`. A target has exactly one source file; native Windows
+deploys 26 regular files and no POSIX shell files. The
 [dependency guide](docs/dependencies.md) explains required and optional tools;
 `config/bootstrap/` owns installation inventories and versions.
 
@@ -125,7 +119,8 @@ PowerShell key bindings, encoding and prompts.
 
 The repository [AGENTS.md](AGENTS.md) contains project rules; [CLAUDE.md](CLAUDE.md)
 only imports it. Keep the guide below 28,000 bytes. User-global Claude/Codex
-instructions and portable settings live under `common/claude` and `common/codex`.
+instructions live in `home/dot_claude/CLAUDE.md` and `home/dot_codex/AGENTS.md`,
+portable settings in `home/.policy/`.
 
 Both global guides place persistent agent worktrees in the current project's
 `.worktrees/` directory; brief disposable work may use `/tmp`. Keep unfinished
@@ -233,12 +228,12 @@ while an invalid explicit path fails. Unmarked homes run no login updater. Real
 takeover and selected secret enrollment require the [Stage 4 procedure](docs/chezmoi-migration/takeover.md)
 and recorded release gates; fixture passes are not real-host outcomes.
 
-To add a configuration file, put the canonical file at its HOME path under
-`common/<tool>/` or a host overlay; legacy source stays canonical until Stage 6.
-Add the matching `home/` literal-include template, its
-[inventory](docs/chezmoi-migration/inventory.md) row and stated totals, a
-`home/.chezmoiignore` role entry unless it applies to every role, and the exact
-counts in `tests/chezmoi_source_support.py`. If it introduces a new parent
+To add a configuration file, add it under `home/` with its chezmoi source name
+(a role-specific variant goes to `home/.hosts/<role>/<target>` behind a one-line
+role-keyed template). Add its row to `tests/fixtures/chezmoi/targets.tsv`, update
+the counts in `tests/chezmoi_source_support.py`, and add a `home/.chezmoiignore`
+role entry unless it applies to every role. A file containing `{{` stays plain;
+use `.tmpl` only for a real template. If it introduces a new parent
 directory, plan the reviewed per-host `apply --include=dirs --recursive=false`
 preparation from the [takeover procedure](docs/chezmoi-migration/takeover.md)
 before landing. Also check each applicable native host for an existing
@@ -248,8 +243,7 @@ on Windows, name its parent's ACL model first (see
 [start-stage-5.md](docs/chezmoi-migration/start-stage-5.md)). Native homes
 receive the change through the login update. Keep secrets local, code in
 its shell dialect and documentation in English ASCII. Follow
-[AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy; keep
-common-before-host order.
+[AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy.
 
 ## License
 

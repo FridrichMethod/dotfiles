@@ -17,7 +17,15 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "common/tmux/.tmux.conf"
+# Every tmux target and its native source (tests/fixtures/chezmoi/targets.tsv).
+TMUX_FILES = {
+    ".tmux.conf": ROOT / "home/dot_tmux.conf",
+    ".config/tmux/floax.conf": ROOT / "home/dot_config/tmux/floax.conf",
+    ".config/tmux/metric.py": ROOT / "home/dot_config/tmux/metric.py",
+    ".config/tmux/modern.conf": ROOT / "home/dot_config/tmux/modern.conf",
+    ".config/tmux/which-key.conf": ROOT / "home/dot_config/tmux/which-key.conf",
+}
+CONFIG = TMUX_FILES[".tmux.conf"]
 TMUX = shutil.which("tmux")
 TMUX_FLOOR = (3, 4)
 # Linux CI sets this: there a missing or below-floor tmux fails instead of
@@ -52,7 +60,7 @@ class PluginProvisioning(unittest.TestCase):
     def test_custom_plugins_have_matching_unix_installation_and_probes(self):
         clones, probes = manifest("git-clones.tsv"), manifest("tools.tsv")
         config = "\n".join(path.read_text() for path in
-                           (ROOT / "common/tmux").rglob("*.conf"))
+                           TMUX_FILES.values() if path.suffix == ".conf")
         for plugin, (identifier, entry) in CUSTOM_PLUGINS.items():
             with self.subTest(plugin=plugin):
                 self.assertIn(plugin, config)
@@ -89,16 +97,23 @@ class PluginProvisioning(unittest.TestCase):
                 self.assertEqual(probes[name]["hosts"], "unix")
                 self.assertEqual(probes[name]["doc"], "S3-clones")
 
+    def test_tmux_file_map_covers_every_tmux_source(self):
+        # A new tmux source must join TMUX_FILES, or no case here reads it.
+        self.assertEqual(set(TMUX_FILES.values()),
+                         {ROOT / "home/dot_tmux.conf", *(ROOT / "home/dot_config/tmux").iterdir()})
+        for target, path in TMUX_FILES.items():
+            with self.subTest(target=target):
+                self.assertTrue(path.is_file(), path)
+
 
 class VersionFloor(unittest.TestCase):
     def test_manifest_floor_replaces_runtime_version_gates(self):
         # The config uses tmux 3.4 menu styles, popups and display-menu without
         # checks; hpc-login-env.yml mirrors this floor (test_bootstrap_manifest).
-        for path in sorted((ROOT / "common/tmux").rglob("*")):
-            if path.is_file():
-                with self.subTest(path=str(path.relative_to(ROOT))):
-                    self.assertNotRegex(path.read_text(encoding="utf-8"),
-                                        r"#\{version\}|tmux\s+-V")
+        for path in sorted(TMUX_FILES.values()):
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertNotRegex(path.read_text(encoding="utf-8"),
+                                    r"#\{version\}|tmux\s+-V")
         self.assertEqual(manifest("tools.tsv")["tmux"]["floor"], "3.4")
 
 
@@ -136,7 +151,9 @@ class TmuxConfiguration(unittest.TestCase):
         self.home = self.root / "home with spaces"
         self.home.mkdir()
         self.config = self.home / ".tmux.conf"
-        shutil.copytree(ROOT / "common/tmux", self.home, dirs_exist_ok=True)
+        for target, source in TMUX_FILES.items():
+            (self.home / target).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, self.home / target)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         # Config shell commands need the native tool on this isolated PATH.
@@ -365,7 +382,7 @@ class MetricForwarding(unittest.TestCase):
         script.chmod(0o755)
         self.env = {"HOME": str(self.home), "PATH": "/usr/bin:/bin",
                     "TMPDIR": str(self.root / "shared-temp")}
-        self.forwarder = ROOT / "common/tmux/.config/tmux/metric.py"
+        self.forwarder = TMUX_FILES[".config/tmux/metric.py"]
 
     def run_metric(self, argument="cpu"):
         result = subprocess.run([sys.executable, "-I", "-B", str(self.forwarder), argument],

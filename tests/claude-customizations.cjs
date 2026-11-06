@@ -32,7 +32,7 @@ const scripts = kitHome ? path.join(kitHome, '.claude', 'coding-agent-kit') : ''
 if (kitHome && !fs.statSync(path.join(scripts, 'statusline.cjs'), { throwIfNoEntry: false })?.isFile()) {
   throw new Error(`DOTFILES_TEST_KIT_HOME=${kitHome} has no installed coding-agent-kit helpers in ${scripts}.`);
 }
-const settings = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../common/claude/.claude/settings.json'), 'utf8'));
+const settings = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../home/.policy/claude-settings.json'), 'utf8'));
 
 test('Git fixtures use ordinary empty config and template paths', () => {
   assert.ok(fs.lstatSync(process.env.GIT_CONFIG_GLOBAL).isFile());

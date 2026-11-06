@@ -16,7 +16,7 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # hosts that already dropped them. Also keep the strict JSON, ASCII and
 # never-disabled PowerShell 7 source that AGENTS.md asks of this file. This
 # needs only Python, so it runs where pwsh is missing too.
-python3 -I -B - "$REPO_ROOT/win/terminal/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json" <<'PY'
+python3 -I -B - "$REPO_ROOT/home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json" <<'PY'
 import json
 import sys
 
@@ -111,8 +111,8 @@ scan_floor() {
 }
 
 floor_status=0
-scan_floor win/powershell/Documents/PowerShell/profile.ps1 7 || floor_status=1
-scan_floor win/powershell/Documents/WindowsPowerShell/profile.ps1 51 || floor_status=1
+scan_floor home/Documents/PowerShell/profile.ps1 7 || floor_status=1
+scan_floor home/Documents/WindowsPowerShell/profile.ps1 51 || floor_status=1
 if [ "$floor_status" -ne 0 ]; then
     printf 'PowerShell 7.0 floor scan failed.\n' >&2
     exit 1

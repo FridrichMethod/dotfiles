@@ -598,6 +598,7 @@ $UNIT/stow-a/stow"
 # stow_audit START PATH [RC]: e2e_audit_login_stow's output and status when
 # the machine had START before the flow and the login shell reports PATH.
 stow_audit() (
+    # shellcheck disable=SC2034 # read by e2e_audit_login_stow (lib/assert.sh)
     E2E_STOW_START=$1
     E2E_LOGIN_PATH=$2
     E2E_LOGIN_RC=${3:-0}
@@ -995,6 +996,7 @@ hp_case() {
     cp -Rp "$HP/good" "$HP/$1"
     (cd "$HP/$1" && eval "$2")
     (
+        # shellcheck disable=SC2034 # read by the sourced lib/assert.sh
         HOME=$HP/$1 E2E_CLONE=$HP/$1/dotfiles E2E_RC_BEFORE=$HP_BEFORE
         e2e_handover_problems lab-ubuntu || true
         printf '%s|%s\n' "$E2E_HANDOVER_DETAIL" "$E2E_HANDOVER_KEPT"
@@ -1032,17 +1034,17 @@ ROWS
 # elsewhere, a link to a sibling whose name starts like the clone's, and a
 # link inside the clone itself are not.
 CL="$UNIT/cl home"
-mkdir -p "$CL/dotfiles/common" "$CL/dotfiles-old" "$CL/.config"
-: >"$CL/dotfiles/common/x"
+mkdir -p "$CL/dotfiles/home" "$CL/dotfiles-old" "$CL/.config"
+: >"$CL/dotfiles/home/x"
 : >"$CL/dotfiles-old/x"
-ln -s ../dotfiles/common/x "$CL/.config/rel"
-ln -s dotfiles/common/x "$CL/top"
-ln -s "$CL/dotfiles/common/x" "$CL/abs"
-ln -s dotfiles/common "$CL/dirlink"
+ln -s ../dotfiles/home/x "$CL/.config/rel"
+ln -s dotfiles/home/x "$CL/top"
+ln -s "$CL/dotfiles/home/x" "$CL/abs"
+ln -s dotfiles/home "$CL/dirlink"
 ln -s dotfiles/missing "$CL/dangling"
 ln -s /etc "$CL/other"
 ln -s dotfiles-old/x "$CL/near"
-ln -s common/x "$CL/dotfiles/inner"
+ln -s home/x "$CL/dotfiles/inner"
 cl_out=$(HOME=$CL E2E_CLONE=$CL/dotfiles E2E_SRC=$UNIT/no-src E2E_SNAPSHOT_PRUNE='' e2e_audit_clone_links) &&
     fail 'the clone-link audit passed a home with links into the clone'
 expect_eq 'clone links found' "$(printf '%s\n' "$cl_out" | LC_ALL=C sort)" "$CL/.config/rel

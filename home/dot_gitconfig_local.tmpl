@@ -1,1 +1,1 @@
-{{- include (joinPath .chezmoi.workingTree .host "git/.gitconfig_local") -}}
+{{- include (printf ".hosts/%s/.gitconfig_local" .host) -}}

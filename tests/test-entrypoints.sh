@@ -134,8 +134,8 @@ python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_environment.py' -v
 # source it and the logger, and this test on itself, the entry points it
 # reads and the hook configuration. Files are selected as pre-commit
 # selects them: re.search of the hook's files, then of its exclude and the
-# top-level one.
-python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" <<'PY'
+# top-level one; a shell linter must also declare its types.
+python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" "$TEST_DIR/fixtures/chezmoi/targets.tsv" <<'PY'
 import re
 import sys
 
@@ -159,33 +159,39 @@ for line in open(sys.argv[1], encoding='utf-8'):
     match = re.match(r'\s+(files|exclude): (.+?)\s*$', line)
     if match and hook is not None:
         hook[match.group(1)] = re.compile(match.group(2).strip('\'"'))
+        continue
+    match = re.match(r'\s+types: \[(.*)\]\s*$', line)
+    if match and hook is not None:
+        hook['types'] = [tag.strip() for tag in match.group(1).split(',') if tag.strip()]
 need = {
-    'ai-policy': ['tests/ai-policy.sh', 'tests/test_ai_policy.py', 'common/claude/.claude/settings.json',
-                  'common/claude/.claude/CLAUDE.md', 'common/codex/.codex/AGENTS.md',
-                  'common/codex/.codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
+    'ai-policy': ['tests/ai-policy.sh', 'tests/test_ai_policy.py', 'home/.policy/claude-settings.json',
+                  'home/dot_claude/CLAUDE.md', 'home/dot_codex/AGENTS.md',
+                  'home/dot_codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
                   'tests/lib/environment.sh'],
-    'payload-update': ['scripts/payload-update.sh', 'config/payloads.tsv', 'common/sh/.aliases', 'common/sh/.profile',
-                       'common/zsh/.zshrc', 'lib/terminal.sh', 'lib/chezmoi-guard.sh', 'tests/payload-update.sh',
+    'payload-update': ['scripts/payload-update.sh', 'config/payloads.tsv', 'home/dot_aliases', 'home/dot_profile',
+                       'home/dot_zshrc', 'lib/terminal.sh', 'lib/chezmoi-guard.sh', 'tests/payload-update.sh',
                        'tests/test_payload_download.py'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
-                         'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py'],
+                         'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py',
+                         'tests/fixtures/chezmoi/targets.tsv'],
     'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
                        'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                        'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
                        'scripts/payload-update.sh', '.gitignore',
                        'tests/chezmoi-takeover.sh', 'tests/chezmoi-takeover.ps1',
                        'home/.chezmoidata/codex-policy.json',
-                       'common/claude/.claude/settings.json', 'common/codex/.codex/config.toml',
+                       'home/.policy/claude-settings.json', 'home/.policy/codex-config.toml',
                        'home/dot_claude/modify_private_settings.json',
                        'home/dot_codex/modify_private_config.toml',
                        'tests/test_chezmoi_claude.py', 'tests/test_chezmoi_codex.py',
                        'tests/test_chezmoi_integration.py',
-                       '.chezmoiroot', '.chezmoiversion', 'home/.chezmoiignore',
-                       'home/dot_zshrc.tmpl', 'home/dot_local/bin/executable_my-fzf-preview.sh.tmpl',
-                       'home/dot_config/aria2/aria2.conf.tmpl', 'home/dot_wezterm.lua.tmpl',
+                       '.chezmoiroot', '.chezmoiversion', 'home/.chezmoiignore', '.gitattributes',
+                       'home/dot_zshrc', 'home/dot_local/bin/executable_my-fzf-preview.sh',
+                       'home/dot_config/aria2/aria2.conf', 'home/dot_wezterm.lua', 'home/dot_p10k.zsh',
+                       'home/dot_config/sh/dot_profile.tmpl', 'home/.hosts/mac/.config/sh/.profile',
                        'tests/chezmoi_source_support.py', 'tests/test_chezmoi_source_state.py',
-                       'tests/test_chezmoi_rendered.py', 'docs/chezmoi-migration/inventory.md',
-                       'common/sh/.profile', 'win/wsl/.wslconfig', 'mac/sh/.config/sh/.profile',
+                       'tests/test_chezmoi_rendered.py', 'tests/fixtures/chezmoi/targets.tsv',
+                       'home/dot_profile', 'home/dot_wslconfig',
                        'tests/test_chezmoi_native_config.py', 'tests/test_chezmoi_secrets.py',
                        'tests/fixtures/chezmoi/native-config/modify_private_settings.json',
                        'tests/fixtures/chezmoi/secrets/README.md', 'tests/chezmoi.sh',
@@ -196,29 +202,40 @@ need = {
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh',
                     'tests/e2e/lib/steps.sh', 'docs/bootstrap.md', 'config/bootstrap/installers.tsv',
                     '.chezmoiversion', 'lib/bootstrap/steps-common.sh'],
-    'shell-profile': ['common/sh/.profile', 'common/sh/.aliases', 'common/zsh/.zshrc', 'lib/chezmoi-guard.sh'],
+    'shell-profile': ['home/dot_profile', 'home/dot_aliases', 'home/dot_zshrc', 'home/dot_oh-my-zsh/custom/nvm.zsh',
+                      'home/dot_oh-my-zsh/custom/fzf-tab.zsh', 'lib/chezmoi-guard.sh'],
     'terminal-output': ['lib/terminal.sh', 'lib/terminal.ps1', 'tests/terminal.ps1', 'doctor.ps1', 'setup-host.ps1'],
     'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1', 'tests/powershell-profile.sh',
                            'doctor.ps1', 'setup-host.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
                            'tests/run.ps1', 'tests/terminal.ps1',
-                           'win/terminal/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/'
-                           'LocalState/settings.json'],
+                           'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/'
+                           'LocalState/settings.json', 'home/Documents/PowerShell/profile.ps1',
+                           'home/Documents/WindowsPowerShell/profile.ps1',
+                           'home/dot_config/oh-my-posh/prompt.omp.json', 'home/dot_zshrc'],
     'doctor': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'setup-host': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'bootstrap-windows': ['lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1'],
     'e2e-harness-windows': ['tests/e2e-harness-windows.sh', 'tests/e2e-harness.ps1',
                             'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1', 'tests/e2e/lib/flow-win.ps1',
                             'docs/bootstrap.md', 'lib/chezmoi-guard.ps1', 'setup-host.ps1'],
+    'tmux-config': ['home/dot_tmux.conf', 'home/dot_config/tmux/metric.py', 'home/dot_config/tmux/modern.conf'],
+    'claude-customizations': ['home/.policy/claude-settings.json', 'tests/claude-customizations.cjs'],
+    'ai-integration': ['.claude/settings.json', 'home/.policy/claude-settings.json', 'home/dot_zsh_aliases',
+                       'home/dot_bash_aliases', 'home/dot_oh-my-zsh/custom/fzf-tab.zsh'],
+    'host-overlays': ['home/.hosts/wsl-ubuntu/.config/bash/.bashrc', 'home/.hosts/lab-ubuntu/.config/zsh/.zshrc',
+                      'home/.hosts/mac/.config/sh/.profile', 'home/dot_aliases'],
 }
 missed = []
 for name, excluded, checked in (
     ('check-json', ['home/dot_claude/modify_private_settings.json',
                     'tests/fixtures/chezmoi/native-config/modify_private_settings.json'],
-                   ['common/claude/.claude/settings.json', 'home/.chezmoidata/codex-policy.json',
-                    'home/dot_claude/ordinary.json']),
+                   ['home/.policy/claude-settings.json', 'home/.chezmoidata/codex-policy.json',
+                    'home/dot_claude/ordinary.json',
+                    'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json',
+                    'home/dot_codex/pets/tom/pet.json', 'home/dot_config/oh-my-posh/prompt.omp.json']),
     ('check-toml', ['home/dot_codex/modify_private_config.toml',
                     'tests/fixtures/chezmoi/native-config/modify_private_config.toml'],
-                   ['common/codex/.codex/config.toml', 'home/dot_codex/ordinary.toml']),
+                   ['home/.policy/codex-config.toml', 'home/dot_codex/ordinary.toml']),
 ):
     exclude = hooks[name][0].get('exclude')
     for path in excluded:
@@ -234,6 +251,38 @@ for name, paths in need.items():
     for path in paths:
         if (files and not files.search(path)) or any(e and e.search(path) for e in (exclude, top_exclude)):
             missed.append(f'{name} does not run on {path}')
+# Shell sources the target table names stay linted under their native
+# names; upstream and app-written bytes never reach a fixing hook.
+TERMINAL = 'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
+UPSTREAM = {'.p10k.zsh': 'home/dot_p10k.zsh', '.local/bin/my-fzf-preview.sh': 'home/dot_local/bin/executable_my-fzf-preview.sh'}
+RENDERED_ONLY = set(UPSTREAM) | {'.local/bin/claude-limited', '.xprofile'}
+def selects(variant, path):
+    files, exclude = variant.get('files'), variant.get('exclude')
+    return bool((files is None or files.search(path)) and not any(e and e.search(path) for e in (exclude, top_exclude)))
+for name, paths in (('trailing-whitespace', [UPSTREAM['.p10k.zsh'], TERMINAL]), ('end-of-file-fixer', [TERMINAL]),
+                    ('shellcheck', [UPSTREAM['.local/bin/my-fzf-preview.sh']]), ('shfmt', list(UPSTREAM.values()))):
+    for path in paths:
+        if any(selects(variant, path) for variant in hooks.get(name, [])):
+            missed.append(f'{name} would rewrite or lint {path}')
+# A variant without its own types inherits the upstream `types: [shell]`;
+# identify gives dot_ names no shell tag, so it would silently skip
+# home/dot_bashrc. Every variant sets `types: [file]` instead.
+for name in ('shellcheck', 'shfmt'):
+    for number, variant in enumerate(hooks.get(name, []), 1):
+        if variant.get('types') != ['file']:
+            missed.append(f'{name} variant {number} does not set types: [file]')
+def lints(variant, path):
+    return variant.get('types') == ['file'] and selects(variant, path)
+ROLES = ('common-only', 'mac', 'wsl-ubuntu', 'lab-ubuntu', 'sherlock', 'marlowe', 'win')
+rows = [line.split('\t') for line in open(sys.argv[3], encoding='ascii').read().splitlines() if line and not line.startswith('#')][1:]
+for target, hosts, source, _mode, shell in rows:
+    if shell == '-' or target in RENDERED_ONLY:
+        continue
+    roles = ROLES if hosts == 'all' else ROLES[:-1] if hosts == 'unix' else hosts.split(',')
+    for path in sorted({source.replace('{host}', role) for role in roles}):
+        for name in (('shfmt', 'shellcheck') if shell in ('sh', 'bash') else ('shfmt',)):
+            if not any(lints(variant, path) for variant in hooks.get(name, [])):
+                missed.append(f'{name} does not lint {path}')
 runner = open(sys.argv[2], encoding='utf-8').read()
 runner_suites = re.search(r'tests=\(\n(.*?)\n\)', runner, re.S).group(1).split()
 entries = {hook.get('entry') for variants in hooks.values() for hook in variants}

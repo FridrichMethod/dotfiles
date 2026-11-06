@@ -348,8 +348,8 @@ class UnixTakeoverTests(unittest.TestCase):
                 log = f.root / "dispatch-log"
                 for name in ("chezmoi-update", "payload-update"):
                     (scripts / f"{name}.sh").write_text(f'printf "%s\\n" {name} >>"$DISPATCH_LOG"\n')
-                shutil.copyfile(ROOT / "common/sh/.profile", f.destination / ".profile")
-                shutil.copyfile(ROOT / "common/zsh/.zshrc", f.destination / ".zshrc")
+                shutil.copyfile(ROOT / "home/dot_profile", f.destination / ".profile")
+                shutil.copyfile(ROOT / "home/dot_zshrc", f.destination / ".zshrc")
                 (f.destination / ".oh-my-zsh").mkdir()
                 (f.destination / ".oh-my-zsh/oh-my-zsh.sh").touch()
                 env = {**f.env, "PATH": os.defpath, "CURSOR_AGENT": "1", "DISPATCH_LOG": str(log)}
@@ -373,7 +373,7 @@ class UnixTakeoverTests(unittest.TestCase):
     def test_noninteractive_profile_skips_invalid_native_binding_quietly(self):
         with UpdateFixture() as f:
             f.marker.write_text("partial takeover\n")
-            result = f.hook("common/sh/.profile", interactive=False)
+            result = f.hook("home/dot_profile", interactive=False)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(result.stdout + result.stderr, "")
 

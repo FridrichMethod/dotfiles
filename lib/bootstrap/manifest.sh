@@ -127,7 +127,7 @@ bootstrap_expand_path() {
             rest=${input#'$ZSH_CUSTOM'}
             ;;
         '$NVM_DIR' | '$NVM_DIR/'*)
-            # Match the official layouts discovered by common/sh/.profile.
+            # Match the official layouts that home/dot_profile discovers.
             # Without an installation, keep ~/.nvm as the installer target.
             base=${NVM_DIR:-$home/.nvm}
             if [ -z "${NVM_DIR:-}" ] && [ ! -d "$home/.nvm" ] &&

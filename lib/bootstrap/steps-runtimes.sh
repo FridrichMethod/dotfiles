@@ -23,7 +23,7 @@ steps_nvm_best() {
 }
 
 # steps_nvm_default DIR: the installed version selected by default, using
-# the same file-only alias resolution as common/sh/.profile. Never source
+# the same file-only alias resolution as home/dot_profile. Never source
 # nvm.sh: aliases can be chained, exact, partial, node/stable or named LTS.
 # Missing targets, empty aliases, loops and relative LTS aliases fail.
 steps_nvm_default() {

@@ -19,7 +19,8 @@
 # eza 0.18.20, fd 8.3.0 (--strip-cwd-prefix), python3 3.11 (the stdlib helper
 # floor, AGENTS.md), node 22.0 (18 and 20 are end of life), shfmt 3.13.0
 # (first zsh dialect), gh 2.50.0, pwsh 7.0 (#Requires -Version 7.0),
-# tmux 3.4 (common/tmux sets menu-style and opens popups and menus ungated).
+# tmux 3.4 (home/dot_tmux.conf and home/dot_config/tmux/ set menu-style and
+# open popups and menus ungated).
 id	tier	hosts	probe	version_flag	floor	absent	doc
 git	core	all	git	--version	-	cannot clone or update the dotfiles	P0-preflight
 bash	core	unix	bash	--version	-	doctor.sh and setup-host.sh cannot run	P0-preflight

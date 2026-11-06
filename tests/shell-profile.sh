@@ -31,7 +31,7 @@ for test_shell in sh bash zsh; do
                 [ "$MANPATH" = "$3" ] || exit 1
                 . "$1"
                 [ "$MANPATH" = "$3" ]
-            ' profile "$REPO_ROOT/common/sh/.profile" "$initial_manpath" "$expected"
+            ' profile "$REPO_ROOT/home/dot_profile" "$initial_manpath" "$expected"
     done
     # When a native man and its system pages are installed, also check actual
     # lookup behavior instead of relying only on the MANPATH representation.
@@ -43,7 +43,7 @@ for test_shell in sh bash zsh; do
                 after=$(man -w ls)
                 [ "$before" = "$after" ]
             fi
-        ' profile "$REPO_ROOT/common/sh/.profile"
+        ' profile "$REPO_ROOT/home/dot_profile"
 done
 
 # nvm: the profile resolves the default alias the way `nvm use default` does
@@ -93,7 +93,7 @@ nvm_case() {
             if leaked=$(set | grep "^_nvm"); then printf "leaked: %s\n" "$leaked"; exit 1; fi
             if command -v _nvm_default_bin >/dev/null 2>&1; then echo "leaked function"; exit 1; fi
             if [ -n "${FAILGLOB-}" ]; then shopt -q failglob || { echo "failglob off"; exit 1; }; fi
-        ' profile "$REPO_ROOT/common/sh/.profile" "$expected_bin" "$expected_dir" \
+        ' profile "$REPO_ROOT/home/dot_profile" "$expected_bin" "$expected_dir" \
         >"$TEST_TMP/nvm-out" 2>&1 && [ ! -s "$TEST_TMP/nvm-out" ]; then
         return 0
     fi
@@ -158,7 +158,7 @@ EOF
     nvm_case "no nvm" "$test_shell" "$TEST_TMP/home" "" unset
 done
 
-# common/zsh/.oh-my-zsh/custom/nvm.zsh loads nvm without `nvm use`. Only
+# home/dot_oh-my-zsh/custom/nvm.zsh loads nvm without `nvm use`. Only
 # when a later `brew shellenv` (oh-my-zsh's brew plugin on macOS) has put
 # Homebrew's bin ahead of nvm's does it move nvm's bin back, just ahead of
 # Homebrew's. Otherwise it must not assign PATH, which would empty the
@@ -186,14 +186,14 @@ if [ -n "$ZSH_BIN" ]; then
             hash _marker=/bin/sh
             source $nvm_zsh
             [[ $PATH == /opt/brew/bin:/usr/bin:/bin:$node_bin ]] && (( $+commands[_marker] ))
-        ' nvm-zsh "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/nvm.zsh" "$(node_bin v24.11.1)" \
+        ' nvm-zsh "$REPO_ROOT/home/dot_oh-my-zsh/custom/nvm.zsh" "$(node_bin v24.11.1)" \
         2>&1; then
         echo "FAIL nvm.zsh" >&2
         nvm_failures=$((nvm_failures + 1))
     fi
 fi
 
-# common/zsh/.zshrc in three nested interactive shells. The host rc runs a
+# home/dot_zshrc in three nested interactive shells. The host rc runs a
 # fake `brew shellenv` that, like Homebrew's, prints nothing only while PATH
 # starts with its bin:sbin, then prepends a condabin once per process tree,
 # as conda's hook does, and a login env's bin every time, as Sherlock's does;
@@ -214,9 +214,9 @@ if [ -n "$ZSH_BIN" ]; then
     zhome=$TEST_TMP/zsh-home brew=$TEST_TMP/brew
     mkdir -p "$zhome/.config/zsh" "$zhome/.oh-my-zsh/custom" "$brew/bin" "$brew/sbin" \
         "$TEST_TMP/condabin" "$TEST_TMP/env/bin" "$TEST_TMP/login/bin"
-    ln -s "$REPO_ROOT/common/sh/.profile" "$zhome/.profile"
-    ln -s "$REPO_ROOT/common/zsh/.zshrc" "$zhome/.zshrc"
-    ln -s "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/nvm.zsh" "$zhome/.oh-my-zsh/custom/"
+    ln -s "$REPO_ROOT/home/dot_profile" "$zhome/.profile"
+    ln -s "$REPO_ROOT/home/dot_zshrc" "$zhome/.zshrc"
+    ln -s "$REPO_ROOT/home/dot_oh-my-zsh/custom/nvm.zsh" "$zhome/.oh-my-zsh/custom/"
     for node in "$brew/bin/node" "$TEST_TMP/env/bin/node"; do
         printf '#!/bin/sh\n' >"$node"
         chmod +x "$node"
@@ -297,7 +297,7 @@ if [ -n "$ZSH_BIN" ]; then
     fi
 fi
 
-# common/zsh/.oh-my-zsh/custom/fzf-tab.zsh: both tldr previews color the page
+# home/dot_oh-my-zsh/custom/fzf-tab.zsh: both tldr previews color the page
 # with every tldr client. tlrc and tealdeer take `--color always`; the C
 # client (the tldr formula Homebrew removed, still on hosts that installed
 # it) takes a bare -C and, given `--color always ls`, looks up a page named
@@ -340,7 +340,7 @@ SH
                 zstyle -s $2 fzf-preview preview || exit 97
                 word=$3 desc=$3
                 eval "$preview"
-            ' fzf-tab "$REPO_ROOT/common/zsh/.oh-my-zsh/custom/fzf-tab.zsh" "$2" "$3" 2>/dev/null
+            ' fzf-tab "$REPO_ROOT/home/dot_oh-my-zsh/custom/fzf-tab.zsh" "$2" "$3" 2>/dev/null
     }
     want=$(printf '\033[1mls\033[0m\nList directory contents.')
     for client in 'c:-C ls' 'tlrc:--color always ls'; do
@@ -376,7 +376,7 @@ SH
     fi
 fi
 
-# sync-payloads and sync-skills (common/sh/.aliases) in each interactive
+# sync-payloads and sync-skills (home/dot_aliases) in each interactive
 # shell, zsh without interactivecomments too (oh-my-zsh sets it, a bare zsh
 # does not): a valid native binding runs its source's hook, never the checkout
 # at ~/dotfiles, with the arguments and exit status passed through; an
@@ -411,7 +411,7 @@ for test_shell in sh dash bash zsh; do
             SYNC_TRACE="$TEST_TMP/sync-trace" "$test_shell_path" "${sync_flags[@]}" -c '. "$1"
                 eval "sync-payloads kit pymol"; first=$?; eval sync-skills
                 printf "%s %s %s\n" "$first" "$?" "$(set | grep -c "^_df_")"' aliases \
-            "$REPO_ROOT/common/sh/.aliases" </dev/null 2>"$TEST_TMP/sync-err") || :
+            "$REPO_ROOT/home/dot_aliases" </dev/null 2>"$TEST_TMP/sync-err") || :
         refusals=$(grep -c -F -x -e "$sync_refusal" "$TEST_TMP/sync-err" || :)
         noise=$(grep -v -F -x -e "$sync_refusal" "$TEST_TMP/sync-err" |
             grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' || :)
@@ -430,7 +430,7 @@ for test_shell in sh dash bash zsh; do
     done
 done
 
-# The login update of an unmarked home, through common/sh/.profile (sh, dash,
+# The login update of an unmarked home, through home/dot_profile (sh, dash,
 # Bash) and the ~/.zshrc tail (zsh), runs no updater, not even one of a
 # checkout at the old default ~/dotfiles, and prints nothing.
 login_failures=0 login_home=$TEST_TMP/login-home
@@ -439,8 +439,8 @@ for hook in dotfiles-update chezmoi-update payload-update; do
     # shellcheck disable=SC2016
     printf 'printf "%%s\\n" %s >>"$LOGIN_TRACE"\n' "$hook" >"$login_home/dotfiles/scripts/$hook.sh"
 done
-ln -s "$REPO_ROOT/common/sh/.profile" "$login_home/.profile"
-ln -s "$REPO_ROOT/common/zsh/.zshrc" "$login_home/.zshrc"
+ln -s "$REPO_ROOT/home/dot_profile" "$login_home/.profile"
+ln -s "$REPO_ROOT/home/dot_zshrc" "$login_home/.zshrc"
 : >"$login_home/.oh-my-zsh/oh-my-zsh.sh"
 for test_shell in sh dash bash zsh; do
     # The cases run with PATH=/usr/bin:/bin, so run the shell by full path.

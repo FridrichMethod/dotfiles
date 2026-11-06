@@ -60,19 +60,24 @@ instead. Ordinary portable inputs and ownership data remain linted. Unix permiss
 assertions do not establish Windows ACL behavior; unavailable native platforms
 remain explicit missing evidence.
 
-Stage 2 adds exact inventory/target-set and byte/mode/convergence checks for
-ordinary source, including empty files, binary assets and Windows CRLF. A real
-linked Git worktree with spaces proves literal include paths. Native compatible
-roles and supplemental OS-data rendering are reported separately. Rendered shell,
-Python, JSON, TOML and Lua output is checked by `test_chezmoi_rendered.py`; optional
-installed linters report skips. Canonical legacy paths retain their original
-lint hooks during coexistence. The native hook also selects encoded `home/`
-templates and their legacy inputs, so filename changes do not bypass checks.
+Stage 6 materializes the source. `test_chezmoi_source_state.py` checks every
+role's exact target set, bytes, modes and convergence against
+`tests/fixtures/chezmoi/targets.tsv` (empty files, binary assets and Windows CRLF
+included), that only the six role-keyed templates remain and none reads the
+working tree, and, in a real linked worktree with spaces, that source-relative
+includes of `home/.hosts/` and `home/.policy/` return exact bytes while no
+dot-directory becomes a target. Native compatible roles and supplemental OS-data
+rendering are reported separately. Rendered shell, Python, JSON, TOML and Lua
+output is checked by `test_chezmoi_rendered.py`, with the shell dialect taken
+from the table; optional installed linters report skips. `test-entrypoints.sh`
+requires shellcheck and shfmt to select every shell source the table names,
+each variant with `types: [file]`, since identify gives `dot_` names no shell
+tag.
 
 Stage 3 adds actual portable Claude/Codex transforms, typed ownership parity,
 numeric/Unicode and TOML temporal refusal, CRLF multiline semantics, invalid
 input preservation and complete candidate applies. Native compatible-role
-counts are 49/56/55/59/54/54/26 in inventory order, with exactly the two AI targets
+counts are 49/56/55/59/54/54/26 in role order, with exactly the two AI targets
 added to Stage 2. Shared auth/trust/payload siblings stay unmanaged. Local temporal
 refusal tests run on every OS; the historical Unix timezone characterization
 skip on Windows remains separate from the cross-platform safety assertions.
@@ -178,7 +183,7 @@ setup-host.ps1 keep a plain fallback when lib/terminal.ps1 is missing or broken.
 `tests/powershell-profile.ps1` checks the tracked PowerShell profiles and the
 oh-my-posh theme without loading the live profile. It walks the AST to pin the
 exact interactive guard and keep setup in its then-branch, checks agent-session
-parity against `common/zsh/.zshrc`, keeps the conda stub lazy (removed before
+parity against `home/dot_zshrc`, keeps the conda stub lazy (removed before
 the hook runs) and identical in both profiles, installs out of the profile and
 Windows PowerShell 5.1 syntax ASCII-only, and requires that the login tail
 runs no payload hook and reads no environment variable. It runs
@@ -215,7 +220,7 @@ errors (unknown segment types are not detectable in oh-my-posh 31.6).
 
 `tests/shell-profile.sh` also resolves nvm's `default` alias forms against a
 fake `NVM_DIR` under sh, dash, Bash and Zsh (including bash `failglob`), checks
-that `custom/nvm.zsh` loads nvm with `--no-use`, and runs `common/zsh/.zshrc`
+that `custom/nvm.zsh` loads nvm with `--no-use`, and runs `home/dot_zshrc`
 three levels deep with a fake `brew shellenv` and conda prepends: PATH, FPATH
 and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
 (activated env or brew first) is kept, a conda-style activate and deactivate
@@ -227,7 +232,7 @@ tlrc (only `--color always`): both must show the colored page, a
 client's missing-page error must never reach the preview, and the C client
 must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
 fetches a missing page from GitHub. Last, it runs `sync-payloads kit pymol`
-and `sync-skills` from `common/sh/.aliases` in interactive sh, dash, Bash and
+and `sync-skills` from `home/dot_aliases` in interactive sh, dash, Bash and
 `zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid native
 marker runs its source's hook, never the checkout at `~/dotfiles`, with the
 arguments and exit status passed through, silently and without leaving a
@@ -240,7 +245,7 @@ checkout at `~/dotfiles`, whose guard and hook never run; an unmarked home and
 an invalid marker (an unterminated extra line, another version, a relative
 source, another home, a symlink, a directory) refuse before any hook; and
 maintenance refuses before any state is
-written. It also requires that no login through `common/sh/.profile`, with
+written. It also requires that no login through `home/dot_profile`, with
 or without Sherlock's overlay, runs a payload hook, while a bound home's update
 dispatch stays.
 
@@ -327,9 +332,10 @@ rules; these local shell tests do not establish cluster policy.
 
 `tests/tmux.sh` runs `tests/test_tmux.py`. Its static cases match the plugin
 rows to Unix installation and probes and require the `tools.tsv` floor 3.4
-with no `#{version}` or `tmux -V` gate under `common/tmux`. With a real tmux
-on PATH, the `TmuxConfiguration` class sources the config on a private
-socket with a temporary `HOME` (one case with a fake TPM). Among other
+with no `#{version}` or `tmux -V` gate in `home/dot_tmux.conf` or
+`home/dot_config/tmux/`, and that their file map names every tmux source.
+With a real tmux on PATH, the `TmuxConfiguration` class sources the config on
+a private socket with a temporary `HOME` (one case with a fake TPM). Among other
 things it loads offline, registers which-key, Catppuccin and FloaX and sets
 the popup and menu styles without conditions, binds FloaX's keys only once
 its script exists, and follows the session environment for the clipboard
@@ -394,7 +400,7 @@ the hooks read. Nothing installs unless a person runs it: a call without
 sourced from an interactive Bash, zsh or sh, directly or from a function, it
 returns 2 after that line and leaves the shell's flags, options and traps
 alone with none of its variables or functions defined; none writes state, and
-a login through `common/sh/.profile` runs no installer. `--now` installs the
+a login through `home/dot_profile` runs no installer. `--now` installs the
 default items in config order, the kit on the declared channel with stdin
 closed, runs each installed item's update command the next time, keeps no
 state of its own and returns only once its installer has finished. The suite

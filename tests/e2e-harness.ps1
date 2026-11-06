@@ -135,9 +135,9 @@ function Invoke-Git([string]$Repository, [string[]]$Arguments) {
 function New-TempClone {
     # A committed repository standing in for $HOME\dotfiles.
     param([string]$Path)
-    New-File (Join-Path $Path 'common/git/.gitconfig') "[user]`n`tname = e2e`n"
+    New-File (Join-Path $Path 'home/dot_gitconfig') "[user]`n`tname = e2e`n"
     Invoke-Git $Path @('init', '-q')
-    Invoke-Git $Path @('add', '--', 'common')
+    Invoke-Git $Path @('add', '--', 'home')
     Invoke-Git $Path @('-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid', 'commit', '-q', '-m', 'fixture')
 }
 
@@ -658,7 +658,7 @@ try {
     Test-Case 'Get-E2ESnapshot records links by their target and never follows them' {
         $case = Reset-RunState
         $root = Join-Path $case 'home'
-        $target = Join-Path $root 'dotfiles/common/git/.gitconfig'
+        $target = Join-Path $root 'dotfiles/home/dot_gitconfig'
         New-File $target '[user]'
         $fileLink = Join-Path $root '.gitconfig'
         $loop = Join-Path $root 'Application Data'
@@ -677,7 +677,7 @@ try {
             $inside = @($snapshot.Keys | Where-Object { $_.StartsWith($loop + [IO.Path]::DirectorySeparatorChar) })
             Assert-Equal $inside.Count 0 'the looping directory link was followed'
             [IO.File]::Delete($fileLink)
-            $relative = [IO.Path]::Combine('dotfiles', 'common', 'git', '.gitconfig')
+            $relative = [IO.Path]::Combine('dotfiles', 'home', 'dot_gitconfig')
             [void][IO.File]::CreateSymbolicLink($fileLink, $relative)
             Assert-Lines @(Compare-E2ESnapshot -Before $snapshot -After (Get-E2ESnapshot -Root $root)) @(
                 "changed $fileLink (link|$target -> link|$relative)") 'a retargeted link'
@@ -835,7 +835,7 @@ try {
         $E2E['Clone'] = $clone
         Start-E2EStep second-apply setup:second-apply
         Complete-E2EStep pass 'exit 0, nothing applied, HOME untouched'
-        [IO.File]::WriteAllText((Join-Path $clone 'common/git/.gitconfig'), "[user]`n`tname = changed`n")
+        [IO.File]::WriteAllText((Join-Path $clone 'home/dot_gitconfig'), "[user]`n`tname = changed`n")
         Start-E2EStep login-shell check:login-shell
         Complete-E2EStep pass 'exit 0, silent'
         $dirtyLog = [IO.File]::ReadAllText($E2E['StepLog'])
@@ -844,7 +844,7 @@ try {
         Complete-E2EStep fail 'exit 1'
         $rows = @(Get-SummaryRows)
         Assert-Equal (Get-RowShape $rows) 'second-apply:pass login-shell:fail doctor-final:fail' 'the rows'
-        Assert-Equal $rows[1].Detail 'exit 0, silent; clone not clean: M common/git/.gitconfig' 'the dirty clone in the detail'
+        Assert-Equal $rows[1].Detail 'exit 0, silent; clone not clean: M home/dot_gitconfig' 'the dirty clone in the detail'
         Assert-True ($dirtyLog.Contains('--- git diff of the clone (exit 0)') -and $dirtyLog.Contains("+`tname = changed") -and $dirtyLog.Contains("--- end`n")) "the step log lacks the diff: $dirtyLog"
         Assert-Equal $rows[2].Detail 'exit 1' 'a failing step is not checked again'
         Assert-True (-not [IO.File]::ReadAllText($E2E['StepLog']).Contains('git diff')) 'a failing step quoted the diff'

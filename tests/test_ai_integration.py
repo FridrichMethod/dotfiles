@@ -13,6 +13,7 @@ those cases skip. The fixtures are the parts of the launcher suites' setUp
 they read; they reach the kit only through its installed paths.
 """
 
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -103,7 +104,7 @@ class CodexAs(IsolatedHome):
         (self.home / ".aliases").write_text("")
         for shell in SHELLS:
             flags = ["-f"] if Path(shell).name == "zsh" else ["--noprofile", "--norc"]
-            alias_file = ROOT / ("common/zsh/.zsh_aliases" if Path(shell).name == "zsh" else "common/bash/.bash_aliases")
+            alias_file = ROOT / ("home/dot_zsh_aliases" if Path(shell).name == "zsh" else "home/dot_bash_aliases")
             command = [shell, *flags, "-c", '. "$1"; . "$1"; codex-as --help', "alias", str(alias_file)]
             result = subprocess.run(command, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -111,7 +112,7 @@ class CodexAs(IsolatedHome):
             self.assertIn("Details and manual repair: ", result.stdout)
 
 
-PREVIEW = ROOT / "common/zsh/.oh-my-zsh/custom/fzf-tab.zsh"
+PREVIEW = ROOT / "home/dot_oh-my-zsh/custom/fzf-tab.zsh"
 # fzf-tab runs the preview with the description of each candidate and these.
 FAKE_FZF = r"""
 import os, subprocess, sys
@@ -261,7 +262,7 @@ class Enrollment(IsolatedHome):
                 self.assertEqual(previews, expected, shown)
 
 
-SETTINGS = ROOT / "common/claude/.claude/settings.json"
+SETTINGS = ROOT / "home/.policy/claude-settings.json"
 # The Claude helpers the kit's installer puts in ~/.claude/coding-agent-kit/.
 HELPERS = KIT_HOME / ".claude/coding-agent-kit" if KIT_HOME else None
 HELPER_PATH = re.compile(r"/\.claude/coding-agent-kit/([^/'\"\s]+)")
@@ -359,6 +360,24 @@ class ClaudeHelperCommands(IsolatedHome):
                         self.assertTrue(getattr(result, stream).strip(), f"{name} wrote nothing to {stream}")
                     else:
                         self.assertEqual((result.stdout, result.stderr), ("", ""))
+
+
+class ProjectGuides(unittest.TestCase):
+    def test_nested_global_guides_are_excluded_from_project_memory(self):
+        # The global guides are real CLAUDE.md/AGENTS.md files under home/; a
+        # Claude Code session in any checkout or worktree must not load them
+        # as nested project guides.
+        patterns = json.loads((ROOT / ".claude/settings.json").read_text(encoding="utf-8"))["claudeMdExcludes"]
+        env = {name: value for name, value in os.environ.items() if not name.upper().startswith("GIT_")}
+        listed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, env=env, check=True,
+                                capture_output=True, timeout=30).stdout.decode("utf-8").split("\0")
+        nested = sorted(path for path in listed
+                        if "/" in path and path.rsplit("/", 1)[1] in ("CLAUDE.md", "AGENTS.md"))
+        self.assertEqual(nested, ["home/dot_claude/CLAUDE.md", "home/dot_codex/AGENTS.md"])
+        for path in nested:
+            with self.subTest(guide=path):
+                self.assertTrue(any(fnmatch.fnmatchcase((ROOT / path).as_posix(), pattern) for pattern in patterns),
+                                patterns)
 
 
 if __name__ == "__main__":

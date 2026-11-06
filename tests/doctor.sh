@@ -216,24 +216,24 @@ row() {
 
 # --- fixture checkout and home -------------------------------------------
 
-# A checkout without submodules, as dotfiles is.
-mkdir -p "$FIXTURE/common/zsh" "$FIXTURE/common/sh" "$FIXTURE/common/git" \
-    "$FIXTURE/common/bash" "$FIXTURE/common/codex/.codex" "$FIXTURE/common/codex/.local/bin"
-for file in zsh/.zshrc sh/.profile git/.gitconfig bash/.bashrc; do
-    printf '# fixture %s\n' "$file" >"$FIXTURE/common/$file"
+# A checkout without submodules, as dotfiles is, with two native sources.
+mkdir -p "$FIXTURE/home"
+for name in dot_zshrc dot_gitconfig; do
+    printf '# fixture %s\n' "$name" >"$FIXTURE/home/$name"
 done
-# Portable instructions remain ordinary Stow files.
-printf '# Global Working Preferences\n\nFixture portable Codex instructions.\n' \
-    >"$FIXTURE/common/codex/.codex/AGENTS.md"
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 "$REAL_GIT" -C "$FIXTURE" init -q
-"$REAL_GIT" -C "$FIXTURE" add .chezmoiroot common
+"$REAL_GIT" -C "$FIXTURE" add .chezmoiroot home
 "$REAL_GIT" -C "$FIXTURE" -c user.name=fixture -c user.email=fixture@example.invalid \
     commit -q -m fixture
 
 mkdir -p "$TEST_HOME/.oh-my-zsh/custom/plugins/demo/src" \
     "$TEST_HOME/.config/bat/themes" "$TEST_HOME/.local/bin"
+# The rc files a native apply deploys: regular files in $HOME.
+for name in .zshrc .profile .gitconfig; do
+    printf '# fixture %s\n' "$name" >"$TEST_HOME/$name"
+done
 # The payload repos as their installers leave them (config/payloads.tsv
 # probes): the kit's managed root and Claude helpers, PyMOL's rc files and
 # the skills data directory.
@@ -850,9 +850,13 @@ run_doctor path-login-debian "$LOGIN_FIRST" -- --host lab-ubuntu --tsv
 assert_row path-order warn "$TEST_HOME/micromamba/envs/login/bin/kitty"
 rm "$TEST_HOME/micromamba/envs/login/bin/kitty" "$TEST_HOME/.local/bin/kitty"
 
-restore_common() {
-    "$REAL_GIT" -C "$FIXTURE" checkout -q -- common
-    "$REAL_GIT" -C "$FIXTURE" clean -qfd -- common
+# restore_rc: the home rc files as the fixture deployed them.
+restore_rc() {
+    local name
+    for name in .zshrc .profile; do
+        printf '# fixture %s\n' "$name" >"$TEST_HOME/$name"
+    done
+    rm -f "$TEST_HOME/.bashrc"
 }
 
 printf 'backup\n' >"$TEST_HOME/.zshrc.pre-oh-my-zsh"
@@ -861,40 +865,39 @@ assert_rc 1
 assert_row rc-pollution human '~/.zshrc.pre-oh-my-zsh exists' 'docs/bootstrap.md X-rc-protection'
 rm "$TEST_HOME/.zshrc.pre-oh-my-zsh"
 
-printf '# >>> Codex installer >>>\nexport PATH=x\n# <<< Codex installer <<<\n' >>"$FIXTURE/common/zsh/.zshrc"
+printf '# >>> Codex installer >>>\nexport PATH=x\n# <<< Codex installer <<<\n' >>"$TEST_HOME/.zshrc"
 run_doctor rc-codex -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row rc-pollution human 'common/zsh/.zshrc has a Codex installer block'
-assert_row rc-pollution human '1 uncommitted change(s) under common/, first: common/zsh/.zshrc'
+assert_row rc-pollution human '~/.zshrc has a Codex installer block'
 run_doctor rc-codex-unselected -- --host lab-ubuntu --tier cli,ai --tsv
 assert_rc 0
 assert_row rc-pollution warn
-restore_common
+restore_rc
 
-printf '# >>> conda initialize >>>\n# <<< conda initialize <<<\n' >>"$FIXTURE/common/sh/.profile"
+printf '# >>> conda initialize >>>\n# <<< conda initialize <<<\n' >>"$TEST_HOME/.profile"
 run_doctor rc-conda -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row rc-pollution human 'common/sh/.profile has a conda or mamba initialize block'
-restore_common
+assert_row rc-pollution human '~/.profile has a conda or mamba initialize block'
+restore_rc
 
 # shellcheck disable=SC2016 # the nvm installer's literal loader line
 printf '%s\n' 'export NVM_DIR="$HOME/.nvm"' \
     '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' \
-    >>"$FIXTURE/common/bash/.bashrc"
+    >"$TEST_HOME/.bashrc"
 run_doctor rc-nvm -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row rc-pollution human 'common/bash/.bashrc has an nvm installer loader'
-restore_common
+assert_row rc-pollution human '~/.bashrc has an nvm installer loader'
+restore_rc
 
-printf '# local edit\n' >>"$FIXTURE/common/git/.gitconfig"
-run_doctor rc-dirty -- --host lab-ubuntu --tsv
+# The doctor reads only the home rc files: checkout changes are setup-host's
+# guard and the native updater's clean-tree refusal (D-14).
+printf '# local edit\n' >>"$FIXTURE/home/dot_gitconfig"
+printf 'new\n' >"$FIXTURE/new-file"
+run_doctor rc-checkout-dirty -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row rc-pollution warn '1 uncommitted change(s) under common/, first: common/git/.gitconfig'
-restore_common
-printf 'new\n' >"$FIXTURE/common/new-file"
-run_doctor rc-untracked -- --host lab-ubuntu --tsv
-assert_row rc-pollution warn 'first: common/new-file'
-restore_common
+assert_row rc-pollution ok 'no installer blocks in the home rc files'
+"$REAL_GIT" -C "$FIXTURE" checkout -q -- home
+rm "$FIXTURE/new-file"
 
 mv "$TEST_HOME/.oh-my-zsh/oh-my-zsh.sh" "$TEST_TMP/omz.hidden"
 run_doctor omz-order -- --host lab-ubuntu --tsv

@@ -10,10 +10,10 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$profile7 = Join-Path $repoRoot 'win/powershell/Documents/PowerShell/profile.ps1'
-$profile51 = Join-Path $repoRoot 'win/powershell/Documents/WindowsPowerShell/profile.ps1'
-$theme = Join-Path $repoRoot 'win/oh-my-posh/.config/oh-my-posh/prompt.omp.json'
-$zshrc = Join-Path $repoRoot 'common/zsh/.zshrc'
+$profile7 = Join-Path $repoRoot 'home/Documents/PowerShell/profile.ps1'
+$profile51 = Join-Path $repoRoot 'home/Documents/WindowsPowerShell/profile.ps1'
+$theme = Join-Path $repoRoot 'home/dot_config/oh-my-posh/prompt.omp.json'
+$zshrc = Join-Path $repoRoot 'home/dot_zshrc'
 $powerShell = (Get-Process -Id $PID).Path
 $failures = [System.Collections.Generic.List[string]]::new()
 
@@ -195,7 +195,7 @@ if (Test-Path -LiteralPath $zshrc) {
         if ($names.Count -eq $terms.Count) { $zshAgents = $names }
     }
 }
-Assert-True ($zshAgents.Count -gt 0) "common/zsh/.zshrc defines _is_agent_session as [[ -n `"`$A`" || ... ]] ($($zshAgents -join ', '))"
+Assert-True ($zshAgents.Count -gt 0) "home/dot_zshrc defines _is_agent_session as [[ -n `"`$A`" || ... ]] ($($zshAgents -join ', '))"
 $psAgents = @()
 $agentFlags = Get-Assignments $parsed7.Ast '$IsAgentSession'
 Assert-True ($agentFlags.Count -eq 1 -and $guards.Count -eq 1 -and $agentFlags[0].Extent.EndOffset -lt $guards[0].Extent.StartOffset) "`$IsAgentSession is assigned exactly once, before the guard ($($agentFlags.Count) assignments)"

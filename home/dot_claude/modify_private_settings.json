@@ -25,7 +25,7 @@
   {{- $live = first $parsed -}}
   {{- if not (kindIs "map" $live) -}}{{- fail "live Claude JSON root must be an object" -}}{{- end -}}
 {{- end -}}
-{{- $portableJSON := include (joinPath .chezmoi.workingTree "common/claude/.claude/settings.json") -}}
+{{- $portableJSON := include ".policy/claude-settings.json" -}}
 {{- $parsed := $portableJSON | jq "fromjson" -}}
 {{- if ne (len $parsed) 1 -}}{{- fail "expected one portable Claude JSON value" -}}{{- end -}}
 {{- $portable := first $parsed -}}

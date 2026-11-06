@@ -5,7 +5,7 @@
 # ref is a branch name, never a commit: nothing here is pinned. A missing
 # clone is made with `git clone --depth=1 --branch REF URL DEST`, and an
 # existing one is never touched, so each tracks its upstream default branch
-# the way oh-my-zsh's own `zstyle ':omz:update' mode auto` (common/zsh/.zshrc)
+# the way oh-my-zsh's own `zstyle ':omz:update' mode auto` (home/dot_zshrc)
 # keeps ~/.oh-my-zsh on master. docs/bootstrap.md S3-clones says how to update
 # the theme and plugins by hand; downloads stay sha256-pinned in installers.tsv.
 id	dest	url	ref	hosts

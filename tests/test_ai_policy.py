@@ -17,10 +17,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 # B5 retargets these to the materialized native source (D-3 policy files).
-CLAUDE_SETTINGS = ROOT / "common/claude/.claude/settings.json"
-CLAUDE_GUIDE = ROOT / "common/claude/.claude/CLAUDE.md"
-CODEX_GUIDE = ROOT / "common/codex/.codex/AGENTS.md"
-CODEX_RULES = ROOT / "common/codex/.codex/rules/portable.rules"
+CLAUDE_SETTINGS = ROOT / "home/.policy/claude-settings.json"
+CLAUDE_GUIDE = ROOT / "home/dot_claude/CLAUDE.md"
+CODEX_GUIDE = ROOT / "home/dot_codex/AGENTS.md"
+CODEX_RULES = ROOT / "home/dot_codex/rules/portable.rules"
 STUB = ROOT / "CLAUDE.md"
 REPOSITORY_GUIDE = ROOT / "AGENTS.md"
 

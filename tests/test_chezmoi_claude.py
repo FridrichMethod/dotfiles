@@ -9,7 +9,7 @@ import unittest
 from chezmoi_source_support import SourceFixture, expected_entries, snapshot
 
 
-PORTABLE = "common/claude/.claude/settings.json"
+PORTABLE = "home/.policy/claude-settings.json"
 TARGET = ".claude/settings.json"
 NONFORCE = ("--mode=file", "--less-interactive", "--force=false")
 
