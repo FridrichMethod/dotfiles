@@ -45,7 +45,8 @@ line, no hook), and a copy an older kit release (0.6) left in
 The one place that names the three repositories: their download URLs, the
 paths that show an install, the install and update commands, and the kit
 channel. Rows are `ITEM<TAB>FIELD<TAB>VALUE`; lines starting with `#` are
-comments, and the first row of an item and field wins.
+comments, and the first row of an item and field wins. The fields are exactly
+those below; `tests/payload-update.sh` fails on any other.
 
 | Field | Meaning |
 | --- | --- |
@@ -54,7 +55,6 @@ comments, and the first row of an item and field wins.
 | `unix-install`, `windows-install` | the first-install command; an item without a `windows-install` row (the kit) is not available on native Windows: it is no default item there, and a run that names it says so (exit 0) |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
 | `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook words such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills where it will not go on alone: an interrupted update it cannot undo because a file it would restore was edited since, an update that would remove many installed skills at once, a Codex skill folder that would pass 1,990 entries, or a Codex folder layout it cannot use; its message names the command to run, such as `--restore` |
-| `stow-links` | `PACKAGE PATH...`: home paths that the installer refuses while they are links into the retired dotfiles package `common/PACKAGE` (the kit's launchers and Bash completions); while one is, the hook does not call the installer and says to run `stow-all` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
 by the hook (the sh one with the kit channel in `$channel`) and with one
@@ -119,9 +119,8 @@ any other URL, so a test can never reach the network.
 ### Unix
 
 Only a person runs `scripts/payload-update.sh --now`, in the foreground: no
-login, profile or schedule installs or updates a payload repo (a call from an
-older rc file does nothing, see below), and the script keeps no state of its
-own.
+login, profile or schedule installs or updates a payload repo (any other call
+is a usage error, see below), and the script keeps no state of its own.
 
 ```sh
 sync-payloads [kit] [pymol] [skills]                      # common/sh/.aliases; follows the home binding
@@ -134,13 +133,15 @@ native home they run the hook of the source `~/.config/dotfiles/native`
 names, validated with that source's `lib/chezmoi-guard.sh` exactly as the
 login dispatch in `common/sh/.profile` does; an invalid binding prints
 `[dotfiles] [error] Native home binding is invalid; payload update refused.`
-and returns 1 without running any checkout's hook. Only an unmarked (legacy)
-home runs `${DOTFILES_DIR:-$HOME/dotfiles}/scripts/payload-update.sh`. They
-return the hook's status. The `--now` line runs the checkout its path names,
-without that check: on a native home use `sync-payloads`, or the path of the
-source the binding names. Under persistent maintenance a `--now` run prints
-`dotfiles: payload update refused during maintenance.` and exits 1 before
-anything runs.
+and returns 1 without running any checkout's hook. An unmarked home has no
+binding: they print
+`[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.`
+and return 1 without running a hook; run that line from the checkout there.
+Otherwise they return the hook's status. The `--now` line runs the checkout
+its path names, without that check: on a native home use `sync-payloads`, or
+the path of the source the binding names. Under persistent maintenance a
+`--now` run prints `dotfiles: payload update refused during maintenance.` and
+exits 1 before anything runs.
 
 A run takes the items it is given, else those of `DOTFILES_PAYLOAD_ITEMS`
 (unset: all three; set but empty: none), and exits 1 before anything runs
@@ -160,8 +161,8 @@ item with one line:
 - any other status: `kit: install failed (exit 1); retry with: sync-payloads
   kit`.
 
-It exits 1 when an item failed or waits for `stow-all` (below), and 0
-otherwise. A failed item is retried only by a person's next run.
+It exits 1 when an item failed, and 0 otherwise. A failed item is retried
+only by a person's next run.
 
 PyMOLScripts exits 3 when `~/.pymolrc` or `~/.pymolrc.py` was edited locally
 since it last installed them: it writes nothing and its message names the
@@ -172,21 +173,12 @@ both files and the installer never touches), or forced with that command (its
 `--force`, `-Force` on Windows, which keeps the edited file as
 `NAME.local-<timestamp>`).
 
-An item with a [`stow-links`](#configpayloadstsv) path still linked into its
-retired package, which happens while `stow-all` has not run since the pull
-(a dirty tree, an unrecorded host, `DOTFILES_AUTO_STOW=0`, a failed stow), is
-not handed to its installer, which would refuse the link: the hook prints
-`kit: ~/.local/bin/claude-as is still a link the retired Stow package made,
-which its installer refuses; run <clone>/stow-all.sh with this host first
-(the next login's automatic stow does), then sync-payloads kit` and counts the
-item as failed. PyMOLScripts' installer replaces its old links itself, so it
-runs. The check stays until Stage 6.
-
-Until Stage 6 a call without `--now` does nothing and returns 0, printing
-nothing and leaving no variable, option or trap set: rc files read before the
-pull that ended the automatic runs still source the hook without arguments,
-and a run they started may still pass the retired `--auto` or `--worker`. So
-`sh .../payload-update.sh kit`, without `--now`, does nothing either.
+Any other call, without `--now` (no arguments, a bare item such as
+`sh .../payload-update.sh kit`, or the retired `--auto` and `--worker`, which
+are refused after `--now` too), prints
+`dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]` on stderr and
+exits 2 before anything else, under maintenance too. Sourced, it returns 2
+after that line and sets no variable, option or trap.
 
 Sherlock's site rules forbid detached login-node workers, and dotfiles starts
 none: no login starts a run (`tests/test_chezmoi_guard.py` checks bash and sh
@@ -204,15 +196,14 @@ Windows, so a run that names it, as an argument or in
 `DOTFILES_PAYLOAD_ITEMS`, prints `kit: not available on native Windows ...`
 and leaves it out without a failure. It keeps the Unix contract:
 `DOTFILES_PAYLOAD_ITEMS`, `DOTFILES_PAYLOAD_TIMEOUT`, install or update in the
-foreground, an unknown item failing the run, exit 75 no failure, the
-`stow-links` check (which says to run `stow-all.ps1` from an elevated
-PowerShell 7) and the `person-status` wording. It exits 1 when an item failed
+foreground, an unknown item failing the run, exit 75 no failure and the
+`person-status` wording. It exits 1 when an item failed
 and 0 otherwise, so `$LASTEXITCODE` is the run's status, not an installer's.
 Under maintenance a `-Now` run warns
-`dotfiles: payload update refused during maintenance.` and exits 1. Until
-Stage 6 a call without `-Now` (an older
-profile's call without arguments, or an older run's `-Auto` or `-Worker`)
-returns at once.
+`dotfiles: payload update refused during maintenance.` and exits 1. A call
+without `-Now`, or with the retired `-Auto` or `-Worker` (with `-Now` too),
+prints `dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]` on stderr
+and exits 2, under maintenance too.
 
 Run it and the functions below from an ordinary PowerShell: an installer run
 elevated would leave its git clone owned by Administrators, which Git then
@@ -230,8 +221,10 @@ home's binding names, read from a marker that must be a regular file, not a
 reparse point, and validated by that source's `lib/chezmoi-guard.ps1`; an
 invalid binding prints
 `[dotfiles] Payload update refused: review the native source binding privately.`
-and sets `$LASTEXITCODE` to 1 without running a hook. Only an unmarked home
-uses `$env:DOTFILES_DIR`, else `~\dotfiles`. A checkout without
+and sets `$LASTEXITCODE` to 1 without running a hook. An unmarked home has no
+binding: they print
+`[dotfiles] Payload update needs a native home binding; in an unmarked home run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.`
+and set `$LASTEXITCODE` to 1 without running a hook. A bound source without
 `scripts/payload-update.ps1` prints
 `[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.`
 and sets `$LASTEXITCODE` to 1. The `-Now` line runs the
@@ -244,7 +237,6 @@ functions, or the path of the source the binding names.
 | --- | --- | --- |
 | `DOTFILES_PAYLOAD_ITEMS` | `kit pymol skills` (native Windows: `pymol skills`, the items with a `windows-install` row) | the items a run without arguments installs or updates and the doctor's `payloads` row checks, separated by spaces; set but empty selects none; on native Windows a named item without a `windows-install` row (the kit) is left out |
 | `DOTFILES_PAYLOAD_TIMEOUT` | `60` | the bound, in seconds, of each download of an installer script |
-| `DOTFILES_DIR` | `~/dotfiles` | in an unmarked (legacy) home, the checkout whose hook `sync-payloads` runs; a native home runs the hook of the source its binding names |
 
 Set them in the environment your terminals and ssh sessions start with: every
 rc file in this repository is tracked, so there is no local file to set them
@@ -265,11 +257,8 @@ instead, for example `sync-payloads kit pymol`: in a shell that still exports
 `DOTFILES_PAYLOAD_ITEMS='kit pymol'`. The old skill hook's other
 variables (`AWESOME_SKILLS_FORCE`, `AWESOME_SKILLS_BG`,
 `AWESOME_SKILLS_INSTALLER_URL`, `AWESOME_SKILLS_REFRESH_DAYS`,
-`_AWESOME_SKILLS_CHECKED`) and those of the automatic runs
-(`DOTFILES_PAYLOAD_AUTO_UPDATE`, `_DOTFILES_PAYLOAD_CHECKED`) are read by
-nothing either. The provisioning shells of [bootstrap.md](bootstrap.md) and
-the setup-host scripts still export `DOTFILES_PAYLOAD_AUTO_UPDATE=0` beside
-`DOTFILES_AUTO_UPDATE=0`; that export is inert and stays until Stage 6.
+`_AWESOME_SKILLS_CHECKED`) and the opt-out and session marker of the
+automatic runs are read by nothing either.
 
 ## State
 
@@ -302,11 +291,12 @@ lock: concurrent runs converge.
   item's probe and, once the kit's passes, checks that the three helpers are
   in `~/.claude/coding-agent-kit/`; `.\doctor.ps1` checks only the items with
   a `windows-install` row, so neither the kit nor its helpers, and names an
-  item the file does not know. It names each selected item that waits for
-  `stow-all` (`... run <clone>/stow-all.sh <host>, then sync-payloads kit`).
-  Missing items end with `run sync-payloads ITEM`; on Unix the row also
-  names the hook to run by path: the running clone's on an unmarked home, the
-  bound source's on a native home (none while the binding does not resolve).
+  item the file does not know. Missing items end with what to run: on a
+  native home `run sync-payloads ITEM`, which on Unix also names the bound
+  source's hook by path (none while the binding does not resolve); on an
+  unmarked home, where `sync-payloads` refuses, the running clone's line
+  alone (`run sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
+  `run & <clone>\scripts\payload-update.ps1 -Now ITEM`).
   When the kit or one of its helpers is missing, it also says what fails until
   then. All of it is `warn`,
   never `missing`. It only reads paths and files, never a record of an
@@ -316,7 +306,8 @@ lock: concurrent runs converge.
   `sh '<hook>' --now`, runs the running clone's hook on an unmarked home and
   the bound source's on a native home, and installs the selected items now
   and, run again later, updates them, as `sync-payloads` does in an
-  interactive shell. While a native home's binding does not resolve, the
+  interactive shell of a native home (an unmarked home's block names only the
+  line). While a native home's binding does not resolve, the
   block prints no run line and points at the doctor's `native-config` row.
 - `./setup-host.sh`, `setup-host.ps1` and the login update never run an
   installer of a payload repository.
@@ -385,86 +376,7 @@ and their contract documentation together, in one reviewed change:
 A probe that never passes makes every run reinstall the item; a probe that
 passes too early makes the hook update an item that was never installed.
 
-## Migration
-
-The change that replaced the two submodules and the weekly skill hook
-converges a host's dotfiles in one login; since Stage 5 the payload repos then
-install only when a person runs `sync-payloads` there. Git cannot remove a
-submodule checkout that holds files, so the two checkouts stay as
-[leftovers](#leftover-checkouts).
-
-### Unix
-
-1. The login runs the rc files it read before the pull. Their
-   `scripts/dotfiles-update.sh` fetches and fast-forwards; the leftover
-   checkouts are ignored, so the tree is clean, and it runs the new
-   `./stow-all.sh` for the remembered host.
-2. `./stow-all.sh` runs its dry run, syncs the new `settings.json` and
-   stows; only then does it remove the 16 links Stow made from the two
-   retired packages, each only while it is a symlink whose text is exactly
-   the one Stow wrote from this checkout, dangling or not: the 14 of
-   `common/coding-agent-kit` (the helpers in `~/.claude/dotfiles/`, the
-   launchers in `~/.local/bin/`, the modules in `~/.local/lib/codex-as/` and
-   `~/.local/lib/claude-as/`, and the Bash and zsh completions) and the two
-   of `common/pymol` (`~/.pymolrc`, `~/.pymolrc.py`). A file, a directory or
-   any other link stays. It then removes `~/.claude/dotfiles`,
-   `~/.local/lib/claude-as`, `~/.local/lib/codex-as` and
-   `~/.oh-my-zsh/custom/completions` if they are empty, and the login
-   updater records the applied revision. A refused dry run or a failed stow
-   leaves the links in place, and a failed removal stops it before anything
-   is recorded, so the next login retries.
-3. The same rc files then source `scripts/awesome-skills-update.sh`, the old
-   hook's path, which is now a [transition shim](#the-transition-shim) that
-   does nothing, so the login installs no payload repo.
-4. A person then runs `sync-payloads` (or the H7-payloads line): it installs
-   the kit and PyMOL, whose probes fail, and updates awesome-skills, whose
-   existing install already passes its probe. A failed item makes the run
-   exit 1 with the line to retry with.
-
-The window between the pull and the kit's install is the one in which
-Claude Code runs without the kit: `settings.json` already names
-`~/.claude/coding-agent-kit/`, so the status line command fails and Claude
-shows no status line, and the notification and Git hook check helpers exit 1,
-which Claude Code reports as a non-blocking hook error (only exit 2 blocks):
-tool calls and prompts go on. It lasts until a person runs
-`sync-payloads kit`; meanwhile the doctor's `payloads` row names the kit and
-what fails until it is installed.
-
-`tests/unix-installer.sh` runs this login, and after it the explicit run
-`--now kit pymol` (not awesome-skills), end to end with real Git and Stow.
-
-On a host where the login does not stow (`DOTFILES_AUTO_STOW=0`, a dirty
-tree, an unrecorded host, a failed stow, or `DOTFILES_AUTO_UPDATE=0` after a
-pull by hand), nothing removes the old links, which the kit's installer
-refuses: `sync-payloads kit` exits 1 with the line that says to run
-`./stow-all.sh` with this host, and the doctor says the same, until it has
-run; `sync-payloads kit` then installs the kit. The links stay in place
-whenever `./stow-all.sh` stops: it removes them only after both stows
-succeeded, so a refused dry run or a failed stow leaves the home as it was.
-`AWESOME_SKILLS_AUTO_UPDATE=0` keeps nothing off any more (see
-[Knobs](#knobs)).
-
-### Native Windows
-
-1. The login that pulls runs the profile it read before the pull. Its
-   `scripts/dotfiles-update.ps1` fast-forwards (the leftover checkouts are
-   ignored) and queues the elevated restow, which the `Dotfiles-Restow-*` task
-   (registered by `scripts/dotfiles-auto-stow.ps1 -Register`)
-   or the next elevated `.\stow-all.ps1 win` runs.
-2. The new `stow-all.ps1` stows, then removes the links it made from the two
-   retired packages, each only while it is a symlink whose text is exactly
-   the path it wrote, `<clone>\common\<package>\<path>`, dangling or not.
-   Harmless empty legacy directories are left in place. A declined link removal is a
-   warning, so the revision is not acknowledged. It installs nothing: an
-   installer run elevated would leave Administrators-owned clones.
-3. A person then runs `sync-payloads` from an ordinary PowerShell 7, which
-   installs PyMOLScripts and awesome-skills where they are absent (the old
-   skill hook ran only on Unix; the kit has left native Windows, see below).
-   Until the restow has synced the new `settings.json`, the live one still
-   names `~\.claude\dotfiles\`, whose links dangle, so Claude's status line
-   and hooks fail until then.
-
-### The kit leaves native Windows
+## The kit leaves native Windows
 
 coding-agent-kit 0.7 installs nothing on native Windows (it never had
 account switching there, only the three helpers), and `config/payloads.tsv`
@@ -484,13 +396,6 @@ Claude Code then shows no status line there and its notification and Git hook
 check commands do nothing, without an error, since on native Windows they
 exit 0 while a helper is missing. WSL, and an ssh session into a Unix host,
 keep the whole kit.
-
-### The transition shim
-
-`scripts/awesome-skills-update.sh` exists only for step 3 on Unix: the rc
-files a host read before the pull source that path. It does nothing, and
-Stage 6 removes it; a host that logs in after it is gone loses nothing, since
-the old rc files only source a readable file.
 
 ## Leftover checkouts
 

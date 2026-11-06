@@ -88,17 +88,20 @@ class WriterGuardTests(unittest.TestCase):
 
     def test_sync_payload_commands_run_only_the_validated_native_source(self):
         # sync-payloads/sync-skills resolve the hook as the login dispatcher
-        # does: a valid marker's source wins over a stale DOTFILES_DIR, whose
-        # guard and hook never run; an invalid marker refuses before any hook;
-        # maintenance surfaces the bound hook's own refusal before any state.
-        # tests/shell-profile.sh covers an unmarked home's DOTFILES_DIR.
+        # does: a valid marker's source wins over the checkout at ~/dotfiles,
+        # whose guard and hook never run; an unmarked home and an invalid
+        # marker refuse before any hook; maintenance surfaces the bound hook's
+        # own refusal before any state.
         # Absolute paths: the children run with PATH=os.defpath, which may lack a
         # shell found here (an HPC login env provides zsh).
         shells = {name: path for name in ("sh", "bash", "zsh") if (path := shutil.which(name))}
         refusal = "[dotfiles] [error] Native home binding is invalid; payload update refused.\n"
+        no_binding = ("[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run "
+                      "sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.\n")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            home, source, stale = (root / name for name in ("home", "bound source", "stale"))
+            home, source = root / "home", root / "bound source"
+            stale = home / "dotfiles"
             trace, state = root / "trace", root / "state"
             for path in (home / ".config/dotfiles", source / "scripts", source / "lib",
                          stale / "scripts", stale / "lib"):
@@ -111,8 +114,7 @@ class WriterGuardTests(unittest.TestCase):
             (stale / "lib/chezmoi-guard.sh").write_text('printf "stale-guard\\n" >>"$TRACE"\n')
             marker = home / ".config/dotfiles/native"
             valid = f"dotfiles-chezmoi-v1\n{home}\n{source}\n".encode()
-            env = {"HOME": str(home), "PATH": os.defpath, "DOTFILES_DIR": str(stale),
-                   "TRACE": str(trace), "XDG_STATE_HOME": str(state)}
+            env = {"HOME": str(home), "PATH": os.defpath, "TRACE": str(trace), "XDG_STATE_HOME": str(state)}
             # eval: zsh does not expand an alias defined earlier in one -c string.
             code = ('[ -z "${BASH_VERSION-}" ] || shopt -s expand_aliases; . "$1"; '
                     'eval "sync-payloads kit pymol"; first=$?; eval sync-skills; '
@@ -145,6 +147,11 @@ class WriterGuardTests(unittest.TestCase):
                        "other home": (f"dotfiles-chezmoi-v1\n{root}\n{source}\n".encode(), "file"),
                        "symlink": (None, "symlink"), "directory": (None, "directory")}
             for shell in shells:
+                with self.subTest(shell=shell, binding="unmarked"):
+                    bind()
+                    result, events = run(shell)
+                    self.assertEqual((result.stdout, result.stderr), ("1 1\n", no_binding * 2))
+                    self.assertEqual(events, [])
                 with self.subTest(shell=shell, binding="valid non-default source"):
                     bind(valid)
                     result, events = run(shell)

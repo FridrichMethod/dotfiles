@@ -52,10 +52,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
-        exclude: ^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$
+        exclude: ^(scripts/(chezmoi-update|payload-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|^(scripts/(chezmoi-update|payload-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -137,7 +137,7 @@ repos:
         entry: tests/payload-update.sh
         language: script
         pass_filenames: false
-        files: ^(scripts/(payload-update\.(sh|ps1)|awesome-skills-update\.sh)|config/payloads\.tsv|lib/terminal\.(sh|ps1)|common/(sh/\.(profile|aliases)|zsh/\.zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(scripts/payload-update\.(sh|ps1)|config/payloads\.tsv|lib/(terminal\.(sh|ps1)|chezmoi-guard\.sh)|common/(sh/\.(profile|aliases)|zsh/\.zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
       - id: powershell-profile
         name: PowerShell profile contract, prompt theme, parse gate and Terminal settings
         entry: tests/powershell-profile.sh

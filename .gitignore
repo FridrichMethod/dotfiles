@@ -74,9 +74,9 @@ coverage.xml
 # were checked out (git cannot remove a submodule checkout that holds files):
 # coding-agent-kit from before its move to its own package, then both
 # submodules from before the payload repos became installed ones. Keep these
-# lines: without them such a host stops updating, at "Checkout changed during
-# update" and then "Local changes" (docs/payloads.md, Migration). Inspect and
-# remove a leftover by hand (docs/payloads.md, Leftover checkouts).
+# lines until no host has a leftover (Stage 6 Phase C): without them the native
+# login update refuses the untracked source on every login. Inspect and remove
+# a leftover by hand (docs/payloads.md, Leftover checkouts).
 /common/codex/coding-agent-kit/
 /common/coding-agent-kit/coding-agent-kit/
 /common/pymol/PyMOLScripts/

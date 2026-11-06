@@ -405,8 +405,7 @@ nothing guesses it.
 > [X-recovery](#x-recovery-recovery-recipes).
 
 Keep the login update hook quiet while provisioning, in every shell you use for
-it: `export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` (the second
-is inert: nothing reads it any more). Otherwise the first interactive shell
+it: `export DOTFILES_AUTO_UPDATE=0`. Otherwise the first interactive shell
 after the handover pulls the checkout in the middle of the bootstrap. No shell
 installs the payload repos: they install only when you run the
 [H7-payloads](#h7-payloads-payload-repos) line, whenever you choose.
@@ -427,7 +426,7 @@ still to do, so a `--check` that exits 0 has nothing left to apply.
 xcode-select --install          # H1-xcode-clt: git comes with the Command Line Tools (GUI dialog)
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --host mac
 ./setup-host.sh --host mac --check
 ./setup-host.sh --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
@@ -456,7 +455,7 @@ sudo apt-get update
 sudo apt-get install -y git curl
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --host wsl-ubuntu                 # or lab-ubuntu
 ./setup-host.sh --host wsl-ubuntu --check
 ./setup-host.sh --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
@@ -488,12 +487,12 @@ zsh and fails until [S2-login-env](#s2-login-env-hpc-login-environment) exists.
 cat /etc/os-release; ldd --version | head -n 1     # P0-preflight: record OS and glibc
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --host sherlock                        # or marlowe
 ./setup-host.sh --host sherlock --check
 ./setup-host.sh --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                  # H2-alloc; Marlowe: an interactive Slurm job
-cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
 ./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-native
 exit                                               # back to the login node
@@ -521,7 +520,7 @@ winget install --id Microsoft.PowerShell -e --source winget --installer-type wix
 # open a new PowerShell 7 (pwsh) window, then:
 git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
-$env:DOTFILES_AUTO_UPDATE = '0'; $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
+$env:DOTFILES_AUTO_UPDATE = '0'
 .\doctor.ps1 -Host win
 .\setup-host.ps1 -Host win -Check
 .\setup-host.ps1 -Host win      # exit 3 until HW-native is done
@@ -552,7 +551,7 @@ into your shell first.
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
     clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first
@@ -597,7 +596,7 @@ and warns that it did.
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
 | `--quiet` | Only rows that are neither `ok` nor `skip`, then the summary |
 | `--online` | Adds the only network probes: `gh auth status`, `claude auth status`, `codex login status`. A signed-out tool is `warn` and an absent one `skip`, so an exit 0 does not prove you are signed in. The probes may write the tools' own state in your home (claude rewrites `~/.claude.json` and keeps backups of it; some codex releases create `~/.codex/tmp`); the doctor itself still writes nothing |
-| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 zsh -ic true` and fails when its stdout or stderr has a line starting `[oh-my-zsh]` (oh-my-zsh echoes `plugin 'x' not found`, `theme 'x' not found` and `zoxide not found` on stdout), or matching `plugin .* not found`, `plugin: .* not found`, `plugin: Cannot find`, `command not found`, `no such file` or `Permission denied` (all case-insensitive); `stty:` noise passes. It may write zsh's own caches |
+| `--smoke` | Runs `DOTFILES_AUTO_UPDATE=0 zsh -ic true` and fails when its stdout or stderr has a line starting `[oh-my-zsh]` (oh-my-zsh echoes `plugin 'x' not found`, `theme 'x' not found` and `zoxide not found` on stdout), or matching `plugin .* not found`, `plugin: .* not found`, `plugin: Cannot find`, `command not found`, `no such file` or `Permission denied` (all case-insensitive); `stty:` noise passes. It may write zsh's own caches |
 | `--list` | The rows and checks that apply, without probing |
 
 Each line reads `[dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step-id>)`,
@@ -611,8 +610,9 @@ Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides th
 ([H7-native](#h7-native-reviewed-native-configuration-handover)). `payloads`
 warns, never fails, while an item of
 `DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
-installed kit lacks a Claude helper, and names `sync-payloads ITEM`
-([H7-payloads](#h7-payloads-payload-repos)).
+installed kit lacks a Claude helper, and names what to run: `sync-payloads
+ITEM`, or in an unmarked home, where `sync-payloads` refuses, this checkout's
+`--now` line ([H7-payloads](#h7-payloads-payload-repos)).
 The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
@@ -650,8 +650,8 @@ at HW-clone).
 
 Every step runs check, plan, apply, verify; a satisfied step is skipped, so a
 second run changes nothing. During apply it exports `DOTFILES_AUTO_UPDATE=0
-DOTFILES_PAYLOAD_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1
-HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
+GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1
+HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
 (and `HOMEBREW_BUNDLE_NO_LOCK=1`, so an older `brew bundle` writes no
 `Brewfile.lock.json` into the checkout), and in every mode
 `GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1`:
@@ -832,7 +832,10 @@ service) is the person's to run, whatever its kind.
 The automatic steps below also list a manual equivalent. Those that download or
 clone use these two helpers, which read the URL and digest from
 `installers.tsv`, or the URL and branch from `git-clones.tsv`, instead of
-copying them here. Paste them into the shell you are working in:
+copying them here. Paste them into the shell you are working in. They read
+the manifests of the checkout at `~/dotfiles`; for a clone elsewhere, first
+set `dotfiles_checkout=/path/to/clone` (a plain shell variable, not exported)
+in that shell:
 
 ```sh
 # fetch_pinned ID [ARCH]: download one installers.tsv row into a fresh temporary
@@ -840,7 +843,7 @@ copying them here. Paste them into the shell you are working in:
 fetch_pinned() {
     _row=$(awk -F '\t' -v id="$1" -v arch="${2:-any}" \
         '$1 == id && ($7 == arch || $7 == "any") { print; exit }' \
-        "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
+        "${dotfiles_checkout:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
     [ -n "$_row" ] || { echo "fetch_pinned: no row for $1 ${2:-any}" >&2; return 1; }
     _url=$(printf '%s\n' "$_row" | cut -f 3)
     _sum=$(printf '%s\n' "$_row" | cut -f 4)
@@ -863,7 +866,7 @@ fetch_pinned() {
 # a shallow clone of the row's branch, and an existing clone left as it is.
 clone_listed() {
     _row=$(awk -F '\t' -v id="$1" '$1 == id { print; exit }' \
-        "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/git-clones.tsv")
+        "${dotfiles_checkout:-$HOME/dotfiles}/config/bootstrap/git-clones.tsv")
     [ -n "$_row" ] || { echo "clone_listed: no row for $1" >&2; return 1; }
     _dest=$(printf '%s\n' "$_row" | cut -f 2)
     _url=$(printf '%s\n' "$_row" | cut -f 3)
@@ -902,9 +905,8 @@ short and send the agent here. The rules they follow:
   from the OS. A machine without an overlay is "other Linux": the doctor takes
   `--platform other`, and the setup steps are the manual ones in
   [X-other-linux](#x-other-linux-other-linux-distributions).
-- **Quiet hooks.** Every command runs with
-  `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` (the second is
-  inert). Nothing installs the payload repos unless someone runs the
+- **Quiet hooks.** Every command runs with `DOTFILES_AUTO_UPDATE=0`. Nothing
+  installs the payload repos unless someone runs the
   [H7-payloads](#h7-payloads-payload-repos) line, so the agent asks the person
   whether to run it.
 - **Plan first.** `./doctor.sh --host H --tsv` and
@@ -968,7 +970,7 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    PowerShell twins in every step below: .\doctor.ps1 -Host win -Tsv,
    .\setup-host.ps1 -Host win -Check, then -Yes; the handover is the HW-native
    block, and the finish is .\doctor.ps1 -Host win.
-4. Run every command with DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0.
+4. Run every command with DOTFILES_AUTO_UPDATE=0.
 5. Run ./doctor.sh --host H --tsv and ./setup-host.sh --host H --check and show me the plan.
 6. After I agree, run ./setup-host.sh --host H --yes. For each HUMAN block
    (lines starting with "# " are notes for me; every other line is one
@@ -1552,9 +1554,9 @@ so the loop fast-forwards oh-my-zsh as well.
 
 For tmux, run `./setup-host.sh --host H --check --only S3-clones`, then
 `./setup-host.sh --host H --yes --only S3-clones` to install missing plugins.
-Keep `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0` exported while
-provisioning. Once `.tmux.conf` is in place, reload a running server with
-`tmux source-file ~/.tmux.conf`; otherwise the next tmux start loads it.
+Keep `DOTFILES_AUTO_UPDATE=0` exported while provisioning. Once `.tmux.conf`
+is in place, reload a running server with `tmux source-file ~/.tmux.conf`;
+otherwise the next tmux start loads it.
 There is no tmux startup download or automatic plugin update. Use TPM's
 `prefix + U` for an explicit update and `prefix + I` after declaring another
 plugin. Other Linux uses `clone_listed ID` as above. Native Windows installs
@@ -1628,7 +1630,7 @@ a nonempty `NVM_DIR`, then an existing `~/.nvm`, then an existing
       set -eu
       d=$NVM_DIR
       c=$(awk -F '\t' '$1 == "nvm" { split($3, p, "/"); print p[6]; exit }' \
-          "${DOTFILES_DIR:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
+          "${dotfiles_checkout:-$HOME/dotfiles}/config/bootstrap/installers.tsv")
       case $c in
           '' | *[!0-9a-f]*) echo "installers.tsv names no nvm commit: [$c]" >&2 && exit 1 ;;
       esac
@@ -1880,10 +1882,13 @@ selects the items a run without arguments installs and the doctor checks.
   `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
   (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
-  warns and names `sync-payloads ITEM` and, on Unix, the `--now` line of the
-  hook to run: on a native-owned home the hook of the source its binding
-  names, never the checkout the doctor runs from, and none while the binding
-  does not resolve.
+  warns and names what to run. In an unmarked home that is this checkout's
+  `--now` line (`sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
+  `& <clone>\scripts\payload-update.ps1 -Now ITEM`), since `sync-payloads`
+  needs a native binding. On a native-owned home it is `sync-payloads ITEM`
+  and, on Unix, the `--now` line of the hook of the source its binding names,
+  never the checkout the doctor runs from, and none while the binding does not
+  resolve.
 - **Install:** the line the setup-host block prints, which works before the
   dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
@@ -1892,8 +1897,11 @@ selects the items a run without arguments installs and the doctor checks.
   binding names (and says so), never the checkout setup-host runs from, and
   only a note while the binding does not resolve. In an interactive shell
   with the dotfiles applied, `sync-payloads [ITEM...]` does the same and
-  `sync-skills` runs only the skills; on a native-owned home they run the
-  bound checkout's script and refuse an invalid binding. An installer's exit
+  `sync-skills` runs only the skills; they run the bound checkout's script,
+  refuse an invalid binding, and in an unmarked home refuse with the `--now`
+  line to run instead. Any other call of the script than `--now` (the retired
+  `--auto` and `--worker` included) prints a usage line and exits 2. An
+  installer's exit
   75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
@@ -2164,7 +2172,7 @@ and `native_handover` ([Fresh home by hand](#fresh-home-by-hand)) pasted first:
 # and fzf, zoxide, eza, fd and bat at the floors in config/bootstrap/tools.tsv
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
     clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first

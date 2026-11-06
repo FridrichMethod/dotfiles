@@ -682,7 +682,8 @@ assert_eq "$(heredoc_offenders "$TEST_TMP/absent.sh")" "$TEST_TMP/absent.sh: mis
 # ----------------------------------------------- manual nvm verification
 echo '==> the manual nvm block fails closed when Git status cannot verify it'
 MANUAL_HOME="$TEST_TMP/manual-home"
-MANUAL_REPO="$MANUAL_HOME/dotfiles"
+# Not $MANUAL_HOME/dotfiles: only dotfiles_checkout can find this clone.
+MANUAL_REPO="$TEST_TMP/manual-repo"
 MANUAL_NVM="$MANUAL_HOME/.nvm"
 mkdir -p "$MANUAL_REPO/config/bootstrap" "$MANUAL_NVM"
 printf '%s\n' 'printf "manual-nvm-sourced\n"' 'nvm() { :; }' >"$MANUAL_NVM/nvm.sh"
@@ -702,10 +703,12 @@ MANUAL_BLOCK=$(awk '
 ' "$REPO_ROOT/docs/bootstrap.md")
 [ -n "$MANUAL_BLOCK" ] || fail 'the documented manual nvm block is absent'
 manual_rc=0
-HOME="$MANUAL_HOME" NVM_DIR="$MANUAL_NVM" DOTFILES_DIR="$MANUAL_REPO" \
+HOME="$MANUAL_HOME" NVM_DIR="$MANUAL_NVM" dotfiles_checkout="$MANUAL_REPO" \
     "$BASH" -c "$MANUAL_BLOCK" >"$TEST_TMP/manual-nvm.out" 2>"$TEST_TMP/manual-nvm.err" || manual_rc=$?
 [ "$manual_rc" -ne 0 ] || fail 'manual nvm verification ignored a failed git status'
 [ ! -s "$TEST_TMP/manual-nvm.out" ] || fail 'manual nvm verification sourced nvm.sh after a failed git status'
+! grep -q 'names no nvm commit' "$TEST_TMP/manual-nvm.err" ||
+    fail 'the manual nvm block did not find the nvm pin through dotfiles_checkout'
 
 # ----------------------------------------------------------- validator
 echo '==> manifest validator'

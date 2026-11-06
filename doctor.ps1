@@ -183,10 +183,10 @@ function Get-DoctorStructuralResults {
 function Get-DoctorPayloadResult {
     # Each item of DOTFILES_PAYLOAD_ITEMS (default: those with a
     # windows-install row of config/payloads.tsv, pymol skills) that installs
-    # here passes its windows-probe row; an item that waits for stow-all (a
-    # stow-links path still linked into the retired package) is named with
-    # what to run. Only a person installs the payload repos (sync-payloads),
-    # so every shortfall names that and only warns. An item without a
+    # here passes its windows-probe row. Only a person installs the payload
+    # repos, so every shortfall names what to run and only warns:
+    # sync-payloads where a native binding exists, else this checkout's -Now
+    # line (sync-payloads refuses an unmarked home). An item without a
     # windows-install row (the kit, which installs nothing on native Windows)
     # is not checked, as the hook does not run it.
     $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
@@ -212,14 +212,6 @@ function Get-DoctorPayloadResult {
     $found = @()
     $issues = @()
     foreach ($item in $items) {
-        $words = @("$($rows["$item`tstow-links"])".Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
-        foreach ($path in @($words | Select-Object -Skip 1)) {
-            $link = Get-Item -LiteralPath (Join-Path $HOME $path) -Force -ErrorAction SilentlyContinue
-            if ($link -and $link.LinkType -and "$(@($link.Target)[0])".Replace('\', '/') -like "*common/$($words[0])/*") {
-                $issues += "$item waits for stow-all: ~/$path is still a link the retired $($words[0]) Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads $item"
-                break
-            }
-        }
         $probe = $rows["$item`twindows-probe"]
         $installed = $false
         if ($probe) { try { $installed = [bool](& ([scriptblock]::Create($probe))) } catch { } }
@@ -228,7 +220,11 @@ function Get-DoctorPayloadResult {
         else { $found += $item }
     }
     if ($short.Count) {
-        $issues += "not installed: $($short -join ', '): run sync-payloads ITEM"
+        $advice = 'sync-payloads ITEM'
+        if ((Get-BootstrapNativeState -RepoRoot $RepoRoot).State -ceq 'unbound') {
+            $advice = "& $(Join-Path (Join-Path $RepoRoot 'scripts') 'payload-update.ps1') -Now ITEM"
+        }
+        $issues += "not installed: $($short -join ', '): run $advice"
     }
     if ($issues.Count) { return New-DoctorResult warn payloads ai ($issues -join '; ') $step }
     if ($found.Count) { return New-DoctorResult ok payloads ai "installed: $($found -join ', ')" $step }

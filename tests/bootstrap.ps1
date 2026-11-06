@@ -908,37 +908,20 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tDOTFILES_PAYLOAD_ITEMS selects no payload`t-") "kit-only row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit nope skills' }
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run sync-payloads ITEM`tdocs/bootstrap.md H7-payloads") "unknown item row: $($run.Stdout)"
-        # A stow-links path still linked into its retired package, which
-        # waits for stow-all, comes first with what to run; only for selected
-        # items that install here. The records the retired scheduler left
-        # (ITEM.failed) are ignored, never reported or removed. No Windows
-        # item of the real file has a stow-links row, so this fixture's copy
-        # gives pymol one, at a path its windows-probe does not
-        # test: PowerShell 7.6's Test-Path -PathType Leaf counts a dangling
-        # link as a file, so a link at a probed rc file would read as
-        # installed and drop pymol from the not installed clause.
-        # stage6-B4 edit: delete the fixture stow-links row ($config/$original read, write and restore), the $legacy link and its delete, and the $expected stow-links assert; keep the ITEM.failed records and the old-records run (B4 design)
-        $config = Join-Path $fixture.Repo 'config/payloads.tsv'
-        $original = [IO.File]::ReadAllText($config)
-        [IO.File]::WriteAllText($config, $original.TrimEnd() + "`npymol`tstow-links`tpymol .dotfiles-test-legacy-pymolrc`n")
+        # The records the retired scheduler left (ITEM.failed) are ignored,
+        # never reported or removed.
         $state = Join-Path $fixture.LocalAppData 'dotfiles/payload'
         [void][IO.Directory]::CreateDirectory($state)
         [IO.File]::WriteAllText((Join-Path $state 'skills.failed'), "1700000000 3`n[dotfiles] [error] skills: stopped for a person`n")
         [IO.File]::WriteAllText((Join-Path $state 'pymol.failed'), "1700000000 1`n")
         [IO.File]::WriteAllText((Join-Path $state 'kit.failed'), "1700000000 1`n")
-        $legacy = Join-Path $fixture.Home '.dotfiles-test-legacy-pymolrc'
-        if ($IsWindows) { New-Item -ItemType SymbolicLink -Path $legacy -Value (Join-Path $fixture.Root 'dotfiles\common\pymol\.pymolrc.py') | Out-Null }
-        else { & ln -s '../dotfiles/common/pymol/.pymolrc.py' $legacy }
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'payload failures only warn'
-        $expected = 'pymol waits for stow-all: ~/.dotfiles-test-legacy-pymolrc is still a link the retired pymol Stow package made, which its installer refuses: run stow-all.ps1 from an elevated PowerShell 7, then sync-payloads pymol; ' + $short
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$expected`tdocs/bootstrap.md H7-payloads") "stow-links row: $($run.Stdout)"
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$short`tdocs/bootstrap.md H7-payloads") "ignored records row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "old records row: $($run.Stdout)"
         Assert-True ((Test-Path -LiteralPath (Join-Path $state 'skills.failed')) -and (Test-Path -LiteralPath (Join-Path $state 'pymol.failed'))) 'the doctor removed an old record'
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles') -Recurse -Force
-        [IO.File]::Delete($legacy)
-        [IO.File]::WriteAllText($config, $original)
         [IO.File]::WriteAllText($pymolPy, '')
     }
 
@@ -1085,6 +1068,11 @@ exit 0
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'no binding'
         Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tno native binding (~/.config/dotfiles/native)")) "unbound row: $($run.Stdout)"
+        # sync-payloads needs a binding, so an unmarked home's payload advice
+        # is this checkout's -Now line.
+        $run = Invoke-Fixture $fixture doctor.ps1 $native @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        $hook = Join-Path (Join-Path $fixture.Repo 'scripts') 'payload-update.ps1'
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run & $hook -Now ITEM`tdocs/bootstrap.md H7-payloads") "unbound payloads row: $($run.Stdout)"
         [IO.File]::WriteAllText($marker, $binding)
 
         $config = Join-Path $fixture.Home '.config/chezmoi/chezmoi.toml'

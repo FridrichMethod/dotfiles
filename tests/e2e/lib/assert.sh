@@ -165,12 +165,12 @@ e2e_nowrite_end() {
 
 # e2e_login_env: the environment a fresh terminal or ssh session starts the
 # login shell with: nothing inherited but HOME, the user, TERM and the system
-# PATH (plus the wrappers' bin on the mac runner), the update hooks and
+# PATH (plus the wrappers' bin on the mac runner), the update hook and
 # gitstatus's installer off, and the harness variables the wrappers read, so
 # a sudo from an rc file is logged under this phase and fails the audit.
 e2e_login_env() {
     E2E_LOGIN_ENV=(env -i "HOME=$HOME" "USER=$E2E_RUN_USER" "LOGNAME=$E2E_RUN_USER" TERM=xterm-256color
-        "PATH=$E2E_SYS_PATH" DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 GITSTATUS_AUTO_INSTALL=0
+        "PATH=$E2E_SYS_PATH" DOTFILES_AUTO_UPDATE=0 GITSTATUS_AUTO_INSTALL=0
         "E2E_OUT=$E2E_OUT" "E2E_PHASE=${E2E_PHASE:--}")
 }
 

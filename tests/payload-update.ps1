@@ -56,14 +56,11 @@ try {
     Assert-True (-not ($config -match "(?m)^kit`twindows-")) 'config/payloads.tsv has a windows row for the kit, which does not install on native Windows'
     $config = $config.Replace('https://raw.githubusercontent.com/FridrichMethod/', $base).Replace('Join-Path $HOME ', 'Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME ')
     Assert-True (-not ($config -match 'https?://')) 'config/payloads.tsv names a URL outside raw.githubusercontent.com/FridrichMethod'
-    # Rows only this fixture has, so the generic fields keep their coverage
-    # now that no Windows item of the real file uses them: an update command
-    # that runs an installed script (skills), and a stow-links row (pymol;
-    # the kit's on Unix) at a path no real home has, since PowerShell's $HOME
-    # on Windows is the account's profile.
+    # A row only this fixture has, so the generic field keeps its coverage
+    # now that no Windows item of the real file uses it: an update command
+    # that runs an installed script (skills).
     $config = $config.TrimEnd() + "`n" +
-        "skills`twindows-update`tInvoke-DotfilesPayloadScript (Join-Path `$env:LOCALAPPDATA 'awesome-skills/update.ps1') -Update`n" +
-        "pymol`tstow-links`tpymol .dotfiles-test-legacy-pymolrc`n"
+        "skills`twindows-update`tInvoke-DotfilesPayloadScript (Join-Path `$env:LOCALAPPDATA 'awesome-skills/update.ps1') -Update`n"
     Write-Fixture (Join-Path $fixture 'config/payloads.tsv') $config
     Write-Fixture (Join-Path $fixture 'scripts/payload-update.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'scripts/payload-update.ps1')))
     Write-Fixture (Join-Path $fixture 'lib/terminal.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'lib/terminal.ps1')))
@@ -148,6 +145,9 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         if (-not $IsWindows) { $values['HOME'] = $Case.Home }
         foreach ($key in $Environment.Keys) { $values[$key] = $Environment[$key] }
         foreach ($key in $values.Keys) { Set-TestVariable $key $values[$key] }
+        # A merged stderr record must not end the suite under the file's Stop
+        # (PowerShell 7.0 and 7.1 apply it to native stderr).
+        $ErrorActionPreference = 'Continue'
         $output = & $pwsh -NoProfile -NonInteractive -File $Hook @Arguments 2>&1 | ForEach-Object { "$_" }
         return [pscustomobject]@{ Code = $LASTEXITCODE; Text = ($output -join "`n") }
     }
@@ -297,26 +297,32 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         }
         finally { $listener.Stop() }
     }
-    Test-Case 'a call without -Now (an older profile''s, or an older run''s -Auto or -Worker) does nothing and says nothing' {
+    Test-Case 'a call without -Now, the retired -Auto and -Worker included (with -Now too), prints one usage line and exits 2' {
         $case = New-Case
-        $run = Invoke-Hook $case @()
-        Assert-True ($run.Code -eq 0 -and -not $run.Text -and (Get-Events $case) -ceq '') "a call without arguments ran: $(Get-Events $case); output: $($run.Text)"
-        $run = Invoke-Hook $case @('-Auto')
-        Assert-True ($run.Code -eq 0 -and -not $run.Text -and (Get-Events $case) -ceq '') "-Auto ran: $(Get-Events $case); output: $($run.Text)"
-        $run = Invoke-Hook $case @('-Worker', 'pymol', 'skills')
-        Assert-True ($run.Code -eq 0 -and -not $run.Text -and (Get-Events $case) -ceq '') "-Worker ran: $(Get-Events $case); output: $($run.Text)"
-        Assert-NoState $case 'a call without -Now'
-    }
-    if ($IsWindows) { Write-Output 'SKIP: a legacy Stow link (PowerShell $HOME cannot be redirected on Windows)' }
-    else {
-        Test-Case 'a stow-links path still linked into its retired package waits for stow-all without running the installer' {
-            $case = New-Case
-            # Dangling, as the pull leaves it; ln makes one on every Unix.
-            & ln -s '../dotfiles/common/pymol/.pymolrc' (Join-Path $case.Home '.dotfiles-test-legacy-pymolrc')
-            $run = Invoke-Hook $case @('-Now', 'pymol', 'skills')
-            Assert-True ($run.Code -eq 1 -and $run.Text.Contains('pymol: ~/.dotfiles-test-legacy-pymolrc is still a link the retired Stow package made, which its installer refuses; run stow-all.ps1')) $run.Text
-            Assert-True ((Get-Events $case) -ceq 'skills-install []') "events: $(Get-Events $case)"
+        $usage = 'dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]'
+        function Assert-UsageError([string[]]$Arguments, [string]$What) {
+            $run = Invoke-Hook $case $Arguments
+            Assert-True ($run.Code -eq 2 -and $run.Text -ceq $usage -and (Get-Events $case) -ceq '') "$($What): exit $($run.Code), events $(Get-Events $case), output: $($run.Text)"
         }
+        Assert-UsageError @() 'no arguments'
+        Assert-UsageError @('-Auto') '-Auto'
+        Assert-UsageError @('-Worker', 'pymol', 'skills') '-Worker'
+        Assert-UsageError @('pymol') 'a bare item'
+        Assert-UsageError @('-Now', '-Auto') '-Now -Auto'
+        Assert-UsageError @('-Now', 'pymol', '-Worker') '-Now pymol -Worker'
+        # Under maintenance too; a -Now run is refused there. Off Windows only:
+        # PowerShell's $HOME on Windows is the account's profile.
+        if (-not $IsWindows) {
+            $maintenance = Join-Path $case.Home '.config/dotfiles/maintenance'
+            Write-Fixture $maintenance ''
+            try {
+                Assert-UsageError @() 'no arguments under maintenance'
+                $run = Invoke-Hook $case @('-Now', 'pymol')
+                Assert-True ($run.Code -eq 1 -and $run.Text.Contains('payload update refused during maintenance') -and (Get-Events $case) -ceq '') "-Now under maintenance: exit $($run.Code): $($run.Text)"
+            }
+            finally { [IO.File]::Delete($maintenance) }
+        }
+        Assert-NoState $case 'a usage error'
     }
     Write-Output "payload-update-ps=PASS ($script:Passed cases)"
 }

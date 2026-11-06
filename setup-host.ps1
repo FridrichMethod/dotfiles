@@ -588,16 +588,15 @@ function Invoke-BootstrapSetup {
         }
     }
 
-    # Provisioning children must not start update hooks or prompt for Git
+    # Provisioning children must not start the update hook or prompt for Git
     # credentials. Process environment outlives this script in an
     # interactive session, so every change is restored at the end.
     $saved = @{}
-    foreach ($name in @('DOTFILES_AUTO_UPDATE', 'DOTFILES_PAYLOAD_AUTO_UPDATE', 'GIT_TERMINAL_PROMPT', 'PATH')) {
+    foreach ($name in @('DOTFILES_AUTO_UPDATE', 'GIT_TERMINAL_PROMPT', 'PATH')) {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
     }
     try {
         $env:DOTFILES_AUTO_UPDATE = '0'
-        $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
         $env:GIT_TERMINAL_PROMPT = '0'
         $applied = @(Invoke-SetupApply)
         if ($applied.Count -ne 1 -or $applied[0] -isnot [bool]) {

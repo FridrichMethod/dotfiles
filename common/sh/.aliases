@@ -18,12 +18,12 @@ alias kstanford='kinit -l 25h -r 7d zyli2002@stanford.edu && { ! command -v kren
 
 # Install or update the payload repos now, in the foreground:
 # sync-payloads [kit] [pymol] [skills] (default: all); sync-skills is
-# sync-payloads skills. Like the login dispatch in ~/.profile, a native home
-# runs the hook of the source its binding names and refuses an invalid
-# binding; only an unmarked home uses DOTFILES_DIR.
+# sync-payloads skills. Like the login dispatch in ~/.profile, they run the
+# hook of the source the native home binding names and refuse an invalid
+# binding; an unmarked home has no binding, so they refuse there and name the
+# --now line to run from its checkout.
 # shellcheck source=/dev/null
 _dotfiles_sync_payloads() (
-    _df_root=${DOTFILES_DIR:-$HOME/dotfiles}
     if [ -e "$HOME/.config/dotfiles/native" ] || [ -L "$HOME/.config/dotfiles/native" ]; then
         if ! _df_root=$(
             [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
@@ -39,6 +39,9 @@ _dotfiles_sync_payloads() (
             printf '%s\n' '[dotfiles] [error] Native home binding is invalid; payload update refused.' >&2
             exit 1
         fi
+    else
+        printf '%s\n' '[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.' >&2
+        exit 1
     fi
     sh "$_df_root/scripts/payload-update.sh" --now "$@"
 )

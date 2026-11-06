@@ -28,8 +28,8 @@ update; the manual commands, takeover and recovery live in
   the source's `scripts/chezmoi-update.sh` or `.ps1` runs.
 - An invalid binding prints one warning and runs nothing.
 - An unmarked home runs nothing and prints nothing. There is no fallback to
-  `~/dotfiles`, `DOTFILES_DIR` or any other checkout, and a retired checkout's
-  guard or updater is never sourced.
+  `~/dotfiles`, an environment variable or any other checkout, and a retired
+  checkout's guard or updater is never sourced.
 
 ## Refusals
 

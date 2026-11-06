@@ -20,10 +20,6 @@
 #                    names what to do (3 for both: PyMOLScripts at a locally
 #                    edited rc file, which it leaves alone; awesome-skills at
 #                    an interrupted update it cannot undo alone)
-#   stow-links       PACKAGE PATH...: HOME paths the installer refuses while
-#                    they are links into the retired dotfiles package
-#                    common/PACKAGE, which stow-all removes; until it has run
-#                    the hook does not call the installer and says so
 # The probes test the paths each installer documents as an install: the kit's
 # managed root (its current/install.sh), PyMOL's two rc files, and
 # awesome-skills' ownership manifests (claude.json, codex.json in its state
@@ -39,7 +35,6 @@
 # the caller's directory or the download's) and return its exit status (75:
 # another run holds that repo's lock).
 kit	channel	0.7
-kit	stow-links	coding-agent-kit .local/bin/claude-as .local/bin/codex-as .local/share/bash-completion/completions/claude-as .local/share/bash-completion/completions/codex-as
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"
 kit	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.sh --channel "$channel"
 kit	unix-update	payload_script sh "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh" --update --channel "$channel"

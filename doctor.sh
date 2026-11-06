@@ -93,7 +93,7 @@ usage() {
         '  --online            also run gh auth status, claude auth status and' \
         '                      codex login status (failures are warn; the tools' \
         '                      may write their own state)' \
-        '  --smoke             also run zsh -ic true with the update hooks off and' \
+        '  --smoke             also run zsh -ic true with the update hook off and' \
         '                      report missing plugins, commands and files (may write' \
         '                      shell caches)' \
         '  --list              print the applicable rows (id, tier, probe, floor, doc)' \
@@ -414,7 +414,7 @@ while [[ -n "$lines" ]]; do
     lines=${lines#*"$BOOTSTRAP_NL"}
     bootstrap_split ' ' "$line" id tier step
     [[ -n "$id" ]] || continue
-    report_result "$(bootstrap_check_structural "$id" "$REPO_ROOT" "$PROFILE" "$ORIG_PATH" "$HOST")" \
+    report_result "$(bootstrap_check_structural "$id" "$REPO_ROOT" "$PROFILE" "$ORIG_PATH")" \
         "$id" "$tier" "$step"
 done
 

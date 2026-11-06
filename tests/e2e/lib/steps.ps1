@@ -247,7 +247,7 @@ function Invoke-E2EAuditSyncVenv {
 function Invoke-E2EStepClone {
     # The clone a person makes (HW-clone): from the read-only source checkout
     # at E2E_REV, its origin pointed at GitHub as a real clone has it.
-    # Everything after it runs with the login and payload hooks off, as
+    # Everything after it runs with the login update hook off, as
     # docs/bootstrap.md asks of every provisioning shell.
     Start-E2EStep clone setup:clone
     $clone = $E2E['Clone']
@@ -266,7 +266,6 @@ function Invoke-E2EStepClone {
         }
     }
     $env:DOTFILES_AUTO_UPDATE = '0'
-    $env:DOTFILES_PAYLOAD_AUTO_UPDATE = '0'
     $env:GIT_TERMINAL_PROMPT = '0'
     # HW-clone's verify: a clone of E2E_REV whose tree tracks no symlink.
     $short = (Get-E2EGitOutput @('-C', $clone, 'rev-parse', '--short', 'HEAD')).Text

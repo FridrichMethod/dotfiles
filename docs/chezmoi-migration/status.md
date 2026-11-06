@@ -85,7 +85,7 @@ The user also approved the one-off Windows Phase 0 task above. Deregistering
   rendered profile, so it lands in Phase B.
 - B1 owns the doctor fixture copies of the parser runtime, `.stowrc` in
   `tests/setup-host.sh`, `SYNC_TRIPWIRE` and every B1 marker A3 left;
-  B4 owns the two `stage6-B4` markers. Each ends with its marker grep empty.
+  B4 owns the two B4 markers. Each ends with its marker grep empty.
 - Doc collisions are resolved by owner: A4 owns the end-to-end section of
   docs/testing.md and the fresh-home sections of docs/bootstrap.md; later
   commits only remove residual legacy tokens there.

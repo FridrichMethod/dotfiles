@@ -237,9 +237,10 @@ if ($IsInteractive -and -not $IsAgentSession) {
     # Install or update the payload repos now, in the foreground
     # (scripts/payload-update.ps1): sync-payloads [pymol] [skills], both by
     # default (coding-agent-kit installs nothing on native Windows);
-    # sync-skills is sync-payloads skills. As at the tail, a native home runs
-    # the hook of the source its validated binding names and refuses an
-    # invalid binding; only an unmarked home uses DOTFILES_DIR.
+    # sync-skills is sync-payloads skills. As at the tail, they run the hook
+    # of the source the validated native binding names and refuse an invalid
+    # binding; an unmarked home has no binding, so they refuse there and name
+    # the -Now line to run from its checkout.
     function global:sync-payloads {
         try {
             $native = $null
@@ -258,7 +259,11 @@ if ($IsInteractive -and -not $IsAgentSession) {
                 . $guard
                 $dotfiles = (Get-DotfilesNativeBinding -HomePath $HOME).Source
             }
-            else { $dotfiles = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' } }
+            else {
+                [Console]::Error.WriteLine('[dotfiles] Payload update needs a native home binding; in an unmarked home run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')
+                $global:LASTEXITCODE = 1
+                return
+            }
         }
         catch {
             [Console]::Error.WriteLine('[dotfiles] Payload update refused: review the native source binding privately.')

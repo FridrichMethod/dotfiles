@@ -366,7 +366,7 @@ case "${1:-} ${2:-}" in
     'bundle --no-upgrade')
         printf 'brew:bundle %s\n' "$name" >>"$EVENT_LOG"
         printf '%s\n' "$brewfile" | sed -nE "s/^(tap|brew|cask) /brew-line:$name &/p" >>"$EVENT_LOG"
-        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} DOTFILES_PAYLOAD_AUTO_UPDATE=${DOTFILES_PAYLOAD_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
+        printf 'brew-env:%s\n' "DOTFILES_AUTO_UPDATE=${DOTFILES_AUTO_UPDATE-} GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT-} NONINTERACTIVE=${NONINTERACTIVE-} HOMEBREW_NO_AUTO_UPDATE=${HOMEBREW_NO_AUTO_UPDATE-} HOMEBREW_NO_ENV_HINTS=${HOMEBREW_NO_ENV_HINTS-} HOMEBREW_NO_INSTALL_CLEANUP=${HOMEBREW_NO_INSTALL_CLEANUP-} GH_TELEMETRY=${GH_TELEMETRY-} GH_NO_UPDATE_NOTIFIER=${GH_NO_UPDATE_NOTIFIER-} TLDR_AUTO_UPDATE_DISABLED=${TLDR_AUTO_UPDATE_DISABLED-}" >>"$EVENT_LOG"
         [ "${BREW_FAIL:-0}" != 1 ] || exit 1
         if [ -n "${BREW_POLLUTE:-}" ]; then
             printf '%s\n' '# appended by a brew installer' >>"$BREW_POLLUTE"
@@ -862,7 +862,9 @@ expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-payloads judgment'
 expect_text check-fresh out '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them'
 expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.7'
-expect_text check-fresh out '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+# An unmarked home has no binding for sync-payloads, so only the line is named.
+expect_line check-fresh '# rerun the line below to update them later (sync-payloads needs a native home binding, which this home lacks). To install them now, in the foreground:'
+expect_no_text check-fresh out '(or sync-payloads'
 PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
 expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
@@ -916,6 +918,7 @@ printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$CASE_HOME" "$FIXTURE" >"$CASE_HOME/.con
 run_case payloads-native-bound -- --host lab-ubuntu --check --only H7-payloads
 expect_line payloads-native-bound "# this native home is bound to $FIXTURE: the line below runs that source's hook, as sync-payloads does"
 expect_line payloads-native-bound "sh $FIXTURE/scripts/payload-update.sh --now"
+expect_line payloads-native-bound '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
 
 # --- debian apply: every step, in phase order --------------------------------
 
@@ -929,7 +932,7 @@ expect_order 'brew:bundle core.Brewfile' 'brew:bundle cli.Brewfile' \
     "curl:$URL_THEME" 'bat:cache --build' \
     "curl:$URL_NVM" 'nvm-install:PROFILE=/dev/null' 'nvm:install --lts' 'nvm:alias default lts/*' \
     "curl:$URL_CHEZMOI" "curl:$URL_CLAUDE" "curl:$URL_CODEX" "curl:$URL_FONT" 'fc-cache:-f' "curl:$URL_KITTY"
-expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
+expect_event 'brew-env:DOTFILES_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1'
 expect_event "nvm-install:PROFILE=/dev/null NVM_DIR=$CASE_HOME/.nvm NVM_INSTALL_VERSION=$NVM_PIN"
 # Linux takes python3 from apt (H1-apt-core): the core Brewfile's python is
 # macOS-only.

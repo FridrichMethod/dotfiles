@@ -179,16 +179,17 @@ its roots. Selection and migration stay with that repository's installer.
 
 No login, profile or schedule installs or refreshes the payload repos. A person
 runs `sync-payloads`, which installs absent items and updates installed ones in
-the foreground and keeps no state. On a native home it runs the hook of the
-validated bound source and refuses an invalid binding; only unmarked homes use
-`DOTFILES_DIR`. Exit 75 (another run holds the repository's lock) is no
-failure. Exit 3 for configured person-status items requires following the
-upstream installer's message; locally edited PyMOL rc files are preserved.
+the foreground and keeps no state. It runs the hook of the validated bound
+source and refuses an invalid binding; an unmarked home has no binding, so run
+`sh <checkout>/scripts/payload-update.sh --now` there. Exit 75 (another run
+holds the repository's lock) is no failure. Exit 3 for configured
+person-status items requires following the upstream installer's message;
+locally edited PyMOL rc files are preserved.
 Exit 3 and other failures print a retry line, and the run exits 1. This remains two
 rolling PyMOL rc copies, not a version manager. Downloads are bounded and run
 from fresh private staging directories, never from a pipe. See the
-[payload contract](docs/payloads.md) for bounds, selection, trust and exact
-migration behavior.
+[payload contract](docs/payloads.md) for bounds, selection, trust and the
+usage error any other call gets.
 
 ```sh
 sync-payloads [kit] [pymol] [skills]  # foreground: install or update
@@ -196,9 +197,9 @@ sync-skills                           # sync-payloads skills
 ```
 
 On native Windows use these profile functions or `scripts/payload-update.ps1 -Now` in an ordinary, unelevated PowerShell. It manages PyMOLScripts and
-awesome-skills, not the kit. Preserve legacy links/checkouts until the documented
-[migration conditions](docs/payloads.md#migration) hold; inspect local work
-before manual cleanup. [Sherlock toolkit migration](docs/sherlock-kit.md) is
+awesome-skills, not the kit. Retired submodule checkouts stay ignored as
+[leftover checkouts](docs/payloads.md#leftover-checkouts); inspect local work
+before removing one by hand. [Sherlock toolkit migration](docs/sherlock-kit.md) is
 separate: consumer projects pin/install their own toolkit.
 
 ## Checks and contribution

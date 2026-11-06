@@ -27,8 +27,8 @@ trap cleanup EXIT HUP INT TERM
 
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
-    for file in "$OUT" "$ERR" "$EVENTS"; do
-        [[ ! -f "$file" ]] || {
+    for file in "${OUT-}" "${ERR-}" "${EVENTS-}"; do
+        [[ -z "$file" || ! -f "$file" ]] || {
             printf -- '--- %s\n' "${file##*/}" >&2
             cat -- "$file" >&2
         }
@@ -44,8 +44,10 @@ REMOTE=$TEST_TMP/remote
 FIXTURE=$TEST_TMP/repo
 mkdir -p "$TEST_TMP/bin" "$FIXTURE/scripts" "$FIXTURE/lib" "$FIXTURE/config" \
     "$REMOTE/coding-agent-kit/main" "$REMOTE/PyMOLScripts/main" "$REMOTE/awesome-skills/main"
-cp "$REPO_ROOT/scripts/payload-update.sh" "$REPO_ROOT/scripts/awesome-skills-update.sh" "$FIXTURE/scripts/"
-cp "$REPO_ROOT/lib/terminal.sh" "$FIXTURE/lib/"
+cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/"
+# The guard and .chezmoiroot make the fixture a source a home can be bound to.
+cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
+printf 'home\n' >"$FIXTURE/.chezmoiroot"
 sed "s#https://raw.githubusercontent.com/FridrichMethod/#file://$REMOTE/#g" \
     "$REPO_ROOT/config/payloads.tsv" >"$FIXTURE/config/payloads.tsv"
 grep -q "file://$REMOTE/coding-agent-kit/main/install.sh" "$FIXTURE/config/payloads.tsv" ||
@@ -53,6 +55,10 @@ grep -q "file://$REMOTE/coding-agent-kit/main/install.sh" "$FIXTURE/config/paylo
 if grep -q 'https\?://' "$FIXTURE/config/payloads.tsv"; then
     fail 'config/payloads.tsv names a URL outside raw.githubusercontent.com/FridrichMethod'
 fi
+# Every field of config/payloads.tsv is one the hooks read.
+unknown_fields=$(awk -F '\t' '!/^#/ && NF && $2 !~ /^(channel|(unix|windows)-(probe|install|update)|person-status)$/ { print NR ": " $1 " " $2 }' \
+    "$REPO_ROOT/config/payloads.tsv")
+[[ -z "$unknown_fields" ]] || fail "config/payloads.tsv has a field no hook reads: $unknown_fields"
 
 cat >"$TEST_TMP/bin/curl" <<'SH'
 #!/bin/sh
@@ -141,7 +147,7 @@ new_home() {
 # in_env COMMAND...: COMMAND in the case's home, with the fakes and only the
 # system tools on PATH.
 in_env() {
-    env HOME="$HOME_DIR" PATH="$TEST_TMP/bin:/usr/bin:/bin" DOTFILES_DIR="$FIXTURE" EVENTS="$EVENTS" \
+    env HOME="$HOME_DIR" PATH="$TEST_TMP/bin:/usr/bin:/bin" EVENTS="$EVENTS" \
         REAL_CURL="$REAL_CURL" TMPDIR="$TEST_TMP" "$@"
 }
 
@@ -175,11 +181,32 @@ wait_for() {
     fail "timed out waiting for: $*"
 }
 
-# sourced SHELL: source the hook from an interactive SHELL as the rc files
-# read before the pull that brought explicit-only payloads do: directly,
-# from a function as the old login dispatcher did, and through the
-# awesome-skills-update.sh shim. Prints "unchanged" when the shell's flags,
-# options and traps are as before and no session marker was set.
+USAGE='dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]'
+
+# Nothing installs a payload repo unless a person runs it. Any other call, a
+# bare item or the retired --auto and --worker (with --now too), is a usage
+# error: one line on stderr and exit 2 before anything else, under
+# maintenance too, with no event and no state.
+new_home
+mkdir -p "$HOME_DIR/.config/dotfiles"
+for maintenance in '' 1; do
+    [[ -z "$maintenance" ]] || : >"$HOME_DIR/.config/dotfiles/maintenance"
+    for mode in '' --auto '--worker kit pymol skills' kit '--now --auto' '--now kit --worker'; do
+        STATUS=0
+        # shellcheck disable=SC2086 # the mode's words
+        in_env sh "$FIXTURE/scripts/payload-update.sh" $mode >"$OUT" 2>"$ERR" || STATUS=$?
+        [[ "$STATUS" == 2 && ! -s "$OUT" && "$(cat "$ERR")" == "$USAGE" ]] ||
+            fail "a call with [$mode]${maintenance:+ under maintenance} was not a usage error (exit $STATUS)"
+    done
+done
+rm "$HOME_DIR/.config/dotfiles/maintenance"
+expect_events ''
+expect_no_state 'a call without --now'
+
+# sourced SHELL: source the hook from an interactive SHELL, directly and from
+# a function, as rc files read before Stage 5 did. Prints "rc=DIRECT NESTED
+# unchanged" when the shell's flags, options and traps are as before and the
+# hook left none of its variables or functions behind, else what leaked.
 sourced() {
     local shell=$1
     shift
@@ -189,22 +216,22 @@ sourced() {
         sh) set -- sh -i -c ;;
     esac
     # shellcheck disable=SC2016 # expanded by the sourcing shell
-    in_env "$@" 'saved_flags=$-; saved_options=$(set +o); saved_traps=$(trap)
-        . "$DOTFILES_DIR/scripts/payload-update.sh"
-        old_dispatch() { _df_payload=$DOTFILES_DIR/scripts/payload-update.sh; . "$_df_payload"; unset _df_payload; }
-        old_dispatch
-        . "$DOTFILES_DIR/scripts/awesome-skills-update.sh"
+    in_env PAYLOAD_HOOK="$FIXTURE/scripts/payload-update.sh" "$@" 'saved_flags=$-; saved_options=$(set +o); saved_traps=$(trap)
+        . "$PAYLOAD_HOOK"; direct=$?
+        via_function() { . "$PAYLOAD_HOOK"; }
+        via_function; nested=$?
+        leaked=$(set | grep -E "^(repo|config|tab|timeout|connect|staging|offline|failed|item|arg)=" | cut -d= -f1 | tr "\n" " ")
+        for f in fail field known payload_script unstage installed run dotfiles_log; do
+            [ "$(command -v "$f")" != "$f" ] || leaked="$leaked$f() "
+        done
         if [ "$-" = "$saved_flags" ] && [ "$(set +o)" = "$saved_options" ] && [ "$(trap)" = "$saved_traps" ] &&
-            [ -z "${_DOTFILES_PAYLOAD_CHECKED+set}" ]; then echo unchanged; fi' \
+            [ -z "$leaked" ]; then echo "rc=$direct $nested unchanged"; else echo "rc=$direct $nested leaked=[$leaked]"; fi' \
         >"$OUT" 2>"$ERR" || fail "sourcing the hook from $shell failed"
 }
 
-# Nothing installs a payload repo unless a person runs it: a call without
-# --now does nothing, prints nothing and returns 0 until Stage 6. The rc files
-# read before the pull source the hook (directly, from the old login
-# dispatcher or through the shim), and an older run may still start the
-# retired --auto or --worker: none of them installs anything, writes state or
-# changes the sourcing shell's options.
+# Sourced, each call prints the usage line and returns 2 to the sourcing
+# shell, which stays alive with its flags, options and traps unchanged and
+# none of the hook's variables or functions defined.
 for shell in bash zsh sh; do
     command -v "$shell" >/dev/null 2>&1 || {
         printf 'SKIP: %s not installed\n' "$shell"
@@ -213,21 +240,11 @@ for shell in bash zsh sh; do
     new_home
     sourced "$shell"
     expect_events ''
-    [[ "$(cat "$OUT")" == unchanged ]] || fail "sourcing the hook changed the $shell session: $(cat "$OUT")"
-    if grep -v -e 'job control' -e 'terminal process group' -e 'access tty' -e '^stty: ' "$ERR" | grep -q .; then
-        fail "sourcing the hook printed under $shell"
-    fi
+    [[ "$(cat "$OUT")" == 'rc=2 2 unchanged' ]] || fail "sourcing the hook under $shell: $(cat "$OUT")"
+    [[ "$(grep -v -e 'job control' -e 'terminal process group' -e 'access tty' -e '^stty: ' "$ERR" || :)" == "$USAGE"$'\n'"$USAGE" ]] ||
+        fail "sourcing the hook under $shell did not print one usage line per call"
     expect_no_state "sourcing the hook under $shell"
 done
-new_home
-for mode in '' --auto '--worker kit pymol skills'; do
-    STATUS=0
-    # shellcheck disable=SC2086 # the mode's words
-    in_env sh "$FIXTURE/scripts/payload-update.sh" $mode >"$OUT" 2>"$ERR" || STATUS=$?
-    [[ "$STATUS" == 0 && ! -s "$OUT" && ! -s "$ERR" ]] || fail "a call with [$mode] was not a quiet no-op (exit $STATUS)"
-done
-expect_events ''
-expect_no_state 'a call without --now'
 # A login runs none either; the update dispatch is all that remains there.
 in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/common/sh/.profile" >"$OUT" 2>"$ERR" ||
     fail 'common/sh/.profile failed'
@@ -306,23 +323,6 @@ FAKE_PYMOL_STATUS=3 now pymol
 [[ "$STATUS" == 1 ]] || fail 'a PyMOL exit 3 was not a failure'
 expect_text "$ERR" '[dotfiles] [error] pymol: stopped for a person (exit 3): do what its message says, then run sync-payloads pymol'
 expect_no_state 'a failed run'
-
-# A legacy link the retired coding-agent-kit Stow package made at a kit
-# path: the kit's installer would refuse it, so the hook says to run stow-all
-# instead of calling it, and the run fails; PyMOL's installer replaces its
-# own old links, so it still runs. A link elsewhere stops nothing.
-new_home
-mkdir -p "$HOME_DIR/.local/bin"
-ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$HOME_DIR/.local/bin/codex-as"
-now kit pymol
-[[ "$STATUS" == 1 ]] || fail '--now ran the kit past a legacy link'
-expect_events 'pymol-install []'
-expect_text "$ERR" "[dotfiles] [warn] kit: ~/.local/bin/codex-as is still a link the retired Stow package made, which its installer refuses; run $FIXTURE/stow-all.sh with this host first (the next login's automatic stow does), then sync-payloads kit"
-rm "$HOME_DIR/.local/bin/codex-as"
-ln -s "$HOME_DIR/elsewhere/codex-as" "$HOME_DIR/.local/bin/codex-as"
-now kit
-expect_events 'pymol-install []
-kit-install [--channel 0.7] stdin=[]'
 
 # A download that stalls (a 127.0.0.1 port that accepts and never answers)
 # ends within DOTFILES_PAYLOAD_TIMEOUT, and the run tries no other download,
@@ -462,8 +462,11 @@ env HOME="$HOME_DIR" PATH="$TEST_TMP/bare" EVENTS="$EVENTS" TMPDIR="$TEST_TMP" \
 [[ "$STATUS" == 1 ]] || fail 'a run without curl or wget succeeded'
 expect_text "$ERR" 'neither curl nor wget is installed'
 
-# The aliases run the manual mode; sync-skills is sync-payloads skills.
+# The aliases run the --now mode through the home binding's source;
+# sync-skills is sync-payloads skills.
 new_home
+mkdir -p "$HOME_DIR/.config/dotfiles"
+printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$HOME_DIR" "$FIXTURE" >"$HOME_DIR/.config/dotfiles/native"
 in_env bash --noprofile --norc -c 'shopt -s expand_aliases; . "$1"
 sync-skills
 sync-payloads pymol' _ "$REPO_ROOT/common/sh/.aliases" >"$OUT" 2>"$ERR" || fail 'the aliases failed'

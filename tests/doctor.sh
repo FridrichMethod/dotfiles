@@ -95,9 +95,7 @@ if [ "${1:-}" = --version ]; then
     printf 'zsh 5.9 (fake)\n'
     exit 0
 fi
-printf 'zsh %s DOTFILES_AUTO_UPDATE=%s DOTFILES_PAYLOAD_AUTO_UPDATE=%s PATH=%s\n' \
-    "$*" "${DOTFILES_AUTO_UPDATE-unset}" "${DOTFILES_PAYLOAD_AUTO_UPDATE-unset}" \
-    "$PATH" >>"$EVENT_LOG"
+printf 'zsh %s DOTFILES_AUTO_UPDATE=%s PATH=%s\n' "$*" "${DOTFILES_AUTO_UPDATE-unset}" "$PATH" >>"$EVENT_LOG"
 [ -z "${SMOKE_STDOUT:-}" ] || printf '%s\n' "$SMOKE_STDOUT"
 [ -z "${SMOKE_STDERR:-}" ] || printf '%s\n' "$SMOKE_STDERR" >&2
 exit "${SMOKE_RC:-0}"
@@ -691,7 +689,7 @@ mv "$TEST_TMP/codex.hidden" "$FAKE_BIN/codex"
 run_doctor smoke -- --host lab-ubuntu --smoke --tsv
 assert_rc 0
 assert_row zsh-smoke ok
-assert_event "zsh -ic true DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 PATH=$BASE_PATH"
+assert_event "zsh -ic true DOTFILES_AUTO_UPDATE=0 PATH=$BASE_PATH"
 assert_no_event NETWORK
 run_doctor smoke-plugin "SMOKE_STDERR=[oh-my-zsh] plugin 'fzf-tab' not found" -- \
     --host lab-ubuntu --smoke --tsv
@@ -773,21 +771,19 @@ run_doctor payloads-awesome-ignored AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOA
 assert_row payloads ok 'installed: skills' -
 run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
 assert_row payloads warn "not installed: kit: $SYNC_ADVICE"
-# A kit path still linked into the retired package, which waits for
-# stow-all, comes first with what to run; only for selected items. The
-# records the retired scheduler left (ITEM.failed, stamps, its log) are
-# ignored, never reported or removed.
+# A link the retired coding-agent-kit package left at a kit path changes
+# nothing: the kit's own installer, not the doctor, judges it. The records the
+# retired scheduler left (ITEM.failed, stamps, its log) are ignored, never
+# reported or removed.
 PAYLOAD_STATE=$TEST_HOME/.local/state/dotfiles/payload
 mkdir -p "$PAYLOAD_STATE" "$TEST_HOME/.local/bin"
 printf '1700000000 3\n[dotfiles] [error] skills: stopped for a person\n' >"$PAYLOAD_STATE/skills.failed"
 printf '1700000000 1\n' >"$PAYLOAD_STATE/kit.failed"
-# stage6-B4 edit: rename payloads-stow-link to payloads-legacy-link, keeping this codex-as link and the old records, and drop STOW_LINK and its detail assert (B4 design)
 ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$TEST_HOME/.local/bin/codex-as"
-run_doctor payloads-stow-link -- --host lab-ubuntu --tsv
+run_doctor payloads-legacy-link -- --host lab-ubuntu --tsv
 assert_rc 0
-STOW_LINK="kit waits for stow-all: ~/.local/bin/codex-as is still a link the retired coding-agent-kit Stow package made, which its installer refuses: run $FIXTURE/stow-all.sh lab-ubuntu, then sync-payloads kit"
 assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
-[ "$(tsv_field payloads 4)" = "$STOW_LINK; not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: $SYNC_ADVICE; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ] ||
+[ "$(tsv_field payloads 4)" = "not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: $SYNC_ADVICE; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ] ||
     case_fail "payloads detail [$(tsv_field payloads 4)]"
 run_doctor payloads-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
 assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
@@ -1204,6 +1200,13 @@ for unresolved in maintenance invalid; do
     rm -f "$NATIVE_DIR/maintenance"
     bind_native "$FIXTURE"
 done
+# An unmarked home has no binding, so sync-payloads refuses there: the advice
+# is this checkout's --now line alone.
+rm "$NATIVE_MARKER"
+run_doctor native-payloads-unmarked DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+[ "$(tsv_field payloads 4)" = "not installed: pymol: run sh $FIXTURE/scripts/payload-update.sh --now ITEM" ] ||
+    case_fail "payloads detail [$(tsv_field payloads 4)]"
+bind_native "$FIXTURE"
 mv "$TEST_TMP/pymolrc.hidden" "$TEST_HOME/.pymolrc.py"
 : >"$NATIVE_DIR/maintenance"
 run_doctor native-config-maintenance -- --host lab-ubuntu --tsv

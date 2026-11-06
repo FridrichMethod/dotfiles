@@ -126,7 +126,7 @@ $tailAt = $text7.IndexOf($tailMarker)
 Assert-True ($tailAt -gt 0) 'the update hook block is present'
 $tail = $text7.Substring([Math]::Max($tailAt, 0))
 Assert-True ($tail.Contains('scripts/chezmoi-update.ps1')) 'the update hook runs the bound source''s scripts/chezmoi-update.ps1'
-Assert-True (-not $tail.Contains('dotfiles-update') -and -not $tail.Contains('DOTFILES_DIR')) 'the update hook has no unmarked-home fallback'
+Assert-True (-not $tail.Contains('dotfiles-update') -and $tail -notmatch '(?i)\$env:') 'the update hook has no unmarked-home fallback and reads no environment variable'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
 function Get-Assignments($Ast, [string]$Left) {
@@ -501,15 +501,15 @@ else {
 
 Write-Output '--- payload commands follow the home binding'
 # sync-payloads and sync-skills, lifted into a child with a fake HOME, run the
-# hook of the source a valid native marker names (never a stale DOTFILES_DIR
-# checkout or its guard) and pass its exit status through; an invalid marker
-# refuses without running any hook; only an unmarked home uses DOTFILES_DIR;
-# maintenance surfaces the bound hook's own refusal.
+# hook of the source a valid native marker names (never the checkout at
+# ~\dotfiles or its guard) and pass its exit status through; an unmarked home
+# and an invalid marker refuse without running any hook; maintenance surfaces
+# the bound hook's own refusal.
 $syncRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-sync-test-" + [guid]::NewGuid().ToString('N'))
 try {
     $syncHome = Join-Path $syncRoot 'home'
     $bound = Join-Path $syncRoot 'bound source'
-    $stale = Join-Path $syncRoot 'stale'
+    $stale = Join-Path $syncHome 'dotfiles'
     $syncTrace = Join-Path $syncRoot 'trace'
     $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $bound 'scripts'),
         (Join-Path $bound 'lib'), (Join-Path $bound '.git'), (Join-Path $stale 'scripts'), (Join-Path $stale 'lib')
@@ -540,15 +540,15 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
         Remove-Item -LiteralPath $syncTrace, $syncMarker -Recurse -Force -ErrorAction Ignore
         & $Prepare
         $run = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $syncChild) -Environment @{
-            DOTFILES_TEST_HOME = $syncHome; DOTFILES_TEST_PROFILE = $profile7; DOTFILES_TEST_TRACE = $syncTrace; DOTFILES_DIR = $stale
+            DOTFILES_TEST_HOME = $syncHome; DOTFILES_TEST_PROFILE = $profile7; DOTFILES_TEST_TRACE = $syncTrace
         }
         $events = if (Test-Path -LiteralPath $syncTrace) { @(Get-Content -LiteralPath $syncTrace) -join '|' } else { '' }
         [pscustomobject]@{ Out = $run.Out; Err = $run.Err; Events = $events; Text = "out=$($run.Out) err=$($run.Err) events=$events" }
     }
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }
-    Assert-True ($case.Events -ceq 'bound -Now pymol|bound -Now skills' -and $case.Out -ceq 'exit=4,4' -and -not $case.Err) "a valid binding runs its source's hook, not DOTFILES_DIR's ($($case.Text))"
+    Assert-True ($case.Events -ceq 'bound -Now pymol|bound -Now skills' -and $case.Out -ceq 'exit=4,4' -and -not $case.Err) "a valid binding runs its source's hook, not ~\dotfiles's ($($case.Text))"
     $case = Invoke-SyncCase { }
-    Assert-True ($case.Events -ceq 'stale -Now pymol|stale -Now skills' -and $case.Out -ceq 'exit=4,4') "an unmarked home uses DOTFILES_DIR ($($case.Text))"
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update needs a native home binding; in an unmarked home run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')) "an unmarked home refuses and runs no hook, not even ~\dotfiles's ($($case.Text))"
     $invalid = [ordered]@{
         'extra line'      = { [IO.File]::WriteAllText($syncMarker, $valid + "`n") }
         'other version'   = { [IO.File]::WriteAllText($syncMarker, $valid.Replace('-v1', '-v2')) }
@@ -558,7 +558,7 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
         'directory'       = { $null = New-Item -ItemType Directory -Path $syncMarker }
     }
     # A marker that is a link, dangling or to a valid marker, refuses too and
-    # never falls back to DOTFILES_DIR. A symbolic link on Windows needs
+    # never falls back to ~\dotfiles. A symbolic link on Windows needs
     # elevation or Developer Mode (hosted runners are elevated).
     $validCopy = Join-Path $syncRoot 'valid marker'
     [IO.File]::WriteAllText($validCopy, $valid)
@@ -585,16 +585,14 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
     try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) } }
     finally { Move-Item -LiteralPath "$boundGuard.hidden" -Destination $boundGuard }
     Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update refused: review the native source binding privately.')) "a bound source without its guard refuses without running a hook ($($case.Text))"
-    # A checkout without the hook fails with one line and exit 1, not a
-    # leftover 0, on an unmarked home and a native one alike.
-    foreach ($entry in @(@('unmarked', $stale, {}), @('native', $bound, { [IO.File]::WriteAllText($syncMarker, $valid) }))) {
-        $hookPath = Join-Path $entry[1] 'scripts/payload-update.ps1'
-        Move-Item -LiteralPath $hookPath -Destination "$hookPath.hidden"
-        try { $case = Invoke-SyncCase $entry[2] }
-        finally { Move-Item -LiteralPath "$hookPath.hidden" -Destination $hookPath }
-        Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update unavailable:') -and
-            -not $case.Err.Contains('CommandNotFound')) "a missing hook ($($entry[0])) fails with exit 1 ($($case.Text))"
-    }
+    # A bound source without the hook fails with one line and exit 1, not a
+    # leftover 0.
+    $hookPath = Join-Path $bound 'scripts/payload-update.ps1'
+    Move-Item -LiteralPath $hookPath -Destination "$hookPath.hidden"
+    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) } }
+    finally { Move-Item -LiteralPath "$hookPath.hidden" -Destination $hookPath }
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update unavailable:') -and
+        -not $case.Err.Contains('CommandNotFound')) "a bound source without the hook fails with exit 1 ($($case.Text))"
     # A hook that ends without exit leaves no stale exit status behind.
     [IO.File]::WriteAllText((Join-Path $bound 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }

@@ -15,8 +15,8 @@
     does, and it keeps no state of its own. Run it unelevated: an elevated
     run's git clones would belong to Administrators.
 
-    Until Stage 6, a call without -Now (an older profile's, or an older
-    run's -Auto or -Worker) does nothing.
+    Any other call, without -Now or with the retired -Auto or -Worker (with
+    -Now too), prints one usage line on stderr and exits 2.
 .NOTES
     DOTFILES_PAYLOAD_ITEMS lists the items without arguments (default: those
     with a windows-install row, pymol skills); DOTFILES_PAYLOAD_TIMEOUT
@@ -25,24 +25,27 @@
 #>
 [CmdletBinding()]
 param(
+    # -Auto and -Worker are the retired automatic modes, declared only so
+    # that a call naming them is refused as a usage error below.
     [switch]$Auto,
     [switch]$Now,
     [switch]$Worker,
     [Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Item
 )
 
+# Only a person's -Now run does anything. Any other call is a usage error,
+# before anything else, maintenance included.
+if (-not $Now -or $Auto -or $Worker) {
+    [Console]::Error.WriteLine('dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]')
+    exit 2
+}
+
 # Persistent operator maintenance refuses an explicit run too.
 $MaintenancePath = Join-Path $HOME '.config/dotfiles/maintenance'
 if (Get-Item -LiteralPath $MaintenancePath -Force -ErrorAction SilentlyContinue) {
-    if ($Now) {
-        Write-Warning 'dotfiles: payload update refused during maintenance.'
-        exit 1
-    }
-    return
+    Write-Warning 'dotfiles: payload update refused during maintenance.'
+    exit 1
 }
-
-# Until Stage 6: the retired -Auto and -Worker, and a call without arguments.
-if (-not $Now) { return }
 $Repo = Split-Path -Parent $PSScriptRoot
 
 $PayloadFailed = & { try {
@@ -162,16 +165,6 @@ $PayloadFailed = & { try {
     # in $script:PayloadStatus.
     function Invoke-PayloadItem([string]$Name) {
         $script:PayloadStatus = 1
-        # A stow-links path (PACKAGE PATH...) still linked into the retired
-        # common/PACKAGE: the repo's installer refuses it until stow-all runs.
-        $words = @("$(Get-PayloadField $Name 'stow-links')".Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
-        foreach ($path in @($words | Select-Object -Skip 1)) {
-            $link = Get-Item -LiteralPath (Join-Path $HOME $path) -Force -ErrorAction SilentlyContinue
-            if ($link -and $link.LinkType -and "$(@($link.Target)[0])".Replace('\', '/') -like "*common/$($words[0])/*") {
-                Write-DotfilesLog warn "$($Name): ~/$path is still a link the retired Stow package made, which its installer refuses; run stow-all.ps1 from an elevated PowerShell 7 first (the login updater's task does), then sync-payloads $Name"
-                return
-            }
-        }
         $action = if (Test-PayloadInstalled $Name) { 'update' } else { 'install' }
         $command = Get-PayloadField $Name "windows-$action"
         if (-not $command) { $command = Get-PayloadField $Name 'windows-install' }

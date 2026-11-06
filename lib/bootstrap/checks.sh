@@ -484,14 +484,14 @@ bootstrap_payload_hook() {
     esac
 }
 
-# bootstrap_check_payloads ROOT [HOST]: each item of DOTFILES_PAYLOAD_ITEMS
+# bootstrap_check_payloads ROOT: each item of DOTFILES_PAYLOAD_ITEMS
 # (default kit pymol skills) passes its unix-probe row of
-# ROOT/config/payloads.tsv and an installed kit left the Claude helpers; an
-# item that waits for stow-all (a stow-links path still linked into the
-# retired package) is named with what to run. Only a person installs the
-# payload repos (sync-payloads), so every shortfall names that and only warns.
+# ROOT/config/payloads.tsv and an installed kit left the Claude helpers. Only
+# a person installs the payload repos, so every shortfall names what to run
+# and only warns: sync-payloads where a native binding exists, else this
+# checkout's --now line (sync-payloads refuses an unmarked home).
 bootstrap_check_payloads() {
-    local config=$1/config/payloads.tsv items item line probe links package path hook
+    local config=$1/config/payloads.tsv items item line probe path hook advice
     local short='' found='' issues=''
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
@@ -502,22 +502,12 @@ bootstrap_check_payloads() {
         item=${items%% *}
         items=${items#* }
         [ -n "$item" ] || continue
-        probe='' links=''
+        probe=''
         while IFS= read -r line || [ -n "$line" ]; do
             case $line in
                 "$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"*) probe=${line#"$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"} ;;
-                "$item${BOOTSTRAP_TAB}stow-links$BOOTSTRAP_TAB"*) links=${line#"$item${BOOTSTRAP_TAB}stow-links$BOOTSTRAP_TAB"} ;;
             esac
         done <"$config"
-        package=${links%% *}
-        for path in ${links#"$package"}; do
-            case $(readlink "$HOME/$path" 2>/dev/null) in
-                *"common/$package/"*)
-                    issues="$issues; $item waits for stow-all: ~/$path is still a link the retired $package Stow package made, which its installer refuses: run $1/stow-all.sh${2:+ $2}, then sync-payloads $item"
-                    break
-                    ;;
-            esac
-        done
         if [ -z "$probe" ]; then
             short="$short, $item (no unix-probe row)"
         elif ! (eval "$probe") >/dev/null 2>&1; then
@@ -533,10 +523,14 @@ bootstrap_check_payloads() {
         fi
     done
     if [ -n "$short" ]; then
-        issues="$issues; not installed: ${short#, }: run sync-payloads ITEM"
-        if hook=$(bootstrap_payload_hook "$1"); then
-            issues="$issues (sh $hook --now ITEM)"
+        if ! bootstrap_native_home; then
+            advice="sh $1/scripts/payload-update.sh --now ITEM"
+        elif hook=$(bootstrap_payload_hook "$1"); then
+            advice="sync-payloads ITEM (sh $hook --now ITEM)"
+        else
+            advice='sync-payloads ITEM'
         fi
+        issues="$issues; not installed: ${short#, }: run $advice"
         case $short in
             *kit*) issues="$issues; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ;;
         esac
@@ -683,10 +677,8 @@ bootstrap_check_nvm_homebrew() {
     bootstrap_check_result ok "no Homebrew nvm keg"
 }
 
-# bootstrap_check_structural ID ROOT PROFILE PATH_VALUE [HOST]: run one
-# structural check by its reserved id. HOST is the selected overlay (empty in
-# platform mode); without the argument it is the caller's $HOST, the one
-# doctor.sh resolved.
+# bootstrap_check_structural ID ROOT PROFILE PATH_VALUE: run one structural
+# check by its reserved id.
 bootstrap_check_structural() {
     case $1 in
         locale) bootstrap_check_locale "$3" ;;
@@ -695,7 +687,7 @@ bootstrap_check_structural() {
         rc-pollution) bootstrap_check_rc_pollution "$2" ;;
         omz-order) bootstrap_check_omz_order ;;
         nvm-homebrew) bootstrap_check_nvm_homebrew ;;
-        payloads) bootstrap_check_payloads "$2" "${5-${HOST-}}" ;;
+        payloads) bootstrap_check_payloads "$2" ;;
         *) bootstrap_check_result warn "unknown structural check $1" ;;
     esac
 }
@@ -747,7 +739,7 @@ bootstrap_check_auth() {
 BOOTSTRAP_SMOKE_FINDINGS='^\[oh-my-zsh\]|plugin:? .* not found|plugin: cannot find|command not found|no such file|permission denied'
 
 # bootstrap_check_smoke PATH_VALUE: start an interactive zsh as a new terminal
-# would (PATH_VALUE, update hooks off, stdin from /dev/null) and scan its
+# would (PATH_VALUE, update hook off, stdin from /dev/null) and scan its
 # stdout and stderr together for BOOTSTRAP_SMOKE_FINDINGS.
 bootstrap_check_smoke() {
     local path_value=${1:-$PATH} zsh_bin timeout_bin output rc esc findings count
@@ -760,7 +752,7 @@ bootstrap_check_smoke() {
     if [ -n "$timeout_bin" ]; then
         set -- "$timeout_bin" 60 "$@"
     fi
-    if output=$(PATH=$path_value DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 "$@" </dev/null 2>&1); then
+    if output=$(PATH=$path_value DOTFILES_AUTO_UPDATE=0 "$@" </dev/null 2>&1); then
         rc=0
     else
         rc=$?

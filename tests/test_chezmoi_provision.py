@@ -27,7 +27,7 @@ class NativeProvisionTests(unittest.TestCase):
         self.home.mkdir()
         self.env = {
             "HOME": str(self.home), "PATH": "/usr/bin:/bin", "LC_ALL": "C",
-            "DOTFILES_AUTO_UPDATE": "0", "DOTFILES_PAYLOAD_AUTO_UPDATE": "0",
+            "DOTFILES_AUTO_UPDATE": "0",
             "BOOTSTRAP_UNAME_S": "Linux", "BOOTSTRAP_UNAME_M": "x86_64",
         }
 

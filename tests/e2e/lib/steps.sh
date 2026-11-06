@@ -21,7 +21,7 @@ E2E_HANDOVER_KEPT=0 E2E_HANDOVER_DETAIL=''
 
 # e2e_step_clone: the clone a person makes, from the read-only source
 # checkout at E2E_REV, its origin pointed at GitHub as a real clone has it.
-# Everything after it runs with the login and payload hooks off, as
+# Everything after it runs with the login update hook off, as
 # docs/bootstrap.md asks of every provisioning shell.
 e2e_step_clone() {
     local rc=0 o e
@@ -37,7 +37,7 @@ e2e_step_clone() {
         e2e_step_end fail "git exited $rc: $(e2e_last_line "$e")"
         return 1
     fi
-    export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0
+    export DOTFILES_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0
     e2e_step_end pass "$(git -C "$E2E_CLONE" rev-parse --short HEAD) at $E2E_CLONE"
 }
 

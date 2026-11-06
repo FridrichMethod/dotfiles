@@ -20,7 +20,7 @@ from this checkout, stop and say so.
    `lab-ubuntu`, `sherlock`, `marlowe`, `win`). Never guess an overlay from the
    OS. A machine without one is other Linux: `./doctor.sh --platform other` plus
    the manual steps of X-other-linux, because setup-host takes only `--host`.
-2. Run every command with `DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0`.
+2. Run every command with `DOTFILES_AUTO_UPDATE=0`.
 3. Diagnose: `./doctor.sh --host H --tsv`.
 4. Plan: `./setup-host.sh --host H --check` writes nothing and makes no network
    calls; exit 0 means nothing is left to apply. Show the plan and wait for the

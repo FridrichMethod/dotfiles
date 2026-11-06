@@ -55,14 +55,14 @@ e2e_step_helpers() {
 }
 
 # e2e_by_hand NAME COMMAND [VERIFY]: one by-hand step of the quick start:
-# COMMAND in the clone, in a bash that sourced the helpers with DOTFILES_DIR
-# set; then VERIFY, a function that prints what it found and returns 1 when
+# COMMAND in the clone, in a bash that sourced the helpers with
+# dotfiles_checkout naming the clone; then VERIFY, a function that prints what it found and returns 1 when
 # the step did not do its job.
 e2e_by_hand() {
     local rc=0 found=''
     e2e_step_begin "$1" "setup:$1"
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-        env DOTFILES_DIR="$E2E_CLONE" bash -c ". $(e2e_quote "$E2E_HELPERS") && $2" || rc=$?
+        env dotfiles_checkout="$E2E_CLONE" bash -c ". $(e2e_quote "$E2E_HELPERS") && $2" || rc=$?
     if [ "$rc" != 0 ]; then
         E2E_BROKEN=$1
         e2e_step_end fail "exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"

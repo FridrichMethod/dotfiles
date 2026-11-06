@@ -11,21 +11,27 @@
 # DOTFILES_PAYLOAD_ITEMS (the items without arguments; default: kit pymol
 # skills), DOTFILES_PAYLOAD_TIMEOUT (seconds per download, default 60).
 #
-# Until Stage 6, any other call does nothing and returns 0, setting no
-# variable or option: shells that read their rc files before the pull that
-# ended automatic runs still source this file, and an older run may still
-# pass the retired --auto or --worker. The old
-# scripts/awesome-skills-update.sh entry point is now a no-op of its own.
+# Any other call, the retired --auto and --worker included (after --now
+# too), prints one usage line on stderr and exits 2 before anything else,
+# maintenance included; sourced, it returns 2 instead and sets no variable
+# or option (the argument scan runs in a subshell).
 
+if [ "${1-}" != --now ] || (
+    for argument; do
+        case $argument in
+            --auto | --worker) exit 0 ;;
+        esac
+    done
+    exit 1
+); then
+    printf '%s\n' 'dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]' >&2
+    return 2 2>/dev/null || exit 2
+fi
 # Persistent operator maintenance refuses an explicit run too.
 if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
-    if [ "${1-}" = --now ]; then
-        printf '%s\n' 'dotfiles: payload update refused during maintenance.' >&2
-        return 1 2>/dev/null || exit 1
-    fi
-    return 0 2>/dev/null || exit 0
+    printf '%s\n' 'dotfiles: payload update refused during maintenance.' >&2
+    return 1 2>/dev/null || exit 1
 fi
-[ "${1-}" = --now ] || return 0 2>/dev/null || exit 0
 
 set -fu
 shift
@@ -177,34 +183,10 @@ installed() {
     (eval "$value") >/dev/null 2>&1
 }
 
-# stowed ITEM: a path of its stow-links row (PACKAGE PATH...) is still a link
-# into the retired common/PACKAGE, which the repo's installer refuses; sets
-# value to that path.
-stowed() {
-    field "$1" stow-links || return 1
-    # shellcheck disable=SC2086 # a word list; set -f keeps it from globbing
-    set -- $value
-    package=$1
-    shift
-    for path; do
-        case $(readlink "$HOME/$path" 2>/dev/null) in
-            *"common/$package/"*)
-                value=$path
-                return 0
-                ;;
-        esac
-    done
-    return 1
-}
-
 # run ITEM: install ITEM when absent, else update it. Sets status to the
 # command's exit status and returns it.
 run() {
     status=1
-    if stowed "$1"; then
-        dotfiles_log warn "$1: ~/$value is still a link the retired Stow package made, which its installer refuses; run $repo/stow-all.sh with this host first (the next login's automatic stow does), then sync-payloads $1"
-        return 1
-    fi
     action=update doing=updating
     installed "$1" || action=install doing=installing
     field kit channel

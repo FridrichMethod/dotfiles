@@ -362,9 +362,11 @@ step_H7_payloads_check() {
 }
 
 # Nothing installs the payload repos at login: a person runs the --now line,
-# or sync-payloads in an interactive shell, to install and later update them.
-# On a native home the line names the hook of the source the binding names
-# (bootstrap_payload_hook), as sync-payloads does; without one, only notes.
+# or sync-payloads in an interactive shell of a native home, to install and
+# later update them. On a native home the line names the hook of the source
+# the binding names (bootstrap_payload_hook), as sync-payloads does; without
+# one, only notes. An unmarked home has no binding, so sync-payloads refuses
+# there and only the line is named.
 step_H7_payloads_plan() {
     local hook
     steps_block_begin H7-payloads judgment
@@ -379,8 +381,10 @@ step_H7_payloads_plan() {
     if bootstrap_native_home; then
         printf '# this native home is bound to %s: the line below runs that source'\''s hook, as sync-payloads does\n' \
             "${hook%/scripts/payload-update.sh}"
+        printf '%s\n' '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+    else
+        printf '%s\n' '# rerun the line below to update them later (sync-payloads needs a native home binding, which this home lacks). To install them now, in the foreground:'
     fi
-    printf '%s\n' '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
     printf 'sh %s --now\n' "$(steps_quote "$hook")"
     steps_block_end
 }

@@ -181,15 +181,16 @@ exact interactive guard and keep setup in its then-branch, checks agent-session
 parity against `common/zsh/.zshrc`, keeps the conda stub lazy (removed before
 the hook runs) and identical in both profiles, installs out of the profile and
 Windows PowerShell 5.1 syntax ASCII-only, and requires that the login tail
-runs no payload hook. It runs `sync-payloads` and `sync-skills`, lifted into
-a child with a fake home: a valid native marker runs its source's hook, never
-a stale `DOTFILES_DIR` checkout or its guard; only an unmarked home uses
-`DOTFILES_DIR`; six invalid markers, two linked ones (dangling or to a valid
+runs no payload hook and reads no environment variable. It runs
+`sync-payloads` and `sync-skills`, lifted into a child with a fake home: a
+valid native marker runs its source's hook, never the checkout at
+`~\dotfiles` or its guard; an unmarked home refuses with the `-Now` line to
+run instead; six invalid markers, two linked ones (dangling or to a valid
 marker, where a symbolic link can be made) and a bound source without its
-guard refuse without running a hook; a checkout without the hook fails with
-exit 1; maintenance surfaces the real hook's refusal; the hook's exit status
-passes through, and one that ends without `exit` reports 0, not the caller's
-`$LASTEXITCODE`.
+guard refuse without running a hook; a bound source without the hook fails
+with exit 1; maintenance surfaces the real hook's refusal; the hook's exit
+status passes through, and one that ends without `exit` reports 0, not the
+caller's `$LASTEXITCODE`.
 It unit-tests the history filter in both directions, the eza glob expansion
 and the `$LASTEXITCODE` prompt wrapper,
 parses and completes conda under Windows PowerShell 5.1, dot-sources the
@@ -214,15 +215,17 @@ must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
 fetches a missing page from GitHub. Last, it runs `sync-payloads kit pymol`
 and `sync-skills` from `common/sh/.aliases` in interactive sh, dash, Bash and
 `zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid native
-marker runs its source's hook and an unmarked home `DOTFILES_DIR`'s, with the
+marker runs its source's hook, never the checkout at `~/dotfiles`, with the
 arguments and exit status passed through, silently and without leaving a
-helper variable. It also requires that an interactive login of an unmarked
+helper variable, and an unmarked home runs no hook and names the `--now` line
+instead. It also requires that an interactive login of an unmarked
 home under sh, dash, Bash and zsh runs no updater, even with a checkout at
 ~/dotfiles, and prints nothing. `tests/test_chezmoi_guard.py` adds the
-refusals under sh, Bash and zsh: a valid marker's source wins over a stale `DOTFILES_DIR`, whose
-guard and hook never run; an invalid marker (an unterminated extra line,
-another version, a relative source, another home, a symlink, a directory)
-refuses before any hook; and maintenance refuses before any state is
+refusals under sh, Bash and zsh: a valid marker's source wins over the
+checkout at `~/dotfiles`, whose guard and hook never run; an unmarked home and
+an invalid marker (an unterminated extra line, another version, a relative
+source, another home, a symlink, a directory) refuse before any hook; and
+maintenance refuses before any state is
 written. It also requires that no login through `common/sh/.profile`, with
 or without Sherlock's overlay, runs a payload hook, while a bound home's update
 dispatch stays.
@@ -370,42 +373,44 @@ skip.
 installers served from `file://` URLs: the real `config/payloads.tsv` with its
 `https://raw.githubusercontent.com/FridrichMethod/` prefix pointed at a local
 directory (a URL anywhere else fails the suite) and a curl that refuses every
-other URL but a loopback port. Nothing installs unless a person runs it:
-sourcing the hook from an interactive Bash, zsh or sh (directly, from a
-function as the old login dispatcher did, and through the
-`scripts/awesome-skills-update.sh` shim), a call without `--now` and the
-retired `--auto` and `--worker` do nothing, print nothing, write no state and
-leave the shell's flags, options and traps alone, and a login through
-`common/sh/.profile` runs no installer. `--now` installs the default items in
-config order, the kit on the declared channel with stdin closed, runs each
-installed item's update command the next time, keeps no state of its own and
-returns only once its installer has finished. The suite also covers
-`DOTFILES_PAYLOAD_ITEMS` (empty selects none, an unknown item fails before
-anything runs); a failed install's retry line and exit 1 while the other
-items still run; exit 75 as no failure; the person-status rows; a kit path
-still linked into the retired Stow package, which stops the kit but not
-PyMOL; a stalled download ending within `DOTFILES_PAYLOAD_TIMEOUT` without a
-second download; each download staged alone in a fresh private directory of
+other URL but a loopback port. Every field of `config/payloads.tsv` is one
+the hooks read. Nothing installs unless a person runs it: a call without
+`--now` (none, a bare item, the retired `--auto` and `--worker`, also after
+`--now`, under maintenance too) prints one usage line on stderr and exits 2;
+sourced from an interactive Bash, zsh or sh, directly or from a function, it
+returns 2 after that line and leaves the shell's flags, options and traps
+alone with none of its variables or functions defined; none writes state, and
+a login through `common/sh/.profile` runs no installer. `--now` installs the
+default items in config order, the kit on the declared channel with stdin
+closed, runs each installed item's update command the next time, keeps no
+state of its own and returns only once its installer has finished. The suite
+also covers `DOTFILES_PAYLOAD_ITEMS` (empty selects none, an unknown item
+fails before anything runs); a failed install's retry line and exit 1 while
+the other items still run; exit 75 as no failure; the person-status rows; a
+stalled download ending within `DOTFILES_PAYLOAD_TIMEOUT` without a second
+download; each download staged alone in a fresh private directory of
 `TMPDIR` (under its absolute path when `TMPDIR` is relative), removed
 afterwards even when its installer fails; every installer, a download or the
 kit's installed update, starting in `/`, outside the caller's working
 directory, where git finds no planted `TMPDIR/.git` (dotfiles chooses only the
 directory an installer starts in; git it runs from elsewhere is its own); a
 failed download, the wget fallback and a host with neither; and the
-`sync-payloads` and `sync-skills` aliases. `tests/test_payload_download.py`
+`sync-payloads` and `sync-skills` aliases through a native binding of the
+fixture. `tests/test_payload_download.py`
 adds loopback deadlines for curl, wget (behind `timeout` or `gtimeout`;
 without either it fails before any request) and PowerShell, and the
 failed-download latch, with no staging or state left behind.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
-call without `-Now`, or with the retired `-Auto` or `-Worker`, does nothing
-and says nothing; a run naming the kit says it is not available there and
-runs nothing for it; no run records anything; a download's directory is
-private (mode 0700; on Windows an access list that grants only this account
-and inherits nothing) and one that cannot be made runs nothing; every
+call without `-Now`, the retired `-Auto` and `-Worker` included (with `-Now`
+too), prints one usage line and exits 2, under maintenance too; a run naming
+the kit says it is not available there and runs nothing for it; no run
+records anything; a download's directory is private (mode 0700; on Windows an
+access list that grants only this account and inherits nothing) and one that
+cannot be made runs nothing; every
 installer, a download or an installed script, runs in `$PSHOME`, out of the
-caller's working directory and the download's; and fixture-only rows keep the
-`windows-update` and `stow-links` fields covered.
+caller's working directory and the download's; and a fixture-only row keeps
+the `windows-update` field covered.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
@@ -788,14 +793,14 @@ above the same way. Log in without the RemoteCommand (`ssh sherlock-plain`,
 ```sh
 uname -a; cat /etc/os-release; ldd --version | head -n 1   # record these with the run
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
-cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --host sherlock --tsv                           # or marlowe; exit 1 is expected now
 marker=$(mktemp) && sleep 1
 ./setup-host.sh --host sherlock --check                     # exit 3
 find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # must print nothing
 ./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
-cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
+cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
 echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the handover
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
 # Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet
