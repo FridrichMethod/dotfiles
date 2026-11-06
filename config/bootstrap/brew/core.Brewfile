@@ -9,9 +9,9 @@
 # python@3.15 on 2026-10-09, after python@3.14). Even with --no-upgrade, brew
 # bundle installs the new default whenever the alias moves (the old keg stays
 # beside it), so python is bundled on macOS only, where it is needed (the CLT
-# python3 is 3.9). Debian and Ubuntu use apt's python3 and python3-venv
-# (apt/common.txt, H1-apt-core; 24.04 ships 3.12), and a Linuxbrew python
-# would relink python3 for every user of a shared prefix.
+# python3 is 3.9). Debian and Ubuntu use apt's python3 (apt/common.txt,
+# H1-apt-core; 24.04 ships 3.12), and a Linuxbrew python would relink
+# python3 for every user of a shared prefix.
 brew "python" if OS.mac?
 brew "fzf"
 brew "zoxide"

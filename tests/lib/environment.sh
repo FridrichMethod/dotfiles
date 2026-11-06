@@ -4,7 +4,7 @@ for _dotfiles_test_name in "${!DOTFILES_@}" "${!_DOTFILES_@}" \
     "${!AWESOME_SKILLS_@}" "${!_AWESOME_SKILLS_@}" \
     "${!CODING_AGENT_KIT_@}" "${!_CODING_AGENT_KIT_@}"; do
     case $_dotfiles_test_name in
-        DOTFILES_TEST_* | DOTFILES_SYNC_PYTHON) ;;
+        DOTFILES_TEST_*) ;;
         *) unset "$_dotfiles_test_name" ;;
     esac
 done

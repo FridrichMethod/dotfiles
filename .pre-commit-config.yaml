@@ -43,7 +43,7 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=warning]
-        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$)
+        files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$|(^|/)\.(profile|alias|aliases)$)
         types: [file]
 
   - repo: https://github.com/scop/pre-commit-shfmt
@@ -52,10 +52,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
-        exclude: ^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$
+        exclude: ^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -89,7 +89,7 @@ repos:
         entry: tests/chezmoi.sh
         language: script
         pass_filenames: false
-        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(config_sync[.]py|sync-runtime[.]sh|chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|payload-update)[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
+        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|payload-update)[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh
@@ -115,37 +115,15 @@ repos:
         pass_filenames: false
         files: ^(common/claude/\.claude/(settings\.json|CLAUDE\.md)|common/codex/\.codex/(AGENTS\.md|rules/portable\.rules)|CLAUDE\.md|AGENTS\.md|tests/(ai-policy\.sh|test_ai_policy\.py))$|^tests/lib/environment\.(sh|ps1)$
         types: []
-      - id: structured-config-sync
-        name: structured configuration merge and safe writes
-        entry: tests/config-sync.sh
-        language: script
-        pass_filenames: false
-        # test_config_sync.py also reads and asserts the real Codex config.toml.
-        files: ^(lib/.*|requirements-sync\.txt|setup-sync\.(sh|ps1)|tests/(test_config_sync\.py|config-sync\.sh)|common/codex/\.codex/config\.toml|common/(claude|codex)/\.local/bin/.*)$|^tests/lib/environment\.(sh|ps1)$
-        # identify tags a tracked link `symlink`; the default `types: [file]`
-        # would skip a link change, so every hook whose files can name one
-        # clears it.
-        types: []
-      - id: ai-config-sync
-        name: ai config and rules sync
-        entry: tests/ai-config-sync.sh
-        language: script
-        pass_filenames: false
-        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|common/(claude|codex)/.*|lib/(config_sync\.py|sync-runtime\.sh)|setup-sync\.(sh|ps1)|requirements-sync\.txt|tests/ai-config-sync\.sh)$|^tests/lib/environment\.(sh|ps1)$
-        types: []
       - id: claude-customizations
         name: Claude status line, notifications and Git hook guard
         entry: node --test tests/claude-customizations.cjs
         language: system
         pass_filenames: false
         files: (^|/)(common/claude/.*|tests/claude-customizations\.cjs)$
-        types: []
-      - id: codex-config-sync
-        name: codex config sync behavior
-        entry: tests/codex-config-sync.sh
-        language: script
-        pass_filenames: false
-        files: (^|/)(stow-all\.(sh|ps1)|\.stowrc|lib/(config_sync\.py|sync-runtime\.sh)|common/codex/(\.codex/config\.toml|\.local/bin/codex-config-sync)|tests/codex-config-sync\.sh)$|^tests/lib/environment\.(sh|ps1)$
+        # identify tags a tracked link `symlink`; the default `types: [file]`
+        # would skip a link change, so every hook whose files can name one
+        # clears it.
         types: []
       - id: ai-integration
         name: AI tooling integration with the real dotfiles content
@@ -154,12 +132,6 @@ repos:
         pass_filenames: false
         files: ^(common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|tests/(ai-integration\.sh|test_ai_integration\.py))$|^tests/lib/environment\.(sh|ps1)$
         types: []
-      - id: fcitx5-profile-sync
-        name: fcitx5 profile sync behavior
-        entry: tests/fcitx5-profile-sync.sh
-        language: script
-        pass_filenames: false
-        files: (^|/)(stow-all\.sh|\.stowrc|lab-ubuntu/fcitx5/.*|tests/fcitx5-profile-sync\.sh)$|^tests/lib/environment\.(sh|ps1)$
       - id: payload-update
         name: payload repo hook behavior
         entry: tests/payload-update.sh

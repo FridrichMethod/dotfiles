@@ -38,14 +38,12 @@ for dependency in bash sh git python3 node; do
         missing=1
     fi
 done
-sync_python=${DOTFILES_SYNC_PYTHON:-$TEST_DIR/../.venv-sync/bin/python}
-if [[ ! -x "$sync_python" ]]; then
-    printf 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.\n' >&2
-    missing=1
-elif ! "$sync_python" -I -B "$TEST_DIR/../lib/config_sync.py" --runtime-check; then
+# The suites import stdlib tomllib; AGENTS.md sets the Python 3.11+ floor.
+if command -v python3 >/dev/null 2>&1 &&
+    ! python3 -I -B -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+    printf 'ERROR: required test dependency python3 is not Python 3.11 or newer.\n' >&2
     missing=1
 fi
-export DOTFILES_SYNC_PYTHON="$sync_python"
 if [[ ${DOTFILES_TEST_CHEZMOI+x} == x ]]; then
     if [[ ! -f "$DOTFILES_TEST_CHEZMOI" || ! -x "$DOTFILES_TEST_CHEZMOI" ]]; then
         printf 'ERROR: invalid DOTFILES_TEST_CHEZMOI executable path.\n' >&2
@@ -83,11 +81,7 @@ tests=(
     shell-profile.sh
     tmux.sh
     ai-policy.sh
-    config-sync.sh
-    ai-config-sync.sh
     ai-integration.sh
-    codex-config-sync.sh
-    fcitx5-profile-sync.sh
     powershell-profile.sh
     payload-update.sh
     bootstrap-manifest.sh

@@ -1,17 +1,16 @@
-"""Legacy writers cannot reclaim an explicitly handed-over destination."""
+"""Home ownership guards: the native binding, maintenance and login dispatch."""
 
 import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipIf(os.name == "nt", "POSIX wrapper execution")
+@unittest.skipIf(os.name == "nt", "POSIX shell execution")
 class WriterGuardTests(unittest.TestCase):
     def test_root_ancestor_does_not_become_a_windows_unc_path(self):
         # Git Bash treats //.config as UNC, not the local POSIX root.
@@ -181,77 +180,6 @@ class WriterGuardTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stderr, b"dotfiles: payload update refused during maintenance.\n")
             self.assertEqual(sorted(path.name for path in home.iterdir()), [".config"])
-
-    def test_direct_backend_refuses_before_portable_migration_write(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            home = Path(temporary)
-            marker = home / ".config/dotfiles/native"
-            marker.parent.mkdir(parents=True)
-            marker.write_text("partial")
-            source = home / "portable.toml"
-            source.write_bytes((ROOT / "common/codex/.codex/config.toml").read_bytes() + b'\nlocal = true\n')
-            live = home / ".codex/config.toml"
-            live.parent.mkdir()
-            live.write_bytes(b'local = false\n')
-            before = source.read_bytes(), live.read_bytes()
-            result = subprocess.run([os.environ.get("DOTFILES_SYNC_PYTHON", sys.executable),
-                                     "-I", "-B", str(ROOT / "lib/config_sync.py"),
-                                     "codex-config-sync", "--migrate-portable", str(source), str(live)],
-                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn(b"legacy write refused", result.stderr)
-            self.assertEqual((source.read_bytes(), live.read_bytes()), before)
-
-    def test_four_explicit_live_writers_refuse_native_and_maintenance_homes(self):
-        cases = (
-            ("common/claude/.local/bin/claude-settings-sync", b'{"permissions":{"allow":[],"ask":[]}}', ".claude/settings.json", b'{}'),
-            ("common/codex/.local/bin/codex-config-sync", (ROOT / "common/codex/.codex/config.toml").read_bytes(), ".codex/config.toml", b'local = true\n'),
-            ("common/codex/.local/bin/codex-rules-sync", b'prefix_rule(pattern=["fixture"], decision="prompt")\n', ".codex/rules/portable.rules", b'# old\n'),
-            ("lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync", b'[Groups/0]\nName=Default\n', ".config/fcitx5/profile", b'# old\n'),
-        )
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            for marker in ("native", "maintenance"):
-                for wrapper, portable, relative, live_bytes in cases:
-                    with self.subTest(marker=marker, wrapper=wrapper):
-                        home = root / marker / Path(wrapper).name
-                        guard = home / ".config/dotfiles" / marker
-                        guard.parent.mkdir(parents=True)
-                        guard.write_text("incomplete handover\n")
-                        live = home / relative
-                        live.parent.mkdir(parents=True, exist_ok=True)
-                        live.write_bytes(live_bytes)
-                        source = home.parent / (Path(wrapper).name + "-portable")
-                        source.write_bytes(portable)
-                        env = {"HOME": str(root / "unrelated-home"), "PATH": os.defpath,
-                               "DOTFILES_SYNC_PYTHON": os.environ.get("DOTFILES_SYNC_PYTHON", sys.executable)}
-                        result = subprocess.run(["sh", str(ROOT / wrapper), str(source), str(live)],
-                                                env=env, stdin=subprocess.DEVNULL, capture_output=True,
-                                                timeout=15)
-                        self.assertNotEqual(result.returncode, 0)
-                        self.assertIn(b"legacy write refused", result.stderr)
-                        self.assertEqual(live.read_bytes(), live_bytes)
-                        self.assertEqual(source.read_bytes(), portable)
-
-    def test_guard_uses_destination_not_operator_home_and_resolves_parent_links(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            protected = root / "native home"
-            marker = protected / ".config/dotfiles/native"
-            marker.parent.mkdir(parents=True)
-            marker.write_text("incomplete")
-            target_parent = protected / ".claude"
-            target_parent.mkdir()
-            alias = root / "alias"
-            alias.symlink_to(target_parent, target_is_directory=True)
-            free = root / "free"
-            free.mkdir()
-            env = {"HOME": str(protected), "PATH": os.defpath}
-            for target, expected in ((free / "config", 0), (alias / "settings.json", 1)):
-                result = subprocess.run(["sh", "-c", '. "$1"; dotfiles_legacy_write_allowed "$2"',
-                                         "guard", str(ROOT / "lib/chezmoi-guard.sh"), str(target)],
-                                        env=env, capture_output=True, timeout=15)
-                self.assertEqual(result.returncode, expected, result.stderr)
 
 
 if __name__ == "__main__":

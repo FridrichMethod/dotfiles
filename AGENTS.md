@@ -23,7 +23,7 @@ six hosts.
 
 These files are installed on every host, including fresh machines and clusters, so they must run on what a host already has and stay small enough to audit.
 
-- Runtime helpers use only POSIX sh/Bash, ordinary POSIX utilities, Python 3.11+ stdlib (`python3 -I -B`) and the wrapped tool. No added pip packages, environments, Node, compiler, service or daemon; the sole exception is explicitly provisioned, pinned tomlkit for TOML sync. Tool installation belongs to setup-host.
+- Runtime helpers use only POSIX sh/Bash, ordinary POSIX utilities, Python 3.11+ stdlib (`python3 -I -B`) and the wrapped tool. No added pip packages, environments, Node, compiler, service or daemon. Tool installation belongs to setup-host.
 - Missing optional tools narrow features; a missing required tool fails once with its name, without a traceback or partial run.
 - Forward to native tools, requiring only a minimum version. Internal sockets/protocols/locks are best effort: warn and fall back to native behavior; block or ask only to prevent lost work.
 - Keep helpers proportional and auditable. Prefer native features over a custom protocol client, journal or lock scheme; justify any such addition and its tests.
@@ -32,7 +32,6 @@ These files are installed on every host, including fresh machines and clusters, 
 
 ## Working commands
 
-- Legacy only: provision the AI-sync parser with `./setup-sync.sh` (Windows: `./setup-sync.ps1`), with Python 3.11+.
 - Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
 - Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
 - Native initialization/takeover: follow `docs/chezmoi-migration/takeover.md`.
@@ -49,9 +48,8 @@ The [chezmoi migration](docs/chezmoi-migration/README.md) is staged. Stage 4 kee
 explicit local `[data].host`, native AI transforms and literal legacy inputs until
 Stage 6. Preserve unsupported-input refusal, exact ownership/policy parity and
 WebP/terminfo byte parity. Provisioning is native only, without a sync venv.
-Home-bound native ownership blocks old writers; maintenance blocks future
-dotfiles updates AND payload runs.
-Keep legacy paths/runtime for supported old callers until Stage 6. First apply
+Maintenance blocks future dotfiles updates AND payload runs.
+Keep legacy paths for supported old callers until Stage 6. First apply
 is not an ownership guard: review exact targets and private snapshots first.
 Real takeover follows exact candidate CI gates and existing D11 authority;
 commits/publication require active authorization. Enroll only privately selected
@@ -89,7 +87,7 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 - `config/bootstrap/` owns installer SHA256 pins (bat theme included), tool floors and clone branches. git-clones.tsv tracks upstream default branches, never commits; clone only missing repositories and do not fetch, pull, repin or dirty-check existing ones. Retain the manual update loop and trust limits in [bootstrap.md](docs/bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones). Keep step-heading, tool-ID and mirrored-skill parity tests; update manifests, not copied pin inventories.
 - Verify every setup-host download before use except inspect rows, which a person reads first. HUMAN execution uses digest gates and installers use no-rc flags (PROFILE=/dev/null, NONINTERACTIVE=1). Preserve the documented distinction between pinned downloads/default-branch clones and package managers' current versions.
 - First-party project skills live only in `.claude/skills/` and `.agents/skills/`, with identical bodies.
-- Provisioning shells export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 (inert; Stage 6 removes it). Test entrypoints use tests/lib/environment.sh/.ps1 to clear inherited DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and _CODING_AGENT_KIT_ prefixes plus XDG_STATE_HOME/XDG_DATA_HOME; preserve DOTFILES_TEST_* inputs and DOTFILES_SYNC_PYTHON. Fixture Git must drop repository/index overrides before mutation. Keep focused linked-worktree isolation and hook-selection tests; do not scan upstream implementation or mirror every variable in every entrypoint.
+- Provisioning shells export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 (inert; Stage 6 removes it). Test entrypoints use tests/lib/environment.sh/.ps1 to clear inherited DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and _CODING_AGENT_KIT_ prefixes plus XDG_STATE_HOME/XDG_DATA_HOME; preserve DOTFILES_TEST_* inputs. Fixture Git must drop repository/index overrides before mutation. Keep focused linked-worktree isolation and hook-selection tests; do not scan upstream implementation or mirror every variable in every entrypoint.
 - Without `--host` (or the doctor's `--platform`), the host is the `[data]` `host` line of a native-owned home's `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2 asking for `--host`); nothing else selects one, and an unmarked home exits 2. Native `common-only` means: the doctor checks the detected platform without an overlay and warns; setup-host exits 2 asking for `--host`. The Windows twins check `win`.
 - HPC environments are built only inside a Slurm allocation, never under `$SCRATCH`.
 
@@ -116,19 +114,16 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 - The repository root `CLAUDE.md` is only an `@AGENTS.md` import stub for Claude Code; `AGENTS.md` is the single repository guide for every agent. Add or change repository policy in `AGENTS.md`, never in the stub.
 - Set Project instructions to `claude-md-and-agents-md` under both pluginConfigs IDs, agents-md@builtin and cc-plugin-agents-md@builtin (pre-2.1.285 clients use the former; newer clients accept either). Keep native ancestor loading and the CLAUDE.md stub for old clients.
 - Shared settings may contain portable preferences, permission rules, plugin identifiers, and remote marketplace declarations.
-- Do not declare `model` in the portable Claude `settings.json`. The sync asserts every key it declares, so a shared `model` would silently undo each host's `/model` choice on the next stow. Model selection stays machine-local; `effortLevel` and the rest remain shared.
+- Do not declare `model` in the portable Claude `settings.json`; the native modify refuses it, since a shared `model` would undo each host's `/model` choice. Model selection stays machine-local; `effortLevel` and the rest remain shared.
 - Preserve Claude permission tiers and authoritative arrays: ask holds only sudo; deny holds sudo pip/pip3, sudo rm, and the exact `rm -rf /`, `rm -fr /`, `rm -rf ~`, `rm -fr ~` patterns. Never add trailing wildcards to those rm denials. Reviewed installs/network/Git/GitHub operations remain in allow. This accepted broad policy is not a prompt to redesign permissions; its rationale is in [config-sync.md](docs/config-sync.md#permission-policy-rationale).
 - Keep ordinary rm/rm -rf, git clean and npx out of all three arrays so auto mode uses its classifier. Tune autoMode.allow/soft_deny prose, preserving literal `$defaults`, rather than moving commands into ask. Built-in critical-path and work-discard checks remain in force; see the policy rationale.
-- Keep autoMode.classifyAllShell=true: Bash allow rules cannot bypass auto-mode review. Do not add allow rules to cure classifier false positives. Protected-path checks precede allow rules; Claude must not loosen these arrays or apply claude-settings-sync to live settings unaided: a human applies both steps.
+- Keep autoMode.classifyAllShell=true: Bash allow rules cannot bypass auto-mode review. Do not add allow rules to cure classifier false positives. Protected-path checks precede allow rules; Claude must not loosen these arrays or apply them to live settings unaided: a human applies both steps.
 - Preserve the accepted broad-allow tradeoff. Reconsider narrower argument-anchored network/install/remote-mutation rules only when the host threat model changes; do not silently change the policy during unrelated work.
 - Do not vendor third-party Markdown payloads copied into `~/.claude/rules/`; plugin checkouts may be used as an audit source, but Claude does not load plugin-bundled rules automatically. Keep reviewed cross-host instructions in the global `CLAUDE.md`.
 - Never track credentials, OAuth state, sessions, histories, project trust, caches, downloaded plugins, generated memories, runtime marketplace paths, or machine-specific absolute paths.
-- Codex config.toml and Claude settings.json are regular mutable live files: their helpers merge into them, portable keys winning and live-only state retained. Use the shared engine; see [sync contract](docs/config-sync.md).
-
-- Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; `codex-rules-sync` materializes it without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
-- Keep all three AI sync helpers fail-closed; when shared config, permission or rule behavior changes, update their sources, README and focused tests together.
-- Keep legacy helper merges in `lib/config_sync.py`; only legacy TOML sync and the full runtime check require pinned `tomlkit`, while JSON/rules use the Python standard library. The native candidate uses the Stage 3 contract above and never calls this backend. Do not add custom parsers or a second legacy JSON engine. Normal sync never rewrites portable source; baseline cleanup is an explicit legacy migration. Legacy sync never broadens existing regular-file Unix permissions.
-- Installers must run every selected AI helper with read-only `--check` before any apply; `--quiet` suppresses successful helper chatter, never errors. Provision `.venv-sync` or an explicitly selected interpreter in advance; profiles, automatic updates and the payload hooks must never install these dependencies.
+- Codex config.toml and Claude settings.json deploy through the two native modify templates as private regular files, portable keys winning and live-only state retained; see [native contract](docs/config-sync.md).
+- Keep reviewed Codex exec-policy guardrails in `common/codex/.codex/rules/portable.rules`; native apply deploys it as an ordinary file without touching host-local `default.rules`. Portable rules may add targeted `prompt` safeguards but must not grant broad cross-host `allow` prefixes or use `forbidden`; exceptionally destructive actions require explicit user pre-authorization through the global Codex instructions.
+- When shared config, permission or rule behavior changes, update the portable sources, README and focused tests together.
 - A target has one owner. If a host requires a different complete `settings.json` or `config.toml`, move that file from `common/<tool>/` to `<host>/<tool>/`; do not define it in both layers.
 - Keep third-party skill payloads out of dotfiles; awesome-skills' own installer, which sync-payloads runs, owns only its installed copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/` (Codex reads both roots) on each host.
 

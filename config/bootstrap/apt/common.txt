@@ -16,8 +16,6 @@ build-essential
 gnupg
 openssh-client
 python3
-python3-venv
-python3-pip
 tmux
 bsdextrautils
 man-db

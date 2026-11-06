@@ -67,6 +67,25 @@ fi
 grep -Fq 'invalid DOTFILES_TEST_CHEZMOI' "$TEST_TMP/chezmoi.stderr" ||
     fail_run chezmoi 'tests/run.sh did not reject the explicit invalid chezmoi path.'
 
+# A python3 below the 3.11 floor is a named prerequisite failure, not an
+# ImportError inside a suite.
+mkdir "$TEST_TMP/old-python"
+for dependency in bash sh git node dirname; do
+    ln -s "$(command -v "$dependency")" "$TEST_TMP/old-python/$dependency"
+done
+printf '#!/bin/sh\nexit 1\n' >"$TEST_TMP/old-python/python3"
+chmod +x "$TEST_TMP/old-python/python3"
+if (
+    unset DOTFILES_TEST_CHEZMOI DOTFILES_TEST_REQUIRE_CHEZMOI
+    PATH="$TEST_TMP/old-python" /bin/bash "$TEST_DIR/run.sh" --check-prerequisites
+) \
+    >"$TEST_TMP/old-python.stdout" 2>"$TEST_TMP/old-python.stderr"; then
+    printf 'ERROR: tests accepted a python3 below the 3.11 floor.\n' >&2
+    exit 1
+fi
+grep -Fq 'python3 is not Python 3.11 or newer' "$TEST_TMP/old-python.stderr" ||
+    fail_run old-python 'tests/run.sh --check-prerequisites did not name the Python 3.11 floor.'
+
 rm "$TEST_TMP/bin/node"
 if PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --check-prerequisites \
     >"$TEST_TMP/missing.stdout" 2>"$TEST_TMP/missing.stderr"; then
@@ -111,10 +130,9 @@ grep -Fq "'lib/environment.ps1'" "$TEST_DIR/run.ps1" || {
 python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_environment.py' -v
 
 # Each hook named below runs its suite when a file the suite depends on
-# changes: the engine suites on the engine and the real Codex config.toml,
-# the payload hook suite on the hook, its config, the rc files that source it
-# and the logger, and this test on itself, the entry points it reads and the
-# hook configuration. Files are selected as pre-commit
+# changes: the payload hook suite on the hook, its config, the rc files that
+# source it and the logger, and this test on itself, the entry points it
+# reads and the hook configuration. Files are selected as pre-commit
 # selects them: re.search of the hook's files, then of its exclude and the
 # top-level one.
 python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" <<'PY'
@@ -141,15 +159,11 @@ for line in open(sys.argv[1], encoding='utf-8'):
     match = re.match(r'\s+(files|exclude): (.+?)\s*$', line)
     if match and hook is not None:
         hook[match.group(1)] = re.compile(match.group(2).strip('\'"'))
-engine = ['lib/config_sync.py', 'lib/sync-runtime.sh']
 need = {
-    'structured-config-sync': engine + ['common/codex/.codex/config.toml'],
-    'ai-config-sync': engine,
     'ai-policy': ['tests/ai-policy.sh', 'tests/test_ai_policy.py', 'common/claude/.claude/settings.json',
                   'common/claude/.claude/CLAUDE.md', 'common/codex/.codex/AGENTS.md',
                   'common/codex/.codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
                   'tests/lib/environment.sh'],
-    'codex-config-sync': engine + ['common/codex/.codex/config.toml'],
     'payload-update': ['scripts/payload-update.sh', 'scripts/awesome-skills-update.sh', 'config/payloads.tsv',
                        'common/sh/.aliases', 'common/sh/.profile', 'common/zsh/.zshrc', 'lib/terminal.sh',
                        'tests/payload-update.sh', 'tests/test_payload_download.py'],
@@ -158,9 +172,10 @@ need = {
     'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
                        'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                        'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
-                       'scripts/payload-update.sh', 'lib/sync-runtime.sh', '.gitignore',
+                       'scripts/payload-update.sh', '.gitignore',
                        'tests/chezmoi-takeover.sh', 'tests/chezmoi-takeover.ps1',
-                       'lib/config_sync.py', 'home/.chezmoidata/codex-policy.json',
+                       'home/.chezmoidata/codex-policy.json',
+                       'common/claude/.claude/settings.json', 'common/codex/.codex/config.toml',
                        'home/dot_claude/modify_private_settings.json',
                        'home/dot_codex/modify_private_config.toml',
                        'tests/test_chezmoi_claude.py', 'tests/test_chezmoi_codex.py',

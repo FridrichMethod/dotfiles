@@ -44,8 +44,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes tmux
-      - name: Provision pinned configuration parser explicitly
-        run: ./setup-sync.sh
       - name: Provision verified native chezmoi test runtime
         run: python .github/scripts/install-test-chezmoi.py
       - name: Check required CI prerequisites
@@ -93,8 +91,6 @@ jobs:
           read -r url ref < <(awk -F '\t' '$1 == "fzf-tab" { print $3, $4 }' config/bootstrap/git-clones.tsv)
           git clone --quiet --depth 1 --branch "$ref" "$url" "$RUNNER_TEMP/fzf-tab"
           echo "FZF_TAB_TEST_DIR=$RUNNER_TEMP/fzf-tab" >> "$GITHUB_ENV"
-      - name: Provision pinned configuration parser explicitly
-        run: ./setup-sync.sh
       - name: Provision verified native chezmoi test runtime
         run: python .github/scripts/install-test-chezmoi.py
       - name: Run behavior tests with system Bash and BSD utilities
@@ -118,8 +114,6 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Provision pinned configuration parser explicitly
-        run: ./setup-sync.ps1
       - name: Provision verified native chezmoi test runtime
         run: python .github/scripts/install-test-chezmoi.py
       - name: Run required native PowerShell and Node suites

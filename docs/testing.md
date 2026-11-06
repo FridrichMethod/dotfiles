@@ -34,13 +34,10 @@ prefixes); only the age ciphertexts
 `home/private_dot_secrets/encrypted_private_claude-<name>.age`, with a
 `<name>` of lowercase letters and digits, are allowed there.
 
-The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
-All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
-hash-pinned configuration parser. Both entrypoints validate this runtime and
-require the shared Python backend tests, including safe replacement failures.
-Suites that run neither the parser nor Stow need only a standard-library
-Python 3.11+ (`python3`, or `python` under PowerShell) when run directly or
-as pre-commit hooks.
+The Unix entrypoint checks Bash, POSIX sh, Git, Python 3.11+ and Node before
+starting, and the PowerShell entrypoint Git, Node and Python 3.11+; a python3
+below the floor is a named prerequisite failure. No configuration parser
+runtime is provisioned: the native transforms run inside chezmoi.
 On developer machines, `./tests/run.sh` reports a missing optional
 installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
@@ -53,7 +50,7 @@ chezmoi skips locally and fails with `DOTFILES_TEST_REQUIRE_CHEZMOI=1` or CI mod
 CI provisions v2.74.0 through `.github/scripts/install-test-chezmoi.py`, verifying
 reviewed official SHA256 digests before extracting only the binary. Downloads
 never happen inside the suite. Local provisioning should likewise verify the
-selected official artifact; no new sync environment is needed for native tests.
+selected official artifact; no Python environment is needed for native tests.
 
 These probes isolate source, destination, configuration, cache, state, HOME and
 temporary directories and use only synthetic credentials. Native modifies run
@@ -61,8 +58,7 @@ without Python, jq or age on child PATH. Parser hooks exclude only the exact
 artificial and production modify templates; native tests parse rendered JSON/TOML
 instead. Ordinary portable inputs and ownership data remain linted. Unix permission
 assertions do not establish Windows ACL behavior; unavailable native platforms
-remain explicit missing evidence. The legacy suites still require their existing
-TOMLKit runtime until legacy retirement.
+remain explicit missing evidence.
 
 Stage 2 adds exact inventory/target-set and byte/mode/convergence checks for
 ordinary source, including empty files, binary assets and Windows CRLF. A real
@@ -126,8 +122,8 @@ their own independent hooks.
 
 Test entrypoints load `tests/lib/environment.sh` or `.ps1` to clear inherited
 DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and
-_CODING_AGENT_KIT_ variables. Deliberate DOTFILES_TEST_* fixture inputs and the
-selected DOTFILES_SYNC_PYTHON remain; XDG_STATE_HOME/XDG_DATA_HOME are cleared.
+_CODING_AGENT_KIT_ variables. Deliberate DOTFILES_TEST_* fixture inputs remain;
+XDG_STATE_HOME/XDG_DATA_HOME are cleared.
 Cases set the production knobs they exercise explicitly. Launchers also keep
 caller XDG_CONFIG_HOME out of reach. New upstream variables therefore require
 no copied lists and no scan of the installed kit implementation.
@@ -143,8 +139,8 @@ fixture instead of rerunning complete manifest, payload or Windows installer
 suites just to establish environment isolation.
 
 The entrypoint test also checks pre-commit's files/exclude selection, the
-inputs each named hook must run on (among them the sync engine, the payload
-scripts and shim, `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`,
+inputs each named hook must run on (among them the payload scripts and shim,
+`lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`,
 `checks.sh` and `steps-human.sh` (the H7-native verdict), `doctor.sh` and
 `setup-host.sh`), and coverage of the complete shell-suite
 list. The e2e-harness and e2e-harness-windows hooks cover harness

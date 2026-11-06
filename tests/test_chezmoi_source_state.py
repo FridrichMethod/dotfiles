@@ -109,15 +109,8 @@ class SourceContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_inventory_matches_exact_index_paths_applicability_and_counts(self):
+        # Every package path is a native target source; the C helpers retired with the parser chain.
         self.assertEqual(inventory_problems(inventory(), indexed_modes()), [])
-        # All configuration targets are present; compatibility helpers stay out.
-        omitted = {entry.source for entry in inventory() if entry.category == "C"}
-        self.assertEqual(omitted, {
-            "common/claude/.local/bin/claude-settings-sync",
-            "common/codex/.local/bin/codex-config-sync",
-            "common/codex/.local/bin/codex-rules-sync",
-            "lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync",
-        })
 
     def check_role(self, role, os_override=None):
         with SourceFixture(role, native_os=os_override) as fixture:

@@ -193,15 +193,15 @@ Audit and remove each item only once no supported caller needs it:
   their old owners instead of porting them into chezmoi. Keep a short manual
   override-shadowing warning and old-host upgrade instructions. (B2 for the
   installer repairs, which live only in `stow-all.*`; B4 for the shim)
-- [ ] `lib/config_sync.py`, `lib/sync-runtime.sh`, three AI sync wrappers and
+- [x] `lib/config_sync.py`, `lib/sync-runtime.sh`, three AI sync wrappers and
   fcitx5 materialization helper. (B3)
-- [ ] `setup-sync.sh`, `setup-sync.ps1`, `requirements-sync.txt`, sync-specific
+- [x] `setup-sync.sh`, `setup-sync.ps1`, `requirements-sync.txt`, sync-specific
   `.venv-sync` probes/setup, `DOTFILES_SYNC_PYTHON` support and old dependency rows.
   (B1, B3)
 - [ ] Bootstrap S4/W1 branches and edges in `lib/bootstrap/steps-runtimes.sh`,
   `steps.sh`, `steps-human.sh`, `checks.sh`, `manifest.sh`, `lib/bootstrap.ps1`,
   `setup-host.*` and `doctor.*`, as they exist after Stage 5. (B1)
-- [ ] Unconditional parser runtime checks in `tests/run.*`, fixture environment
+- [x] Unconditional parser runtime checks in `tests/run.*`, fixture environment
   support, legacy sync tests, pre-commit hooks and all CI parser-provision steps.
   (A2, B3)
 - [ ] Corresponding bootstrap fixtures/e2e steps, tool/document parity entries,
@@ -237,9 +237,10 @@ Confirmed couplings:
 - `scripts/dotfiles-update.sh:142` runs `stow-all.sh`;
   `scripts/dotfiles-auto-stow.ps1:233` runs `stow-all.ps1`; `stow-all.ps1:624`
   dot-sources `dotfiles-auto-stow.ps1`. Updaters and installers go together (B2).
-- `stow-all.sh:133-166` and `stow-all.ps1:510-514` call the four wrappers; each
-  wrapper sources `lib/sync-runtime.sh`, whose `:8-13` call
-  `dotfiles_legacy_write_allowed` before running `lib/config_sync.py`. So B2
+- `stow-all.sh:133-166` and `stow-all.ps1:510-514` call the four wrappers; the
+  three AI wrappers source `lib/sync-runtime.sh`, whose `:8-13` call
+  `dotfiles_legacy_write_allowed` before running `lib/config_sync.py`, and
+  `fcitx5-profile-sync` sources `lib/chezmoi-guard.sh` directly. So B2
   (Stow) precedes B3 (parser), and the Unix legacy guard leaves with its last
   callers in B3.
 - `S4-setup-sync` runs `setup-sync.sh` (`lib/bootstrap/steps-runtimes.sh:253-279`)
@@ -535,8 +536,8 @@ Edit:
   docs/dependencies.md:18 ties to parser setup: drop them unless the caller
   re-derivation finds another consumer (for example pre-commit on a
   contributor host); record the outcome.
-- `docs/chezmoi-migration/inventory.md`: remove the four C rows (`:97,103,104,
-  145`); 95 -> 91 tracked rows; per-role package paths 52/59/58/63/57/57/29 ->
+- `docs/chezmoi-migration/inventory.md`: remove the four C rows (`:108,114,115,
+  156` at e3a0762); 95 -> 91 tracked rows; per-role package paths 52/59/58/63/57/57/29 ->
   49/56/55/59/54/54/26 (now equal to the native totals); six executable modes ->
   two; update the reproducible check in the same commit (the parity tests
   otherwise fail on missing paths).
@@ -731,12 +732,14 @@ design. `Test-SetupStowed`'s `LinkTarget` use leaves with B1.
    DOTFILES_SYNC_PYTHON`. No tracked file outside `docs/chezmoi-migration/` may
    name a retired mechanism; this returns only reviewed hits: `.gitignore:55`;
    kept native negative assertions unless their commits drop them
-   (`tests/test_chezmoi_source_state.py:113`,
+   (`tests/test_chezmoi_source_state.py` `check_role`,
    `tests/test_chezmoi_native_config.py:21`,
-   `tests/test_chezmoi_integration.py:62`, the `DOTFILES_SYNC_PYTHON` poison in
-   `tests/test_chezmoi_provision.py:31`); the D-12 retired-name test and the A4
-   e2e `.venv-sync` audit; D-10 prose if kept; `DOTFILES_DIR` only where D-6
-   keeps it:
+   `tests/test_chezmoi_integration.py`, `tests/test_chezmoi_codex.py:177`,
+   the `.venv-sync`/`venv-sync` negatives in `tests/test_chezmoi_provision.py`
+   (`:98`, `:262`, `:312`), the cleared-knob assertion in
+   `tests/test_environment.py`); the D-12 retired-name test and the A4
+   e2e `.venv-sync` audit; D-10 prose in `common/claude/.claude/settings.json`
+   until D-10 lands; `DOTFILES_DIR` only where D-6 keeps it:
 
    ```sh
    git grep -n -E 'tomlkit|config_sync|sync-runtime|DOTFILES_SYNC_PYTHON|DOTFILES_DIR|setup-sync|venv-sync|stow-all|dotfiles-update|dotfiles-auto-stow|awesome-skills-update|stow-links|legacy-stow|LegacyStow|BOOTSTRAP_LEGACY_STOW|DOTFILES_AUTO_STOW|DOTFILES_PAYLOAD_AUTO_UPDATE|dotfiles-sync-(unix|windows)|windows-link-trust|requirements-sync' -- ':!docs/chezmoi-migration'

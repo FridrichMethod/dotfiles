@@ -528,8 +528,8 @@ login, completion, concurrency, takeover, resume, the account details, the
 optional configuration file and the `CODING_AGENT_KIT_*` variables. What
 dotfiles adds:
 
-- The settings and the AI config sync engine (`lib/config_sync.py`,
-  [config-sync.md](config-sync.md)) stay in this repository; the kit needs
+- The Claude and Codex settings and their native modifies
+  ([config-sync.md](config-sync.md)) stay in this repository; the kit needs
   none of them.
 - Dotfiles ships no `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml`,
   so the kit's defaults apply (`codex-as --show-config` prints them). If a host

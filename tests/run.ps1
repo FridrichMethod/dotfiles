@@ -17,22 +17,13 @@ foreach ($dependency in @('git', 'node', 'python')) {
         throw "Required test dependency not found: $dependency"
     }
 }
+# The suites import stdlib tomllib; AGENTS.md sets the Python 3.11+ floor.
+& python -I -B -c 'import sys; sys.exit(sys.version_info < (3, 11))'
+if ($LASTEXITCODE -ne 0) { throw 'Required test dependency python is not Python 3.11 or newer.' }
 $powerShell = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
 if (-not (Test-Path -LiteralPath $powerShell -PathType Leaf)) {
     throw "Cannot locate the current PowerShell executable: $powerShell"
 }
-$repoRoot = Split-Path -Parent $PSScriptRoot
-# The AI-sync runtime below serves only test_config_sync.py;
-# every other Python suite runs on the plain standard-library python checked above.
-$syncPython = if ($env:DOTFILES_SYNC_PYTHON) { $env:DOTFILES_SYNC_PYTHON }
-    elseif ($IsWindows) { Join-Path $repoRoot '.venv-sync/Scripts/python.exe' }
-    else { Join-Path $repoRoot '.venv-sync/bin/python' }
-if (-not (Test-Path -LiteralPath $syncPython -PathType Leaf)) {
-    throw 'AI-sync runtime missing; run setup-sync.ps1 explicitly.'
-}
-$env:DOTFILES_SYNC_PYTHON = $syncPython
-& $syncPython -I -B (Join-Path $repoRoot 'lib/config_sync.py') --runtime-check
-if ($LASTEXITCODE -ne 0) { throw 'Configuration runtime check failed.' }
 if (Test-Path Env:DOTFILES_TEST_CHEZMOI) {
     if (-not (Test-Path -LiteralPath $env:DOTFILES_TEST_CHEZMOI -PathType Leaf)) {
         throw 'Invalid DOTFILES_TEST_CHEZMOI executable path.'
@@ -57,13 +48,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Native chezmoi fixture tests failed.' }
 Write-Output '==> test_environment.py'
 & python -I -B -m unittest discover -s $PSScriptRoot -p 'test_environment.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Test environment isolation checks failed.' }
-
-Write-Output '==> test_config_sync.py'
-if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_config_sync.py') -PathType Leaf)) {
-    throw 'Required configuration backend test suite is missing.'
-}
-& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_config_sync.py' -v
-if ($LASTEXITCODE -ne 0) { throw 'Configuration backend tests failed.' }
 
 Write-Output '==> test_ai_integration.py'
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.py') -PathType Leaf)) {

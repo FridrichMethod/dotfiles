@@ -1085,9 +1085,9 @@ wl-clipboard and the fcitx5 set). apt keeps the system pieces (zsh, git,
 git-lfs, tmux, man, locales, build tools, and `openssh-client` for the
 `ssh`, `ssh-agent` and `ssh-keygen` that the dotfiles `~/.ssh` config, the
 overlays' ssh-agent plugin and [H7-auth](#h7-auth-authentication) need; a
-minimal Ubuntu has none of them) and Python: `python3` and
-`python3-venv` meet the 3.11 floor of setup-sync (Ubuntu 24.04 ships 3.12), so
-no Linuxbrew python is bundled ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
+minimal Ubuntu has none of them) and Python: apt's `python3` meets the 3.11
+floor (Ubuntu 24.04 ships 3.12), so no Linuxbrew python is bundled
+([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)).
 The interactive tools come from
 Linuxbrew because Ubuntu 24.04's apt is below the floors (fzf 0.44.1,
 gh 2.45) and renames bat and fd to `batcat` and `fdfind`. Ubuntu's apt gh is
@@ -1320,7 +1320,7 @@ installed formula, but it resolves the alias each time: when Homebrew's
 default moves (it became `python@3.15` on 2026-10-09, after `python@3.14`),
 the next bundle installs the new `python@3.x` alongside the old one, which
 stays installed until you remove it. On Debian and Ubuntu, apt's `python3`
-and `python3-venv` from H1-apt-core already meet the 3.11 floor, and a
+from H1-apt-core already meets the 3.11 floor, and a
 Linuxbrew python would add a whole new formula at every such move and, on a
 shared prefix, relink `python3` for every account, so it is bundled on macOS
 only, where it is needed (the Command Line Tools' `python3` is 3.9). The

@@ -20,6 +20,21 @@ UNMANAGED = {
     ".codex/auth.json": b'{"fixture":"app-written"}\n',
     ".codex/rules/default.rules": b"fixture local policy\n",
 }
+POISONS = ("python3", "python", "jq", "node", "sh", "bash", "pwsh")
+
+
+def poison_interpreters(directory, calls):
+    # Each poison records its name in CALLS (an absolute path that may contain
+    # spaces) and fails, so any interpreter a native transform starts is seen.
+    for name in POISONS:
+        if os.name == "nt":
+            (directory / f"{name}.cmd").write_text(
+                f'@echo {name}>>"{calls}"\r\n@exit /b 97\r\n', encoding="utf-8", newline="")
+        else:
+            poison = directory / name
+            poison.write_text(f"#!/bin/sh\nprintf '%s\\n' {name} >>\"{calls}\"\nexit 97\n",
+                              encoding="utf-8")
+            poison.chmod(0o755)
 
 
 class NativeIntegrationTests(unittest.TestCase):
@@ -55,19 +70,18 @@ class NativeIntegrationTests(unittest.TestCase):
         self.assertEqual(snapshot(fixture.source), source)
 
     def test_complete_apply_without_external_merge_dependencies(self):
-        # A subprocess-based merger, even via an absolute legacy helper, fails here.
+        # Native transforms never shell out: every interpreter on the child PATH is a poison.
         with SourceFixture(HOST) as fixture:
             self.seed_live(fixture)
             self.assertEqual(list(Path(fixture.env["PATH"]).iterdir()), [])
-            for name in (".venv-sync", "lib/config_sync.py", "lib/sync-runtime.sh"):
+            # The fixture source holds no helper library or Python environment.
+            for name in (".venv-sync", "lib"):
                 self.assertFalse((fixture.source / name).exists(), name)
-            fixture.env["DOTFILES_SYNC_PYTHON"] = str(fixture.root / "unavailable-python")
-            for name in ("common/claude/.local/bin/claude-settings-sync",
-                         "common/codex/.local/bin/codex-config-sync",
-                         "common/codex/.local/bin/codex-rules-sync"):
-                (fixture.source / name).write_bytes(b"dependency poison: legacy sync must not run\n")
+            calls = fixture.root / "interpreter calls"
+            poison_interpreters(Path(fixture.env["PATH"]), calls)
             source = snapshot(fixture.source)
             self.assert_success(fixture.run("apply"))
+            self.assertFalse(calls.exists(), calls.read_text(encoding="utf-8") if calls.exists() else "")
             for name in AI_MUTABLE:
                 with self.subTest(target=name):
                     target = fixture.destination / name

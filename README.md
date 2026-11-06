@@ -136,15 +136,10 @@ exception.
 
 Claude settings and Codex config are merged into mutable regular files rather
 than linked. Portable values win while credentials, host-only settings and
-runtime state stay local. Codex rules are materialized without touching
-`default.rules`. Native modifies use builtin JSON/TOML functions with no Python,
-external jq or sync venv. The following parser selection applies only to legacy
-compatibility: provision it explicitly; login never installs it.
-A provisioned interpreter that satisfies the selected helper's dependencies
-can be selected with DOTFILES_SYNC_PYTHON. Setup, doctor and wrappers share this
-choice; an invalid override fails without creating an unused default venv.
-See [runtime selection](docs/config-sync.md#explicit-provisioning).
-Read the [sync contract](docs/config-sync.md) before migrations or policy edits.
+runtime state stay local. Codex rules deploy as an ordinary file without
+touching `default.rules`. Native modifies use builtin JSON/TOML functions with
+no Python, external jq or virtual environment. Read the
+[native contract](docs/config-sync.md) before migrations or policy edits.
 Authenticate separately on every host. Never commit tokens, histories, trust,
 caches, generated memories or machine-specific absolute paths.
 
@@ -209,7 +204,6 @@ separate: consumer projects pin/install their own toolkit.
 ## Checks and contribution
 
 ```sh
-./setup-sync.sh
 # Install the selected chezmoi test release, or name an already verified binary:
 export DOTFILES_TEST_CHEZMOI=/path/to/chezmoi
 pre-commit install

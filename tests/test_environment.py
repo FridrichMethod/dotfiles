@@ -19,9 +19,11 @@ class TestEnvironment(unittest.TestCase):
         inherited = {"DOTFILES_FUTURE": "caller", "_DOTFILES_FUTURE": "caller",
                      "AWESOME_SKILLS_FUTURE": "caller", "_AWESOME_SKILLS_FUTURE": "caller",
                      "CODING_AGENT_KIT_FUTURE": "caller", "_CODING_AGENT_KIT_FUTURE": "caller",
-                     "XDG_STATE_HOME": "caller", "XDG_DATA_HOME": "caller"}
-        preserved = {"DOTFILES_TEST_FUTURE": "fixture", "DOTFILES_SYNC_PYTHON": sys.executable,
-                     "FZF_TAB_TEST_DIR": "fixture-plugin", "UNRELATED_TEST_VALUE": "keep"}
+                     "XDG_STATE_HOME": "caller", "XDG_DATA_HOME": "caller",
+                     # The retired sync-interpreter knob is an ordinary cleared input.
+                     "DOTFILES_SYNC_PYTHON": "caller"}
+        preserved = {"DOTFILES_TEST_FUTURE": "fixture", "FZF_TAB_TEST_DIR": "fixture-plugin",
+                     "UNRELATED_TEST_VALUE": "keep"}
         for shell in SHELLS:
             executable = shutil.which(shell)
             if not executable:

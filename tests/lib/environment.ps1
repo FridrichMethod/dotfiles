@@ -1,7 +1,6 @@
-# Test-only counterpart of environment.sh; retain explicit fixture/runtime inputs.
+# Test-only counterpart of environment.sh; retain explicit DOTFILES_TEST_* fixture inputs.
 foreach ($testName in @(Get-ChildItem Env: | Select-Object -ExpandProperty Name)) {
-    if ($testName -match '^_?(DOTFILES|AWESOME_SKILLS|CODING_AGENT_KIT)_' -and
-        $testName -notlike 'DOTFILES_TEST_*' -and $testName -ne 'DOTFILES_SYNC_PYTHON') {
+    if ($testName -match '^_?(DOTFILES|AWESOME_SKILLS|CODING_AGENT_KIT)_' -and $testName -notlike 'DOTFILES_TEST_*') {
         Remove-Item -LiteralPath "Env:$testName" -ErrorAction Stop
     }
 }

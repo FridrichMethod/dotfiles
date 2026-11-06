@@ -1,4 +1,4 @@
-# AI configuration sync runtime and contract
+# Native AI configuration contract
 
 ## Native configuration and Stage 4 handover
 
@@ -7,9 +7,8 @@ and `home/dot_codex/modify_private_config.toml`. They use the native
 `chezmoi:modify-template` directive, have no `.tmpl` suffix, read canonical
 portable values with literal includes from the existing `common/` files and
 let chezmoi write private regular files. Native deployment invokes no Python,
-external jq, TOMLKit, custom writer or sync environment. Legacy installation and
-login behavior below remains available for unmarked legacy homes; never run
-both writers on one destination. Stage 4 adds the reviewed
+external jq, custom writer or virtual environment; Stage 6 retired the legacy
+Python helpers and their parser runtime. Stage 4 adds the reviewed
 [takeover procedure](chezmoi-migration/takeover.md). Candidate CI and rollout
 results are recorded separately in the migration status.
 
@@ -24,12 +23,12 @@ The JSON parser is builtin `jq "fromjson"` on raw text. Its native `json.Number`
 values pass unchanged through object merge and serialization, retaining large
 integers, long decimal fractions, signed zero and extreme exponents. Do not
 substitute `fromJson`, which can coerce these values. Duplicate keys use the
-native last-value-wins rule, unlike the legacy duplicate detector. Invalid
-UTF-8 and unpaired surrogate escapes can become U+FFFD in the native parser;
-the transform conservatively rejects U+FFFD in all parsed keys/strings before
-writing. This also rejects otherwise valid intentional U+FFFD. Valid Unicode
-and surrogate pairs remain supported. Empty/whitespace live JSON initializes
-an object; malformed, trailing or non-object JSON fails.
+native last-value-wins rule. Invalid UTF-8 and unpaired surrogate escapes can
+become U+FFFD in the native parser; the transform conservatively rejects U+FFFD
+in all parsed keys/strings before writing. This also rejects otherwise valid
+intentional U+FFFD. Valid Unicode and surrogate pairs remain supported.
+Empty/whitespace live JSON initializes an object; malformed, trailing or
+non-object JSON fails.
 
 Codex applies only the typed owned paths and removes only the retired paths
 listed below. `home/.chezmoidata/codex-policy.json` contains paths/types only;
@@ -84,118 +83,23 @@ apply can replace a preexisting foreign symlink. Inspect exact owners and privat
 snapshots before any takeover apply. This also affects a new target first added
 upstream after takeover; native less-interactive mode protects existing targets
 without a recorded baseline. The updater refuses missing or empty persistent
-state. The home-bound `.config/dotfiles/native` marker makes all four
-legacy sync wrappers and the Python backend refuse an explicit LIVE destination,
-including `--check` and `--migrate-portable`, before reads/writes. An unrelated
-explicit destination does not inherit the invoking HOME's guard. Maintenance
-also blocks legacy writers, future dotfiles updates and explicit payload runs.
+state. Maintenance blocks future dotfiles updates and explicit payload runs.
 Failed apply keeps ownership; removing a guard requires inspected recovery.
 
-The native API has no `--migrate-portable` or source writeback. Before takeover,
-review a historically polluted portable source privately, preserve its unknown
-state in a separate private backup, and reconcile the intended live config and
-owned portable values explicitly. Do not import an entire application directory
-or use normal apply as source cleanup. During coexistence, edit canonical
-`common/` policy values, inspect a nonsecret targeted native diff and apply.
-For live-only edits, use the application's file/editor and review the resulting
-native diff; do not `add` a mutable target over its modify template. Stage 6
-moves canonical inputs once and retires the entire legacy parser/helper chain.
-
-## Legacy compatibility path
-
-Installation and login orchestration remain shell and PowerShell. The three
-`*-sync` entrypoints delegate configuration/file operations to the
-small `lib/config_sync.py` backend. It uses Python's standard-library JSON
-implementation and `tomlkit` for syntax-aware TOML edits; no AWK/regular-expression
-TOML parser or alternate jq merge implementation remains.
-
-## Explicit provisioning
-
-All AI helpers require Python 3.11 or newer. Codex TOML sync additionally needs
-the exact pure-Python `tomlkit` version in `requirements-sync.txt`; setup verifies
-its wheel hash. Claude JSON and Codex rules use only
-Python's standard library.
-To provision the complete installer runtime on each checkout/device, run one of:
-
-```sh
-./setup-sync.sh
-# Or select a particular installed interpreter, including a path with spaces:
-./setup-sync.sh --python /path/to/python3
-```
-
-```powershell
-./setup-sync.ps1
-# Or:
-./setup-sync.ps1 -Python 'C:\path with spaces\python.exe'
-```
-
-Setup creates the ignored, checkout-local `.venv-sync/`, installs only the
-pinned wheel, and validates the runtime. It does not require activation, root,
-global pip installs, conda activation, or a new shell-startup PATH entry. It
-refuses an unrelated directory or a linked virtual environment. It does not
-install Python itself; select an already installed supported interpreter.
-
-Profiles, installers, and automatic updates **never** install or download
-AI-sync/parser dependencies. A missing runtime, or a changed required parser version after a
-pull, fails with a request to rerun explicit setup. An offline host can provision
-from a previously downloaded matching wheel using pip's normal offline options
-(for example `PIP_NO_INDEX=1` and `PIP_FIND_LINKS=/path/to/wheels`).
-
-The shell wrappers resolve their own Stow symlink chains to find the checkout
-and its `lib/` directory. They use `.venv-sync/bin/python` on Unix or
-`.venv-sync/Scripts/python.exe` under native Windows/Git Bash. An explicit
-`DOTFILES_SYNC_PYTHON` **executable path** overrides this lookup, useful for CI
-or a separately provisioned host-local environment. An invalid override fails;
-it never falls back silently to another interpreter. Native Windows paths are
-converted for Git Bash's executable lookup. Backend paths and arguments remain
-quoted, and Python runs with `-I -B -X utf8` (no user-site/PYTHONPATH injection or
-bytecode cache writes, and UTF-8 diagnostics for Windows paths).
-
-Python itself does not need a venv. A separately provisioned interpreter selected
-with `DOTFILES_SYNC_PYTHON` can run the helpers without one. JSON/rules do not
-require `tomlkit` on that path, but TOML sync and the full `--runtime-check` still
-require the exact pin. The default launcher continues to use `.venv-sync`; it
-does not silently search system Python. See [dependency options](dependencies.md).
-
-The clone must remain present for its stowed wrappers to work, just as for other
-Stow-managed files. Re-provision rather than copying virtual environments to a
-different OS, Python installation, or checkout location.
-
-## Helper API
-
-```text
-codex-config-sync [--quiet] [--check | --migrate-portable] PORTABLE LIVE
-claude-settings-sync [--quiet] [--check] PORTABLE LIVE
-codex-rules-sync [--quiet] [--check] PORTABLE LIVE
-```
-
-All paths are explicit; helpers do not infer a user's real home. `--check`
-validates the runtime, both selected inputs and the complete serialized merge
-without creating target directories, temporary files, or changing any input.
-It permits an absent live file and validates a legacy live symlink's contents
-without replacing it. This is the installers' preflight interface. It is not a
-promise that a later write will succeed: permissions or files can change after
-preflight, and a filesystem can run out of space.
-
-`--quiet` suppresses successful validation/sync messages, never errors. Installers
-use it for both preflight and apply, and report their own stages and final summary.
-
-Missing portable input, unreadable/nonregular input, dangling live symlinks,
-malformed JSON/TOML, and invalid required portable fields fail closed. Empty live
-JSON is treated as a fresh host; nonempty malformed JSON is rejected. Empty TOML
-is a valid fresh document. Empty portable rules are rejected. Duplicate JSON
-keys and non-JSON constants such as `NaN` are rejected rather than normalized.
-
-Ordinary sync treats the portable source as read-only: bytes, permissions and
-mtime are untouched. Passing the same regular file or two hardlinks as portable
-and live is rejected. A live symlink to the portable source is supported for
-migration to a mutable regular file.
+The native API has no source writeback. Before takeover, review a historically
+polluted portable source privately, preserve its unknown state in a separate
+private backup, and reconcile the intended live config and owned portable values
+explicitly. Do not import an entire application directory or use normal apply as
+source cleanup. Edit the canonical `common/` policy values, inspect a nonsecret
+targeted native diff and apply. For live-only edits, use the application's
+file/editor and review the resulting native diff; do not `add` a mutable target
+over its modify template. Stage 6 moves the canonical inputs once.
 
 ## Merge ownership
 
-Codex ownership, required types, and retired paths are centralized in
-`CODEX_POLICY` and `CODEX_RETIRED` in `lib/config_sync.py`. The current owned
-fields are:
+Codex ownership, required types and retired paths live in
+`home/.chezmoidata/codex-policy.json`, which the native modify reads literally
+(paths and types only, no values). The current owned fields are:
 
 | TOML path | Owned required keys |
 | --- | --- |
@@ -207,38 +111,25 @@ fields are:
 | `memories` | `generate_memories`, `use_memories` |
 | `tui` | `status_line` (ordered string array) |
 
-The shared status line includes the cumulative session token total and the native
-estimated thread cost item. Codex CLI 0.166.0 exposes cost only for Enterprise
-workspaces and omits it when unavailable. `context-used` reports context window
-occupancy, independently of cumulative tokens. Other `tui` settings, including
-colors, theme and onboarding state, remain local. `/statusline` edits the live
-layout. A legacy sync restores the shared array; on a native home a live edit of
-any owned key stops the nonforce login update at `~/.codex/config.toml` until it
-is reconciled as in [takeover.md](chezmoi-migration/takeover.md#reconcile-an-owned-ai-config-key).
+The shared status line includes the cumulative session token total and the
+native estimated thread cost item. Codex CLI 0.166.0 exposes cost only for
+Enterprise workspaces and omits it when unavailable. `context-used` reports
+context window occupancy, independently of cumulative tokens. Other `tui`
+settings, including colors, theme and onboarding state, remain local.
+`/statusline` edits the live layout. A live edit of any owned key stops the
+nonforce login update at `~/.codex/config.toml` until it is reconciled as in
+[takeover.md](chezmoi-migration/takeover.md#reconcile-an-owned-ai-config-key).
 
-Portable values replace these paths only. Other live keys, tables, comments,
-multiline strings and arrays of tables are retained by TOMLKit's document model.
-Formatting of edited values can change; the library may also normalize some
-unusual out-of-order array-of-tables layouts. Semantic no-ops do not replace the
-file. Retired `sandbox_mode`, the whole `sandbox_workspace_write` table, and
-`features.js_repl` are removed. Unknown portable keys are not silently deployed
-as shared policy.
+Portable values replace these paths only; other live keys and tables are
+retained, with the native serialization described above. Retired `sandbox_mode`,
+the whole `sandbox_workspace_write` table and `features.js_repl` are removed.
+Unknown portable keys are not silently deployed as shared policy.
 
-Claude deep-merges objects with portable leaf values winning. Arrays, including
-permissions and hooks, replace wholesale, even when empty. Live-only fields such
-as `model` and `permissions.additionalDirectories` remain. `false`, `null`, and
-numeric values remain distinct. Portable `permissions.allow` and `permissions.ask`
-must be string arrays; `permissions.deny` must also be a string array when present.
-Portable `model` is rejected to protect per-host model
-selection. This refactor does not change the contents of the portable policies
-or the separate Node-based Claude hooks.
+Codex hooks are host runtime state; the native modify leaves them in place like
+any other unowned field.
 
-Codex hooks are host runtime state and remain untouched by ordinary sync.
-Explicit legacy migration preserves source-only hooks just like other unknown
-fields. The helpers do not expose a separate hook-registration API.
-
-Codex rules remain an opaque, authoritative byte copy: the backend does not
-parse, reformat or edit rule syntax. Siblings such as `default.rules` are untouched.
+Codex rules deploy as an opaque, authoritative ordinary file through a literal
+include; siblings such as `default.rules` are untouched.
 
 ## Codex override precedence and retirement
 
@@ -246,74 +137,9 @@ Codex reads one global instructions file, `~/.codex/AGENTS.override.md` when it
 exists and `~/.codex/AGENTS.md` otherwise, with no include mechanism. Dotfiles
 no longer generates overrides or ships a public instructions sync kind.
 
-After successful POSIX Stow, the installer removes an override only when it is
-a nonsymlink regular file whose first line exactly matches the retired generator's
-marker. Foreign files, symlinks, directories and FIFOs remain with a warning to
-inspect and move obsolete entries aside manually. A removal error prevents
-applied-revision acknowledgment. Native Windows does not clean up overrides;
-inspect legacy files manually. See [Sherlock migration](sherlock-kit.md).
-
-## Legacy portable cleanup
-
-Older Stow links may have allowed runtime state to accumulate in tracked Codex
-input. Ordinary sync now materializes the live file without cleaning its source.
-To explicitly clean that known legacy state:
-
-```sh
-common/codex/.local/bin/codex-config-sync --migrate-portable \
-    common/codex/.codex/config.toml /path/to/live/config.toml
-```
-
-Migration first retains portable-only runtime state in the live document;
-existing live runtime values win conflicts. It then applies owned portable
-policy and removes retired paths. Only after the live snapshot is safely
-materialized does it rewrite the portable baseline to owned keys. This also
-preserves source-only runtime state when live is already a regular file or is
-absent, not just when it remains a legacy symlink. The portable migration target
-must itself be a regular file, not a symlink. Review the resulting tracked diff;
-the command intentionally modifies the source and never runs automatically.
-
-## File safety and test boundaries
-
-Each changed file is serialized and validated before writes, staged in an
-adjacent temporary file, flushed, and replaced with `os.replace`. There is no
-preliminary unlink of an existing live symlink. Failed temporary creation,
-writing or replacement leaves the prior file/link in place and cleans the
-temporary file. New regular files and materialized legacy symlinks default to
-`0600` for Codex config and `0644` for Claude settings and Codex rules on Unix.
-Existing regular-file permissions are
-intersected with those defaults, never broadened: for example, a private `0600`
-Claude file stays private on both changed writes and no-ops. Explicit portable migration also preserves stricter source modes.
-Windows uses native replacement behavior and inherited directory ACLs;
-Unix permission bits are not an ACL policy there.
-
-Unchanged regular files keep their inode and mtime; Unix mode drift may still be
-corrected. The backend checks for observed content changes before replacement
-and asks for retry instead of overwriting them. This is not an atomic
-compare-and-swap and cannot eliminate a simultaneous application's final
-read/replace race. Close the configuration editor during manual migrations.
-
-Safety is per file, not a transaction across all AI files. Explicit migration
-writes live first, then portable; failure of the second write leaves the original
-portable source intact and can be retried. Installer state must only acknowledge
-a completely successful install.
-
-Tests use the standard library, disposable targets, and injected write failures:
-
-```sh
-.venv-sync/bin/python -I -B -m unittest discover -s tests -p test_config_sync.py -v
-./tests/codex-config-sync.sh
-./tests/ai-config-sync.sh
-```
-
-```powershell
-& ./.venv-sync/Scripts/python.exe -I -B -m unittest discover -s tests -p test_config_sync.py -v
-```
-
-Native backend tests run on all three OSes; tests specific to POSIX permission
-bits/FIFOs are explicitly marked. Windows symlink tests require the CI runner's
-symlink privilege. These tests do not establish OpenSSH network-logon trust or
-Task Scheduler behavior; those are separate installer/update integration checks.
+A host may still carry a regular `~/.codex/AGENTS.override.md` written by the
+retired generator, which makes Codex ignore `~/.codex/AGENTS.md`. Nothing
+removes it automatically: inspect it and move it aside by hand.
 
 ## Permission policy rationale
 

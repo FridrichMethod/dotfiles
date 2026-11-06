@@ -70,8 +70,7 @@ def indexed_modes():
 
 
 def expected_entries(role):
-    return {entry.destination: entry for entry in inventory()
-            if entry.applies(role) and entry.category != "C"}
+    return {entry.destination: entry for entry in inventory() if entry.applies(role)}
 
 
 def copy_controls(destination):
@@ -97,24 +96,24 @@ def snapshot(directory):
 def inventory_problems(entries, modes):
     problems = []
     sources = [entry.source for entry in entries]
-    if len(sources) != 95 or Counter(sources) != Counter(modes.keys()):
-        problems.append("inventory must contain exactly the 95 indexed package paths once each")
+    if len(sources) != 91 or Counter(sources) != Counter(modes.keys()):
+        problems.append("inventory must contain exactly the 91 indexed package paths once each")
     if Counter(path.split("/", 1)[0] for path in sources) != Counter(
-            {"common": 52, "mac": 7, "wsl-ubuntu": 6, "lab-ubuntu": 11,
+            {"common": 49, "mac": 7, "wsl-ubuntu": 6, "lab-ubuntu": 10,
              "sherlock": 5, "marlowe": 5, "win": 9}):
         problems.append("package counts changed")
+    if any(entry.category == "C" for entry in entries):
+        problems.append("migration-only compatibility rows remain")
     for entry in entries:
         tree, package, relative = entry.source.split("/", 2)
         hosts = ("A" if package in WINDOWS_PACKAGES else "U") if tree == "common" else tree
         if entry.destination != relative or entry.hosts != hosts:
             problems.append(f"incorrect destination/applicability: {entry.source}")
-    if Counter(modes.values()) != Counter({"100644": 89, "100755": 6}):
+    if Counter(modes.values()) != Counter({"100644": 89, "100755": 2}):
         problems.append("indexed regular/executable modes changed")
     for role, count in COUNTS.items():
         applicable = [entry.destination for entry in entries if entry.applies(role)]
-        native = {entry.destination for entry in entries if entry.applies(role)
-                  and entry.category != "C"}
-        if len(applicable) != len(set(applicable)) or len(native) != count:
+        if len(applicable) != len(set(applicable)) or len(applicable) != count:
             problems.append(f"incorrect unique target set for {role}")
     return problems
 

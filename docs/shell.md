@@ -70,9 +70,9 @@ changes to load.
 
 ## Lab input settings
 
-fcitx5 rewrites its profile, so Stow materializes the authoritative baseline as
-an ordinary file; a later stow reasserts it. Invalid directory/special-file
-targets fail, and existing links survive until replacements are staged.
+fcitx5 rewrites its profile, so the native source deploys the authoritative
+baseline as a private regular file rather than a link; fcitx5's own `conf/`
+state stays unmanaged.
 On lab-ubuntu, GNOME owns the X keymap. The deployed .xprofile sets CapsLock as
 Hyper_L for the fcitx5 language trigger and frees Super+Space for cycling input
 methods. It uses /usr/bin/gsettings because the Linuxbrew command lacks GNOME's

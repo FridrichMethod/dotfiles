@@ -39,11 +39,17 @@ is unchanged. Five Unix hosts converged on `dddc718` and Windows on `57fbc45`
 (the same code plus the Stage 5 records), all six re-initialized
 ([Stage 5 outcome](stage-5-ecosystem.md#stage-5-outcome)).
 
+Stage 6 B3 deletes the four category C helpers with the legacy parser chain:
+91 package paths remain (common 49, lab-ubuntu 10; two have mode 100755). No
+native source entry, target or role total changes; ordinary totals stay
+49/56/55/59/54/54/26.
+
 ## Derivation, applicability and notation
 
 `git ls-files common mac sherlock wsl-ubuntu lab-ubuntu marlowe win` yields
-**95 tracked package files**: common 52, mac 7, wsl-ubuntu 6, lab-ubuntu 11,
-sherlock 5, marlowe 5, win 9. All are Git regular files; six have mode 100755.
+**91 tracked package files** (95 before Stage 6 retired the four C helpers):
+common 49, mac 7, wsl-ubuntu 6, lab-ubuntu 10, sherlock 5, marlowe 5, win 9.
+All are Git regular files; two have mode 100755.
 The table below has one row per path, including zero-byte tcsh/xonsh files,
 the pet metadata/WebP, compiled terminfo and all five current tmux files.
 No ignored payload checkout or untracked HOME content contributes a row.
@@ -54,7 +60,7 @@ or uninitialized role. An explicit role selects common plus that role's overlay.
 Windows selects only common packages `claude`, `codex`, `conda`, `git`, `ssh`,
 `wezterm`, as `home/.chezmoiignore` selects for `win` (the former
 `$CommonPackages` of the retired `stow-all.ps1`), plus `win/`.
-Thus 20 common paths apply to Windows; Unix common has 52. Presence in a package
+Thus 17 common paths apply to Windows; Unix common has 49. Presence in a package
 does not assert that its application is installed on every applicable host.
 
 All destinations are relative to HOME, including `mount.vbs` and `wsl.conf`:
@@ -66,8 +72,9 @@ Category codes: **O** ordinary configuration; **E** executable/helper code
 (some is sourced or invoked with Python and deliberately not executable);
 **M** mutable configuration; **X** external asset, here an already tracked opaque
 asset, not a new network download; **P** payload-owned path; **C** migration-only
-compatibility file. No tracked package file is P: payload-owned trees appear in
-the separate ownership-boundary table. Category is not a permission declaration.
+compatibility file (none since Stage 6). No tracked package file is P:
+payload-owned trees appear in the separate ownership-boundary table. Category
+is not a permission declaration.
 
 Native representation cells name planned paths under the `home/` source root.
 **B** is a thin `.tmpl` bridge using literal `include` of the corresponding
@@ -106,14 +113,11 @@ the corresponding live user file. Parenthetical S2/S3 is the replacement stage.
 | `common/bash/.config/bash/upload.sh` | `~/.config/bash/upload.sh` | U | E | B: dot_config/bash/upload.sh.tmpl | D | S6 (S2) |
 | `common/claude/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | A | O | B: dot_claude/CLAUDE.md.tmpl | D | S6 (S2) |
 | `common/claude/.claude/settings.json` | `~/.claude/settings.json` | A | M | N: dot_claude/modify_private_settings.json | D/app | S6 (S3) |
-| `common/claude/.local/bin/claude-settings-sync` | `~/.local/bin/claude-settings-sync` | A | C | -; retire helper | D/legacy | S6 (S2/S3 native replacement) |
 | `common/codex/.codex/AGENTS.md` | `~/.codex/AGENTS.md` | A | O | B: dot_codex/AGENTS.md.tmpl | D | S6 (S2) |
 | `common/codex/.codex/config.toml` | `~/.codex/config.toml` | A | M | N: dot_codex/modify_private_config.toml | D/app | S6 (S3) |
 | `common/codex/.codex/pets/tom/pet.json` | `~/.codex/pets/tom/pet.json` | A | X | B: dot_codex/pets/tom/pet.json.tmpl | D | S6 (S2) |
 | `common/codex/.codex/pets/tom/spritesheet.webp` | `~/.codex/pets/tom/spritesheet.webp` | A | X | R: dot_codex/pets/tom/spritesheet.webp | D | S6 (S2) |
 | `common/codex/.codex/rules/portable.rules` | `~/.codex/rules/portable.rules` | A | O | B: dot_codex/rules/portable.rules.tmpl | D | S6 (S2) |
-| `common/codex/.local/bin/codex-config-sync` | `~/.local/bin/codex-config-sync` | A | C | -; retire helper | D/legacy | S6 (S2/S3 native replacement) |
-| `common/codex/.local/bin/codex-rules-sync` | `~/.local/bin/codex-rules-sync` | A | C | -; retire helper | D/legacy | S6 (S2/S3 native replacement) |
 | `common/conda/.condarc` | `~/.condarc` | A | O | B: dot_condarc.tmpl | D | S6 (S2) |
 | `common/git/.gitconfig` | `~/.gitconfig` | A | O | B: dot_gitconfig.tmpl | D | S6 (S2) |
 | `common/kitty/.config/kitty/current-theme.conf` | `~/.config/kitty/current-theme.conf` | U | O | B: dot_config/kitty/current-theme.conf.tmpl | D/app | S6 (S2) |
@@ -154,7 +158,6 @@ the corresponding live user file. Parenthetical S2/S3 is the replacement stage.
 | `lab-ubuntu/claude/.local/bin/claude-limited` | `~/.local/bin/claude-limited` | lab-ubuntu | E | B: dot_local/bin/executable_claude-limited.tmpl | D | S6 (S2) |
 | `lab-ubuntu/fcitx5/.config/fcitx5/config` | `~/.config/fcitx5/config` | lab-ubuntu | O | B: dot_config/fcitx5/config.tmpl | D | S6 (S2) |
 | `lab-ubuntu/fcitx5/.config/fcitx5/profile` | `~/.config/fcitx5/profile` | lab-ubuntu | M | B: dot_config/fcitx5/private_profile.tmpl | D/app | S6 (S2) |
-| `lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync` | `~/.local/bin/fcitx5-profile-sync` | lab-ubuntu | C | -; retire helper | D/legacy | S6 (S2/S3 native replacement) |
 | `lab-ubuntu/fcitx5/.xprofile` | `~/.xprofile` | lab-ubuntu | O | B: dot_xprofile.tmpl | D | S6 (S2) |
 | `lab-ubuntu/git/.gitconfig_local` | `~/.gitconfig_local` | lab-ubuntu | O | B: dot_gitconfig_local.tmpl | D | S6 (S2) |
 | `lab-ubuntu/sh/.config/sh/.aliases` | `~/.config/sh/.aliases` | lab-ubuntu | O | B: dot_config/sh/dot_aliases.tmpl | D | S6 (S2) |
@@ -202,29 +205,29 @@ are explicitly included above:
 and lab-ubuntu's `.config/fcitx5/profile`. The first two become native modifies;
 rules become an opaque ordinary file and fcitx5 becomes an authoritative private
 ordinary file despite being rewritten by fcitx5. No runtime-only fcitx5 `conf/`
-state is imported. The three AI sync executables and fcitx5 sync executable
-remain available only to the legacy path, never copied as native helpers.
+state is imported. Stage 6 deleted the three AI sync executables and the
+fcitx5 sync executable; they were never native helpers.
 
 The other former `.stowrc` ignores covered OS/editor/cache artifacts and the
 retired `coding-agent-kit`, `PyMOLScripts`, `sherlock-kit` checkouts; none of
-the 95 tracked paths matched them. There is no tracked `.stow-local-ignore` in
+the 91 tracked paths matched them. There is no tracked `.stow-local-ignore` in
 these packages. Stage 6 removed `.stowrc` with Stow; `.gitignore` keeps the
 leftover-checkout lines until Phase C. The native model deploys only
 inventoried targets; it must not import ignored checkouts.
 
 | Role | Current package paths | Legacy-only helpers excluded | Stage 2 ordinary/assets targets | Stage 3 complete native targets |
 | --- | ---: | ---: | ---: | ---: |
-| common-only | 52 | 3 | 47 | 49 |
-| mac | 59 | 3 | 54 | 56 |
-| wsl-ubuntu | 58 | 3 | 53 | 55 |
-| lab-ubuntu | 63 | 4 | 57 | 59 |
-| sherlock | 57 | 3 | 52 | 54 |
-| marlowe | 57 | 3 | 52 | 54 |
-| win | 29 | 3 | 24 | 26 |
+| common-only | 49 | 0 | 47 | 49 |
+| mac | 56 | 0 | 54 | 56 |
+| wsl-ubuntu | 55 | 0 | 53 | 55 |
+| lab-ubuntu | 59 | 0 | 57 | 59 |
+| sherlock | 54 | 0 | 52 | 54 |
+| marlowe | 54 | 0 | 52 | 54 |
+| win | 26 | 0 | 24 | 26 |
 
 These are unique file destinations, excluding directories, native special files
 and unapproved secret enrollment. Stage 3 fills Stage 2's two AI gaps on every
-role; the four legacy helper definitions stay absent. An omitted legacy helper
+role; Stage 6 deleted the four legacy helper definitions. An omitted legacy helper
 is not a coverage defect.
 Native rendered target lists must match these sets, not just their counts.
 
@@ -235,7 +238,7 @@ Native rendered target lists must match these sets, not just their counts.
 | Same manifest, skills entry | Upstream awesome-skills installed skills under its documented roots | P; keep explicit `sync-skills` and ownership checks until interface evidence supports removal | S5 done: explicit-only (D7), `sync-skills` and the probes kept, `AWESOME_SKILLS_AUTO_UPDATE` removed; S6 deletes the no-op shim |
 | Bootstrap clone manifests | `.oh-my-zsh/`, plugin/theme trees and `.tmux/plugins/` | Installer-owned external assets; chezmoi manages only inventoried custom files within shared parents, never an exact directory or blanket cleanup | S2 mapping; S5 kept them in S3-clones with their upstream updaters, no externals (`test_source_declares_no_externals`) |
 | Root `AGENTS.md`, `CLAUDE.md`, mirrored first-party skills | Repository instructions, not HOME targets | Preserve the import stub and mirrored skills; narrowly update active stage instructions | Each owning stage |
-| `.venv-sync`, `requirements-sync.txt`, `setup-sync.*`, `lib/config_sync.py`, `lib/sync-runtime.sh` | Legacy sync backend/runtime | Temporary compatibility only; keep for legacy callers through S6, absent from native runtime | S3 dependency-negative proof; S6 delete chain |
+| `.venv-sync`, `requirements-sync.txt`, `setup-sync.*`, `lib/config_sync.py`, `lib/sync-runtime.sh` | Legacy sync backend/runtime | Temporary compatibility only; keep for legacy callers through S6, absent from native runtime | S3 dependency-negative proof; S6 B3 deleted the chain; a host's ignored `.venv-sync` is Phase C residue |
 | `.ssh` keys, known_hosts, control sockets and agent state | User/SSH runtime | Unmanaged, never inferred from tracked connection snippets or distributed by default | S2 boundaries; S4/S6 private verification |
 | Auth stores, sessions, history, project trust, plugin caches | Application/OS keychain | Unmanaged, preserve contents and active ownership | S3/S4/S6 |
 
@@ -247,7 +250,8 @@ connection snippets, not automatically historical-removal candidates.
 
 ## Temporary single-source bridge and parity checks
 
-Until S6, the 95 legacy files remain canonical. S2 creates small include templates
+Until S6 materializes them, the legacy package files (91 since B3) remain
+canonical. S2 creates small include templates
 for text, with no second editable copy of policy or shell configuration. A
 working-tree-root path is required because `.chezmoiroot` selects `home/` and
 relative native includes otherwise resolve from the source directory. Prove it
@@ -286,9 +290,9 @@ behavior, not deleted wholesale.
 
 | Current callers/source assumptions | Relevant tests/selectors | Disposition and owner |
 | --- | --- | --- |
-| `common/{claude,codex}/.local/bin/*-sync` resolve symlinks and climb four parents into `lib/sync-runtime.sh`; that runtime invokes `lib/config_sync.py` | `tests/test_config_sync.py`, `tests/config-sync.sh`, `tests/ai-config-sync.sh`, `tests/codex-config-sync.sh`; structured/AI/Codex hooks | S3 port owned-field, arrays, malformed-input, permissions and local-state behavior to native modifies; S6 retire symlink-climb, custom writer/CAS/formatting and runtime-selection cases |
+| `common/{claude,codex}/.local/bin/*-sync` resolve symlinks and climb four parents into `lib/sync-runtime.sh`; that runtime invokes `lib/config_sync.py` | `tests/test_config_sync.py`, `tests/config-sync.sh`, `tests/ai-config-sync.sh`, `tests/codex-config-sync.sh`; structured/AI/Codex hooks | S3 port owned-field, arrays, malformed-input, permissions and local-state behavior to native modifies; S6 retire symlink-climb, custom writer/CAS/formatting and runtime-selection cases. S6 B3 deleted the helpers and their suites. |
 | `stow-all.sh`, `stow-all.ps1` enumerate package roots and invoke merge/materialization sources directly | `tests/stow-all.sh`, `tests/unix-installer.sh`, `tests/windows-installer.{sh,ps1}`, `tests/windows-installer-controls.ps1`, `tests/test_stow_ignores.py` | S2 preserve applicability/bytes in native fixtures; S4 port takeover/conflict/foreign-file/mode/ACL safety; S6 retire package enumeration, Stow parser, adoption and historical-repair mechanics |
-| `lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync`, both installers' fcitx5 source handling | `tests/fcitx5-profile-sync.sh`, Stow hook | S2 port authoritative private profile and unmanaged sibling behavior; S6 retire the helper's staging mechanics |
+| `lab-ubuntu/fcitx5/.local/bin/fcitx5-profile-sync`, both installers' fcitx5 source handling | `tests/fcitx5-profile-sync.sh`, Stow hook | S2 port authoritative private profile and unmanaged sibling behavior; S6 retire the helper's staging mechanics. S6 B3 deleted the helpers and their suites. |
 | `common/sh/.profile` sources `~/.config/sh/.profile`; `.aliases` sources the matching host aliases; Bash/zsh source shared and host paths | `tests/shell-profile.sh`, `tests/host-overlays.sh`, `tests/test_portable_shell.py` | S2 port source inputs to rendered HOME; retain PATH/nvm ordering, quiet startup, shell-state, completions and host overrides; S5 change only justified surviving branches |
 | `common/zsh/.zshrc` sources custom oh-my-zsh files and update/payload scripts; `my-fzf-preview.sh` remains executable | `tests/test_ai_integration.py`, `tests/ai-integration.sh`, shell tests | S2 retain fzf/account preview non-disclosure, aliases and native Windows helper guards; S4 switch updater caller; S5 removed the payload dispatch (D7 explicit-only, `281e33f`), so only the update dispatch remains |
 | `common/tmux/.tmux.conf` sources all three `.conf` fragments and calls `metric.py` with `python3 -I -B`; which-key reloads `~/.tmux.conf` | `tests/test_tmux.py`, `tests/tmux.sh`; tmux hook | S2 use rendered files and preserve all five paths, plugin fallback, clipboard/battery gates, private metric cache, menu quoting, reload and hostname recovery; S5 removed all seven version gates and the version parsing at the 3.4 floor (`e6cfba2`), keeping all of the rest; extrakto's OSC 52 choice now reads the session environment like tmux-yank's; Linux CI fails, not skips, without real tmux 3.4 |
@@ -482,7 +486,7 @@ trees = ['common', 'mac', 'sherlock', 'wsl-ubuntu', 'lab-ubuntu', 'marlowe', 'wi
 tracked = subprocess.check_output(['git', 'ls-files', *trees], text=True).splitlines()
 text = Path('docs/chezmoi-migration/inventory.md').read_text(encoding='ascii')
 rows = re.findall(r'^\| `((?:common|mac|sherlock|wsl-ubuntu|lab-ubuntu|marlowe|win)/[^`]+)` \| `~/([^`]+)` \| ([^|]+) \| ([OEMXPC]) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$', text, re.M)
-assert len(rows) == len(tracked) == 95
+assert len(rows) == len(tracked) == 91
 assert collections.Counter(row[0] for row in rows) == collections.Counter(tracked)
 windows = {'claude', 'codex', 'conda', 'git', 'ssh', 'wezterm'}
 roles = ['common-only', 'mac', 'wsl-ubuntu', 'lab-ubuntu', 'sherlock', 'marlowe', 'win']
@@ -499,14 +503,14 @@ for source, dest, hosts, category, representation, owner, removal in rows:
         targets[host].add(dest)
         if category != 'C':
             native[host].add(dest)
-assert [len(targets[h]) for h in roles] == [52, 59, 58, 63, 57, 57, 29]
+assert [len(targets[h]) for h in roles] == [49, 56, 55, 59, 54, 54, 26]
 assert [len(native[h]) for h in roles] == [49, 56, 55, 59, 54, 54, 26]
 exceptions = {'common/claude/.claude/settings.json', 'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules', 'lab-ubuntu/fcitx5/.config/fcitx5/profile'}
 assert exceptions <= set(tracked)
 modes = subprocess.check_output(['git', 'ls-files', '--stage', *trees], text=True).splitlines()
-assert sum(line.startswith('100755 ') for line in modes) == 6
+assert sum(line.startswith('100755 ') for line in modes) == 2
 assert not any(p.endswith('/.stow-local-ignore') for p in tracked)
 assert len([p for p in tracked if p.startswith('common/tmux/')]) == 5
-print('inventory=PASS: 95 exact rows; seven host sets; four exceptions; six executable modes; five tmux files')
+print('inventory=PASS: 91 exact rows; seven host sets; four exceptions; two executable modes; five tmux files')
 PY
 ```
