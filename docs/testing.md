@@ -191,6 +191,20 @@ guard refuse without running a hook; a bound source without the hook fails
 with exit 1; maintenance surfaces the real hook's refusal; the hook's exit
 status passes through, and one that ends without `exit` reports 0, not the
 caller's `$LASTEXITCODE`.
+It holds the PowerShell 7.0 floor: every `$PSStyle` use (7.2+) sits in the
+then-branch of one interactive if whose condition is
+`Get-Variable -Name PSStyle -ValueOnly -ErrorAction Ignore`; that statement
+runs cleanly, plainly and in strict mode, in a runspace whose initial state
+lacks `$PSStyle` (where the bare assignment must fail), and where pwsh has
+`$PSStyle` it colors directories bold blue. Every prediction option
+(`-PredictionSource`, `-PredictionViewStyle` and the prediction colors) sits
+likewise behind one if that requires PSReadLine 2.2 and PowerShell 7.2.
+Replayed against stand-ins for PSReadLine 2.0 to 2.3 on PowerShell 7.0 to
+7.4 (stock 7.0 to 7.2 ship PSReadLine 2.0 or 2.1), the profile's PSReadLine
+statements set the other options everywhere without an error and the
+predictions only where both versions allow them. `tests/powershell-profile.sh`
+scans both profiles for the same guards before it hands over to pwsh, so the
+rule holds where pwsh is missing too.
 It unit-tests the history filter in both directions, the eza glob expansion
 and the `$LASTEXITCODE` prompt wrapper,
 parses and completes conda under Windows PowerShell 5.1, dot-sources the

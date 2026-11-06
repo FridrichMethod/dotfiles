@@ -110,9 +110,15 @@ if ($IsInteractive -and -not $IsAgentSession) {
     # --- PSReadLine -----------------------------------------------------------
     # The console host imports PSReadLine before profiles run, so it is not
     # imported again here.
-    Set-PSReadLineOption -BellStyle None -HistorySearchCursorMovesToEnd `
-        -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView `
-        -Colors @{ InlinePrediction = '#8d8d8d' }
+    Set-PSReadLineOption -BellStyle None -HistorySearchCursorMovesToEnd
+    # The plugin source and the list view came with PSReadLine 2.2, and a
+    # plugin source needs PowerShell 7.2; pwsh 7.0 to 7.2 ship PSReadLine 2.0
+    # or 2.1, which reject these options, so there PSReadLine keeps its own
+    # prediction defaults.
+    if ((Get-Module PSReadLine).Version -ge [version]'2.2.0' -and $PSVersionTable.PSVersion -ge [System.Management.Automation.SemanticVersion]'7.2.0') {
+        Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView `
+            -Colors @{ InlinePrediction = '#8d8d8d' }
+    }
     # Keep credentials out of ConsoleHost_history.txt (still recallable in this
     # session); a leading space mirrors zsh HIST_IGNORE_SPACE. A bearer token
     # needs a digit, an sk- key a vendor prefix in the vendor's case
@@ -166,7 +172,11 @@ if ($IsInteractive -and -not $IsAgentSession) {
         }
     }
 
-    $PSStyle.FileInfo.Directory = $PSStyle.Bold + $PSStyle.Foreground.Blue
+    # $PSStyle came with PowerShell 7.2 (its FileInfo colors are mainstream
+    # from 7.3); this profile's floor is 7.0, so look the variable up first.
+    if (Get-Variable -Name PSStyle -ValueOnly -ErrorAction Ignore) {
+        $PSStyle.FileInfo.Directory = $PSStyle.Bold + $PSStyle.Foreground.Blue
+    }
 
     # --- Optional CLI tools (docs/dependencies.md); each skipped when absent ---
     if (& $HasExe fzf) {

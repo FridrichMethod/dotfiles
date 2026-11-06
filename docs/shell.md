@@ -48,15 +48,21 @@ only when a person runs them; native Windows has no kit installation. See
 [payloads](payloads.md).
 
 Tab cycles completions; Up/Down search history by prefix. RightArrow at the
-end of the line accepts a prediction, and F2 switches prediction views. With
-fzf/PSFzf present, Ctrl+R searches history, Ctrl+T inserts paths and Alt+C
-changes directory. Lazy conda setup avoids importing conda until first use.
+end of the line accepts a prediction, and F2 switches prediction views. The
+profile asks for history and plugin predictions in the list view only with
+PSReadLine 2.2 on PowerShell 7.2 or later; older versions, down to the 7.0
+floor, keep PSReadLine's own prediction defaults. With fzf/PSFzf present,
+Ctrl+R searches history, Ctrl+T inserts paths and Alt+C changes directory.
+Lazy conda setup avoids importing conda until first use.
 
 Interactive encoding uses UTF-8 for native output and Python, respecting
 explicit PYTHONUTF8/PYTHONIOENCODING choices. Legacy GBK files still need an
 explicit encoding; localized Windows commands may emit a different code page.
 CompletionPredictor and WinGet CommandNotFound load on the first idle tick:
 missing modules stay silent, failed imports warn once.
+Directories list bold blue where `$PSStyle.FileInfo` colors listings
+(mainstream from PowerShell 7.3); before 7.2, which added `$PSStyle`, the
+profile skips the setting.
 
 oh-my-posh initializes after PSReadLine key handlers because it owns Enter and
 Ctrl+C; zoxide follows because it wraps the prompt. A final wrapper preserves

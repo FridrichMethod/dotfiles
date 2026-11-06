@@ -392,6 +392,145 @@ $condaSetup = {
 }
 Assert-True ((& $condaSetup $parsed7) -ceq (& $condaSetup $parsed51) -and (& $condaSetup $parsed7) -match 'Register-ArgumentCompleter') 'both profiles define the same conda stub and completer'
 
+Write-Output '--- PowerShell 7.0 floor'
+# The profile's floor is 7.0 (the tools.tsv pwsh row), but $PSStyle came with
+# PowerShell 7.2 and the prediction options with PSReadLine 2.1 and 2.2, while
+# pwsh 7.0 to 7.2 ship PSReadLine 2.0 or 2.1. Every use sits in the
+# then-branch of one interactive if that detects its feature first. The
+# $PSStyle statement is replayed in a runspace whose initial state lacks
+# $PSStyle, as 7.0 and 7.1 do, plainly and in strict mode, and, where this
+# pwsh has $PSStyle, in an ordinary one; the bare assignment replayed without
+# $PSStyle must fail, or the stand-in would prove nothing. Where pwsh is
+# missing, the .sh entry point still scans the profile for the same guards.
+$styleGuardText = 'Get-Variable -Name PSStyle -ValueOnly -ErrorAction Ignore'
+$readLineGuardText = '(Get-Module PSReadLine).Version -ge [version]''2.2.0'' -and $PSVersionTable.PSVersion -ge [System.Management.Automation.SemanticVersion]''7.2.0'''
+# The USES outside the then-branch of every if in IFS, and their line numbers.
+function Get-Unguarded([object[]]$Uses, [object[]]$Ifs) {
+    @($Uses | Where-Object { $use = $_; -not ($Ifs | Where-Object { Test-InsideNode $use $_.Clauses[0].Item2 }) })
+}
+function Format-Unguarded([object[]]$Nodes) {
+    if ($Nodes) { '; unguarded on line ' + (@($Nodes | ForEach-Object { $_.Extent.StartLineNumber } | Sort-Object -Unique) -join ', ') }
+}
+# IFS is one if with one clause and no else, inside the interactive guard.
+function Test-FloorGuard([object[]]$Ifs) {
+    ($Ifs.Count -eq 1 -and $Ifs[0].Clauses.Count -eq 1 -and $null -eq $Ifs[0].ElseClause -and
+        $null -ne $guardBody -and (Test-InsideNode $Ifs[0] $guardBody))
+}
+$findStyle = {
+    param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] -and
+    $n.VariablePath.UserPath -match '^((global|local|script|private|variable):)?PSStyle$'
+}
+$styleUses = @($parsed7.Ast.FindAll($findStyle, $true))
+$styleGuards = @(Get-IfStatements $parsed7.Ast $styleGuardText)
+$unguardedStyle = @(Get-Unguarded $styleUses $styleGuards)
+Assert-True ($styleUses.Count -gt 0 -and (Test-FloorGuard $styleGuards) -and $unguardedStyle.Count -eq 0) "every `$PSStyle use ($($styleUses.Count)) is in the then-branch of one interactive if ($styleGuardText)$(Format-Unguarded $unguardedStyle)"
+Assert-True (@($parsed51.Ast.FindAll($findStyle, $true)).Count -eq 0) 'the 5.1 profile does not use $PSStyle'
+# The prediction parameters and the prediction color keys of every
+# Set-PSReadLineOption call.
+$readLineGuards = @(Get-IfStatements $parsed7.Ast $readLineGuardText)
+$predictionArgs = @(Get-Commands $parsed7.Ast | Where-Object { $_.GetCommandName() -eq 'Set-PSReadLineOption' } | ForEach-Object {
+        $command = $_
+        $command.CommandElements | Where-Object {
+            $_ -is [System.Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -match '^Prediction'
+        }
+        $command.FindAll({ param($n) $n -is [System.Management.Automation.Language.HashtableAst] }, $true) |
+            ForEach-Object { $_.KeyValuePairs } | ForEach-Object { $_.Item1 } |
+            Where-Object { $_.Extent.Text -match '^[''"]?(Inline|List)Prediction' }
+    })
+$unguardedArgs = @(Get-Unguarded $predictionArgs $readLineGuards)
+Assert-True ($predictionArgs.Count -gt 0 -and (Test-FloorGuard $readLineGuards) -and $unguardedArgs.Count -eq 0) "every PSReadLine 2.2 prediction option ($($predictionArgs.Count)) is in the then-branch of one interactive if ($readLineGuardText)$(Format-Unguarded $unguardedArgs)"
+
+# Runs TEXT in a fresh runspace, without the PSStyle variable under
+# -NoPSStyle, and returns its output and every error it wrote or threw.
+function Invoke-FloorRunspace([string]$Text, [switch]$NoPSStyle) {
+    $state = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    if ($NoPSStyle) { $state.Variables.Remove('PSStyle', $null) }
+    $shell = [System.Management.Automation.PowerShell]::Create($state)
+    try {
+        $out = $errors = @()
+        try { $out = @($shell.AddScript($Text).Invoke()) }
+        catch { $errors += $_.Exception.Message }
+        $errors += @($shell.Streams.Error | ForEach-Object { $_.ToString() })
+        [pscustomobject]@{ Out = $out -join '|'; Errors = $errors -join '; ' }
+    }
+    finally { $shell.Dispose() }
+}
+$styleAssign = @(Get-Assignments $parsed7.Ast '$PSStyle.FileInfo.Directory')
+$styleRule = if ($styleAssign.Count -eq 1) {
+    if ($styleGuards.Count -eq 1 -and (Test-InsideNode $styleAssign[0] $styleGuards[0])) { $styleGuards[0] } else { $styleAssign[0] }
+}
+# Only the lookup may run as a command here, never the interactive guard.
+if ($styleRule -and @(Get-Commands $styleRule | Where-Object { $_.GetCommandName() -ne 'Get-Variable' }).Count) { $styleRule = $null }
+Assert-True ($null -ne $styleRule) "the directory color is set once, by a replayable statement ($($styleAssign.Count) assignments)"
+if ($styleRule) {
+    $probe = Invoke-FloorRunspace '[bool](Get-Variable -Name PSStyle -ErrorAction Ignore)' -NoPSStyle
+    Assert-True ($probe.Out -ceq 'False' -and -not $probe.Errors) "a runspace without the PSStyle variable stands in for PowerShell 7.0 and 7.1 (out=$($probe.Out) errors=$($probe.Errors))"
+    $bare = Invoke-FloorRunspace $styleAssign[0].Extent.Text -NoPSStyle
+    Assert-True ([bool]$bare.Errors) 'the bare assignment fails in that runspace'
+    foreach ($strict in $false, $true) {
+        $prefix = if ($strict) { "Set-StrictMode -Version Latest`n" } else { '' }
+        $run = Invoke-FloorRunspace ($prefix + $styleRule.Extent.Text) -NoPSStyle
+        Assert-True (-not $run.Errors) "without `$PSStyle$(if ($strict) { ', in strict mode,' }) the directory color statement runs cleanly ($($run.Errors))"
+    }
+    if (Get-Variable -Name PSStyle -ValueOnly -ErrorAction Ignore) {
+        # Runspaces share one PSStyle instance: start from a value the
+        # statement does not set, and restore the original afterwards.
+        $savedDirectory = $PSStyle.FileInfo.Directory
+        try {
+            $PSStyle.FileInfo.Directory = $PSStyle.Reset
+            $run = Invoke-FloorRunspace ($styleRule.Extent.Text + "`n" + '$PSStyle.FileInfo.Directory -ceq $PSStyle.Bold + $PSStyle.Foreground.Blue')
+        }
+        finally { $PSStyle.FileInfo.Directory = $savedDirectory }
+        Assert-True ($run.Out -ceq 'True' -and -not $run.Errors) "with `$PSStyle the statement colors directories bold blue (out=$($run.Out) errors=$($run.Errors))"
+    }
+    else { Write-Output 'SKIP: $PSStyle replay (this PowerShell predates 7.2)' }
+}
+
+# The profile's PSReadLine statements, replayed against stand-ins: a real
+# prediction source refuses redirected output, and $PSVersionTable cannot be
+# replaced, so the replay reads the engine version from $FakeEngine.
+# PSReadLine 2.1 added -PredictionSource (None, History) and the
+# InlinePrediction color; 2.2 added the plugin sources, -PredictionViewStyle
+# and the ListPrediction colors, and a plugin source needs PowerShell 7.2.
+$readLineStatements = @(if ($guardBody) {
+        $guardBody.Statements | Where-Object { @(Get-Commands $_ | Where-Object { $_.GetCommandName() -eq 'Set-PSReadLineOption' }).Count }
+    })
+$readLineReplay = (@($readLineStatements | ForEach-Object { $_.Extent.Text }) -join "`n").Replace('$PSVersionTable.PSVersion', '$FakeEngine')
+# Only the stand-ins may run as commands here.
+$readLineForeign = @($readLineStatements | ForEach-Object { Get-Commands $_ } | Where-Object { $_.GetCommandName() -notin 'Set-PSReadLineOption', 'Get-Module' })
+if ($readLineForeign) { $readLineReplay = '' }
+Assert-True ($readLineStatements.Count -gt 0 -and -not $readLineForeign -and $readLineReplay.Contains('$FakeEngine')) "the PSReadLine options are set by $($readLineStatements.Count) replayable statements that test the engine version"
+$readLineStandIn = @'
+function Get-Module { [pscustomobject]@{ Name = 'PSReadLine'; Version = $FakeReadLine } }
+function Set-PSReadLineOption {
+    [CmdletBinding()]
+    param($BellStyle, [switch]$HistorySearchCursorMovesToEnd, [hashtable]$Colors, $AddToHistoryHandler, $PredictionSource, $PredictionViewStyle)
+    $since = @{ PredictionSource = '2.1.0'; InlinePrediction = '2.1.0'; PredictionViewStyle = '2.2.0'; ListPrediction = '2.2.0'; Plugin = '2.2.0' }
+    $used = @($PSBoundParameters.Keys) + @(if ($Colors) { $Colors.Keys -replace '^ListPrediction.*', 'ListPrediction' })
+    if ("$PredictionSource" -like '*Plugin') { $used += 'Plugin' }
+    foreach ($name in $used) {
+        if ($since.ContainsKey($name) -and $FakeReadLine -lt [System.Version]$since[$name]) { throw "PSReadLine $FakeReadLine has no $name" }
+    }
+    if ($used -contains 'Plugin' -and $FakeEngine -lt [System.Management.Automation.SemanticVersion]'7.2.0') {
+        throw "a plugin prediction source needs PowerShell 7.2, not $FakeEngine"
+    }
+    foreach ($name in $PSBoundParameters.Keys) { $Bound.Add($name) }
+}
+'@
+# PSReadLine, PowerShell, whether the predictions apply: the stock pairs of
+# 7.0, 7.1 and 7.2, PSReadLine 2.2 installed on 7.1, and the supported pairs.
+foreach ($floorCase in @(
+        @('2.0.0', '7.0.0', $false), @('2.1.0', '7.1.0', $false), @('2.1.0', '7.2.0', $false),
+        @('2.2.0', '7.1.0', $false), @('2.2.0', '7.2.0', $true), @('2.3.6', '7.4.6', $true))) {
+    $prelude = "`$FakeReadLine = [System.Version]'$($floorCase[0])'`n`$FakeEngine = [System.Management.Automation.SemanticVersion]'$($floorCase[1])'`n" +
+        "`$Bound = [System.Collections.Generic.List[string]]::new()`n"
+    $run = if ($readLineReplay) { Invoke-FloorRunspace ($prelude + $readLineStandIn + "`n" + $readLineReplay + "`n" + '"bound=" + ($Bound -join ",")') }
+    $names = if ($run) { @(($run.Out -replace '^bound=', '') -split ',') } else { @() }
+    $predicts = $names -contains 'PredictionViewStyle'
+    Assert-True ($run -and -not $run.Errors -and $run.Out -like 'bound=*' -and $names -contains 'BellStyle' -and $predicts -eq $floorCase[2]) "PSReadLine $($floorCase[0]) on PowerShell $($floorCase[1]) takes the profile's options$(if ($floorCase[2]) { ' with' } else { ' without' }) predictions (out=$($run.Out) errors=$($run.Errors))"
+}
+Remove-Item -LiteralPath Function:\Invoke-FloorRunspace, Function:\Get-Unguarded, Function:\Format-Unguarded, Function:\Test-FloorGuard
+
 Write-Output '--- Windows PowerShell 5.1 compatibility'
 $modern = @($parsed51.Ast.FindAll({
             param($n)
