@@ -5,9 +5,6 @@
 # -NonInteractive processes on a fixture checkout, with .ps1 shims for winget,
 # git, oh-my-posh, bat and every probed tool on a fixture-only PATH, and global
 # wrapper functions standing in for Invoke-WebRequest and PSResourceGet.
-# The fixture's .venv-sync interpreter logs its runtime check: a shell script
-# on Unix; on Windows a venv of a real Python 3.11+ (DOTFILES_SYNC_PYTHON, this
-# checkout's .venv-sync or PATH) running a stand-in lib/config_sync.py.
 # Nothing touches the runner's real home, profile, modules or network. Runs on
 # Linux and macOS pwsh as well as Windows; Windows-only probes are guarded,
 # and every guarded assertion prints a SKIP line.
@@ -25,14 +22,7 @@ $script:Passed = 0
 $script:FixtureNumber = 0
 $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')
 $HumanSteps = @('HW-clone', 'HW-native', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
-# >>> stage6-B1 legacy-stow: the -LegacyStow step lists
-$LegacyAutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-setup-sync')
-$LegacyHumanSteps = @('HW-clone', 'HW-stow', 'HW-auto-stow-task', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
-# <<< stage6-B1 legacy-stow
-# stage6-B1 edit: drop |setup-sync\.ps1
-$InstallEvent = '^(winget |Install-PSResource |oh-my-posh font |Invoke-WebRequest |bat cache |setup-sync\.ps1)'
-# stage6-B1 edit: delete with Get-RuntimeChecks and its calls
-$RuntimeEvent = '--runtime-check$'
+$InstallEvent = '^(winget |Install-PSResource |oh-my-posh font |Invoke-WebRequest |bat cache )'
 $ScratchImport = '^(winget import -i ).+[\\/]dotfiles-bootstrap-[0-9a-f]{32}[\\/]winget\.json( --no-upgrade )'
 $FontFile = 'Microsoft/Windows/Fonts/CaskaydiaMonoNerdFont-Regular.ttf'
 $ThemeFile = 'bat/themes/Catppuccin Mocha.tmTheme'
@@ -185,20 +175,6 @@ function New-Fixture {
     }
     # A clone, as HW-clone requires (only the git shim ever reads it).
     [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Repo '.git'))
-    # stage6-B1 edit: delete the stand-in lib/config_sync.py and setup-sync.ps1 below
-    # Stand-in runtime check for the Windows venv; FAKE_RUNTIME_EXIT fails it.
-    [IO.File]::WriteAllText((Join-Path $fixture.Repo 'lib/config_sync.py'), @'
-import os, sys
-with open(os.environ["BOOTSTRAP_TEST_EVENTS"], "a", encoding="utf-8") as log:
-    log.write("config_sync.py " + " ".join(sys.argv[1:]) + "\n")
-sys.exit(int(os.environ.get("FAKE_RUNTIME_EXIT") or "0"))
-'@)
-    [IO.File]::WriteAllText((Join-Path $fixture.Repo 'setup-sync.ps1'), @'
-param([string]$Python = 'python')
-Add-Content -LiteralPath $env:BOOTSTRAP_TEST_EVENTS -Value "setup-sync.ps1 -Python $Python"
-& $env:FIXTURE_NEW_VENV $PSScriptRoot
-Write-Host 'fixture AI-sync runtime ready'
-'@)
     # The real pin cannot match fixture bytes; repin only bat-theme's digest.
     [IO.File]::WriteAllText($fixture.Download, 'fixture Catppuccin Mocha theme')
     $digest = (Get-FileHash -LiteralPath $fixture.Download -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -214,12 +190,10 @@ Write-Host 'fixture AI-sync runtime ready'
     return $fixture
 }
 
-# stage6-B1 edit: drop -LegacyVenv
 function Set-FixtureHealthy {
     # Everything the win rows probe, plus the structural checks, is present,
-    # chezmoi included (Set-FixtureChezmoi) unless Except names it;
-    # -LegacyVenv also builds the legacy .venv-sync.
-    param($Fixture, [string[]]$Except = @(), [switch]$LegacyVenv)
+    # chezmoi included (Set-FixtureChezmoi) unless Except names it.
+    param($Fixture, [string[]]$Except = @())
     foreach ($name in $ToolText.Keys) {
         if ($name -notin $Except) { New-ToolShim $Fixture.Bin $name }
     }
@@ -227,7 +201,6 @@ function Set-FixtureHealthy {
     foreach ($module in @('PSFzf', 'CompletionPredictor', 'Microsoft.WinGet.CommandNotFound')) {
         [void][IO.Directory]::CreateDirectory((Join-Path $Fixture.Modules $module))
     }
-    if ($LegacyVenv) { New-FixtureVenv $Fixture.Repo } # stage6-B1
     $files = @{
         (Join-Path $Fixture.LocalAppData $FontFile) = 'font'
         (Join-Path $Fixture.AppData $ThemeFile) = 'fixture Catppuccin Mocha theme'
@@ -244,26 +217,6 @@ function Set-FixtureHealthy {
         [IO.File]::WriteAllText($path, $files[$path])
     }
 }
-
-# >>> stage6-B1 legacy-stow: the receipt and links HW-stow readiness needs
-function Set-FixtureStowed($Fixture) {
-    foreach ($relative in @('common/git/.gitconfig', 'win/git/.gitconfig_local',
-            'win/powershell/Documents/PowerShell/profile.ps1', 'win/powershell/Documents/WindowsPowerShell/profile.ps1')) {
-        $source = Join-Path $Fixture.Repo $relative
-        $destination = Join-Path $Fixture.Home (($relative -split '/', 3)[2])
-        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $source))
-        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
-        [IO.File]::WriteAllText($source, '')
-        if (-not (Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue)) {
-            [void](New-Item -ItemType SymbolicLink -Path $destination -Target $source)
-        }
-    }
-    $directory = Join-Path $Fixture.Repo '.git/dotfiles-sync-windows'
-    [void][IO.Directory]::CreateDirectory($directory)
-    @{ home = $Fixture.Home; host = 'win'; appliedHead = 'fixture-head' } |
-        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'configuration.json')
-}
-# <<< stage6-B1 legacy-stow
 
 function Set-FixtureChezmoi($Fixture) {
     # chezmoi as W1-chezmoi leaves it: a shim on PATH and, on Windows, the
@@ -352,11 +305,10 @@ exit $LASTEXITCODE
         $start.ArgumentList.Add($argument)
     }
     foreach ($name in @('DOTFILES_COLOR', 'BAT_CONFIG_DIR', 'ZSH', 'ZSH_CUSTOM', 'NVM_DIR', 'DOTFILES_HOST',
-            'DOTFILES_AUTO_UPDATE', 'DOTFILES_SYNC_PYTHON', 'FAKE_WINGET_EXIT', 'FAKE_AUTH_EXIT',
-            'FAKE_PSRESOURCE_INSTALLED', 'FAKE_RUNTIME_EXIT', 'FAKE_BAT_CACHE_EXIT')) {
+            'DOTFILES_AUTO_UPDATE', 'FAKE_WINGET_EXIT', 'FAKE_AUTH_EXIT',
+            'FAKE_PSRESOURCE_INSTALLED', 'FAKE_BAT_CACHE_EXIT')) {
         [void]$start.Environment.Remove($name)
     }
-    # stage6-B1 edit: drop FIXTURE_NEW_VENV and FIXTURE_VENV_TEMPLATE
     $values = @{
         PATH = $Fixture.Bin; HOME = $Fixture.Home; APPDATA = $Fixture.AppData; LOCALAPPDATA = $Fixture.LocalAppData
         TMPDIR = $Fixture.Temp; TEMP = $Fixture.Temp; TMP = $Fixture.Temp
@@ -365,9 +317,8 @@ exit $LASTEXITCODE
         BOOTSTRAP_TEST_BAT_CACHE = $Fixture.BatCache
         FIXTURE_SCRIPT = Join-Path $Fixture.Repo $Script; FIXTURE_PARAMETERS = ($Parameters | ConvertTo-Json -Compress)
         FAKE_WINGET_PACKAGES = $Fixture.Packages; FAKE_DOWNLOAD = $Fixture.Download
-        FAKE_WINGET_ECHO = '1'; FIXTURE_NEW_VENV = $NewVenvScript
+        FAKE_WINGET_ECHO = '1'
     }
-    if ($script:VenvTemplate) { $values['FIXTURE_VENV_TEMPLATE'] = $script:VenvTemplate }
     if (-not $IsWindows) {
         # Keep pwsh's own caches out of the snapshotted fixture home; Unix
         # has no WINDIR, so the fixture provides the system font directory.
@@ -401,8 +352,6 @@ function Assert-Exit {
     Assert-True ($Run.Stderr -eq '') "$Label wrote to stderr: $($Run.Stderr)"
 }
 function Get-FixtureEvents($Fixture) { return @([IO.File]::ReadAllLines($Fixture.Events)) }
-# stage6-B1 edit: delete Get-RuntimeChecks with $RuntimeEvent once no case counts runtime checks
-function Get-RuntimeChecks($Fixture) { return @(Get-FixtureEvents $Fixture | Where-Object { $_ -cmatch $RuntimeEvent }) }
 function Get-InstallEvents($Fixture) {
     # W1-winget's scratch copy of winget.json has a fresh name on every run.
     return @(Get-FixtureEvents $Fixture | Where-Object { $_ -cmatch $InstallEvent } |
@@ -480,14 +429,12 @@ function Get-HumanBlocks {
     Assert-True ($null -eq $current) 'Unterminated HUMAN block.'
     return , $blocks.ToArray()
 }
-# stage6-B1 edit: drop -LegacyStow
 function Get-WinToolIds {
     # Independent of lib/bootstrap.ps1: data rows whose hosts are all or name
-    # win; -LegacyStow leaves out chezmoi, which only native mode checks.
-    param([switch]$LegacyStow)
+    # win.
     $rows = @([IO.File]::ReadAllLines((Join-Path $sourceRoot 'config/bootstrap/tools.tsv')) |
             Where-Object { $_ -and -not $_.StartsWith('#') } | Select-Object -Skip 1)
-    return @($rows | ForEach-Object { $cells = $_.Split("`t"); if ((-not $LegacyStow -or $cells[0] -cne 'chezmoi') -and ($cells[2] -ceq 'all' -or $cells[2].Split(',') -ccontains 'win')) { $cells[0] } })
+    return @($rows | ForEach-Object { $cells = $_.Split("`t"); if ($cells[2] -ceq 'all' -or $cells[2].Split(',') -ccontains 'win') { $cells[0] } })
 }
 
 . (Join-Path $sourceRoot 'lib/bootstrap.ps1')
@@ -502,46 +449,6 @@ if (-not $script:RealChezmoi) {
     $found = Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue |
         Where-Object { -not $IsWindows -or $_.Source -like '*.exe' } | Select-Object -First 1
     if ($found) { $script:RealChezmoi = $found.Source }
-}
-
-# stage6-B1 edit: delete $NewVenvScript, $script:VenvTemplate, New-FixtureVenv and Test-VenvUnsupported below
-# Builds a fixture checkout's .venv-sync, here and in the fixture's own
-# setup-sync.ps1 (a child process). Unix: a shell script that logs its
-# arguments and exits FAKE_RUNTIME_EXIT. Windows: a copy of a template venv.
-$NewVenvScript = Join-Path $testRoot 'new-venv.ps1'
-[IO.File]::WriteAllText($NewVenvScript, @'
-param([string]$Repo)
-$venv = Join-Path $Repo '.venv-sync'
-if ([IO.Directory]::Exists($venv)) { Remove-Item -LiteralPath $venv -Recurse -Force }
-if ($IsWindows) {
-    if (-not $env:FIXTURE_VENV_TEMPLATE) { throw 'No Python 3.11+ to build a fixture venv from.' }
-    Copy-Item -LiteralPath $env:FIXTURE_VENV_TEMPLATE -Destination $venv -Recurse
-    return
-}
-$python = Join-Path $venv 'bin/python'
-[void][IO.Directory]::CreateDirectory((Split-Path -Parent $python))
-[IO.File]::WriteAllText((Join-Path $venv 'pyvenv.cfg'), "home = /usr/bin`n")
-$lines = @('#!/bin/sh', 'printf ''venv-python %s\n'' "$*" >> "$BOOTSTRAP_TEST_EVENTS"', 'exit "${FAKE_RUNTIME_EXIT:-0}"')
-[IO.File]::WriteAllText($python, ($lines -join "`n") + "`n")
-# The child's PATH holds only fixture shims, so no chmod on PATH: .NET 7+
-# sets the mode itself, older runtimes use /bin/chmod.
-if ([IO.File].GetMethod('SetUnixFileMode', [type[]]@([string], [IO.UnixFileMode]))) {
-    [IO.File]::SetUnixFileMode($python, [IO.UnixFileMode]'UserRead, UserWrite, UserExecute, GroupRead, GroupExecute, OtherRead, OtherExecute')
-}
-else {
-    & /bin/chmod 755 $python
-    if ($LASTEXITCODE -ne 0) { throw "chmod $python failed" }
-}
-'@)
-$script:VenvTemplate = ''
-function New-FixtureVenv([string]$Repo) {
-    Use-Environment @{ FIXTURE_VENV_TEMPLATE = $script:VenvTemplate } { & $NewVenvScript $Repo }
-}
-function Test-VenvUnsupported {
-    # True when no fixture venv can be built (Windows without any Python
-    # 3.11+); the caller prints the SKIP line.
-    if (-not $IsWindows -or $script:VenvTemplate) { return $false }
-    return $true
 }
 
 $script:MockInstalled = @()
@@ -566,29 +473,6 @@ function Invoke-WebRequest {
 }
 
 try {
-    # stage6-B1 edit: delete this venv template build
-    if ($IsWindows) {
-        # A venv runs anywhere only as a real interpreter; build one template.
-        $realPython = @($env:DOTFILES_SYNC_PYTHON, (Join-Path $sourceRoot '.venv-sync/Scripts/python.exe')) |
-            Where-Object { $_ -and [IO.File]::Exists($_) } | Select-Object -First 1
-        if (-not $realPython) { $realPython = (Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11').Path }
-        if ($realPython) {
-            $template = Join-Path $testRoot 'venv-template'
-            $templatePython = Join-Path $template 'Scripts/python.exe'
-            $null | & $realPython -I -B -m venv --without-pip $template *> $null
-            if ($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists($templatePython)) {
-                # Store Python can resolve its base into the deliberately fake
-                # USERPROFILE and create no executable. An existing PATH Python
-                # builds the same package-free temporary fixture instead.
-                $pathPython = (Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11').Path
-                Assert-True ([bool]$pathPython) 'An existing PATH Python is required for the stdlib fixture.'
-                $null | & $pathPython -I -B -m venv --without-pip $template *> $null
-            }
-            Assert-True ($LASTEXITCODE -eq 0 -and [IO.File]::Exists($templatePython)) 'The stdlib fixture interpreter was not created.'
-            $script:VenvTemplate = $template
-        }
-    }
-
     Test-Case 'entry points and library parse, never elevate and keep preferences scoped' {
         foreach ($name in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'tests/bootstrap.ps1')) {
             $errors = $null
@@ -610,6 +494,12 @@ try {
                 $parent = $assignment.Parent
                 while ($parent -and $parent -isnot [Management.Automation.Language.FunctionDefinitionAst]) { $parent = $parent.Parent }
                 Assert-True ($null -ne $parent) "$name sets ErrorActionPreference outside a function."
+            }
+            if ($name -in @('doctor.ps1', 'setup-host.ps1')) {
+                # The exact parameters: the retired compatibility-mode switch is gone.
+                $declared = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }) -join ','
+                $expected = if ($name -eq 'doctor.ps1') { 'HostName,Tier,Tsv,Quiet,Online' } else { 'HostName,Tier,Check,Yes,PrintManual' }
+                Assert-Equal $declared $expected "$name parameters"
             }
             if ($name -eq 'lib/bootstrap.ps1') {
                 Assert-True ($null -eq $ast.ParamBlock) 'The library declares parameters.'
@@ -667,10 +557,9 @@ try {
         Assert-True (-not (Test-BootstrapTierSelection '')) 'empty tiers'
         Assert-True (Test-BootstrapTierSelected host all) 'all tiers'
         Assert-True (-not (Test-BootstrapTierSelected desktop 'core,cli,ai')) 'default tiers'
-        # stage6-B1 edit: drop the S4-setup-sync and H7-stow pairs
         $refs = [ordered]@{ 'H1-apt-core' = 'W1-winget'; 'S2-brew-bundle' = 'W1-winget'; 'S4-nvm' = 'W1-winget'
             'S5-claude' = 'W1-winget'; 'S5-codex' = 'W1-winget'; 'S3-bat-theme' = 'W1-bat-theme'; 'S6-nerd-font' = 'W1-font'
-            'S4-setup-sync' = 'W1-setup-sync'; 'H7-stow' = 'HW-stow'; 'H7-auth' = 'HW-auth'; 'X-contributor' = 'X-contributor'
+            'S4-chezmoi' = 'W1-chezmoi'; 'H7-native' = 'HW-native'; 'H7-auth' = 'HW-auth'; 'X-contributor' = 'X-contributor'
         }
         foreach ($step in $refs.Keys) { Assert-Equal (Get-BootstrapDocRef $step) $refs[$step] "windows $step" }
         Assert-Equal (Get-BootstrapDocRef P0-preflight) 'HW-clone' 'windows git'
@@ -767,7 +656,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         }
     }
 
-    Test-Case 'Store aliases never pass for Python and interpreter selection honours the floor' {
+    Test-Case 'Store aliases never pass for Python' {
         $root = Join-Path $testRoot 'interpreters'
         $local = Join-Path $root 'local'
         $aliases, $old, $real = (Join-Path $local 'Microsoft/WindowsApps'), (Join-Path $root 'old'), (Join-Path $root 'real')
@@ -787,17 +676,10 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             Assert-True ($tool.Path -eq (Join-Path $old 'python3.ps1') -and $tool.Version -eq '3.10.4') "python3 past the alias: $($tool.Path) $($tool.Version)"
             $quiet = Test-BootstrapTool -Probe quiet -VersionFlag '--version'
             Assert-True ($quiet.Found -and $quiet.Version -eq '') 'a tool printing no version outside WindowsApps is found, version unknown'
-            $selected = Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11'
-            Assert-True ($selected.Path -eq (Join-Path $real 'python.ps1') -and $selected.Version -eq '3.12.7') "selected $($selected.Path)"
-            Assert-Equal ($selected.Rejected -join '|') ((@("$(Join-Path $aliases 'python3.ps1') (no version)", "$(Join-Path $old 'python3.ps1') (3.10.4)",
-                        "$(Join-Path $aliases 'python.ps1') (no version)")) -join '|') 'passed-over candidates'
-            Assert-Throws { Select-BootstrapCommand -Probe 'file:x' -VersionFlag '--version' -Floor '3.11' } 'Selected from a file probe.' -InvalidData
         }
         Use-Environment @{ PATH = $aliases; LOCALAPPDATA = $local; BOOTSTRAP_TEST_EVENTS = $events } {
             Assert-True (-not (Test-BootstrapTool -Probe 'python3,python' -VersionFlag '--version').Found) 'Store stubs alone count as Python'
             Assert-True (Test-BootstrapTool -Probe 'python3,python').Found 'presence-only probes still see the alias'
-            $none = Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11'
-            Assert-True ($none.Path -eq '' -and $none.Rejected.Count -eq 2) "no interpreter: $($none.Path)"
         }
     }
 
@@ -953,16 +835,10 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
     # runs put this machine's PATH behind the fixture's after winget: font and
     # oh-my-posh expectations hold only when neither is installed on the machine.
     $machineTools = $false
-    # stage6-B1 edit: delete $machinePython, which only the legacy W1-setup-sync case reads
-    $machinePython = ''
     if ($IsWindows) {
         $machinePath = @('Machine', 'User' | ForEach-Object { [Environment]::GetEnvironmentVariable('Path', $_) }) -join ';'
         $machineTools = Use-Environment @{ PATH = $machinePath; LOCALAPPDATA = $null } {
             [bool]((Find-BootstrapCommand 'oh-my-posh') -or (Find-BootstrapFontFile 'CaskaydiaMono Nerd Font'))
-        }
-        # stage6-B1 edit: delete with $machinePython above
-        $machinePython = Use-Environment @{ PATH = $machinePath } {
-            (Select-BootstrapCommand -Probe 'python3,python' -VersionFlag '--version' -Floor '3.11').Path
         }
     }
 
@@ -986,7 +862,6 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'doctor wrote files'
         $events = Get-FixtureEvents $fixture
         Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version') 'version probes did not run'
-        Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native runtime checks' # stage6-B1
         Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline doctor used the network: $($events -join '; ')"
         $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
         $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true }; Assert-Exit $quiet 0 'quiet doctor'
@@ -998,39 +873,6 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-True ($plain.Lines -contains '[dotfiles] [ok] core fzf: 0.60.0') 'ok line format'
         Assert-True ($plain.Lines[-1] -cmatch $summary) "summary line: $($plain.Lines[-1])"
     }
-
-    # >>> stage6-B1 legacy-stow: the legacy doctor's venv-sync row
-    Test-Case 'legacy: doctor checks the sync runtime it would run, healthy or not' {
-        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; legacy venv-sync rows not checked.'; return }
-        $fixture = New-Fixture
-        Set-FixtureHealthy $fixture -LegacyVenv
-        $legacy = @{ Tsv = $true; LegacyStow = $true }
-        $run = Invoke-Fixture $fixture doctor.ps1 (@{ Tier = 'all' } + $legacy)
-        Assert-Exit $run 0 'healthy legacy doctor'
-        $ids = @($run.Lines | Select-Object -Skip 1 | ForEach-Object { $_.Split("`t")[1] })
-        Assert-Equal ($ids -join ',') ((@(Get-WinToolIds -LegacyStow) + @('venv-sync', 'payloads')) -join ',') 'legacy doctor ids'
-        Assert-Equal @(Get-RuntimeChecks $fixture).Count 1 'venv-sync runtime check'
-        # venv-sync follows lib/sync-runtime.sh: DOTFILES_SYNC_PYTHON when set, and readiness is the runtime check.
-        $run = Invoke-Fixture $fixture doctor.ps1 $legacy @{ FAKE_RUNTIME_EXIT = '1' }
-        Assert-Exit $run 1 'failing runtime check'
-        Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^missing`tvenv-sync`tcore`t.+ fails lib/config_sync.py --runtime-check; rerun setup-sync.ps1`tdocs/bootstrap.md W1-setup-sync$" }).Count -eq 1) "runtime check row: $($run.Stdout)"
-        $missingPython = Join-Path $fixture.Root 'no-such-python'
-        $run = Invoke-Fixture $fixture doctor.ps1 $legacy @{ DOTFILES_SYNC_PYTHON = $missingPython }
-        Assert-Exit $run 1 'missing DOTFILES_SYNC_PYTHON'
-        Assert-True ($run.Lines -contains "missing`tvenv-sync`tcore`tDOTFILES_SYNC_PYTHON='$missingPython' fails lib/config_sync.py --runtime-check; the AI config sync helpers cannot run`tdocs/bootstrap.md W1-setup-sync") "override row: $($run.Stdout)"
-        $alternate = Join-Path $fixture.Root 'alternate'
-        New-FixtureVenv $alternate
-        $alternatePython = Get-BootstrapVenvPython $alternate
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.venv-sync') -Recurse -Force
-        $run = Invoke-Fixture $fixture doctor.ps1 $legacy @{ DOTFILES_SYNC_PYTHON = $alternatePython }
-        Assert-Exit $run 0 'working DOTFILES_SYNC_PYTHON without .venv-sync'
-        Assert-True ($run.Lines -contains "ok`tvenv-sync`tcore`tDOTFILES_SYNC_PYTHON=$alternatePython passes the runtime check`t-") "override ok row: $($run.Stdout)"
-
-        $run = Invoke-Fixture $fixture doctor.ps1 $legacy
-        Assert-Exit $run 1 'structural failures'
-        Assert-True (@($run.Lines | Where-Object { $_ -cmatch "^missing`tvenv-sync`tcore`tno .+; setup-sync.ps1 has not run.+`tdocs/bootstrap.md W1-setup-sync$" }).Count -eq 1) 'venv-sync row'
-    }
-    # <<< stage6-B1 legacy-stow
 
     Test-Case 'doctor fails selected tiers, warns for the rest and maps fixes to Windows steps' {
         if (Test-RealChezmoiMissing) { return }
@@ -1163,7 +1005,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
     }
 
     Test-Case 'native doctor reports a healthy bound host, keeps gh telemetry off and writes nothing offline' {
-        # Native mode needs no .venv-sync; on Windows it needs a real chezmoi.
+        # On Windows the native doctor needs a real chezmoi.
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
@@ -1194,7 +1036,6 @@ exit 0
         # On Windows the private ~/.local/bin/chezmoi.exe, the real chezmoi,
         # answers before the PATH shim; elsewhere the shim does.
         Assert-True (($events -contains 'chezmoi --version') -ne $IsWindows) "chezmoi probe (Windows: $IsWindows): $($events -join '; ')"
-        Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native runtime checks' # stage6-B1
         Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline native doctor used the network: $($events -join '; ')"
         $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
         $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true }; Assert-Exit $quiet 0 'quiet native doctor'
@@ -1391,7 +1232,6 @@ exit 0
             Assert-True $good.Success "native install failed: $($good.Message)"
             Assert-Equal ([IO.File]::ReadAllText($destination)) 'fixture chezmoi.exe' 'native executable bytes'
             Assert-True (-not [IO.File]::Exists((Join-Path (Split-Path -Parent $destination) 'unrelated.txt'))) 'unselected ZIP member extracted'
-            Assert-True (-not [IO.Directory]::Exists((Join-Path $fixture.Repo '.venv-sync'))) 'native install created sync runtime' # stage6-B1
             Assert-True (-not [IO.Directory]::Exists((Join-Path $fixture.Home '.config'))) 'native install applied configuration'
         }
         finally { $script:DownloadBytes = $null }
@@ -1447,24 +1287,20 @@ exit 0
         finally { $script:DownloadBytes = $null }
     }
 
-    Test-Case 'native setup and doctor omit the legacy parser and elevated stow path' {
+    Test-Case 'native setup and doctor check chezmoi and the handover' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
         $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
         Assert-Exit $run 3 'native check before handover'
         Assert-True ([bool]($run.Lines -match '^W1-chezmoi todo ')) 'native binary step missing'
         Assert-True ([bool]($run.Lines -match '^HW-native human ')) 'native handover step missing'
-        Assert-True (-not [bool]($run.Lines -match 'W1-setup-sync|HW-stow|HW-auto-stow-task')) 'native plan selected legacy steps' # stage6-B1
         $doctor = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
         Assert-True ([bool]($doctor.Lines -match "`tchezmoi`t")) 'native doctor omitted chezmoi'
         Assert-True ([bool]($doctor.Lines -match "`tnative-config`t")) 'native doctor omitted binding check'
-        Assert-True (-not [bool]($doctor.Lines -match "`tvenv-sync`t")) 'native doctor checked legacy runtime' # stage6-B1
-        Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native runtime calls' # stage6-B1
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'native check wrote files'
         $manual = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }
         Assert-Exit $manual 0 'native manual handoff'
         Assert-True ($manual.Stdout.Contains('docs/chezmoi-migration/takeover.md')) 'missing native procedure'
-        Assert-True (-not $manual.Stdout.Contains('HW-auto-stow-task')) 'native task handoff' # stage6-B1
     }
 
     Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 while work remains' {
@@ -1492,73 +1328,6 @@ exit 0
         Assert-True ($default.Lines -contains 'W1-font skip no selected tier needs the Nerd Font') 'font under default tiers'
         Assert-Exit $default 3 'default-tier check with HW-native pending'
     }
-
-    # >>> stage6-B1 legacy-stow: the -LegacyStow plan and its lone-link stow readiness
-    Test-Case 'legacy: setup-host -Check plans the legacy steps; a lone ~/.gitconfig link is no complete stow' {
-        $fixture = New-Fixture
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all'; LegacyStow = $true }
-        Assert-Exit $run 3 'legacy check with HW-stow pending'
-        Assert-Equal (@($run.Lines | ForEach-Object { $_.Split(' ')[0] }) -join ',') (($LegacyAutomatedSteps + $LegacyHumanSteps) -join ',') 'legacy plan step order'
-        Assert-True ($run.Lines -contains 'W1-setup-sync todo run .\setup-sync.ps1 once Python >= 3.11 is on PATH (W1-winget installs it)') 'setup-sync without Python'
-        Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'HW-stow blocks'
-        # A lone ~/.gitconfig link is an incomplete install, even though
-        # it points into the correct checkout.
-        $gitconfig = Join-Path $fixture.Repo 'common/git/.gitconfig'
-        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $gitconfig)); [IO.File]::WriteAllText($gitconfig, '')
-        try { [void](New-Item -ItemType SymbolicLink -Path (Join-Path $fixture.Home '.gitconfig') -Target $gitconfig) } catch { }
-        $default = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $true }
-        if (Test-Path -LiteralPath (Join-Path $fixture.Home '.gitconfig')) {
-            Assert-Exit $default 3 'check with only non-blocking HUMAN steps and todo steps'
-            Assert-True ($default.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'lone .gitconfig must not mark stow done'
-            Assert-True (@($default.Lines -like 'W1-winget todo missing: python3, fzf, *').Count -eq 1) "winget todo: $($default.Stdout)"
-        }
-        else {
-            Assert-Exit $default 3 'default-tier check without a stowed .gitconfig'
-            Skip-Assertion 'cannot create a symlink here; the HW-stow done state and exit 0 are not checked.'
-        }
-    }
-    # <<< stage6-B1 legacy-stow
-
-    # >>> stage6-B1 legacy-stow: HW-stow readiness from the receipt and links
-    Test-Case 'stow completion requires the current home and host receipt plus every startup link' {
-        $fixture = New-Fixture
-        try { Set-FixtureStowed $fixture } catch {
-            Skip-Assertion "cannot create symlinks here; receipt/link regressions not checked: $_"
-            return
-        }
-        $parameters = @{ Check = $true; LegacyStow = $true }
-        $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
-        Assert-Exit $run 3 'complete stow with automated steps still pending'
-        Assert-True ($run.Lines -contains 'HW-stow done already done') 'current install not done'
-        $receipt = Join-Path $fixture.Repo '.git/dotfiles-sync-windows/configuration.json'
-        $valid = [IO.File]::ReadAllText($receipt)
-        foreach ($case in @(@('home', ($fixture.Home + '/other')), @('host', ''), @('host', 'mac'),
-                @('appliedHead', 'stale'), @('appliedHead', ''))) {
-            $state = $valid | ConvertFrom-Json
-            $state.($case[0]) = $case[1]
-            $state | ConvertTo-Json | Set-Content -LiteralPath $receipt
-            $before = Get-Snapshot (Get-FixtureRoots $fixture)
-            $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
-            Assert-Exit $run 3 "invalid receipt $($case[0])=$($case[1])"
-            Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'invalid receipt marked done'
-            Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'readiness check wrote files'
-        }
-        [IO.File]::WriteAllText($receipt, $valid)
-        foreach ($relative in @('.gitconfig', '.gitconfig_local', 'Documents/PowerShell/profile.ps1', 'Documents/WindowsPowerShell/profile.ps1')) {
-            $path = Join-Path $fixture.Home $relative
-            $target = (Get-Item -LiteralPath $path -Force).LinkTarget
-            [IO.File]::Delete($path)
-            $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
-            Assert-Exit $run 3 "missing $relative"
-            Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') "missing $relative marked done"
-            [void](New-Item -ItemType SymbolicLink -Path $path -Target $target)
-        }
-        [IO.File]::Delete($receipt)
-        $run = Invoke-Fixture $fixture setup-host.ps1 $parameters
-        Assert-Exit $run 3 'links without a receipt'
-        Assert-True ($run.Lines -contains 'HW-stow human judgment step for a person; blocks completion') 'missing receipt marked done'
-    }
-    # <<< stage6-B1 legacy-stow
 
     Test-Case 'setup-host refuses a non-interactive run without -Yes, bad usage and invalid pins' {
         $fixture = New-Fixture
@@ -1616,7 +1385,7 @@ exit 0
             Assert-True ($text.Contains($expected)) "HUMAN blocks lack '$expected'"
         }
         $wsl = ($blocks | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
-        Assert-True ($wsl.Contains('~\.wslconfig') -and $wsl.Contains('/etc/wsl.conf') -and $wsl.Contains('mount.vbs')) "HW-wsl lacks the stowed win\wsl files: $wsl"
+        Assert-True ($wsl.Contains('~\.wslconfig') -and $wsl.Contains('/etc/wsl.conf') -and $wsl.Contains('mount.vbs')) "HW-wsl lacks the deployed win\wsl files: $wsl"
         Assert-True (-not $wsl.Contains('not stowed')) 'HW-wsl claims win\wsl is not stowed'
         $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
         Assert-True (-not @($commands | Where-Object { $_ -match 'setup-git' }).Count) 'a HUMAN block runs gh auth setup-git'
@@ -1653,38 +1422,7 @@ exit 0
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
     }
 
-    # >>> stage6-B1 legacy-stow: the -LegacyStow HUMAN blocks call the checkout's scripts by full path
-    Test-Case 'legacy: -PrintManual quotes the checkout scripts it calls' {
-        # A checkout path with $, a quote and a space must survive pasting.
-        $fixture = New-Fixture -RepoName "it's `$HOME dir"
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true; LegacyStow = $true }
-        Assert-Exit $run 0 'legacy print manual'
-        $blocks = Get-HumanBlocks $run.Lines
-        Assert-Equal (($blocks | ForEach-Object Id) -join ',') ($LegacyHumanSteps -join ',') 'legacy HUMAN ids'
-        Assert-Equal (($blocks | ForEach-Object Kind) -join ',') 'judgment,judgment,judgment,judgment,sudo,judgment,auth' 'legacy HUMAN kinds'
-        foreach ($expected in @("stow-all.ps1' win", "dotfiles-auto-stow.ps1' -Register")) {
-            Assert-True ($run.Stdout.Contains($expected)) "legacy HUMAN blocks lack '$expected'"
-        }
-        $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
-        # The stow and task lines call the checkout's scripts by full path, so
-        # they run from any directory, the elevated shell's included.
-        $scripts = @((Join-Path $fixture.Repo 'stow-all.ps1'), (Join-Path (Join-Path $fixture.Repo 'scripts') 'dotfiles-auto-stow.ps1'))
-        $invocations = @($commands | Where-Object { $_.StartsWith('& ') })
-        Assert-Equal $invocations.Count 2 'full-path script lines'
-        foreach ($line in $invocations) {
-            $errors = $null
-            $parsed = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$errors)
-            Assert-True (-not $errors) "HUMAN line does not parse: $line"
-            $script = $parsed.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true).CommandElements[0]
-            Assert-True ($script -is [Management.Automation.Language.StringConstantExpressionAst] -and
-                $script.StringConstantType -eq 'SingleQuoted' -and $script.Value -cin $scripts) "script path not single-quoted in: $line"
-        }
-        Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'legacy print manual probed tools'
-    }
-    # <<< stage6-B1 legacy-stow
-
-    # stage6-B1 edit: rename to drop "rerun notes keep the mode"
-    Test-Case 'native HUMAN blocks hand over to chezmoi and never name Stow; rerun notes keep the mode' {
+    Test-Case 'native HUMAN blocks hand over to chezmoi and never name Stow' {
         $fixture = New-Fixture
         $manual = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }
         Assert-Exit $manual 0 'native print manual'
@@ -1699,77 +1437,8 @@ exit 0
         Assert-True ($auth.Contains('check with .\doctor.ps1 -Online.')) "native HW-auth doctor line: $auth"
         $clone = ($blocks | Where-Object Id -eq 'HW-clone').Lines -join "`n"
         Assert-True ($clone.Contains('then rerun setup-host.ps1 from the clone.')) "native HW-clone: $clone"
-        # >>> stage6-B1 legacy-stow: the -LegacyStow rerun notes keep the flag
-        $legacy = Get-HumanBlocks (Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true; LegacyStow = $true }).Lines
-        $legacyWsl = ($legacy | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
-        Assert-True ($legacyWsl.Contains('# .\stow-all.ps1 win links win\wsl into your home.')) "legacy HW-wsl: $legacyWsl"
-        $legacyAuth = ($legacy | Where-Object Id -eq 'HW-auth').Lines -join "`n"
-        Assert-True ($legacyAuth.Contains('check with .\doctor.ps1 -LegacyStow -Online.')) "legacy HW-auth doctor line: $legacyAuth"
-        $legacyClone = ($legacy | Where-Object Id -eq 'HW-clone').Lines -join "`n"
-        Assert-True ($legacyClone.Contains('then rerun setup-host.ps1 -LegacyStow from the clone.')) "legacy HW-clone: $legacyClone"
-        # <<< stage6-B1 legacy-stow
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
     }
-
-    # >>> stage6-B1 legacy-stow: the -LegacyStow apply builds .venv-sync and hands out HW-stow
-    Test-Case 'legacy: setup-host applies every todo step once, in order, then hands out HW-stow' {
-        if ($machineTools) { Skip-Assertion 'oh-my-posh or the Nerd Font is installed on this machine; apply not checked.'; return }
-        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; apply not checked.'; return }
-        $fixture = New-Fixture
-        foreach ($name in $ToolText.Keys) { if ($name -ne 'git') { New-ToolShim $fixture.Packages $name } }
-        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Modules 'PSFzf'))
-        # Store aliases ahead of everything, as WindowsApps is in a fresh session.
-        New-StoreStub $fixture.StoreAliases 'python3'; New-StoreStub $fixture.StoreAliases 'python'
-        $repoBefore = @((Get-Snapshot @($fixture.Repo)).Split("`n"))
-        $environment = @{ FAKE_PSRESOURCE_INSTALLED = 'CompletionPredictor'; PATH = ($fixture.StoreAliases, $fixture.Bin) -join [IO.Path]::PathSeparator }
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all'; LegacyStow = $true } $environment
-        Assert-Exit $run 3 'full apply'
-        $url = @([IO.File]::ReadAllLines((Join-Path $fixture.Repo 'config/bootstrap/installers.tsv')) |
-                Where-Object { $_.StartsWith("bat-theme`t") })[0].Split("`t")[2]
-        $expected = @((Get-ImportEvent $fixture -Scratch), 'Install-PSResource -Name Microsoft.WinGet.CommandNotFound -Scope CurrentUser -TrustRepository -AcceptLicense',
-            'oh-my-posh font install CascadiaMono', "Invoke-WebRequest $url", 'bat cache --build',
-            "setup-sync.ps1 -Python $([IO.Path]::Combine($fixture.Bin, 'python3.ps1'))")
-        Assert-Equal ((Get-InstallEvents $fixture) -join "`n") ($expected -join "`n") 'apply events'
-        # Before the import only git is on PATH, plus the running PowerShell:
-        # pwsh puts $PSHOME first on its own PATH. Store stubs do not count.
-        Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") ((Get-WingetIds -Without @('Microsoft.PowerShell', 'Git.Git')) -join ' ') 'imported packages'
-        Assert-Equal @(Get-RuntimeChecks $fixture).Count 1 'runtime check after setup-sync'
-        $queries = @(Get-FixtureEvents $fixture | Where-Object { $_ -like 'Get-InstalledPSResource *' })
-        Assert-Equal ($queries -join ',') 'Get-InstalledPSResource CompletionPredictor,Get-InstalledPSResource Microsoft.WinGet.CommandNotFound' 'PSResourceGet queries'
-        Assert-Equal ([IO.File]::ReadAllText((Join-Path $fixture.AppData $ThemeFile))) 'fixture Catppuccin Mocha theme' 'theme bytes'
-        $repoAdded = @((Get-Snapshot @($fixture.Repo)).Split("`n") | Where-Object { $_ -notin $repoBefore })
-        $outside = @($repoAdded | Where-Object { -not $_.StartsWith((Join-Path $fixture.Repo '.venv-sync')) })
-        Assert-Equal ($outside -join "`n") '' 'apply wrote inside the checkout outside .venv-sync'
-        Assert-True $repoAdded.Count '.venv-sync was not created'
-        $blocks = Get-HumanBlocks $run.Lines
-        $ids = @($blocks | ForEach-Object Id)
-        Assert-True ($ids -contains 'HW-stow' -and $ids -contains 'HW-auth') "HUMAN blocks: $($ids -join ',')"
-        Assert-True ($ids -notcontains 'HW-clone') 'HW-clone printed although the checkout is a clone'
-        Assert-Equal $run.Lines[-1] '[dotfiles] [warn] HUMAN steps pending: HW-stow; run the HUMAN blocks above, then rerun .\setup-host.ps1 -LegacyStow' 'pending summary'
-        Assert-Equal @(Get-ChildItem -LiteralPath $fixture.Temp -Filter 'dotfiles-bootstrap-*').Count 0 'scratch left behind'
-        $count = @(Get-FixtureEvents $fixture).Count
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all'; LegacyStow = $true } $environment) 3 'second apply'
-        $new = @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent })
-        Assert-Equal ($new -join '; ') '' 'second apply installed again'
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all'; LegacyStow = $true } $environment
-        foreach ($id in @('W1-winget', 'W1-font', 'W1-bat-theme', 'W1-setup-sync')) { Assert-True (@($check.Lines -like "$id done *").Count -eq 1) "$id not done after apply" }
-
-        # Once stowed, only non-blocking blocks remain: they print, and the run exits 0.
-        try { Set-FixtureStowed $fixture } catch {
-            Skip-Assertion "cannot create symlinks here; complete-stow apply not checked: $_"
-            return
-        }
-        # FAKE_PSRESOURCE_INSTALLED has PSResourceGet report CompletionPredictor
-        # without its module directory; give it one, so no step is left todo.
-        [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Modules 'CompletionPredictor'))
-        $final = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all'; LegacyStow = $true } $environment
-        Assert-Exit $final 0 'apply with only non-blocking HUMAN steps'
-        $finalBlocks = Get-HumanBlocks $final.Lines
-        Assert-True (@($finalBlocks | ForEach-Object Id) -contains 'HW-auth') 'HW-auth block missing once stowed'
-        Assert-Equal $final.Lines[-1] '[dotfiles] [ok] setup-host: nothing blocking remains for win' 'done summary'
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all'; LegacyStow = $true } $environment) 0 'check once only non-blocking steps remain'
-    }
-    # <<< stage6-B1 legacy-stow
 
     Test-Case 'setup-host applies every todo step once, in order, then hands out HW-native' {
         if ($machineTools) { Skip-Assertion 'oh-my-posh or the Nerd Font is installed on this machine; apply not checked.'; return }
@@ -1794,7 +1463,6 @@ exit 0
         # Before the import only git is on PATH, plus the running PowerShell:
         # pwsh puts $PSHOME first on its own PATH. Store stubs do not count.
         Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") ((Get-WingetIds -Without @('Microsoft.PowerShell', 'Git.Git')) -join ' ') 'imported packages'
-        Assert-Equal @(Get-RuntimeChecks $fixture).Count 0 'native apply runtime checks' # stage6-B1
         $queries = @(Get-FixtureEvents $fixture | Where-Object { $_ -like 'Get-InstalledPSResource *' })
         Assert-Equal ($queries -join ',') 'Get-InstalledPSResource CompletionPredictor,Get-InstalledPSResource Microsoft.WinGet.CommandNotFound' 'PSResourceGet queries'
         Assert-Equal ([IO.File]::ReadAllText((Join-Path $fixture.AppData $ThemeFile))) 'fixture Catppuccin Mocha theme' 'theme bytes'
@@ -1823,7 +1491,6 @@ exit 0
         Assert-True (@($finalBlocks | ForEach-Object Id) -contains 'HW-auth') 'HW-auth block missing once bound'
         Assert-Equal $final.Lines[-1] '[dotfiles] [ok] setup-host: nothing blocking remains for win' 'done summary'
         Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' } $environment) 0 'check once only non-blocking steps remain'
-        Assert-True (-not [IO.Directory]::Exists((Join-Path $fixture.Repo '.venv-sync'))) 'native apply built .venv-sync' # stage6-B1
     }
 
     Test-Case 'setup-host retries a failed bat cache build without downloading the pinned theme again' {
@@ -1884,63 +1551,6 @@ exit 0
         Assert-Equal (Get-Snapshot @($theme)) $before 'the unverified preexisting theme was overwritten'
         Assert-Equal @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent }).Count 0 'a conflicting theme caused a download or cache write'
     }
-
-    # >>> stage6-B1 legacy-stow: W1-setup-sync and the explicit sync runtime
-    Test-Case 'setup-host W1-setup-sync needs a real Python and a passing runtime check' {
-        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for a fixture .venv-sync; W1-setup-sync not checked.'; return }
-        if ($machinePython) { Skip-Assertion "this machine's PATH has Python 3.11+, which W1-winget's PATH refresh would find; W1-setup-sync not checked."; return }
-        $fixture = New-Fixture
-        Set-FixtureHealthy $fixture -Except @('python', 'python3') -LegacyVenv
-        New-StoreStub $fixture.StoreAliases 'python3'; New-StoreStub $fixture.StoreAliases 'python'
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.venv-sync') -Recurse -Force
-        $environment = @{ PATH = ($fixture.StoreAliases, $fixture.Bin) -join [IO.Path]::PathSeparator }
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $true } $environment
-        Assert-True ($check.Lines -contains 'W1-winget todo missing: python3') "Store stubs passed for Python: $($check.Stdout)"
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; LegacyStow = $true } $environment
-        Assert-Exit $run 1 'no real Python'
-        Assert-True ($run.Stdout.Contains("no Python >= 3.11 on PATH (passed over: $([IO.Path]::Combine($fixture.StoreAliases, 'python3.ps1')) (no version)")) "no-Python message: $($run.Stdout)"
-        Assert-True ($run.Stdout.Contains('.\setup-sync.ps1 -Python <path>')) 'no-Python remedy'
-        Assert-True (-not @(Get-FixtureEvents $fixture | Where-Object { $_ -like 'setup-sync.ps1*' }).Count) 'setup-sync.ps1 ran without an interpreter'
-
-        # A venv that exists but fails the runtime check is todo, and stays a failure after setup-sync.
-        New-ToolShim $fixture.Bin 'python3'
-        New-FixtureVenv $fixture.Repo
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $true } ($environment + @{ FAKE_RUNTIME_EXIT = '1' })
-        Assert-True ($check.Lines -contains "W1-setup-sync todo run .\setup-sync.ps1 -Python $([IO.Path]::Combine($fixture.Bin, 'python3.ps1'))") "broken venv plan: $($check.Stdout)"
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; LegacyStow = $true } ($environment + @{ FAKE_RUNTIME_EXIT = '1' })
-        Assert-Exit $run 1 'runtime check still failing'
-        Assert-True ($run.Stdout.Contains('fails lib/config_sync.py --runtime-check')) "verify message: $($run.Stdout)"
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $true } $environment) 3 'ready venv, HW-stow pending'
-    }
-
-    Test-Case 'setup-host uses the explicitly selected sync runtime without provisioning a default' {
-        if (Test-VenvUnsupported) { Skip-Assertion 'no Python 3.11+ for an explicit sync runtime; override not checked.'; return }
-        $fixture = New-Fixture
-        Set-FixtureHealthy $fixture -LegacyVenv
-        $explicitRoot = Join-Path $fixture.Home 'selected-runtime'
-        [void][IO.Directory]::CreateDirectory($explicitRoot)
-        New-FixtureVenv $explicitRoot
-        $python = Get-BootstrapVenvPython $explicitRoot
-        Remove-Item -LiteralPath (Join-Path $fixture.Repo '.venv-sync') -Recurse -Force
-        $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $true } @{ DOTFILES_SYNC_PYTHON = $python }
-        Assert-True ($check.Lines -contains 'W1-setup-sync done DOTFILES_SYNC_PYTHON passes the runtime check') "explicit runtime: $($check.Stdout)"
-        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'explicit check wrote files'
-        $count = @(Get-InstallEvents $fixture).Count
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; LegacyStow = $true } @{ DOTFILES_SYNC_PYTHON = $python }) 3 'explicit runtime, HW-stow pending'
-        Assert-Equal @(Get-InstallEvents $fixture).Count $count 'explicit runtime provisioned the unused default'
-        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo '.venv-sync'))) 'explicit runtime created a default'
-
-        foreach ($environment in @(@{ DOTFILES_SYNC_PYTHON = (Join-Path $fixture.Home 'missing-python') },
-                @{ DOTFILES_SYNC_PYTHON = $python; FAKE_RUNTIME_EXIT = '1' })) {
-            $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; LegacyStow = $true } $environment
-            Assert-True (@($check.Lines -like "W1-setup-sync todo DOTFILES_SYNC_PYTHON=*fails lib/config_sync.py --runtime-check*").Count -eq 1) "invalid override: $($check.Stdout)"
-            Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; LegacyStow = $true } $environment) 1 'invalid explicit runtime'
-            Assert-Equal @(Get-InstallEvents $fixture).Count $count 'invalid override provisioned an unused default'
-            Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Repo '.venv-sync'))) 'invalid override created a default'
-        }
-    }
-    # <<< stage6-B1 legacy-stow
 
     Test-Case 'setup-host -WhatIf previews without installing' {
         $fixture = New-Fixture

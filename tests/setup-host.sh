@@ -168,11 +168,6 @@ snapshot() {
     find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -print | LC_ALL=C sort
 }
 
-# CASE_FLAGS: the mode flag case_command passes, empty for the native
-# default; run_legacy_case sets --legacy-stow for one run.
-# stage6-B1 edit: drop CASE_FLAGS and its expansion in case_command
-CASE_FLAGS=()
-
 # case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
 # setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
 # WSL, no system or Homebrew font dirs); a VAR=VALUE overrides a default of
@@ -205,7 +200,7 @@ case_command() {
         BOOTSTRAP_SYSTEM_FONT_DIRS=
         FAKE_DPKG_INSTALLED="$DPKG_ALL"
         ${extra[@]+"${extra[@]}"}
-        "$BASH" "$FIXTURE/setup-host.sh" ${CASE_FLAGS[@]+"${CASE_FLAGS[@]}"} "$@")
+        "$BASH" "$FIXTURE/setup-host.sh" "$@")
 }
 
 # run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
@@ -234,15 +229,6 @@ run_tty_case() {
     CASE_RC=$?
     set -e
 }
-
-# >>> stage6-B1 legacy-stow: run_legacy_case serves only the legacy cases
-# run_legacy_case NAME [VAR=VALUE...] -- ARGS...: run_case with --legacy-stow.
-run_legacy_case() {
-    CASE_FLAGS=(--legacy-stow)
-    run_case "$@"
-    CASE_FLAGS=()
-}
-# <<< stage6-B1 legacy-stow
 
 # stow_mentions NAME: lines of NAME's stderr and HUMAN blocks that name
 # Stow. The fixture paths are removed first: a random mktemp suffix or a
@@ -460,12 +446,6 @@ exit 99
 SH
 done
 chmod 755 "$FAKE_BIN"/* "$TEST_TMP/brew-stub"
-
-# The legacy AI-sync interpreter as a tripwire: native steps never run it.
-# stage6-B1 edit: delete this comment and the three SYNC_TRIPWIRE lines below with the native-hpc tripwire arguments
-SYNC_TRIPWIRE="$TEST_TMP/sync-python-tripwire"
-printf '#!/bin/sh\nprintf "TRIPWIRE sync-python %%s\\n" "$*" >>"$EVENT_LOG"\nexit 1\n' >"$SYNC_TRIPWIRE"
-chmod 755 "$SYNC_TRIPWIRE"
 
 # The system commands every case sees, as links in SYS_BIN, less those that
 # the fixture Brewfiles' entries are probed by (their tools.tsv rows): a jq,
@@ -720,34 +700,15 @@ write_clones
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
-mkdir -p "$FIXTURE/common/bash" "$FIXTURE/common/claude/.claude" \
-    "$FIXTURE/common/sh" "$FIXTURE/lab-ubuntu/zsh/.config/zsh"
-printf '# fixture profile\n' >"$FIXTURE/common/sh/.profile"
-printf '# fixture host zshrc\n' >"$FIXTURE/lab-ubuntu/zsh/.config/zsh/.zshrc"
-printf '%s\n' '# fixture bashrc' >"$FIXTURE/common/bash/.bashrc"
-printf '%s\n' '{}' >"$FIXTURE/common/claude/.claude/settings.json"
-# stage6-B1 edit: drop with H7-stow, the only reader; B2 deletes .stowrc
-cp "$REPO_ROOT/.stowrc" "$FIXTURE/.stowrc"
 mkdir -p "$FIXTURE/scripts"
 cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/payload-update.sh"
 cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
-printf '%s\n' '/.venv-sync/' >"$FIXTURE/.gitignore"
 cat >"$FIXTURE/stow-all.sh" <<'SH'
 #!/bin/sh
 printf 'TRIPWIRE stow-all.sh %s\n' "$*" >>"$EVENT_LOG"
 exit 99
 SH
-# stage6-B1 edit: delete this stub, it from the chmod below and the /.venv-sync/ .gitignore line above
-cat >"$FIXTURE/setup-sync.sh" <<'SH'
-#!/bin/sh
-root=$(cd "$(dirname "$0")" && pwd)
-printf 'setup-sync:%s\n' "$*" >>"$EVENT_LOG"
-mkdir -p "$root/.venv-sync/bin"
-: >"$root/.venv-sync/pyvenv.cfg"
-printf '#!/bin/sh\nexit 0\n' >"$root/.venv-sync/bin/python"
-chmod 755 "$root/.venv-sync/bin/python"
-SH
-chmod 755 "$FIXTURE/setup-host.sh" "$FIXTURE/stow-all.sh" "$FIXTURE/setup-sync.sh"
+chmod 755 "$FIXTURE/setup-host.sh" "$FIXTURE/stow-all.sh"
 # A committed .chezmoiroot, as the real checkout has: the native binding guard
 # accepts only a source that names its root.
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
@@ -802,50 +763,19 @@ expect_text wrong-platform err 'is macOS, but this kernel is Linux'
 run_case wrong-distro BOOTSTRAP_OS_RELEASE="$OS_ROCKY" -- --host lab-ubuntu --check
 expect_rc wrong-distro 2
 
-# >>> stage6-B1 legacy-stow: DOTFILES_HOST and Stow receipt resolution of an unmarked home
-# DOTFILES_HOST stands in for --host.
-run_legacy_case env-host DOTFILES_HOST=win -- --check
-expect_rc env-host 2
-expect_text env-host err 'setup-host.ps1'
-
-# A set but empty DOTFILES_HOST means common only, as the login updater reads
-# it, and setup-host has no --platform: it asks for --host instead of using
-# the host ./stow-all.sh recorded.
-printf '%s\n' "$CASE_HOME" Linux lab-ubuntu recorded-head >"$FIXTURE/.git/dotfiles-sync-unix"
-run_legacy_case env-host-recorded -- --check --only S3-dirs
-expect_rc env-host-recorded 3
-expect_text env-host-recorded out 'P0-preflight done host lab-ubuntu'
-run_legacy_case env-host-empty DOTFILES_HOST= -- --check --only S3-dirs
-expect_rc env-host-empty 2
-expect_text env-host-empty err 'DOTFILES_HOST is set but empty, which means common only (no host overlay)'
-expect_text env-host-empty err 'pass --host HOST'
-expect_no_text env-host-empty out 'P0-preflight'
-expect_no_events env-host-empty
-run_legacy_case env-host-empty-explicit DOTFILES_HOST= -- --host lab-ubuntu --check --only S3-dirs
-expect_rc env-host-empty-explicit 3
-expect_text env-host-empty-explicit out 'P0-preflight done host lab-ubuntu'
-# So is a common-only install that ./stow-all.sh recorded (an empty host
-# line): exit 2 asking for --host, not the generic "no host"; DOTFILES_HOST
-# and --host still win.
-printf '%s\n' "$CASE_HOME" Linux '' recorded-head >"$FIXTURE/.git/dotfiles-sync-unix"
-run_legacy_case state-common-only -- --check --only S3-dirs
-expect_rc state-common-only 2
-expect_text state-common-only err './stow-all.sh recorded a common-only install for this home (no host overlay)'
-expect_text state-common-only err 'pass --host HOST'
-expect_no_text state-common-only err 'no host: pass --host'
-expect_no_text state-common-only out 'P0-preflight'
-expect_no_events state-common-only
-run_legacy_case state-common-only-list -- --list
-expect_rc state-common-only-list 2
-expect_text state-common-only-list err 'recorded a common-only install'
-run_legacy_case state-common-only-env DOTFILES_HOST=lab-ubuntu -- --check --only S3-dirs
-expect_rc state-common-only-env 3
-expect_text state-common-only-env out 'P0-preflight done host lab-ubuntu'
-run_legacy_case state-common-only-host -- --host lab-ubuntu --check --only S3-dirs
-expect_rc state-common-only-host 3
-expect_text state-common-only-host out 'P0-preflight done host lab-ubuntu'
-rm -f "$FIXTURE/.git/dotfiles-sync-unix"
-# <<< stage6-B1 legacy-stow
+# The retired --legacy-stow is an unknown argument. An unmarked home needs
+# --host: DOTFILES_HOST selects nothing.
+run_case legacy-flag -- --legacy-stow --host lab-ubuntu --check
+expect_rc legacy-flag 2
+expect_text legacy-flag err 'unknown argument: --legacy-stow'
+expect_no_events legacy-flag
+for value in lab-ubuntu win ''; do
+    run_case env-host-ignored DOTFILES_HOST="$value" -- --check
+    expect_rc env-host-ignored 2
+    expect_text env-host-ignored err 'no host: pass --host'
+    expect_no_text env-host-ignored out 'P0-preflight'
+    expect_no_events env-host-ignored
+done
 
 # Never as root: it would install into /root or leave root-owned files.
 run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
@@ -909,58 +839,6 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
 }
 [ -z "$(find "$CASE_HOME" "$CASE_BREW" "$FIXTURE" -newer "$MARKER" -print)" ] || fail '--check modified files'
 
-# >>> stage6-B1 legacy-stow: the legacy plan waits for the clone before ./stow-all.sh
-run_legacy_case legacy-check-missing FAKE_DPKG_INSTALLED="$DPKG_PARTIAL" \
-    BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host lab-ubuntu --check
-expect_rc legacy-check-missing 3
-expect_text legacy-check-missing out 'H7-stow human waiting: oh-my-zsh must be cloned before ./stow-all.sh'
-expect_no_text legacy-check-missing out 'HUMAN-BEGIN H7-stow'
-expect_text legacy-check-missing err 'after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu --legacy-stow without --check'
-expect_no_events legacy-check-missing
-# <<< stage6-B1 legacy-stow
-
-# >>> stage6-B1 legacy-stow: S4-setup-sync and its explicit sync runtime
-# Explicit sync runtimes are the helpers' runtime, even without a local venv.
-new_home sync-override
-SYNC_EXPLICIT="$CASE_HOME/provisioned-python"
-printf '#!/bin/sh\nexit 0\n' >"$SYNC_EXPLICIT"
-chmod 755 "$SYNC_EXPLICIT"
-snapshot >"$TEST_TMP/sync-before"
-run_legacy_case sync-explicit DOTFILES_SYNC_PYTHON="$SYNC_EXPLICIT" -- --host lab-ubuntu --check --only S4-setup-sync
-expect_rc sync-explicit 0
-expect_text sync-explicit out 'S4-setup-sync done'
-expect_no_events sync-explicit
-snapshot >"$TEST_TMP/sync-after"
-cmp "$TEST_TMP/sync-before" "$TEST_TMP/sync-after" || fail 'explicit runtime check wrote files'
-[ ! -e "$FIXTURE/.venv-sync" ] || fail 'explicit runtime created an unused default'
-SYNC_BROKEN="$CASE_HOME/broken-python"
-printf '#!/bin/sh\nexit 1\n' >"$SYNC_BROKEN"
-chmod 755 "$SYNC_BROKEN"
-for override in '' "$CASE_HOME/missing-python" "$SYNC_BROKEN"; do
-    run_legacy_case sync-invalid "DOTFILES_SYNC_PYTHON=$override" -- --host lab-ubuntu --yes --only S4-setup-sync
-    expect_rc sync-invalid 1
-    expect_text sync-invalid err 'DOTFILES_SYNC_PYTHON'
-    expect_no_event 'setup-sync:'
-    [ ! -e "$FIXTURE/.venv-sync" ] || fail 'invalid explicit runtime provisioned an unused default'
-done
-run_legacy_case sync-missing -- --host lab-ubuntu --check --only S4-setup-sync
-expect_rc sync-missing 3
-expect_text sync-missing out 'S4-setup-sync todo'
-expect_no_events sync-missing
-mkdir -p "$FIXTURE/.venv-sync/bin"
-cp "$SYNC_EXPLICIT" "$FIXTURE/.venv-sync/bin/python"
-run_legacy_case sync-default -- --host lab-ubuntu --check --only S4-setup-sync
-expect_rc sync-default 0
-expect_text sync-default out 'S4-setup-sync done'
-expect_no_events sync-default
-# A broken override must still fail when a valid default exists.
-run_legacy_case sync-invalid-default DOTFILES_SYNC_PYTHON="$CASE_HOME/missing-python" -- --host lab-ubuntu --yes --only S4-setup-sync
-expect_rc sync-invalid-default 1
-expect_no_event 'setup-sync:'
-rm -f "$FIXTURE/.venv-sync/bin/python"
-rmdir "$FIXTURE/.venv-sync/bin" "$FIXTURE/.venv-sync"
-# <<< stage6-B1 legacy-stow
-
 # --- debian --check: apt done, Homebrew present, nothing else ----------------
 
 new_home debian
@@ -976,7 +854,6 @@ expect_text check-fresh out 'S3-clones todo to clone: oh-my-zsh (master) powerle
 expect_text check-fresh out 'S3-dirs todo'
 expect_text check-fresh out 'S4-nvm todo'
 expect_text check-fresh out "S4-chezmoi todo chezmoi >= 2.74.0 is missing; install the verified release into $CASE_HOME/.local/bin/chezmoi"
-expect_no_text check-fresh out 'S4-setup-sync' # stage6-B1
 expect_text check-fresh out 'S5-codex todo codex is not installed; pinned 0.161.0'
 expect_text check-fresh out 'S6-kitty todo'
 expect_text check-fresh out 'S5-claude human'
@@ -1098,8 +975,6 @@ cmp -s "$ARTIFACTS/theme" "$CASE_HOME/.config/bat/themes/Catppuccin Mocha.tmThem
 [ -d "$CASE_HOME/.vim/undo" ] && [ -d "$CASE_HOME/.vim/tmp" ] || fail 'vim dirs'
 [ -x "$CASE_HOME/.nvm/versions/node/v24.11.1/bin/node" ] && [ -f "$CASE_HOME/.nvm/alias/default" ] || fail 'nvm node'
 [ "$("$REAL_GIT" -C "$CASE_HOME/.nvm" rev-parse HEAD)" = "$NVM_PIN" ] || fail 'nvm not at its pinned commit'
-expect_no_event 'setup-sync:'                                          # stage6-B1
-[ ! -e "$FIXTURE/.venv-sync" ] || fail 'native apply built .venv-sync' # stage6-B1
 CODEX_RELEASE="$CASE_HOME/.codex/packages/standalone/releases/0.161.0-x86_64-unknown-linux-musl"
 [ "$(readlink "$CODEX_RELEASE/codex")" = bin/codex ] || fail 'codex release link'
 [ "$(readlink "$CASE_HOME/.codex/packages/standalone/current")" = "$CODEX_RELEASE" ] || fail 'codex current link'
@@ -1152,66 +1027,6 @@ expect_text reapply out 'S5-claude done claude at'
 expect_text reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_text reapply out "S4-chezmoi done chezmoi 2.74.0 at $CASE_HOME/.local/bin/chezmoi"
 expect_line reapply 'HUMAN-BEGIN H7-native judgment'
-# >>> stage6-B1 legacy-stow: S4-setup-sync and the H7-stow receipt-plus-link readiness
-run_legacy_case legacy-stow-block -- --host lab-ubuntu --check --only H7-stow
-expect_rc legacy-stow-block 3
-expect_line legacy-stow-block 'HUMAN-BEGIN H7-stow judgment'
-# One self-contained line: stow is on PATH only after the first stow.
-expect_line legacy-stow-block "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
-run_legacy_case legacy-sync-apply -- --host lab-ubuntu --yes --only S4-setup-sync
-expect_rc legacy-sync-apply 0
-expect_event 'setup-sync:'
-[ -f "$FIXTURE/.venv-sync/pyvenv.cfg" ] || fail 'setup-sync did not run'
-# A lone ~/.zshrc must still block.
-ln -s "$FIXTURE/common/zsh/.zshrc" "$CASE_HOME/.zshrc"
-run_legacy_case partial-stow -- --host lab-ubuntu --check --only H7-stow
-expect_rc partial-stow 3
-expect_text partial-stow out 'H7-stow human '
-expect_no_events partial-stow
-STOW_HEAD=$("$REAL_GIT" -C "$FIXTURE" rev-parse HEAD)
-mkdir -p "$CASE_HOME/.config/zsh"
-ln -s "$FIXTURE/common/sh/.profile" "$CASE_HOME/.profile"
-ln -s "$FIXTURE/lab-ubuntu/zsh/.config/zsh/.zshrc" "$CASE_HOME/.config/zsh/.zshrc"
-for invalid in home platform host common-only stale blank; do
-    receipt_home=$CASE_HOME receipt_os=Linux receipt_host=lab-ubuntu receipt_head=$STOW_HEAD
-    case $invalid in
-        home) receipt_home=$CASE_HOME/other ;;
-        platform) receipt_os=Darwin ;;
-        host) receipt_host=mac ;;
-        common-only) receipt_host= ;;
-        stale) receipt_head=stale-revision ;;
-        blank) receipt_head= ;;
-    esac
-    printf '%s\n' "$receipt_home" "$receipt_os" "$receipt_host" "$receipt_head" >"$FIXTURE/.git/dotfiles-sync-unix"
-    run_legacy_case "stow-$invalid" -- --host lab-ubuntu --check --only H7-stow
-    expect_rc "stow-$invalid" 3
-    expect_text "stow-$invalid" out 'H7-stow human '
-    expect_no_events "stow-$invalid"
-done
-printf '%s\n' "$CASE_HOME" Linux lab-ubuntu "$STOW_HEAD" >"$FIXTURE/.git/dotfiles-sync-unix"
-for missing in .profile .config/zsh/.zshrc; do
-    source=$(readlink "$CASE_HOME/$missing")
-    rm "$CASE_HOME/$missing"
-    run_legacy_case stow-missing -- --host lab-ubuntu --check --only H7-stow
-    expect_rc stow-missing 3
-    expect_no_events stow-missing
-    ln -s "$source" "$CASE_HOME/$missing"
-done
-run_legacy_case stowed -- --host lab-ubuntu --yes --tier all
-expect_rc stowed 0
-expect_no_installs stowed
-expect_text stowed out 'H7-stow done current stow receipt and shell links match this home and host'
-expect_no_text stowed out 'HUMAN-BEGIN H7-stow'
-expect_line stowed 'HUMAN-BEGIN H7-auth auth'
-expect_text stowed out 'nothing blocking remains for lab-ubuntu'
-run_legacy_case check-done -- --host lab-ubuntu --check --tier all
-expect_rc check-done 0
-expect_no_events check-done
-expect_text check-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate"
-rm -f "$FIXTURE/.git/dotfiles-sync-unix"
-rm -rf "$FIXTURE/.venv-sync"
-rm -f "$CASE_HOME/.zshrc" "$CASE_HOME/.profile" "$CASE_HOME/.config/zsh/.zshrc"
-# <<< stage6-B1 legacy-stow
 
 # Once the home is bound to this checkout with its local config, H7-native
 # is done and nothing blocks; --host still wins over [data].host.
@@ -1389,33 +1204,6 @@ run_case sysfont-none -- --host lab-ubuntu --check --only S6-nerd-font
 expect_rc sysfont-none 3
 expect_text sysfont-none out "S6-nerd-font todo CaskaydiaMonoNerdFont is not installed in $CASE_HOME/.local/share/fonts/CaskaydiaMonoNerdFont"
 expect_no_events sysfont-none
-
-# --- H7-stow: home files Stow would refuse are moved aside first -------------
-
-# >>> stage6-B1 legacy-stow: H7-stow's conflict list
-new_home stow-conflicts
-mkdir -p "$CASE_HOME/.oh-my-zsh" "$CASE_HOME/.claude"
-: >"$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh"
-printf '# from /etc/skel\n' >"$CASE_HOME/.bashrc"
-ln -s "$TEST_TMP/elsewhere/.zshrc" "$CASE_HOME/.zshrc"
-# A regular file by design: .stowrc ignores the tracked settings.json.
-printf '{}\n' >"$CASE_HOME/.claude/settings.json"
-run_legacy_case stow-conflicts -- --host lab-ubuntu --check --only H7-stow
-expect_rc stow-conflicts 3
-expect_text stow-conflicts out 'H7-stow human '
-expect_text stow-conflicts out '2 home file(s) to move aside first: .bashrc .zshrc'
-expect_text stow-conflicts out 'stow --adopt would overwrite the tracked copies'
-expect_line stow-conflicts "mv -n $CASE_HOME/.bashrc $CASE_HOME/.bashrc.pre-dotfiles"
-expect_line stow-conflicts "mv -n $CASE_HOME/.zshrc $CASE_HOME/.zshrc.pre-dotfiles"
-expect_no_text stow-conflicts out 'settings.json.pre-dotfiles'
-expect_no_events stow-conflicts
-# A link into this checkout is Stow's own: nothing to move.
-rm "$CASE_HOME/.bashrc"
-ln -s "$FIXTURE/common/bash/.bashrc" "$CASE_HOME/.bashrc"
-run_legacy_case stow-own-link -- --host lab-ubuntu --check --only H7-stow
-expect_text stow-own-link out '1 home file(s) to move aside first: .zshrc'
-expect_no_text stow-own-link out "mv -n $CASE_HOME/.bashrc"
-# <<< stage6-B1 legacy-stow
 
 # --- S2-brew-bundle: a conflicting formula stops it before brew runs ---------
 
@@ -2064,7 +1852,7 @@ for alias in v24.11.1 24 v24.11 node stable 'lts/*' current; do
     expect_no_events nvm-default-valid
     selected=$(HOME="$CASE_HOME" NVM_DIR="$CASE_HOME/.nvm" NVM_BIN='' PATH="$SYS_BIN" \
         "$BASH" -c '. "$1"; node --version' _ "$REPO_ROOT/common/sh/.profile")
-    [ "$selected" = v24.11.1 ] || fail "default $alias selected [$selected] in the stowed profile"
+    [ "$selected" = v24.11.1 ] || fail "default $alias selected [$selected] in the dotfiles profile"
 done
 for alias in v20.19.0 v99.0.0 missing ''; do
     printf '%s\n' "$alias" >"$CASE_HOME/.nvm/alias/default"
@@ -2113,7 +1901,7 @@ expect_no_event 'nvm-sourced'
 
 new_home recovery
 mkdir -p "$CASE_HOME/.oh-my-zsh/custom"
-printf '# stowed\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
+printf '# applied\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
 run_case recovery -- --host lab-ubuntu --yes --only S3-clones
 expect_rc recovery 3
 expect_line recovery 'HUMAN-BEGIN X-recovery judgment'
@@ -2125,7 +1913,7 @@ expect_line recovery '# Turn it into the oh-my-zsh checkout in place, then rerun
 expect_no_events recovery
 [ ! -e "$CASE_HOME/.oh-my-zsh/custom/themes" ] || fail 'recovery case cloned plugins'
 
-# The same recovery on the native default path names no Stow.
+# The same recovery under --check names no Stow.
 new_home native-recovery
 mkdir -p "$CASE_HOME/.oh-my-zsh/custom"
 printf '# deployed\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
@@ -2161,12 +1949,6 @@ run_case native-dirty -- --host lab-ubuntu --check --only S3-dirs
 expect_rc native-dirty 3
 expect_text native-dirty err "uncommitted changes in $FIXTURE: common/zsh/.zshrc; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
 expect_no_text native-dirty err 'stowed'
-# >>> stage6-B1 legacy-stow: the legacy P0 names the stowed rc files
-new_home legacy-dirty
-run_legacy_case legacy-dirty -- --host lab-ubuntu --check --only S3-dirs
-expect_rc legacy-dirty 3
-expect_text legacy-dirty err "uncommitted changes in $FIXTURE: common/zsh/.zshrc; review them first, since an installer that appends to a stowed rc file edits this checkout (docs/bootstrap.md X-rc-protection)"
-# <<< stage6-B1 legacy-stow
 "$REAL_GIT" -C "$FIXTURE" checkout -q -- common/zsh/.zshrc
 
 mkdir -p "$FIXTURE/common/extra"
@@ -2253,14 +2035,12 @@ expect_text keep-going err 'failed steps: S2-brew-bundle'
 
 new_home sherlock
 HPC_ENV=(LMOD_DIR=/opt/lmod BOOTSTRAP_OS_RELEASE="$OS_ROCKY")
-rm -rf "$FIXTURE/.venv-sync" # stage6-B1
 run_case hpc-login "${HPC_ENV[@]}" -- --host sherlock --yes
 expect_rc hpc-login 3
 expect_event "curl:$URL_MICROMAMBA"
 expect_event "curl:$URL_CHEZMOI"
 [ -x "$CASE_HOME/.local/bin/chezmoi" ] || fail 'S4-chezmoi did not install chezmoi on hpc'
 expect_no_event 'micromamba:create'
-expect_no_event 'setup-sync:' # stage6-B1
 expect_line hpc-login 'HUMAN-BEGIN H2-alloc alloc'
 expect_line hpc-login 'sh_dev -t 1:00:00'
 # Inside the allocation, the rerun stays in the person's mode.
@@ -2284,38 +2064,6 @@ expect_text hpc-alloc out "S4-chezmoi done chezmoi 2.74.0 at $CASE_HOME/.local/b
 expect_no_text hpc-alloc out 'HUMAN-BEGIN H2-alloc'
 expect_no_event TRIPWIRE
 
-# >>> stage6-B1 legacy-stow: S4-setup-sync on hpc and the legacy H7-stow line
-# An existing login env does not authorize building .venv-sync on a login node.
-rm -rf "$FIXTURE/.venv-sync"
-run_legacy_case hpc-sync-login "${HPC_ENV[@]}" -- --host sherlock --yes --only H2-alloc --only S4-setup-sync
-expect_rc hpc-sync-login 3
-expect_line hpc-sync-login 'HUMAN-BEGIN H2-alloc alloc'
-expect_no_event 'setup-sync:'
-[ ! -e "$FIXTURE/.venv-sync" ] || fail 'the sync env was built outside an allocation'
-run_legacy_case hpc-sync-only "${HPC_ENV[@]}" -- --host sherlock --yes --only S4-setup-sync
-expect_rc hpc-sync-only 3
-expect_no_event 'setup-sync:'
-run_legacy_case hpc-sync-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- --host sherlock --yes --only H2-alloc --only S4-setup-sync
-expect_rc hpc-sync-alloc 0
-expect_event "setup-sync:--python $CASE_HOME/micromamba/envs/login/bin/python3"
-# The checkout-local sync env obeys the same durable-storage rule as login.
-rm -rf "$FIXTURE/.venv-sync"
-for scratch_var in SCRATCH GROUP_SCRATCH; do
-    run_legacy_case hpc-sync-scratch "${HPC_ENV[@]}" SLURM_JOB_ID=1 "$scratch_var=$FIXTURE" -- \
-        --host sherlock --yes --only S4-setup-sync
-    expect_rc hpc-sync-scratch 1
-    expect_text hpc-sync-scratch err "refusing to build the AI-sync env under \$$scratch_var"
-    expect_no_event 'setup-sync:'
-    [ ! -e "$FIXTURE/.venv-sync" ] || fail 'the sync env was built under purged storage'
-done
-run_legacy_case hpc-sync-restored "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- --host sherlock --yes --only S4-setup-sync
-expect_rc hpc-sync-restored 0
-run_legacy_case legacy-hpc-stow "${HPC_ENV[@]}" -- --host sherlock --check --only H7-stow
-expect_line legacy-hpc-stow 'HUMAN-BEGIN H7-stow judgment'
-expect_line legacy-hpc-stow "PATH=\"\$HOME/micromamba/envs/login/bin:\$PATH\" $FIXTURE/stow-all.sh sherlock"
-rm -rf "$FIXTURE/.venv-sync"
-# <<< stage6-B1 legacy-stow
-
 new_home sherlock-scratch
 run_case hpc-scratch "${HPC_ENV[@]}" SLURM_JOB_ID=1 SCRATCH="$TEST_TMP/homes" -- \
     --host sherlock --yes --only S2-micromamba --only S2-login-env
@@ -2325,21 +2073,17 @@ expect_no_event 'micromamba:create'
 
 # --- native hpc: the login env alone satisfies H2-alloc ---------------------
 
-# The native default never consults the legacy AI-sync env: an existing
-# login env is enough, and the sync interpreter is a tripwire.
-# stage6-B1 edit: drop DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" from the three runs below
+# An existing login env is enough: no allocation is needed.
 new_home native-hpc
 mkdir -p "$CASE_HOME/micromamba/envs/login/bin"
 printf '#!/bin/sh\nexit 0\n' >"$CASE_HOME/micromamba/envs/login/bin/zsh"
 chmod 755 "$CASE_HOME/micromamba/envs/login/bin/zsh"
 snapshot >"$TEST_TMP/before"
-run_case native-hpc-login-env "${HPC_ENV[@]}" DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" -- --host sherlock --check
+run_case native-hpc-login-env "${HPC_ENV[@]}" -- --host sherlock --check
 expect_rc native-hpc-login-env 3
 expect_line native-hpc-login-env 'H2-alloc done the login env exists; no allocation is needed'
 expect_text native-hpc-login-env out "S2-login-env done login env at $CASE_HOME/micromamba/envs/login"
 expect_no_text native-hpc-login-env out 'HUMAN-BEGIN H2-alloc'
-expect_no_text native-hpc-login-env out 'S4-setup-sync' # stage6-B1
-expect_no_text native-hpc-login-env err 'S4-setup-sync' # stage6-B1
 expect_no_events native-hpc-login-env
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'native hpc --check wrote files'
@@ -2348,17 +2092,16 @@ cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'native hpc --check wrote fi
 
 # Without a login env, the native allocation gate holds as before.
 new_home native-hpc-fresh
-run_case native-hpc-fresh "${HPC_ENV[@]}" DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" -- --host sherlock --check
+run_case native-hpc-fresh "${HPC_ENV[@]}" -- --host sherlock --check
 expect_rc native-hpc-fresh 3
 expect_text native-hpc-fresh out 'H2-alloc human S2-login-env builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
 expect_line native-hpc-fresh 'HUMAN-BEGIN H2-alloc alloc'
 expect_line native-hpc-fresh 'sh_dev -t 1:00:00'
 expect_line native-hpc-fresh "$FIXTURE/setup-host.sh --host sherlock"
 expect_text native-hpc-fresh out 'S2-login-env todo blocked by H2-alloc'
-expect_no_text native-hpc-fresh out 'S4-setup-sync' # stage6-B1
 expect_no_events native-hpc-fresh
 [ -z "$(stow_mentions native-hpc-fresh)" ] || fail "native hpc names Stow: $(stow_mentions native-hpc-fresh)"
-run_case native-hpc-alloc "${HPC_ENV[@]}" DOTFILES_SYNC_PYTHON="$SYNC_TRIPWIRE" SLURM_JOB_ID=1 -- \
+run_case native-hpc-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- \
     --host sherlock --check
 expect_text native-hpc-alloc out 'H2-alloc done inside Slurm job 1'
 expect_no_events native-hpc-alloc
@@ -2462,8 +2205,6 @@ expect_line list "S6-kitty${TAB}auto${TAB}desktop${TAB}-"
 expect_line list "S4-chezmoi${TAB}auto${TAB}core${TAB}-"
 expect_line list "H7-native${TAB}judgment${TAB}-${TAB}yes"
 expect_no_text list out 'S2-micromamba'
-expect_no_text list out 'S4-setup-sync' # stage6-B1
-expect_no_text list out 'H7-stow'       # stage6-B1
 
 # Each host's native steps, exactly and in phase order.
 for spec in \
@@ -2511,16 +2252,6 @@ expect_no_text manual out '--legacy-stow'
 expect_no_events manual
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail '--print-manual wrote files'
-# >>> stage6-B1 legacy-stow: the legacy HUMAN text hands out ./stow-all.sh and keeps the flag
-run_legacy_case legacy-manual -- --host lab-ubuntu --print-manual
-expect_rc legacy-manual 0
-expect_line legacy-manual 'HUMAN-BEGIN H7-stow judgment'
-expect_line legacy-manual "PATH=\"$CASE_BREW/bin:\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu"
-expect_line legacy-manual "$FIXTURE/doctor.sh --legacy-stow --host lab-ubuntu"
-expect_line legacy-manual '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu --legacy-stow:'
-expect_text legacy-manual out '# ./setup-host.sh --host lab-ubuntu --legacy-stow (without --check) downloads https://claude.ai/install.sh (unpinned)'
-expect_text legacy-manual out "# ./setup-host.sh --host lab-ubuntu --legacy-stow (without --check) downloads $URL_HOMEBREW"
-# <<< stage6-B1 legacy-stow
 
 # The native default hands configuration over to chezmoi (H7-native); its
 # HUMAN text names no Stow, and its rerun lines carry no legacy flag.
@@ -2543,7 +2274,7 @@ expect_line native-manual-mac '# finish the installer dialog, then run ./setup-h
 expect_text native-manual-mac out "# ./setup-host.sh --host mac (without --check) downloads $URL_HOMEBREW"
 expect_line native-manual-sherlock "$FIXTURE/setup-host.sh --host sherlock"
 
-# --- PATH before the first stow ----------------------------------------------
+# --- PATH before the handover ------------------------------------------------
 
 # path_case PROFILE: this process's PATH after steps_extend_path, starting
 # from /usr/bin:/bin, with Homebrew, ~/.local/bin and the login env present.
@@ -2556,36 +2287,14 @@ path_case() {
 }
 new_home path
 mkdir -p "$CASE_BREW/sbin" "$CASE_HOME/.local/bin" "$CASE_HOME/micromamba/envs/login/bin"
-# The stowed shells' order: ~/.local/bin before Homebrew; on hpc the login
+# The dotfiles shells' order: ~/.local/bin before Homebrew; on hpc the login
 # env before both.
 PATH_DEBIAN=$(path_case debian)
 [ "$PATH_DEBIAN" = "$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
-    fail "debian PATH before stow: $PATH_DEBIAN"
+    fail "debian PATH before the handover: $PATH_DEBIAN"
 PATH_HPC=$(path_case hpc)
 [ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
-    fail "hpc PATH before stow: $PATH_HPC"
-
-# >>> stage6-B1 legacy-stow: the H7-stow line's Homebrew prefix
-# The H7-stow prefix without a Homebrew yet: each profile's default prefix,
-# and a found brew outside the plain path characters stays quoted.
-stow_line() {
-    awk -v tail=" $FIXTURE/stow-all.sh $2" 'substr($0, length($0) - length(tail) + 1) == tail' "$TEST_TMP/$1.out"
-}
-run_legacy_case stow-arm "${MAC_ENV[@]}" -- --host mac --print-manual
-[ "$(stow_line stow-arm mac)" = "PATH=\"/opt/homebrew/bin:\$PATH\" $FIXTURE/stow-all.sh mac" ] ||
-    fail "Apple Silicon stow line: $(stow_line stow-arm mac)"
-run_legacy_case stow-intel "${MAC_ENV[@]}" BOOTSTRAP_UNAME_M=x86_64 -- --host mac --print-manual
-[ "$(stow_line stow-intel mac)" = "PATH=\"/usr/local/bin:\$PATH\" $FIXTURE/stow-all.sh mac" ] ||
-    fail "Intel macOS stow line: $(stow_line stow-intel mac)"
-run_legacy_case stow-linux BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/no-brew/brew" -- --host wsl-ubuntu --print-manual
-[ "$(stow_line stow-linux wsl-ubuntu)" = "PATH=\"/home/linuxbrew/.linuxbrew/bin:\$PATH\" $FIXTURE/stow-all.sh wsl-ubuntu" ] ||
-    fail "Linuxbrew stow line: $(stow_line stow-linux wsl-ubuntu)"
-mkdir -p "$TEST_TMP/odd brew/bin"
-cp "$TEST_TMP/brew-stub" "$TEST_TMP/odd brew/bin/brew"
-run_legacy_case stow-odd BOOTSTRAP_BREW_CANDIDATES="$TEST_TMP/odd brew/bin/brew" -- --host lab-ubuntu --print-manual
-[ "$(stow_line stow-odd lab-ubuntu)" = "PATH=$(printf '%q' "$TEST_TMP/odd brew/bin"):\"\$PATH\" $FIXTURE/stow-all.sh lab-ubuntu" ] ||
-    fail "quoted stow prefix: $(stow_line stow-odd lab-ubuntu)"
-# <<< stage6-B1 legacy-stow
+    fail "hpc PATH before the handover: $PATH_HPC"
 
 # --- HUMAN block lines stand alone -------------------------------------------
 
@@ -2667,20 +2376,6 @@ for name in manual manual-mac \
     VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
     [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
 done
-# >>> stage6-B1 legacy-stow: the legacy HUMAN blocks stand alone too
-run_legacy_case legacy-manual-mac "${MAC_ENV[@]}" -- --host mac --print-manual
-expect_line legacy-manual-mac '# finish the installer dialog, then run ./setup-host.sh --host mac --legacy-stow again'
-expect_text legacy-manual-mac out "# ./setup-host.sh --host mac --legacy-stow (without --check) downloads $URL_HOMEBREW"
-for host in wsl-ubuntu sherlock marlowe; do
-    run_legacy_case "legacy-manual-$host" -- --host "$host" --print-manual
-done
-for name in legacy-check-missing legacy-stow-block legacy-manual legacy-manual-mac legacy-manual-wsl-ubuntu \
-    legacy-manual-sherlock legacy-manual-marlowe stow-conflicts legacy-hpc-stow; do
-    grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"
-    VIOLATIONS=$(block_violations "$TEST_TMP/$name.out")
-    [ -z "$VIOLATIONS" ] || fail "$name: HUMAN block lines that do not stand alone: $VIOLATIONS"
-done
-# <<< stage6-B1 legacy-stow
 
 # --- no temporary files ------------------------------------------------------
 
@@ -2718,12 +2413,6 @@ no_tmp_case no-tmp-provided 0 "$ALL_PATH" -- --host lab-ubuntu --check --only S2
 expect_text no-tmp-provided out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 no_tmp_case no-tmp-help 0 -- --help
 no_tmp_case no-tmp-usage 2 -- --host lab-ubuntu --check --tier core,gui
-# >>> stage6-B1 legacy-stow: the legacy mode keeps the no-TMPDIR promise
-CASE_FLAGS=(--legacy-stow)
-no_tmp_case legacy-no-tmp-check 3 -- --host lab-ubuntu --check --tier all
-no_tmp_case legacy-no-tmp-hpc 3 "${HPC_ENV[@]}" -- --host sherlock --check
-CASE_FLAGS=()
-# <<< stage6-B1 legacy-stow
 
 # --- bootstrap_fetch ---------------------------------------------------------
 

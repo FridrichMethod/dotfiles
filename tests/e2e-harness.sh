@@ -583,6 +583,41 @@ if bad=$(e2e_audit_wrappers "$UNIT/wrappers-probe.log"); then
 fi
 expect_eq 'wrappers audit names the probe' "$(printf '%s\n' "$bad" | cut -f 2,3,6 | tr '\t' ' ')" 'check:doctor-initial stow --version'
 
+# The login-PATH stow audit: a stow the machine had before the flow passes;
+# any other executable stow on the login PATH is a finding, and a login
+# shell that prints no PATH is its own verdict.
+mkdir -p "$UNIT/stow-a" "$UNIT/stow-b" "$UNIT/stow-c"
+for dir in stow-a stow-b; do
+    printf '#!/bin/sh\n' >"$UNIT/$dir/stow"
+    chmod 755 "$UNIT/$dir/stow"
+done
+printf '#!/bin/sh\n' >"$UNIT/stow-c/stow"
+expect_eq 'stow paths in PATH order, executables only' "$(e2e_stow_paths "$UNIT/stow-b::$UNIT/stow-c:$UNIT/none:$UNIT/stow-a")" \
+    "$UNIT/stow-b/stow
+$UNIT/stow-a/stow"
+# stow_audit START PATH [RC]: e2e_audit_login_stow's output and status when
+# the machine had START before the flow and the login shell reports PATH.
+stow_audit() (
+    E2E_STOW_START=$1
+    E2E_LOGIN_PATH=$2
+    E2E_LOGIN_RC=${3:-0}
+    e2e_login_run() {
+        [ -z "$E2E_LOGIN_PATH" ] || printf 'E2E_PATH=%s\n' "$E2E_LOGIN_PATH" >"$1"
+        return "$E2E_LOGIN_RC"
+    }
+    rc=0
+    : >"$UNIT/stow-audit.out"
+    e2e_audit_login_stow "$UNIT/stow-audit.out" "$UNIT/stow-audit.err" || rc=$?
+    printf 'rc=%s\n' "$rc"
+)
+expect_eq 'stow audit passes the stow the machine had' "$(stow_audit "$UNIT/stow-a/stow" "$UNIT/stow-c:$UNIT/stow-a")" 'rc=0'
+expect_eq 'stow audit passes a PATH without stow' "$(stow_audit '' "$UNIT/stow-c:$UNIT/none")" 'rc=0'
+expect_eq 'stow audit names a stow the run added' "$(stow_audit "$UNIT/stow-a/stow" "$UNIT/stow-b:$UNIT/stow-a")" \
+    "$UNIT/stow-b/stow
+rc=1"
+expect_eq 'stow audit without a login PATH' "$(stow_audit '' '' 1)" 'the login shell exited 1 and printed no PATH
+rc=2'
+
 # The login shell's stderr filter drops only what a missing terminal causes
 # (the stty line, fzf's zle option restore) and keeps everything else.
 printf '%s\n' "stty: 'standard input': Inappropriate ioctl for device" \
@@ -1462,6 +1497,7 @@ expect_step clean native-fixtures pass 'isolated native source/config/takeover/r
 expect_step clean audit-wrappers pass '3 wrapper call(s), all in human or negative phases'
 expect_step clean audit-sudo-log skip 'no log/sudo.log'
 expect_step clean audit-clone-links pass 'no link under HOME leads into the clone'
+expect_step clean audit-no-stow pass 'no stow on the login PATH'
 expect_step clean audit-sync-venv pass 'never appeared in the clone'
 expect_step clean audit-login-shell pass 'login shell still '
 expect_step clean audit-rc-files pass 'human phases only'
@@ -1469,7 +1505,7 @@ expect_step clean rc-files note 'changed during human:H7-native: .bashrc .profil
 [ "$(summary_rows clean apply-5)" = '' ] || fail 'clean: a fifth apply run happened'
 # The steps run in the documented order.
 expect_eq 'clean step order' "$(awk -F '\t' '$3 != "note" && $3 != "skip" { printf "%s ", $2 }' "$CLEAN_OUT/summary.tsv")" \
-    'clone doctor-initial check-nowrite apply-1 H1-apt-core apply-2 S5-claude apply-3 apply-4 native-handover second-apply check-done login-shell payloads native-converged doctor-final doctor-smoke negative-wsl-refused negative-root-refused native-fixtures audit-wrappers audit-clone-links audit-sync-venv audit-login-shell audit-rc-files '
+    'clone doctor-initial check-nowrite apply-1 H1-apt-core apply-2 S5-claude apply-3 apply-4 native-handover second-apply check-done login-shell payloads native-converged doctor-final doctor-smoke negative-wsl-refused negative-root-refused native-fixtures audit-wrappers audit-clone-links audit-no-stow audit-sync-venv audit-login-shell audit-rc-files '
 # The wrappers.log holds the two apt sudos and the root-refused sudo,
 # nothing else; the timeline frames each phase.
 expect_eq 'clean wrappers.log' "$(cut -f 2,3 "$CLEAN_OUT/log/wrappers.log" | tr '\t' ' ')" 'human:H1-apt-core sudo

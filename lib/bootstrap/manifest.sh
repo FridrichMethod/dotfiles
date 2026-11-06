@@ -211,19 +211,6 @@ bootstrap_tool_rows() {
     bootstrap_rows_for_host "$BOOTSTRAP_CONFIG/tools.tsv" 3 "${1:-}"
 }
 
-# Filter only deployment prerequisites; other Python consumers remain supported.
-# Entry points explicitly choose the legacy compatibility path.
-bootstrap_mode_tool_rows() {
-    local line id
-    while IFS= read -r line; do
-        id=${line%%"$BOOTSTRAP_TAB"*}
-        case ${BOOTSTRAP_LEGACY_STOW:-0}:$id in
-            0:stow | 1:chezmoi) continue ;;
-        esac
-        printf '%s\n' "$line"
-    done
-}
-
 # bootstrap_tool_aliases NAME: the TOOL-IDs that tools.tsv installs under
 # NAME, from its "# alias: TOOL-ID NAME" declarations, one per line in file
 # order. Returns 1 if tools.tsv is unreadable.
@@ -333,8 +320,6 @@ bootstrap_doc_ref() {
         windows:S6-nerd-font) printf '%s\n' W1-font ;;
         windows:S4-chezmoi) printf '%s\n' W1-chezmoi ;;
         windows:H7-native) printf '%s\n' HW-native ;;
-        windows:S4-setup-sync) printf '%s\n' W1-setup-sync ;;
-        windows:H7-stow) printf '%s\n' HW-stow ;;
         windows:H7-auth) printf '%s\n' HW-auth ;;
         *) printf '%s\n' "$1" ;;
     esac

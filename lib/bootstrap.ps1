@@ -286,8 +286,6 @@ function Get-BootstrapDocRef {
         'windows:S6-nerd-font' { return 'W1-font' }
         'windows:S4-chezmoi' { return 'W1-chezmoi' }
         'windows:H7-native' { return 'HW-native' }
-        'windows:S4-setup-sync' { return 'W1-setup-sync' }
-        'windows:H7-stow' { return 'HW-stow' }
         'windows:H7-auth' { return 'HW-auth' }
     }
     return $Step
@@ -404,30 +402,6 @@ function Get-BootstrapToolStatus {
         switch (Compare-BootstrapVersion $probe.Version $Row.floor) { 0 { 'ok' } 1 { 'outdated' } default { 'unknown' } }
     }
     return [pscustomobject]@{ Status = $status; Probe = $probe }
-}
-
-function Select-BootstrapCommand {
-    # The first PATH candidate, over the comma alternatives of a command
-    # Probe in order, whose VersionFlag output carries a version >= Floor:
-    # Path and Version, or empty ones. Rejected lists every candidate passed
-    # over, with its version or "no version" (a Store alias stub).
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Probe, [Parameter(Mandatory)][string]$VersionFlag,
-        [Parameter(Mandatory)][string]$Floor)
-    $parsed = Get-BootstrapProbe $Probe
-    if ($parsed.Kind -cne 'command') { throw [IO.InvalidDataException]::new("Not a command probe: '$Probe'") }
-    $rejected = [Collections.Generic.List[string]]::new()
-    foreach ($name in $parsed.Value.Split(',')) {
-        foreach ($candidate in @(Find-BootstrapCommand $name -All)) {
-            $version = Get-BootstrapToolVersion -Path $candidate -Flag $VersionFlag
-            if ($version -and (Compare-BootstrapVersion $version $Floor) -eq 0) {
-                return [pscustomobject]@{ Path = $candidate; Version = $version; Rejected = $rejected.ToArray() }
-            }
-            $shown = if ($version) { $version } else { 'no version' }
-            $rejected.Add("$candidate ($shown)")
-        }
-    }
-    return [pscustomobject]@{ Path = ''; Version = ''; Rejected = $rejected.ToArray() }
 }
 
 function New-BootstrapResult {
@@ -575,38 +549,6 @@ function Install-BootstrapFile {
     catch { return New-BootstrapResult failed "download of $Uri failed: $($_.Exception.Message)" }
     # Never ask, and never skip, under the caller's -Confirm or -WhatIf.
     finally { Remove-Item -LiteralPath $scratch -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue }
-}
-
-function Get-BootstrapVenvPython {
-    # The interpreter setup-sync creates in RepoRoot/.venv-sync: bin/python
-    # when it exists, else Scripts\python.exe, the order lib/sync-runtime.sh
-    # uses.
-    param([Parameter(Mandatory)][string]$RepoRoot)
-    $unix = Join-Path $RepoRoot '.venv-sync/bin/python'
-    if ([IO.File]::Exists($unix)) { return $unix }
-    return Join-Path $RepoRoot '.venv-sync/Scripts/python.exe'
-}
-
-function Get-BootstrapSyncPython {
-    # The interpreter the AI config sync helpers run (lib/sync-runtime.sh):
-    # DOTFILES_SYNC_PYTHON whenever it is set, else the .venv-sync one.
-    param([Parameter(Mandatory)][string]$RepoRoot)
-    $override = [Environment]::GetEnvironmentVariable('DOTFILES_SYNC_PYTHON')
-    if ($null -ne $override) { return [pscustomobject]@{ Path = $override; Source = 'DOTFILES_SYNC_PYTHON' } }
-    return [pscustomobject]@{ Path = (Get-BootstrapVenvPython $RepoRoot); Source = '.venv-sync' }
-}
-
-function Test-BootstrapSyncRuntime {
-    # True when Python passes lib/config_sync.py --runtime-check (Python
-    # 3.11+ and the pinned tomlkit), the check setup-sync itself ends with.
-    # Read-only: -B writes no bytecode, and its output is discarded.
-    param([Parameter(Mandatory)][AllowEmptyString()][string]$Python, [Parameter(Mandatory)][string]$RepoRoot)
-    if (-not $Python -or -not [IO.File]::Exists($Python)) { return $false }
-    $ErrorActionPreference = 'Continue'
-    $PSNativeCommandUseErrorActionPreference = $false
-    try { $null | & $Python -I -B -X utf8 (Join-Path $RepoRoot 'lib/config_sync.py') --runtime-check *> $null }
-    catch { return $false }
-    return $LASTEXITCODE -eq 0
 }
 
 function Split-BootstrapPathList {

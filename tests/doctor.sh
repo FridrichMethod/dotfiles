@@ -22,12 +22,6 @@ REAL_GIT=$(command -v git) || {
 # GIT_INDEX_FILE, which -C does not override: the fixture's git init and
 # commit would reinitialize and commit into the caller's repository.
 dotfiles_test_clear_git_environment
-# The fake sync interpreter below answers the runtime check itself and runs
-# any other call in this standard-library python3; no AI-sync runtime needed.
-REAL_PYTHON=$(command -v python3) || {
-    echo 'ERROR: python3 is required for the doctor fixture interpreter.' >&2
-    exit 1
-}
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-doctor.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 cleanup() {
@@ -46,9 +40,7 @@ SHELL_TMP="$TEST_TMP/tmp"
 mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
     "$FAKE_BIN" "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
 cp "$REPO_ROOT/doctor.sh" "$FIXTURE/doctor.sh"
-# stage6-B1 edit: drop lib/sync-runtime.sh and lib/config_sync.py from this cp and from the doctor hook's files selector
-cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/sync-runtime.sh" "$REPO_ROOT/lib/config_sync.py" \
-    "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
+cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 # The real step headings: every doc step a manifest row cites must have one.
 cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
@@ -178,19 +170,6 @@ write_fake "$FAKE_BIN/fc-list" <<'SH'
 printf 'fc-list %s\n' "$*" >>"$EVENT_LOG"
 SH
 
-# A sync interpreter: it passes lib/config_sync.py --runtime-check unless
-# SYNC_RUNTIME_RC says otherwise (a venv without tomlkit), and logs the call.
-# Any other call runs in the real Python.
-# stage6-B1 edit: delete this fake and its comment, the REAL_PYTHON comment and definition near the top (its only user), the fixture .venv-sync (its mkdir path and the cp of this fake), the .venv-sync/ .gitignore line and .gitignore in the fixture git add
-write_fake "$FAKE_BIN/sync-python" <<SH
-#!/bin/sh
-printf 'sync-python %s\n' "\$*" >>"\$EVENT_LOG"
-case " \$* " in
-    *" --runtime-check "*) exit "\${SYNC_RUNTIME_RC:-0}" ;;
-esac
-exec "$REAL_PYTHON" "\$@"
-SH
-
 # A fresh Homebrew prefix that is not on PATH yet.
 write_fake "$BREW_BIN/brew" <<'SH'
 #!/bin/sh
@@ -241,24 +220,19 @@ row() {
 
 # A checkout without submodules, as dotfiles is.
 mkdir -p "$FIXTURE/common/zsh" "$FIXTURE/common/sh" "$FIXTURE/common/git" \
-    "$FIXTURE/common/bash" "$FIXTURE/common/codex/.codex" "$FIXTURE/common/codex/.local/bin" "$FIXTURE/.venv-sync/bin"
+    "$FIXTURE/common/bash" "$FIXTURE/common/codex/.codex" "$FIXTURE/common/codex/.local/bin"
 for file in zsh/.zshrc sh/.profile git/.gitconfig bash/.bashrc; do
     printf '# fixture %s\n' "$file" >"$FIXTURE/common/$file"
 done
 # Portable instructions remain ordinary Stow files.
 printf '# Global Working Preferences\n\nFixture portable Codex instructions.\n' \
     >"$FIXTURE/common/codex/.codex/AGENTS.md"
-cp "$FAKE_BIN/sync-python" "$FIXTURE/.venv-sync/bin/python"
-printf '.venv-sync/\n' >"$FIXTURE/.gitignore"
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 "$REAL_GIT" -C "$FIXTURE" init -q
-"$REAL_GIT" -C "$FIXTURE" add .gitignore .chezmoiroot common
+"$REAL_GIT" -C "$FIXTURE" add .chezmoiroot common
 "$REAL_GIT" -C "$FIXTURE" -c user.name=fixture -c user.email=fixture@example.invalid \
     commit -q -m fixture
-# >>> stage6-B1 legacy-stow: the Stow receipt only the legacy resolution reads
-STATE_FILE="$FIXTURE/.git/dotfiles-sync-unix"
-# <<< stage6-B1 legacy-stow
 
 mkdir -p "$TEST_HOME/.oh-my-zsh/custom/plugins/demo/src" \
     "$TEST_HOME/.config/bat/themes" "$TEST_HOME/.local/bin"
@@ -286,9 +260,6 @@ write_fake "$TEST_HOME/.fake-file-tool" <<'SH'
 #!/bin/sh
 printf 'file-tool version %s\n' "${FILE_TOOL_VERSION:-2.81.0}"
 SH
-ln -s ../fixture/common/zsh/.zshrc "$TEST_HOME/.zshrc"
-ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
-ln -s "$FIXTURE/common/git/.gitconfig" "$TEST_HOME/.gitconfig"
 
 BASE_PATH="$TEST_HOME/.local/bin:$FAKE_BIN:/usr/bin:/bin"
 BASE_ENV=(
@@ -311,11 +282,7 @@ BASE_ENV=(
 # run_doctor CASE [VAR=VALUE ...] -- [doctor arguments]: a clean environment
 # (env -i) plus BASE_ENV and the overrides; stdout/stderr land in $OUT. The
 # doctor runs under the Bash running this file ($BASH), so `bash-3.2
-# tests/doctor.sh` tests the doctor under Bash 3.2 too. DOCTOR_MODE is the
-# mode flag: empty, the native default; stage6-B1 blocks set --legacy-stow and
-# clear it again.
-# stage6-B1 edit: drop DOCTOR_MODE and its expansion in run_doctor
-DOCTOR_MODE=
+# tests/doctor.sh` tests the doctor under Bash 3.2 too.
 run_doctor() {
     CASE=$1
     shift
@@ -326,7 +293,7 @@ run_doctor() {
     done
     [ "$#" -eq 0 ] || shift
     : >"$EVENT_LOG"
-    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" ${DOCTOR_MODE:+"$DOCTOR_MODE"} "$@" \
+    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" "$@" \
         >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
@@ -426,96 +393,16 @@ expect_usage_error unknown-tier "unknown tier 'gui'" -- --host lab-ubuntu --tier
 expect_usage_error win-host 'pwsh -File doctor.ps1 -Host win' -- --host win
 expect_usage_error win-host-equals 'pwsh -File doctor.ps1 -Host win' -- --host=win
 expect_usage_error no-host 'mac wsl-ubuntu lab-ubuntu sherlock marlowe win' --
+# The retired --legacy-stow is an unknown argument. An unmarked home needs
+# --host or --platform: DOTFILES_HOST selects nothing.
+expect_usage_error legacy-flag 'unknown argument: --legacy-stow' -- --legacy-stow --host lab-ubuntu
+expect_usage_error env-host-lab-ubuntu 'no host given and none recorded for this home' DOTFILES_HOST=lab-ubuntu --
+expect_usage_error env-host-win 'no host given and none recorded for this home' DOTFILES_HOST=win --
+expect_usage_error env-host-unknown 'no host given and none recorded for this home' DOTFILES_HOST=nowhere --
+expect_usage_error env-host-empty 'no host given and none recorded for this home' DOTFILES_HOST= --
 
 OS_UBUNTU="$TEST_TMP/os-release-ubuntu"
 printf 'ID=ubuntu\nID_LIKE=debian\n' >"$OS_UBUNTU"
-
-# >>> stage6-B1 legacy-stow: DOTFILES_HOST and Stow receipt resolution of an unmarked home
-DOCTOR_MODE=--legacy-stow
-expect_usage_error win-env 'pwsh -File doctor.ps1 -Host win' DOTFILES_HOST=win --
-expect_usage_error unknown-env "DOTFILES_HOST='nowhere' is not a known host" DOTFILES_HOST=nowhere --
-
-# The host ./stow-all.sh recorded for this home and kernel.
-printf '%s\n' "$TEST_HOME" Linux sherlock test-head >"$STATE_FILE"
-run_doctor state-host -- --tsv
-assert_rc 1
-assert_row login-tool missing
-assert_no_row host-tool
-run_doctor state-overridden DOTFILES_HOST=lab-ubuntu -- --tsv
-assert_rc 0
-assert_row host-tool warn
-assert_no_row login-tool
-printf '%s\n' "$TEST_TMP/elsewhere" Linux sherlock test-head >"$STATE_FILE"
-expect_usage_error state-other-home 'none recorded for this home' --
-printf '%s\n' "$TEST_HOME" Darwin sherlock test-head >"$STATE_FILE"
-expect_usage_error state-other-kernel 'none recorded for this home' --
-rm -f "$STATE_FILE"
-run_doctor env-host DOTFILES_HOST=lab-ubuntu -- --tsv
-assert_rc 0
-assert_row host-tool warn
-
-# A set but empty DOTFILES_HOST means common only, as the login updater reads
-# it: the detected platform without an overlay, even with a recorded host
-# (sherlock would fail on login-tool); --host and --platform still win.
-printf '%s\n' "$TEST_HOME" Linux sherlock test-head >"$STATE_FILE"
-run_doctor env-empty DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
-assert_rc 0
-assert_tsv_shape
-assert_err 'DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform debian'
-assert_row fzf ok '' -
-assert_no_row login-tool
-assert_no_row host-tool
-run_doctor env-empty-log DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" --
-assert_rc 0
-assert_out 'Checking platform debian without a host overlay'
-assert_out '(platform debian, required tiers: core,cli,ai)'
-run_doctor env-empty-host DOTFILES_HOST= -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row host-tool warn
-assert_not_in "$OUT/$CASE.err" 'set but empty'
-run_doctor env-empty-platform DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --platform other --tsv
-assert_rc 0
-assert_not_in "$OUT/$CASE.err" 'set but empty'
-assert_row zsh ok
-
-# So does a common-only install that ./stow-all.sh recorded (an empty host
-# line), as the login updater reads it: the detected platform, with a
-# warning, never "none recorded". DOTFILES_HOST, --host and --platform still
-# win, and a state that is not all four lines (which the updater ignores)
-# records nothing.
-printf '%s\n' "$TEST_HOME" Linux '' test-head >"$STATE_FILE"
-run_doctor state-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
-assert_rc 0
-assert_tsv_shape
-assert_err './stow-all.sh recorded a common-only install for this home (no host overlay): checking as --platform debian'
-assert_not_in "$OUT/$CASE.err" 'none recorded'
-assert_row fzf ok '' -
-assert_no_row login-tool
-assert_no_row host-tool
-run_doctor state-common-only-list BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --list
-assert_rc 0
-assert_err 'recorded a common-only install'
-run_doctor state-common-only-env DOTFILES_HOST=lab-ubuntu -- --tsv
-assert_rc 0
-assert_row host-tool warn
-assert_not_in "$OUT/$CASE.err" 'common-only'
-run_doctor state-common-only-host -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row host-tool warn
-assert_not_in "$OUT/$CASE.err" 'common-only'
-run_doctor state-common-only-empty DOTFILES_HOST= BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
-assert_rc 0
-assert_err 'DOTFILES_HOST is set but empty'
-assert_not_in "$OUT/$CASE.err" 'recorded a common-only'
-printf '%s\n' "$TEST_TMP/elsewhere" Linux '' test-head >"$STATE_FILE"
-expect_usage_error state-common-only-other-home 'none recorded for this home' --
-printf '%s\n' "$TEST_HOME" Darwin '' test-head >"$STATE_FILE"
-expect_usage_error state-common-only-other-kernel 'none recorded for this home' --
-printf '%s\n' "$TEST_HOME" Linux '' >"$STATE_FILE"
-expect_usage_error state-common-only-truncated 'none recorded for this home' --
-rm -f "$STATE_FILE"
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
 
 # --- a home bound to the fixture checkout: every case below runs native ---
 
@@ -543,8 +430,6 @@ for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr clau
     assert_row "$id" ok '' -
 done
 assert_row native-config ok 'native binding and local config present' -
-assert_no_row venv-sync  # stage6-B1
-assert_no_row stow-links # stage6-B1
 assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
 assert_row alt ok "1.2.3 >= 1.0 at $FAKE_BIN/doctor-alt"
 assert_row brew-only ok "at $BREW_BIN/doctor-brew-only"
@@ -562,22 +447,8 @@ assert_event 'fzf --version'
 assert_no_event 'fc-list'
 [ ! -e "$TEST_HOME/.local/state/gh/device-id" ] || case_fail 'gh --version wrote its telemetry device id'
 [ ! -e "$TEST_HOME/.tldrc" ] || case_fail 'tldr --version updated its page cache'
-assert_no_event sync-python # stage6-B1
 assert_no_event NETWORK
 assert_no_event 'zsh -ic'
-
-# >>> stage6-B1 legacy-stow: the legacy baseline checks the sync runtime and Stow links
-DOCTOR_MODE=--legacy-stow
-run_doctor legacy-baseline-tsv -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_tsv_shape
-for id in venv-sync stow-links path-order; do
-    assert_row "$id" ok '' -
-done
-assert_no_row native-config
-assert_event "sync-python -I -B -X utf8 $FIXTURE/lib/config_sync.py --runtime-check"
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
 
 run_doctor baseline-log -- --host lab-ubuntu
 assert_rc 0
@@ -882,32 +753,6 @@ assert_row locale missing '' 'docs/bootstrap.md H1-locale'
 run_doctor locale-upper LOCALE_EXTRA=en_US.UTF-8 -- --host lab-ubuntu --tsv
 assert_row locale ok
 
-# >>> stage6-B1 legacy-stow: the venv-sync row of the AI-sync runtime
-DOCTOR_MODE=--legacy-stow
-mv "$FIXTURE/.venv-sync" "$TEST_TMP/venv.hidden"
-run_doctor venv-missing -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row venv-sync missing '' 'docs/bootstrap.md S4-setup-sync'
-run_doctor venv-env "DOTFILES_SYNC_PYTHON=$FAKE_BIN/sync-python" -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row venv-sync ok
-mv "$TEST_TMP/venv.hidden" "$FIXTURE/.venv-sync"
-run_doctor venv-env-bad "DOTFILES_SYNC_PYTHON=$TEST_TMP/no-python" -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$TEST_TMP/no-python' fails lib/config_sync.py --runtime-check"
-# An executable that fails the runtime check (an interrupted setup-sync.sh
-# leaves a venv without tomlkit) is missing, as doctor.ps1 and setup-host's
-# S4-setup-sync judge it.
-run_doctor venv-env-broken "DOTFILES_SYNC_PYTHON=$FAKE_BIN/sync-python" SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row venv-sync missing "DOTFILES_SYNC_PYTHON='$FAKE_BIN/sync-python' fails lib/config_sync.py --runtime-check" \
-    'docs/bootstrap.md S4-setup-sync'
-run_doctor venv-broken SYNC_RUNTIME_RC=1 -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row venv-sync missing "$FIXTURE/.venv-sync/bin/python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
-
 # The payload repos: each selected item passes its unix-probe row, and the
 # kit's Claude helpers are there; a shortfall warns with what to run (only a
 # person installs them, with sync-payloads) and, for the kit, what fails until
@@ -959,31 +804,6 @@ assert_rc 0
 assert_row payloads warn "no readable $FIXTURE/config/payloads.tsv"
 mv "$TEST_TMP/payloads.hidden" "$FIXTURE/config/payloads.tsv"
 
-# >>> stage6-B1 legacy-stow: the stow-links row of the Stow links
-DOCTOR_MODE=--legacy-stow
-rm "$TEST_HOME/.profile"
-run_doctor stow-absent -- --host lab-ubuntu --tsv
-assert_rc 1
-assert_row stow-links missing '~/.profile is absent' 'docs/bootstrap.md H7-stow'
-printf 'regular\n' >"$TEST_HOME/.profile"
-run_doctor stow-regular -- --host lab-ubuntu --tsv
-assert_row stow-links missing '~/.profile is not a symlink'
-rm "$TEST_HOME/.profile"
-ln -s ../fixture/common/sh/.gone "$TEST_HOME/.profile"
-run_doctor stow-dangling -- --host lab-ubuntu --tsv
-assert_row stow-links missing '~/.profile is a dangling symlink'
-rm "$TEST_HOME/.profile"
-mkdir -p "$TEST_TMP/other/common/sh"
-printf 'other\n' >"$TEST_TMP/other/common/sh/.profile"
-ln -s "$TEST_TMP/other/common/sh/.profile" "$TEST_HOME/.profile"
-run_doctor stow-elsewhere -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row stow-links warn "~/.profile -> $TEST_TMP/other/common/sh/.profile"
-rm "$TEST_HOME/.profile"
-ln -s ../fixture/common/sh/.profile "$TEST_HOME/.profile"
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
-
 # Homebrew and conda ahead of ~/.local/bin are the overlays' order: only an
 # executable that shadows one in ~/.local/bin is reported.
 run_doctor path-brew-first "PATH=$BREW_BIN:$TEST_TMP/miniforge3/condabin:$BASE_PATH" -- --host lab-ubuntu --tsv
@@ -1001,12 +821,6 @@ run_doctor path-shadow "PATH=$TEST_TMP/miniforge3/bin:$BASE_PATH" -- --host lab-
 assert_rc 0
 assert_row path-order warn "1 command(s) in ~/.local/bin are shadowed by an earlier PATH entry: $TEST_TMP/miniforge3/bin/kitty;" \
     'docs/bootstrap.md H7-native'
-# >>> stage6-B1 legacy-stow: the legacy path-order fix names H7-stow
-DOCTOR_MODE=--legacy-stow
-run_doctor legacy-path-shadow "PATH=$TEST_TMP/miniforge3/bin:$BASE_PATH" -- --host lab-ubuntu --tsv
-assert_row path-order warn '' 'docs/bootstrap.md H7-stow'
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
 rm "$TEST_TMP/miniforge3/bin/doctor-local"
 # The same file under another name for its directory is no shadow.
 ln -s "$TEST_HOME/.local/bin" "$TEST_TMP/local-alias"
@@ -1020,8 +834,8 @@ assert_row brew-only ok
 run_doctor path-no-local-bin "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
 assert_row path-order warn 'PATH lacks ~/.local/bin; the dotfiles ~/.profile prepends it' 'docs/bootstrap.md H7-native'
 # ~/.local/bin joins this process's PATH, ahead of Homebrew's bin as in the
-# stowed shells, so what setup-host linked there is found before the first
-# stow; path-order above still judges the caller's PATH.
+# dotfiles shells, so what setup-host linked there is found before the
+# handover; path-order above still judges the caller's PATH.
 assert_rc 0
 assert_row local-tool ok "2.0 at $TEST_HOME/.local/bin/doctor-local"
 write_fake "$TEST_HOME/.local/bin/doctor-brew-only" <<'SH'
@@ -1213,8 +1027,7 @@ assert_quiet_events '--list probed tools with the real manifest on --platform ot
 # index, the login updater's fetch, a parallel session) may write there at
 # any time, and the read-only fixture cases below already cover the doctor's
 # own git, whose find includes the fixture's .git. The exit code depends on
-# what this machine has installed: 0 or 1, never 2. MODE legacy passes
-# --legacy-stow; native passes no mode flag, and its native-config row is
+# what this machine has installed: 0 or 1, never 2. Its native-config row is
 # human in the empty home.
 REAL_HOME="$TEST_TMP/real-home"
 REAL_TMP="$TEST_TMP/real-tmp"
@@ -1222,21 +1035,15 @@ REAL_REF="$TEST_TMP/real.ref"
 REAL_MARKER="$TEST_TMP/real.marker"
 mkdir "$REAL_HOME" "$REAL_TMP"
 DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
-# stage6-B1 edit: make the native required/absent lists the only ones, drop the MODE argument (and the MODE sentences above), the mode array, and native from the two native calls
 real_doctor_case() {
-    local fix changed mode=() required='git locale venv-sync rc-pollution' absent='native-config'
+    local fix changed required='git locale native-config rc-pollution' absent='venv-sync stow-links'
     CASE=$1
-    if [ "$2" = legacy ]; then
-        mode=(--legacy-stow)
-    else
-        required='git locale native-config rc-pollution' absent='venv-sync stow-links'
-    fi
-    shift 2
+    shift
     touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
     : >"$REAL_MARKER"
     : >"$EVENT_LOG"
     if env -i HOME="$REAL_HOME" PATH="$PATH" TMPDIR="$REAL_TMP" LC_ALL=C TERM=dumb \
-        "$BASH" "$REPO_ROOT/doctor.sh" ${mode[@]+"${mode[@]}"} "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
+        "$BASH" "$REPO_ROOT/doctor.sh" "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
         RC=$?
@@ -1270,10 +1077,8 @@ real_doctor_case() {
     changed=$(find "$REPO_ROOT" -name .git -prune -o -newer "$REAL_MARKER" -print)
     [ -z "$changed" ] || case_fail "the real doctor wrote into the checkout: $changed"
 }
-real_doctor_case real-debian legacy --platform debian --tsv # stage6-B1
-real_doctor_case real-other legacy --platform other --tsv   # stage6-B1
-real_doctor_case real-native-debian native --platform debian --tsv
-real_doctor_case real-native-other native --platform other --tsv
+real_doctor_case real-native-debian --platform debian --tsv
+real_doctor_case real-native-other --platform other --tsv
 
 # --- read-only and offline -----------------------------------------------------
 
@@ -1289,12 +1094,6 @@ run_doctor ro-list -- --host lab-ubuntu --list
 assert_rc 0
 run_doctor ro-codex -- --host wsl-ubuntu --tsv
 assert_rc 0
-# >>> stage6-B1 legacy-stow: the legacy mode keeps the read-only promise
-DOCTOR_MODE=--legacy-stow
-run_doctor legacy-ro-log -- --host lab-ubuntu
-assert_rc 0
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
 CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$MARKER" -print)
 [ -z "$CHANGED" ] || fail "doctor wrote into the fixture or home: $CHANGED"
 
@@ -1345,12 +1144,6 @@ no_tmp_case no-tmp-help TMPDIR="$NO_TMP" -- --help
 assert_rc 0
 no_tmp_case no-tmp-usage TMPDIR="$NO_TMP" -- --tier gui
 assert_rc 2
-# >>> stage6-B1 legacy-stow: the legacy mode keeps the no-TMPDIR promise
-DOCTOR_MODE=--legacy-stow
-no_tmp_case legacy-no-tmp-log TMPDIR="$NO_TMP" -- --host lab-ubuntu
-assert_rc 0
-DOCTOR_MODE=
-# <<< stage6-B1 legacy-stow
 
 # --- native binding causes and host resolution -------------------------------
 
@@ -1359,8 +1152,6 @@ assert_rc 0
 assert_out "$(printf 'native-config\tcore\tcheck\t-\tH7-native')"
 assert_out "$(printf 'path-order\tcore\tcheck\t-\tH7-native')"
 assert_no_out "$(printf 'submodule\t')"
-assert_no_out "$(printf 'venv-sync\t')"  # stage6-B1
-assert_no_out "$(printf 'stow-links\t')" # stage6-B1
 assert_quiet_events 'native --list probed tools'
 
 # native-config names its cause. Only a home bound to another checkout (a
@@ -1443,17 +1234,8 @@ assert_row native-config human "$FIXTURE/lib/chezmoi-guard.sh is unreadable, so 
 mv "$TEST_TMP/guard.hidden" "$FIXTURE/lib/chezmoi-guard.sh"
 
 # Without --host or --platform, a native-owned home's role is the one
-# [data].host of its native config, read as text. Its Stow receipt and
-# DOTFILES_HOST (legacy only) never apply, and an unclear role is a usage
-# error, never a guess.
-# >>> stage6-B1 legacy-stow: a native home ignores a Stow receipt
-printf '%s\n' "$TEST_HOME" Linux sherlock test-head >"$STATE_FILE"
-run_doctor native-host-receipt-ignored -- --tsv
-assert_rc 0
-assert_row host-tool warn
-assert_no_row login-tool
-rm -f "$STATE_FILE"
-# <<< stage6-B1 legacy-stow
+# [data].host of its native config, read as text. DOTFILES_HOST never
+# applies, and an unclear role is a usage error, never a guess.
 run_doctor native-host-env-ignored DOTFILES_HOST=sherlock -- --tsv
 assert_rc 0
 assert_row host-tool warn
@@ -1509,14 +1291,14 @@ rm "$NATIVE_CONFIG"
 expect_usage_error native-host-absent 'selects no single known [data].host' --
 mv "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
 # Even an invalid marker selects the native record: native-config explains
-# the marker, and the receipt is not a fallback.
+# the marker, and nothing else is a fallback.
 native_config '[git]'
 printf 'not a binding\n' >"$NATIVE_MARKER"
 expect_usage_error native-host-invalid-marker 'selects no single known [data].host' --
 bind_native "$FIXTURE"
 native_config '[data]' "host = 'win'"
 expect_usage_error native-host-win 'pwsh -File doctor.ps1 -Host win' --
-# common-only as the role means common only, as for an unmarked home.
+# common-only as the role means the detected platform without an overlay.
 native_config '[data]' "host = 'common-only'"
 run_doctor native-host-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
 assert_rc 0

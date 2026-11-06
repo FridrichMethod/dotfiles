@@ -10,12 +10,6 @@ steps_quote() {
     printf '%q' "$1"
 }
 
-# steps_mode_flag: " --legacy-stow" in that compatibility mode, else nothing,
-# for HUMAN lines that rerun setup-host in the person's mode.
-steps_mode_flag() {
-    [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ] || printf ' --legacy-stow'
-}
-
 # steps_block_begin ID KIND / steps_block_end: the HUMAN block frame. Blocks
 # are printed, never executed; `#` lines are notes for the reader.
 steps_block_begin() {
@@ -203,7 +197,7 @@ steps_resolve() {
 
 # steps_brew_default: the brew executable a HUMAN block names: the one this
 # run found, else the profile's default Homebrew (Linux, Intel macOS or Apple
-# Silicon). Only the stowed rc files put it on PATH, so blocks name it by path.
+# Silicon). Only the dotfiles rc files put it on PATH, so blocks name it by path.
 steps_brew_default() {
     local brew
     if brew=$(bootstrap_brew_bin); then
@@ -227,7 +221,7 @@ steps_path_prepend() {
 }
 
 # steps_extend_path: let this run see what the installers put on disk before
-# any rc file is stowed, in the stowed shells' order: on hpc the login env,
+# the dotfiles rc files are applied, in their order: on hpc the login env,
 # then ~/.local/bin, then Homebrew. Nothing is written to an rc file.
 steps_extend_path() {
     local brew dir
@@ -379,25 +373,17 @@ steps_platform_mismatch() {
 }
 
 step_P0_preflight_check() {
-    local glibc platform detail dirty why
+    local glibc platform detail dirty
     glibc=$(bootstrap_glibc_version)
     platform=$(bootstrap_detect_platform)
     detail="host $STEPS_HOST, profile $STEPS_PROFILE, $(bootstrap_os) $STEPS_ARCH${glibc:+, glibc $glibc}, detected $platform, checkout $STEPS_ROOT"
-    if [ -n "${DOTFILES_DIR:-}" ] && [ "$DOTFILES_DIR" != "$STEPS_ROOT" ]; then
-        dotfiles_log warn "DOTFILES_DIR is $DOTFILES_DIR, but this checkout is $STEPS_ROOT"
-    fi
     # X-rc-protection expects a clean checkout; the guard still fails a step
     # that changes a file that was already dirty.
     if ! dirty=$(steps_dirty_summary); then
         dotfiles_log warn "git status fails in $STEPS_ROOT, so the rc-pollution guard cannot see installer edits"
         detail="$detail; git status failed"
     elif [ -n "$dirty" ]; then
-        if [ "${BOOTSTRAP_LEGACY_STOW:-0}" = 1 ]; then
-            why='an installer that appends to a stowed rc file edits this checkout'
-        else
-            why='the native login update does not run from a checkout with uncommitted changes'
-        fi
-        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since $why (docs/bootstrap.md X-rc-protection)"
+        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
         detail="$detail; checkout has uncommitted changes"
     fi
     STEP_DETAIL=$detail

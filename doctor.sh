@@ -8,17 +8,14 @@ set -euo pipefail
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
 # has, plus structural checks (locale, the native binding, PATH order,
 # rc-file pollution, oh-my-zsh order, Homebrew nvm and the payload repos of
-# config/payloads.tsv; with --legacy-stow, .venv-sync and stow links instead
-# of the native binding). Read-only and offline: it installs nothing, writes
+# config/payloads.tsv). Read-only and offline: it installs nothing, writes
 # nothing and uses no network unless --online (auth status probes) or
 # --smoke (an interactive zsh) asks for it.
 # On a native-owned home (one with ~/.config/dotfiles/native) the host
 # defaults to the [data].host of ~/.config/chezmoi/chezmoi.toml, read as
-# text; elsewhere to DOTFILES_HOST, then to the host ./stow-all.sh recorded
-# for this home. It is never guessed. Common only (common-only as that
-# [data].host, a set but empty DOTFILES_HOST, or a common-only install
-# ./stow-all.sh recorded) means the detected platform, as --platform. The
-# win host is checked by doctor.ps1.
+# text; nothing else selects one, and it is never guessed. common-only as
+# that [data].host means the detected platform, as --platform. The win host
+# is checked by doctor.ps1.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
 # row or a structural check); 2 usage error, invalid manifest, unknown host
 # or win.
@@ -76,22 +73,18 @@ usage() {
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
         'and of the structural setup (locale, native-config, path-order, rc-pollution,' \
-        'omz-order, nvm-homebrew, payloads; --legacy-stow checks venv-sync and' \
-        'stow-links instead of native-config).' \
+        'omz-order, nvm-homebrew, payloads).' \
         '' \
         'Host selection (default: on a native-owned home the [data].host of its' \
-        'native ~/.config/chezmoi/chezmoi.toml; elsewhere DOTFILES_HOST, else the' \
-        'host ./stow-all.sh recorded):' \
+        'native ~/.config/chezmoi/chezmoi.toml):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \
         '                      (win: pwsh -File doctor.ps1 -Host win)' \
         '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
         '                      without a host overlay' \
-        'Common only (common-only as that [data].host, a set but empty DOTFILES_HOST,' \
-        'or a common-only install ./stow-all.sh recorded) means the detected platform' \
-        'without an overlay.' \
+        'common-only as that [data].host means the detected platform without an' \
+        'overlay.' \
         '' \
         'Options:' \
-        '  --legacy-stow     check the supported Stow/parser compatibility path' \
         '  --tier LIST|all     required tiers, comma list of core, cli, ai, desktop,' \
         '                      contributor, host (default core,cli,ai); rows of other' \
         '                      tiers report warn instead of missing or outdated' \
@@ -140,7 +133,6 @@ QUIET=0
 ONLINE=0
 SMOKE=0
 LIST=0
-BOOTSTRAP_LEGACY_STOW=0
 
 while [[ $# -gt 0 ]]; do
     option=$1
@@ -169,10 +161,6 @@ while [[ $# -gt 0 ]]; do
         --online) ONLINE=1 ;;
         --smoke) SMOKE=1 ;;
         --list) LIST=1 ;;
-        --legacy-stow)
-            # shellcheck disable=SC2034 # read by lib/bootstrap/checks.sh
-            BOOTSTRAP_LEGACY_STOW=1
-            ;;
         -h | --help)
             usage
             exit 0
@@ -206,27 +194,13 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 
 # Host and profile. --platform runs without an overlay: only all/unix rows.
-# A native-owned home records its role in its native config, which needs no
-# git, and DOTFILES_HOST and the Stow receipt do not apply there. Elsewhere
-# a DOTFILES_HOST that is set but empty, and without DOTFILES_HOST a
-# common-only install that ./stow-all.sh recorded for this home, mean common
-# only, as the login updater reads them. Common only, without --host or
-# --platform, means the platform the doctor detects, without an overlay, and
-# the doctor says so.
-if [[ -z "$PLATFORM" && $HOST_SET == 0 ]]; then
-    if bootstrap_native_home; then
-        if bootstrap_recorded_common_only "$REPO_ROOT"; then
-            PLATFORM=$(bootstrap_detect_platform)
-            dotfiles_log warn "the native config of this home selects [data].host common-only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
-        fi
-    elif bootstrap_host_env_empty; then
-        PLATFORM=$(bootstrap_detect_platform)
-        dotfiles_log warn "DOTFILES_HOST is set but empty, which means common only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
-    elif [[ -z "${DOTFILES_HOST:-}" ]] && bootstrap_find_command git >/dev/null &&
-        bootstrap_recorded_common_only "$REPO_ROOT"; then
-        PLATFORM=$(bootstrap_detect_platform)
-        dotfiles_log warn "./stow-all.sh recorded a common-only install for this home (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
-    fi
+# Only a native-owned home records a role, in its native config, which needs
+# no git; nothing else selects a host. Its common-only role, without --host
+# or --platform, means the platform the doctor detects, without an overlay,
+# and the doctor says so.
+if [[ -z "$PLATFORM" && $HOST_SET == 0 ]] && bootstrap_recorded_common_only; then
+    PLATFORM=$(bootstrap_detect_platform)
+    dotfiles_log warn "the native config of this home selects [data].host common-only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
 fi
 if [[ -n "$PLATFORM" ]]; then
     case $PLATFORM in
@@ -236,19 +210,10 @@ if [[ -n "$PLATFORM" ]]; then
     HOST=
 else
     if [[ $HOST_SET == 0 ]]; then
-        if bootstrap_native_home; then
-            HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
-                usage_error "no host given and none recorded for this home: its native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
-        elif [[ -n "${DOTFILES_HOST:-}" ]]; then
-            [[ "$DOTFILES_HOST" != win ]] || reject_win
-            HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
-                usage_error "DOTFILES_HOST='$DOTFILES_HOST' is not a known host (known: $(known_hosts_line))."
-        elif bootstrap_find_command git >/dev/null; then
-            HOST=$(bootstrap_resolve_host "$REPO_ROOT") || HOST=
-        fi
-        if [[ -z "$HOST" ]]; then
+        bootstrap_native_home ||
             usage_error "no host given and none recorded for this home; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
-        fi
+        HOST=$(bootstrap_resolve_host) ||
+            usage_error "no host given and none recorded for this home: its native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
     fi
     [[ "$HOST" != win ]] || reject_win
     PROFILE=$(bootstrap_profile_for_host "$HOST") ||
@@ -299,8 +264,7 @@ while [[ -n "$lines" ]]; do
     esac
     SEEN_IDS="$SEEN_IDS$id "
 done
-ROWS=$(bootstrap_tool_rows "$HOST" | bootstrap_mode_tool_rows) || invalid_manifest 'unreadable'
-BOOTSTRAP_STRUCTURAL_CHECKS=$(bootstrap_mode_structural_checks)
+ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
 # The row fields bootstrap_split assigns by name below, declared so a lint of
 # this file alone (a pre-commit run without the libraries) sees them.
 probe='' flag='' floor='' absent='' doc=''

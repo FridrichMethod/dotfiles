@@ -45,13 +45,11 @@ S3-clones auto core - macos,debian,hpc
 S3-bat-theme auto core - macos,debian,hpc
 S3-dirs auto core - macos,debian,hpc
 S4-nvm auto ai - macos,debian
-S4-setup-sync auto core - macos,debian,hpc
 S4-chezmoi auto core - macos,debian,hpc
 S5-claude inspect ai yes debian
 S5-codex auto ai - debian
 S6-nerd-font auto desktop - lab-ubuntu
 S6-kitty auto desktop - lab-ubuntu
-H7-stow judgment - yes macos,debian,hpc
 H7-native judgment - yes macos,debian,hpc
 H7-chsh chsh - no macos,debian
 H7-auth auth - no macos,debian,hpc
@@ -62,7 +60,7 @@ H7-doctor judgment - no macos,debian,hpc'
 STEP_DETAIL=''
 STEP_KIND='' STEP_TIER='' STEP_BLOCKING=''
 STEPS_KIND='' STEPS_URL='' STEPS_SHA='' STEPS_DEST='' STEPS_HUMAN='' STEPS_ARCHIVE=''
-STEPS_PROBE_FOUND='' STEPS_OMZ_RECOVERY='' STEPS_STOW_CONFLICTS='' STEPS_BREW_CONFLICTS=''
+STEPS_PROBE_FOUND='' STEPS_OMZ_RECOVERY='' STEPS_BREW_CONFLICTS=''
 STEPS_BREW_PREFIX='' STEPS_BREW_LOCKED='' STEPS_BREW_OWNER='' STEPS_BREW_SHARED=''
 STEPS_NVM_REFUSAL='' STEPS_NVM_PIN='' STEPS_NVM_HEAD=''
 STEPS_RC=0 STEPS_ERROR='' STEPS_EXIT=0
@@ -82,9 +80,6 @@ steps_rows() {
         lines=${lines#*"$BOOTSTRAP_NL"}
         bootstrap_split ' ' "$line" id kind tier blocking scopes
         [ -n "$id" ] || continue
-        case ${BOOTSTRAP_LEGACY_STOW:-0}:$id in
-            0:S4-setup-sync | 0:H7-stow | 1:S4-chezmoi | 1:H7-native) continue ;;
-        esac
         case ",$scopes," in
             *",$STEPS_PROFILE,"* | *",$STEPS_HOST,"*) ;;
             *) continue ;;
@@ -157,8 +152,6 @@ steps_needs() {
         hpc:H7-native) echo S3-clones S2-login-env S4-chezmoi ;;
         macos:H1-homebrew | macos:S3-clones | macos:S4-nvm) echo H1-xcode-clt ;;
         macos:S2-brew-bundle) echo H1-homebrew ;;
-        macos:S4-setup-sync) echo S2-brew-bundle ;;
-        macos:H7-stow | debian:H7-stow) echo S3-clones S2-brew-bundle S4-setup-sync ;;
         debian:S2-brew-bundle) echo H1-linuxbrew ;;
         debian:H7-chsh) echo H1-apt-core ;;
         debian:H1-linuxbrew | debian:S3-clones | debian:S3-bat-theme | debian:S4-* | \
@@ -166,16 +159,14 @@ steps_needs() {
             echo H1-apt-core
             ;;
         hpc:S2-login-env) echo S2-micromamba H2-alloc ;;
-        hpc:S4-setup-sync) echo S2-login-env H2-alloc ;;
-        hpc:H7-stow) echo S3-clones S2-login-env S4-setup-sync ;;
     esac
 }
 
 # steps_blocker ID KIND: print the first prerequisite that stops ID. A failed
 # or blocked prerequisite, or a pending blocking HUMAN one, stops every step;
 # a HUMAN step also waits for auto prerequisites that are still to do, or
-# that --skip or a declined prompt left undone, so the run never hands out
-# ./stow-all.sh before its prerequisites ran.
+# that --skip or a declined prompt left undone, so the run never hands out a
+# HUMAN block before its prerequisites ran.
 steps_blocker() {
     local IFS=' ' need state
     for need in $(steps_needs "$1"); do
@@ -391,7 +382,6 @@ steps_run_one() {
 # steps_rerun: the command that continues this run.
 steps_rerun() {
     printf './setup-host.sh --host %s' "$STEPS_HOST"
-    [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ] || printf ' --legacy-stow'
     [ "$STEPS_TIERS" = core,cli,ai ] || printf ' --tier %s' "$STEPS_TIERS"
     printf '\n'
 }

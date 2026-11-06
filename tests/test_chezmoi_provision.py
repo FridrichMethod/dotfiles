@@ -47,14 +47,27 @@ class NativeProvisionTests(unittest.TestCase):
         self.assertNotIn("H7-stow", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
-    # >>> stage6-B1 legacy-stow: the explicit legacy setup plan
-    def test_legacy_setup_is_explicit(self):
-        result = self.run_script("setup-host.sh", "--legacy-stow", "--host", "lab-ubuntu", "--list")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("S4-setup-sync", result.stdout)
-        self.assertIn("H7-stow", result.stdout)
-        self.assertNotIn("S4-chezmoi", result.stdout)
-    # <<< stage6-B1 legacy-stow
+    def test_legacy_stow_flag_is_refused(self):
+        for script in ("setup-host.sh", "doctor.sh"):
+            with self.subTest(script=script):
+                result = self.run_script(script, "--legacy-stow", "--host", "lab-ubuntu", "--list")
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn("unknown argument: --legacy-stow", result.stderr)
+                self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_unmarked_home_needs_host_whatever_dotfiles_host_says(self):
+        expected = {"setup-host.sh": "no host: pass --host", "doctor.sh": "no host given"}
+        for script, text in expected.items():
+            for value in ("lab-ubuntu", "win", ""):
+                with self.subTest(script=script, dotfiles_host=value):
+                    self.env["DOTFILES_HOST"] = value
+                    try:
+                        result = self.run_script(script, "--list")
+                    finally:
+                        del self.env["DOTFILES_HOST"]
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertIn(text, result.stderr)
+                    self.assertEqual(list(self.home.iterdir()), [])
 
     def test_sherlock_plan_uses_static_binary_for_legacy_glibc(self):
         # The real host has glibc 2.17; the generic v2.74 binary requires 2.34.
@@ -86,15 +99,6 @@ step_S4_chezmoi_plan
         self.assertTrue({"stow", "stow-links", "venv-sync"}.isdisjoint(ids))
         self.assertEqual(list(self.home.iterdir()), [])
 
-    # >>> stage6-B1 legacy-stow: the explicit legacy doctor checks
-    def test_legacy_doctor_retains_sync_checks(self):
-        result = self.run_script("doctor.sh", "--legacy-stow", "--host", "lab-ubuntu", "--list")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        ids = {line.split("\t")[0] for line in result.stdout.splitlines()}
-        self.assertTrue({"stow", "stow-links", "venv-sync"}.issubset(ids))
-        self.assertNotIn("chezmoi", ids)
-    # <<< stage6-B1 legacy-stow
-
     def test_native_handoff_only_prints_reviewed_procedure(self):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--print-manual")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -117,7 +121,7 @@ step_S4_chezmoi_plan
                       for path in self.home.rglob("*"))
 
     def test_native_role_selects_host_without_receipt_or_environment(self):
-        # DOTFILES_HOST is legacy only: a native-owned home ignores it.
+        # DOTFILES_HOST selects nothing: a native-owned home ignores it.
         self.bind_native("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
         for script, step in (("doctor.sh", "native-config"), ("setup-host.sh", "H7-native")):

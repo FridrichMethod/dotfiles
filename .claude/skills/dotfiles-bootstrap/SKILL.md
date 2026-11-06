@@ -57,17 +57,9 @@ the handover is the HW-native block and the finish is `.\doctor.ps1 -Host win`.
 Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 `micromamba shell init`, never edit rc files, and never commit.
 
-Native mode is the default and installs the verified chezmoi release without
-creating `.venv-sync` or running setup-sync. Doctor checks the native binding
-and tool, without requiring the Stow/parser runtime; a binding to another
-checkout or a stray `~/.config/chezmoi/chezmoistate.boltdb` only warns. On a
-native-owned home the default host is the local config's `[data].host`
-(`DOTFILES_HOST` is legacy only). It remains offline and write-free; native
-diff/apply is a separate operation.
-
-Use `--legacy-stow` on BOTH Unix commands, or `-LegacyStow` on BOTH Windows
-commands, only for the supported compatibility path. That path retains
-S4-setup-sync / W1-setup-sync and H7-stow / HW-stow, including the printed
-`mv -n` conflict preparation and Windows elevation/task boundaries. Never
-run those legacy writers against a native-owned home. Current package
-manifests and existing legacy environments remain until their retirement stage.
+Provisioning is native only: it installs the verified chezmoi release and
+creates no virtual environment. Doctor checks the native binding and tool; a
+binding to another checkout or a stray `~/.config/chezmoi/chezmoistate.boltdb`
+only warns. On a native-owned home the default host is the local config's
+`[data].host`; nothing else selects one. It remains offline and write-free;
+native diff/apply is a separate operation.

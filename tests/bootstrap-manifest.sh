@@ -168,7 +168,7 @@ assert_events 'ldd:--version' 'ldd:--version' 'ldd:--version'
 assert_eq "$(BOOTSTRAP_UNAME_S=Darwin bootstrap_glibc_version)" '' 'macOS glibc'
 assert_events
 
-# A fresh Homebrew is off PATH until `brew shellenv` runs (stow brings that).
+# A fresh Homebrew is off PATH until `brew shellenv` runs (the dotfiles rc files bring that).
 BREW_OFF="$TEST_TMP/prefix-a/bin/brew"
 BREW_ON="$TEST_TMP/prefix-b/bin/brew"
 mkdir -p "${BREW_OFF%/brew}" "${BREW_ON%/brew}"
@@ -428,14 +428,14 @@ doc_case S4-nvm hpc S2-modules
 doc_case S5-claude hpc S2-modules
 doc_case S5-codex hpc S2-modules
 doc_case S3-clones hpc S3-clones
-doc_case H7-stow hpc H7-stow
+doc_case H7-native hpc H7-native
 for step in H1-apt-core S2-brew-bundle S4-nvm S5-claude S5-codex; do
     doc_case "$step" windows W1-winget
 done
 doc_case S3-bat-theme windows W1-bat-theme
 doc_case S6-nerd-font windows W1-font
-doc_case S4-setup-sync windows W1-setup-sync
-doc_case H7-stow windows HW-stow
+doc_case S4-chezmoi windows W1-chezmoi
+doc_case H7-native windows HW-native
 doc_case H7-auth windows HW-auth
 doc_case P0-preflight windows HW-clone
 # No apt outside debian, and no sudo locale-gen on a cluster.
@@ -445,10 +445,10 @@ doc_case H1-apt-core macos S2-brew-bundle
 for step in H1-apt-core H1-locale H1-homebrew H1-linuxbrew S2-brew-bundle S4-nvm S5-claude S5-codex; do
     doc_case "$step" other X-other-linux
 done
-for step in S3-clones S3-bat-theme S4-setup-sync H7-stow P0-preflight; do
+for step in S3-clones S3-bat-theme S4-chezmoi H7-native P0-preflight; do
     doc_case "$step" other "$step"
 done
-for step in S2-brew-bundle S4-nvm S5-claude S3-bat-theme H7-stow; do
+for step in S2-brew-bundle S4-nvm S5-claude S3-bat-theme H7-native; do
     doc_case "$step" debian "$step"
     doc_case "$step" macos "$step"
 done
@@ -530,75 +530,33 @@ assert_eq "$(cd "$TEST_TMP" && BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS
 
 # --------------------------------------------------------- host resolution
 echo '==> host resolution'
-REPO="$TEST_TMP/repo"
-"$REAL_GIT" -c init.defaultBranch=main init -q "$REPO"
-"$REAL_GIT" -C "$REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
-state_file() {
-    local path
-    path=$("$REAL_GIT" -C "$1" rev-parse --git-path dotfiles-sync-unix)
-    case $path in
-        /*) printf '%s\n' "$path" ;;
-        *) printf '%s\n' "$1/$path" ;;
-    esac
-}
+# Only a native-owned home's local config selects a host: an unmarked home
+# resolves none and is never common only, whatever DOTFILES_HOST says.
 resolve() {
-    # resolve ROOT [VAR=VALUE...]
-    local root=$1
-    shift
-    env "$@" bash -c 'set -eu; . "$1"; bootstrap_resolve_host "$2"' _ \
-        "$FIXTURE/lib/bootstrap/platform.sh" "$root"
+    # resolve [VAR=VALUE...]
+    env "$@" bash -c 'set -eu; . "$1"; bootstrap_resolve_host' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
-STATE=$(state_file "$REPO")
-assert_status 1 'no state file' resolve "$REPO"
-printf '%s\n' "$TEST_HOME" "$(uname -s)" sherlock abc123 >"$STATE"
-assert_eq "$(resolve "$REPO")" sherlock 'recorded host'
-assert_eq "$(resolve "$REPO" DOTFILES_HOST=marlowe)" marlowe 'DOTFILES_HOST wins'
-assert_status 1 'invalid DOTFILES_HOST' resolve "$REPO" DOTFILES_HOST=fedora
-# Set but empty means common only, as for the login updater: the recorded
-# host does not apply.
-assert_status 1 'empty DOTFILES_HOST' resolve "$REPO" DOTFILES_HOST=
-assert_status 1 'other HOME' resolve "$REPO" HOME="$TEST_TMP/elsewhere"
-assert_status 1 'other kernel' resolve "$REPO" BOOTSTRAP_UNAME_S=Plan9
-printf '%s\n' "$TEST_HOME" Plan9 mac '' >"$STATE"
-assert_eq "$(resolve "$REPO" BOOTSTRAP_UNAME_S=Plan9)" mac 'kernel override matches'
-printf '%s\n' "$TEST_HOME" "$(uname -s)" '' '' >"$STATE"
-assert_status 1 'common-only stow' resolve "$REPO"
-# A recorded common-only install, which resolve cannot tell from no record:
-# all four lines, as the login updater reads them, for this home and kernel.
 common_only() {
-    # common_only ROOT [VAR=VALUE...]
-    local root=$1
-    shift
-    env "$@" bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only "$2"' _ \
-        "$FIXTURE/lib/bootstrap/platform.sh" "$root"
+    # common_only [VAR=VALUE...]
+    env "$@" bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
-assert_status 0 'recorded common only' common_only "$REPO"
-assert_status 0 'the record alone (DOTFILES_HOST is for the caller)' common_only "$REPO" DOTFILES_HOST=sherlock
-assert_status 1 'common only, other HOME' common_only "$REPO" HOME="$TEST_TMP/elsewhere"
-assert_status 1 'common only, other kernel' common_only "$REPO" BOOTSTRAP_UNAME_S=Plan9
-printf '%s\n' "$TEST_HOME" "$(uname -s)" '' >"$STATE"
-assert_status 1 'common only, three lines' common_only "$REPO"
-printf '%s\n' "$TEST_HOME" "$(uname -s)" sherlock '' >"$STATE"
-assert_status 1 'a recorded host is not common only' common_only "$REPO"
-rm -f "$STATE"
-assert_status 1 'no state is not common only' common_only "$REPO"
-printf '%s\n' "$TEST_HOME" "$(uname -s)" ubuntu '' >"$STATE"
-assert_status 1 'unknown recorded host' resolve "$REPO"
-printf '%s\n%s\n%s' "$TEST_HOME" "$(uname -s)" lab-ubuntu >"$STATE"
-assert_eq "$(resolve "$REPO")" lab-ubuntu 'no trailing newline'
-printf '%s\n' "$TEST_HOME" >"$STATE"
-assert_status 1 'truncated state' resolve "$REPO"
-assert_status 1 'not a repository' resolve "$TEST_TMP/fixture" GIT_CEILING_DIRECTORIES="$TEST_TMP"
-
-WORKTREE="$TEST_TMP/worktree"
-"$REAL_GIT" -C "$REPO" worktree add -q --detach "$WORKTREE"
-WORKTREE_STATE=$(state_file "$WORKTREE")
-case $WORKTREE_STATE in
-    "$REPO"/.git/worktrees/*) ;;
-    *) fail "unexpected worktree state path: $WORKTREE_STATE" ;;
-esac
-printf '%s\n' "$TEST_HOME" "$(uname -s)" wsl-ubuntu '' >"$WORKTREE_STATE"
-assert_eq "$(resolve "$WORKTREE")" wsl-ubuntu 'linked worktree state'
+[ ! -e "$TEST_HOME/.config" ] || fail 'the host resolution cases need a home without ~/.config'
+assert_status 1 'unmarked home' resolve
+assert_status 1 'unmarked home ignores DOTFILES_HOST' resolve DOTFILES_HOST=sherlock
+assert_status 1 'unmarked home: an empty DOTFILES_HOST is not common only' common_only DOTFILES_HOST=
+mkdir -p "$TEST_HOME/.config/dotfiles" "$TEST_HOME/.config/chezmoi"
+: >"$TEST_HOME/.config/dotfiles/native"
+printf '[data]\nhost = "sherlock"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
+assert_eq "$(resolve)" sherlock 'native role'
+assert_eq "$(resolve DOTFILES_HOST=marlowe)" sherlock 'native role over DOTFILES_HOST'
+assert_status 1 'a native role is not common only' common_only
+printf '[data]\nhost = "common-only"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
+assert_status 1 'native common-only resolves no host' resolve
+assert_status 0 'native common-only' common_only
+printf '[data]\nhost = "ubuntu"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
+assert_status 1 'unknown native role' resolve
+# The sections below expect an unmarked home.
+rm -rf "$TEST_HOME/.config"
 
 # ------------------------------------------------------- real manifests
 echo '==> repository manifests'
@@ -660,8 +618,8 @@ assert_events
 
 # -------------------------------------------------- gh auth setup-git
 echo '==> no bootstrap script or doc tells anyone to run gh auth setup-git'
-# It runs git config --global, which writes through the stowed ~/.gitconfig
-# into common/git/.gitconfig. It may only be named as a warning.
+# It runs git config --global, which rewrites the managed ~/.gitconfig. It
+# may only be named as a warning.
 setup_git_offenders() {
     local file
     for file in "$@"; do

@@ -14,11 +14,10 @@
 #   human     a person must repair it (installer edits, dotfiles before oh-my-zsh)
 # Checks only read. git runs with --no-optional-locks, so it never refreshes
 # the index. Fonts are found by file name, never through fc-list, which
-# creates fontconfig caches under ~/.cache and in its prefix. venv-sync runs
-# Python with -I -B, so it writes no bytecode. Tools whose version flag writes
-# are presence-only rows in tools.tsv, so they never run: brew
-# (.git/describe-cache), codex (~/.codex/tmp/arg0), nvim (its log) and
-# pre-commit (__pycache__). Only bootstrap_check_auth (doctor.sh --online)
+# creates fontconfig caches under ~/.cache and in its prefix. Tools whose
+# version flag writes are presence-only rows in tools.tsv, so they never
+# run: brew (.git/describe-cache), codex (~/.codex/tmp/arg0), nvim (its log)
+# and pre-commit (__pycache__). Only bootstrap_check_auth (doctor.sh --online)
 # may reach the network, and only bootstrap_check_smoke (doctor.sh --smoke)
 # starts a shell, which may write shell caches. Test overrides:
 # BOOTSTRAP_NVM_KEG_CANDIDATES, BOOTSTRAP_CLT_SHIMS and
@@ -29,30 +28,12 @@
 # tools.tsv never uses them.
 # shellcheck disable=SC2034 # read by doctor.sh
 BOOTSTRAP_STRUCTURAL_CHECKS='locale core H1-locale
-venv-sync core S4-setup-sync
-stow-links core H7-stow
 native-config core H7-native
-path-order core H7-stow
+path-order core H7-native
 rc-pollution core X-rc-protection
 omz-order core X-recovery
 nvm-homebrew ai S4-nvm
 payloads ai H7-payloads'
-
-# Select checks without running chezmoi transforms or its persistent state.
-bootstrap_mode_structural_checks() {
-    local lines line id
-    lines=$BOOTSTRAP_STRUCTURAL_CHECKS$BOOTSTRAP_NL
-    while [ -n "$lines" ]; do
-        line=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        id=${line%% *}
-        case ${BOOTSTRAP_LEGACY_STOW:-0}:$id in
-            0:venv-sync | 0:stow-links | 1:native-config) continue ;;
-            0:path-order) line='path-order core H7-native' ;;
-        esac
-        printf '%s\n' "$line"
-    done
-}
 
 # bootstrap_native_state ROOT: this home's native binding as one word: ok,
 # maintenance, unbound (no ~/.config/dotfiles/native), invalid (a marker the
@@ -480,39 +461,6 @@ bootstrap_check_locale() {
     fi
 }
 
-# bootstrap_sync_runtime_ok PYTHON ROOT: 0 when PYTHON passes
-# ROOT/lib/config_sync.py --runtime-check (Python 3.11+ and the pinned
-# tomlkit), as setup-sync.sh, setup-host's S4-setup-sync and doctor.ps1
-# judge it. -I -B: isolated, and no bytecode is written.
-bootstrap_sync_runtime_ok() {
-    [ -n "$1" ] && [ -f "$1" ] && [ -x "$1" ] || return 1
-    "$1" -I -B -X utf8 "$2/lib/config_sync.py" --runtime-check </dev/null >/dev/null 2>&1
-}
-
-# bootstrap_check_venv_sync ROOT: the AI-sync interpreter lib/sync-runtime.sh
-# would use (DOTFILES_SYNC_PYTHON when set, else ROOT/.venv-sync) passes the
-# runtime check; an interrupted setup-sync.sh leaves a venv that does not.
-bootstrap_check_venv_sync() {
-    local python
-    if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
-        python=$DOTFILES_SYNC_PYTHON
-        if bootstrap_sync_runtime_ok "$python" "$1"; then
-            bootstrap_check_result ok "DOTFILES_SYNC_PYTHON=$python passes the runtime check"
-        else
-            bootstrap_check_result missing "DOTFILES_SYNC_PYTHON='$python' fails lib/config_sync.py --runtime-check; the AI config sync helpers cannot run"
-        fi
-        return 0
-    fi
-    python=$1/.venv-sync/bin/python
-    if bootstrap_sync_runtime_ok "$python" "$1"; then
-        bootstrap_check_result ok "AI-sync runtime ready at $python"
-    elif [ -f "$python" ] && [ -x "$python" ]; then
-        bootstrap_check_result missing "$python fails lib/config_sync.py --runtime-check; rerun ./setup-sync.sh"
-    else
-        bootstrap_check_result missing "no executable $python; ./setup-sync.sh has not run, so ./stow-all.sh cannot sync the AI configs"
-    fi
-}
-
 # The Claude helpers that common/claude/.claude/settings.json runs, which
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
@@ -599,61 +547,6 @@ bootstrap_check_payloads() {
         bootstrap_check_result ok "installed: ${found#, }"
     else
         bootstrap_check_result ok "DOTFILES_PAYLOAD_ITEMS selects no payload"
-    fi
-}
-
-# bootstrap_physical_path PATH: PATH with every symlink resolved (readlink
-# without -f, which old BSD readlink lacks). Returns 1 on a loop or dead end.
-bootstrap_physical_path() {
-    local path=$1 target hops=0 dir
-    while [ -L "$path" ]; do
-        [ "$hops" -lt 40 ] || return 1
-        target=$(readlink "$path") || return 1
-        case $target in
-            /*) path=$target ;;
-            *) path=${path%/*}/$target ;;
-        esac
-        hops=$((hops + 1))
-    done
-    dir=${path%/*}
-    [ -n "$dir" ] || dir=/
-    dir=$(cd -P -- "$dir" 2>/dev/null && pwd -P) || return 1
-    printf '%s/%s\n' "${dir%/}" "${path##*/}"
-}
-
-# bootstrap_check_stow_links ROOT: ~/.zshrc, ~/.profile and ~/.gitconfig are
-# symlinks that resolve into ROOT/common/. A link into another checkout (a
-# second clone or a worktree) is a warn; absent, dangling or regular files
-# are missing.
-bootstrap_check_stow_links() {
-    local root broken='' elsewhere='' name link resolved
-    root=$(cd -P -- "$1" 2>/dev/null && pwd -P) || root=$1
-    for name in .zshrc .profile .gitconfig; do
-        link=$HOME/$name
-        if [ ! -L "$link" ]; then
-            if [ -e "$link" ]; then
-                broken="$broken, ~/$name is not a symlink"
-            else
-                broken="$broken, ~/$name is absent"
-            fi
-            continue
-        fi
-        if [ ! -e "$link" ]; then
-            broken="$broken, ~/$name is a dangling symlink"
-            continue
-        fi
-        resolved=$(bootstrap_physical_path "$link") || resolved=
-        case $resolved in
-            "$root"/common/*) ;;
-            *) elsewhere="$elsewhere, ~/$name -> ${resolved:-unresolvable}" ;;
-        esac
-    done
-    if [ -n "$broken" ]; then
-        bootstrap_check_result missing "${broken#, }; stow with the line the H7-stow block of ./setup-host.sh prints"
-    elif [ -n "$elsewhere" ]; then
-        bootstrap_check_result warn "${elsewhere#, } (not $root/common)"
-    else
-        bootstrap_check_result ok "stow links ~/.zshrc, ~/.profile and ~/.gitconfig resolve into $root/common"
     fi
 }
 
@@ -758,8 +651,8 @@ bootstrap_check_rc_pollution() {
 }
 
 # bootstrap_check_omz_order: ~/.oh-my-zsh exists without oh-my-zsh.sh, the
-# state applying the dotfiles (./stow-all.sh, or the native directory
-# preparation) leaves when it runs before the oh-my-zsh clone.
+# state applying the dotfiles (the native directory preparation) leaves when
+# it runs before the oh-my-zsh clone.
 bootstrap_check_omz_order() {
     local omz=$HOME/.oh-my-zsh
     if [ -d "$omz" ] && [ ! -f "$omz/oh-my-zsh.sh" ]; then
@@ -797,8 +690,6 @@ bootstrap_check_nvm_homebrew() {
 bootstrap_check_structural() {
     case $1 in
         locale) bootstrap_check_locale "$3" ;;
-        venv-sync) bootstrap_check_venv_sync "$2" ;;
-        stow-links) bootstrap_check_stow_links "$2" ;;
         native-config) bootstrap_check_native_config "$2" ;;
         path-order) bootstrap_check_path_order "$4" "$3" ;;
         rc-pollution) bootstrap_check_rc_pollution "$2" ;;

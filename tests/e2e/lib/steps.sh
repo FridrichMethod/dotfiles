@@ -468,10 +468,11 @@ e2e_negatives() {
 # e2e_audits: the acceptance audits over the whole run: (1) every wrapper
 # call happened in a human:* or negative:* phase, and a host without sudo
 # saw no sudo at all; (2) every sudo.log entry falls in such a window; (3)
-# no link under HOME leads into the clone; (4) the AI-sync runtime never
-# appeared in the clone; (5) the login shell is unchanged; (6) the rc files
-# changed only in human phases. Stow is no longer wrapped: until core.Brewfile
-# and the hpc login env stop installing it, (3) is what catches a stray stow.
+# no link under HOME leads into the clone; (4) no stow is on the login PATH
+# but one the machine had before the flow; (5) the AI-sync runtime never
+# appeared in the clone; (6) the login shell is unchanged; (7) the rc files
+# changed only in human phases. Stow is no longer wrapped: nothing the
+# native flow runs installs it, and (3) and (4) catch a stray one.
 e2e_audits() {
     local log=$E2E_OUT/log/wrappers.log sudo_log=$E2E_OUT/log/sudo.log bad rc=0 shell
     e2e_step_begin audit-wrappers check:audit-wrappers
@@ -507,6 +508,27 @@ e2e_audits() {
     else
         e2e_step_end fail "links under HOME that lead into the clone: $(e2e_one_line "$bad" 400)"
     fi
+
+    e2e_step_begin audit-no-stow check:audit-no-stow
+    rc=0
+    bad=$(e2e_audit_login_stow "$E2E_STEP_OUT" "$E2E_STEP_ERR") || rc=$?
+    case $rc in
+        0)
+            if [ -n "$E2E_STOW_START" ]; then
+                e2e_step_end pass "no stow on the login PATH but what the machine had before the run: $(e2e_one_line "$E2E_STOW_START" 200)"
+            else
+                e2e_step_end pass 'no stow on the login PATH'
+            fi
+            ;;
+        2)
+            if [ -n "$E2E_BROKEN" ]; then
+                e2e_step_end skip "after $E2E_BROKEN failed: $(e2e_one_line "$bad" 200)"
+            else
+                e2e_step_end fail "$(e2e_one_line "$bad" 400)"
+            fi
+            ;;
+        *) e2e_step_end fail "stow on the login PATH that the run put there: $(e2e_one_line "$bad" 400)" ;;
+    esac
 
     e2e_step_begin audit-sync-venv check:audit-sync-venv
     if [ -n "$E2E_VENV_VIOLATIONS" ]; then

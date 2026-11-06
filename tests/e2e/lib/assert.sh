@@ -1,11 +1,12 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2034 # the guard state (E2E_VENV_VIOLATIONS, E2E_LOGIN_SHELL_START) is read by steps.sh and inside.sh
+# shellcheck disable=SC2034 # the guard state (E2E_VENV_VIOLATIONS, E2E_LOGIN_SHELL_START, E2E_STOW_START) is read by steps.sh and inside.sh
 # The checks of tests/e2e/inside.sh that watch the home and the clone: the
 # no-write snapshots (an empty TMPDIR, HOME by find -newer and entry count),
 # the clean-clone rule, the per-step guards (rc-file digests, the AI-sync
 # runtime in the clone), the login-shell run and the acceptance audits
 # (wrappers.log phases, sudo.log timestamps against the timeline, links
-# under HOME that lead into the clone). Sourced after common.sh; same
+# under HOME that lead into the clone, a stow on the login PATH). Sourced
+# after common.sh; same
 # portability rules (no find -printf, no stat, no readlink -f, no date -d
 # except inside the sudo.log audit, which Linux alone needs).
 
@@ -19,6 +20,8 @@ E2E_SYNC_VENV=.venv-sync
 E2E_VENV_VIOLATIONS=''
 E2E_PENDING_NOTES=''
 E2E_LOGIN_SHELL_START=''
+# The stow executables the machine had before the flow (e2e_stow_start).
+E2E_STOW_START=''
 E2E_LOGIN_DETAIL=''
 E2E_LOGIN_ENV=()
 E2E_PRUNE=()
@@ -307,6 +310,61 @@ e2e_clone_link() {
         "$3" | "$3"/*) return 0 ;;
     esac
     return 1
+}
+
+# e2e_stow_paths PATH_VALUE: every executable named stow in the
+# colon-separated PATH_VALUE, in PATH order, one per line.
+e2e_stow_paths() {
+    local rest=$1 dir
+    while [ -n "$rest" ]; do
+        dir=${rest%%:*}
+        case $rest in
+            *:*) rest=${rest#*:} ;;
+            *) rest= ;;
+        esac
+        if [ -n "$dir" ] && [ -f "$dir/stow" ] && [ -x "$dir/stow" ]; then
+            printf '%s\n' "$dir/stow"
+        fi
+    done
+    return 0
+}
+
+# e2e_stow_start: set E2E_STOW_START to the stow executables on the system
+# PATH and on the PATH a fresh `bash -l` reports, before any step ran: what
+# the machine had before the flow (a runner may ship one).
+e2e_stow_start() {
+    local out=$E2E_OUT/log/stow-start.out path=''
+    local run=()
+    e2e_login_env
+    [ -z "${E2E_TIMEOUT_BIN:-}" ] || run=("$E2E_TIMEOUT_BIN" "$E2E_TIMEOUT_CHECK")
+    if (cd "$HOME" && exec ${run[@]+"${run[@]}"} "${E2E_LOGIN_ENV[@]}" bash -lc 'printf "E2E_PATH=%s\n" "$PATH"') \
+        </dev/null >"$out" 2>"$E2E_OUT/log/stow-start.err"; then
+        path=$(e2e_login_text "$out" | sed -n 's/^E2E_PATH=//p' | sed -n 1p)
+    fi
+    E2E_STOW_START=$(e2e_stow_paths "$E2E_SYS_PATH${path:+:$path}")
+}
+
+# e2e_audit_login_stow OUT ERR: every stow executable on the PATH of a fresh
+# login shell (e2e_login_run) that the machine did not have before the flow
+# (E2E_STOW_START), one per line. Nothing the native flow runs installs
+# Stow (core.Brewfile and the hpc login env have no stow), so any is a
+# finding. 0 when there is none; 2 when the login shell printed no PATH.
+e2e_audit_login_stow() {
+    local rc=0 path new line
+    e2e_login_run "$1" "$2" 'printf "E2E_PATH=%s\n" "$PATH"' || rc=$?
+    path=$(e2e_login_text "$1" | sed -n 's/^E2E_PATH=//p' | sed -n 1p)
+    if [ "$rc" != 0 ] || [ -z "$path" ]; then
+        printf 'the login shell exited %s and printed no PATH\n' "$rc"
+        return 2
+    fi
+    new=$(e2e_stow_paths "$path" | while IFS= read -r line; do
+        case $E2E_NL$E2E_STOW_START$E2E_NL in
+            *"$E2E_NL$line$E2E_NL"*) ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done)
+    printf '%s' "${new:+$new$E2E_NL}"
+    [ -z "$new" ]
 }
 
 # e2e_audit_no_sudo LOG: on a host without sudo (E2E_SUDO=no: the clusters,

@@ -1,7 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# Runtime steps of setup-host.sh: S4-nvm (nvm and Node.js) and S4-setup-sync
-# (the checkout's .venv-sync, the only write inside the checkout).
+# Runtime steps of setup-host.sh: S4-nvm (nvm and Node.js).
 # Checks are read-only and offline; apply functions run in steps_guarded
 # and report each failure explicitly. Sourced only (after steps.sh and
 # steps-common.sh); defines functions and changes no shell options.
@@ -153,7 +152,7 @@ steps_nvm_block() {
         printf 'git -C %s fetch --depth=1 https://github.com/nvm-sh/nvm.git %s\n' "$q" "$2"
         printf 'git -C %s -c advice.detachedHead=false checkout --detach %s\n' "$q" "$2"
     fi
-    printf '# then run ./setup-host.sh --host %s%s again\n' "$STEPS_HOST" "$(steps_mode_flag)"
+    printf '# then run ./setup-host.sh --host %s again\n' "$STEPS_HOST"
     steps_block_end
 }
 
@@ -207,73 +206,4 @@ step_S4_nvm_apply() {
     # shellcheck disable=SC2016 # expanded by the child bash
     NVM_DIR=$dir bash -c '. "$NVM_DIR/nvm.sh" --no-use && nvm install --lts && nvm alias default "lts/*"' \
         >&2 </dev/null
-}
-
-# --- S4-setup-sync (unix) --------------------------------------------------
-
-step_S4_setup_sync_check() {
-    local result status
-    result=$(bootstrap_check_venv_sync "$STEPS_ROOT")
-    bootstrap_split "$BOOTSTRAP_TAB" "$result" status STEP_DETAIL
-    [ "$status" != ok ] || return 0
-    # A selected interpreter belongs to the caller. Provisioning the default
-    # would not repair it, because the helpers would still use the override.
-    [ "${DOTFILES_SYNC_PYTHON+x}" != x ] || return 1
-    if [ "$STEPS_PROFILE" = hpc ] && ! bootstrap_in_allocation; then
-        STEP_DETAIL="H2-alloc: building the AI-sync env needs a Slurm allocation (SLURM_JOB_ID is unset)"
-        return 4
-    fi
-    return 1
-}
-
-# steps_setup_sync_python: the interpreter setup-sync.sh should use, if not
-# the python3 on PATH: the login env on hpc, Homebrew's python3 on macOS.
-steps_setup_sync_python() {
-    local brew
-    case $STEPS_PROFILE in
-        hpc) printf '%s\n' "$HOME/micromamba/envs/login/bin/python3" ;;
-        macos)
-            if brew=$(bootstrap_brew_bin) && [ -x "${brew%/brew}/python3" ]; then
-                printf '%s\n' "${brew%/brew}/python3"
-            fi
-            ;;
-    esac
-}
-
-step_S4_setup_sync_plan() {
-    local python
-    if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
-        printf '%s\n' '# Repair DOTFILES_SYNC_PYTHON or unset it to provision the default runtime.'
-        return
-    fi
-    python=$(steps_setup_sync_python)
-    printf './setup-sync.sh%s\n' "${python:+ --python $python}"
-}
-
-step_S4_setup_sync_apply() {
-    local python where
-    if [ "${DOTFILES_SYNC_PYTHON+x}" = x ]; then
-        dotfiles_log error "DOTFILES_SYNC_PYTHON='$DOTFILES_SYNC_PYTHON' fails the runtime check; repair or unset it before provisioning the default runtime"
-        return 1
-    fi
-    if [ "$STEPS_PROFILE" = hpc ]; then
-        if ! bootstrap_in_allocation; then
-            dotfiles_log error 'refusing to build the AI-sync env outside a Slurm allocation (H2-alloc)'
-            return 1
-        fi
-        if where=$(steps_under_scratch "$STEPS_ROOT/.venv-sync"); then
-            dotfiles_log error "refusing to build the AI-sync env under \$$where, which is purged: $STEPS_ROOT/.venv-sync"
-            return 1
-        fi
-    fi
-    python=$(steps_setup_sync_python)
-    if [ -z "$python" ]; then
-        "$STEPS_ROOT/setup-sync.sh" >&2 </dev/null
-        return
-    fi
-    if [ ! -x "$python" ]; then
-        dotfiles_log error "missing $python for ./setup-sync.sh"
-        return 1
-    fi
-    "$STEPS_ROOT/setup-sync.sh" --python "$python" >&2 </dev/null
 }

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # Host, profile and platform detection for doctor.sh and setup-host.sh: the
-# host a native-owned home's local config selects, else the legacy record.
+# host a native-owned home's local config selects.
 # Sourced only; defines functions and changes no shell options. Bash 3.2
 # compatible and `set -u` safe; nothing here splits words by the caller's IFS.
 # No here-documents (see manifest.sh): text reaches awk through a pipe.
@@ -133,7 +133,7 @@ bootstrap_glibc_version() {
 
 # bootstrap_brew_bin: the brew executable this process should use: brew on
 # PATH, else the first executable among Homebrew's default prefixes. A fresh
-# install stays off PATH until `brew shellenv` runs, which only the stowed rc
+# install stays off PATH until `brew shellenv` runs, which only the dotfiles rc
 # files do, so callers prepend the printed file's directory to their own PATH
 # before probing or bundling. BOOTSTRAP_BREW_CANDIDATES (colon-separated paths)
 # replaces the prefix list for tests. Returns 1 when there is none.
@@ -161,17 +161,10 @@ bootstrap_brew_bin() {
     return 1
 }
 
-# bootstrap_host_env_empty: 0 when DOTFILES_HOST is set but empty, which the
-# login updater (scripts/dotfiles-update.sh) reads as common only: no overlay.
-bootstrap_host_env_empty() {
-    [ "${DOTFILES_HOST+set}" = set ] && [ -z "$DOTFILES_HOST" ]
-}
-
 # bootstrap_native_home: 0 when this home has the native ownership marker
 # ~/.config/dotfiles/native in any form, the existence test of
 # dotfiles_native_owned (lib/chezmoi-guard.sh); the native-config check
-# judges its content. Such a home records its role in its native config,
-# never in a Stow receipt or DOTFILES_HOST, which are legacy only.
+# judges its content. Such a home records its role in its native config.
 bootstrap_native_home() {
     [ -n "${HOME:-}" ] || return 1
     [ -e "${HOME%/}/.config/dotfiles/native" ] || [ -L "${HOME%/}/.config/dotfiles/native" ]
@@ -229,76 +222,20 @@ bootstrap_native_host() {
     esac
 }
 
-# bootstrap_state_file ROOT: the readable file in which ./stow-all.sh records
-# its install for the checkout ROOT, $(git rev-parse --git-path
-# dotfiles-sync-unix), with lines HOME, uname -s, HOST (empty for common
-# only) and APPLIED_HEAD. Returns 1 when there is none.
-bootstrap_state_file() {
-    local root=$1 state
-    state=$(git -C "$root" rev-parse --git-path dotfiles-sync-unix 2>/dev/null) || return 1
-    [ -n "$state" ] || return 1
-    case $state in
-        /*) ;;
-        *) state=$root/$state ;;
-    esac
-    [ -f "$state" ] && [ -r "$state" ] || return 1
-    printf '%s\n' "$state"
-}
-
-# bootstrap_recorded_common_only ROOT: 0 when a native-owned home's config
-# selects common-only, or on another home when ./stow-all.sh recorded a
-# common-only install (an empty HOST line) for this home and kernel, which
-# the login updater reads as common only, as it does a set but empty
-# DOTFILES_HOST. Like the updater, it needs all four lines.
+# bootstrap_recorded_common_only: 0 when this home is native-owned and its
+# local config selects common-only (no host overlay).
 bootstrap_recorded_common_only() {
-    local state home_line os_line host_line
-    if bootstrap_native_home; then
-        [ "$(bootstrap_native_host)" = common-only ]
-        return
-    fi
-    state=$(bootstrap_state_file "$1") || return 1
-    {
-        IFS= read -r home_line && IFS= read -r os_line &&
-            IFS= read -r host_line && IFS= read -r _
-    } <"$state" || return 1
-    [ -n "${HOME:-}" ] && [ "$home_line" = "$HOME" ] || return 1
-    [ "$os_line" = "$(bootstrap_os)" ] || return 1
-    [ -z "$host_line" ]
+    bootstrap_native_home && [ "$(bootstrap_native_host)" = common-only ]
 }
 
-# bootstrap_resolve_host ROOT: on a native-owned home the host its config
-# selects (bootstrap_native_host), whatever DOTFILES_HOST says. Elsewhere
-# DOTFILES_HOST when set (it must be a known host), else the host that
-# ./stow-all.sh recorded for this home and kernel (bootstrap_state_file).
-# Returns 1 when unknown, and for common only: a common-only role, a set but
-# empty DOTFILES_HOST (the recorded host does not apply) or a recorded
-# common-only install (bootstrap_recorded_common_only tells that case apart).
+# bootstrap_resolve_host: the host a native-owned home's local config selects
+# (bootstrap_native_host). Returns 1 on any other home, for an unclear role
+# and for common-only (bootstrap_recorded_common_only tells that case apart).
 # Never guesses an overlay.
 bootstrap_resolve_host() {
-    local root=$1 state home_line os_line host_line
-    if bootstrap_native_home; then
-        host_line=$(bootstrap_native_host) || return 1
-        [ "$host_line" != common-only ] || return 1
-        printf '%s\n' "$host_line"
-        return 0
-    fi
-    if bootstrap_host_env_empty; then
-        return 1
-    fi
-    if [ -n "${DOTFILES_HOST:-}" ]; then
-        bootstrap_profile_for_host "$DOTFILES_HOST" >/dev/null || return 1
-        printf '%s\n' "$DOTFILES_HOST"
-        return 0
-    fi
-    state=$(bootstrap_state_file "$root") || return 1
-    home_line='' os_line='' host_line=''
-    {
-        IFS= read -r home_line && IFS= read -r os_line &&
-            { IFS= read -r host_line || [ -n "$host_line" ]; }
-    } <"$state" || return 1
-    [ -n "${HOME:-}" ] && [ "$home_line" = "$HOME" ] || return 1
-    [ "$os_line" = "$(bootstrap_os)" ] || return 1
-    [ -n "$host_line" ] || return 1
-    bootstrap_profile_for_host "$host_line" >/dev/null || return 1
-    printf '%s\n' "$host_line"
+    local host
+    bootstrap_native_home || return 1
+    host=$(bootstrap_native_host) || return 1
+    [ "$host" != common-only ] || return 1
+    printf '%s\n' "$host"
 }

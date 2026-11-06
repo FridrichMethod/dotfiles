@@ -4,9 +4,7 @@
     Day-zero installer for the win host - the thin Windows twin of setup-host.sh.
 
 .DESCRIPTION
-    Native configuration provisioning is the default. -LegacyStow selects the
-    supported Stow/parser compatibility path. Native W1-chezmoi replaces
-    W1-setup-sync and HW-native replaces HW-stow/HW-auto-stow-task.
+    Provisions the native chezmoi configuration tools for the win host.
 
     Runs the selected steps in order, each checked first and applied only when it is
     todo, then prints the person-only steps as HUMAN blocks:
@@ -18,18 +16,13 @@
       W1-font         oh-my-posh font install CascadiaMono (needs oh-my-posh)
       W1-bat-theme    the pinned Catppuccin Mocha theme, sha256-checked, into
                       %APPDATA%\bat\themes, then bat cache --build
-      W1-chezmoi      native default: the pinned, SHA256-checked chezmoi
-                      release, extracting only chezmoi.exe into ~\.local\bin;
-                      done once the login updater would run that private copy
-      W1-setup-sync   -LegacyStow only: .\setup-sync.ps1 -Python <the first
-                      python3 or python on PATH that reports 3.11 or newer; a
-                      Microsoft Store alias does not count> (the only write
-                      inside this checkout); done when the selected sync
-                      interpreter passes lib/config_sync.py --runtime-check
+      W1-chezmoi      the pinned, SHA256-checked chezmoi release, extracting
+                      only chezmoi.exe into ~\.local\bin; done once the login
+                      updater would run that private copy
 
     A step runs when a selected tier needs it: tools.tsv rows whose Windows
     docs step is W1-winget, W1-psresources, W1-font or W1-bat-theme decide
-    their step's tiers; W1-chezmoi and W1-setup-sync are core.
+    their step's tiers; W1-chezmoi is core.
 
     W1-winget leaves out each package whose tool the doctor already reports
     ok in this session, whoever installed it (the package maps to its
@@ -44,20 +37,18 @@
     a preexisting file with different bytes is left untouched and fails apply.
 
     HUMAN blocks follow the shared grammar (HUMAN-BEGIN <step-id> <kind>,
-    command lines, HUMAN-END) for HW-clone, HW-native (HW-stow and
-    HW-auto-stow-task with -LegacyStow), HW-execution-policy, HW-ssh-agent,
-    HW-wsl and HW-auth. This script never elevates itself, never initializes
-    or applies configuration, never runs stow-all.ps1 and never edits a
-    profile or rc file; elevated steps are left to a person.
+    command lines, HUMAN-END) for HW-clone, HW-native, HW-execution-policy,
+    HW-ssh-agent, HW-wsl and HW-auth. This script never elevates itself,
+    never initializes or applies configuration and never edits a profile or
+    rc file; elevated steps are left to a person.
 
     Exit codes: 0 done (non-blocking HUMAN blocks may still be printed);
     1 a step failed; 2 usage error, invalid manifest, or refusal (a
     non-interactive run without -Yes, or a declined prompt); 3 work remains:
-    a blocking HUMAN step is pending (HW-clone or HW-native; HW-clone or
-    HW-stow with -LegacyStow), or, under -Check, a step is still to apply.
-    As in setup-host.sh, the other HUMAN steps (HW-execution-policy,
-    HW-ssh-agent, HW-wsl, HW-auth, and HW-auto-stow-task with -LegacyStow)
-    are printed while pending but leave the exit code alone;
+    a blocking HUMAN step is pending (HW-clone or HW-native), or, under
+    -Check, a step is still to apply. As in setup-host.sh, the other HUMAN
+    steps (HW-execution-policy, HW-ssh-agent, HW-wsl and HW-auth) are
+    printed while pending but leave the exit code alone;
     .\doctor.ps1 -Online then shows whether sign-in is done.
 
 .PARAMETER HostName
@@ -74,9 +65,6 @@
 
 .PARAMETER Yes
     Apply without asking. Required when the session is not interactive.
-
-.PARAMETER LegacyStow
-    Provision the supported Stow/parser compatibility path explicitly.
 
 .PARAMETER PrintManual
     Print every HUMAN block and exit 0 without checking or applying anything.
@@ -95,8 +83,7 @@ param(
     [string]$Tier = 'core,cli,ai',
     [switch]$Check,
     [switch]$Yes,
-    [switch]$PrintManual,
-    [switch]$LegacyStow
+    [switch]$PrintManual
 )
 
 Set-StrictMode -Version Latest
@@ -112,15 +99,10 @@ try {
     if (Test-Path -LiteralPath $terminalLibrary -PathType Leaf) { . $terminalLibrary }
 } catch { } # Plain diagnostics remain usable in a partial checkout.
 
-$AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-setup-sync')
-$HumanSteps = @('HW-clone', 'HW-stow', 'HW-auto-stow-task', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
+$AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')
+$HumanSteps = @('HW-clone', 'HW-native', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
 # A pending blocking step makes the run exit 3 (setup-host.sh's "blocking").
-$BlockingHumanSteps = @('HW-clone', 'HW-stow')
-if (-not $LegacyStow) {
-    $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')
-    $HumanSteps = @('HW-clone', 'HW-native', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
-    $BlockingHumanSteps = @('HW-clone', 'HW-native')
-}
+$BlockingHumanSteps = @('HW-clone', 'HW-native')
 
 function New-SetupState {
     param([string]$Id, [ValidateSet('done', 'todo', 'human', 'skip')][string]$Status, [string]$Detail)
@@ -248,20 +230,6 @@ function Assert-SetupWingetManifest {
     }
 }
 
-function Get-SetupSyncPythonSpec {
-    # What W1-setup-sync hands to setup-sync.ps1 -Python: the tools.tsv
-    # python3 row's probe, version flag and floor (Select-BootstrapCommand).
-    $row = @($script:ToolRows | Where-Object { $_.id -ceq 'python3' -and $_.floor -cne '-' }) | Select-Object -First 1
-    if ($row) { return @{ Probe = $row.probe; VersionFlag = $row.version_flag; Floor = $row.floor } }
-    return @{ Probe = 'python3,python'; VersionFlag = '--version'; Floor = '3.11' }
-}
-
-function Test-SetupVenvReady {
-    # Ready means runnable with the pinned dependency, not merely present: a
-    # failed first setup-sync.ps1 leaves a venv without tomlkit.
-    return Test-BootstrapSyncRuntime -Python ((Get-BootstrapSyncPython $RepoRoot).Path) -RepoRoot $RepoRoot
-}
-
 function Get-SetupStepState {
     # Read-only and offline: PATH, file, module-directory and font probes.
     param([Parameter(Mandatory)][string]$Id, [Collections.IDictionary]$Earlier = @{})
@@ -326,48 +294,8 @@ function Get-SetupStepState {
             }
             return New-SetupState $Id done "chezmoi $($state.Probe.Version) at $($state.Probe.Path)"
         }
-        'W1-setup-sync' {
-            if (-not (Test-BootstrapTierSelected core $Tier)) { return New-SetupState $Id skip 'tier core not selected' }
-            $runtime = Get-BootstrapSyncPython $RepoRoot
-            if (Test-SetupVenvReady) { return New-SetupState $Id done "$($runtime.Source) passes the runtime check" }
-            if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
-                return New-SetupState $Id todo "DOTFILES_SYNC_PYTHON='$($runtime.Path)' fails lib/config_sync.py --runtime-check; repair or unset it before provisioning the default runtime"
-            }
-            $spec = Get-SetupSyncPythonSpec
-            $python = Select-BootstrapCommand @spec
-            if ($python.Path) { return New-SetupState $Id todo "run .\setup-sync.ps1 -Python $($python.Path)" }
-            return New-SetupState $Id todo "run .\setup-sync.ps1 once Python >= $($spec.Floor) is on PATH (W1-winget installs it)"
-        }
     }
     throw "Unknown step $Id"
-}
-
-function Test-SetupStowed {
-    # Read the installer's receipt directly: Get-DotfilesStateDirectory creates
-    # directories, which is forbidden during -Check.
-    try {
-        $gitDir = git -C $RepoRoot rev-parse --absolute-git-dir 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $gitDir) { return $false }
-        $head = git -C $RepoRoot rev-parse HEAD 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $head) { return $false }
-        $receipt = Get-Content -LiteralPath (Join-Path ([string]$gitDir) 'dotfiles-sync-windows/configuration.json') -Raw -ErrorAction Stop |
-            ConvertFrom-Json -ErrorAction Stop
-        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-        if (-not ([string]$receipt.home).Equals($HOME, $comparison) -or
-            $receipt.host -cne 'win' -or $receipt.appliedHead -cne [string]$head) { return $false }
-        foreach ($relative in @('common/git/.gitconfig', 'win/git/.gitconfig_local',
-                'win/powershell/Documents/PowerShell/profile.ps1', 'win/powershell/Documents/WindowsPowerShell/profile.ps1')) {
-            $destination = ($relative -split '/', 3)[2]
-            $link = Get-Item -LiteralPath (Join-Path $HOME $destination) -Force -ErrorAction Stop
-            if ($link.LinkType -ne 'SymbolicLink' -or -not $link.LinkTarget) { return $false }
-            $target = [string]$link.LinkTarget
-            if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path (Split-Path -Parent $link.FullName) $target }
-            $expected = [IO.Path]::GetFullPath((Join-Path $RepoRoot $relative))
-            if (-not (Test-Path -LiteralPath $expected -PathType Leaf) -or
-                -not [IO.Path]::GetFullPath($target).Equals($expected, $comparison)) { return $false }
-        }
-        return $true
-    } catch { return $false }
 }
 
 function Get-SetupFirstPolicy {
@@ -381,7 +309,7 @@ function Test-SetupExecutionPolicy {
     # Both shells' own scopes must allow local scripts. PowerShell 7: Group
     # Policy, then CurrentUser; LocalMachine is no evidence, because pwsh's
     # $PSHOME\powershell.config.json already sets it to RemoteSigned on
-    # Windows. Windows PowerShell 5.1 (it loads the stowed WindowsPowerShell
+    # Windows. Windows PowerShell 5.1 (it loads the dotfiles WindowsPowerShell
     # profile) keeps its own settings in the registry, Restricted by default.
     $allowed = @('RemoteSigned', 'Unrestricted', 'Bypass')
     $list = @(Get-ExecutionPolicy -List -ErrorAction SilentlyContinue)
@@ -406,18 +334,7 @@ function Test-SetupHumanDone {
         # login updater can pull it. No tracked file is a symlink, so Git
         # needs neither core.symlinks nor Developer Mode.
         'HW-clone' { return Test-Path -LiteralPath (Join-Path $RepoRoot '.git') }
-        'HW-stow' { return Test-SetupStowed }
         'HW-native' { return Test-BootstrapNativeReady -RepoRoot $RepoRoot }
-        'HW-auto-stow-task' {
-            $autoStow = Join-Path $RepoRoot 'scripts/dotfiles-auto-stow.ps1'
-            if (-not $IsWindows -or -not (Test-Path -LiteralPath $autoStow -PathType Leaf)) { return $false }
-            # Without switches the script only defines functions, here in
-            # this function's scope; its task name is keyed to this checkout.
-            # A task whose pwsh an update or uninstall removed, or will, is
-            # not done.
-            . $autoStow
-            return (Get-DotfilesTaskStatus (Get-DotfilesTaskName $RepoRoot)).State -ceq 'Ok'
-        }
         'HW-execution-policy' {
             if (-not $IsWindows) { return $false }
             return Test-SetupExecutionPolicy
@@ -450,18 +367,11 @@ function Get-SetupHumanBlock {
     # self-contained command: no Set-Location or variable carries over.
     param([Parameter(Mandatory)][string]$Id)
     $repo = ConvertTo-SetupQuoted $RepoRoot
-    # Lines that rerun a script name the person's mode.
-    $modeFlag = if ($LegacyStow) { ' -LegacyStow' } else { '' }
     switch -CaseSensitive ($Id) {
         'HW-clone' {
-            $powerShellNote = if ($LegacyStow) {
-                '# Git, and PowerShell 7 as the MSI in Program Files\PowerShell\7, which HW-auto-stow-task starts by path:'
-            } else {
-                '# Git and PowerShell 7 as the MSI in Program Files\PowerShell\7:'
-            }
             return @{ Kind = 'judgment'; Lines = @(
-                    "# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1$modeFlag from the clone."
-                    $powerShellNote
+                    '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.'
+                    '# Git and PowerShell 7 as the MSI in Program Files\PowerShell\7:'
                     'winget install --id Git.Git -e --source winget'
                     'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix'
                     'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
@@ -474,18 +384,6 @@ function Get-SetupHumanBlock {
                     '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.'
                     '# Quiesce writers, snapshot exact targets, initialize with all paths explicit and establish the home binding.'
                     '# Native regular-file updates need no elevation or scheduled task.'
-                ) }
-        }
-        'HW-stow' {
-            return @{ Kind = 'judgment'; Lines = @(
-                    '# From an elevated PowerShell 7 (Run as administrator); it writes ~\.claude, ~\.codex and ~\.ssh.'
-                    "& $(ConvertTo-SetupQuoted (Join-Path $RepoRoot 'stow-all.ps1')) win"
-                ) }
-        }
-        'HW-auto-stow-task' {
-            return @{ Kind = 'judgment'; Lines = @(
-                    '# Optional, elevated PowerShell 7 (the MSI, see HW-clone): lets the login updater restow without a UAC prompt.'
-                    "& $(ConvertTo-SetupQuoted (Join-Path (Join-Path $RepoRoot 'scripts') 'dotfiles-auto-stow.ps1')) -Register"
                 ) }
         }
         'HW-execution-policy' {
@@ -504,14 +402,9 @@ function Get-SetupHumanBlock {
                 ) }
         }
         'HW-wsl' {
-            $wslSource = if ($LegacyStow) {
-                '.\stow-all.ps1 win links win\wsl into your home.'
-            } else {
-                'The native handover (HW-native) deploys win\wsl into your home.'
-            }
             return @{ Kind = 'judgment'; Lines = @(
                     '# Optional, elevated PowerShell. Windows Terminal and WezTerm profiles need the distro named exactly Ubuntu.'
-                    "# $wslSource ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown."
+                    '# The native handover (HW-native) deploys win\wsl into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
                     '# ~\wsl.conf applies only when copied to /etc/wsl.conf inside the distro; the tracked one runs /usr/local/bin/mount-data.sh, which this repository does not ship, and hardcodes a default user.'
                     '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.'
                     'wsl --install -d Ubuntu'
@@ -519,7 +412,7 @@ function Get-SetupHumanBlock {
         }
         'HW-auth' {
             return @{ Kind = 'auth'; Lines = @(
-                    "# Sign in, then check with .\doctor.ps1$modeFlag -Online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage."
+                    '# Sign in, then check with .\doctor.ps1 -Online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.'
                     'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519'
                     'gh auth login --git-protocol ssh'
                     'claude auth login'
@@ -554,8 +447,7 @@ function Invoke-SetupStep {
             Update-BootstrapSessionPath
             $missing = @(Get-SetupMissingNames @(Get-SetupStepRows W1-winget))
             if ($missing.Count) {
-                $doctorFlag = if ($LegacyStow) { ' -LegacyStow' } else { '' }
-                Write-DotfilesLog warn "W1-winget: not on this session's PATH yet: $($missing -join ', '); open a new shell, then run .\doctor.ps1$doctorFlag"
+                Write-DotfilesLog warn "W1-winget: not on this session's PATH yet: $($missing -join ', '); open a new shell, then run .\doctor.ps1"
             }
             return $result
         }
@@ -595,28 +487,6 @@ function Invoke-SetupStep {
         'W1-chezmoi' {
             $row = Get-SetupChezmoiRow
             return Install-BootstrapChezmoi -Uri $row.url -Sha256 $row.sha256 -Destination (Join-Path $HOME '.local/bin/chezmoi.exe')
-        }
-        'W1-setup-sync' {
-            $runtime = Get-BootstrapSyncPython $RepoRoot
-            if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
-                return New-BootstrapResult failed "DOTFILES_SYNC_PYTHON='$($runtime.Path)' fails lib/config_sync.py --runtime-check; repair or unset it before provisioning the default runtime"
-            }
-            # setup-sync.ps1 defaults to "python", which can resolve to the
-            # Store alias even after winget installed a real one; pass a
-            # probed interpreter instead.
-            $spec = Get-SetupSyncPythonSpec
-            $python = Select-BootstrapCommand @spec
-            if (-not $python.Path) {
-                $seen = if ($python.Rejected.Count) { " (passed over: $($python.Rejected -join ', '))" } else { '' }
-                return New-BootstrapResult failed ("no Python >= $($spec.Floor) on PATH$seen; a Microsoft Store alias does not count. " +
-                    'Open a new terminal so the W1-winget PATH applies, or run .\setup-sync.ps1 -Python <path> (py -0p lists interpreters)')
-            }
-            try { & (Join-Path $RepoRoot 'setup-sync.ps1') -Python $python.Path | Out-Host }
-            catch { return New-BootstrapResult failed "setup-sync.ps1 -Python $($python.Path) failed: $($_.Exception.Message)" }
-            if (-not (Test-SetupVenvReady)) {
-                return New-BootstrapResult failed "setup-sync.ps1 finished, but $(Get-BootstrapVenvPython $RepoRoot) fails lib/config_sync.py --runtime-check"
-            }
-            return New-BootstrapResult installed "AI-sync runtime ready, from Python $($python.Version) at $($python.Path)"
         }
     }
     throw "Unknown step $Id"
@@ -684,7 +554,7 @@ function Invoke-BootstrapSetup {
                     'id', 'kind', 'url', 'sha256', 'dest', 'hosts', 'arch', 'tier', 'human'))
         Assert-SetupWingetManifest (Join-Path $config 'winget.json')
         [void](Get-SetupBatThemeRow)
-        if (-not $LegacyStow) { [void](Get-SetupChezmoiRow) }
+        [void](Get-SetupChezmoiRow)
     }
     catch [IO.InvalidDataException] {
         Write-DotfilesLog error "Invalid manifest: $($_.Exception.Message)"
@@ -748,8 +618,7 @@ function Invoke-BootstrapSetup {
     foreach ($id in $pending) { Write-SetupHumanBlock $id }
     $held = @($pending | Where-Object { $_ -cin $BlockingHumanSteps })
     if ($held.Count) {
-        $legacyFlag = if ($LegacyStow) { ' -LegacyStow' } else { '' }
-        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1$legacyFlag"
+        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1"
         $script:SetupStatus = 3
         return
     }

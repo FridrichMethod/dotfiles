@@ -209,6 +209,7 @@ e2e_find_timeout
 : >"$E2E_OUT/log/timeline"
 e2e_write_env "$E2E_MODE"
 E2E_LOGIN_SHELL_START=$(e2e_login_shell_of)
+e2e_stow_start
 e2e_log "host $E2E_HOST ($E2E_FLOW flow, $E2E_MODE) as $E2E_RUN_USER in $HOME; source $E2E_SRC at ${E2E_REV:0:12}; output $E2E_OUT"
 
 case $E2E_FLOW in

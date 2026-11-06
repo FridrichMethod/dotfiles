@@ -537,10 +537,6 @@ try {
         $global:DotfilesTestTaskProgram = Join-Path $package 'pwsh.exe'
         [IO.File]::WriteAllText($global:DotfilesTestTaskProgram, '')
         Assert-Equal 'Versioned' (Get-DotfilesTaskStatus 'any').State 'Program in a WindowsApps folder.'
-        # setup-host counts only a working task as done; it runs only on
-        # Windows against the real Task Scheduler, so pin its one call here.
-        $setupHost = [IO.File]::ReadAllText((Join-Path $sourceRoot 'setup-host.ps1'))
-        Assert-True ($setupHost.Contains("return (Get-DotfilesTaskStatus (Get-DotfilesTaskName `$RepoRoot)).State -ceq 'Ok'")) 'setup-host HW-auto-stow-task check does not require a working task.'
     }
     Test-Case 'worker branch retains all-stream log capture without changing caller preferences' {
         $fixture = New-Fixture

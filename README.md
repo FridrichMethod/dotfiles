@@ -42,10 +42,8 @@ For an explicitly retained legacy Stow home only:
 Stow checks conflicts before applying shared sync files, but may first remove
 exact dangling links from retired Sherlock packages. It does not promise a
 whole-home transaction. Failed/partial application never acknowledges a new
-revision. See the [bootstrap playbook](docs/bootstrap.md#legacy-quick-start) and
-[installer contract](docs/installer-contract.md).
+revision. See the [installer contract](docs/installer-contract.md).
 
-Legacy provisioning/doctor use `--legacy-stow`. They refuse native-owned homes.
 For native common-only installation on other Linux, select `common-only` in
 local chezmoi data and use `./doctor.sh --platform other`; install prerequisites by the
 [other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions).
@@ -68,7 +66,7 @@ cd $HOME\dotfiles
 Follow the HW-* HUMAN blocks and the native takeover procedure. Regular-file
 native updates run unelevated, without a scheduled restow task or UAC prompt.
 Both actual PowerShell profile paths and ordinary-user destination ACLs must be
-checked before takeover. Legacy `-LegacyStow` provisioning retains `setup-sync.ps1`
+checked before takeover. A retained legacy Stow home still uses `setup-sync.ps1`
 and **elevated** `stow-all.ps1 win`; `-WhatIf` previews and `-Strict` rejects
 incomplete installation. Legacy local readability does
 not prove link trust: Windows OpenSSH can reject an unelevated link with error
@@ -160,7 +158,7 @@ compatibility: provision it explicitly; login never installs it.
 A provisioned interpreter that satisfies the selected helper's dependencies
 can be selected with DOTFILES_SYNC_PYTHON. Setup, doctor and wrappers share this
 choice; an invalid override fails without creating an unused default venv.
-See [runtime selection](docs/bootstrap.md#s4-setup-sync-ai-sync-runtime).
+See [runtime selection](docs/config-sync.md#explicit-provisioning).
 Read the [sync contract](docs/config-sync.md) before migrations or policy edits.
 Authenticate separately on every host. Never commit tokens, histories, trust,
 caches, generated memories or machine-specific absolute paths.

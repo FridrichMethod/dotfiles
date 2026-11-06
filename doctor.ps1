@@ -5,8 +5,8 @@
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
-    the structural checks native-config (with -LegacyStow, venv-sync) and
-    payloads, prints one line per check and then a summary:
+    the structural checks native-config and payloads, prints one line per
+    check and then a summary:
 
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
 
@@ -17,13 +17,10 @@
     Microsoft Store alias that prints no version does not count);
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
-    Only -LegacyStow checks venv-sync; native mode checks chezmoi and the
-    home-bound native configuration signal, named by cause: a binding to
-    another checkout and a stray ~/.config/chezmoi/chezmoistate.boltdb only
-    warn, and on Windows a bound home whose ~/.local/bin/chezmoi.exe the
-    login updater refuses is human. Legacy venv-sync passes when the
-    interpreter the AI config sync helpers use (DOTFILES_SYNC_PYTHON when
-    set, else .venv-sync) passes lib/config_sync.py --runtime-check.
+    native-config checks the home-bound native configuration signal, named
+    by cause: a binding to another checkout and a stray
+    ~/.config/chezmoi/chezmoistate.boltdb only warn, and on Windows a bound
+    home whose ~/.local/bin/chezmoi.exe the login updater refuses is human.
 
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
@@ -51,9 +48,6 @@
     Print only checks that are neither ok nor skip, then the summary; with
     -Tsv, only those rows after the header.
 
-.PARAMETER LegacyStow
-    Check the supported Stow/parser compatibility path instead of native chezmoi.
-
 .PARAMETER Online
     Also run the network auth probes, which may write the tools' own state.
 
@@ -71,8 +65,7 @@ param(
     [string]$Tier = 'core,cli,ai',
     [switch]$Tsv,
     [switch]$Quiet,
-    [switch]$Online,
-    [switch]$LegacyStow
+    [switch]$Online
 )
 
 Set-StrictMode -Version Latest
@@ -103,8 +96,8 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # Ids the doctors report besides tools.tsv rows (doctor.sh's structural
 # checks, the -Online and --smoke rows); tools.tsv never uses them
 # (tests/test_bootstrap_manifest.py RESERVED_IDS).
-$ReservedIds = @('locale', 'venv-sync', 'stow-links', 'path-order', 'rc-pollution', 'omz-order',
-    'nvm-homebrew', 'payloads', 'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'native-config')
+$ReservedIds = @('locale', 'path-order', 'rc-pollution', 'omz-order', 'nvm-homebrew', 'payloads',
+    'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'native-config')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.
@@ -147,23 +140,6 @@ function Get-DoctorToolResult {
     return Limit-DoctorResult $result $Selection
 }
 
-function Get-DoctorSyncRuntimeResult {
-    # The interpreter lib/sync-runtime.sh would run for stow-all.ps1's
-    # helpers must pass lib/config_sync.py --runtime-check (read-only).
-    $step = Get-BootstrapDocRef -Step S4-setup-sync -ProfileName windows
-    $runtime = Get-BootstrapSyncPython $RepoRoot
-    $ready = Test-BootstrapSyncRuntime -Python $runtime.Path -RepoRoot $RepoRoot
-    if ($runtime.Source -ceq 'DOTFILES_SYNC_PYTHON') {
-        if ($ready) { return New-DoctorResult ok venv-sync core "DOTFILES_SYNC_PYTHON=$($runtime.Path) passes the runtime check" $step }
-        return New-DoctorResult missing venv-sync core "DOTFILES_SYNC_PYTHON='$($runtime.Path)' fails lib/config_sync.py --runtime-check; the AI config sync helpers cannot run" $step
-    }
-    if ($ready) { return New-DoctorResult ok venv-sync core "AI-sync runtime ready at $($runtime.Path)" $step }
-    if (-not [IO.File]::Exists($runtime.Path)) {
-        return New-DoctorResult missing venv-sync core "no $($runtime.Path); setup-sync.ps1 has not run, so stow-all.ps1 cannot sync AI configs" $step
-    }
-    return New-DoctorResult missing venv-sync core "$($runtime.Path) fails lib/config_sync.py --runtime-check; rerun setup-sync.ps1" $step
-}
-
 function Get-DoctorNativeConfigResult {
     # doctor.sh's bootstrap_check_native_config: the native binding, named by
     # cause. A binding to another checkout and a stray state database that a
@@ -200,8 +176,7 @@ function Get-DoctorNativeConfigResult {
 }
 
 function Get-DoctorStructuralResults {
-    if ($LegacyStow) { Get-DoctorSyncRuntimeResult }
-    else { Get-DoctorNativeConfigResult }
+    Get-DoctorNativeConfigResult
     Get-DoctorPayloadResult
 }
 
@@ -321,7 +296,6 @@ function Invoke-BootstrapDoctor {
         }
         if (-not $Tsv -and -not $Quiet) { Write-DotfilesLog step "Checking host win (windows); required tiers: $Tier" }
         foreach ($row in $rows) {
-            if ($LegacyStow -and $row.id -ceq 'chezmoi') { continue }
             $results.Add((Get-DoctorToolResult $row $Tier))
         }
     }

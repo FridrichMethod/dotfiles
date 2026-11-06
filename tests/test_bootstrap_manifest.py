@@ -29,16 +29,15 @@ TOKENS = ("$HOME", "$ZSH_CUSTOM", "$NVM_DIR", "$XDG_CONFIG_HOME", "$XDG_DATA_HOM
 STEP_IDS = (
     "P0-preflight", "H1-xcode-clt", "H1-homebrew", "H1-apt-core", "H1-locale", "H1-linuxbrew",
     "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env", "S2-modules",
-    "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-setup-sync", "S4-chezmoi", "S5-claude", "S5-codex",
-    "S6-nerd-font", "S6-kitty", "H7-stow", "H7-native", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
-    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-setup-sync", "W1-chezmoi", "HW-native", "HW-clone",
-    "HW-stow", "HW-auto-stow-task", "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
+    "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-chezmoi", "S5-claude", "S5-codex",
+    "S6-nerd-font", "S6-kitty", "H7-native", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
+    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-chezmoi", "HW-native", "HW-clone",
+    "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
     "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
 # checks and the --online/--smoke rows.
-RESERVED_IDS = ("locale", "venv-sync", "stow-links", "path-order", "rc-pollution",
-                "omz-order", "nvm-homebrew", "payloads", "gh-auth", "claude-auth", "codex-auth",
-                "zsh-smoke", "native-config")
+RESERVED_IDS = ("locale", "path-order", "rc-pollution", "omz-order", "nvm-homebrew", "payloads",
+                "gh-auth", "claude-auth", "codex-auth", "zsh-smoke", "native-config")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
@@ -71,7 +70,7 @@ APT_COMMON = ("zsh", "git", "git-lfs", "curl", "rsync", "tar", "file", "procps",
               "gnupg", "openssh-client", "python3", "python3-venv", "python3-pip", "tmux",
               "bsdextrautils", "man-db", "locales", "ca-certificates", "unzip", "xz-utils", "fontconfig")
 APT_HOST_REQUIRED = {"wsl-ubuntu": ("wslu", "libnotify-bin"), "lab-ubuntu": ("xclip", "wl-clipboard", "fcitx5")}
-LOGIN_REQUIRED = ("python", "zsh", "git", "git-lfs", "gh", "stow", "tmux", "rsync", "curl", "fzf",
+LOGIN_REQUIRED = ("python", "zsh", "git", "git-lfs", "gh", "tmux", "rsync", "curl", "fzf",
                   "zoxide", "eza", "bat", "fd-find", "ripgrep", "nvim", "jq", "tealdeer", "aria2",
                   "uv", "go-shfmt", "shellcheck", "pre-commit", "file", "nodejs")
 LOGIN_TRAPS = {"neovim": "nvim (conda-forge neovim is the Python client)", "fd": "fd-find",
@@ -103,7 +102,7 @@ GITHUB_RE = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.g
 PINNED_URL_RE = re.compile(r"/(?:[0-9a-f]{40}|(?:rust-)?v?[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)/")
 HEADING_RE = re.compile(r"^### ([A-Za-z0-9-]+):")
 # The step lists of setup-host.sh (STEPS_REGISTRY in lib/bootstrap/steps.sh)
-# and setup-host.ps1 (each list assigned once per mode: legacy, then native).
+# and setup-host.ps1 (each list assigned once).
 REGISTRY_RE = re.compile(r"^STEPS_REGISTRY='([^']*)'", re.M)
 PS_STEP_LIST_RE = re.compile(r"^[ \t]*\$(AutomatedSteps|HumanSteps|BlockingHumanSteps) = @\(([^)\r\n]*)\)", re.M)
 PS_ITEM_RE = re.compile(r"'([^']*)'")
@@ -566,7 +565,7 @@ def check_docs(repo, tools, errors):
 
 
 def check_step_lists(repo, errors):
-    """STEPS_REGISTRY and both setup-host.ps1 modes name only contract ids, and every non-X- id."""
+    """STEPS_REGISTRY and the setup-host.ps1 lists name only contract ids, and every non-X- id."""
     named, where = set(), "lib/bootstrap/steps.sh"
     match = REGISTRY_RE.search(read_text(repo / where, where, errors) or "")
     rows = [line.split()[0] for line in (match.group(1).splitlines() if match else []) if line.strip()]
@@ -581,17 +580,16 @@ def check_step_lists(repo, errors):
     for name, body in PS_STEP_LIST_RE.findall(read_text(repo / where, where, errors) or ""):
         lists[name].append(PS_ITEM_RE.findall(body))
     for name, found in lists.items():
-        report(errors, "step-lists", where, len(found) != 2 and
-               f"${name} is assigned {len(found)} times, expected 2 (legacy, then native)")
+        report(errors, "step-lists", where, len(found) != 1 and
+               f"${name} is assigned {len(found)} times, expected 1")
         for ids in found:
             named.update(ids)
             for step in sorted(set(ids) - set(STEP_IDS)):
                 report(errors, "step-lists", where, f"${name} names {step}, not a contract step id")
-    for mode, index in (("legacy", 0), ("native", 1)):
-        human, blocking = lists["HumanSteps"], lists["BlockingHumanSteps"]
-        if len(human) > index and len(blocking) > index:
-            extra = sorted(set(blocking[index]) - set(human[index]))
-            report(errors, "step-lists", where, extra and f"{mode} blocking steps not in $HumanSteps: {', '.join(extra)}")
+    human, blocking = lists["HumanSteps"], lists["BlockingHumanSteps"]
+    if human and blocking:
+        extra = sorted(set(blocking[0]) - set(human[0]))
+        report(errors, "step-lists", where, extra and f"blocking steps not in $HumanSteps: {', '.join(extra)}")
     for step in STEP_IDS:
         report(errors, "step-lists", "STEP_IDS", not step.startswith("X-") and step not in named and
                f"{step} has a docs heading but no step list names it")
@@ -792,14 +790,16 @@ class RejectionTests(unittest.TestCase):
             ("step-lists", "repeated registry id",
              lambda: self.replace(steps, doctor_row, "\nH7-doctor judgment - no macos,debian,hpc" + doctor_row)),
             ("step-lists", "registry not found", lambda: self.replace(steps, "STEPS_REGISTRY='", 'STEPS_REGISTRY="')),
-            ("step-lists", "unknown native windows id",
+            ("step-lists", "unknown windows id",
              lambda: self.replace(setup, "'HW-clone', 'HW-native', ", "'HW-clone', 'HW-natve', ")),
-            ("step-lists", "native blocking not human",
+            ("step-lists", "blocking not human",
              lambda: self.replace(setup, "$BlockingHumanSteps = @('HW-clone', 'HW-native')",
                                   "$BlockingHumanSteps = @('HW-clone', 'W1-chezmoi')")),
-            ("step-lists", "one mode only",
-             lambda: self.replace(setup, "    $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', "
+            ("step-lists", "list missing",
+             lambda: self.replace(setup, "$AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', "
                                          "'W1-bat-theme', 'W1-chezmoi')\n", "")),
+            ("step-lists", "list assigned twice",
+             lambda: self.append(setup, "$AutomatedSteps = @('W1-winget')\n")),
         ])
 
     def test_clones(self):

@@ -7,7 +7,7 @@ six hosts, with a guarded Stow compatibility path until Stage 6.
 
 - Shared defaults live in `common/`.
 - Keep persistent worktrees in `.worktrees/`. Follow the global guides for temporary work, preservation and post-integration cleanup.
-- Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, and `win/`. Other Linux distributions have no overlay; they stow `common/` only.
+- Host overlays live in `mac/`, `sherlock/`, `wsl-ubuntu/`, `lab-ubuntu/`, `marlowe/`, and `win/`. Other Linux distributions have no overlay; they select native `common-only`.
 - Packages mirror `$HOME` paths (for example `.config/...`, `.ssh/...`).
 - Root scripts are person-facing setup/check entry points; `scripts/` contains login/scheduled hooks, `lib/` sourced/imported code, and `config/` their data. Place files by their caller. Keep `.stowrc` at the root for GNU Stow.
 
@@ -48,9 +48,9 @@ After modifying any file, run `pre-commit run --all-files` to ensure changes pas
 The [chezmoi migration](docs/chezmoi-migration/README.md) is staged. Stage 4 keeps
 explicit local `[data].host`, native AI transforms and literal legacy inputs until
 Stage 6. Preserve unsupported-input refusal, exact ownership/policy parity and
-WebP/terminfo byte parity. New provisioning defaults to native without a sync venv;
-`--legacy-stow` / `-LegacyStow` retains the old path. Home-bound native ownership
-blocks old writers; maintenance blocks future dotfiles updates AND payload runs.
+WebP/terminfo byte parity. Provisioning is native only, without a sync venv.
+Home-bound native ownership blocks old writers; maintenance blocks future
+dotfiles updates AND payload runs.
 Keep legacy paths/runtime for supported old callers until Stage 6. First apply
 is not an ownership guard: review exact targets and private snapshots first.
 Real takeover follows exact candidate CI gates and existing D11 authority;
@@ -83,14 +83,14 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 ## Bootstrap and doctor
 
 - Only `setup-host.sh` and `setup-host.ps1` install third-party tools, and only when a person runs them. The payload commands (`sync-payloads`, `scripts/payload-update.* --now`) install and update only the three payload repos, through each repo's own documented installer. Profiles, stow and the dotfiles update hooks install nothing.
-- setup-host never runs sudo, chsh, stow/stow-all, conda/micromamba shell init or git lfs install, nor edits rc files; print HUMAN blocks instead. Each line is a `# ` note or self-contained command. A person runs privileged lines, or approves each visible top-level agent command; never hide them in a script or `sh -c`. Printed digest-gate lines and the shared-prefix `(cd /tmp && sudo -u OWNER ...)` form are single commands. Never chown a shared Homebrew prefix. The only checkout write is `.venv-sync` via setup-sync. S2-brew-bundle skips entries already satisfying their tools.tsv probe or alias via apt, conda or OS.
+- setup-host never runs sudo, chsh, conda/micromamba shell init or git lfs install, nor edits rc files; print HUMAN blocks instead. Each line is a `# ` note or self-contained command. A person runs privileged lines, or approves each visible top-level agent command; never hide them in a script or `sh -c`. Printed digest-gate lines and the shared-prefix `(cd /tmp && sudo -u OWNER ...)` form are single commands. Never chown a shared Homebrew prefix. It writes nothing inside the checkout. S2-brew-bundle skips entries already satisfying their tools.tsv probe or alias via apt, conda or OS.
 - Doctor without --online/--smoke and setup-host --check stay offline and write-free. --online runs only three auth probes and may write native tool state; --smoke may write zsh caches. Always set GH_TELEMETRY=0 and TLDR_AUTO_UPDATE_DISABLED=1 for probes, including --version. Keep empty-home real-tool and stateful-fake no-write tests; see [guarantees](docs/bootstrap.md#guarantees).
 - What setup-host cannot settle safely becomes a blocking judgment block, never a guess: dotfiles applied before the oh-my-zsh clone, a formula or cask that a Brewfile's `# conflicts: FORMULA OTHER...` or `# conflicts: cask TOKEN OTHER...` line names (checked by keg or `Caskroom` before any brew command, only where brew bundle installs the entry), and an `nvm.sh` that is not the pinned checkout without local changes (it is never sourced).
 - `config/bootstrap/` owns installer SHA256 pins (bat theme included), tool floors and clone branches. git-clones.tsv tracks upstream default branches, never commits; clone only missing repositories and do not fetch, pull, repin or dirty-check existing ones. Retain the manual update loop and trust limits in [bootstrap.md](docs/bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones). Keep step-heading, tool-ID and mirrored-skill parity tests; update manifests, not copied pin inventories.
 - Verify every setup-host download before use except inspect rows, which a person reads first. HUMAN execution uses digest gates and installers use no-rc flags (PROFILE=/dev/null, NONINTERACTIVE=1). Preserve the documented distinction between pinned downloads/default-branch clones and package managers' current versions.
 - First-party project skills live only in `.claude/skills/` and `.agents/skills/`, with identical bodies.
 - Provisioning shells export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0 (inert; Stage 6 removes it). Test entrypoints use tests/lib/environment.sh/.ps1 to clear inherited DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and _CODING_AGENT_KIT_ prefixes plus XDG_STATE_HOME/XDG_DATA_HOME; preserve DOTFILES_TEST_* inputs and DOTFILES_SYNC_PYTHON. Fixture Git must drop repository/index overrides before mutation. Keep focused linked-worktree isolation and hook-selection tests; do not scan upstream implementation or mirror every variable in every entrypoint.
-- Native-owned homes take the host from the `[data]` `host` line of `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2 asking for `--host`); `DOTFILES_HOST` and the Stow receipt are legacy only, a nonempty `DOTFILES_HOST` overriding the receipt. Common only (an empty but set `DOTFILES_HOST`, a host-less `./stow-all.sh` record, or native `common-only`) means: the doctor checks the detected platform without an overlay and warns, setup-host exits 2 asking for `--host`, and the legacy login updater stows only `common/`. The Windows twins never read `DOTFILES_HOST` and check `win`.
+- Without `--host` (or the doctor's `--platform`), the host is the `[data]` `host` line of a native-owned home's `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2 asking for `--host`); nothing else selects one, and an unmarked home exits 2. Native `common-only` means: the doctor checks the detected platform without an overlay and warns; setup-host exits 2 asking for `--host`. The Windows twins check `win`.
 - HPC environments are built only inside a Slurm allocation, never under `$SCRATCH`.
 
 ## Git and SSH conventions

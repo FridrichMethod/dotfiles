@@ -114,7 +114,7 @@ step_S3_clones_check() {
 }
 
 # steps_omz_recovery_block DEST: put an oh-my-zsh checkout under the dir that
-# a configuration apply (stow-all or chezmoi) created first; the dotfiles'
+# a configuration apply (chezmoi) created first; the dotfiles'
 # custom/ files stay untracked there.
 steps_omz_recovery_block() {
     local dest url='' q lines row key row_url
@@ -133,8 +133,7 @@ steps_omz_recovery_block() {
     q=$(steps_quote "$dest")
     steps_block_begin X-recovery judgment
     printf '# %s exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones.\n' "$dest"
-    printf '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host %s%s:\n' \
-        "$STEPS_HOST" "$(steps_mode_flag)"
+    printf '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host %s:\n' "$STEPS_HOST"
     printf 'git -C %s init\n' "$q"
     for key in core.eol=lf core.autocrlf=false fsck.zeroPaddedFilemode=ignore \
         fetch.fsck.zeroPaddedFilemode=ignore receive.fsck.zeroPaddedFilemode=ignore \

@@ -16,14 +16,14 @@
 #   floor         X.Y or X.Y.Z, compared with the first X.Y[.Z] the tool prints
 #   doc           a step id; docs/bootstrap.md has one "### <id>:" heading each
 # Floors: fzf 0.58.0 (--style full, --input-label in fzf.zsh and fzf-tab.zsh),
-# eza 0.18.20, fd 8.3.0 (--strip-cwd-prefix), python3 3.11 (setup-sync.sh),
-# node 22.0 (18 and 20 are end of life), stow 2.3.1 (.stowrc parsing),
-# shfmt 3.13.0 (first zsh dialect), gh 2.50.0, pwsh 7.0 (#Requires -Version 7.0),
+# eza 0.18.20, fd 8.3.0 (--strip-cwd-prefix), python3 3.11 (the stdlib helper
+# floor, AGENTS.md), node 22.0 (18 and 20 are end of life), shfmt 3.13.0
+# (first zsh dialect), gh 2.50.0, pwsh 7.0 (#Requires -Version 7.0),
 # tmux 3.4 (common/tmux sets menu-style and opens popups and menus ungated).
 id	tier	hosts	probe	version_flag	floor	absent	doc
-git	core	all	git	--version	-	cannot clone, update or stow the dotfiles	P0-preflight
-bash	core	unix	bash	--version	-	doctor.sh, setup-host.sh and stow-all.sh cannot run	P0-preflight
-zsh	core	unix	zsh	--version	-	no interactive shell for the stowed .zshrc	H1-apt-core
+git	core	all	git	--version	-	cannot clone or update the dotfiles	P0-preflight
+bash	core	unix	bash	--version	-	doctor.sh and setup-host.sh cannot run	P0-preflight
+zsh	core	unix	zsh	--version	-	no interactive shell for the dotfiles .zshrc	H1-apt-core
 git-lfs	core	unix	git-lfs	--version	-	the required lfs filter in .gitconfig fails on LFS repositories	H1-apt-core
 curl	core	unix	curl	--version	-	setup-host downloads fail, and the payload hook needs wget instead	H1-apt-core
 rsync	core	unix	rsync	--version	-	upload fails	H1-apt-core
@@ -32,7 +32,7 @@ file	core	unix	file	--version	-	fzf previews cannot detect file types	H1-apt-cor
 col	core	unix	col	-	-	fzf-tab man page previews fail	H1-apt-core
 man	core	unix	man	-	-	man, colored-man-pages and fzf-tab man previews fail	H1-apt-core
 tmux	core	unix	tmux	-V	3.4	tmux hostname-scoped recovery configuration and sessions are unavailable	H1-apt-core
-# A fresh Homebrew is off PATH until the stowed rc files run brew shellenv, so
+# A fresh Homebrew is off PATH until the dotfiles rc files run brew shellenv, so
 # doctor and setup-host first prepend the directory of bootstrap_brew_bin
 # (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to
 # their own PATH; the brew probe and every Brewfile tool probe rely on that.
@@ -43,9 +43,8 @@ linuxbrew	core	wsl-ubuntu,lab-ubuntu	file:/home/linuxbrew/.linuxbrew/bin/brew	-	
 # python3 is apt's on Debian and Ubuntu (24.04 ships 3.12); the core Brewfile
 # bundles Homebrew's python on macOS only (the CLT python3 is 3.9), where
 # bootstrap_doc_ref maps H1-apt-core to S2-brew-bundle.
-python3	core	all	python3,python	--version	3.11	Python helpers and legacy AI config sync cannot run	H1-apt-core
+python3	core	all	python3,python	--version	3.11	Python helpers cannot run	H1-apt-core
 chezmoi	core	all	chezmoi	--version	2.74.0	native dotfile configuration cannot run	S4-chezmoi
-stow	core	unix	stow	--version	2.3.1	stow-all.sh refuses to run	S2-brew-bundle
 fzf	core	all	fzf	--version	0.58.0	Ctrl-R/T, Alt-C and fzf-tab fail	S2-brew-bundle
 zoxide	core	all	zoxide	--version	-	z and zi are not defined	S2-brew-bundle
 eza	core	all	eza	--version	0.18.20	ll, la and fzf directory previews fail	S2-brew-bundle
@@ -81,7 +80,7 @@ chafa	cli	unix	chafa	--version	-	fzf image previews outside kitty show only file
 jq	cli	all	jq	--version	-	JSON filtering on the command line fails	S2-brew-bundle
 # Presence-only: `nvim --version` creates ~/.local/state/nvim/nvim.log.
 nvim	cli	all	nvim	-	-	the vi alias fails	S2-brew-bundle
-aria2	cli	all	aria2c	--version	-	aria2c downloads with the stowed aria2.conf fail	S2-brew-bundle
+aria2	cli	all	aria2c	--version	-	aria2c downloads with the dotfiles aria2.conf fail	S2-brew-bundle
 uv	cli	all	uv	--version	-	uv and the oh-my-zsh uv plugin are unavailable	S2-brew-bundle
 gh	cli	all	gh	--version	2.50.0	gh auth git-credential and GitHub CLI workflows fail	S2-brew-bundle
 # lab-ubuntu's credential helper calls this file even when a GUI does not
@@ -99,10 +98,10 @@ node	ai	all	node	--version	22.0	Claude hooks and the status line fail	S4-nvm
 claude	ai	mac,wsl-ubuntu,lab-ubuntu,win	claude	--version	-	Claude Code is unavailable	S5-claude
 # Presence-only: `codex --version` writes $CODEX_HOME/tmp/arg0 once ~/.codex exists.
 codex	ai	mac,wsl-ubuntu,lab-ubuntu,win	codex	-	-	Codex is unavailable	S5-codex
-kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the stowed kitty.conf has no terminal to configure	S6-kitty
-wezterm	desktop	mac,win	wezterm	-	-	the stowed .wezterm.lua has no terminal to configure	S2-brew-bundle
+kitty	desktop	mac,lab-ubuntu	kitty	--version	-	the dotfiles kitty.conf has no terminal to configure	S6-kitty
+wezterm	desktop	mac,win	wezterm	-	-	the dotfiles .wezterm.lua has no terminal to configure	S2-brew-bundle
 nerd-font	desktop	mac,lab-ubuntu,win	font:CaskaydiaMono Nerd Font	-	-	prompt, eza and terminal icons render as boxes	S6-nerd-font
-windows-terminal	desktop	win	wt	-	-	the stowed Windows Terminal settings are unused	W1-winget
+windows-terminal	desktop	win	wt	-	-	the dotfiles Windows Terminal settings are unused	W1-winget
 oh-my-posh	desktop	win	oh-my-posh	version	-	the default PowerShell prompt replaces the tracked theme	W1-winget
 psfzf	desktop	win	psmodule:PSFzf	-	-	Ctrl+R, Ctrl+T and Alt+C keep PSReadLine defaults	W1-psresources
 completionpredictor	desktop	win	psmodule:CompletionPredictor	-	-	predictions come from history only	W1-psresources
@@ -123,7 +122,7 @@ gromacs-apps	host	lab-ubuntu	file:/apps/gromacs-2026.0/bin/gmx	-	-	gmx and its c
 cuda	host	wsl-ubuntu,lab-ubuntu	dir:/usr/local/cuda/bin	-	-	nvcc and the CUDA PATH entry are absent	X-host-tools
 matlab	host	mac	dir:/Applications/MATLAB_R2025b.app/bin	-	-	MATLAB is not exported	X-host-tools
 schrodinger	host	mac	dir:/opt/schrodinger/suites2025-2	-	-	SCHRODINGER is not exported	X-host-tools
-fcitx5	host	lab-ubuntu	fcitx5	-	-	no input method, and the stowed fcitx5 profile is unused	H1-fcitx5
+fcitx5	host	lab-ubuntu	fcitx5	-	-	no input method, and the dotfiles fcitx5 profile is unused	H1-fcitx5
 wslu	host	wsl-ubuntu	wslview	-	-	BROWSER=wslview cannot open links	H1-apt-core
 notify-send	host	wsl-ubuntu,lab-ubuntu	notify-send	-	-	the alert alias fails	H1-apt-core
 kinit	host	mac,wsl-ubuntu,lab-ubuntu	kinit	-	-	GSSAPI ssh to sherlock and marlowe cannot use Kerberos tickets	H7-auth

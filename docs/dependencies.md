@@ -71,10 +71,10 @@ of missing them; manifest parity tests require every ID to remain documented.
 
 | Tool | Hosts | When absent |
 | --- | --- | --- |
-| `git` | all | cannot clone, update or stow the dotfiles |
+| `git` | all | cannot clone or update the dotfiles |
 | `chezmoi` | all | native configuration deployment needs 2.74.0+; setup steps S4-chezmoi / W1-chezmoi provision it explicitly |
-| `bash` | unix | doctor.sh, setup-host.sh and stow-all.sh cannot run |
-| `zsh` | unix | no interactive shell for the stowed .zshrc |
+| `bash` | unix | doctor.sh and setup-host.sh cannot run |
+| `zsh` | unix | no interactive shell for the dotfiles .zshrc |
 | `git-lfs` | unix | the required lfs filter in .gitconfig fails on LFS repositories |
 | `curl` | unix | setup-host downloads fail, and the payload hook needs wget instead |
 | `rsync` | unix | upload fails |
@@ -85,8 +85,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `tmux` | unix | tmux 3.4+ hostname-scoped recovery configuration and sessions are unavailable |
 | `homebrew` | mac | Brewfile bundles cannot run |
 | `linuxbrew` | wsl-ubuntu, lab-ubuntu | Brewfile bundles cannot run and the overlay brew shellenv line fails |
-| `python3` | all | setup-sync and the AI config sync helpers cannot run |
-| `stow` | unix | stow-all.sh refuses to run |
+| `python3` | all | Python helpers cannot run |
 | `fzf` | all | Ctrl-R/T, Alt-C and fzf-tab fail |
 | `zoxide` | all | z and zi are not defined |
 | `eza` | all | ll, la and fzf directory previews fail |
@@ -126,7 +125,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `chafa` | unix | fzf image previews outside kitty show only file details |
 | `jq` | all | JSON filtering on the command line fails |
 | `nvim` | all | the vi alias fails |
-| `aria2` | all | aria2c downloads with the stowed aria2.conf fail |
+| `aria2` | all | aria2c downloads with the dotfiles aria2.conf fail |
 | `uv` | all | uv and the oh-my-zsh uv plugin are unavailable |
 | `gh` | all | gh auth git-credential and GitHub CLI workflows fail |
 | `gh-linuxbrew` | lab-ubuntu | GitHub/Gist credential helpers call this exact executable, including GUI Git |
@@ -152,10 +151,10 @@ Dotfiles does not install `shk`, toolkit rules or skills. See
 
 | Tool | Hosts | When absent |
 | --- | --- | --- |
-| `kitty` | mac, lab-ubuntu | the stowed kitty.conf has no terminal to configure |
-| `wezterm` | mac, win | the stowed .wezterm.lua has no terminal to configure |
+| `kitty` | mac, lab-ubuntu | the dotfiles kitty.conf has no terminal to configure |
+| `wezterm` | mac, win | the dotfiles .wezterm.lua has no terminal to configure |
 | `nerd-font` | mac, lab-ubuntu, win | prompt, eza and terminal icons render as boxes |
-| `windows-terminal` | win | the stowed Windows Terminal settings are unused |
+| `windows-terminal` | win | the dotfiles Windows Terminal settings are unused |
 | `oh-my-posh` | win | the default PowerShell prompt replaces the tracked theme |
 | `psfzf` | win | Ctrl+R, Ctrl+T and Alt+C keep PSReadLine defaults |
 | `completionpredictor` | win | predictions come from history only |
@@ -189,7 +188,7 @@ path its row probes.
 | `cuda` | wsl-ubuntu, lab-ubuntu | nvcc and the CUDA PATH entry are absent |
 | `matlab` | mac | MATLAB is not exported |
 | `schrodinger` | mac | SCHRODINGER is not exported |
-| `fcitx5` | lab-ubuntu | no input method, and the stowed fcitx5 profile is unused |
+| `fcitx5` | lab-ubuntu | no input method, and the dotfiles fcitx5 profile is unused |
 | `wslu` | wsl-ubuntu | BROWSER=wslview cannot open links |
 | `notify-send` | wsl-ubuntu, lab-ubuntu | the alert alias fails |
 | `kinit` | mac, wsl-ubuntu, lab-ubuntu | GSSAPI ssh to sherlock and marlowe cannot use Kerberos tickets |

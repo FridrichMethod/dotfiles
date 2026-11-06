@@ -5,17 +5,14 @@ set -euo pipefail
 # Usage: ./setup-host.sh --host HOST [--tier LIST|all] [--check] [--yes]
 #            [--only ID]... [--skip ID]... [--keep-going] [--list] [--print-manual]
 # Example: ./setup-host.sh --host lab-ubuntu --check
-# Installs tools for native chezmoi configuration by default, step by step in the order of
+# Installs tools for native chezmoi configuration, step by step in the order of
 # docs/bootstrap.md, from the pinned sources in config/bootstrap/. It never
-# runs sudo, chsh, stow, ./stow-all.sh, conda init, micromamba shell init or
-# git lfs install, and never writes an rc file or a tracked file: those are
-# printed as HUMAN blocks for a person (or one visible top-level agent
-# command). The only write inside the checkout is .venv-sync, made by
-# ./setup-sync.sh in --legacy-stow compatibility mode. --check writes nothing and makes no network calls.
-# On hpc, the login env (and, with --legacy-stow, the AI-sync env) builds only
-# inside an allocation and outside SCRATCH/GROUP_SCRATCH. Natively an existing
-# login env needs no allocation; with --legacy-stow it does not bypass the
-# AI-sync env's allocation.
+# runs sudo, chsh, conda init, micromamba shell init or git lfs install, and
+# never writes an rc file or a tracked file: those are printed as HUMAN blocks
+# for a person (or one visible top-level agent command). It writes nothing
+# inside the checkout. --check writes nothing and makes no network calls.
+# On hpc, the login env builds only inside an allocation and outside
+# SCRATCH/GROUP_SCRATCH; an existing login env needs no allocation.
 # Exit: 0 every selected step done (non-blocking HUMAN reminders may still
 # print), 1 a step failed, 2 usage or refusal (also as root, or on a machine
 # that is not HOST), 3 work remains: a blocking HUMAN step pending, or auto
@@ -44,13 +41,8 @@ usage() {
         '' \
         '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
         '                    on a native-owned home to the [data].host of' \
-        '                    ~/.config/chezmoi/chezmoi.toml, elsewhere to' \
-        '                    DOTFILES_HOST or the host ./stow-all.sh recorded;' \
-        '                    common only (common-only as that [data].host, a set but' \
-        '                    empty DOTFILES_HOST, or a common-only install' \
-        '                    ./stow-all.sh recorded) needs --host.' \
-        '                    The win host uses setup-host.ps1.' \
-        '  --legacy-stow     provision the supported Stow/parser compatibility path' \
+        '                    ~/.config/chezmoi/chezmoi.toml; common-only there' \
+        '                    needs --host. The win host uses setup-host.ps1.' \
         '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
         '                    (default core,cli,ai)' \
         '  --check           print one plan line per step and the pending HUMAN blocks;' \
@@ -130,7 +122,6 @@ YES=0
 KEEP_GOING=0
 ONLY=''
 SKIP=''
-BOOTSTRAP_LEGACY_STOW=0
 
 set_mode() {
     if [[ -n "$MODE_FLAG" && "$MODE_FLAG" != "$2" ]]; then
@@ -182,11 +173,6 @@ while [[ $# -gt 0 ]]; do
             SKIP="$SKIP,${1#*=}"
             shift
             ;;
-        --legacy-stow)
-            # shellcheck disable=SC2034 # read by lib/bootstrap
-            BOOTSTRAP_LEGACY_STOW=1
-            shift
-            ;;
         --check)
             set_mode check --check
             shift
@@ -223,30 +209,18 @@ if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
     exit 2
 fi
 
-# A native-owned home records its role in its native config (DOTFILES_HOST
-# and the Stow receipt do not apply there). Elsewhere a set but empty
-# DOTFILES_HOST, and without DOTFILES_HOST a common-only install that
-# ./stow-all.sh recorded for this home, mean common only (as the login
-# updater reads them). Common only either way, and there is no --platform
-# here: every step needs an overlay.
+# Only a native-owned home records a role, in its native config; nothing else
+# selects a host. Its common-only role means no host overlay, and there is no
+# --platform here: every step needs an overlay.
 COMMON_ONLY_HINT='setup-host needs one: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe), or follow X-other-linux in docs/bootstrap.md'
 if [[ -z "$HOST" ]] && bootstrap_native_home; then
-    if bootstrap_recorded_common_only "$REPO_ROOT"; then
+    if bootstrap_recorded_common_only; then
         usage_error "the native config of this home selects [data].host common-only (no host overlay); $COMMON_ONLY_HINT"
     fi
-    HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
+    HOST=$(bootstrap_resolve_host) ||
         usage_error "no host: this home's native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)"
 fi
-if [[ -z "$HOST" ]] && bootstrap_host_env_empty; then
-    usage_error "DOTFILES_HOST is set but empty, which means common only (no host overlay); $COMMON_ONLY_HINT"
-fi
-if [[ -z "$HOST" && -z "${DOTFILES_HOST:-}" ]] && bootstrap_recorded_common_only "$REPO_ROOT"; then
-    usage_error "./stow-all.sh recorded a common-only install for this home (no host overlay); $COMMON_ONLY_HINT"
-fi
-if [[ -z "$HOST" ]]; then
-    HOST=$(bootstrap_resolve_host "$REPO_ROOT") ||
-        usage_error 'no host: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)'
-fi
+[[ -n "$HOST" ]] || usage_error 'no host: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)'
 if [[ "$HOST" == win ]]; then
     dotfiles_log error "the 'win' host is set up from Windows, not from POSIX."
     dotfiles_log error 'Run this in PowerShell from the repo root instead: .\setup-host.ps1'

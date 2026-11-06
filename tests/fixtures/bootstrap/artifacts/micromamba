@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fixture micromamba binary: records `create` and lays out the env's zsh and
-# python3, so the login-env probe and setup-sync --python see them.
+# python3, so the login-env probe sees them.
 case ${1:-} in
     --version)
         echo 2.9.0

@@ -215,7 +215,7 @@ repos:
         entry: tests/doctor.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|docs/bootstrap\.md|tests/doctor\.sh)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(doctor\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|docs/bootstrap\.md|tests/doctor\.sh)$|^tests/lib/environment\.(sh|ps1)$
         types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks

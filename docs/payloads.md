@@ -449,7 +449,7 @@ succeeded, so a refused dry run or a failed stow leaves the home as it was.
 1. The login that pulls runs the profile it read before the pull. Its
    `scripts/dotfiles-update.ps1` fast-forwards (the leftover checkouts are
    ignored) and queues the elevated restow, which the `Dotfiles-Restow-*` task
-   ([HW-auto-stow-task](bootstrap.md#hw-auto-stow-task-automatic-stow-task))
+   (registered by `scripts/dotfiles-auto-stow.ps1 -Register`)
    or the next elevated `.\stow-all.ps1 win` runs.
 2. The new `stow-all.ps1` stows, then removes the links it made from the two
    retired packages, each only while it is a symlink whose text is exactly

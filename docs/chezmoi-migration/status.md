@@ -84,7 +84,7 @@ The user also approved the one-off Windows Phase 0 task above. Deregistering
   re-derives its sites by content on the previous tip. B6 (D-15) changes win's
   rendered profile, so it lands in Phase B.
 - B1 owns the doctor fixture copies of the parser runtime, `.stowrc` in
-  `tests/setup-host.sh`, `SYNC_TRIPWIRE` and every `stage6-B1` marker A3 left;
+  `tests/setup-host.sh`, `SYNC_TRIPWIRE` and every B1 marker A3 left;
   B4 owns the two `stage6-B4` markers. Each ends with its marker grep empty.
 - Doc collisions are resolved by owner: A4 owns the end-to-end section of
   docs/testing.md and the fresh-home sections of docs/bootstrap.md; later

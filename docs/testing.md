@@ -244,36 +244,32 @@ unit-tests the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs
 the standard-library validator `tests/test_bootstrap_manifest.py`, which checks
 `config/bootstrap/`, the step headings of `docs/bootstrap.md`, the tool table
 of `docs/dependencies.md`, the two identical project skills, and that
-`STEPS_REGISTRY` and both modes' step lists in `setup-host.ps1` name only
-contract step ids, with every id but the `X-` ones in some list.
+`STEPS_REGISTRY` and the step lists in `setup-host.ps1` name only contract
+step ids, with every id but the `X-` ones in some list.
 `tests/doctor.sh` and `tests/setup-host.sh` run the entry points under `env -i`
 against fixture checkouts, homes and Homebrew prefixes with stubbed tools and
 local clone remotes. Network commands outside `--online` fail the doctor
 suite; `sudo`, `chsh`, `stow`, `apt-get`, `conda` and `git lfs` are tripwires in
 the installer suite; find snapshots prove that the doctor and
 `setup-host.sh --check` write nothing. Every fixture case runs the native
-default. The few legacy-only cases pass `--legacy-stow` (`LegacyStow = $true`
-in `tests/bootstrap.ps1`) inside blocks fenced by `# >>> stage6-B1` and
-`# <<< stage6-B1` lines, or end with a `# stage6-B1` comment, so the Stage 6
-commit that drops the legacy mode deletes them by that marker. The doctor binds
-its fixture home to the fixture checkout once the unmarked-home resolution
-cases have run. The setup-host fixture serves a pinned chezmoi archive whose
-executable answers only `--version` (any other command is a tripwire), so
-S4-chezmoi installs it and a full apply ends at H7-native. The doctor reads a
-bound home's role from the one quoted `host` line of the `[data]` table of its
-local config, ignores the Stow receipt and `DOTFILES_HOST` (legacy only), exits
-2 for a missing, repeated, unknown or malformed one, treats `common-only` as
-common only, names the cause in its `native-config` row (only another
-checkout's binding and a stray `chezmoistate.boltdb`, which it leaves in place,
-merely warn) and keeps the offline, write-free and no-`TMPDIR` promises. The
-setup-host cases list each host's native step order, print HUMAN text that
-names no Stow and rerun notes without a mode flag, take `--host` over
-`[data].host`, and let an existing login env satisfy H2-alloc with the AI-sync
-interpreter as a tripwire; S6-nerd-font counts a Nerd Font in a system font
+mode, the only one. The doctor binds its fixture home to the fixture checkout
+once the unmarked-home cases have run. The setup-host fixture serves a pinned
+chezmoi archive whose executable answers only `--version` (any other command
+is a tripwire), so S4-chezmoi installs it and a full apply ends at H7-native.
+The doctor reads a bound home's role from the one quoted `host` line of the
+`[data]` table of its local config, ignores `DOTFILES_HOST`, exits 2 for a
+missing, repeated, unknown or malformed one and for an unmarked home without
+`--host` or `--platform`, treats `common-only` as common only, names the cause
+in its `native-config` row (only another checkout's binding and a stray
+`chezmoistate.boltdb`, which it leaves in place, merely warn) and keeps the
+offline, write-free and no-`TMPDIR` promises. The setup-host cases print HUMAN
+text that names no Stow, refuse the retired `--legacy-stow`, check each host's
+exact step order, take `--host` over `[data].host`, and let an existing login
+env satisfy H2-alloc; S6-nerd-font counts a Nerd Font in a system font
 directory as installed. `tests/doctor.sh`
 also runs the real `./doctor.sh` with the real manifest against the test
-machine's own tools, in legacy and native mode (`--platform debian` and
-`--platform other` with `--tsv`, an empty temporary `HOME`): every line must
+machine's own tools (`--platform debian` and `--platform other` with `--tsv`,
+an empty temporary `HOME`): every line must
 keep the TSV contract, the exit code must be 0 or 1, and the home, `TMPDIR`
 and checkout must stay unchanged, so a runner whose tools print unexpected
 versions or write state on `--version` fails CI. The
@@ -285,8 +281,7 @@ page cache unless `TLDR_AUTO_UPDATE_DISABLED` is set.
 `tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
 against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
 Windows job runs that suite and the validator from `tests/run.ps1`. Its cases
-run the native default too (legacy-only ones pass `LegacyStow = $true` inside a
-`stage6-B1` block) and mirror the Unix ones (a healthy bound host with gh
+run the native mode too and mirror the Unix ones (a healthy bound host with gh
 telemetry off and no writes, the `native-config` causes, a checkout reached
 through a junction or symlink counting as the bound one, HUMAN text without
 Stow). The healthy fixture puts a chezmoi shim on PATH and, on Windows, gives
@@ -578,10 +573,10 @@ approximation:
   every file that is itself an e2e wrapper when it looks for the real tool,
   so a call is logged once and never bounces between the copies. Stow is no
   longer wrapped ([Stage 6](chezmoi-migration/stage-6-retirement.md) decision
-  D-11(a)). Until Stage 6's B1 drops it, `core.Brewfile` and the hpc login
-  env still install it, so the suite does not claim that nothing installs Stow;
-  `audit-clone-links` instead fails any link under HOME that leads into the
-  clone, which is what a stray stow would leave.
+  D-11(a)), and nothing the native flow runs installs it: `audit-no-stow`
+  fails any stow on the login PATH that the machine did not have before the
+  run, and `audit-clone-links` any link under HOME that leads into the clone,
+  which is what a stray stow would leave.
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.
@@ -724,7 +719,8 @@ step in `summary.tsv`:
    line of that log is such a timestamped entry, so a log in a shape the
    audit cannot parse fails it instead of passing unread; (c) no link under
    HOME, outside the clone, resolves into the clone (`audit-clone-links`),
-   and `~/dotfiles/.venv-sync` never exists after any step
+   no stow is on the login PATH but one the machine had before the run
+   (`audit-no-stow`), and `~/dotfiles/.venv-sync` never exists after any step
    (`audit-sync-venv`); (d) the login shell from `getent passwd` (`dscl` on
    macOS) is the same at the start and the end, and the sha256 of
    `~/.bashrc`, `~/.profile`, `~/.bash_profile`, `~/.zshrc`, `~/.zshenv` and

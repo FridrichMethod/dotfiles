@@ -2,7 +2,7 @@
 # H1-apt-core sudo block. One package per line.
 # pinned 2026-10-09 (names checked against Ubuntu 24.04 noble).
 # bsdextrautils provides col; man-db provides man. openssh-client provides
-# ssh, ssh-agent and ssh-keygen for the stowed ~/.ssh config, the overlays'
+# ssh, ssh-agent and ssh-keygen for the dotfiles ~/.ssh config, the overlays'
 # ssh-agent plugin and H7-auth.
 zsh
 git

@@ -20,7 +20,7 @@ step_H1_xcode_clt_check() {
 step_H1_xcode_clt_plan() {
     steps_block_begin H1-xcode-clt gui
     printf '%s\n' 'xcode-select --install' \
-        "# finish the installer dialog, then run ./setup-host.sh --host $STEPS_HOST$(steps_mode_flag) again"
+        "# finish the installer dialog, then run ./setup-host.sh --host $STEPS_HOST again"
     steps_block_end
 }
 
@@ -53,7 +53,7 @@ steps_homebrew_block() {
     if [ "$STEPS_MODE" = apply ] && steps_has_digest "$path" "$STEPS_SHA"; then
         printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
     else
-        printf '# ./setup-host.sh --host %s%s (without --check) downloads %s\n' "$STEPS_HOST" "$(steps_mode_flag)" "$STEPS_URL"
+        printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
         printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
     fi
     printf '%s\n' "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v' \
@@ -168,24 +168,15 @@ step_H1_fcitx5_plan() {
 # --- H2-alloc (hpc, alloc) -------------------------------------------------
 
 step_H2_alloc_check() {
-    local need=S2-login-env
     if steps_probe login-env; then
-        # Only --legacy-stow builds the checkout's AI-sync env here.
-        if [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ]; then
-            STEP_DETAIL='the login env exists; no allocation is needed'
-            return 0
-        fi
-        if step_S4_setup_sync_check; then
-            STEP_DETAIL='the login and AI-sync envs exist; no allocation is needed'
-            return 0
-        fi
-        need=S4-setup-sync
+        STEP_DETAIL='the login env exists; no allocation is needed'
+        return 0
     fi
     if bootstrap_in_allocation; then
         STEP_DETAIL="inside Slurm job $SLURM_JOB_ID"
         return 0
     fi
-    STEP_DETAIL="$need builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)"
+    STEP_DETAIL='S2-login-env builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
     return 1
 }
 
@@ -200,7 +191,7 @@ step_H2_alloc_plan() {
             ;;
     esac
     printf '%s\n' '# then, inside the allocation (export CONDA_PKGS_DIRS first, as docs/bootstrap.md S2-login-env says):'
-    printf '%s --host %s%s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST" "$(steps_mode_flag)"
+    printf '%s --host %s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST"
     steps_block_end
 }
 
@@ -273,143 +264,11 @@ step_S5_claude_plan() {
         printf '%s\n' '# read it first; the line below runs it only while its sha256 is still the one above'
         steps_digest_gate "$digest" "$path" "bash $quoted"
     else
-        printf '# ./setup-host.sh --host %s%s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$(steps_mode_flag)" "$STEPS_URL"
+        printf '# ./setup-host.sh --host %s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$STEPS_URL"
         printf '# to %s once, then prints its sha256, its size and a line\n' "$quoted"
         printf '%s\n' '# that runs it only while that sha256 holds; read the file before you run it'
     fi
     printf '%s\n' '# ./doctor.sh then checks the installed claude against tools.tsv'
-    steps_block_end
-}
-
-# --- H7-stow (judgment, blocking) ------------------------------------------
-
-# Completion needs the installer's current receipt and its key startup links.
-# The receipt proves all packages completed; links catch partial home cleanup
-# without reproducing Stow's entire target graph.
-steps_stowed() {
-    local state saved_home saved_os saved_host saved_head head relative source link resolved
-    STEP_DETAIL='no current complete stow installation recorded for this home and host'
-    state=$(bootstrap_state_file "$STEPS_ROOT") || return 1
-    {
-        IFS= read -r saved_home && IFS= read -r saved_os &&
-            IFS= read -r saved_host && IFS= read -r saved_head
-    } <"$state" || return 1
-    head=$(git -C "$STEPS_ROOT" rev-parse HEAD 2>/dev/null) || return 1
-    [ -n "$head" ] && [ "$saved_home" = "$HOME" ] &&
-        [ "$saved_os" = "$(bootstrap_os)" ] && [ "$saved_host" = "$STEPS_HOST" ] &&
-        [ "$saved_head" = "$head" ] || return 1
-    for relative in common/sh/.profile common/zsh/.zshrc \
-        "$STEPS_HOST/sh/.config/sh/.profile" "$STEPS_HOST/zsh/.config/zsh/.zshrc"; do
-        source=$STEPS_ROOT/$relative
-        # Hosts without a shell overlay use the common startup files only.
-        case $relative in common/*) ;; *) [ -f "$source" ] || continue ;; esac
-        link=$HOME/${relative#*/*/}
-        resolved=$(steps_resolve "$link") || resolved=
-        if [ ! -L "$link" ] || [ ! -f "$source" ] || [ "$resolved" != "$source" ]; then
-            STEP_DETAIL="$link is not linked to $source"
-            return 1
-        fi
-    done
-    STEP_DETAIL='current stow receipt and shell links match this home and host'
-    return 0
-}
-
-# steps_stow_conflicts: the home paths (relative to $HOME, one per line) that
-# the first ./stow-all.sh would have to replace: a regular file, or a link
-# that does not lead into this checkout, where a common/ or host package
-# tracks a file that .stowrc does not ignore. Stow refuses them, and
-# stow --adopt would overwrite the tracked copies instead, so the H7-stow
-# block moves each aside first. Read-only: git ls-files and the home.
-steps_stow_conflicts() {
-    local files ignores pattern lines path rel target resolved
-    files=$(git -c core.quotePath=false --no-optional-locks -C "$STEPS_ROOT" ls-files -- common "$STEPS_HOST" \
-        2>/dev/null </dev/null) || return 0
-    ignores=$(sed -n 's/^--ignore=//p' "$STEPS_ROOT/.stowrc" 2>/dev/null) || ignores=
-    pattern=$(printf '%s\n' "$ignores" | awk 'NF { printf "%s(%s)$", sep, $0; sep = "|" }')
-    lines=$files$BOOTSTRAP_NL
-    while [ -n "$lines" ]; do
-        path=${lines%%"$BOOTSTRAP_NL"*}
-        lines=${lines#*"$BOOTSTRAP_NL"}
-        case $path in
-            \"* | */*/.stow-local-ignore) continue ;;
-            */*/*) ;;
-            *) continue ;;
-        esac
-        rel=${path#*/}
-        rel=${rel#*/}
-        if [ -n "$pattern" ] && bootstrap_text_has -E "$pattern" "$rel"; then
-            continue
-        fi
-        target=$HOME/$rel
-        if [ -L "$target" ]; then
-            resolved=$(steps_resolve "$target") || resolved=
-            case $resolved in
-                "$STEPS_ROOT"/*) continue ;;
-            esac
-        elif [ ! -e "$target" ] || [ -d "$target" ]; then
-            continue
-        fi
-        printf '%s\n' "$rel"
-    done
-}
-
-step_H7_stow_check() {
-    local count
-    STEPS_STOW_CONFLICTS=
-    steps_stowed && return 0
-    if ! steps_probe oh-my-zsh; then
-        STEP_DETAIL='oh-my-zsh must be cloned before ./stow-all.sh (S3-clones), or stow creates ~/.oh-my-zsh/custom first'
-        return 4
-    fi
-    STEPS_STOW_CONFLICTS=$(steps_stow_conflicts)
-    if [ -n "$STEPS_STOW_CONFLICTS" ]; then
-        count=$(printf '%s\n' "$STEPS_STOW_CONFLICTS" | grep -c .)
-        STEP_DETAIL="$STEP_DETAIL; $count home file(s) to move aside first: $(printf '%s\n' "$STEPS_STOW_CONFLICTS" | tr '\n' ' ')"
-        STEP_DETAIL=${STEP_DETAIL% }
-    fi
-    return 1
-}
-
-# steps_stow_path_prefix: the one-shot PATH prefix for the first
-# ./stow-all.sh. GNU Stow comes from the login env on hpc, else from
-# Homebrew (the one this run found, or the profile's default prefix on
-# Apple Silicon, Intel macOS or Linux), and only the stowed rc files put
-# those on PATH.
-steps_stow_path_prefix() {
-    local dir
-    if [ "$STEPS_PROFILE" = hpc ]; then
-        # shellcheck disable=SC2016 # expanded by the shell the block is pasted into
-        printf '%s\n' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'
-        return 0
-    fi
-    dir=$(steps_brew_default)
-    dir=${dir%/brew}
-    case $dir in
-        *[!A-Za-z0-9_./-]*) printf 'PATH=%s:"$PATH"\n' "$(steps_quote "$dir")" ;;
-        *) printf 'PATH="%s:$PATH"\n' "$dir" ;;
-    esac
-}
-
-step_H7_stow_plan() {
-    local lines rel
-    steps_block_begin H7-stow judgment
-    if [ -n "${STEPS_STOW_CONFLICTS:-}" ]; then
-        printf '%s\n' '# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;' \
-            '# merge what you still need into the overlay later'
-        lines=$STEPS_STOW_CONFLICTS$BOOTSTRAP_NL
-        while [ -n "$lines" ]; do
-            rel=${lines%%"$BOOTSTRAP_NL"*}
-            lines=${lines#*"$BOOTSTRAP_NL"}
-            [ -n "$rel" ] || continue
-            printf 'mv -n %s %s\n' "$(steps_quote "$HOME/$rel")" "$(steps_quote "$HOME/$rel.pre-dotfiles")"
-        done
-    elif [ "$STEPS_MODE" = manual ]; then
-        printf '%s\n' '# Stow never replaces a regular file (a fresh ~/.bashrc or ~/.profile from /etc/skel);' \
-            '# ./setup-host.sh lists each one in this block with a mv line that moves it aside first'
-    fi
-    printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command' \
-        "# stow reaches PATH only through this stow, so the prefix names where this host's stow lives"
-    printf '%s %s %s\n' "$(steps_stow_path_prefix)" "$(steps_quote "$STEPS_ROOT/stow-all.sh")" "$STEPS_HOST"
     steps_block_end
 }
 
@@ -554,7 +413,6 @@ step_H7_doctor_check() {
 step_H7_doctor_plan() {
     local doctor
     doctor=$(steps_quote "$STEPS_ROOT/doctor.sh")
-    [ "${BOOTSTRAP_LEGACY_STOW:-0}" != 1 ] || doctor="$doctor --legacy-stow"
     steps_block_begin H7-doctor judgment
     printf '%s --host %s\n' "$doctor" "$STEPS_HOST"
     printf '%s --host %s --smoke\n' "$doctor" "$STEPS_HOST"
