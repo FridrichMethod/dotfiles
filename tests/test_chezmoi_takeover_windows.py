@@ -153,7 +153,10 @@ class WindowsTakeoverTests(unittest.TestCase):
     def test_legacy_target_guard_uses_ancestors_and_explicit_target(self):
         self.bind()
         target = self.home / ".codex/config.toml"
-        unrelated = self.f.root / "unrelated/config.toml"
+        # Not under the fixture root: the temp directory may itself lie inside
+        # a native-bound home (the e2e runner's, after its handover). Nothing
+        # is created at this path.
+        unrelated = Path(self.f.root.anchor) / ("dotfiles-unrelated-" + self.f.root.name) / "config.toml"
         result = self.guard("@( (Test-DotfilesLegacyWriteAllowed -TargetPath " + ps_string(target) +
                             "), (Test-DotfilesLegacyWriteAllowed -TargetPath " + ps_string(unrelated) +
                             ") ) | ConvertTo-Json -Compress")
