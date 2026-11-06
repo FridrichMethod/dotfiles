@@ -16,7 +16,7 @@ dotfiles_test_clear_git_environment
 
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$TEST_DIR/.." && pwd)"
-TEST_PYTHON=${DOTFILES_SYNC_PYTHON:-$(command -v python3 || true)}
+TEST_PYTHON=$(command -v python3 || true)
 [ -n "$TEST_PYTHON" ] || {
     echo 'ERROR: python3 is required for the manifest validator.' >&2
     exit 1

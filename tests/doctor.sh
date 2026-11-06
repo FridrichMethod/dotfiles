@@ -22,13 +22,12 @@ REAL_GIT=$(command -v git) || {
 # GIT_INDEX_FILE, which -C does not override: the fixture's git init and
 # commit would reinitialize and commit into the caller's repository.
 dotfiles_test_clear_git_environment
-# The sync runtime check needs
-# only a standard-library Python 3.11+; the runtime check stays a fake.
-SYNC_PYTHON="${DOTFILES_SYNC_PYTHON:-$REPO_ROOT/.venv-sync/bin/python}"
-if [[ ! -x "$SYNC_PYTHON" ]]; then
-    echo 'ERROR: AI-sync runtime missing; run ./setup-sync.sh explicitly.' >&2
+# The fake sync interpreter below answers the runtime check itself and runs
+# any other call in this standard-library python3; no AI-sync runtime needed.
+REAL_PYTHON=$(command -v python3) || {
+    echo 'ERROR: python3 is required for the doctor fixture interpreter.' >&2
     exit 1
-fi
+}
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-doctor.XXXXXX")"
 TEST_TMP="$(cd -- "$TEST_TMP" && pwd -P)"
 cleanup() {
@@ -187,7 +186,7 @@ printf 'sync-python %s\n' "\$*" >>"\$EVENT_LOG"
 case " \$* " in
     *" --runtime-check "*) exit "\${SYNC_RUNTIME_RC:-0}" ;;
 esac
-exec "$SYNC_PYTHON" "\$@"
+exec "$REAL_PYTHON" "\$@"
 SH
 
 # A fresh Homebrew prefix that is not on PATH yet.

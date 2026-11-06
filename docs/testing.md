@@ -38,6 +38,9 @@ The Unix entrypoint checks Bash, POSIX sh, Git, Python and Node before starting.
 All jobs explicitly run `setup-sync.sh` or `setup-sync.ps1` to provision the
 hash-pinned configuration parser. Both entrypoints validate this runtime and
 require the shared Python backend tests, including safe replacement failures.
+Suites that run neither the parser nor Stow need only a standard-library
+Python 3.11+ (`python3`, or `python` under PowerShell) when run directly or
+as pre-commit hooks.
 In CI mode GNU Stow is required too, so its real symlink fixture cannot silently
 skip. On developer machines, `./tests/run.sh` reports a missing optional Stow
 integration check, installed-Codex exec-policy check, or PowerShell check.

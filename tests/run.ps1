@@ -22,6 +22,8 @@ if (-not (Test-Path -LiteralPath $powerShell -PathType Leaf)) {
     throw "Cannot locate the current PowerShell executable: $powerShell"
 }
 $repoRoot = Split-Path -Parent $PSScriptRoot
+# The AI-sync runtime below serves only test_config_sync.py and test_stow_ignores.py;
+# every other Python suite runs on the plain standard-library python checked above.
 $syncPython = if ($env:DOTFILES_SYNC_PYTHON) { $env:DOTFILES_SYNC_PYTHON }
     elseif ($IsWindows) { Join-Path $repoRoot '.venv-sync/Scripts/python.exe' }
     else { Join-Path $repoRoot '.venv-sync/bin/python' }
@@ -53,7 +55,7 @@ Write-Output '==> chezmoi.ps1'
 if ($LASTEXITCODE -ne 0) { throw 'Native chezmoi fixture tests failed.' }
 
 Write-Output '==> test_environment.py'
-& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_environment.py' -v
+& python -I -B -m unittest discover -s $PSScriptRoot -p 'test_environment.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Test environment isolation checks failed.' }
 
 Write-Output '==> test_config_sync.py'
@@ -67,11 +69,11 @@ Write-Output '==> test_ai_integration.py'
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_integration.py') -PathType Leaf)) {
     throw 'Required AI integration test suite is missing.'
 }
-& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_integration.py' -v
+& python -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_integration.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'AI integration tests failed.' }
 
 Write-Output '==> test_bootstrap_manifest.py'
-& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
+& python -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }
 
 Write-Output '==> test_stow_ignores.py'
@@ -92,7 +94,7 @@ Write-Output '==> update-hooks.ps1'
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell update-hook tests failed.' }
 
 Write-Output '==> test_payload_download.py'
-& $syncPython -I -B (Join-Path $PSScriptRoot 'test_payload_download.py')
+& python -I -B (Join-Path $PSScriptRoot 'test_payload_download.py')
 if ($LASTEXITCODE -ne 0) { throw 'Payload loopback download tests failed.' }
 
 Write-Output '==> payload-update.ps1'
