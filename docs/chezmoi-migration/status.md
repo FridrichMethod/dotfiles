@@ -1,5 +1,100 @@
 # Migration state and next-session record
 
+## Stage 6 progress record (started 2026-11-05)
+
+Stage 6 runs from [start-stage-6.md](start-stage-6.md) and
+[stage-6-retirement.md](stage-6-retirement.md). This section records the
+read-only Phase 0, the user's decisions and the coordinator rulings. The
+completion record replaces it when Stage 6 closes.
+
+### Phase 0 (read-only, 2026-11-05; mac 2026-11-06)
+
+Every check used existing access and the full explicit native arguments. No
+host was written: Windows reads used the administrator token for metadata
+only, and status, managed and doctor ran once as the user (Medium integrity)
+through a one-off Interactive/Limited task with no trigger, deleted after it
+ran; the chezmoi state, config and cache timestamps were unchanged.
+
+| Host | HEAD | chezmoi | F1-F8, F10, F11 | Managed (F7) | Doctor (offline) |
+| --- | --- | --- | --- | --- | --- |
+| lab-ubuntu | `e3a0762` | 2.74.0, `~/.local/bin` | pass | 67 | 79 ok, exit 0 |
+| wsl-ubuntu | `e3a0762` | 2.74.0, `~/.local/bin` | pass | 63 | 62 ok, 11 missing tmux clones (preexisting) |
+| sherlock | `dddc718` | 2.74.0, static, `~/.local/bin` | pass | 62 | 40 ok, 18 missing, 5 warn (preexisting login-env gaps; skills not installed) |
+| marlowe | `dddc718` | 2.74.0, `~/.local/bin` | pass | 62 | 38 ok, 18 missing, 7 warn (preexisting) |
+| mac | `e3a0762` | 2.74.0, Homebrew | pass | 64 | 55 ok, 12 missing (tmux clones and the zsh-completions clone; Stage 5 recorded 11), 3 warn |
+| win | `57fbc45` | 2.74.0, private `~/.local/bin/chezmoi.exe` (protected DACL, owner the user) | pass | 26 (first measurement; Stage 5 left F7 open) | 32 ok, 1 warn (skills), exit 0 |
+
+All six: status empty, both AI configs byte-equal to `chezmoi cat`, one
+`persistentState` key and no stray `chezmoistate.boltdb`, maintenance absent,
+`[data].host` equal to the role, native-config ok. mac was unreachable on
+2026-11-05 and was probed after the user woke it.
+
+Residue found (none of it is read by a native home):
+
+| Host | `.venv-sync` | Stow receipt | Wrapper links in `~/.local/bin` | Retired checkouts (all clean, no local commits) |
+| --- | --- | --- | --- | --- |
+| lab-ubuntu | yes | `.git/dotfiles-sync-unix` | 3 AI sync helpers and `fcitx5-profile-sync`, relative | kit, PyMOLScripts |
+| wsl-ubuntu | yes | yes | 3 AI sync helpers, relative | kit, PyMOLScripts, plus `.git/modules/pymol` |
+| sherlock | yes | yes | 3 AI sync helpers, relative | codex kit, kit, PyMOLScripts, sherlock-kit |
+| marlowe | no | no | none | PyMOLScripts |
+| mac | yes | yes | 3 AI sync helpers, relative | codex kit, kit, PyMOLScripts, sherlock-kit |
+| win | yes | `.git\dotfiles-sync-windows\` (4 files) | 3 AI sync helpers, absolute; `claude-as` and `codex-as` dangling into the retired `common\coding-agent-kit` | kit, PyMOLScripts |
+
+Old payload stamp and log files remain on the five Unix hosts. No generated
+`AGENTS.override.md`, `filter.codex-portable` config or `*.pre-dotfiles` file
+exists anywhere. The Windows task `Dotfiles-Restow-76CD67D31195469A` is
+Disabled, runs as the user at RunLevel Highest and has exactly the
+`dotfiles-auto-stow.ps1 -Apply` action the plan's refusal checks expect.
+
+The plan's file:line references were re-derived on `e3a0762`: most held;
+about 20 were corrected and about 150 unlisted sites were assigned to a
+commit before implementation.
+
+### User decisions (2026-11-05 and 2026-11-06)
+
+The user chose the recommended option everywhere except D-8.
+
+| ID | Decision | Reason |
+| --- | --- | --- |
+| D-1 | A Linux without an overlay installs by hand: fetch the pinned chezmoi, then `init` with `[data].host = "common-only"`; no new setup-host mode | One documented route that e2e `other` exercises, instead of a mode used by no current host |
+| D-2 | Host-variant inputs move to `home/.hosts/<host>/<HOME-relative path>`, read by a relative `include` | Probed on 2.74.0: a dot-dir inside the source root is never a target and a relative include resolves against the source directory with exact bytes, so no template depends on `.chezmoi.workingTree` |
+| D-3 | The portable AI policy moves to `home/.policy/claude-settings.json` and `codex-config.toml`, read raw by the two modify templates | `.chezmoidata` deep-merges into template data and `.chezmoitemplates` files are parsed as templates; a raw include keeps the reviewed bytes |
+| D-4 | A frozen golden list (19 owned paths, 3 retired) plus structural checks | An ownership change must show up as a reviewed test edit |
+| D-5 | A payload call without `--now`/`-Now`, or with the retired `--auto`/`--worker`/`-Auto`/`-Worker`, is a usage error: one stderr line, exit 2 (return 2 when sourced) | A silent no-op hides a broken caller |
+| D-6 | `DOTFILES_DIR` goes everywhere; paste-in helpers use a local variable | The validated native binding is the only authority; an unmarked home runs `sh <checkout>/scripts/payload-update.sh --now` |
+| D-7 | Rewrite `docs/update-contract.md` as the native updater contract; delete `docs/sherlock-kit.md` if support-boundary.md covers its links | Both describe retired behavior |
+| D-8 | Keep the `.gitignore` residue patterns (`/.venv-sync/` and the retired checkout lines) through the code commits; remove them only after every host's residue is verified gone, as the last Phase C step | User's choice: the patterns keep host leftovers out of `git status` until they are gone |
+| D-9 | Phase C removes only the exact `.venv-sync` directories and the Stow receipts; old payload stamps and logs stay | Exact known paths with no reader; the rest is harmless history |
+| D-10 | Reword the two `autoMode.soft_deny` entries that name Stow link targets and `.venv-sync`, in a separate commit after B5; the user approved the exact text on 2026-11-06 | The protection must name the native source, its targets and the chezmoi state |
+| D-11 | Drop the e2e `stow` wrapper | Nothing runs Stow after B1 |
+| D-12 | `tests/test_ai_policy.py` for the policy; the PowerShell parse gate and Terminal JSON check move into `tests/powershell-profile.sh`; a retired-name test with a reviewed allowlist | No invariant may live only in a suite B2/B3 delete |
+| D-13 | Expected per-role target sets move to a data file under `tests/fixtures/`; inventory.md becomes historical | Tests read data, not a document |
+| D-14 | The rc-pollution check scans the live home rc files read-only; the checkout half goes | Native targets are rendered, so the live files are what a shell reads |
+| D-15 | Keep the Unix PATH chezmoi; guard `$PSStyle` in the pwsh 7 profile (ruling: also every PSReadLine 2.2-only option) | The documented 7.0 floor then holds |
+| D-16 | Maintenance-gated canary: maintenance on the five remote hosts before `main` moves, Lab first, then host by host | No host pulls the retirement before its turn |
+| D-17 | Keep the takeover and recovery suites with synthetic links; drop only cases that run `stow-all` or `dotfiles-update` | Their coverage does not depend on the retired commands |
+
+The user also approved the one-off Windows Phase 0 task above. Deregistering
+`Dotfiles-Restow-*` waits for a separate approval of its exact command.
+
+### Coordinator rulings
+
+- Phase A lands as A2, A1, A3, A4 in one `ci/**` and `e2e-ci/**` checkpoint.
+  Phase B lands strictly B1, B2, B3, B4, B6, B5, D-10, B7; each later commit
+  re-derives its sites by content on the previous tip. B6 (D-15) changes win's
+  rendered profile, so it lands in Phase B.
+- B1 owns the doctor fixture copies of the parser runtime, `.stowrc` in
+  `tests/setup-host.sh`, `SYNC_TRIPWIRE` and every `stage6-B1` marker A3 left;
+  B4 owns the two `stage6-B4` markers. Each ends with its marker grep empty.
+- Doc collisions are resolved by owner: A4 owns the end-to-end section of
+  docs/testing.md and the fresh-home sections of docs/bootstrap.md; later
+  commits only remove residual legacy tokens there.
+- B1 adds the "nothing installs Stow" e2e audit when it removes the Stow rows
+  from the Brewfile and the HPC login env.
+- Not fixed in Stage 6 (recorded in B7): a local `workingTree` config key
+  redirects `.chezmoi.workingTree`, which the validate-host include and the
+  `sourceDir` written at init read.
+
 ## Stage 5 completion record (2026-11-04)
 
 This section is the current state. Stage 5 ran 2026-11-03..04 and landed: local
@@ -682,7 +777,7 @@ before the main fast-forward.
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
 | 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e; closure `a5d9ad7` passed exact CI 41719265671 | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Six packages, two review-fix branches and docs landed at `dddc718`; exact CI 41832666587 and bootstrap e2e 41832666818 passed | Five Unix hosts at `dddc718` through the actual updater, with the reviewed `persistentState` re-init; Marlowe's login env has tmux 3.6a; win at `57fbc45` (same code plus the Stage 5 records) through its own updater and the same re-init on 2026-11-04, by a user-approved limited-token task | [Stage 5 record](#stage-5-completion-record-2026-11-04), [rollout](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04) |
-| 6 | Not started; next stage | Native-only deletion candidate and actual retirement not implemented | Plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
+| 6 | In progress: Phase 0 and decisions recorded; Phase A (preparation) implemented | No host changed yet | [Stage 6 progress record](#stage-6-progress-record-started-2026-11-05), plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
 
 ## Decisions and open choices
 
