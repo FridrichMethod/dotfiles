@@ -131,6 +131,14 @@ repair into the native path or delete residue merely because it is old.
 
 ## Initialize and establish one writer
 
+A fresh home, with no earlier dotfiles install, no Stow links, no local native
+config and no binding, has no other writer to quiesce: follow
+[Fresh home by hand](../bootstrap.md#fresh-home-by-hand) (Windows:
+[Fresh Windows home by hand](../bootstrap.md#fresh-windows-home-by-hand))
+instead. It runs the commands below with the same explicit arguments, keeps
+private copies of the files the first apply replaces, and needs no maintenance
+marker; everything else follows this section.
+
 After backups and quiescence, seed the local config with only the explicitly
 selected `[data].host` if it does not exist. If it exists, review and edit it
 privately instead of overwriting unknown encryption or local settings. The

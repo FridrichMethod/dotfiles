@@ -1,89 +1,20 @@
 #Requires -Version 7.0
-# The flow of tests/e2e/run.ps1: the setup-host.ps1 -LegacyStow -Yes loop with its HUMAN
-# blocks, and the whole sequence: clone, winget, doctor-initial, the no-write
-# -Check, the apply loop, the second apply, the profile load, the payload
-# repos and the final legacy doctor, followed by native binary provisioning
-# and isolated native fixtures. The legacy Windows compatibility flow is driven the
-# way "Running it with an agent" says an agent drives it. Dot-source only,
-# after steps.ps1.
-
-# The child command for a block line: the line reaches it through the
-# environment, so no quoting of the harness changes what runs, and
-# Invoke-Expression runs it as the person's elevated PowerShell 7 would. A
-# throw in stow-all.ps1 ends the child with exit 1.
-$script:E2EInvokeCommand = 'Invoke-Expression -Command $env:E2E_BLOCK_LINE'
-
-function Test-E2EStowed {
-    # HW-stow's verify: ~\.gitconfig is a symlink to the clone's common copy.
-    # Done, plus a Detail for the row.
-    $link = Get-Item -LiteralPath (Join-Path $HOME '.gitconfig') -Force -ErrorAction SilentlyContinue
-    if ($null -eq $link) { return @{ Done = $false; Detail = '~\.gitconfig is missing' } }
-    if ([string]$link.LinkType -cne 'SymbolicLink') {
-        return @{ Done = $false; Detail = "~\.gitconfig is a regular file ($($link.Length) bytes), not a symlink" }
-    }
-    $target = Get-E2ELinkTarget $link
-    if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path $HOME $target }
-    $expected = [IO.Path]::GetFullPath((Join-Path $E2E['Clone'] 'common/git/.gitconfig'))
-    $done = [IO.Path]::GetFullPath($target).Equals($expected, [StringComparison]::OrdinalIgnoreCase)
-    $detail = if ($done) { "~\.gitconfig -> $target" } else { "~\.gitconfig -> $target, not the clone's $expected" }
-    return @{ Done = $done; Detail = $detail }
-}
-
-function Invoke-E2EStowBlock {
-    # Run the HW-stow block's one line as the person would from an elevated
-    # PowerShell 7 (Invoke-Expression in a child pwsh -NoProfile
-    # -NonInteractive, in HOME), then HW-stow's verify and the applied state.
-    # Unlike stow-all.sh, which writes its state file unconditionally (so
-    # inside.sh judges it by its exit code and audits the file apart),
-    # stow-all.ps1 records the applied state only when nothing warned: a
-    # WARNING line leaves .git\dotfiles-sync-windows\configuration.json
-    # unwritten and the login updater would request a restow at every login,
-    # so a warning or a missing state file fails the step, warnings quoted.
-    param([Parameter(Mandatory)]$Block, [Parameter(Mandatory)][string]$Line)
-    Start-E2EStep $Block.Id "human:$($Block.Id)"
-    Add-E2EText $E2E['StepLog'] ("--- block`n" + ($Block.Lines -join "`n") + "`n")
-    $code = Invoke-E2EProcess -FilePath $E2E['PowerShell'] -WorkingDirectory $HOME `
-        -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', $script:E2EInvokeCommand) `
-        -OutFile $E2E['StepOut'] -ErrFile $E2E['StepErr'] -TimeoutSeconds $E2ETimeout['Block'] `
-        -Environment @{ E2E_BLOCK_LINE = $Line }
-    if ($code -ne 0) {
-        $E2E['Broken'] = $Block.Id
-        Complete-E2EStep fail "line 1 exited $code ($(ConvertTo-E2EOneLine $Line 200)): $(Get-E2ELastLine $E2E['StepErr'])"
-        return $false
-    }
-    $stowed = Test-E2EStowed
-    if (-not $stowed['Done']) {
-        $E2E['Broken'] = $Block.Id
-        Complete-E2EStep fail "stow-all.ps1 exited 0, but $($stowed['Detail'])"
-        return $false
-    }
-    $warnings = @(@(Get-E2ELines $E2E['StepOut']) + @(Get-E2ELines $E2E['StepErr']) | Where-Object { $_ -match '^WARNING: ' })
-    $gitDir = Get-E2EGitOutput @('-C', $E2E['Clone'], 'rev-parse', '--absolute-git-dir')
-    if ($gitDir.Code -ne 0) {
-        $E2E['Broken'] = $Block.Id
-        Complete-E2EStep fail "git rev-parse --absolute-git-dir exited $($gitDir.Code) in the clone: $($gitDir.Text)"
-        return $false
-    }
-    $state = Join-Path (Join-Path $gitDir.Text 'dotfiles-sync-windows') 'configuration.json'
-    $recorded = [IO.File]::Exists($state)
-    if ($warnings.Count -or -not $recorded) {
-        $E2E['Broken'] = $Block.Id
-        $where = if ($recorded) { 'recorded' } else { "missing at $state" }
-        $quoted = if ($warnings.Count) { ": $(ConvertTo-E2EOneLine ($warnings -join "`n") 300)" } else { '' }
-        Complete-E2EStep fail ("stow-all.ps1 exited 0 with $($warnings.Count) warning(s), applied state $where " +
-            "(stow-all.ps1 records it only on a warning-free run)$quoted")
-        return $false
-    }
-    Complete-E2EStep pass "1 line run as printed (run-stow); $($stowed['Detail']); applied state recorded, 0 warnings"
-    return $true
-}
+# The flow of tests/e2e/run.ps1: the setup-host.ps1 -Host win -Yes loop with
+# its HUMAN blocks up to the HW-native handover, and the whole sequence:
+# clone, winget, doctor-initial, the no-write -Check, the apply loop, the
+# handover through docs/bootstrap.md "Fresh Windows home by hand", the second
+# apply, the no-write -Check that finds nothing left, the profile load, the
+# payload repos, the native convergence check, the final doctor, the isolated
+# native fixtures and the task and sync-runtime audits: the native Windows
+# bootstrap, driven the way "Running it with an agent" says an agent drives
+# it. Dot-source only, after steps.ps1.
 
 function Invoke-E2EBlocks {
-    # Act on an exit-3 run's blocks in printed order; $false once a block
-    # fails or is refused (Broken is set). A block the harness must not act on
-    # refuses the whole run first, wherever it was printed, so the stow never
-    # runs in a run that also printed one (HW-clone precedes HW-stow today;
-    # the order is setup-host.ps1's to change).
+    # Act on an exit-3 run's blocks in printed order; $false once a block is
+    # refused (Broken is set). A block the harness must not act on refuses
+    # the whole run first, wherever it was printed. The HW-native block is the
+    # native-handover step's, after the loop; each reminder is recorded once
+    # as a skip, across runs.
     param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blocks)
     foreach ($block in $Blocks) {
         if ((Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind) -ceq 'fail') {
@@ -94,97 +25,112 @@ function Invoke-E2EBlocks {
     }
     foreach ($block in $Blocks) {
         $action = Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind
-        $text = Get-E2EBlockText $block
-        switch ($action) {
-            'skip' {
-                if ($E2E['SkippedBlocks'] -notcontains $block.Id) {
-                    $E2E['SkippedBlocks'] = @($E2E['SkippedBlocks']) + @($block.Id)
-                    Skip-E2EStep $block.Id "$($block.Kind) block left to the person: $text"
-                }
+        if ($action -ceq 'handover') { continue }
+        if ($action -ceq 'skip') {
+            if ($E2E['SkippedBlocks'] -notcontains $block.Id) {
+                $E2E['SkippedBlocks'] = @($E2E['SkippedBlocks']) + @($block.Id)
+                Skip-E2EStep $block.Id "$($block.Kind) block left to the person: $(Get-E2EBlockText $block)"
             }
-            'run-stow' {
-                $selected = Get-E2EStowLine -Lines @($block.Lines) -Clone $E2E['Clone']
-                if ($selected['Error']) {
-                    $E2E['Broken'] = $block.Id
-                    Write-E2EFailure $block.Id "$($block.Kind) block refused: $($selected['Error']); block: $text"
-                    return $false
-                }
-                if (-not (Invoke-E2EStowBlock -Block $block -Line $selected['Line'])) { return $false }
-            }
-            default {
-                $E2E['Broken'] = $block.Id
-                Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $text"
-                return $false
-            }
+            continue
         }
+        $E2E['Broken'] = $block.Id
+        Write-E2EFailure $block.Id "$($block.Kind) block the harness must not run: $(Get-E2EBlockText $block)"
+        return $false
     }
     return $true
 }
 
 function Invoke-E2EApplyLoop {
-    # setup-host.ps1 -Host win -Yes until it exits 0, at most eight runs, each
-    # with the PATH a new terminal would read. Exit 3 hands the printed blocks
-    # to Invoke-E2EBlocks, which runs the stow or refuses a block by name (as
-    # inside.sh counts a run-* or fail action as progress); a run whose blocks
-    # hold neither fails as "no progress"; exit 1 or 2 fails with what
-    # setup-host reported.
+    # setup-host.ps1 -Host win -Yes until only the HW-native handover is
+    # left, at most eight runs, each with the PATH a new terminal would read;
+    # Get-E2ELoopNext decides on each run, as e2e_loop_next does in
+    # inside.sh. blocks: a block the harness must act on (no Windows block
+    # line runs, so a refused one), handed to Invoke-E2EBlocks. rerun:
+    # nothing to act on, but a step applied (a line of E2EAppliedRe). done:
+    # nothing to act on, nothing applied, HW-native alone pending and its
+    # block printed; the reminders are recorded and HandoverBlock keeps that
+    # block for the native-handover step. stuck: any other exit 3 fails as
+    # "no progress". early: exit 0 fails, since a fresh home cannot have
+    # HW-native done. Exit 1 or 2 fails with what setup-host reported;
+    # anything else is the timeout. Returns one bool.
     for ($n = 1; $n -le 8; $n++) {
         $name = "apply-$n"
         Update-E2EPath
         Start-E2EStep $name "setup:$name"
-        $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-LegacyStow', '-Host', 'win', '-Yes') -TimeoutSeconds $E2ETimeout['Apply']
+        $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Yes') -TimeoutSeconds $E2ETimeout['Apply']
         $output = @(Get-E2ELines $E2E['StepOut'])
-        $errors = @(Get-E2ELines $E2E['StepErr'])
-        switch ($code) {
-            0 {
-                $done = @($output | Where-Object { $_ -match '\] [A-Za-z0-9-]+: done: ' }).Count
-                $skipped = @($output | Where-Object { $_ -match '\] [A-Za-z0-9-]+: skip: ' }).Count
-                Complete-E2EStep pass "exit 0 after $n run(s); $done done, $skipped skip"
-                return $true
-            }
-            3 {
-                $blocks = @(ConvertFrom-E2EBlocks -Output $output -Directory ([IO.Path]::ChangeExtension($E2E['StepLog'], '.blocks')))
-                $actions = @($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind })
-                $pending = Get-E2EPendingIds (@($output) + @($errors))
-                $summary = Get-E2EBlocksSummary $blocks
-                if ($actions -notcontains 'run-stow' -and $actions -notcontains 'fail') {
-                    $E2E['Broken'] = $name
-                    Complete-E2EStep fail "no progress: exit 3 with no block the harness may run (pending: $pending; blocks: $summary)"
-                    return $false
-                }
-                Complete-E2EStep pass "exit 3; blocks: $summary; pending: $pending"
-                if (-not (Invoke-E2EBlocks -Blocks $blocks)) { return $false }
-            }
-            { $_ -in @(1, 2) } {
-                $E2E['Broken'] = $name
-                Complete-E2EStep fail "exit $code`: $(Get-E2EFailureDetail $output $errors)"
-                return $false
-            }
-            default {
-                $E2E['Broken'] = $name
-                Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Apply'])s timeout): $(Get-E2ELastLine $E2E['StepErr'])"
-                return $false
-            }
+        $stderr = @(Get-E2ELines $E2E['StepErr'])
+        $applied = @($output | Where-Object { $_ -match $script:E2EAppliedRe })
+        $stepped = @($output | Where-Object { $_ -match '\[step\] [A-Za-z0-9-]+: ' })
+        $blocks = @()
+        $actions = @()
+        if ($code -eq 3) {
+            $blocks = @(ConvertFrom-E2EBlocks -Output $output -Directory ([IO.Path]::ChangeExtension($E2E['StepLog'], '.blocks')))
+            $actions = @($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind })
         }
+        $pending = Get-E2EPendingIds (@($output) + @($stderr))
+        $summary = Get-E2EBlocksSummary $blocks
+        $verdict = Get-E2ELoopNext -Code $code -Pending $pending -Actionable ($actions -contains 'fail') -Applied ($applied.Count -gt 0)
+        if ($verdict -ceq 'blocks') {
+            Complete-E2EStep pass "exit 3; blocks: $summary; pending: $pending"
+            if (-not (Invoke-E2EBlocks -Blocks $blocks)) { return $false }
+            continue
+        }
+        if ($verdict -ceq 'rerun') {
+            Complete-E2EStep pass "exit 3; applied $($stepped.Count) step(s); pending: $pending"
+            continue
+        }
+        $handover = @($blocks | Where-Object { $_.Id -ceq 'HW-native' }) | Select-Object -First 1
+        if ($verdict -ceq 'done' -and $null -ne $handover) {
+            $E2E['HandoverBlock'] = $handover
+            Complete-E2EStep pass "exit 3 after $n run(s); only HW-native pending; blocks: $summary"
+            return (Invoke-E2EBlocks -Blocks $blocks)
+        }
+        $E2E['Broken'] = $name
+        if ($verdict -ceq 'done') {
+            Complete-E2EStep fail "exit 3 with only HW-native pending, but no HW-native block (blocks: $summary)"
+        }
+        elseif ($verdict -ceq 'stuck') {
+            Complete-E2EStep fail "no progress: exit 3 with no block the harness may run and nothing applied (pending: $pending; blocks: $summary)"
+        }
+        elseif ($verdict -ceq 'early') {
+            Complete-E2EStep fail 'exit 0 before the handover: HW-native was already done on a fresh home'
+        }
+        elseif ($verdict -ceq 'error') {
+            Complete-E2EStep fail "exit ${code}: $(Get-E2EFailureDetail $output $stderr)"
+        }
+        else {
+            Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Apply'])s timeout): $(Get-E2ELastLine $E2E['StepErr'])"
+        }
+        return $false
     }
     $E2E['Broken'] = 'apply-loop'
-    Write-E2EFailure apply-loop 'eight apply runs without an exit 0'
+    Write-E2EFailure apply-loop 'eight apply runs without reaching the handover'
     return $false
 }
 
 function Invoke-E2EFlowWin {
-    # The whole sequence for the win host.
+    # The whole sequence for the win host. The scheduled task identities are
+    # read just before and just after the apply loop; the two audits run
+    # whatever broke the flow before them.
     Invoke-E2EStepClone
     Invoke-E2EOrSkip winget { Invoke-E2EStepWinget }
     Invoke-E2EOrSkip doctor-initial { Invoke-E2EStepDoctorInitial }
     Invoke-E2EOrSkip check-nowrite { Invoke-E2EStepCheckNoWrite }
     if ($E2E['Broken']) { Skip-E2EStep apply-1 "after $($E2E['Broken']) failed" }
-    else { [void](Invoke-E2EApplyLoop) }
+    else {
+        $E2E['TasksBefore'] = Get-E2EScheduledTaskNames
+        [void](Invoke-E2EApplyLoop)
+        $E2E['TasksAfterLoop'] = Get-E2EScheduledTaskNames
+    }
+    Invoke-E2EOrSkip native-handover { Invoke-E2EStepNativeHandover }
     Invoke-E2EOrSkip second-apply { Invoke-E2EStepSecondApply }
+    Invoke-E2EOrSkip check-done { Invoke-E2EStepCheckDone }
     Invoke-E2EOrSkip login-shell { Invoke-E2EStepLoginShell }
     Invoke-E2EOrSkip payloads { Invoke-E2EStepPayloads }
+    Invoke-E2EOrSkip native-converged { Invoke-E2EStepNativeConverged }
     Invoke-E2EOrSkip doctor-final { Invoke-E2EStepDoctorFinal }
-    Invoke-E2EOrSkip native-provision { Invoke-E2EStepNativeProvision }
-    Invoke-E2EOrSkip native-check { Invoke-E2EStepNativeCheck }
     Invoke-E2EOrSkip native-fixtures { Invoke-E2EStepNativeFixtures }
+    Invoke-E2EAuditTasks
+    Invoke-E2EAuditSyncVenv
 }

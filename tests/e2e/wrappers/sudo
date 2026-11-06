@@ -13,8 +13,8 @@
 # Logging never fails the call: a write error is ignored. Bash 3.2 and BSD
 # userland (macOS), no here-documents or process substitution.
 #
-# chsh and stow are this file with another tool name, and sudo-deny denies
-# instead of exec'ing (hpc images have no sudo); keep the four in step.
+# chsh is this file with another tool name, and sudo-deny denies instead of
+# exec'ing (hpc images have no sudo); keep the three in step.
 
 tool=sudo
 

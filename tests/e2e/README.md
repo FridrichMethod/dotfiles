@@ -1,8 +1,10 @@
 # End-to-end bootstrap suite
 
 Opt-in: runs the day-zero bootstrap for real, from a fresh home, on every host
-overlay, the way the quick starts of [docs/bootstrap.md](../../docs/bootstrap.md#legacy-quick-start)
-tell a person to, and checks its [acceptance checklist](../../docs/bootstrap.md#acceptance-checklist).
+overlay, the way [Running it with an agent](../../docs/bootstrap.md#running-it-with-an-agent)
+drives it, hands the home to native chezmoi through
+[Fresh home by hand](../../docs/bootstrap.md#fresh-home-by-hand), and checks its
+[acceptance checklist](../../docs/bootstrap.md#acceptance-checklist).
 `./tests/run.sh` and pre-commit never run it; they run only the fast unit test
 `tests/e2e-harness.sh`, which drives the harness against stubs. The full
 description, each host's fidelity caveats, the HUMAN-block policy, the
@@ -56,8 +58,7 @@ the network and takes from ten minutes to an hour per host.
 - `env.txt`: kernel, `/etc/os-release`, glibc, `id`, PATH, tool versions, `LMOD_DIR`, `SCRATCH`,
   the timeout binary (`tests/e2e/timeout.pl` on the mac runner) and the paths the HOME snapshots left out
   (`E2E_SNAPSHOT_PRUNE`, expanded)
-- `log/wrappers.log`: every `sudo`, `chsh` and `stow` call, with the harness phase it ran in
-  (the doctor's `stow --version` probe is logged like any call but is not a finding)
+- `log/wrappers.log`: every `sudo` and `chsh` call, with the harness phase it ran in
 - `log/sudo.log`: sudo's own log (Ubuntu and Fedora images)
 - `log/timeline`: `<epoch> <begin|end> <phase>` around every command the harness runs
 - `snapshots/`: the `find` listings behind the no-write checks
@@ -91,7 +92,7 @@ Which HUMAN blocks the harness runs, skips or fails on is decided in
 step id and kind, and documented in
 [docs/testing.md](../../docs/testing.md#human-block-policy). Each host is
 described by `hosts/<host>.env`, its image by `docker/`, and the logging
-`sudo`, `chsh` and `stow` wrappers by `wrappers/`: the images install them in
+`sudo` and `chsh` wrappers by `wrappers/`: the images install them in
 `/usr/local/bin`, and on the mac runner the workflow installs them there too,
 before any phase opens, because macOS's `path_helper` puts `/usr/local/bin`
 ahead of `/usr/bin` in every login shell and demotes any other directory

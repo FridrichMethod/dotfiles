@@ -1,18 +1,22 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2034 # the guard state (E2E_STOWED, E2E_LOGIN_SHELL_START) is read by steps.sh and inside.sh
+# shellcheck disable=SC2034 # the guard state (E2E_VENV_VIOLATIONS, E2E_LOGIN_SHELL_START) is read by steps.sh and inside.sh
 # The checks of tests/e2e/inside.sh that watch the home and the clone: the
 # no-write snapshots (an empty TMPDIR, HOME by find -newer and entry count),
-# the clean-clone rule, the per-step guards (rc-file digests, the stow
-# state), the login-shell run and the acceptance audits (wrappers.log
-# phases, sudo.log timestamps against the timeline). Sourced after
-# common.sh; same portability rules (no find -printf, no stat, no date -d
+# the clean-clone rule, the per-step guards (rc-file digests, the AI-sync
+# runtime in the clone), the login-shell run and the acceptance audits
+# (wrappers.log phases, sudo.log timestamps against the timeline, links
+# under HOME that lead into the clone). Sourced after common.sh; same
+# portability rules (no find -printf, no stat, no readlink -f, no date -d
 # except inside the sudo.log audit, which Linux alone needs).
 
 # Guard state: the before-images e2e_step_begin takes, the violations the
 # audits report at the end, and the notes e2e_step_end appends after a row.
+# E2E_SYNC_VENV is the AI-sync runtime directory the legacy route made in
+# the clone; the native flow never creates it.
 E2E_RC_FILES='.bashrc .profile .bash_profile .zshrc .zshenv .zprofile'
 E2E_RC_BEFORE='' E2E_RC_VIOLATIONS=''
-E2E_STOW_BEFORE='' E2E_STOW_VIOLATIONS='' E2E_STOWED=0
+E2E_SYNC_VENV=.venv-sync
+E2E_VENV_VIOLATIONS=''
 E2E_PENDING_NOTES=''
 E2E_LOGIN_SHELL_START=''
 E2E_LOGIN_DETAIL=''
@@ -66,34 +70,16 @@ e2e_rc_diff() {
     printf '%s\n' "$out"
 }
 
-# e2e_stow_state: "<state|->" "<link|->": whether ./stow-all.sh's state file
-# ($(git rev-parse --git-path dotfiles-sync-unix) in the clone) and the
-# ~/.zshrc link exist.
-e2e_stow_state() {
-    local state='-' link='-' path
-    if [ -e "$E2E_CLONE/.git" ] &&
-        path=$(git -C "$E2E_CLONE" rev-parse --git-path dotfiles-sync-unix 2>/dev/null </dev/null) &&
-        [ -n "$path" ]; then
-        case $path in
-            /*) ;;
-            *) path=$E2E_CLONE/$path ;;
-        esac
-        [ ! -f "$path" ] || state='state'
-    fi
-    [ ! -L "$HOME/.zshrc" ] || link='link'
-    printf '%s %s\n' "$state" "$link"
-}
-
 e2e_guard_before() {
     E2E_RC_BEFORE=$(e2e_rc_sums)
-    E2E_STOW_BEFORE=$(e2e_stow_state)
 }
 
 # e2e_guard_after STEP PHASE: compare with the before-images. The rc files
-# may change during a human:* phase only (recorded as a note: the H7-stow
-# block moves /etc/skel files aside and links the tracked ones); the stow
-# state and the ~/.zshrc link may appear only during human:H7-stow, both at
-# once, and never vanish.
+# may change during a human:* phase only (recorded as a note: the
+# native-handover step, in human:H7-native, replaces the /etc/skel files
+# with the deployed ones after keeping a copy of each). The first step after
+# which the clone holds E2E_SYNC_VENV (a directory, a file or a link) is
+# recorded once for the audit.
 e2e_guard_after() {
     local step=$1 phase=$2 after changed
     after=$(e2e_rc_sums)
@@ -104,13 +90,9 @@ e2e_guard_after() {
             *) E2E_RC_VIOLATIONS="$E2E_RC_VIOLATIONS${E2E_RC_VIOLATIONS:+; }$step ($phase): $changed" ;;
         esac
     fi
-    after=$(e2e_stow_state)
-    if [ "$after" != "$E2E_STOW_BEFORE" ]; then
-        if [ "$phase" = human:H7-stow ] && [ "$E2E_STOW_BEFORE" = '- -' ] && [ "$after" = 'state link' ]; then
-            E2E_STOWED=1
-        else
-            E2E_STOW_VIOLATIONS="$E2E_STOW_VIOLATIONS${E2E_STOW_VIOLATIONS:+; }$step ($phase): $E2E_STOW_BEFORE -> $after"
-        fi
+    if [ -z "$E2E_VENV_VIOLATIONS" ] && [ -n "${E2E_CLONE:-}" ] &&
+        { [ -e "$E2E_CLONE/$E2E_SYNC_VENV" ] || [ -L "$E2E_CLONE/$E2E_SYNC_VENV" ]; }; then
+        E2E_VENV_VIOLATIONS="$step ($phase)"
     fi
 }
 
@@ -263,16 +245,68 @@ e2e_login_shell_of() {
 
 # e2e_audit_wrappers LOG: the wrappers.log lines ("<epoch>\t<phase>\t<tool>
 # \t<ppid>\t<parent>\t<argv>") whose phase is neither human:* nor
-# negative:*: a sudo, chsh or stow that ran where only the harness's own
-# read-only steps should have. A bare `stow --version` or `stow -V` is not
-# one: the doctor's tools.tsv probe runs it on every doctor run, and the
-# wrapper logs the probe like any call. 0 when there are none.
+# negative:*: a sudo or chsh that ran where only the harness's own
+# read-only steps should have. No call is exempt, a version probe
+# included. 0 when there are none.
 e2e_audit_wrappers() {
     local bad
-    bad=$(awk -F '\t' '$2 !~ /^(human|negative):/ && !($3 == "stow" && ($6 == "--version" || $6 == "-V"))' \
-        "$1" 2>/dev/null)
+    bad=$(awk -F '\t' '$2 !~ /^(human|negative):/' "$1" 2>/dev/null)
     printf '%s\n' "$bad"
     [ -z "$bad" ]
+}
+
+# e2e_audit_clone_links: every link under HOME, outside the clone, E2E_OUT,
+# E2E_SRC and E2E_SNAPSHOT_PRUNE, that leads into the clone (a Stow link, or
+# anything else a step made point at the checkout), one per line. A link
+# whose text names the clone's basename is resolved without following it
+# further than cd -P does: its target (absolute, or the link's directory
+# plus the text) when that is a directory, else the target's directory, and
+# it counts when that is the physical clone or lies under it, a dangling
+# link into the clone included. 0 when there are none. BSD-safe: no
+# readlink -f, no find -printf.
+e2e_audit_clone_links() {
+    local phys base path found
+    local prune=()
+    [ -d "${E2E_CLONE:-}" ] || return 0
+    phys=$(cd -P -- "$E2E_CLONE" 2>/dev/null && pwd -P) || return 0
+    base=${E2E_CLONE##*/}
+    prune=('(' -path "$E2E_CLONE" -o -path "${E2E_OUT:-}" -o -path "${E2E_SRC:-}")
+    for path in $(e2e_expand "${E2E_SNAPSHOT_PRUNE:-}"); do
+        prune=("${prune[@]}" -o -path "$path")
+    done
+    prune=("${prune[@]}" ')' -prune -o)
+    found=$(
+        find "$HOME" "${prune[@]}" -type l -print 2>/dev/null | while IFS= read -r path; do
+            e2e_clone_link "$path" "$base" "$phys" || continue
+            printf '%s\n' "$path"
+        done
+    )
+    printf '%s' "${found:+$found$E2E_NL}"
+    [ -z "$found" ]
+}
+
+# e2e_clone_link LINK BASE PHYS: 0 when LINK's text names BASE and the link
+# resolves (as e2e_audit_clone_links says) to PHYS or a path under it.
+e2e_clone_link() {
+    local text target dir
+    text=$(readlink "$1" 2>/dev/null) || return 1
+    case $text in
+        *"$2"*) ;;
+        *) return 1 ;;
+    esac
+    case $text in
+        /*) target=$text ;;
+        *) target=${1%/*}/$text ;;
+    esac
+    if [ -d "$target" ]; then
+        dir=$(cd -P -- "$target" 2>/dev/null && pwd -P) || return 1
+    else
+        dir=$(cd -P -- "${target%/*}" 2>/dev/null && pwd -P) || return 1
+    fi
+    case $dir in
+        "$3" | "$3"/*) return 0 ;;
+    esac
+    return 1
 }
 
 # e2e_audit_no_sudo LOG: on a host without sudo (E2E_SUDO=no: the clusters,

@@ -1,30 +1,30 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # E2E_BLOCK_ERROR is read by tests/e2e-harness.sh
 # HUMAN block handling of tests/e2e/inside.sh: the parser that splits an
-# apply run's stdout into blocks, the "HUMAN steps pending:" reader, and the
+# apply run's stdout into blocks, the "HUMAN steps pending:" reader, the
 # policy that says which block lines the harness may run, keyed on (step
-# id, kind) and failing closed. Sourced after common.sh; same portability
-# rules. The policy follows docs/bootstrap.md "HUMAN blocks" and "Running it
-# with an agent": the harness stands in for the person who approves the
-# sudo, inspect and stow blocks, and it can neither sign in, answer a
-# dialog, change a login shell nor take a Slurm allocation.
+# id, kind) and failing closed, and the apply loop's verdict on one run.
+# Sourced after common.sh; same portability rules. The policy follows
+# docs/bootstrap.md "HUMAN blocks" and "Running it with an agent": the
+# harness stands in for the person who approves the sudo and inspect blocks
+# and who does the H7-native handover with the agent, and it can neither
+# sign in, answer a dialog, change a login shell nor take a Slurm
+# allocation.
 
-# The lines the harness runs as printed are matched by their whole shape,
-# since each one becomes a `bash -c LINE`: the digest-gated run line of an
-# inspect block (steps_digest_gate in lib/bootstrap/steps-common.sh: the
-# sha256 and the %q path into sha256sum on Linux or shasum on macOS, then
-# `bash` of that same path and nothing after it; E2E_GATE_RE is its head,
-# e2e_gate_line the whole), and the two lines of an H7-stow block
-# (step_H7_stow_plan in lib/bootstrap/steps-human.sh): `mv -n FILE
-# FILE.pre-dotfiles` for a file under HOME (e2e_mv_line) and one of the
-# three PATH prefixes of steps_stow_path_prefix, then E2E_CLONE/stow-all.sh
-# HOST (e2e_stow_line). A path is one printf %q word (steps_quote): the
-# characters %q leaves alone, and a backslash before any other printable
-# one or a space; the $'...' form %q uses for control characters, and
-# anything unescaped that the shell would act on, is refused.
+# The one line kind the harness runs as printed beyond a sudo block is
+# matched by its whole shape, since it becomes a `bash -c LINE`: the
+# digest-gated run line of an inspect block (steps_digest_gate in
+# lib/bootstrap/steps-common.sh: the sha256 and the %q path into sha256sum
+# on Linux or shasum on macOS, then `bash` of that same path and nothing
+# after it; E2E_GATE_RE is its head, e2e_gate_line the whole). A path is one
+# printf %q word (steps_quote): the characters %q leaves alone, and a
+# backslash before any other printable one or a space; the $'...' form %q
+# uses for control characters, and anything unescaped that the shell would
+# act on, is refused. The H7-native block holds notes only: the handover runs
+# the documented procedure (steps.sh e2e_step_native_handover), never a
+# block line.
 E2E_GATE_RE='^printf '\''%s  %s\\n'\'' [0-9a-f]{64} .+ \| (sha256sum|shasum -a 256) -c --status - && bash '
 E2E_QWORD_RE='([A-Za-z0-9_./+=:@%,-]|\\[^A-Za-z0-9_/[:space:]]|\\ )+'
-E2E_STOW_PREFIX_RE='^PATH=("\$HOME/micromamba/envs/login/bin:\$PATH"|"/[A-Za-z0-9_./-]+:\$PATH"|/'"$E2E_QWORD_RE"':"\$PATH")$'
 E2E_BLOCK_ERROR=''
 
 # e2e_qword WORD: 0 when WORD is one %q-quoted absolute path.
@@ -51,54 +51,6 @@ e2e_gate_line() {
     e2e_qword "$path" || return 1
     for verify in 'sha256sum -c --status -' 'shasum -a 256 -c --status -'; do
         [ "$1" != "$head$sha $path | $verify && bash $path" ] || return 0
-    done
-    return 1
-}
-
-# e2e_mv_line HOME LINE: 0 when LINE is exactly `mv -n FILE FILE.pre-dotfiles`
-# with FILE one %q word for a path under HOME, as step_H7_stow_plan prints
-# for an /etc/skel file. Without the suffix the rest is "FILE FILE", so its
-# two halves around the middle space must be equal, and that word is then
-# checked on its own (an unescaped space inside it would fail there).
-e2e_mv_line() {
-    local rest n half first
-    case $2 in
-        'mv -n '*'.pre-dotfiles') ;;
-        *) return 1 ;;
-    esac
-    rest=${2#'mv -n '}
-    rest=${rest%.pre-dotfiles}
-    n=${#rest}
-    [ $((n % 2)) = 1 ] || return 1
-    half=$(((n - 1) / 2))
-    [ "${rest:$half:1}" = ' ' ] || return 1
-    first=${rest:0:$half}
-    [ "$first" = "${rest:$((half + 1))}" ] || return 1
-    e2e_qword "$first" || return 1
-    case $first in
-        "$(printf '%q' "$1")"/?*) ;;
-        *) return 1 ;;
-    esac
-}
-
-# e2e_stow_line HOST CLONE LINE: 0 when LINE is exactly `<prefix>
-# <CLONE>/stow-all.sh HOST`, the prefix one of the three
-# steps_stow_path_prefix prints (E2E_STOW_PREFIX_RE) and the path the %q
-# form of the clone's stow-all.sh (setup-host prints its checkout with pwd
-# -P, so the clone's physical path is the other accepted spelling).
-e2e_stow_line() {
-    local host=$1 clone=$2 line=$3 physical root tail
-    [ -n "$host" ] && [ -n "$clone" ] || return 1
-    physical=$(cd -- "$clone" 2>/dev/null && pwd -P) || physical=$clone
-    for root in "$clone" "$physical"; do
-        tail=" $(printf '%q' "$root/stow-all.sh") $host"
-        case $line in
-            *"$tail")
-                if e2e_has "$E2E_STOW_PREFIX_RE" "${line%"$tail"}"; then
-                    return 0
-                fi
-                ;;
-        esac
     done
     return 1
 }
@@ -139,6 +91,12 @@ e2e_blocks_summary() {
     awk -F '\t' '{ printf "%s%s(%s)", sep, $2, $3; sep = " " }' "$1/index"
 }
 
+# e2e_blocks_find DIR ID: the number n of the first block of DIR with step
+# id ID (its lines are DIR/n.block); returns 1 when none was printed.
+e2e_blocks_find() {
+    awk -F '\t' -v id="$2" '$2 == id { print $1; found = 1; exit } END { exit !found }' "$1/index" 2>/dev/null
+}
+
 # e2e_pending_ids STDERR: the ids of the "HUMAN steps pending: <ids>;" line
 # that steps_run (lib/bootstrap/steps.sh) prints once per run, or nothing.
 e2e_pending_ids() {
@@ -161,17 +119,20 @@ e2e_failure_detail() {
 # e2e_block_policy ID KIND: the harness action for a block. run-all: every
 # command line, in order (the sudo blocks a person approves as a whole).
 # run-gate: only the digest-gated line (the person read the script; the
-# harness runs it as printed). run-stow: the mv -n lines and the one
-# stow-all.sh line. alloc: never run; E2E_ALLOC_ENV stands in for the
-# allocation. skip: a reminder for the person (sign-in, chsh, a dialog, a
-# choice the harness must not make). fail: a block the harness must not act
-# on (a GUI installer, a Homebrew conflict or shared prefix, a foreign nvm,
-# the oh-my-zsh recovery) and every (id, kind) it does not know.
+# harness runs it as printed). handover: the H7-native block, whose lines
+# are notes and are never run line by line; once it alone is pending and a
+# run applied nothing, the loop ends and the native-handover step runs the
+# documented Fresh home by hand procedure. alloc: never run; E2E_ALLOC_ENV
+# stands in for the allocation. skip: a reminder for the person (sign-in,
+# chsh, a dialog, a choice the harness must not make). fail: a block the
+# harness must not act on (a GUI installer, a Homebrew conflict or shared
+# prefix, a foreign nvm, the oh-my-zsh recovery, a retired legacy step) and
+# every (id, kind) it does not know.
 e2e_block_policy() {
     case $1:$2 in
         H1-apt-core:sudo | H1-locale:sudo | H1-linuxbrew:sudo | H1-homebrew:sudo) printf 'run-all\n' ;;
         S5-claude:inspect) printf 'run-gate\n' ;;
-        H7-stow:judgment) printf 'run-stow\n' ;;
+        H7-native:judgment) printf 'handover\n' ;;
         H2-alloc:alloc) printf 'alloc\n' ;;
         S2-modules:judgment | H7-payloads:judgment | H7-doctor:judgment | H7-auth:auth | \
             H1-fcitx5:gui | H7-chsh:chsh) printf 'skip\n' ;;
@@ -182,14 +143,22 @@ e2e_block_policy() {
 # e2e_block_lines ACTION HOST FILE: the command lines of block FILE that
 # ACTION lets the harness run, one per line, in order. A "# " line is a note
 # and never counts. run-gate wants exactly one gated line (e2e_gate_line)
-# and nothing but notes besides it; run-stow exactly one stow-all.sh HOST
-# line (e2e_stow_line, against E2E_CLONE) and nothing but mv -n lines
-# (e2e_mv_line, against HOME) besides it. Returns 1 with the reason in
+# and nothing but notes besides it; every other action (a handover, a
+# skip) selects no line, even from a block of notes only. HOST names the
+# host the block was printed for. Returns 1 with the reason in
 # E2E_BLOCK_ERROR and printed, since the caller captures the output with
 # $(...) and would not see the variable.
 e2e_block_lines() {
-    local action=$1 host=$2 file=$3 line selected='' gates=0 stows=0
+    local action=$1 file=$3 line selected='' gates=0
     E2E_BLOCK_ERROR=''
+    case $action in
+        run-all | run-gate) ;;
+        *)
+            E2E_BLOCK_ERROR="no lines run for action $action"
+            printf '%s\n' "$E2E_BLOCK_ERROR"
+            return 1
+            ;;
+    esac
     while IFS= read -r line || [ -n "$line" ]; do
         case $line in
             '# '* | '') continue ;;
@@ -204,24 +173,12 @@ e2e_block_lines() {
                     E2E_BLOCK_ERROR="an inspect line the harness may not run: $line"
                 fi
                 ;;
-            run-stow)
-                if e2e_mv_line "$HOME" "$line"; then
-                    selected="$selected$line$E2E_NL"
-                elif e2e_stow_line "$host" "${E2E_CLONE:-}" "$line"; then
-                    selected="$selected$line$E2E_NL"
-                    stows=$((stows + 1))
-                else
-                    E2E_BLOCK_ERROR="an H7-stow line the harness may not run: $line"
-                fi
-                ;;
-            *) E2E_BLOCK_ERROR="no lines run for action $action" ;;
         esac
         [ -z "$E2E_BLOCK_ERROR" ] || break
     done <"$file"
     if [ -z "$E2E_BLOCK_ERROR" ]; then
         case $action in
             run-gate) [ "$gates" = 1 ] || E2E_BLOCK_ERROR="the inspect block has $gates digest-gated run lines, not 1" ;;
-            run-stow) [ "$stows" = 1 ] || E2E_BLOCK_ERROR="the H7-stow block has $stows stow-all.sh $host lines, not 1" ;;
         esac
     fi
     if [ -n "$E2E_BLOCK_ERROR" ]; then
@@ -229,6 +186,34 @@ e2e_block_lines() {
         return 1
     fi
     printf '%s' "$selected"
+}
+
+# e2e_loop_next RC PENDING ACTIONABLE APPLIED: the apply loop's verdict on
+# one ./setup-host.sh --yes run, as one word, from its exit code RC, the ids
+# of its "HUMAN steps pending:" line, whether a printed block gives the
+# harness something to do (1) and whether a step applied (1). blocks: exit
+# 3 with such a block; rerun: exit 3, nothing to do but a step applied;
+# done: exit 3, nothing to do, nothing applied and H7-native alone pending,
+# the handover's turn; stuck: any other exit 3; early: exit 0, which a fresh
+# home cannot reach before its handover; error: exit 1 or 2; timeout:
+# anything else (124 after the limit).
+e2e_loop_next() {
+    case $1 in
+        3)
+            if [ "$3" = 1 ]; then
+                printf 'blocks\n'
+            elif [ "$4" = 1 ]; then
+                printf 'rerun\n'
+            elif [ "$2" = H7-native ]; then
+                printf 'done\n'
+            else
+                printf 'stuck\n'
+            fi
+            ;;
+        0) printf 'early\n' ;;
+        1 | 2) printf 'error\n' ;;
+        *) printf 'timeout\n' ;;
+    esac
 }
 
 # e2e_alloc_exports TEXT: E2E_ALLOC_ENV expanded and checked: "KEY=value"

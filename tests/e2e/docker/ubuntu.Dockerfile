@@ -1,9 +1,9 @@
 # Fresh Ubuntu 24.04 for the lab-ubuntu and wsl-ubuntu e2e hosts: what a new
 # workstation or WSL distribution has before the bootstrap runs (the quick
 # start's ca-certificates, git, curl and sudo), one passwordless-sudo user
-# whose home holds /etc/skel's .bashrc and .profile (the H7-stow `mv -n`
-# lines are part of the test), and the e2e wrappers in /usr/local/bin, ahead
-# of the real tools on the default PATH. DEBIAN_FRONTEND stays unset in the
+# whose home holds /etc/skel's .bashrc and .profile (the native handover
+# keeps a private copy of each before it replaces it), and the e2e wrappers
+# in /usr/local/bin, ahead of the real tools on the default PATH. DEBIAN_FRONTEND stays unset in the
 # image on purpose: an apt that hangs without a TTY is a finding (the build
 # below sets it for its own RUN lines only). Build context is tests/e2e/;
 # tests/e2e/run.sh passes E2E_USER and E2E_HOME from the host's env file and
@@ -43,6 +43,6 @@ RUN printf 'Defaults logfile=/e2e/out/log/sudo.log\nDefaults log_year\n%s ALL=(A
 # Ubuntu's /etc/profile leaves USER and LOGNAME to login(1); docker/site/login.sh
 # sets them for the login shells the harness starts.
 COPY docker/site/login.sh /etc/profile.d/e2e-login.sh
-COPY wrappers/sudo wrappers/chsh wrappers/stow /usr/local/bin/
+COPY wrappers/sudo wrappers/chsh /usr/local/bin/
 RUN chmod 644 /etc/profile.d/e2e-login.sh \
-    && chmod 755 /usr/local/bin/sudo /usr/local/bin/chsh /usr/local/bin/stow
+    && chmod 755 /usr/local/bin/sudo /usr/local/bin/chsh

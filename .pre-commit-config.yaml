@@ -240,10 +240,10 @@ repos:
         entry: tests/e2e-harness.sh
         language: script
         pass_filenames: false
-        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.sh|lib/bootstrap/.*)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.sh|lib/bootstrap/.*|config/bootstrap/installers\.tsv|\.chezmoiversion)$|^tests/lib/environment\.(sh|ps1)$
       - id: e2e-harness-windows
         name: PowerShell end-to-end harness fixtures
         entry: tests/e2e-harness-windows.sh
         language: script
         pass_filenames: false
-        files: ^(tests/e2e(/|[-.]).*|setup-host\.ps1|lib/bootstrap\.ps1)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.ps1|lib/bootstrap\.ps1|lib/chezmoi-guard\.ps1)$|^tests/lib/environment\.(sh|ps1)$

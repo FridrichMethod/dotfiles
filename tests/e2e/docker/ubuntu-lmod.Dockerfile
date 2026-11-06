@@ -26,7 +26,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 # The image's own `ubuntu` account (uid 1000) is not on a cluster and would
 # collide with a build uid of 1000. ~/.cache and $SCRATCH/.cache/conda/pkgs
 # exist so that a --cache run's bind mounts under them do not leave
-# root-owned parents the bootstrap and the stowed overlay (XDG_CACHE_HOME
+# root-owned parents the bootstrap and the deployed overlay (XDG_CACHE_HOME
 # under $SCRATCH) could not write in; /e2e/out is where run.sh mounts the
 # run's output.
 RUN if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi \
@@ -44,6 +44,6 @@ RUN if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi \
 COPY docker/site/login.sh /etc/profile.d/e2e-login.sh
 COPY docker/site/marlowe.sh /etc/profile.d/e2e-site.sh
 COPY wrappers/sudo-deny /usr/local/bin/sudo
-COPY wrappers/chsh wrappers/stow /usr/local/bin/
+COPY wrappers/chsh /usr/local/bin/
 RUN chmod 644 /etc/profile.d/e2e-login.sh /etc/profile.d/e2e-site.sh \
-    && chmod 755 /usr/local/bin/sudo /usr/local/bin/chsh /usr/local/bin/stow
+    && chmod 755 /usr/local/bin/sudo /usr/local/bin/chsh

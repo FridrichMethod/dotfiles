@@ -1,8 +1,8 @@
-# Fresh Fedora for the `other` e2e host (X-other-linux: no overlay, the
-# setup steps by hand): what a new install has before anything is done (git,
-# curl, sudo), one passwordless-sudo user whose home holds /etc/skel's
-# .bashrc and .bash_profile, and the e2e wrappers in /usr/local/bin, ahead of
-# the real tools on the default PATH. The harness installs the distro
+# Fresh Fedora for the `other` e2e host (the native X-other-linux route: no
+# overlay, the setup steps and the common-only handover by hand): what a new
+# install has before anything is done (git, curl, sudo), one passwordless-sudo
+# user whose home holds /etc/skel's .bashrc and .bash_profile, and the e2e
+# wrappers in /usr/local/bin, ahead of the real tools on the default PATH. The harness installs the distro
 # packages itself through `sudo dnf install`. Build context is tests/e2e/;
 # tests/e2e/run.sh passes E2E_USER and E2E_HOME from the host's env file and
 # E2E_UID=$(id -u), so the user owns the /e2e/out it mounts.
@@ -32,5 +32,5 @@ RUN printf 'Defaults logfile=/e2e/out/log/sudo.log\nDefaults log_year\n%s ALL=(A
     && chmod 0440 /etc/sudoers.d/e2e \
     && visudo -c
 
-COPY wrappers/sudo wrappers/chsh wrappers/stow /usr/local/bin/
-RUN chmod 755 /usr/local/bin/sudo /usr/local/bin/chsh /usr/local/bin/stow
+COPY wrappers/sudo wrappers/chsh /usr/local/bin/
+RUN chmod 755 /usr/local/bin/sudo /usr/local/bin/chsh

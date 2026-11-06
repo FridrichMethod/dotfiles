@@ -7,17 +7,26 @@
 # so one reader serves the Unix and the Windows artifacts.
 
 # Run state, mutated in place through its keys. run.ps1 fills the paths before
-# the first step; the counters feed the last line and the exit code. Broken
-# names the step after which the main flow cannot go on.
+# the first step (Home is the home the run bootstraps, which every new step
+# reads through this key); the counters feed the last line and the exit
+# code. Broken names the step after which the main flow cannot go on.
+# HandoverBlock is the HW-native block of the last apply run, TasksBefore
+# and TasksAfterLoop the scheduled task identities around the apply loop,
+# and VenvViolations the first step after which the clone held the AI-sync
+# runtime directory.
 $script:E2E = @{
-    Src = ''; Rev = ''; Out = ''; Clone = ''; Git = ''; PowerShell = ''
+    Src = ''; Rev = ''; Out = ''; Clone = ''; Home = ''; Git = ''; PowerShell = ''
     StepN = 0; StepName = ''; StepPhase = ''; StepStart = 0
     StepLog = ''; StepOut = ''; StepErr = ''
     Passes = 0; Fails = 0; Skips = 0
     Broken = ''; Phase = ''
     SkippedBlocks = @()
     NoWriteTemp = ''; NoWriteHome = $null
+    HandoverBlock = $null; TasksBefore = ''; TasksAfterLoop = ''; VenvViolations = ''
 }
+# The AI-sync runtime directory the legacy route made in the clone; the
+# native flow never creates it.
+$script:E2ESyncVenv = '.venv-sync'
 # Seconds allowed to one HUMAN block line (the contract's 45 minutes), one
 # setup-host apply run and one read-only run (doctor, -Check, a profile load).
 $script:E2ETimeout = @{ Block = 2700; Apply = 3600; Check = 900 }
@@ -221,8 +230,18 @@ function Start-E2EStep {
     Write-E2ELog ('{0:d2} {1}: begin' -f [int]$E2E['StepN'], $Name)
 }
 
+function Test-E2EEntry {
+    # True when Path names anything, a dangling link included (its own
+    # attributes are read, never its target's).
+    param([Parameter(Mandatory)][string]$Path)
+    try { [void][IO.File]::GetAttributes($Path); return $true }
+    catch { return $false }
+}
+
 function Complete-E2EStep {
-    # Close the phase, require a clean clone of a passing step, record the row.
+    # Close the phase, require a clean clone of a passing step, record the
+    # first step after which the clone holds E2ESyncVenv (a .gitignore line
+    # hides it from git status), then record the row.
     param([Parameter(Mandatory)][ValidateSet('pass', 'fail')][string]$Status,
         [AllowEmptyString()][string]$Detail)
     Stop-E2EPhase
@@ -236,6 +255,9 @@ function Complete-E2EStep {
             $diff = Get-E2EGitOutput @('-C', $E2E['Clone'], '--no-optional-locks', 'diff', '--no-color')
             Add-E2EText $E2E['StepLog'] ("--- git diff of the clone (exit $($diff.Code))`n$($diff.Text)`n--- end`n")
         }
+    }
+    if ($E2E['Clone'] -and -not $E2E['VenvViolations'] -and (Test-E2EEntry (Join-Path $E2E['Clone'] $script:E2ESyncVenv))) {
+        $E2E['VenvViolations'] = "$($E2E['StepName']) ($($E2E['StepPhase']))"
     }
     $seconds = (Get-E2ENow) - $E2E['StepStart']
     Add-E2ERecord $E2E['StepName'] $Status $seconds $Detail

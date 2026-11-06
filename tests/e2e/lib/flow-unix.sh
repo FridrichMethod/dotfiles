@@ -1,24 +1,26 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # E2E_APPLY1_OUT and E2E_APPLY1_RC are read by steps.sh (alloc-first)
-# The unix flow of tests/e2e/inside.sh: clone, doctor-initial, the no-write
-# --check, the setup-host apply loop with its HUMAN blocks, the second apply,
-# the login shell, the payload repos, the final doctor runs, the negatives
-# and the audits: the legacy docs/bootstrap.md quick start, driven the way
-# "Running it with an agent" says an agent drives it. Sourced after
-# steps.sh; same portability rules. Native binary provisioning and isolated
-# native fixtures follow the legacy flow, without migrating its HOME.
+# The unix flow of tests/e2e/inside.sh, for a host with an overlay: clone,
+# doctor-initial, the no-write --check, the setup-host apply loop with its
+# HUMAN blocks up to the H7-native handover, the handover itself through
+# docs/bootstrap.md "Fresh home by hand", the second apply, the no-write
+# --check that finds nothing left, the login shell, the payload repos, the
+# native convergence check, the final doctor runs, the negatives, the
+# isolated native fixtures and the audits: the native bootstrap driven the
+# way "Running it with an agent" says an agent drives it. Sourced after
+# steps.sh; same portability rules.
 
 E2E_SKIPPED_BLOCKS=' ' # block ids already recorded as skip
 E2E_ALLOC_DONE=0
 
-# e2e_step_check_nowrite: ./setup-host.sh --legacy-stow --host H --check plans (exit 3
+# e2e_step_check_nowrite: ./setup-host.sh --host H --check plans (exit 3
 # while work remains, 0 when nothing is left) and writes nothing.
 e2e_step_check_nowrite() {
     local rc=0 problems
     e2e_step_begin check-nowrite check:check-nowrite
     e2e_nowrite_begin check-nowrite
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        env TMPDIR="$E2E_NW_TMP" ./setup-host.sh --legacy-stow --host "$E2E_SETUP_HOST" --check || rc=$?
+        env TMPDIR="$E2E_NW_TMP" ./setup-host.sh --host "$E2E_SETUP_HOST" --check || rc=$?
     problems=$(e2e_nowrite_end check-nowrite)
     case $rc in
         0 | 3)
@@ -38,10 +40,11 @@ e2e_block_text() {
 }
 
 # e2e_blocks_actionable DIR: 0 when a block of DIR gives e2e_handle_blocks
-# something to do: a runnable block, the alloc block before E2E_ALLOC_ENV
-# was exported, or a block the policy refuses (reported there with its
-# text). Only skips, or an alloc block seen before, mean no progress.
-# Prints "<id> <kind> <action>" per block.
+# something to do: a runnable block, the alloc block (exported the first
+# time, refused when it comes back) or a block the policy refuses (reported
+# there with its text). Only skips and the H7-native handover, which the
+# native-handover step does after the loop, mean nothing to do. Prints
+# "<id> <kind> <action>" per block.
 e2e_blocks_actionable() {
     local count n row id kind action progress=1
     count=$(e2e_blocks_count "$1")
@@ -53,8 +56,7 @@ e2e_blocks_actionable() {
         action=$(e2e_block_policy "$id" "$kind")
         printf '%s %s %s\n' "$id" "$kind" "$action"
         case $action in
-            run-* | fail) progress=0 ;;
-            alloc) [ "$E2E_ALLOC_DONE" = 1 ] || progress=0 ;;
+            run-* | fail | alloc) progress=0 ;;
         esac
     done
     return "$progress"
@@ -143,6 +145,7 @@ e2e_handle_blocks() {
                         ;;
                 esac
                 ;;
+            handover) ;;
             alloc) e2e_handle_alloc "$id" "$1/$n.block" || return 1 ;;
             run-*) e2e_run_block "$id" "$kind" "$action" "$1/$n.block" || return 1 ;;
             *)
@@ -154,41 +157,69 @@ e2e_handle_blocks() {
     done
 }
 
-# e2e_apply_loop: ./setup-host.sh --legacy-stow --host H --yes until it exits 0, at most
-# eight runs. Exit 3 hands the printed blocks to e2e_handle_blocks; a run
-# whose blocks are all skips fails as "no progress" (the "HUMAN steps
-# pending:" ids from stderr name what setup-host waits for); exit 1 or 2
-# fails naming the step setup-host reported.
+# e2e_apply_loop: ./setup-host.sh --host H --yes until only the H7-native
+# handover is left, at most eight runs; e2e_loop_next decides on each run.
+# blocks: exit 3 with a block to act on, handed to e2e_handle_blocks. rerun:
+# exit 3, nothing to act on, but a step applied ("<id> done applied: "). done:
+# exit 3, nothing to act on, nothing applied, H7-native alone pending and its
+# block printed; the skip reminders are recorded and the native-handover
+# step follows. stuck: any other exit 3 fails as "no progress" (the "HUMAN
+# steps pending:" ids from stderr name what setup-host waits for). early:
+# exit 0 fails, since a fresh home cannot have H7-native done. Exit 1 or 2
+# fails naming the step setup-host reported; anything else is the timeout.
 e2e_apply_loop() {
-    local n=0 rc name dir plan
+    local n=0 rc name dir plan pending count applied actionable verdict found
     while [ "$n" -lt 8 ]; do
         n=$((n + 1))
         name=apply-$n
         rc=0
         e2e_step_begin "$name" "setup:$name"
         e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-            ./setup-host.sh --legacy-stow --host "$E2E_SETUP_HOST" --yes || rc=$?
+            ./setup-host.sh --host "$E2E_SETUP_HOST" --yes || rc=$?
         if [ "$n" = 1 ]; then
             E2E_APPLY1_OUT=$E2E_STEP_OUT E2E_APPLY1_RC=$rc
         fi
-        case $rc in
-            0)
-                e2e_step_end pass "exit 0 after $n run(s); $(grep -c ' done ' "$E2E_STEP_OUT") done, $(grep -c ' skip ' "$E2E_STEP_OUT") skip"
-                return 0
+        count=$(grep -cE '^[A-Za-z0-9-]+ done applied: ' "$E2E_STEP_OUT" 2>/dev/null) || count=0
+        applied=0
+        [ "$count" = 0 ] || applied=1
+        dir=${E2E_STEP_LOG%.log}.blocks
+        actionable=0 plan=''
+        if [ "$rc" = 3 ]; then
+            e2e_blocks_parse "$E2E_STEP_OUT" "$dir"
+            if plan=$(e2e_blocks_actionable "$dir"); then
+                actionable=1
+            fi
+        fi
+        pending=$(e2e_pending_ids "$E2E_STEP_ERR")
+        verdict=$(e2e_loop_next "$rc" "$pending" "$actionable" "$applied")
+        case $verdict in
+            blocks)
+                e2e_step_end pass "exit 3; blocks: $(e2e_blocks_summary "$dir"); pending: $pending"
+                e2e_handle_blocks "$dir" || return 1
                 ;;
-            3)
-                dir=${E2E_STEP_LOG%.log}.blocks
-                e2e_blocks_parse "$E2E_STEP_OUT" "$dir"
-                if plan=$(e2e_blocks_actionable "$dir"); then
-                    e2e_step_end pass "exit 3; blocks: $(e2e_blocks_summary "$dir"); pending: $(e2e_pending_ids "$E2E_STEP_ERR")"
-                    e2e_handle_blocks "$dir" || return 1
-                else
+            rerun) e2e_step_end pass "exit 3; applied $count step(s); pending: $pending" ;;
+            done)
+                if ! found=$(e2e_blocks_find "$dir" H7-native); then
                     E2E_BROKEN=$name
-                    e2e_step_end fail "no progress: exit 3 with no block the harness may run (pending: $(e2e_pending_ids "$E2E_STEP_ERR"); blocks: $(e2e_one_line "$plan" 300))"
+                    e2e_step_end fail "exit 3 with only H7-native pending, but no H7-native block (blocks: $(e2e_blocks_summary "$dir"))"
                     return 1
                 fi
+                E2E_HANDOVER_BLOCK=$dir/$found.block
+                e2e_step_end pass "exit 3 after $n run(s); only H7-native pending; blocks: $(e2e_blocks_summary "$dir")"
+                e2e_handle_blocks "$dir" || return 1
+                return 0
                 ;;
-            1 | 2)
+            stuck)
+                E2E_BROKEN=$name
+                e2e_step_end fail "no progress: exit 3 with no block the harness may run and nothing applied (pending: $pending; blocks: $(e2e_one_line "$plan" 300))"
+                return 1
+                ;;
+            early)
+                E2E_BROKEN=$name
+                e2e_step_end fail 'exit 0 before the handover: H7-native was already done on a fresh home'
+                return 1
+                ;;
+            error)
                 E2E_BROKEN=$name
                 e2e_step_end fail "exit $rc: $(e2e_failure_detail "$E2E_STEP_OUT" "$E2E_STEP_ERR")"
                 return 1
@@ -201,19 +232,19 @@ e2e_apply_loop() {
         esac
     done
     E2E_BROKEN=apply-loop
-    e2e_fail_row apply-loop 'eight apply runs without an exit 0'
+    e2e_fail_row apply-loop 'eight apply runs without reaching the handover'
     return 1
 }
 
-# e2e_step_second_apply: one more ./setup-host.sh --legacy-stow --host H --yes exits 0,
-# applies nothing ("<id> done applied: ..." would be a step that redid its
-# work) and writes nothing in HOME.
+# e2e_step_second_apply: after the handover, one more ./setup-host.sh --host
+# H --yes exits 0, applies nothing ("<id> done applied: ..." would be a step
+# that redid its work) and writes nothing in HOME.
 e2e_step_second_apply() {
     local rc=0 applied problems
     e2e_step_begin second-apply setup:second-apply
     e2e_nowrite_begin second-apply
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-        ./setup-host.sh --legacy-stow --host "$E2E_SETUP_HOST" --yes || rc=$?
+        ./setup-host.sh --host "$E2E_SETUP_HOST" --yes || rc=$?
     applied=$(grep -E '^[A-Za-z0-9-]+ done applied: ' "$E2E_STEP_OUT" 2>/dev/null) || true
     problems=$(e2e_nowrite_end second-apply)
     if [ "$rc" != 0 ]; then
@@ -227,6 +258,9 @@ e2e_step_second_apply() {
     fi
 }
 
+# e2e_step_handover_host: the native handover of this host's role.
+e2e_step_handover_host() { e2e_step_native_handover "$E2E_SETUP_HOST"; }
+
 # e2e_flow_unix: the whole sequence for a host with an overlay.
 e2e_flow_unix() {
     e2e_step_clone || true
@@ -237,16 +271,15 @@ e2e_flow_unix() {
     else
         e2e_skip apply-1 "after $E2E_BROKEN failed"
     fi
+    e2e_or_skip native-handover e2e_step_handover_host
     e2e_or_skip second-apply e2e_step_second_apply
+    e2e_or_skip check-done e2e_step_check_done
     e2e_or_skip login-shell e2e_step_login_shell
     e2e_or_skip payloads e2e_step_payloads
+    e2e_or_skip native-converged e2e_step_native_converged
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
-    # The sandbox HOME remains a legacy install. Provision the native binary,
-    # then exercise takeover/recovery only in the native suite's temp homes.
-    e2e_or_skip native-provision e2e_step_native_provision
-    e2e_or_skip native-check e2e_step_native_check
     e2e_or_skip native-fixtures e2e_step_native_fixtures
     e2e_audits
 }

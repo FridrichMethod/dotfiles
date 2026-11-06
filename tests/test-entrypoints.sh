@@ -178,7 +178,9 @@ need = {
                        '.github/scripts/install-test-chezmoi.py', 'lib/bootstrap/platform.sh',
                        'lib/bootstrap/checks.sh', 'lib/bootstrap/steps-human.sh',
                        'doctor.sh', 'setup-host.sh'],
-    'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh'],
+    'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh',
+                    'tests/e2e/lib/steps.sh', 'docs/bootstrap.md', 'config/bootstrap/installers.tsv',
+                    '.chezmoiversion', 'lib/bootstrap/steps-common.sh'],
     'shell-profile': ['common/sh/.profile', 'common/sh/.aliases', 'lib/chezmoi-guard.sh'],
     'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1', 'tests/powershell-profile.sh',
                            'doctor.ps1', 'setup-host.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
@@ -190,7 +192,8 @@ need = {
     'setup-host': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'bootstrap-windows': ['lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1'],
     'e2e-harness-windows': ['tests/e2e-harness-windows.sh', 'tests/e2e-harness.ps1',
-                            'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1'],
+                            'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1', 'tests/e2e/lib/flow-win.ps1',
+                            'docs/bootstrap.md', 'lib/chezmoi-guard.ps1', 'setup-host.ps1'],
 }
 missed = []
 for name, excluded, checked in (

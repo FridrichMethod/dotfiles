@@ -1,14 +1,21 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # E2E_BROKEN is read by common.sh and steps.sh
 # The other-Linux flow of tests/e2e/inside.sh (Fedora, no overlay): the
-# docs/bootstrap.md legacy "Other Linux" quick start and X-other-linux done as the
-# person does them: the distribution's packages, the fetch_pinned and
-# clone_listed helpers taken from the clone's own docs, the clone loop, the
-# bat theme, the vim dirs, setup-sync, the host-less stow, then the login
-# shell, the payload repos, the doctor, the common-only negatives and the
-# audits. Sourced after steps.sh; same portability rules.
+# native docs/bootstrap.md X-other-linux route done as the person does it:
+# the distribution's packages, the fetch_pinned and clone_listed helpers
+# taken from the clone's own docs, the clone loop, the bat theme, the vim
+# dirs, the by-hand S4-chezmoi line, then the common-only role deployed by
+# hand (native_handover common-only, Fresh home by hand), the login shell,
+# the payload repos, the native convergence check, the doctor, the
+# common-only negatives, the isolated native fixtures and the audits.
+# Sourced after steps.sh; same portability rules.
 
 E2E_HELPERS='' # the helper functions extracted from docs/bootstrap.md
+# The by-hand S4-chezmoi line of docs/bootstrap.md, byte for byte (the
+# harness checks the doc still holds it): the generic Linux archive of the
+# first installers.tsv row for the architecture, its one executable written
+# beside the target and moved into place.
+E2E_CHEZMOI_LINE='f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"'
 
 # e2e_step_packages: E2E_PKG_INSTALL E2E_PACKAGES as one sudo line, in the
 # human:packages phase (the one place the sudo.log audit allows dnf).
@@ -26,46 +33,11 @@ e2e_step_packages() {
 
 # e2e_extract_helpers DOC FILE: the fenced sh block that follows the
 # "Downloads and clones by hand" heading of DOC, written to FILE: the
-# fetch_pinned and clone_listed definitions, taken from the clone instead of
-# copied here, so the test runs what the playbook prints. The file is
-# sourced at the start of every by-hand step, so nothing but those two
-# definitions may run from it: every other line must be a comment, blank,
-# or an indented line inside one of them (`fetch_pinned() {` or
-# `clone_listed() {` through the `}` in column 0); a stray top-level line,
-# an example invocation or an export, would run four times, unflagged by
-# the audits. Returns 1 with the reason printed.
+# fetch_pinned and clone_listed definitions and nothing else (the rules and
+# messages of e2e_extract_fence in steps.sh). Returns 1 with the reason
+# printed.
 e2e_extract_helpers() {
-    local stray
-    awk '
-        /^#+ Downloads and clones by hand/ { seen = 1; next }
-        seen && !inside && /^```sh/ { inside = 1; next }
-        inside && /^```/ { exit }
-        inside { print }
-    ' "$1" >"$2"
-    if [ ! -s "$2" ]; then
-        printf 'no fenced sh block after "Downloads and clones by hand"\n'
-        return 1
-    fi
-    if ! bash -n "$2"; then
-        printf 'the fenced sh block does not parse (bash -n)\n'
-        return 1
-    fi
-    if ! grep -E '^fetch_pinned\(\) \{$' "$2" >/dev/null || ! grep -E '^clone_listed\(\) \{$' "$2" >/dev/null; then
-        printf 'the fenced sh block lacks a "fetch_pinned() {" or a "clone_listed() {" line\n'
-        return 1
-    fi
-    stray=$(awk '
-        !infn && /^(fetch_pinned|clone_listed)\(\) \{$/ { infn = 1; next }
-        infn && /^\}$/ { infn = 0; next }
-        /^#/ || /^[ \t]*$/ { next }
-        infn && /^[ \t]/ { next }
-        { print; found = 1; exit }
-        END { if (infn && !found) print "(a definition without its closing } in column 0)" }
-    ' "$2")
-    if [ -n "$stray" ]; then
-        printf 'a line outside the fetch_pinned and clone_listed definitions in the fenced sh block: %s\n' "$stray"
-        return 1
-    fi
+    e2e_extract_fence "$1" 'Downloads and clones by hand' "$2" fetch_pinned clone_listed
 }
 
 # e2e_step_helpers: define the helpers from the clone's docs/bootstrap.md.
@@ -82,10 +54,12 @@ e2e_step_helpers() {
     fi
 }
 
-# e2e_by_hand NAME COMMAND: one by-hand step of the quick start: COMMAND in
-# the clone, in a bash that sourced the helpers with DOTFILES_DIR set.
+# e2e_by_hand NAME COMMAND [VERIFY]: one by-hand step of the quick start:
+# COMMAND in the clone, in a bash that sourced the helpers with DOTFILES_DIR
+# set; then VERIFY, a function that prints what it found and returns 1 when
+# the step did not do its job.
 e2e_by_hand() {
-    local rc=0
+    local rc=0 found=''
     e2e_step_begin "$1" "setup:$1"
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
         env DOTFILES_DIR="$E2E_CLONE" bash -c ". $(e2e_quote "$E2E_HELPERS") && $2" || rc=$?
@@ -94,7 +68,12 @@ e2e_by_hand() {
         e2e_step_end fail "exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
         return 1
     fi
-    e2e_step_end pass "exit 0: $(e2e_one_line "$2" 200)"
+    if [ -n "${3:-}" ] && ! found=$("$3"); then
+        E2E_BROKEN=$1
+        e2e_step_end fail "exit 0, but $found"
+        return 1
+    fi
+    e2e_step_end pass "exit 0: $(e2e_one_line "$2" 200)${found:+; $found}"
 }
 
 # The quick start's lines, verbatim but for the loop's break turned into a
@@ -111,60 +90,28 @@ e2e_step_dirs() {
     e2e_by_hand dirs 'mkdir -p ~/.vim/undo ~/.vim/tmp'
 }
 
-e2e_step_setup_sync() {
-    e2e_by_hand setup-sync './setup-sync.sh'
+# e2e_chezmoi_version: ~/.local/bin/chezmoi --version names the release the
+# clone pins in .chezmoiversion.
+e2e_chezmoi_version() {
+    local want text
+    want=v$(cat "$E2E_CLONE/.chezmoiversion" 2>/dev/null)
+    text=$("$HOME/.local/bin/chezmoi" --version 2>&1 </dev/null) || text="exit $?: $text"
+    case $text in
+        *"$want"*)
+            printf '%s\n' "$(e2e_one_line "$text" 120)"
+            return 0
+            ;;
+    esac
+    printf 'the chezmoi in ~/.local/bin reports [%s], not %s\n' "$(e2e_one_line "$text" 120)" "$want"
+    return 1
 }
 
-# e2e_skel_conflicts: the home files ./stow-all.sh would refuse, as H7-stow
-# lists them on a host with an overlay (steps_stow_conflicts): a regular file
-# in HOME where a common/ package tracks a top-level file of that name (the
-# /etc/skel .bashrc, .bash_profile and .profile on a fresh account), one per
-# line.
-e2e_skel_conflicts() {
-    local tracked rest path name
-    tracked=$(git -C "$E2E_CLONE" ls-files -- common 2>/dev/null </dev/null)
-    rest=$tracked${tracked:+$E2E_NL}
-    while [ -n "$rest" ]; do
-        path=${rest%%"$E2E_NL"*}
-        rest=${rest#*"$E2E_NL"}
-        case $path in
-            common/*/*/* | '' | */.stow-local-ignore) continue ;;
-            common/*/*) name=${path##*/} ;;
-            *) continue ;;
-        esac
-        [ -f "$HOME/$name" ] && [ ! -L "$HOME/$name" ] || continue
-        printf '%s\n' "$name"
-    done
+e2e_step_chezmoi() {
+    e2e_by_hand chezmoi "$E2E_CHEZMOI_LINE" e2e_chezmoi_version
 }
 
-# e2e_step_stow_other: H7-stow without a host: each /etc/skel conflict moved
-# aside with its own mv -n, then ./stow-all.sh, all in human:H7-stow.
-e2e_step_stow_other() {
-    local conflicts rest name rc=0 moved=0
-    e2e_step_begin H7-stow human:H7-stow
-    conflicts=$(e2e_skel_conflicts)
-    rest=$conflicts${conflicts:+$E2E_NL}
-    while [ -n "$rest" ]; do
-        name=${rest%%"$E2E_NL"*}
-        rest=${rest#*"$E2E_NL"}
-        [ -n "$name" ] || continue
-        e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$HOME" \
-            bash -c "mv -n $(e2e_quote "$HOME/$name") $(e2e_quote "$HOME/$name.pre-dotfiles")" || rc=$?
-        if [ "$rc" != 0 ]; then
-            E2E_BROKEN=H7-stow
-            e2e_step_end fail "mv -n $name exited $rc: $(e2e_last_line "$E2E_STEP_ERR")"
-            return 1
-        fi
-        moved=$((moved + 1))
-    done
-    e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" ./stow-all.sh || rc=$?
-    if [ "$rc" != 0 ]; then
-        E2E_BROKEN=H7-stow
-        e2e_step_end fail "./stow-all.sh exited $rc: $(e2e_problem_lines "$E2E_STEP_ERR")"
-        return 1
-    fi
-    e2e_step_end pass "$moved skel file(s) moved aside, ./stow-all.sh (common only) exit 0"
-}
+# e2e_step_handover_common_only: the native handover of the common-only role.
+e2e_step_handover_common_only() { e2e_step_native_handover common-only; }
 
 # e2e_flow_other: the whole sequence for a Linux without an overlay.
 e2e_flow_other() {
@@ -175,15 +122,14 @@ e2e_flow_other() {
     e2e_or_skip clones e2e_step_clones
     e2e_or_skip bat-theme e2e_step_bat_theme
     e2e_or_skip dirs e2e_step_dirs
-    e2e_or_skip setup-sync e2e_step_setup_sync
-    e2e_or_skip H7-stow e2e_step_stow_other
+    e2e_or_skip chezmoi e2e_step_chezmoi
+    e2e_or_skip native-handover e2e_step_handover_common_only
     e2e_or_skip login-shell e2e_step_login_shell
     e2e_or_skip payloads e2e_step_payloads
+    e2e_or_skip native-converged e2e_step_native_converged
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
-    e2e_skip native-provision 'setup-host has no common-only provisioning route; no ad hoc native installer'
-    e2e_skip native-check 'no supported setup-host route for this host'
     e2e_or_skip native-fixtures e2e_step_native_fixtures
     e2e_audits
 }

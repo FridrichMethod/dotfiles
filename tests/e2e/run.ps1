@@ -4,28 +4,32 @@
     The native Windows driver of the opt-in end-to-end bootstrap suite.
 
 .DESCRIPTION
-    Plays the person who bootstraps a fresh Windows machine from
-    docs/bootstrap.md's legacy Windows compatibility flow, the way "Running it with an agent"
-    says an agent drives it: clones the source checkout at E2E_REV into
-    $HOME\dotfiles (HW-clone), checks winget answers
-    (W1-winget needs it; a missing one is bootstrapped through
-    Microsoft.WinGet.Client and recorded as a deviation), runs doctor.ps1
-    -LegacyStow -Host win -Tsv and setup-host.ps1 -LegacyStow -Host win -Check and requires that
-    neither wrote in HOME or TEMP, loops setup-host.ps1 -LegacyStow -Host win -Yes (at
-    most eight runs) running only the HW-stow block's line as an elevated
-    PowerShell 7 would (it must link ~\.gitconfig and record the applied
-    state, which stow-all.ps1 does only on a warning-free run), leaving every
-    non-blocking HW block to the person and refusing a pending HW-clone (the
-    clone is the harness's own, so that block means setup-host.ps1 did not
-    accept it), then requires a second -Yes to exit 0 applying nothing, the
-    stowed profile to load silently, doctor.ps1 -LegacyStow -Host win to exit 0, and the
-    clone to stay clean after every step. Between steps PATH is rebuilt from
-    the registry, as a new terminal reads it. tests/e2e/inside.sh is the Unix
-    twin. It then runs native setup-host without -LegacyStow: W1-chezmoi
-    installs the verified binary, and HW-native must be the only blocking
-    handoff. A native -Check writes nothing. tests/chezmoi.ps1 exercises
-    takeover and recovery in isolated temporary homes, with the provisioned
-    binary required. The legacy sandbox HOME is not migrated by this suite.
+    Plays the person who bootstraps a fresh Windows machine natively from
+    docs/bootstrap.md, the way "Running it with an agent" says an agent
+    drives it: clones the source checkout at E2E_REV into $HOME\dotfiles
+    (HW-clone), checks winget answers (W1-winget needs it; a missing one is
+    bootstrapped through Microsoft.WinGet.Client and recorded as a
+    deviation), runs doctor.ps1 -Host win -Tsv and setup-host.ps1 -Host win
+    -Check and requires that neither wrote in HOME or TEMP, then loops
+    setup-host.ps1 -Host win -Yes (at most eight runs) until HW-native is the
+    only step left, leaving every non-blocking HW block to the person and
+    refusing a pending HW-clone (the clone is the harness's own, so that
+    block means setup-host.ps1 did not accept it). It then hands the home to
+    native chezmoi with docs/bootstrap.md "Fresh Windows home by hand"
+    (Invoke-NativeHandover -Role win from the clone) and checks the binding,
+    the local config, the state database and the private copies it
+    promises, requires a second -Yes to exit 0 applying nothing, a -Check to
+    exit 0 with nothing left, the deployed profile (a regular file) to load
+    silently, the payload repos to install, an empty Invoke-NativeCz diff
+    with every managed target a regular file, doctor.ps1 -Host win to exit
+    0, tests/chezmoi.ps1 to pass with the provisioned
+    ~\.local\bin\chezmoi.exe, no dotfiles scheduled task and no task
+    change after the apply loop, the AI-sync runtime never in the clone, and
+    the clone to stay clean after every step. Between steps PATH is rebuilt
+    from the registry, as a new terminal reads it. tests/e2e/inside.sh is
+    the Unix twin. Every step runs under the runner's elevated token, which
+    the windows-2025 runner alone offers; the handover warns about it and
+    the run records it in a note.
 
     It refuses to run anywhere but a GitHub Actions runner (GITHUB_ACTIONS is
     true) or a session that sets E2E_NATIVE=1, and only when $HOME\dotfiles
@@ -42,7 +46,9 @@
     Output, the layout of inside.sh: summary.tsv ("<n>\t<step>\t<pass|fail|
     skip|note>\t<seconds>\t<detail>"), steps/NN-<step>.{log,out,err} plus
     NN-apply-N.blocks/ for the HUMAN blocks, env.txt, log/timeline,
-    snapshots/<step>.diff and tmp/<step> (the TEMP of each no-write run).
+    snapshots/<step>.diff, tmp/<step> (the TEMP of each no-write run) and
+    handover/ (the scripts the native-handover and native-converged steps
+    ran).
 
     Exit codes: 0 every step passed (skip and note rows are fine); 1 a step
     failed; 2 usage error or refusal.
@@ -73,7 +79,8 @@ if ($env:GITHUB_ACTIONS -ne 'true' -and $env:E2E_NATIVE -ne '1') {
         'runner (GITHUB_ACTIONS=true) or with E2E_NATIVE=1 on a disposable machine')
 }
 if (-not (Test-E2EElevated)) {
-    Exit-E2EUsage 'run.ps1 needs an elevated session: it runs the HW-stow block, whose links any other token makes untrusted, and it never elevates itself'
+    Exit-E2EUsage ('run.ps1 needs an elevated session: the windows-2025 runner offers only an elevated token, the winget repair ' +
+        'needs it, and every run is recorded as elevated; it never elevates itself')
 }
 $clone = Join-Path $HOME 'dotfiles'
 if (Test-Path -LiteralPath $clone) { Exit-E2EUsage "$clone exists; the harness bootstraps only a home without a clone" }
@@ -107,6 +114,7 @@ if ($env:E2E_ALLOW_DIRTY -ne '1') {
 $E2E['Src'] = $src
 $E2E['Rev'] = $rev
 $E2E['Clone'] = $clone
+$E2E['Home'] = $HOME
 
 # --- the output directory ----------------------------------------------------
 

@@ -471,16 +471,21 @@ environment checks, documented in `windows-installer.md` and
 ## End-to-end bootstrap (opt-in)
 
 `tests/e2e/` runs the day-zero bootstrap for real, from a fresh home, on every
-host overlay, the way a person following the [legacy quick start](bootstrap.md#legacy-quick-start)
-would (`--legacy-stow`, `-LegacyStow` on Windows), and checks the acceptance
-criteria below. Then, without migrating that home, it provisions the native
-binary (`native-provision`: S4-chezmoi, or on Windows a native
-`setup-host.ps1 -Yes` that may install only W1-chezmoi and must stop at
-HW-native), requires a native `--check` (`-Check`) that writes nothing
-(`native-check`), and runs `tests/chezmoi.sh` or `tests/chezmoi.ps1` with
-that binary required (`native-fixtures`); `other` skips the first two and
-runs the third only with a chezmoi supplied through `DOTFILES_TEST_CHEZMOI`
-or PATH. It is opt-in: `./tests/run.sh` never runs it (only the fast unit
+host overlay, the way [Running it with an agent](bootstrap.md#running-it-with-an-agent)
+drives it natively, and checks the acceptance criteria below. The setup-host
+loop runs until the H7-native handover (HW-native on Windows) is the only step
+left; `native-handover` then runs the documented
+[Fresh home by hand](bootstrap.md#fresh-home-by-hand) procedure
+([Fresh Windows home by hand](bootstrap.md#fresh-windows-home-by-hand)),
+extracted from the clone's own `docs/bootstrap.md`, in the sandbox home;
+`second-apply` must apply nothing, `check-done` (`--check`, `-Check`) must
+exit 0 with nothing left, `native-converged` must find an empty
+`native_cz diff --exclude=dirs` (`Invoke-NativeCz` on Windows) with every
+managed target a regular file, and `native-fixtures` runs `tests/chezmoi.sh`
+or `tests/chezmoi.ps1` with the provisioned chezmoi required. The `other`
+host has no overlay: it installs chezmoi with the by-hand line of S4-chezmoi
+and deploys the `common-only` role by hand (`native_handover common-only`).
+It is opt-in: `./tests/run.sh` never runs it (only the fast unit
 tests `tests/e2e-harness.sh` and, wherever pwsh exists,
 `tests/e2e-harness.ps1`, which drive the harness and its Windows twin against
 stubs), and neither does pre-commit. A run installs packages,
@@ -529,36 +534,40 @@ natively on Darwin with `E2E_NATIVE=1`, and `win` only through
 
 | Host | Image or runner | User and home | Flow |
 | --- | --- | --- | --- |
-| `lab-ubuntu` | `ubuntu:24.04` | `fridrichmethod`, `/home/fridrichmethod` | setup-host loop, `--host lab-ubuntu` |
-| `wsl-ubuntu` | `ubuntu:24.04` with `WSL_DISTRO_NAME=Ubuntu` | the same | setup-host loop, `--host wsl-ubuntu` |
-| `other` | `fedora:44` | the same | X-other-linux by hand, `--platform other` |
-| `sherlock` | `rockylinux:9` plus EPEL Lmod, `linux/amd64` | `zyli2002`, `/home/users/zyli2002` | setup-host loop, `--host sherlock` |
-| `marlowe` | `ubuntu:24.04` plus apt `lmod`, `linux/amd64` | `zyli2002`, `/users/zyli2002` | setup-host loop, `--host marlowe` |
-| `mac` | the `macos-15` runner, natively | `runner`, `/Users/runner` | setup-host loop, `--host mac` |
-| `win` | the `windows-2025` runner, natively | the runner user | `run.ps1`: the PowerShell twins, then `HW-stow` |
+| `lab-ubuntu` | `ubuntu:24.04` | `fridrichmethod`, `/home/fridrichmethod` | setup-host loop, `--host lab-ubuntu`, then the fresh-home handover |
+| `wsl-ubuntu` | `ubuntu:24.04` with `WSL_DISTRO_NAME=Ubuntu` | the same | setup-host loop, `--host wsl-ubuntu`, then the fresh-home handover |
+| `other` | `fedora:44` | the same | X-other-linux by hand, `native_handover common-only`, `--platform other` |
+| `sherlock` | `rockylinux:9` plus EPEL Lmod, `linux/amd64` | `zyli2002`, `/home/users/zyli2002` | setup-host loop, `--host sherlock`, then the fresh-home handover |
+| `marlowe` | `ubuntu:24.04` plus apt `lmod`, `linux/amd64` | `zyli2002`, `/users/zyli2002` | setup-host loop, `--host marlowe`, then the fresh-home handover |
+| `mac` | the `macos-15` runner, natively | `runner`, `/Users/runner` | setup-host loop, `--host mac`, then the fresh-home handover |
+| `win` | the `windows-2025` runner, natively | the runner user | `run.ps1`: the PowerShell twins, then Fresh Windows home by hand (elevated) |
 
 Each image has only what a fresh install of that kind has (Ubuntu and Fedora:
 `git`, `curl`, `sudo` and certificates; the clusters: Lmod, `git`, `curl` and
 the OS utilities), never what the bootstrap installs, and a home made by
-`useradd -m`, so the `/etc/skel` rc files are there for H7-stow's `mv -n`
-lines. The setup-host loop is `./setup-host.sh --legacy-stow --host H --yes`
-after `./doctor.sh --legacy-stow --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
+`useradd -m`, so the `/etc/skel` rc files are there for the handover to keep
+copies of. The setup-host loop is `./setup-host.sh --host H --yes` after
+`./doctor.sh --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 prescribes; the `other` flow installs the distribution packages with `dnf`,
 takes `fetch_pinned` and `clone_listed` from the fenced block of
-[Downloads and clones by hand](bootstrap.md#downloads-and-clones-by-hand) in
-the clone itself, then follows the Other Linux quick start to a host-less
-`./stow-all.sh`. What is faked, and what is only an approximation:
+[Downloads and clones by hand](bootstrap.md#downloads-and-clones-by-hand) and
+`native_cz` and `native_handover` from the one of
+[Fresh home by hand](bootstrap.md#fresh-home-by-hand), both in the clone
+itself, then follows the native
+[X-other-linux](bootstrap.md#x-other-linux-other-linux-distributions) sequence
+to `native_handover common-only`. What is faked, and what is only an
+approximation:
 
-- `sudo`, `chsh` and `stow` are wrappers in `/usr/local/bin` that append every
+- `sudo` and `chsh` are wrappers in `/usr/local/bin` that append every
   call, with the harness phase it ran in, to `log/wrappers.log` and then run
   the real tool; on the cluster images `sudo` is a denying wrapper, since no
   sudo exists there, as on the real clusters. The Ubuntu and Fedora images
   grant passwordless sudo and make it log to `log/sudo.log` through sudoers. A
   Homebrew or conda prefix prepended to PATH can shadow the wrappers; the sudo
   log and the behavioral signals below still cover those calls. On the `mac`
-  runner the workflow installs the same three wrappers in `/usr/local/bin`
+  runner the workflow installs the same two wrappers in `/usr/local/bin`
   with one `sudo install` before the run, refusing a runner that already has
-  one of the three names there (nothing is installed there on the arm64 image;
+  one of the two names there (nothing is installed there on the arm64 image;
   Homebrew is `/opt/homebrew`): `/etc/profile` and `/etc/zprofile` run
   `path_helper`, which rebuilds PATH from `/etc/paths` and appends the old
   entries afterwards, so `/usr/local/bin` is the one directory it keeps ahead
@@ -567,9 +576,12 @@ the clone itself, then follows the Other Linux quick start to a host-less
   after `/etc/paths`). `inside.sh`'s own copy in `$E2E_OUT/bin` is reached
   only outside login shells. With two copies on PATH, each wrapper skips
   every file that is itself an e2e wrapper when it looks for the real tool,
-  so a call is logged once and never bounces between the copies (the first
-  CI run hung 90 minutes on the doctor's `stow --version` that way, before
-  Homebrew's stow existed).
+  so a call is logged once and never bounces between the copies. Stow is no
+  longer wrapped ([Stage 6](chezmoi-migration/stage-6-retirement.md) decision
+  D-11(a)). Until Stage 6's B1 drops it, `core.Brewfile` and the hpc login
+  env still install it, so the suite does not claim that nothing installs Stow;
+  `audit-clone-links` instead fails any link under HOME that leads into the
+  clone, which is what a stray stow would leave.
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.
@@ -582,7 +594,8 @@ the clone itself, then follows the Other Linux quick start to a host-less
   block has been printed; `SCRATCH` points at a writable directory in the
   image once it is set: on `sherlock` the fake site profile exports it (with
   the group paths) from the first login shell, on `marlowe` nothing sets it
-  before the stow, as on the real cluster, and the overlay then exports
+  before the handover deploys the overlay, as on the real cluster, and the
+  overlay then exports
   `/scratch/m000191`, which the image creates writable, so `E2E_ALLOC_ENV`
   names that path literally; the `S2-modules` block (`ml nodejs/24.13.0`, the
   AI CLI modules) is skipped, and there is no Kerberos. The login env is built
@@ -609,29 +622,33 @@ the clone itself, then follows the Other Linux quick start to a host-less
   TERM then KILL, exit 124); `env.txt` records which one ran. A hang thus
   fails its step with a `summary.tsv` row instead of running into the job's
   90-minute `timeout-minutes`, as the first CI run's did.
-- `win` runs every step, not only `HW-stow`, under the runner's elevated
-  token, where the Native Windows quick start has the person elevate only for
-  `.\stow-all.ps1 win`: `winget import` leaves each installer's scope to that
-  token (`winget.json` pins none), `oh-my-posh font install` puts fonts where
-  an elevated oh-my-posh puts them, and the non-elevated untrusted-link
-  warn-or-repair path of `stow-all.ps1` is never exercised. A winget that
-  needs `Repair-WinGetPackageManager` first is recorded as a deviation.
-  `run.ps1` asserts criteria 1 to 4, 6 and 7 (the doctor, the no-write `-Tsv`
-  and `-Check` runs, a second `-Yes` that applies nothing, a clean clone after
-  every step, a silent load of the stowed profile, the payload repos);
-  criterion 5's four audits
-  have no Windows counterpart, since there are no wrappers and no sudo log
-  there, and `HW-stow` is judged by its own evidence instead (below). The
-  home snapshots note, rather than fail, a change under
-  `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows' per-user CRL and
-  OCSP cache, which every process of the runner account writes, the Actions
-  agent's own HTTPS traffic included (the first CI run saw an entry appear
-  during `-Check`, whose probes are all local). The same holds for
-  `AppData\Local\Microsoft\TokenBroker\Cache`, the Web Account Manager's
-  token cache, which Windows' token broker refreshes on its own (a run saw a
-  `.tbres` entry change during `-Check`). `snapshots\<step>.diff` keeps both
-  as `noted ...`. `pwsh` is absent from the development machines, so the
-  Windows driver ran first in CI.
+- `win` runs every step under the runner's elevated token, because the
+  `windows-2025` runner offers no ordinary one: `winget import` leaves each
+  installer's scope to that token (`winget.json` pins none), and `oh-my-posh
+  font install` puts fonts where an elevated oh-my-posh puts them. Fresh
+  Windows home by hand warns when it runs elevated, and the run records a
+  `handover-token` note; the ordinary-token check of the login updater stays
+  in per-host acceptance. A winget that needs `Repair-WinGetPackageManager`
+  first is recorded as a deviation. `run.ps1` asserts criteria 1 (without
+  `--smoke`, which `doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
+  doctor, the no-write `-Tsv` and `-Check` runs, a second `-Yes` that applies
+  nothing and a `-Check` with nothing left, a clean clone after every step, a
+  silent load of the deployed profile, the payload repos, the documented
+  handover and an empty native diff), plus `audit-scheduled-tasks` (no task of
+  the dotfiles at the end, the task identities unchanged after the apply loop,
+  the tasks the loop added listed in a note) and `audit-sync-venv`. There are
+  no negatives and no wrapper, sudo or rc audits there, since there are no
+  wrappers and no sudo log. The home snapshots note, rather than fail, a
+  change under `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows'
+  per-user CRL and OCSP cache, which every process of the runner account
+  writes, the Actions agent's own HTTPS traffic included (the first CI run
+  saw an entry appear during `-Check`, whose probes are all local). The same
+  holds for `AppData\Local\Microsoft\TokenBroker\Cache`, the Web Account
+  Manager's token cache, which Windows' token broker refreshes on its own (a
+  run saw a `.tbres` entry change during `-Check`). `snapshots\<step>.diff`
+  keeps both as `noted ...`. `pwsh` is absent from the development machines,
+  so the Windows driver, and the Fresh Windows home by hand functions it
+  runs, are exercised first in CI.
 
 ### HUMAN-block policy
 
@@ -646,68 +663,74 @@ with the person's approvals scripted, keyed on the block's step id and kind.
 | --- | --- |
 | `H1-apt-core`, `H1-locale`, `H1-linuxbrew`, `H1-homebrew` (`sudo`) | every command line, in order |
 | `S5-claude` (`inspect`) | only the digest-gate line, `printf '%s  %s\n' <sha256> <path> \| sha256sum -c --status - && bash <path>` |
-| `H7-stow` (`judgment`) | only its `mv -n` lines and the single `PATH=... stow-all.sh <host>` line; any other command line in that block fails the run |
+| `H7-native` (`judgment`) | handover: never run line by line (its lines are notes); once it alone is pending and a run applied nothing, the loop ends and `native-handover` runs the documented procedure under `human:H7-native` |
 | `H2-alloc` (`alloc`) | never run: recorded, and the fake allocation variables are exported for the rest of the run |
 | `S2-modules`, `H7-payloads`, `H7-doctor` (`judgment`); `H7-auth` (`auth`); `H1-fcitx5` (`gui`); `H7-chsh` (`chsh`) | skipped and recorded as `skip`: non-blocking, and a person's to do |
 | `H1-xcode-clt`; any `S2-brew-bundle` block (the conflict judgment or the shared-prefix `sudo`); `S4-nvm`; `X-recovery`; any other id or kind | **fail**, with the block's text in the detail |
 
 A blocking block the harness refuses is a finding, not something to work
 around: a fresh machine should never print it. The loop reruns setup-host after
-each block, at most eight times; exit 0 ends it, exit 3 without a runnable
-block fails as "no progress", and exit 1 or 2 fails naming the step.
+each block, at most eight times. Exit 3 with a block to act on hands it over;
+exit 3 with nothing to act on reruns when the run applied a step (a
+`<id> done applied:` line) and ends the loop when H7-native alone is pending
+and nothing was applied; any other exit 3 fails as "no progress". Exit 0
+before the handover fails, since a fresh home cannot have H7-native done, and
+exit 1 or 2 fails naming the step.
 
-On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -LegacyStow
--Host win -Yes` (again at most eight runs, exit 3 without a runnable block
-failing as "no progress"), with the policy of `tests/e2e/lib/blocks.ps1`,
-keyed on the same `<id>:<kind>`:
+On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -Host win
+-Yes` (again at most eight runs, with the same verdicts and HW-native as the
+handover), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the same
+`<id>:<kind>`:
 
 | Block | Action |
 | --- | --- |
-| `HW-stow` (`judgment`) | only its single `& '<clone>\stow-all.ps1' win` line, run by a child `pwsh -NoProfile -NonInteractive` from `$HOME` under the runner's elevated token; a block with any other command line, or naming a path other than the clone's `stow-all.ps1`, fails the run. The step passes only when `stow-all.ps1` recorded its applied state and printed no `WARNING:` line |
+| `HW-native` (`judgment`) | handover: never run line by line; once it alone is pending and a run applied nothing, the loop ends and `native-handover` runs Fresh Windows home by hand (`Invoke-NativeHandover -Role win` in a child `pwsh -NoProfile -NonInteractive` from the clone) under `human:HW-native` |
 | `HW-clone` (any kind) | **fail**: it blocks the flow, and the harness made and checked the clone itself, so a pending HW-clone means setup-host has not accepted it |
-| `HW-execution-policy`, `HW-auto-stow-task`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, grants a task standing elevation, installs WSL, starts a service nor signs in |
-| any other id or kind | **fail**, with the block's text in the detail |
+| `HW-execution-policy`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, installs WSL, starts a service nor signs in |
+| any other id or kind, the retired `HW-stow` and `HW-auto-stow-task` included | **fail**, with the block's text in the detail |
 
-The Windows login-shell step then loads the stowed profile in a child `pwsh`
-started without `-NoProfile`, which must exit 0 and print nothing, the
-payloads step runs `scripts\payload-update.ps1 -Now` (criterion 7), and
+The Windows login-shell step then loads the deployed profile in a child `pwsh`
+started without `-NoProfile`, which must exit 0 and print nothing, with the
+profile a regular file the handover wrote, the payloads step runs
+`scripts\payload-update.ps1 -Now` (criterion 7), and
 `E2E_SNAPSHOT_PRUNE` is `;`-separated there, since Windows paths hold drive
 letters and colons.
 
 ### Acceptance criteria
 
-The seven criteria, and how `inside.sh` asserts each; every failure names its
+The eight criteria, and how `inside.sh` asserts each; every failure names its
 step in `summary.tsv`:
 
 1. **The doctor passes.** From a login environment (`bash -lc 'exec zsh -il
-   -c ...'`), `./doctor.sh --legacy-stow --host H` exits 0 for the default
-   tiers, then `--smoke` exits 0 (`--platform other` on `other`).
-2. **The read-only modes write nothing.** Around `./doctor.sh --legacy-stow
-   --tsv` and `./setup-host.sh --legacy-stow --host H --check`, `TMPDIR` is a
-   fresh empty directory that must stay empty with its mtime unchanged, and
-   `find "$HOME" -newer <marker>` (pruning `~/dotfiles/.git`) must print
-   nothing, with the entry count unchanged.
-3. **A second apply is a no-op.** After the loop, `./setup-host.sh
-   --legacy-stow --host H --yes` exits 0, prints no `<id> done applied:`
-   line, and the home snapshot shows nothing newer.
+   -c ...'`), `./doctor.sh --host H` exits 0 for the default tiers, then
+   `--smoke` exits 0 (`--platform other` on `other`).
+2. **The read-only modes write nothing.** Around `./doctor.sh --tsv`,
+   `./setup-host.sh --host H --check` and the `--check` after the handover,
+   `TMPDIR` is a fresh empty directory that must stay empty with its mtime
+   unchanged, and `find "$HOME" -newer <marker>` (pruning `~/dotfiles/.git`)
+   must print nothing, with the entry count unchanged.
+3. **A second apply is a no-op.** After the handover, `./setup-host.sh --host
+   H --yes` exits 0, prints no `<id> done applied:` line, and the home
+   snapshot shows nothing newer; `./setup-host.sh --host H --check` then exits
+   0 with no `todo` line.
 4. **The checkout stays clean.** `git -C ~/dotfiles status --porcelain` is
    empty after every step; a dirty tree fails that step.
 5. **Nothing privileged or stateful ran outside a HUMAN block**, by four
    signals: (a) every `log/wrappers.log` line's phase starts with `human:` or
-   `negative:`, except a bare `stow --version` or `stow -V`, the doctor's
-   `tools.tsv` probe, which is logged on every doctor run but is not a
-   finding (the `negative:root-refused` sudo is legitimate); (b) where sudo
-   logs (`E2E_SUDO=yes`, the Linux images: macOS keeps no sudo.log), every
-   `log/sudo.log` timestamp falls inside a `human:*` or `negative:*` window of
-   `log/timeline`, and every non-indented line of that log is such a
-   timestamped entry, so a log in a shape the audit cannot parse fails it
-   instead of passing unread; (c) the stow state file
-   (`git rev-parse --git-path dotfiles-sync-unix`) and the `~/.zshrc` link
-   exist only after `human:H7-stow`; (d) the login shell from `getent passwd`
-   (`dscl` on macOS) is the same at the start and the end, and the sha256 of
+   `negative:`, with no exemption (the `negative:root-refused` sudo is
+   legitimate); (b) where sudo logs (`E2E_SUDO=yes`, the Linux images: macOS
+   keeps no sudo.log), every `log/sudo.log` timestamp falls inside a
+   `human:*` or `negative:*` window of `log/timeline`, and every non-indented
+   line of that log is such a timestamped entry, so a log in a shape the
+   audit cannot parse fails it instead of passing unread; (c) no link under
+   HOME, outside the clone, resolves into the clone (`audit-clone-links`),
+   and `~/dotfiles/.venv-sync` never exists after any step
+   (`audit-sync-venv`); (d) the login shell from `getent passwd` (`dscl` on
+   macOS) is the same at the start and the end, and the sha256 of
    `~/.bashrc`, `~/.profile`, `~/.bash_profile`, `~/.zshrc`, `~/.zshenv` and
-   `~/.zprofile` (those that exist) does not change across any non-human step;
-   a change during a `human:*` step is recorded as a note.
+   `~/.zprofile` (those that exist) does not change across any non-human
+   step; a change during a `human:*` step, the handover's included, is
+   recorded as a note.
 6. **A login shell starts clean.** Under `env -i` with the system PATH,
    `bash -lc 'exec <zsh> -il -c exit'` (the login env's zsh on hpc) exits 0
    with empty stdout and empty stderr, apart from what is not a message: on
@@ -729,16 +752,29 @@ step in `summary.tsv`:
    `config/payloads.tsv` declares, within the
    45-minute block limit. It must exit 0, and the doctor's `payloads` row
    (`--tsv`) must then be `ok` and name what it found installed. On Unix it
-   is a setup phase, so criterion 5 covers it: an installer that runs sudo or
-   stow, or changes an rc file, fails the audits.
+   is a setup phase, so criterion 5 covers it: an installer that runs sudo,
+   links into the clone or changes an rc file fails the audits.
+8. **The handover is the documented one and converges.** `native-handover`
+   runs the clone's Fresh home by hand functions, which must define exactly
+   `native_cz` and `native_handover` and nothing else at the top level, and
+   `native_handover H` (or `common-only`) must exit 0 and leave the exact
+   binding (`dotfiles-chezmoi-v1`, the physical home, the physical clone,
+   mode 0600), a regular local config selecting the role, no maintenance
+   marker, no stray `~/.config/chezmoi/chezmoistate.boltdb`, a non-empty bound
+   state database, a regular `~/.zshrc` and a byte-identical copy of every rc
+   file that existed before in `~/.local/state/dotfiles-fresh-backup`. After
+   the payloads, `native-converged` requires an empty
+   `native_cz diff --exclude=dirs` and every managed target a regular file.
 
-Each host also runs its negative cases as separate steps (`negative:<token>`),
-all with `--legacy-stow`: the platform refusals (`--host wsl-ubuntu --check`
-in the lab container and the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster (Lmod's profile.d
-exports `BASH_ENV`, which every bash script sources on start and which
-re-exports `LMOD_DIR`), `sudo -n ./setup-host.sh` as root, each exit 2), `alloc-first` (the first hpc apply exits 3 and prints the
-`H2-alloc` block) and `common-only` (after the host-less stow, `./doctor.sh`
-exits 0 and warns common-only, and `./setup-host.sh` without `--host` exits 2).
+Each host also runs its negative cases as separate steps
+(`negative:<token>`): the platform refusals (`--host wsl-ubuntu --check` in
+the lab container and the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster
+(Lmod's profile.d exports `BASH_ENV`, which every bash script sources on start
+and which re-exports `LMOD_DIR`), `sudo -n ./setup-host.sh` as root, each exit
+2), `alloc-first` (the first hpc apply exits 3 and prints the `H2-alloc`
+block) and `common-only` (after the common-only handover, `./doctor.sh` exits
+0 and warns common-only, and `./setup-host.sh --check` without `--host` exits
+2).
 
 ### Harness code rules
 
@@ -786,38 +822,43 @@ leave it off.
 ### Real clusters
 
 Sherlock and Marlowe cannot run the containers (no Docker on a login node, and
-`E2E_NATIVE` is honoured only on macOS), so the owner runs the legacy
-[Sherlock and Marlowe quick start](bootstrap.md#sherlock-and-marlowe) by hand
-once per cluster and checks the criteria above the same way. Log in without
-the RemoteCommand (`ssh sherlock-plain`, `ssh marlowe-plain`), then:
+`E2E_NATIVE` is honoured only on macOS), so the owner runs the native bootstrap
+by hand once per cluster, on a fresh account home, and checks the criteria
+above the same way. Log in without the RemoteCommand (`ssh sherlock-plain`,
+`ssh marlowe-plain`), paste `native_cz` and `native_handover` from
+[Fresh home by hand](bootstrap.md#fresh-home-by-hand) into the shell, then:
 
 ```sh
 uname -a; cat /etc/os-release; ldd --version | head -n 1   # record these with the run
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
-./doctor.sh --legacy-stow --host sherlock --tsv             # or marlowe; exit 1 is expected now
+./doctor.sh --host sherlock --tsv                           # or marlowe; exit 1 is expected now
 marker=$(mktemp) && sleep 1
-./setup-host.sh --legacy-stow --host sherlock --check       # exit 3
+./setup-host.sh --host sherlock --check                     # exit 3
 find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # must print nothing
-./setup-host.sh --legacy-stow --host sherlock               # light steps; exit 3 at H2-alloc
+./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0 DOTFILES_PAYLOAD_AUTO_UPDATE=0
-echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the stow
+echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the handover
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
 # Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet
-./setup-host.sh --legacy-stow --host sherlock               # builds the login env; exit 3 at H7-stow
+./setup-host.sh --host sherlock                             # builds the login env; exit 3 with only H7-native left
 exit                                                        # back to the login node
-# H7-stow block: its mv -n lines, then PATH="$HOME/micromamba/envs/login/bin:$PATH" ./stow-all.sh sherlock
-./setup-host.sh --legacy-stow --host sherlock               # exits 0 and prints no "done applied:" line
+cd ~/dotfiles && native_handover sherlock                   # H7-native: Fresh home by hand
+./setup-host.sh --host sherlock                             # exits 0 and prints no "done applied:" line
 git -C ~/dotfiles status --porcelain                        # empty, here and after every step above
 exec "$HOME/micromamba/envs/login/bin/zsh" -l               # starts without an error line
 sh ~/dotfiles/scripts/payload-update.sh --now               # H7-payloads (criterion 7; no login runs it): exits 0
-./doctor.sh --legacy-stow --host sherlock && ./doctor.sh --legacy-stow --host sherlock --smoke
+cd ~/dotfiles && native_cz diff --exclude=dirs              # paste the functions again in this shell; prints nothing
+./doctor.sh --host sherlock && ./doctor.sh --host sherlock --smoke
 ```
 
-Nothing but the HUMAN blocks ran `stow` or edited an rc file when the stow
-state file and the `~/.zshrc` link appear only after the H7-stow line and
-`getent passwd "$USER"` still names the same login shell at the end. Then fill
+Nothing but the HUMAN blocks and the handover changed the home when
+`~/.config/dotfiles/native` and the deployed regular files (`~/.zshrc`
+among them) appear only after the `native_handover` line, the backup
+directory `~/.local/state/dotfiles-fresh-backup` holds the earlier rc files
+byte for byte, and `getent passwd "$USER"` still names the same login shell
+at the end. Then fill
 the run's row of the [acceptance table](bootstrap.md#acceptance-checklist):
 the date, the OS and glibc from the first line, the result and any notes,
 adding a row for Marlowe.

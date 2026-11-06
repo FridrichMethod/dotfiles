@@ -13,8 +13,7 @@
 # write error is ignored. Bash 3.2 and BSD userland, no here-documents or
 # process substitution.
 #
-# sudo, chsh and stow are the exec variants of this file; keep the four in
-# step.
+# sudo and chsh are the exec variants of this file; keep the three in step.
 
 tool=sudo
 

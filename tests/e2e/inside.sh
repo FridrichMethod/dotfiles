@@ -4,14 +4,16 @@
 # bootstraps a fresh machine from docs/bootstrap.md: clones the read-only
 # source checkout at E2E_REV into $HOME/dotfiles, runs the doctor and
 # setup-host, runs the HUMAN blocks the policy in lib/blocks.sh allows,
-# stows, starts a login shell, and audits that sudo, chsh and stow were only
-# ever called inside those blocks. tests/e2e/run.sh starts it; it never runs
+# hands the home to native chezmoi through docs/bootstrap.md "Fresh home by
+# hand", starts a login shell, and audits that sudo and chsh were only ever
+# called inside those blocks. tests/e2e/run.sh starts it; it never runs
 # against a workstation's own home: it refuses unless it is in a container
 # (Docker's /.dockerenv or Podman's /run/.containerenv, not a toolbox or
 # distrobox that shares the real home), on Darwin with E2E_NATIVE=1 (the
 # macos runner), or given E2E_SANDBOX_HOME under the temp dir together with
-# a fixture E2E_SRC under it and stub sudo, chsh and stow first on PATH (the
-# unit test's seam, Linux or Darwin; not a dry-run mode for a real checkout).
+# a fixture E2E_SRC under it and stub sudo, chsh and chezmoi first on PATH
+# (the unit test's seam, Linux or Darwin; not a dry-run mode for a real
+# checkout).
 #
 #   E2E_HOST=<host> E2E_REV=<sha> E2E_SRC=<checkout> E2E_OUT=<dir> inside.sh
 #
@@ -128,10 +130,11 @@ if [ -n "${E2E_SANDBOX_HOME:-}" ]; then
         "$tmp_root"/?*) ;;
         *) e2e_die "E2E_SANDBOX_HOME drives only a fixture checkout under the temp dir $tmp_root; E2E_SRC is $E2E_SRC" ;;
     esac
-    # And only with stub tools: the sudo, chsh and stow PATH finds must live
-    # under the temp dir too, so a checkout copied there still reaches no
-    # real sudo.
-    for tool in sudo chsh stow; do
+    # And only with stub tools: the sudo, chsh and chezmoi PATH finds must
+    # live under the temp dir too, so a checkout copied there still reaches
+    # no real sudo, and no real chezmoi (a workstation may have one in
+    # ~/.local/bin) deploys into the sandbox home.
+    for tool in sudo chsh chezmoi; do
         found=$(command -v "$tool" 2>/dev/null) || continue
         [ -n "$found" ] || continue
         found_dir=$(e2e_physical "$(dirname -- "$found")") ||
@@ -189,7 +192,7 @@ fi
 if [ "$E2E_MODE" = native ]; then
     E2E_WRAP_BIN=$E2E_OUT/bin
     mkdir -p "$E2E_WRAP_BIN"
-    for tool in sudo chsh stow; do
+    for tool in sudo chsh; do
         if [ -f "$E2E_SRC/tests/e2e/wrappers/$tool" ]; then
             cp "$E2E_SRC/tests/e2e/wrappers/$tool" "$E2E_WRAP_BIN/$tool" && chmod 755 "$E2E_WRAP_BIN/$tool"
         else
