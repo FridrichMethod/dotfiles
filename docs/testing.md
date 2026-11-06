@@ -251,19 +251,26 @@ against fixture checkouts, homes and Homebrew prefixes with stubbed tools and
 local clone remotes. Network commands outside `--online` fail the doctor
 suite; `sudo`, `chsh`, `stow`, `apt-get`, `conda` and `git lfs` are tripwires in
 the installer suite; find snapshots prove that the doctor and
-`setup-host.sh --check` write nothing. Most fixture cases pass
-`--legacy-stow`; native cases in each run the default mode. There the
-doctor reads a bound home's role from the one quoted `host` line of the
-`[data]` table of its local config, ignores the Stow receipt and
-`DOTFILES_HOST` (legacy only), exits 2 for a missing, repeated, unknown or
-malformed one, treats `common-only` as common only, names the cause in its
-`native-config` row (only another checkout's binding and a stray
-`chezmoistate.boltdb`, which it leaves in place, merely warn) and keeps the
-offline, write-free and no-`TMPDIR` promises. The native setup-host cases
-print HUMAN text that names no Stow and rerun notes without a mode flag (the
-legacy cases' notes keep `--legacy-stow`), and let an existing login env
-satisfy H2-alloc with the AI-sync interpreter as a tripwire; S6-nerd-font
-counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
+`setup-host.sh --check` write nothing. Every fixture case runs the native
+default. The few legacy-only cases pass `--legacy-stow` (`LegacyStow = $true`
+in `tests/bootstrap.ps1`) inside blocks fenced by `# >>> stage6-B1` and
+`# <<< stage6-B1` lines, or end with a `# stage6-B1` comment, so the Stage 6
+commit that drops the legacy mode deletes them by that marker. The doctor binds
+its fixture home to the fixture checkout once the unmarked-home resolution
+cases have run. The setup-host fixture serves a pinned chezmoi archive whose
+executable answers only `--version` (any other command is a tripwire), so
+S4-chezmoi installs it and a full apply ends at H7-native. The doctor reads a
+bound home's role from the one quoted `host` line of the `[data]` table of its
+local config, ignores the Stow receipt and `DOTFILES_HOST` (legacy only), exits
+2 for a missing, repeated, unknown or malformed one, treats `common-only` as
+common only, names the cause in its `native-config` row (only another
+checkout's binding and a stray `chezmoistate.boltdb`, which it leaves in place,
+merely warn) and keeps the offline, write-free and no-`TMPDIR` promises. The
+setup-host cases list each host's native step order, print HUMAN text that
+names no Stow and rerun notes without a mode flag, take `--host` over
+`[data].host`, and let an existing login env satisfy H2-alloc with the AI-sync
+interpreter as a tripwire; S6-nerd-font counts a Nerd Font in a system font
+directory as installed. `tests/doctor.sh`
 also runs the real `./doctor.sh` with the real manifest against the test
 machine's own tools, in legacy and native mode (`--platform debian` and
 `--platform other` with `--tsv`, an empty temporary `HOME`): every line must
@@ -277,16 +284,19 @@ device id unless `GH_TELEMETRY=0`, and the tldr C client refreshes a stale
 page cache unless `TLDR_AUTO_UPDATE_DISABLED` is set.
 `tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
 against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
-Windows job runs that suite and the validator from `tests/run.ps1`. Its
-native cases mirror the Unix ones (a healthy bound host with gh telemetry off
-and no writes, the `native-config` causes, a checkout reached through a
-junction or symlink counting as the bound one, HUMAN text without Stow). On
-Windows those cases give the fixture home a private copy of the real chezmoi
-(`DOTFILES_TEST_CHEZMOI`, else PATH's) as `~/.local/bin/chezmoi.exe`, and a
-PATH-only chezmoi, a copy other users may modify and a junctioned
-`~/.local/bin` each make `native-config` `human` and W1-chezmoi todo, with no
-writes. W1-chezmoi stops before downloading under a linked `.local` or
-`.local/bin`. Its other
+Windows job runs that suite and the validator from `tests/run.ps1`. Its cases
+run the native default too (legacy-only ones pass `LegacyStow = $true` inside a
+`stage6-B1` block) and mirror the Unix ones (a healthy bound host with gh
+telemetry off and no writes, the `native-config` causes, a checkout reached
+through a junction or symlink counting as the bound one, HUMAN text without
+Stow). The healthy fixture puts a chezmoi shim on PATH and, on Windows, gives
+the fixture home a private copy of the real chezmoi (`DOTFILES_TEST_CHEZMOI`,
+else PATH's) as `~/.local/bin/chezmoi.exe`, so W1-chezmoi is done and an apply
+ends at HW-native; a Windows run without a real chezmoi skips those cases (CI
+requires one). There a PATH-only chezmoi, a copy other users may modify and a
+junctioned `~/.local/bin` each make `native-config` `human` and W1-chezmoi
+todo, with no writes. W1-chezmoi stops before downloading under a linked
+`.local` or `.local/bin`. Its other
 W1-chezmoi case swaps the archive right after the by-path hash check and
 requires a sha256 mismatch with nothing installed, then a clean install that
 leaves only `chezmoi.exe`, whose DACL on Windows must be protected and grant

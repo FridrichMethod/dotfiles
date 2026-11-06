@@ -47,12 +47,14 @@ class NativeProvisionTests(unittest.TestCase):
         self.assertNotIn("H7-stow", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
+    # >>> stage6-B1 legacy-stow: the explicit legacy setup plan
     def test_legacy_setup_is_explicit(self):
         result = self.run_script("setup-host.sh", "--legacy-stow", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("S4-setup-sync", result.stdout)
         self.assertIn("H7-stow", result.stdout)
         self.assertNotIn("S4-chezmoi", result.stdout)
+    # <<< stage6-B1 legacy-stow
 
     def test_sherlock_plan_uses_static_binary_for_legacy_glibc(self):
         # The real host has glibc 2.17; the generic v2.74 binary requires 2.34.
@@ -84,12 +86,14 @@ step_S4_chezmoi_plan
         self.assertTrue({"stow", "stow-links", "venv-sync"}.isdisjoint(ids))
         self.assertEqual(list(self.home.iterdir()), [])
 
+    # >>> stage6-B1 legacy-stow: the explicit legacy doctor checks
     def test_legacy_doctor_retains_sync_checks(self):
         result = self.run_script("doctor.sh", "--legacy-stow", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         ids = {line.split("\t")[0] for line in result.stdout.splitlines()}
         self.assertTrue({"stow", "stow-links", "venv-sync"}.issubset(ids))
         self.assertNotIn("chezmoi", ids)
+    # <<< stage6-B1 legacy-stow
 
     def test_native_handoff_only_prints_reviewed_procedure(self):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--print-manual")
