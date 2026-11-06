@@ -22,7 +22,7 @@ if (-not (Test-Path -LiteralPath $powerShell -PathType Leaf)) {
     throw "Cannot locate the current PowerShell executable: $powerShell"
 }
 $repoRoot = Split-Path -Parent $PSScriptRoot
-# The AI-sync runtime below serves only test_config_sync.py and test_stow_ignores.py;
+# The AI-sync runtime below serves only test_config_sync.py;
 # every other Python suite runs on the plain standard-library python checked above.
 $syncPython = if ($env:DOTFILES_SYNC_PYTHON) { $env:DOTFILES_SYNC_PYTHON }
     elseif ($IsWindows) { Join-Path $repoRoot '.venv-sync/Scripts/python.exe' }
@@ -84,10 +84,6 @@ Write-Output '==> test_bootstrap_manifest.py'
 & python -I -B -m unittest discover -s $PSScriptRoot -p 'test_bootstrap_manifest.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap manifest validator tests failed.' }
 
-Write-Output '==> test_stow_ignores.py'
-& $syncPython -I -B -m unittest discover -s $PSScriptRoot -p 'test_stow_ignores.py' -v
-if ($LASTEXITCODE -ne 0) { throw 'Stow ignore tests failed.' }
-
 Write-Output '==> claude-customizations.cjs'
 & node --test (Join-Path $PSScriptRoot 'claude-customizations.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed.' }
@@ -95,11 +91,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Claude customization tests failed.' }
 Write-Output '==> terminal.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'terminal.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell terminal-output tests failed.' }
-
-Write-Output '==> update-hooks.ps1'
-# Use a child process so fixtures cannot leak mock functions or global state.
-& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'update-hooks.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'PowerShell update-hook tests failed.' }
 
 Write-Output '==> test_payload_download.py'
 & python -I -B (Join-Path $PSScriptRoot 'test_payload_download.py')
@@ -112,10 +103,6 @@ if ($LASTEXITCODE -ne 0) { throw 'PowerShell payload hook tests failed.' }
 Write-Output '==> powershell-profile.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'powershell-profile.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'PowerShell profile tests failed.' }
-
-Write-Output '==> windows-installer-controls.ps1'
-& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'windows-installer-controls.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'Windows installer confirmation and failure-control tests failed.' }
 
 Write-Output '==> bootstrap.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'bootstrap.ps1')
@@ -146,14 +133,5 @@ if ($e2eParseIssues.Count -gt 0) { throw "Windows e2e driver parse errors:`n$($e
 Write-Output '==> e2e-harness.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'e2e-harness.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Windows e2e driver unit tests failed.' }
-
-if ($IsWindows) {
-    Write-Output '==> windows-installer.ps1'
-    & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'windows-installer.ps1')
-    if ($LASTEXITCODE -ne 0) { throw 'Native Windows installer tests failed.' }
-}
-else {
-    Write-Output 'SKIP: native NTFS installer integration requires Windows (mandatory in Windows CI).'
-}
 
 Write-Output 'test-suite=PASS'

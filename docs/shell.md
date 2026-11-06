@@ -8,6 +8,8 @@ loads it from .bashrc; zsh sources it immediately after its uniqueness setup.
 Host aliases and profile files live under ~/.config/sh/. Preserve shared site
 prefixes such as /apps/miniconda3; per-user conda and Juliaup paths use HOME.
 The vi alias selects nvim only when available, leaving native vi usable otherwise.
+An interactive login updates only a home bound by ~/.config/dotfiles/native
+([update contract](update-contract.md)); an unmarked home runs nothing.
 
 nvm discovery honors an explicit NVM_DIR, then ~/.nvm, then
 ${XDG_CONFIG_HOME:-~/.config}/nvm. The profile reads default-alias chains with the read builtin without
@@ -61,18 +63,17 @@ Ctrl+C; zoxide follows because it wraps the prompt. A final wrapper preserves
 LASTEXITCODE, which zoxide's directory tracking can reset. The tracked theme
 lives under win/oh-my-posh, uses a release-tagged schema and ASCII glyph escapes,
 and supports shell integration/transient prompts. Re-render it after upgrades.
-Windows Terminal settings remain a Stow symlink; UI saves follow it, but a
-Terminal restart is required for changes to load. Since v1.10.2383.0 Terminal
-resolves the link before its atomic save
-(`til::io::write_utf8_string_to_file_atomic`), so the save writes through it;
-the same rename would sever a hard link. See [Windows installation](windows-installer.md).
+Windows Terminal settings are a regular file that chezmoi applies; a Terminal
+UI save edits it in place and shows up as destination drift (`chezmoi diff`) to
+reconcile under the takeover procedure, and a Terminal restart is required for
+changes to load.
 
 ## Lab input settings
 
 fcitx5 rewrites its profile, so Stow materializes the authoritative baseline as
 an ordinary file; a later stow reasserts it. Invalid directory/special-file
 targets fail, and existing links survive until replacements are staged.
-On lab-ubuntu, GNOME owns the X keymap. The stowed .xprofile sets CapsLock as
+On lab-ubuntu, GNOME owns the X keymap. The deployed .xprofile sets CapsLock as
 Hyper_L for the fcitx5 language trigger and frees Super+Space for cycling input
 methods. It uses /usr/bin/gsettings because the Linuxbrew command lacks GNOME's
 dconf backend. Settings apply at X login, not by appending to a shell rc.
@@ -118,7 +119,7 @@ then `./setup-host.sh --host <host> --yes --only S3-clones`, with
 is inert; Stage 6 removes it). After the dotfiles are applied, reload a running
 server with `tmux source-file ~/.tmux.conf`; new servers load it
 automatically. Plugins live in `~/.tmux/plugins/`, outside this checkout.
-Startup, reload, Stow and login hooks never install or update them. Without
+Startup, reload and login hooks never install or update them. Without
 TPM, native tmux settings still work. See
 [S3-clones](bootstrap.md#s3-clones-oh-my-zsh-theme-and-plugin-clones) for
 Other Linux installation and existing-clone behavior.
@@ -162,9 +163,9 @@ configuration: upstream autobuild is disabled, so reload needs no Python
 menu generation, pip package or virtual environment. Upstream may copy its
 default config into ignored files in its own checkout on first load; the
 deployed menu is then applied. To customize the menu, edit
-`common/tmux/.config/tmux/which-key.conf` in the checkout. A legacy link sees
-the edit at once; a native home receives it through the login update once it
-is committed, since that update refuses a dirty checkout.
+`common/tmux/.config/tmux/which-key.conf` in the checkout. A native home
+receives it through the login update once it is committed, since that update
+refuses a dirty checkout.
 
 The config uses tmux 3.4 popup, menu and style features without version
 checks; `config/bootstrap/tools.tsv` holds the floor, and older tmux is

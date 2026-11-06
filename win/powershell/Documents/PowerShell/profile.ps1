@@ -1,10 +1,10 @@
-# PowerShell 7 profile (CurrentUserAllHosts), stowed from dotfiles.
+# PowerShell 7 profile (CurrentUserAllHosts), deployed from dotfiles.
 # Portable (Join-Path $HOME ...) and install-free: optional tools and modules
 # are used only when already present, and console-only setup sits behind one
 # guard, because every `pwsh -Command ...` loads this file too.
 
 # Agent terminals (Cursor, Gemini CLI) are real consoles, so the redirect test
-# misses them. Mirror _is_agent_session in common/zsh/.zshrc and keep the
+# misses them. Mirror _is_agent_session in ~/.zshrc and keep the
 # prompt theme and key handlers out of their way.
 $IsAgentSession = [bool]($env:CURSOR_AGENT -or $env:GEMINI_CLI)
 
@@ -188,7 +188,7 @@ if ($IsInteractive -and -not $IsAgentSession) {
                 -ScriptBlock { Invoke-FzfPsReadlineHandlerSetLocation }
         }
     }
-    # Same theme as common/zsh/.zshrc.
+    # Same theme as ~/.zshrc.
     if ((& $HasExe bat) -and -not $env:BAT_THEME) { $env:BAT_THEME = 'Catppuccin Mocha' }
     if (& $HasExe eza) {
         # eza does not glob on Windows and PowerShell passes wildcards to
@@ -278,8 +278,8 @@ if ($IsInteractive -and -not $IsAgentSession) {
     function global:sync-skills { sync-payloads skills }
 
     # --- oh-my-posh prompt ----------------------------------------------------
-    # Tracked theme (win/oh-my-posh), stowed to ~/.config/oh-my-posh. The
-    # builtin name is only a fallback until stow links it, because it is
+    # The dotfiles theme, deployed to ~/.config/oh-my-posh. The builtin
+    # name is only a fallback until that file is applied, because it is
     # revalidated over the network. With shell_integration and
     # transient_prompt omp rebinds Enter and Ctrl+c, so this stays after every
     # other key handler.
@@ -316,12 +316,13 @@ if ($IsInteractive -and -not $IsAgentSession) {
 Remove-Variable IsAgentSession
 
 # --- Dotfiles auto-update check -------------------------------------------
-# Last, mirroring the tail of common/zsh/.zshrc, so the prompt and modules
-# above are ready first. Like zsh, which returns before it for
-# non-interactive shells, a script run in a console or piped in never
-# fetches or stows. The session-once and no-console guards live in
-# scripts/dotfiles-update.ps1 so it keeps one contract with its Unix twin.
-# The payload repos install only when a person runs sync-payloads.
+# Last, mirroring the tail of ~/.zshrc, so the prompt and modules above are
+# ready first. Like zsh, which returns before it for non-interactive shells,
+# a script run in a console or piped in never updates. Only a home bound by
+# ~/.config/dotfiles/native updates, through its source's
+# scripts/chezmoi-update.ps1, which keeps the session-once and opt-out guards;
+# an unmarked home runs nothing and prints nothing. The payload repos install
+# only when a person runs sync-payloads.
 if ($IsInteractive) {
     & {
         try {
@@ -335,30 +336,22 @@ if ($IsInteractive) {
             $DotfilesNative = $null
             try { $DotfilesNative = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/native') -Force -ErrorAction Stop }
             catch [System.Management.Automation.ItemNotFoundException] { }
-            if ($DotfilesNative) {
-                if ($DotfilesNative -isnot [IO.FileInfo] -or ($DotfilesNative.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                    throw 'Native marker must be a regular file.'
-                }
-                $DotfilesText = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($DotfilesNative.FullName))
-                if ($DotfilesText -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') {
-                    throw 'Invalid native marker.'
-                }
-                $DotfilesDir = $Matches[2]
-                if (-not [IO.Path]::IsPathFullyQualified($DotfilesDir)) { throw 'Native source must be absolute.' }
-            } else {
-                $DotfilesDir = if ($env:DOTFILES_DIR) { $env:DOTFILES_DIR } else { Join-Path $HOME 'dotfiles' }
+            if (-not $DotfilesNative) { return }
+            if ($DotfilesNative -isnot [IO.FileInfo] -or ($DotfilesNative.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw 'Native marker must be a regular file.'
             }
+            $DotfilesText = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($DotfilesNative.FullName))
+            if ($DotfilesText -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') {
+                throw 'Invalid native marker.'
+            }
+            $DotfilesDir = $Matches[2]
+            if (-not [IO.Path]::IsPathFullyQualified($DotfilesDir)) { throw 'Native source must be absolute.' }
             $DotfilesGuard = Join-Path $DotfilesDir 'lib/chezmoi-guard.ps1'
-            if (-not (Test-Path -LiteralPath $DotfilesGuard -PathType Leaf)) {
-                if ($DotfilesNative) { throw 'Native source guard is unavailable.' }
-                return
-            }
+            if (-not (Test-Path -LiteralPath $DotfilesGuard -PathType Leaf)) { throw 'Native source guard is unavailable.' }
             . $DotfilesGuard
             if (Test-DotfilesMaintenance -HomePath $HOME) { return }
-            $DotfilesUpdate = if ($DotfilesNative) {
-                $DotfilesDir = (Get-DotfilesNativeBinding -HomePath $HOME).Source
-                Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
-            } else { Join-Path $DotfilesDir 'scripts/dotfiles-update.ps1' }
+            $DotfilesDir = (Get-DotfilesNativeBinding -HomePath $HOME).Source
+            $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
             if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
         }
         catch { [Console]::Error.WriteLine('[dotfiles] Profile hooks skipped: review the native source binding privately.') }

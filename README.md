@@ -1,9 +1,9 @@
 # Dotfiles
 
 Cross-platform configuration for macOS, WSL/Ubuntu, Stanford Sherlock, Marlowe
-and native Windows, moving to native chezmoi regular-file deployment. The Stage 4
-compatibility release retains physical GNU Stow sources for existing homes.
-Shared defaults in `common/` and host overlays remain canonical through Stage 6.
+and native Windows, deployed by native chezmoi as regular files. Shared defaults
+in `common/` and host overlays remain the canonical sources until Stage 6
+consolidates them under `home/`.
 Secret enrollment is explicit and encrypted; mutable auth/runtime state stays local.
 
 ## Quick Start
@@ -32,17 +32,9 @@ File apply and login updates use `--exclude=dirs` to preserve existing shared
 parent permissions. Prepare only inspected missing directories through the
 native directory-only procedure; plain apply can change existing parent modes.
 
-For an explicitly retained legacy Stow home only:
-
-```sh
-./setup-sync.sh             # Python 3.11+; once per clone, no activation
-./stow-all.sh mac
-```
-
-Stow checks conflicts before applying shared sync files, but may first remove
-exact dangling links from retired Sherlock packages. It does not promise a
-whole-home transaction. Failed/partial application never acknowledges a new
-revision. See the [installer contract](docs/installer-contract.md).
+GNU Stow deployment is retired. A home still deployed by Stow is unsupported:
+convert it from the recovery bridge `bf99958` under the
+[support boundary](docs/chezmoi-migration/support-boundary.md) before updating.
 
 For native common-only installation on other Linux, select `common-only` in
 local chezmoi data and use `./doctor.sh --platform other`; install prerequisites by the
@@ -64,16 +56,11 @@ cd $HOME\dotfiles
 ```
 
 Follow the HW-* HUMAN blocks and the native takeover procedure. Regular-file
-native updates run unelevated, without a scheduled restow task or UAC prompt.
-Both actual PowerShell profile paths and ordinary-user destination ACLs must be
-checked before takeover. A retained legacy Stow home still uses `setup-sync.ps1`
-and **elevated** `stow-all.ps1 win`; `-WhatIf` previews and `-Strict` rejects
-incomplete installation. Legacy local readability does
-not prove link trust: Windows OpenSSH can reject an unelevated link with error
-448, "untrusted mount point". The installer checks RedirectionGuard in a
-separate process. See [Windows installation](docs/windows-installer.md),
-[the Windows quick start](docs/bootstrap.md#native-windows), and
-[automatic worker registration](docs/update-contract.md#windows-worker-operations).
+native updates run unelevated, without a scheduled task or UAC prompt. Both
+actual PowerShell profile paths and ordinary-user destination ACLs must be
+checked before takeover. See
+[the Windows quick start](docs/bootstrap.md#native-windows) and the
+[login update contract](docs/update-contract.md).
 
 ### Bootstrapping with Claude Code or Codex
 
@@ -96,12 +83,12 @@ For a session outside the clone, use the
 | [marlowe](marlowe/) | Marlowe shell, Git and cache settings |
 | [win](win/) | PowerShell, Git/SSH, prompt, Terminal and WSL settings |
 
-Packages mirror HOME paths. Stow uses `--restow --no-folding`: individual links
-let common and host packages compose. Git overrides use `~/.gitconfig_local`;
-SSH delegates to `~/.ssh/config.d/*.conf`. A target has one owner: move a full
-host-specific file out of common rather than defining it in both layers.
-Legacy Windows (`stow-all.ps1`) stows an explicit common-package allowlist and no
-Unix shell packages; native Windows deploys 26 regular files. The
+Packages mirror HOME paths; chezmoi deploys them as regular files from `home/`,
+composing common and host files for the role in local `[data].host`. Git
+overrides use `~/.gitconfig_local`; SSH delegates to `~/.ssh/config.d/*.conf`. A
+target has one owner: move a full host-specific file out of common rather than
+defining it in both layers. Windows receives an explicit common subset and no
+Unix shell files (`home/.chezmoiignore`); it deploys 26 regular files. The
 [dependency guide](docs/dependencies.md) explains required and optional tools;
 `config/bootstrap/` owns installation inventories and versions.
 
@@ -119,21 +106,19 @@ or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
 After native handover, interactive login checks once per session and calls
 chezmoi update with explicit paths, `--exclude=dirs`, fast-forward-only Git, closed stdin and
 conflict handling. It refuses dirty source, missing/empty native state and OneDrive
-source writes; failures warn and leave the shell usable. Unmarked homes retain
-the legacy updater in the [update contract](docs/update-contract.md). A persistent
-maintenance marker blocks the update hook and explicit payload runs during takeover.
+source writes; failures warn and leave the shell usable. An unmarked home runs
+no updater and prints nothing; see the [update contract](docs/update-contract.md).
+A persistent maintenance marker blocks the update hook and explicit payload runs
+during takeover.
 Windows Terminal still needs a restart to load settings changes.
 
 | Variable | Effect |
 | --- | --- |
 | `DOTFILES_AUTO_UPDATE=0` | Disable the dotfiles login updater |
-| `DOTFILES_AUTO_STOW=0` | Legacy only: permit pulls without automatic restow |
-| `DOTFILES_DIR` | Legacy checkout selection; native uses its home-bound marker |
-| `DOTFILES_HOST` | Legacy only: override remembered Unix host; native uses local `[data].host` |
 | `DOTFILES_COLOR` | `auto`, `always` or `never`; NO_COLOR/TERM=dumb disable color |
 
-Set opt-outs before shell startup. Do not run manual and automatic installers
-concurrently. [Shell startup](docs/shell.md) covers nvm, conda, PATH ordering,
+Set opt-outs before shell startup. Do not run a manual native apply while a login
+update runs. [Shell startup](docs/shell.md) covers nvm, conda, PATH ordering,
 PowerShell key bindings, encoding and prompts.
 
 ## AI Assistant Configuration
@@ -146,7 +131,7 @@ Both global guides place persistent agent worktrees in the current project's
 `.worktrees/` directory; brief disposable work may use `/tmp`. Keep unfinished
 work and handoffs in durable storage. After integration and validation, release
 active users and remove completed worktrees and their merged task branches.
-Git and Stow ignore `.worktrees/`; OneDrive checkouts retain their independent-clone
+Git ignores `.worktrees/`; OneDrive checkouts retain their independent-clone
 exception.
 
 Claude settings and Codex config are merged into mutable regular files rather
@@ -249,9 +234,8 @@ The [native contract](docs/config-sync.md#native-configuration-and-stage-4-hando
 native serialization for policy changes, preservation of unchanged Claude/Codex input,
 exact ownership and safe refusal of unsupported inputs.
 CI requires verified v2.74.0; local native probes skip if chezmoi is absent,
-while an invalid explicit path fails. Canonical legacy source remains available
-and unmarked homes retain the legacy path. Real takeover and selected secret
-enrollment require the [Stage 4 procedure](docs/chezmoi-migration/takeover.md)
+while an invalid explicit path fails. Unmarked homes run no login updater. Real
+takeover and selected secret enrollment require the [Stage 4 procedure](docs/chezmoi-migration/takeover.md)
 and recorded release gates; fixture passes are not real-host outcomes.
 
 To add a configuration file, put the canonical file at its HOME path under
@@ -267,8 +251,7 @@ unmanaged file at the new path: the login update stops on it as a first-target
 conflict until it is reconciled under that procedure. For a file that applies
 on Windows, name its parent's ACL model first (see
 [start-stage-5.md](docs/chezmoi-migration/start-stage-5.md)). Native homes
-receive the change through the login update; `stow-all` applies only to legacy
-(unmarked) homes. Keep secrets local, code in
+receive the change through the login update. Keep secrets local, code in
 its shell dialect and documentation in English ASCII. Follow
 [AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy; keep
 common-before-host order.

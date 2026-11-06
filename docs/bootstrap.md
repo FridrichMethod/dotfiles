@@ -9,12 +9,11 @@ and offline: for every tool it reports `ok`, `missing` or `outdated` and names
 the step below that fixes it. The installer runs pinned, checksummed steps that
 need no root, and prints everything that needs a person (sudo, a browser login,
 a GUI dialog, a Slurm allocation, a login-shell change, a judgment call) as a
-HUMAN block instead of running it. Profiles, `./stow-all.sh` and the login
-update hooks never install a tool; only these entry points do, and only when
-you run them. (This repository's three first-party payload repos install and
-update, through their own installers, only when a person runs the payload
-command; no login, profile or schedule does; see
-[H7-payloads](#h7-payloads-payload-repos).)
+HUMAN block instead of running it. Profiles and the login update never
+install a tool; only these entry points do, and only when you run them. (This
+repository's three first-party payload repos install and update, through their
+own installers, only when a person runs the payload command; no login,
+profile or schedule does; see [H7-payloads](#h7-payloads-payload-repos).)
 
 [`config/bootstrap/`](../config/bootstrap/) is the single source for
 everything they install: [`tools.tsv`](../config/bootstrap/tools.tsv) (what the
@@ -1009,9 +1008,9 @@ have a minimum), the overlay the person chose, and a complete checkout.
 
 - **Check:** `uname -sm; cat /etc/os-release 2>/dev/null || sw_vers; ldd --version 2>/dev/null | head -n 1; git -C ~/dotfiles status --porcelain`
 - **Install:** `git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles`
-  (the login hooks default to `DOTFILES_DIR=$HOME/dotfiles`). The checkout has
-  no submodules; the payload repos install only when you run them, through
-  their own installers ([H7-payloads](#h7-payloads-payload-repos)).
+  (any path; native login updates follow the home binding that handover
+  writes). The checkout has no submodules; the payload repos install only when
+  you run them, through their own installers ([H7-payloads](#h7-payloads-payload-repos)).
 - **Verify:** the status is empty. setup-host's P0-preflight line records the
   OS, architecture, glibc and detected platform, and warns about uncommitted
   changes in the checkout: the native login update does not run from a
@@ -2385,11 +2384,11 @@ fail-closed behavior beyond what is stated.
   shell that starts or attaches tmux: a server and a client of different
   versions sharing the default socket can fail to talk (the
   [Marlowe note](shell.md#tmux)).
-- **Windows Terminal re-serializes its stowed settings.** Terminal saves
-  `settings.json` back through the legacy Stow link
-  whenever the file it loads is not in its own form, which leaves the clone
-  dirty. Terminal releases can reorder its arrays, so inspect and retain the native
-  serialization if starting Terminal changes the tracked file. The Windows PowerShell and Command Prompt stubs
+- **Windows Terminal re-serializes its settings.** Terminal saves
+  `settings.json` in place whenever the file it loads is not in its own form,
+  which shows up as destination drift (`chezmoi diff`). Terminal releases can
+  reorder its arrays, so inspect and retain the native serialization in the
+  source if starting Terminal changes the deployed file. The Windows PowerShell and Command Prompt stubs
   stay `"hidden": true`: Terminal treats a generated profile that its
   `state.json` lists but `settings.json` omits as deleted, so a visible stub
   brings both profiles back on a host that had already dropped them.
@@ -2405,7 +2404,7 @@ Deferred on purpose; each is a separate change.
   runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
   the login-env form the other overlays use
   (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
-- **`win/wsl` is not a `$HOME`-shaped package.** `stow-all.ps1` links
+- **`win/wsl` is not a `$HOME`-shaped package.** Native apply deploys
   `wsl.conf` and `mount.vbs` into `%USERPROFILE%`, where neither does
   anything: `wsl.conf` only works as `/etc/wsl.conf` inside the distribution,
   and its `mount-data.sh` is not shipped

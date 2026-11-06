@@ -318,8 +318,8 @@ lock: concurrent runs converge.
   and, run again later, updates them, as `sync-payloads` does in an
   interactive shell. While a native home's binding does not resolve, the
   block prints no run line and points at the doctor's `native-config` row.
-- `./setup-host.sh`, `setup-host.ps1`, `./stow-all.sh`, `stow-all.ps1` and
-  the login updaters never run an installer of a payload repository.
+- `./setup-host.sh`, `setup-host.ps1` and the login update never run an
+  installer of a payload repository.
 
 ## Trust
 
@@ -505,13 +505,8 @@ A pull across a submodule's removal leaves its checkout on every host where it
 was checked out. They are harmless:
 
 - `.gitignore` names each of them, so `git status` stays clean; without those
-  lines the login updater would stop at `Checkout changed during update` and
-  then at `Local changes` on every later login.
-- The `.stowrc` lines `--ignore=^coding-agent-kit(/|$)`,
-  `--ignore=^PyMOLScripts(/|$)` and `--ignore=^sherlock-kit(/|$)` keep Stow
-  from linking their trees into `$HOME`: `common/coding-agent-kit` and
-  `common/pymol` still exist on such a host, holding only the leftover, and
-  `./stow-all.sh` stows every directory of `common/` as a package.
+  lines the native login update would refuse the untracked source on every
+  login.
 - Nothing in dotfiles reports or removes them or their repositories under
   `.git/modules`. `git -C <path> status` and
   `git -C <path> log --branches --not --remotes` show whether one holds work
@@ -522,8 +517,8 @@ as an ignored (`!!`) path. Once a checkout holds nothing you want, remove it
 with `rm -rf <path>` (`Remove-Item -LiteralPath <path> -Recurse -Force` on
 Windows). Its repository under `.git/modules` can go the same way once no
 other leftover uses it: both kit leftovers share one, so remove it only after
-both checkouts are gone. Keep the `.gitignore` and `.stowrc` lines until no
-host has a leftover.
+both checkouts are gone. Keep the `.gitignore` lines until no host has a
+leftover (Stage 6 Phase C removes them after verification).
 
 ## The kit on a dotfiles host
 

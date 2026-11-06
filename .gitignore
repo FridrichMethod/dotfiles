@@ -1,6 +1,5 @@
-# Stow also ignores each pattern here with no slash but a trailing one, which
-# git matches at any depth: add every new one to .stowrc too
-# (tests/test_stow_ignores.py).
+# Files git never tracks in this checkout. chezmoi deploys only the managed
+# source under home/ (.chezmoiroot), so these patterns need no deployment twin.
 
 # OS metadata
 .DS_Store

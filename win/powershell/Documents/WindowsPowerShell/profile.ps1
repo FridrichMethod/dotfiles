@@ -1,4 +1,4 @@
-# Windows PowerShell 5.1 profile, stowed from dotfiles. Keep it 5.1 syntax
+# Windows PowerShell 5.1 profile, deployed from dotfiles. Keep it 5.1 syntax
 # and ASCII only: 5.1 reads a BOM-less file in the ANSI code page.
 
 #region conda initialize (lazy)

@@ -1,4 +1,4 @@
-# Temporary per-home writer handover guard. Sourcing has no filesystem effects.
+# Per-home native binding, maintenance and Windows binary-trust guard. Sourcing has no filesystem effects.
 # PowerShell 5.1 compatible: both installed profile variants load this library.
 function Test-DotfilesMarkerObject {
     param([Parameter(Mandatory)][string]$Path)
@@ -38,29 +38,6 @@ function Resolve-DotfilesDirectory {
         }
     }
     return $current.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-}
-
-function Test-DotfilesLegacyWriteAllowed {
-    param([Parameter(Mandatory)][string]$TargetPath)
-    try {
-        $lexical = [IO.Path]::GetFullPath($TargetPath)
-        # Resolve parents, never the final target: it may be an owned Stow link.
-        $parent = [IO.Path]::GetDirectoryName($lexical.TrimEnd('\', '/'))
-        $resolved = if ($parent) { Resolve-DotfilesDirectory $parent } else { $lexical }
-        foreach ($start in @($lexical, $resolved)) {
-            for ($ancestor = $start; $ancestor; $ancestor = [IO.Path]::GetDirectoryName($ancestor)) {
-                if ((Test-DotfilesNativeOwned $ancestor) -or (Test-DotfilesMaintenance $ancestor)) {
-                    [Console]::Error.WriteLine('[dotfiles] Legacy writes are disabled for this destination (native ownership or maintenance).')
-                    return $false
-                }
-            }
-        }
-        return $true
-    }
-    catch {
-        [Console]::Error.WriteLine('[dotfiles] Legacy writes are disabled: destination ownership could not be checked.')
-        return $false
-    }
 }
 
 function Get-DotfilesNativeBinding {

@@ -152,75 +152,29 @@ catch { Write-DotfilesLog error $_.Exception.Message; exit 17 }
             }
         }
     }
-    Test-Case 'missing or broken optional logging library leaves plain worker fallback' {
+    Test-Case 'missing or broken optional logging library leaves the entry points plain fallback' {
+        # A partial checkout holds an entry point without lib/bootstrap.ps1, so
+        # it stops with its one diagnostic before any check. The real library
+        # is the positive control: only then is the badge colored.
         $fixture = Join-Path $temporaryRoot 'partial checkout'
-        $fixtureScripts = Join-Path $fixture 'scripts'
-        [void][IO.Directory]::CreateDirectory($fixtureScripts)
-        Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/dotfiles-auto-stow.ps1') -Destination $fixtureScripts
-        $guardDirectory = Join-Path $fixture 'lib'
-        [void][IO.Directory]::CreateDirectory($guardDirectory)
-        Copy-Item -LiteralPath (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1') -Destination $guardDirectory
-        $command = @'
-$ErrorActionPreference = 'Stop'
-. (Join-Path $env:DOTFILES_TEST_TEMP 'partial checkout/scripts/dotfiles-auto-stow.ps1')
-Write-DotfilesLog error 'partial checkout diagnostic'
-'@
-        foreach ($broken in @($false, $true)) {
-            if ($broken) {
-                $libraryDirectory = Join-Path $fixture 'lib'
-                [void][IO.Directory]::CreateDirectory($libraryDirectory)
-                [IO.File]::WriteAllText((Join-Path $libraryDirectory 'terminal.ps1'), "throw 'broken optional logger'")
+        $libraryDirectory = Join-Path $fixture 'lib'
+        [void][IO.Directory]::CreateDirectory($libraryDirectory)
+        $logger = Join-Path $libraryDirectory 'terminal.ps1'
+        foreach ($entry in @('doctor.ps1', 'setup-host.ps1')) {
+            Copy-Item -LiteralPath (Join-Path $sourceRoot $entry) -Destination $fixture
+            foreach ($state in @('missing', 'broken', 'present')) {
+                switch ($state) {
+                    'missing' { [IO.File]::Delete($logger) }
+                    'broken' { [IO.File]::WriteAllText($logger, "throw 'broken optional logger'") }
+                    'present' { Copy-Item -LiteralPath (Join-Path $sourceRoot 'lib/terminal.ps1') -Destination $logger -Force }
+                }
+                # Without the explicit exit, -Command would turn the script's exit 2 into 1.
+                $outputText = Invoke-LogChild "& (Join-Path `$env:DOTFILES_TEST_TEMP 'partial checkout/$entry'); exit `$LASTEXITCODE" @{ DOTFILES_COLOR = 'always' } -ExpectedExit 2
+                $plainText = $outputText.Replace("$([char]27)[31m", '').Replace("$([char]27)[0m", '').Trim()
+                Assert-True ($plainText.StartsWith('[dotfiles] [error] Missing ') -and $plainText.EndsWith('bootstrap.ps1; this checkout is incomplete.')) "$entry lost its diagnostic with a $state logging library: $plainText"
+                Assert-True ($outputText.Contains([string][char]27) -eq ($state -eq 'present')) "$entry colored its diagnostic wrongly with a $state logging library."
             }
-            $outputText = Invoke-LogChild $command @{ DOTFILES_COLOR = 'always' }
-            Assert-True ($outputText.Trim() -ceq '[dotfiles] [error] partial checkout diagnostic') 'Plain fallback did not survive optional library failure.'
         }
-    }
-    Test-Case 'installer warning loop preserves stream 3 and WarningAction Stop' {
-        $errors = $null
-        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot 'stow-all.ps1'), [ref]$null, [ref]$errors)
-        Assert-True (-not $errors) 'Installer did not parse.'
-        $loops = @($ast.FindAll({
-                    param($node)
-                    $node -is [Management.Automation.Language.ForEachStatementAst] -and
-                        $node.Extent.Text.StartsWith('foreach ($warning in $script:Warnings)')
-                }, $true))
-        Assert-True ($loops.Count -eq 1) 'Could not isolate actual installer warning loop.'
-        $emitWarnings = [scriptblock]::Create('[CmdletBinding()]param() ' + $loops[0].Extent.Text)
-        $script:Warnings = @('Native warning 100%')
-        $warningLog = Join-Path $temporaryRoot 'warning-stream.log'
-        $informationLog = Join-Path $temporaryRoot 'information-stream.log'
-        & $emitWarnings -WarningAction Continue 3> $warningLog 6> $informationLog
-        Assert-True ([IO.File]::ReadAllText($warningLog).Contains('[dotfiles] [warn] Native warning 100%')) 'Installer warning lost stream 3.'
-        Assert-True ([IO.File]::ReadAllText($informationLog) -eq '') 'Installer warning moved to Information stream.'
-        $stopped = $false
-        try { & $emitWarnings -WarningAction Stop 3> $warningLog }
-        catch { $stopped = $true }
-        Assert-True $stopped 'WarningAction Stop was ignored.'
-    }
-    Test-Case 'profile contains helper-load failure without altering caller preferences' {
-        $fixture = Join-Path $temporaryRoot 'broken worker checkout'
-        [void][IO.Directory]::CreateDirectory((Join-Path $fixture '.git'))
-        [void][IO.Directory]::CreateDirectory((Join-Path $fixture 'scripts'))
-        $guardDirectory = Join-Path $fixture 'lib'
-        [void][IO.Directory]::CreateDirectory($guardDirectory)
-        Copy-Item -LiteralPath (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1') -Destination $guardDirectory
-        [IO.File]::WriteAllText((Join-Path $fixture 'scripts/dotfiles-auto-stow.ps1'), "throw 'worker load failed'")
-        $outputText = Invoke-LogChild @'
-$ErrorActionPreference = 'Stop'
-$PSNativeCommandUseErrorActionPreference = $true
-$env:DOTFILES_DIR = Join-Path $env:DOTFILES_TEST_TEMP 'broken worker checkout'
-$env:DOTFILES_AUTO_UPDATE = '1'
-$source = [IO.File]::ReadAllText((Join-Path $env:DOTFILES_TEST_ROOT 'scripts/dotfiles-update.ps1'))
-$source = $source.Replace('if ([Console]::IsOutputRedirected) { return }', '')
-$hook = Join-Path $env:DOTFILES_DIR 'scripts/interactive-hook.ps1'
-[IO.File]::WriteAllText($hook, $source)
-. $hook
-if ($env:_DOTFILES_CHECKED -ne '1') { throw 'Load failure lost session marker.' }
-if ($ErrorActionPreference -ne 'Stop' -or -not $PSNativeCommandUseErrorActionPreference) { throw 'Load failure changed caller preferences.' }
-Write-Output 'profile continued'
-'@
-        Assert-True ($outputText.Contains('[dotfiles] [error] Update check failed: worker load failed')) 'Load failure lost fallback diagnostic.'
-        Assert-True ($outputText.Contains('profile continued')) 'Load failure aborted profile.'
     }
     Write-Output "powershell-terminal=PASS ($script:Passed cases)"
 }

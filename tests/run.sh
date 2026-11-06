@@ -21,7 +21,7 @@ for argument in "$@"; do
         --check-prerequisites) prerequisites_only=1 ;;
         --help)
             printf 'Usage: %s [--ci] [--check-prerequisites]\n' "$0"
-            printf 'CI mode requires Stow integration; local optional skips are reported.\n'
+            printf 'CI mode requires chezmoi for the native fixtures; local optional skips are reported.\n'
             exit 0
             ;;
         *)
@@ -62,14 +62,6 @@ fi
 if [[ "$require_ci" == 1 ]]; then
     export DOTFILES_TEST_REQUIRE_CHEZMOI=1
 fi
-if ! command -v stow >/dev/null 2>&1; then
-    if [[ "$require_ci" == 1 ]]; then
-        printf 'ERROR: CI requires stow for real symlink integration tests.\n' >&2
-        missing=1
-    else
-        printf 'SKIP: real GNU Stow integration (install stow to enable).\n'
-    fi
-fi
 if ! command -v pwsh >/dev/null 2>&1; then
     printf 'SKIP: optional Unix PowerShell checks (mandatory in the native Windows job).\n'
 fi
@@ -96,12 +88,8 @@ tests=(
     ai-integration.sh
     codex-config-sync.sh
     fcitx5-profile-sync.sh
-    stow-all.sh
-    stow-ignores.sh
-    update-hooks.sh
     powershell-profile.sh
     payload-update.sh
-    windows-installer.sh
     bootstrap-manifest.sh
     doctor.sh
     setup-host.sh
@@ -115,10 +103,5 @@ for test_name in "${tests[@]}"; do
     printf '==> %s\n' "$test_name"
     "$TEST_DIR/$test_name"
 done
-
-if command -v stow >/dev/null 2>&1; then
-    printf '==> unix-installer.sh\n'
-    "$TEST_DIR/unix-installer.sh"
-fi
 
 echo "test-suite=PASS"

@@ -10,15 +10,13 @@ remains only for the explicitly selected Stow compatibility path.
 | --- | --- |
 | Native Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities; no sync venv |
 | Native Windows installation | chezmoi 2.74.0+, PowerShell 7+, Git; ordinary file updates are unelevated |
-| Legacy Unix installation | Bash, Git, GNU Stow (and its Perl runtime), ordinary POSIX utilities |
-| Legacy Windows installation | PowerShell 7+, Git for Windows / Git Bash, elevated symlink creation |
 | All three AI sync helpers | Python 3.11+; no package installation during login or stow |
 | Codex TOML merge | Exact `tomlkit` pin in `requirements-sync.txt` |
 | Claude JSON / Codex rules alone | Python standard library only, via an explicitly selected interpreter |
 | Default parser setup | Python's `venv` and pip support; downloads the pinned wheel unless pre-provisioned offline |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Payload repos ([payloads.md](payloads.md)) | `scripts/payload-update.*`, which `sync-payloads` runs: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
-| Contributor checks | pre-commit, Node, Python/parser runtime; pinned lint tools; Stow integration; PowerShell required on Windows CI; Docker for the opt-in end-to-end bootstrap suite (`tests/e2e/run.sh`, see [testing.md](testing.md#end-to-end-bootstrap-opt-in)) |
+| Contributor checks | pre-commit, Node, Python/parser runtime; pinned lint tools; PowerShell required on Windows CI; Docker for the opt-in end-to-end bootstrap suite (`tests/e2e/run.sh`, see [testing.md](testing.md#end-to-end-bootstrap-opt-in)) |
 | Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
 The configured applications (Zsh, Vim, terminals, Codex, Claude, etc.) are needed
@@ -206,7 +204,7 @@ executables are probed on `PATH`, PSFzf by looking for a `PSFzf` directory in
 each `PSModulePath` entry, and CompletionPredictor and
 Microsoft.WinGet.CommandNotFound are imported on the first idle tick (a missing
 module is silent; one that is installed but fails to import warns once).
-`setup-host.ps1` installs them explicitly; profiles, stow, automatic updates
+`setup-host.ps1` installs them explicitly; profiles, automatic updates
 and the payload hook never install them. Where the Windows profile degrades differently from the
 Unix rows above: without eza, `ll` and `la` fall back to `Get-ChildItem`;
 without bat, `BAT_THEME` is not set; the profile does not use fd; without

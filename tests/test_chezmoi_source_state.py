@@ -75,6 +75,17 @@ class SourceContractTests(unittest.TestCase):
                                 stdout=subprocess.PIPE, text=True, timeout=30).stdout
         self.assertEqual([line for line in listed.splitlines() if line.startswith("160000 ")], [])
 
+    def test_gitignore_keeps_the_host_residue_guards(self):
+        # Without these lines the native updater's untracked-file check refuses
+        # every login on a host that still holds the residue (D-8, Risk 2).
+        # Phase C removes the lines and this test together.
+        lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        for pattern in ("/.venv-sync/", "/common/codex/coding-agent-kit/",
+                        "/common/coding-agent-kit/coding-agent-kit/", "/common/pymol/PyMOLScripts/",
+                        "/common/sherlock-kit/sherlock-kit/"):
+            with self.subTest(pattern=pattern):
+                self.assertIn(pattern, lines)
+
     def test_unselected_invalid_and_incompatible_hosts_fail_before_writing(self):
         compatible = {
             "Linux": {"common-only", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"},

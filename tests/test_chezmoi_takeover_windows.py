@@ -150,60 +150,19 @@ class WindowsTakeoverTests(unittest.TestCase):
         return self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";" + before +
                        "Invoke-DotfilesNativeUpdate -HomePath " + ps_string(self.home) + ";" + after)
 
-    def test_legacy_target_guard_uses_ancestors_and_explicit_target(self):
-        self.bind()
-        target = self.home / ".codex/config.toml"
-        # Not under the fixture root: the temp directory may itself lie inside
-        # a native-bound home (the e2e runner's, after its handover). Nothing
-        # is created at this path.
-        unrelated = Path(self.f.root.anchor) / ("dotfiles-unrelated-" + self.f.root.name) / "config.toml"
-        result = self.guard("@( (Test-DotfilesLegacyWriteAllowed -TargetPath " + ps_string(target) +
-                            "), (Test-DotfilesLegacyWriteAllowed -TargetPath " + ps_string(unrelated) +
-                            ") ) | ConvertTo-Json -Compress")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), [False, True])
-
     def test_malformed_marker_and_partial_handover_fail_closed(self):
         for value in (b"", b"bad\n", b"dotfiles-chezmoi-v1\nwrong\nwrong\n"):
             self.marker.write_bytes(value)
-            result = self.guard("if(Test-DotfilesLegacyWriteAllowed -TargetPath " + ps_string(self.home) +
-                                "){throw 'old writer enabled'};try {Get-DotfilesNativeBinding -HomePath " +
-                                ps_string(self.home) + " | Out-Null;throw 'binding accepted'}catch{if($_ -match 'binding accepted'){throw}}")
+            result = self.guard("try {Get-DotfilesNativeBinding -HomePath " + ps_string(self.home) +
+                                " | Out-Null;throw 'binding accepted'}catch{if($_ -match 'binding accepted'){throw}}")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(self.marker.read_bytes(), value)
-
-    def test_guard_resolves_parent_junction_but_not_final_link(self):
-        self.bind()
-        alias = self.f.root / "alias"
-        result = self.ps("New-Item -ItemType Junction -Path " + ps_string(alias) + " -Target " +
-                         ps_string(self.home) + " | Out-Null")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        result = self.guard("Test-DotfilesLegacyWriteAllowed -TargetPath " + ps_string(alias / "new/config") )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "False")
-
-    def test_installer_refuses_marked_explicit_target_before_shouldprocess(self):
-        self.bind()
-        result = self.ps("& " + ps_string(ROOT / "stow-all.ps1") + " -TargetRoot " +
-                         ps_string(self.home) + " -WhatIf -Strict")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("legacy writes are disabled", (result.stdout + result.stderr).lower())
-        self.assertFalse((self.home / ".gitconfig").exists())
-
-    def test_scheduled_apply_refuses_before_state_or_task_actions(self):
-        self.bind()
-        result = self.ps("function Get-ScheduledTask {throw 'task queried'};" +
-                         "& " + ps_string(ROOT / "scripts/dotfiles-auto-stow.ps1") + " -Apply")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("legacy writes are disabled", (result.stdout + result.stderr).lower())
-        self.assertNotIn("task queried", result.stdout + result.stderr)
 
     def test_maintenance_persists_in_fresh_process(self):
         (self.marker.parent / "maintenance").mkdir()
         for _ in range(2):
             result = self.guard("if(-not(Test-DotfilesMaintenance -HomePath " + ps_string(self.home) +
-                                ")){throw 'maintenance absent'};if(Test-DotfilesLegacyWriteAllowed -TargetPath " +
-                                ps_string(self.home / "new") + "){throw 'legacy enabled'}")
+                                ")){throw 'maintenance absent'}")
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_binding_rejects_copied_home_and_noncanonical_source(self):
@@ -393,15 +352,14 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD"), head)
         self.assertEqual(self.git("stash", "list"), "")
 
-    def test_marker_directory_and_dangling_link_block_both_writers(self):
+    def test_marker_directory_and_dangling_link_are_owned_but_unbound(self):
         for kind in ("directory", "link"):
             if kind == "directory":
                 self.marker.mkdir()
             else:
                 self.marker.symlink_to(self.f.root / "absent")
             result = self.guard("if(-not(Test-DotfilesNativeOwned " + ps_string(self.home) +
-                                ")){throw 'not owned'};if(Test-DotfilesLegacyWriteAllowed " +
-                                ps_string(self.home) + "){throw 'legacy allowed'}")
+                                ")){throw 'not owned'}")
             self.assertEqual(result.returncode, 0, result.stderr)
             result = self.guard("Get-DotfilesNativeBinding " + ps_string(self.home))
             self.assertNotEqual(result.returncode, 0)
@@ -412,7 +370,9 @@ class WindowsTakeoverTests(unittest.TestCase):
 
     def test_profile_dispatch_uses_marker_and_maintenance_in_fresh_shells(self):
         profile = ROOT / "win/powershell/Documents/PowerShell/profile.ps1"
-        fake_repo = self.f.root / "profile source"
+        # A checkout at the old default ~/dotfiles, with every hook and a real
+        # guard: an unmarked home must still run none of them.
+        fake_repo = self.home / "dotfiles"
         (fake_repo / "scripts").mkdir(parents=True)
         (fake_repo / "lib").mkdir()
         shutil.copyfile(ROOT / "lib/chezmoi-guard.ps1", fake_repo / "lib/chezmoi-guard.ps1")
@@ -420,7 +380,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         for name in ("dotfiles-update", "chezmoi-update", "payload-update"):
             (fake_repo / ("scripts/" + name + ".ps1")).write_text(
                 "Add-Content -LiteralPath " + ps_string(trace) + " -Value '" + name + "'\n")
-        body = ("$env:DOTFILES_DIR=" + ps_string(fake_repo) + ";$IsInteractive=$true;" +
+        body = ("$IsInteractive=$true;" +
                 "$ast=[Management.Automation.Language.Parser]::ParseFile(" + ps_string(profile) +
                 ",[ref]$null,[ref]$null);$tail=@($ast.EndBlock.Statements | Where-Object " +
                 "{ $_ -is [Management.Automation.Language.IfStatementAst] -and " +
@@ -428,10 +388,11 @@ class WindowsTakeoverTests(unittest.TestCase):
                 "if($tail.Count -ne 1){throw 'profile tail not found'};Invoke-Expression $tail[0].Extent.Text")
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)
-        # A login updates; payloads install only through sync-payloads.
-        self.assertEqual(trace.read_text().splitlines(), ["dotfiles-update"])
-        trace.unlink()
-        # A native source may be independent from a stale DOTFILES_DIR/default.
+        # An unmarked home runs nothing and prints nothing.
+        self.assertFalse(trace.exists(), trace.read_text() if trace.exists() else "")
+        self.assertEqual(result.stdout.strip(), "")
+        self.assertEqual(result.stderr.strip(), "")
+        # A native source may be independent from a checkout at the old default ~/dotfiles.
         native_repo = self.f.root / "bound source"
         (native_repo / "scripts").mkdir(parents=True)
         (native_repo / "lib").mkdir()
@@ -447,8 +408,18 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.marker.write_bytes(("dotfiles-chezmoi-v1\n" + str(self.home) + "\n" + str(native_repo) + "\n").encode())
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)
+        # A login updates; payloads install only through sync-payloads.
         self.assertEqual(trace.read_text().splitlines(), ["native-chezmoi-update"])
         trace.unlink()
+        # A failing updater leaves the shell usable and the caller's preferences intact.
+        updater = native_repo / "scripts/chezmoi-update.ps1"
+        saved = updater.read_bytes()
+        updater.write_text("throw 'updater failed'\n")
+        result = self.ps(body + ";if($ErrorActionPreference -ne 'Stop'){throw 'caller preference changed'};'profile continued'")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("profile continued", result.stdout)
+        self.assertIn("[dotfiles] Profile hooks skipped", result.stderr)
+        updater.write_bytes(saved)
         self.marker.write_text("malformed marker cannot fall back\n")
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)

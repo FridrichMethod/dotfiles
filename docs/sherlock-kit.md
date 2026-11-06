@@ -30,8 +30,8 @@ skills and overrides manually, including ownership of the older
 No automatic deletion of these Windows entries or bulk home cleanup runs.
 
 A pull may retain `common/sherlock-kit/sherlock-kit/` after the submodule is
-removed. `.gitignore` and `.stowrc` keep it harmless even without its package
-ignore file. The doctor warns with an exact manual removal command. Inspect
+removed. `.gitignore` keeps it harmless even without its package ignore
+file. The doctor warns with an exact manual removal command. Inspect
 local branches and files before removing that checkout; retain and inspect
 `.git/modules/common/sherlock-kit/sherlock-kit` until local work is recovered.
 Neither is removed automatically. The retired coding-agent-kit and

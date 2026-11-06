@@ -43,7 +43,7 @@ jobs:
       - name: Install Unix test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes stow tmux
+          sudo apt-get install --yes tmux
       - name: Provision pinned configuration parser explicitly
         run: ./setup-sync.sh
       - name: Provision verified native chezmoi test runtime
@@ -86,8 +86,6 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Install Unix test dependencies
-        run: brew install stow
       # fzf-tab as the bootstrap clones it, for the real fzf-tab preview case
       # of tests/test_ai_integration.py (this runner has zsh; ubuntu-24.04 has none).
       - name: Check out fzf-tab for the real fzf-tab preview test

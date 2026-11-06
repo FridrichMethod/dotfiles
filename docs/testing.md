@@ -11,8 +11,8 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, GNU Stow and tmux from apt, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
-| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, GNU Stow, verified chezmoi v2.74.0; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
+| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, tmux from apt, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
+| `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, verified chezmoi v2.74.0; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
 | `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12, Node 24 and verified chezmoi v2.74.0; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
 
 Each Unix job first installs the real coding-agent-kit of the channel that
@@ -41,9 +41,8 @@ require the shared Python backend tests, including safe replacement failures.
 Suites that run neither the parser nor Stow need only a standard-library
 Python 3.11+ (`python3`, or `python` under PowerShell) when run directly or
 as pre-commit hooks.
-In CI mode GNU Stow is required too, so its real symlink fixture cannot silently
-skip. On developer machines, `./tests/run.sh` reports a missing optional Stow
-integration check, installed-Codex exec-policy check, or PowerShell check.
+On developer machines, `./tests/run.sh` reports a missing optional
+installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
 
@@ -158,7 +157,7 @@ Local developer hooks remain scoped to changed sources. These are invocation
 boundaries, not a measured claim of elapsed-time improvement.
 
 PowerShell is optional in the Unix jobs. When present, the existing shell suite
-runs the PowerShell parser, terminal-output, installer confirmation, update behavior and PowerShell profile/prompt-theme contract tests. The Windows job invokes
+runs the PowerShell parser, terminal-output and PowerShell profile/prompt-theme contract tests. The Windows job invokes
 PowerShell behavior tests directly and fails if any assigned suite fails; it
 does not depend on Bash discovering an optional PowerShell executable.
 
@@ -177,8 +176,8 @@ stdout/stderr, including forced color, `NO_COLOR`, `TERM=dumb`, literal percent
 signs and silent sourcing. `tests/terminal.ps1` covers the matching PowerShell
 policy, pipeline/stream behavior and preference isolation. When pwsh is present,
 the Unix terminal suite also runs it on a real PTY to cover same-console `*>`
-redirection, even with PowerShell's ANSI rendering preference. Installers are tested
-with quiet helpers; errors and failed-install retries must remain observable.
+redirection, even with PowerShell's ANSI rendering preference. doctor.ps1 and
+setup-host.ps1 keep a plain fallback when lib/terminal.ps1 is missing or broken.
 
 `tests/powershell-profile.ps1` checks the tracked PowerShell profiles and the
 oh-my-posh theme without loading the live profile. It walks the AST to pin the
@@ -221,14 +220,16 @@ and `sync-skills` from `common/sh/.aliases` in interactive sh, dash, Bash and
 `zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid native
 marker runs its source's hook and an unmarked home `DOTFILES_DIR`'s, with the
 arguments and exit status passed through, silently and without leaving a
-helper variable. `tests/test_chezmoi_guard.py` adds the refusals under sh,
-Bash and zsh: a valid marker's source wins over a stale `DOTFILES_DIR`, whose
+helper variable. It also requires that an interactive login of an unmarked
+home under sh, dash, Bash and zsh runs no updater, even with a checkout at
+~/dotfiles, and prints nothing. `tests/test_chezmoi_guard.py` adds the
+refusals under sh, Bash and zsh: a valid marker's source wins over a stale `DOTFILES_DIR`, whose
 guard and hook never run; an invalid marker (an unterminated extra line,
 another version, a relative source, another home, a symlink, a directory)
 refuses before any hook; and maintenance refuses before any state is
 written. It also requires that no login through `common/sh/.profile`, with
-or without Sherlock's overlay, runs a payload hook, while the update dispatch
-stays.
+or without Sherlock's overlay, runs a payload hook, while a bound home's update
+dispatch stays.
 
 `tests/test_ai_integration.py` evaluates the account preview of
 `custom/fzf-tab.zsh` under the context fzf-tab really looks up; with
@@ -329,26 +330,6 @@ tmux (3.4 on `ubuntu-24.04`) and sets that variable, so the class runs there
 and cannot skip unseen inside the pre-commit pass; the macOS job installs
 none.
 
-`tests/stow-ignores.sh` (and `tests/run.ps1`) runs `tests/test_stow_ignores.py`:
-it builds a name from each `.gitignore` pattern with no slash but a trailing
-one, plus
-near misses such as `kept-NAME` and `NAME-kept`, asks `git check-ignore`
-which of them git ignores, and requires `.stowrc` to agree as Stow 2.3
-(split on spaces), Stow 2.4 (split like a shell, dropping a lone backslash)
-and `stow-all.ps1` (case-insensitive and unanchored) read it, and the
-installed Stow on a real package (2.3.1 in the Linux job, 2.4 in the macOS
-one). Stow cannot tell a directory from a file,
-so `build/` also hides a file named `build`; the suite therefore also
-requires every tracked package file but the four materialized ones to stay
-linked.
-
-`tests/stow-all.sh` and `tests/unix-installer.sh` cover retired Sherlock
-links, deleted source parents, generated override retirement, foreign entries,
-repeat installs and ignored leftover checkouts. The latter uses real GNU Stow
-and the real local-remote updater flow. Windows controls and native installer
-fixtures cover the two exact retired launcher links, preview and decline
-behavior. Native Windows coverage requires the Windows CI job.
-
 The launcher, configuration and Claude helper suites live in
 coding-agent-kit, whose CI runs them on its own fixtures.
 `tests/ai-integration.sh` runs `tests/test_ai_integration.py`, the
@@ -429,13 +410,6 @@ and inherits nothing) and one that cannot be made runs nothing; every
 installer, a download or an installed script, runs in `$PSHOME`, out of the
 caller's working directory and the download's; and fixture-only rows keep the
 `windows-update` and `stow-links` fields covered.
-`tests/unix-installer.sh` also runs the [migration](payloads.md#migration) of
-a host stowed with both submodules through the real login updater, Git and
-Stow: the leftover checkouts stay ignored, the restow removes the 16 retired
-links, that login installs no payload repo, the next login changes nothing,
-and an explicit `--now kit pymol` then installs both. Where the leftovers
-stopped the restow (a checkout without those `.gitignore` lines), the explicit
-run refuses the kit with the stow-all advice and fails.
 
 Run either entrypoint from any working directory. To check prerequisites only:
 
@@ -448,20 +422,11 @@ pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI -CheckPrerequisites
 ```
 
 `tests/run.ps1` without `-CI` also runs portable PowerShell behavior tests on
-Linux/macOS, including actual confirmation prompts with a scripted host. It starts child processes with `-NoProfile`, isolating test mocks
+Linux/macOS. It starts child processes with `-NoProfile`, isolating test mocks
 and avoiding live profile side effects. The `-CI` switch requires native
 Windows so an accidentally misplaced job cannot masquerade as native coverage.
 
-Unix jobs also run `tests/unix-installer.sh`: a temporary checkout and local
-bare remote exercise actual Git pull, actual Stow and applied-state recording.
-The Windows entrypoint runs `tests/windows-installer.ps1` on native Windows,
-using a disposable target for actual Git Bash helpers and NTFS links. POSIX
-permission/inode assertions stay on Unix; NTFS/link behavior stays on Windows.
-
-Ordinary hosted-runner tests do not establish OpenSSH network-logon symlink
-trust or real Task Scheduler behavior; those remain explicitly scoped
-environment checks, documented in `windows-installer.md` and
-`update-contract.md`.
+Native Windows ACL, reparse-point and held-handle checks run only in the Windows job.
 
 ## End-to-end bootstrap (opt-in)
 

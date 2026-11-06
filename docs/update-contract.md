@@ -1,123 +1,98 @@
-# Automatic update and apply contract
+# Native login update contract
 
-The Unix and PowerShell login hooks share the same safety boundary: update
-only a clean checkout, use fast-forward-only pulls, preserve explicit host
-selection, and acknowledge only an installed revision. An installer returning
-success is necessary but is not sufficient evidence that configuration was
-fully applied.
+A login updates only a home that native chezmoi owns, through the updater of
+the source that home is bound to. This page is the durable contract of that
+update; the manual commands, takeover and recovery live in
+[takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover).
 
-## Acknowledgement and retry
+## Trigger
 
-Unix stores four newline-delimited fields in the Git metadata path returned by
-`git rev-parse --git-path dotfiles-sync-unix`: home, platform (`uname -s`), host,
-and applied HEAD. The updater rereads all four fields after `stow-all.sh`
-returns zero. Each field must match this apply request, and the checkout HEAD
-must still equal the requested revision. Empty common-only hosts are valid;
-missing, truncated, foreign-home/platform, wrong-host, or stale-HEAD records
-are not successful acknowledgements.
+- Only interactive shells update. `common/sh/.profile` dispatches for sh and
+  Bash; zsh dispatches from the tail of `~/.zshrc`, after ssh-agent and the
+  host environment are ready; PowerShell 7 dispatches from the tail of its
+  profile, only under `$IsInteractive` (console stdin and stdout and a loaded
+  PSReadLine), so `-File`, `-Command`, `-NonInteractive` and piped input never
+  update. The Windows PowerShell 5.1 profile has no update hook.
+- One attempt per session: the updater exports `_DOTFILES_CHECKED`, and a
+  nested shell that inherits it does not try again.
+- `DOTFILES_AUTO_UPDATE=0` disables the hook.
 
-PowerShell uses home-bound `configuration.json` and `request.json` records in
-local Git metadata. Its automatic worker verifies the installer acknowledged
-the requested host and revision. It never obtains elevation through a login
-UAC prompt; use the explicit elevated worker or its registered current-user
-task.
+## Selection
 
-Native Windows accepts case variants of `win` at installer/worker boundaries
-and canonicalizes them to `win` when saving or dispatching state, including
-legacy records. Other host names remain invalid.
+- Maintenance comes first: while `~/.config/dotfiles/maintenance` exists, in
+  any form, nothing runs.
+- `~/.config/dotfiles/native` must be a regular file of exactly three
+  terminated lines: `dotfiles-chezmoi-v1`, the home and an absolute source.
+  The profile reads only enough to find that source's guard
+  (`lib/chezmoi-guard.sh` or `.ps1`), which validates the whole binding before
+  the source's `scripts/chezmoi-update.sh` or `.ps1` runs.
+- An invalid binding prints one warning and runs nothing.
+- An unmarked home runs nothing and prints nothing. There is no fallback to
+  `~/dotfiles`, `DOTFILES_DIR` or any other checkout, and a retired checkout's
+  guard or updater is never sourced.
 
-Neither updater writes a successful acknowledgement on behalf of the
-installer. A failed install, or a zero-exit install which leaves the prior
-unapplied state unchanged, remains eligible for retry in a new login session,
-even without a new pull. `_DOTFILES_CHECKED` still prevents retry loops inside
-the same session. A missing or invalid Unix configuration record cannot
-provide a trustworthy remembered host: rerun `stow-all.sh [host-dir]`, or set
-`DOTFILES_HOST` explicitly, before automatic installation can resume.
+## Refusals
 
-`DOTFILES_AUTO_UPDATE=0` disables the entire hook. `DOTFILES_AUTO_STOW=0` allows
-pulls but does not install or acknowledge the new HEAD.
-`DOTFILES_HOST` is legacy only: `scripts/dotfiles-update.sh` and `.ps1` read
-it, while a native-owned home's `scripts/chezmoi-update.sh`/`.ps1` never does
-(its host is `[data].host` in its chezmoi config). An explicitly empty Unix
-`DOTFILES_HOST` means common-only installation; other Unix host overlays are
-never guessed.
+The updater stops, with a warning and without touching the destination, when:
 
-Neither updater runs a submodule command (dotfiles has none) or installs a
-payload repo, and no login installs or updates one (a call from an older rc
-file or profile to `scripts/payload-update.sh` or `scripts/payload-update.ps1`
-does nothing): only a person does, through `sync-payloads` or
-`--now`/`-Now`. Those scripts never pull or stow and keep no state; see
-[payloads.md](payloads.md).
+- the source has tracked or untracked changes (ignored files do not count);
+- the native state database is missing or empty, because lost state can turn
+  a foreign target into a first apply (recovery is an inspected maintenance
+  action);
+- the source path contains OneDrive (use the independent-clone procedure);
+- the effective update configuration is not the safe one below;
+- on Windows, `~/.local/bin/chezmoi.exe` is missing, a link, or owned or
+  writable by an account other than you, SYSTEM and Administrators. Only that
+  file runs, never a PATH match
+  ([W1-chezmoi](bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary)).
 
-## Lock scope and remaining boundary
+## Invocation
 
-- Unix holds the checkout's metadata-directory lock across fetch, pull,
-  installation, and acknowledgement verification.
-- PowerShell update and apply workers use the same exclusive file lock. Task
-  dispatch hands off to the apply worker, which rechecks its request and
-  acquires that lock before changing configuration.
-- These locks serialize automatic workers for one checkout. They do not
-  serialize different checkouts targeting the same home.
-- Direct manual `stow-all.sh` and `stow-all.ps1` invocations do not acquire the
-  automatic worker lock. Do not run a manual installer while an automatic
-  update/apply is active. Avoid concurrent manual installers as well. Disable
-  future login updates when arranging a manual maintenance window; disabling
-  the hook does not cancel a worker that is already running.
+- Every run passes the full explicit argument set: `--source`,
+  `--working-tree`, `--destination`, `--config`, `--cache` and
+  `--persistent-state` of the bound home, so inherited XDG or chezmoi settings
+  cannot redirect it, plus `--mode=file --no-tty --error-on-conflict
+  --less-interactive --no-pager --use-builtin-diff --use-builtin-age=true
+  --use-builtin-git=false --force=false`.
+- Before updating, an `execute-template` check requires the validated
+  fast-forward-only update command
+  (`git -c rebase.autoStash=false -c merge.autoStash=false pull --ff-only
+  --no-rebase --no-autostash --no-recurse-submodules`), no submodule recursion
+  and no Git auto add, commit or push.
+- The update itself is `update --apply --exclude=dirs
+  --recurse-submodules=false`, with stdin closed. Credential helpers, askpass
+  programs and Git hooks are disabled, so nothing prompts.
+- Transport is bounded: an SSH connect timeout and an HTTPS low-speed abort
+  end normal network failures, and on Windows each native process is killed
+  after 60 seconds. An SSH session that stalls after connecting can still wait
+  for the operating system's defaults.
 
-The acknowledgement check detects incomplete or changed-revision application;
-it is not a whole-home transaction or a substitute for cross-installer locks.
-Introducing a lock shared by manual and automatic entrypoints needs a separate
-reentrant/handoff design, so the worker cannot deadlock its child installer.
+## Failure
 
-## Executable coverage
+- A failure prints one generic warning; native output, which can carry
+  secrets, is never printed.
+- The shell stays usable, the PowerShell profile keeps the caller's
+  preferences, and the next session retries.
+- A source fast-forward can succeed before apply refuses a target. The update
+  is not a whole-home transaction.
 
-Status output shares `[dotfiles] [step/ok/warn/error/info]` badges across shells.
-`DOTFILES_COLOR=auto` uses terminal detection; `always` forces color and `never`
-disables it. Nonempty `NO_COLOR` and `TERM=dumb` always disable color. Redirected
-logs remain plain by default. Unix warnings/errors use stderr; PowerShell keeps
-host/information-stream capture so the scheduled worker's `*>` log retains them.
-Installer warnings retain PowerShell's warning stream and `-WarningAction`
-semantics; native warning/error/`WhatIf` rendering follows PowerShell preferences,
-not the dotfiles logger's color policy.
-Formatting must not alter exit status, updater retry rules or caller preferences.
+## Not provided
 
-`tests/update-hooks.sh` checks shell session isolation and injected failure
-paths, including malformed or mismatched acknowledgements. It also uses real
-temporary Git repositories and local bare remotes for fast-forward updates,
-dirty-tree protection, divergent history, failure/no-acknowledgement retry,
-and two independent interactive-shell processes contending for one lock.
-No real home, live installer, external remote, or credential store is used.
+No scheduler, receipts, locks, retries within a session, elevation or payload
+runs. The payload repos install only when a person runs `sync-payloads` or
+`scripts/payload-update.sh --now` (`payload-update.ps1 -Now`); see
+[payloads.md](payloads.md). Do not run a manual native apply while a login
+update runs.
 
-`tests/update-hooks.ps1` exercises the PowerShell worker with temporary Git
-repositories and injected installers/elevation/task dispatch. Run it through
-`pwsh -NoProfile -NonInteractive -File tests/update-hooks.ps1`. The shell runner
-reports an explicit local skip when `pwsh` is unavailable; the Windows CI job
-must require the suite. Mocked dispatch and ordinary link tests do not prove
-real Task Scheduler execution or OpenSSH network-logon symlink trust.
+## Coverage
 
-## Windows worker operations
-
-**On Windows** - on an unmarked (legacy) home, `scripts/dotfiles-update.ps1` runs at the end of `win/powershell/Documents/PowerShell/profile.ps1`, only in an interactive console (not for `-File`/`-Command` scripts, `-NonInteractive` or piped stdin), and skips redirected stdout. A native-owned home runs `scripts/chezmoi-update.ps1` there instead ([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover)) and uses no worker: `-Register` and `stow-all.ps1` refuse it. Register the worker once from **elevated PowerShell 7+**, using the same Windows account as your ordinary shell:
-
-```powershell
-cd "$HOME\dotfiles"
-.\stow-all.ps1 win
-.\scripts\dotfiles-auto-stow.ps1 -Register
-```
-
-The on-demand task runs as that user with `Interactive` logon and `Highest` privileges, using `pwsh -NoProfile -NonInteractive -WindowStyle Hidden`. It starts the registering pwsh by path, so register from the MSI PowerShell that [HW-clone](bootstrap.md#hw-clone-clone-the-repository) installs: `-Register` refuses a pwsh whose folder is named for its version, such as the MSIX package winget installs by default, and the login hook refuses to start a task whose pwsh is gone. Registration explicitly authorizes the checkout's updated installer scripts to run with administrator privileges. It stores no password, uses the user's home, allows battery operation, and ignores overlapping task starts. Task names include a checkout/user hash. No UAC prompt is launched from the login hook; ordinary shells enqueue work, while elevated shells can apply directly. The interactive task requires that user to be logged on to Windows.
-
-The worker verifies the requested revision, home, host and clean working tree again under the update lock before running `stow-all.ps1 -Strict`. Any installer warning or failed portable sync prevents marking the revision as applied. A queued task is not reported as a completed stow. Inspect its result and last-run log with:
-
-```powershell
-. .\scripts\dotfiles-auto-stow.ps1
-Get-ScheduledTaskInfo -TaskName (Get-DotfilesTaskName $PWD.Path)
-Get-Content (Join-Path (Get-DotfilesStateDirectory $PWD.Path) 'restow.log')
-```
-
-Set `DOTFILES_AUTO_STOW=0` before the login hook to stop automatic stow. To remove the registered worker entirely, from elevated PowerShell in the same checkout:
-
-```powershell
-. .\scripts\dotfiles-auto-stow.ps1
-Unregister-ScheduledTask -TaskName (Get-DotfilesTaskName $PWD.Path)
-```
+- `tests/test_chezmoi_takeover_unix.py`, `tests/test_chezmoi_takeover_windows.py`
+  and `tests/test_chezmoi_takeover_recovery.py`: the updaters against real
+  local remotes and disposable homes, refusals, divergence, conflicts and the
+  PowerShell profile tail.
+- `tests/test_chezmoi_update_config.py`: the safe update configuration.
+- `tests/test_chezmoi_guard.py`: binding validation and the sh and Bash login
+  dispatch, with and without the Sherlock overlay.
+- `tests/shell-profile.sh`: quiet unmarked logins under sh, dash, Bash and zsh.
+- `tests/powershell-profile.ps1`: the PowerShell 7 tail's structure and
+  placement.

@@ -2,7 +2,6 @@
 
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import unittest
@@ -28,7 +27,7 @@ class UpdateFixture(ChezmoiFixture):
                                'autoCommit=false\nautoPush=false\n[update]\ncommand="git"\n'
                                f'args={json.dumps(UPDATE_ARGS)}\nrecurseSubmodules=false\n',
                                encoding="utf-8")
-        self.env.update(HOME=str(self.destination), DOTFILES_DIR=str(self.source))
+        self.env.update(HOME=str(self.destination))
         self.bin = self.root / "tools"
         self.bin.mkdir()
         for name, executable in (("chezmoi", self.binary), ("git", shutil.which("git")),
@@ -102,29 +101,6 @@ class UnixTakeoverTests(unittest.TestCase):
     def assert_warning(self, result):
         self.assertEqual(result.returncode, 0, "login must stay usable")
         self.assertIn("[dotfiles] [warn]", result.stderr)
-
-    def test_legacy_stow_refuses_before_any_tool_or_destination_write(self):
-        with ChezmoiFixture() as f:
-            (Path(f.env["PATH"]) / "dirname").symlink_to(shutil.which("dirname"))
-            marker = Path(f.env["HOME"]) / ".config/dotfiles/native"
-            marker.parent.mkdir(parents=True)
-            marker.write_text("partial takeover\n", encoding="utf-8")
-            r = subprocess.run(["/bin/bash", str(ROOT / "stow-all.sh")], env=f.env,
-                               cwd=f.root, capture_output=True, text=True, timeout=15)
-            self.assertNotEqual(r.returncode, 0)
-            self.assertIn("native-owned", r.stderr)
-
-    def test_legacy_update_refuses_native_and_maintenance_before_git_mutation(self):
-        for guard in ("native", "maintenance"):
-            with self.subTest(guard=guard), UpdateFixture() as f:
-                if guard == "maintenance":
-                    f.marker.rename(f.marker.with_name("maintenance"))
-                f.advance()
-                before = f.git("rev-parse", "HEAD")
-                result = f.hook("scripts/dotfiles-update.sh", env={"DOTFILES_AUTO_STOW": "0"})
-                self.assertEqual(result.returncode, 0)
-                self.assertEqual(f.git("rev-parse", "HEAD"), before)
-                self.assertFalse((f.source / ".git/dotfiles-sync-unix.lock").exists())
 
     def test_clean_fast_forward_applies_and_uses_bound_home_despite_xdg_and_git_overrides(self):
         with UpdateFixture() as f:
@@ -370,14 +346,13 @@ class UnixTakeoverTests(unittest.TestCase):
                 scripts = f.source / "scripts"
                 scripts.mkdir()
                 log = f.root / "dispatch-log"
-                for name in ("dotfiles-update", "chezmoi-update", "payload-update"):
+                for name in ("chezmoi-update", "payload-update"):
                     (scripts / f"{name}.sh").write_text(f'printf "%s\\n" {name} >>"$DISPATCH_LOG"\n')
                 shutil.copyfile(ROOT / "common/sh/.profile", f.destination / ".profile")
                 shutil.copyfile(ROOT / "common/zsh/.zshrc", f.destination / ".zshrc")
                 (f.destination / ".oh-my-zsh").mkdir()
                 (f.destination / ".oh-my-zsh/oh-my-zsh.sh").touch()
-                env = {**f.env, "PATH": os.defpath, "CURSOR_AGENT": "1", "DISPATCH_LOG": str(log),
-                       "DOTFILES_DIR": str(f.root / "stale source")}
+                env = {**f.env, "PATH": os.defpath, "CURSOR_AGENT": "1", "DISPATCH_LOG": str(log)}
                 args = [executable, *(["--noprofile", "--norc"] if shell == "bash" else ["-f"]),
                         "-ic", '. "$HOME/.profile"' if shell == "bash" else 'source "$HOME/.zshrc"']
                 for maintenance in (False, True, True):

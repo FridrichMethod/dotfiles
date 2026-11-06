@@ -52,7 +52,8 @@ Host sets: **U** = common-only, mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe;
 **A** = U plus win. The common-only role is Unix with no overlay, not an empty
 or uninitialized role. An explicit role selects common plus that role's overlay.
 Windows selects only common packages `claude`, `codex`, `conda`, `git`, `ssh`,
-`wezterm`, as `$CommonPackages` in `stow-all.ps1` declares, plus `win/`.
+`wezterm`, as `home/.chezmoiignore` selects for `win` (the former
+`$CommonPackages` of the retired `stow-all.ps1`), plus `win/`.
 Thus 20 common paths apply to Windows; Unix common has 52. Presence in a package
 does not assert that its application is installed on every applicable host.
 
@@ -195,7 +196,8 @@ the corresponding live user file. Parenthetical S2/S3 is the replacement stage.
 
 ## Exceptions, coverage totals and ownership boundaries
 
-The four `.stowrc` materialization exceptions are explicitly included above:
+The four former `.stowrc` materialization exceptions (Stow retired in Stage 6)
+are explicitly included above:
 `.claude/settings.json`, `.codex/config.toml`, `.codex/rules/portable.rules`,
 and lab-ubuntu's `.config/fcitx5/profile`. The first two become native modifies;
 rules become an opaque ordinary file and fcitx5 becomes an authoritative private
@@ -203,12 +205,12 @@ ordinary file despite being rewritten by fcitx5. No runtime-only fcitx5 `conf/`
 state is imported. The three AI sync executables and fcitx5 sync executable
 remain available only to the legacy path, never copied as native helpers.
 
-The remaining `.stowrc` ignores cover OS/editor/cache artifacts and retired
-`coding-agent-kit`, `PyMOLScripts`, `sherlock-kit` checkouts. None of the 95
-tracked paths matches those general ignores; four match the materialization
-exceptions. There is no tracked `.stow-local-ignore` in these packages at this
-baseline. Keep those exclusions until the Stow path retires. Stage 2's ignore
-model deploys only inventoried targets; it must not import ignored checkouts.
+The other former `.stowrc` ignores covered OS/editor/cache artifacts and the
+retired `coding-agent-kit`, `PyMOLScripts`, `sherlock-kit` checkouts; none of
+the 95 tracked paths matched them. There is no tracked `.stow-local-ignore` in
+these packages. Stage 6 removed `.stowrc` with Stow; `.gitignore` keeps the
+leftover-checkout lines until Phase C. The native model deploys only
+inventoried targets; it must not import ignored checkouts.
 
 | Role | Current package paths | Legacy-only helpers excluded | Stage 2 ordinary/assets targets | Stage 3 complete native targets |
 | --- | ---: | ---: | ---: | ---: |
@@ -499,9 +501,8 @@ for source, dest, hosts, category, representation, owner, removal in rows:
             native[host].add(dest)
 assert [len(targets[h]) for h in roles] == [52, 59, 58, 63, 57, 57, 29]
 assert [len(native[h]) for h in roles] == [49, 56, 55, 59, 54, 54, 26]
-ignores = [re.compile(line.removeprefix('--ignore=')) for line in Path('.stowrc').read_text().splitlines() if line.startswith('--ignore=')]
-ignored = {p for p in tracked if any(r.search(p.split('/', 2)[2]) for r in ignores)}
-assert ignored == {'common/claude/.claude/settings.json', 'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules', 'lab-ubuntu/fcitx5/.config/fcitx5/profile'}
+exceptions = {'common/claude/.claude/settings.json', 'common/codex/.codex/config.toml', 'common/codex/.codex/rules/portable.rules', 'lab-ubuntu/fcitx5/.config/fcitx5/profile'}
+assert exceptions <= set(tracked)
 modes = subprocess.check_output(['git', 'ls-files', '--stage', *trees], text=True).splitlines()
 assert sum(line.startswith('100755 ') for line in modes) == 6
 assert not any(p.endswith('/.stow-local-ignore') for p in tracked)

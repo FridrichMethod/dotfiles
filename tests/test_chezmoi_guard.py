@@ -40,27 +40,30 @@ class WriterGuardTests(unittest.TestCase):
                                             capture_output=True, timeout=15)
                     self.assertEqual(result.returncode, expected)
 
-    def test_logins_start_no_payload_run_and_keep_the_update_dispatch(self):
-        # No profile path runs a payload hook, the bound source's or a stale
-        # DOTFILES_DIR's, with or without Sherlock's overlay, whose site rule
-        # forbids detached login-node workers; the update dispatch stays. zsh
-        # (the .zshrc tail) is in the native takeover suite.
+    def test_logins_start_no_payload_run_and_update_only_a_bound_home(self):
+        # No profile path runs a payload hook, with or without Sherlock's
+        # overlay, whose site rule forbids detached login-node workers. A bound
+        # home runs only its source's updater; an unmarked home runs nothing,
+        # not even the hooks of a checkout at the old default ~/dotfiles, and
+        # prints nothing. zsh (the .zshrc tail) is in tests/shell-profile.sh
+        # and the native takeover suite.
         with tempfile.TemporaryDirectory() as temporary:
             # macOS TMPDIR may use /var rather than canonical /private/var.
             root = Path(temporary).resolve()
-            home, source, stale = (root / name for name in ("home", "source", "stale"))
+            home, source = root / "home", root / "source"
+            default = home / "dotfiles"
             trace = root / "trace"
             for path in (home / ".config/dotfiles", home / ".config/sh", source / "scripts",
-                         source / "lib", stale / "scripts"):
+                         source / "lib", default / "scripts"):
                 path.mkdir(parents=True)
             (source / ".chezmoiroot").write_text("home\n")
             shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
-            for checkout, name in ((source, "bound"), (stale, "stale")):
+            for checkout, name in ((source, "bound"), (default, "default")):
                 for hook in ("chezmoi-update", "dotfiles-update", "payload-update"):
                     (checkout / f"scripts/{hook}.sh").write_text(f'printf "%s\\n" "{name} {hook}" >>"$TRACE"\n')
             marker, overlay = home / ".config/dotfiles/native", home / ".config/sh/.profile"
             env = {"HOME": str(home), "PATH": os.defpath, "TERM": "dumb", "SCRATCH": "",
-                   "DOTFILES_DIR": str(stale), "TRACE": str(trace)}
+                   "TRACE": str(trace)}
             for sherlock in (False, True):
                 if sherlock:
                     shutil.copyfile(ROOT / "sherlock/sh/.config/sh/.profile", overlay)
@@ -78,8 +81,11 @@ class WriterGuardTests(unittest.TestCase):
                                                     env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                                     text=True, timeout=15)
                             self.assertEqual(result.returncode, 0, result.stderr)
-                            self.assertEqual(trace.read_text().splitlines(),
-                                             ["bound chezmoi-update" if native else "stale dotfiles-update"])
+                            if native:
+                                self.assertEqual(trace.read_text().splitlines(), ["bound chezmoi-update"])
+                            else:
+                                self.assertFalse(trace.exists(), trace.read_text() if trace.exists() else "")
+                                self.assertNotIn("[dotfiles]", result.stderr)
 
     def test_sync_payload_commands_run_only_the_validated_native_source(self):
         # sync-payloads/sync-skills resolve the hook as the login dispatcher

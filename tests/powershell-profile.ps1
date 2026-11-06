@@ -125,7 +125,8 @@ $tailMarker = '# --- Dotfiles auto-update check'
 $tailAt = $text7.IndexOf($tailMarker)
 Assert-True ($tailAt -gt 0) 'the update hook block is present'
 $tail = $text7.Substring([Math]::Max($tailAt, 0))
-Assert-True ($tail.Contains('scripts/dotfiles-update.ps1')) 'the update hook runs scripts/dotfiles-update.ps1'
+Assert-True ($tail.Contains('scripts/chezmoi-update.ps1')) 'the update hook runs the bound source''s scripts/chezmoi-update.ps1'
+Assert-True (-not $tail.Contains('dotfiles-update') -and -not $tail.Contains('DOTFILES_DIR')) 'the update hook has no unmarked-home fallback'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
 function Get-Assignments($Ast, [string]$Left) {
@@ -644,7 +645,6 @@ if ($IsWindows) {
 '@
     $result = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $child) -Environment @{
         DOTFILES_AUTO_UPDATE = '0'
-        DOTFILES_DIR = Join-Path $fakeHome 'no-dotfiles'
         DOTFILES_TEST_HOME = $fakeHome
         DOTFILES_TEST_PROFILE = $profile7
         CONDA_CHANGEPS1 = $null

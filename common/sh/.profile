@@ -20,7 +20,7 @@ esac
 # nvm: put the default node's bin on PATH without sourcing nvm.sh, whose
 # `nvm use default` costs ~0.5 s per shell. npm-installed CLIs (gemini, the
 # Neovim node host, tree-sitter) then work in every shell and script; zsh
-# also defines the nvm function (common/zsh/.oh-my-zsh/custom/nvm.zsh).
+# also defines the nvm function (~/.oh-my-zsh/custom/nvm.zsh).
 if [ -z "${NVM_DIR-}" ]; then
     if [ -d "$HOME/.nvm" ]; then
         export NVM_DIR="$HOME/.nvm"
@@ -115,40 +115,39 @@ fi
 
 # Both shells use the same home binding. zsh calls this after ssh-agent/env
 # setup; bash/sh calls it here. Maintenance survives unrelated future logins.
+# Only a bound home updates; an unmarked home runs nothing and prints nothing.
 _dotfiles_login_updates() {
     case $- in *i*) ;; *) return 0 ;; esac
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
         return 0
     fi
-    _df_hook_root=${DOTFILES_DIR:-$HOME/dotfiles}
-    _df_update=$_df_hook_root/scripts/dotfiles-update.sh
-    if [ -e "$HOME/.config/dotfiles/native" ] || [ -L "$HOME/.config/dotfiles/native" ]; then
-        # Read only enough to locate the shared validator. Any malformed marker
-        # prevents both dispatches; it never falls back to the legacy writer.
-        if ! _df_hook_root=$(
-            [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
-            {
-                IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_root
-            } <"$HOME/.config/dotfiles/native" || exit 1
-            [ "$_df_version" = dotfiles-chezmoi-v1 ] || exit 1
-            [ "${_df_root#/}" != "$_df_root" ] || exit 1
-            [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
-            # shellcheck source=/dev/null
-            . "$_df_root/lib/chezmoi-guard.sh"
-            dotfiles_native_source "$HOME"
-        ); then
-            printf '%s\n' '[dotfiles] [warn] Native home binding is invalid; automatic updates skipped.' >&2
-            unset _df_hook_root _df_update
-            return 0
-        fi
-        _df_update=$_df_hook_root/scripts/chezmoi-update.sh
-        if [ ! -r "$_df_update" ]; then
-            printf '%s\n' '[dotfiles] [warn] Native updater is unavailable; inspect the source checkout.' >&2
-        fi
+    if [ ! -e "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ]; then
+        return 0
     fi
+    # Read only enough to locate the shared validator. Any malformed marker
+    # prevents the dispatch; nothing falls back to another checkout.
+    if ! _df_hook_root=$(
+        [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
+        {
+            IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_root
+        } <"$HOME/.config/dotfiles/native" || exit 1
+        [ "$_df_version" = dotfiles-chezmoi-v1 ] || exit 1
+        [ "${_df_root#/}" != "$_df_root" ] || exit 1
+        [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
+        # shellcheck source=/dev/null
+        . "$_df_root/lib/chezmoi-guard.sh"
+        dotfiles_native_source "$HOME"
+    ); then
+        printf '%s\n' '[dotfiles] [warn] Native home binding is invalid; automatic updates skipped.' >&2
+        unset _df_hook_root
+        return 0
+    fi
+    _df_update=$_df_hook_root/scripts/chezmoi-update.sh
     if [ -r "$_df_update" ]; then
         # shellcheck source=/dev/null
         . "$_df_update"
+    else
+        printf '%s\n' '[dotfiles] [warn] Native updater is unavailable; inspect the source checkout.' >&2
     fi
     # The payload repos install only when a person runs sync-payloads.
     unset _df_hook_root _df_update

@@ -387,47 +387,6 @@ for auto_reviewed_example in \
     fi
 done
 
-grep -Fq 'codex-rules-sync' "$REPO_ROOT/stow-all.sh"
-grep -Fq 'codex-rules-sync' "$REPO_ROOT/stow-all.ps1"
-grep -Fq '\.codex/rules/portable\.rules' "$REPO_ROOT/.stowrc"
-
-if command -v stow >/dev/null 2>&1; then
-    STOW_TARGET="$TEST_TMP/stow-target"
-    mkdir -p \
-        "$STOW_TARGET/.claude" \
-        "$STOW_TARGET/.codex/rules"
-    printf '%s\n' 'claude-live-sentinel' \
-        >"$STOW_TARGET/.claude/settings.json"
-    printf '%s\n' 'codex-live-sentinel' \
-        >"$STOW_TARGET/.codex/config.toml"
-    printf '%s\n' 'rules-live-sentinel' \
-        >"$STOW_TARGET/.codex/rules/portable.rules"
-
-    (
-        cd "$REPO_ROOT"
-        stow \
-            --restow \
-            --no-folding \
-            --target="$STOW_TARGET" \
-            -d "$REPO_ROOT/common" \
-            claude codex
-    )
-
-    [[ ! -L "$STOW_TARGET/.claude/settings.json" ]]
-    [[ ! -L "$STOW_TARGET/.codex/config.toml" ]]
-    [[ ! -L "$STOW_TARGET/.codex/rules/portable.rules" ]]
-    grep -Fxq 'claude-live-sentinel' "$STOW_TARGET/.claude/settings.json"
-    grep -Fxq 'codex-live-sentinel' "$STOW_TARGET/.codex/config.toml"
-    grep -Fxq 'rules-live-sentinel' "$STOW_TARGET/.codex/rules/portable.rules"
-    [[ -L "$STOW_TARGET/.claude/CLAUDE.md" && -e "$STOW_TARGET/.claude/CLAUDE.md" ]]
-    [[ -L "$STOW_TARGET/.codex/AGENTS.md" && -e "$STOW_TARGET/.codex/AGENTS.md" ]]
-    # The payload repos install the launchers and the Claude helpers; no
-    # package links them any more.
-    for kit_link in .claude/dotfiles .claude/coding-agent-kit .local/bin/codex-as .local/bin/claude-as; do
-        [[ ! -e "$STOW_TARGET/$kit_link" && ! -L "$STOW_TARGET/$kit_link" ]]
-    done
-fi
-
 if command -v codex >/dev/null 2>&1; then
     assert_codex_decision() {
         expected=$1

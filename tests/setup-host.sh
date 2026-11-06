@@ -2,8 +2,8 @@
 
 # Fixture tests for setup-host.sh and lib/bootstrap/{fetch,steps*}.sh. Every
 # package manager, download and clone remote is a local stub; sudo, chsh,
-# stow, apt-get, git lfs and the fixture's ./stow-all.sh are tripwires; each
-# case runs under `env -i` with its own fixture home, never the real one.
+# stow, apt-get and git lfs are tripwires; each case runs under `env -i` with
+# its own fixture home, never the real one.
 # The [y/N] prompt cases run on a pseudo terminal from python3's pty module
 # and are skipped, with a note on stderr, where that is unavailable.
 
@@ -703,12 +703,7 @@ printf '%s\n' '# fixture zshrc' >"$FIXTURE/common/zsh/.zshrc"
 mkdir -p "$FIXTURE/scripts"
 cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/payload-update.sh"
 cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
-cat >"$FIXTURE/stow-all.sh" <<'SH'
-#!/bin/sh
-printf 'TRIPWIRE stow-all.sh %s\n' "$*" >>"$EVENT_LOG"
-exit 99
-SH
-chmod 755 "$FIXTURE/setup-host.sh" "$FIXTURE/stow-all.sh"
+chmod 755 "$FIXTURE/setup-host.sh"
 # A committed .chezmoiroot, as the real checkout has: the native binding guard
 # accepts only a source that names its root.
 printf 'home\n' >"$FIXTURE/.chezmoiroot"

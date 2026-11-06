@@ -31,11 +31,12 @@ if (
     PATH="$TEST_TMP/bin" /bin/bash "$TEST_DIR/run.sh" --ci --check-prerequisites
 ) \
     >"$TEST_TMP/ci.stdout" 2>"$TEST_TMP/ci.stderr"; then
-    printf 'ERROR: CI accepted a missing Stow integration prerequisite.\n' >&2
+    printf 'ERROR: CI accepted a missing chezmoi prerequisite.\n' >&2
     exit 1
 fi
-grep -Fq 'CI requires stow' "$TEST_TMP/ci.stderr" ||
-    fail_run ci 'tests/run.sh --ci --check-prerequisites did not name the missing stow.'
+if grep -Fqi stow "$TEST_TMP/ci.stdout" "$TEST_TMP/ci.stderr"; then
+    fail_run ci 'tests/run.sh --ci --check-prerequisites still requires or mentions GNU Stow.'
+fi
 
 grep -Fq 'CI requires chezmoi' "$TEST_TMP/ci.stderr" ||
     fail_run ci 'tests/run.sh --ci --check-prerequisites did not name missing chezmoi.'
@@ -47,11 +48,14 @@ if ! (
     >"$TEST_TMP/local.stdout" 2>"$TEST_TMP/local.stderr"; then
     fail_run local 'tests/run.sh --check-prerequisites failed with only optional tools missing.'
 fi
-for skipped in 'real GNU Stow integration' 'optional Unix PowerShell checks' \
-    'optional installed-Codex exec-policy checks' 'native chezmoi fixtures'; do
+for skipped in 'optional Unix PowerShell checks' 'optional installed-Codex exec-policy checks' \
+    'native chezmoi fixtures'; do
     grep -Fq "SKIP: $skipped" "$TEST_TMP/local.stdout" ||
         fail_run local "tests/run.sh --check-prerequisites did not skip the $skipped."
 done
+if grep -Fqi stow "$TEST_TMP/local.stdout" "$TEST_TMP/local.stderr"; then
+    fail_run local 'tests/run.sh --check-prerequisites still mentions GNU Stow.'
+fi
 grep -Fxq 'test-prerequisites=PASS' "$TEST_TMP/local.stdout" ||
     fail_run local 'tests/run.sh --check-prerequisites did not print test-prerequisites=PASS.'
 
@@ -88,18 +92,16 @@ for test_file in "$TEST_DIR"/*.sh; do
         exit 1
     }
 done
-for suite in bootstrap-manifest.sh doctor.sh e2e-harness.sh payload-update.sh setup-host.sh unix-installer.sh; do
+for suite in bootstrap-manifest.sh doctor.sh e2e-harness.sh payload-update.sh setup-host.sh; do
     grep -Fxq 'dotfiles_test_clear_git_environment' "$TEST_DIR/$suite" || {
         printf 'ERROR: tests/%s does not isolate fixture Git.\n' "$suite" >&2
         exit 1
     }
 done
-for suite in e2e-harness.ps1 windows-installer-controls.ps1; do
-    grep -Fxq 'Clear-DotfilesTestGitEnvironment' "$TEST_DIR/$suite" || {
-        printf 'ERROR: tests/%s does not isolate fixture Git.\n' "$suite" >&2
-        exit 1
-    }
-done
+grep -Fxq 'Clear-DotfilesTestGitEnvironment' "$TEST_DIR/e2e-harness.ps1" || {
+    printf 'ERROR: tests/e2e-harness.ps1 does not isolate fixture Git.\n' >&2
+    exit 1
+}
 grep -Fq "'lib/environment.ps1'" "$TEST_DIR/run.ps1" || {
     printf 'ERROR: tests/run.ps1 does not load test environment isolation.\n' >&2
     exit 1
@@ -152,13 +154,11 @@ need = {
                        'common/sh/.aliases', 'common/sh/.profile', 'common/zsh/.zshrc', 'lib/terminal.sh',
                        'tests/payload-update.sh', 'tests/test_payload_download.py'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
-                         'tests/windows-installer-controls.ps1', 'tests/lib/environment.sh',
-                         'tests/lib/environment.ps1', 'tests/test_environment.py'],
+                         'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py'],
     'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
                        'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                        'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
-                       'scripts/dotfiles-auto-stow.ps1', 'scripts/payload-update.sh',
-                       'stow-all.sh', 'stow-all.ps1', 'lib/sync-runtime.sh',
+                       'scripts/payload-update.sh', 'lib/sync-runtime.sh', '.gitignore',
                        'tests/chezmoi-takeover.sh', 'tests/chezmoi-takeover.ps1',
                        'lib/config_sync.py', 'home/.chezmoidata/codex-policy.json',
                        'home/dot_claude/modify_private_settings.json',
@@ -181,13 +181,13 @@ need = {
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh',
                     'tests/e2e/lib/steps.sh', 'docs/bootstrap.md', 'config/bootstrap/installers.tsv',
                     '.chezmoiversion', 'lib/bootstrap/steps-common.sh'],
-    'shell-profile': ['common/sh/.profile', 'common/sh/.aliases', 'lib/chezmoi-guard.sh'],
+    'shell-profile': ['common/sh/.profile', 'common/sh/.aliases', 'common/zsh/.zshrc', 'lib/chezmoi-guard.sh'],
+    'terminal-output': ['lib/terminal.sh', 'lib/terminal.ps1', 'tests/terminal.ps1', 'doctor.ps1', 'setup-host.ps1'],
     'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1', 'tests/powershell-profile.sh',
                            'doctor.ps1', 'setup-host.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
                            'tests/run.ps1', 'tests/terminal.ps1',
                            'win/terminal/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/'
                            'LocalState/settings.json'],
-    'unix-installer-integration': ['scripts/awesome-skills-update.sh'],
     'doctor': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'setup-host': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
     'bootstrap-windows': ['lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1'],
@@ -220,7 +220,7 @@ for name, paths in need.items():
         if (files and not files.search(path)) or any(e and e.search(path) for e in (exclude, top_exclude)):
             missed.append(f'{name} does not run on {path}')
 runner = open(sys.argv[2], encoding='utf-8').read()
-runner_suites = re.search(r'tests=\(\n(.*?)\n\)', runner, re.S).group(1).split() + ['unix-installer.sh']
+runner_suites = re.search(r'tests=\(\n(.*?)\n\)', runner, re.S).group(1).split()
 entries = {hook.get('entry') for variants in hooks.values() for hook in variants}
 for suite in runner_suites:
     if 'tests/' + suite not in entries:

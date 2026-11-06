@@ -24,7 +24,7 @@ for test_shell in sh bash zsh; do
             /opt/*) expected="/usr/local/man:$initial_manpath" ;;
             /usr/local/*) expected="$initial_manpath" ;;
         esac
-        env -u NVM_DIR -u NVM_BIN HOME="$TEST_TMP/home" DOTFILES_DIR="$TEST_TMP/no-checkout" \
+        env -u NVM_DIR -u NVM_BIN HOME="$TEST_TMP/home" \
             "$test_shell" -c '
                 if [ "$2" = unset ]; then unset MANPATH; else export MANPATH="$2"; fi
                 . "$1"
@@ -35,7 +35,7 @@ for test_shell in sh bash zsh; do
     done
     # When a native man and its system pages are installed, also check actual
     # lookup behavior instead of relying only on the MANPATH representation.
-    env -u NVM_DIR -u NVM_BIN HOME="$TEST_TMP/home" DOTFILES_DIR="$TEST_TMP/no-checkout" \
+    env -u NVM_DIR -u NVM_BIN HOME="$TEST_TMP/home" \
         "$test_shell" -c '
             unset MANPATH
             if command -v man >/dev/null 2>&1 && before=$(man -w ls 2>/dev/null); then
@@ -78,7 +78,7 @@ nvm_case() {
     local label=$1 test_shell=$2 home=$3 expected_bin=$4 expected_dir=$5
     shift 5
     if env -u NVM_DIR -u NVM_BIN -u NVM_INC -u XDG_CONFIG_HOME "$@" \
-        HOME="$home" DOTFILES_DIR="$TEST_TMP/no-checkout" PATH=/usr/bin:/bin \
+        HOME="$home" PATH=/usr/bin:/bin \
         "$test_shell" -c '
             if [ -n "${FAILGLOB-}" ]; then shopt -s failglob; fi
             NVM_BIN=/bin
@@ -266,7 +266,7 @@ if [ -n "$ZSH_BIN" ]; then
             no-nvm) nvm_home=$TEST_TMP/no-nvm head='' want_nvm_bin='' node=$brew/bin/node same=2 ;;
         esac
         noise=$(env -i HOME="$zhome" PATH=/usr/bin:/bin TERM=dumb NVM_DIR="$nvm_home" \
-            DOTFILES_DIR="$TEST_TMP/no-checkout" NEST="$TEST_TMP/nest.zsh" OUT="$out" TEST_ZSH="$ZSH_BIN" \
+            NEST="$TEST_TMP/nest.zsh" OUT="$out" TEST_ZSH="$ZSH_BIN" \
             ACTIVATE="$activate" MAC="$mac" LVL=1 "$ZSH_BIN" -d -i -c 'source $NEST' </dev/null 2>&1 |
             grep -v '^stty: ' || true)
         ok=1
@@ -291,7 +291,6 @@ if [ -n "$ZSH_BIN" ]; then
     # PATH must not stay unique there either.
     # shellcheck disable=SC2016
     if ! env -i HOME="$zhome" PATH=/usr/bin:/bin NVM_DIR="$nvm_dir" \
-        DOTFILES_DIR="$TEST_TMP/no-checkout" \
         "$ZSH_BIN" -d -c 'source ~/.zshrc && [[ ${(t)path}${(t)PATH} != *unique* ]]' 2>&1; then
         echo "FAIL non-interactive .zshrc left PATH unique" >&2
         nvm_failures=$((nvm_failures + 1))
@@ -422,5 +421,40 @@ for test_shell in sh dash bash zsh; do
     done
 done
 
-[ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] && [ "$sync_failures" = 0 ] || exit 1
+# The login update of an unmarked home, through common/sh/.profile (sh, dash,
+# Bash) and the ~/.zshrc tail (zsh), runs no updater, not even one of a
+# checkout at the old default ~/dotfiles, and prints nothing.
+login_failures=0 login_home=$TEST_TMP/login-home
+mkdir -p "$login_home/dotfiles/scripts" "$login_home/.oh-my-zsh"
+for hook in dotfiles-update chezmoi-update payload-update; do
+    # shellcheck disable=SC2016
+    printf 'printf "%%s\\n" %s >>"$LOGIN_TRACE"\n' "$hook" >"$login_home/dotfiles/scripts/$hook.sh"
+done
+ln -s "$REPO_ROOT/common/sh/.profile" "$login_home/.profile"
+ln -s "$REPO_ROOT/common/zsh/.zshrc" "$login_home/.zshrc"
+: >"$login_home/.oh-my-zsh/oh-my-zsh.sh"
+for test_shell in sh dash bash zsh; do
+    # The cases run with PATH=/usr/bin:/bin, so run the shell by full path.
+    test_shell_path=$(command -v "$test_shell") || continue
+    # shellcheck disable=SC2016
+    case $test_shell in
+        bash) login_args=(--noprofile --norc -i -c '. "$HOME/.profile"') ;;
+        zsh) login_args=(-d -i -c true) ;;
+        *) login_args=(-i -c '. "$HOME/.profile"') ;;
+    esac
+    rm -f "$TEST_TMP/login-trace"
+    login_rc=0
+    out=$(env -i HOME="$login_home" PATH=/usr/bin:/bin TERM=dumb LOGIN_TRACE="$TEST_TMP/login-trace" \
+        "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
+    noise=$(grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' "$TEST_TMP/login-err" || :)
+    trace=$(cat "$TEST_TMP/login-trace" 2>/dev/null || :)
+    if [ "$login_rc" != 0 ] || [ -n "$out" ] || [ -n "$noise" ] || [ -e "$TEST_TMP/login-trace" ]; then
+        printf 'FAIL unmarked login (%s): rc=%s out=[%s] noise=[%s] trace=[%s]\n' "$test_shell" \
+            "$login_rc" "$out" "$noise" "$(printf '%s' "$trace" | tr '\n' ';')" >&2
+        login_failures=$((login_failures + 1))
+    fi
+done
+
+[ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] && [ "$sync_failures" = 0 ] &&
+    [ "$login_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

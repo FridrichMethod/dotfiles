@@ -80,5 +80,5 @@ fi
 
 # npm global installs. The nodejs module's default prefix is its read-only shared
 # software dir, so `npm install -g` fails there. Point it at ~/.local, which
-# common/sh/.profile already puts on PATH (binaries land in ~/.local/bin).
+# ~/.profile already puts on PATH (binaries land in ~/.local/bin).
 export NPM_CONFIG_PREFIX="$HOME/.local"

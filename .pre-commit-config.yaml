@@ -52,10 +52,10 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)\.bash(rc|_profile|_aliases)$)
-        exclude: ^(scripts/(chezmoi-update|dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$
+        exclude: ^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(chezmoi-update|dotfiles-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$)
+        files: ((^|/)\.(profile|alias|aliases)$|/\.local/bin/[^/]+-sync$|^(scripts/(chezmoi-update|payload-update|awesome-skills-update)\.sh|setup-sync\.sh|lib/(chezmoi-guard|sync-runtime|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -89,13 +89,13 @@ repos:
         entry: tests/chezmoi.sh
         language: script
         pass_filenames: false
-        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(config_sync[.]py|sync-runtime[.]sh|chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|dotfiles-update|dotfiles-auto-stow|payload-update)[.](sh|ps1)|stow-all[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
+        files: ^(home/.*|[.]chezmoi(root|version)|common/.*|(?:mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe|win)/.*|lib/(config_sync[.]py|sync-runtime[.]sh|chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|payload-update)[.](sh|ps1)|docs/chezmoi-migration/inventory[.]md|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh
         language: script
         pass_filenames: false
-        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|scripts/dotfiles-update\.sh|stow-all\.sh)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|(doctor|setup-host)\.ps1)$|^tests/lib/environment\.(sh|ps1)$
       - id: shell-profile
         name: portable shell profile and default manual search
         entry: tests/shell-profile.sh
@@ -152,27 +152,7 @@ repos:
         entry: tests/ai-integration.sh
         language: script
         pass_filenames: false
-        files: ^(\.stowrc|common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|tests/(ai-integration\.sh|test_ai_integration\.py))$|^tests/lib/environment\.(sh|ps1)$
-        types: []
-      - id: stow-installer
-        name: POSIX stow installer behavior
-        entry: tests/stow-all.sh
-        language: script
-        pass_filenames: false
-        files: (^|/)(stow-all\.sh|lib/terminal\.sh|lib/config_sync\.py|lib/sync-runtime\.sh|\.stowrc|tests/stow-all\.sh)$|^tests/lib/environment\.(sh|ps1)$
-        types: []
-      - id: stow-ignores
-        name: Stow ignores what git ignores and links every tracked file
-        entry: tests/stow-ignores.sh
-        language: script
-        pass_filenames: false
-        files: ^(\.stowrc|\.gitignore|stow-all\.ps1|tests/(stow-ignores\.sh|test_stow_ignores\.py))$|^tests/lib/environment\.(sh|ps1)$
-      - id: unix-installer-integration
-        name: real Git and Stow integration
-        entry: tests/unix-installer.sh
-        language: script
-        pass_filenames: false
-        files: ^(stow-all\.sh|scripts/(dotfiles|payload|awesome-skills)-update\.sh|\.stowrc|\.gitignore|lib/.*|common/(claude|codex)/.*|tests/unix-installer\.sh)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(common/(codex|claude)/.*|common/zsh/\.oh-my-zsh/custom/fzf-tab\.zsh|common/(zsh/\.zsh_aliases|bash/\.bash_aliases)|tests/(ai-integration\.sh|test_ai_integration\.py))$|^tests/lib/environment\.(sh|ps1)$
         types: []
       - id: fcitx5-profile-sync
         name: fcitx5 profile sync behavior
@@ -186,24 +166,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(scripts/(payload-update\.(sh|ps1)|awesome-skills-update\.sh)|config/payloads\.tsv|lib/terminal\.(sh|ps1)|common/(sh/\.(profile|aliases)|zsh/\.zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
-      - id: windows-installer
-        name: windows installer symlink trust
-        entry: tests/windows-installer.sh
-        language: script
-        pass_filenames: false
-        files: (^|/)(stow-all\.ps1|setup-sync\.ps1|lib/config_sync\.py|lib/(terminal|windows-link-trust)\.ps1|tests/(terminal|windows-installer-controls)\.ps1|README\.md|CLAUDE\.md|AGENTS\.md|tests/windows-installer\.(sh|ps1)|tests/run\.ps1)$|^tests/lib/environment\.(sh|ps1)$
       - id: powershell-profile
         name: PowerShell profile contract, prompt theme, parse gate and Terminal settings
         entry: tests/powershell-profile.sh
         language: script
         pass_filenames: false
         files: ^(win/(powershell|oh-my-posh|terminal)/.*|common/zsh/\.zshrc|(doctor|setup-host)\.ps1|lib/(chezmoi-guard|terminal)\.ps1|scripts/(chezmoi-update|payload-update)\.ps1|tests/(powershell-profile\.(sh|ps1)|run\.ps1|terminal\.ps1))$|^tests/lib/environment\.(sh|ps1)$
-      - id: update-hooks
-        name: automatic update and stow behavior
-        entry: tests/update-hooks.sh
-        language: script
-        pass_filenames: false
-        files: (^|/)(dotfiles-update\.(sh|ps1)|dotfiles-auto-stow\.ps1|stow-all\.(sh|ps1)|lib/terminal\.(sh|ps1)|win/powershell/Documents/PowerShell/profile\.ps1|tests/update-hooks\.(sh|ps1))$|^tests/lib/environment\.(sh|ps1)$
       - id: bootstrap-manifest
         name: bootstrap manifests, playbook and skill parity
         entry: tests/bootstrap-manifest.sh
