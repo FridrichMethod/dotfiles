@@ -142,7 +142,8 @@ workstation first. It is already approved and is the explicit exception to the
 global rules "ask before adding one" and "never another project's copy", so do
 not ask again. Dotfiles pins no sherlock-kit and never adds one. Never log in or
 authenticate for the user, never ssh ... sbatch. Build environments only inside
-a Slurm allocation, never under $SCRATCH. Probe zsh there with zsh -n ~/.zshrc.
+a Slurm allocation, never under $SCRATCH. Probe zsh there with
+DOTFILES_AUTO_UPDATE=0 zsh -ic true; the HPC roles load no ssh-agent plugin.
 
 Marlowe. Interactive login shells use the micromamba login env
 ($HOME/micromamba, env login); non-interactive shells see the system tools.
@@ -150,7 +151,7 @@ Run the doctor inside the login env. The site AppArmor profile block-node
 denies node on login nodes: accepted, never work around it. Any env change runs
 in a Slurm job. Its filesystem keeps ACLs ('+'): never use cp -p there, and
 never assume $0 is a file when a script travels over ssh. Probe zsh there with
-zsh -n ~/.zshrc.
+DOTFILES_AUTO_UPDATE=0 zsh -ic true inside the login env.
 
 Secrets and evidence. Metadata only: never print, copy or diff secret values,
 OAuth or app-written auth state, private identities or decrypted content, and

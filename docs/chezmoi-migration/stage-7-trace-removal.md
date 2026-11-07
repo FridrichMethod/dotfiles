@@ -220,9 +220,9 @@ Keep the answers in the session record (the final report), not in the tree.
    (`codex-as --version`); doctor rows as TSV (mac after `. /etc/profile;
    . ~/.profile`, Marlowe inside the micromamba login env, win inside a
    limited-token task); both AI configs equal to rendered (equal/not equal);
-   `DOTFILES_AUTO_UPDATE=0 bash -ic true` everywhere and
-   `DOTFILES_AUTO_UPDATE=0 zsh -ic true` on Lab, WSL and mac, `zsh -n ~/.zshrc`
-   on Sherlock and Marlowe (Stage 6's method); PowerShell 7 and 5.1 profile
+   `DOTFILES_AUTO_UPDATE=0 bash -ic true` and `DOTFILES_AUTO_UPDATE=0 zsh -ic
+   true` everywhere (the HPC roles load no ssh-agent plugin; Stage 6's closing
+   check ran it on both login nodes); PowerShell 7 and 5.1 profile
    parse and load on win. Every interactive shell Phase 0 starts on a remote
    host sets `DOTFILES_AUTO_UPDATE=0`: remote shells do not inherit
    `_DOTFILES_CHECKED`, so they would run the real login update.
