@@ -28,7 +28,7 @@
 **/*.orig
 **/*.rej
 **/*.patch
-**/\#*#
+**/[#]*#
 **/*.iml
 **/*.code-workspace
 **/*.sublime-project

@@ -163,7 +163,9 @@ class SourceContractTests(unittest.TestCase):
                     if line and not line.startswith(("#", ".", "/", "!"))]
         ignore = (ROOT / "home/.chezmoiignore").read_text(encoding="utf-8").splitlines()
         twins = [line for line in ignore if line.startswith("**/")]
-        self.assertEqual(twins, ["**/" + pattern.rstrip("/") for pattern in patterns])
+        # A leading escaped '#' becomes the class [#]: no backslash, which a
+        # Windows chezmoi could read as a separator.
+        self.assertEqual(twins, ["**/" + re.sub(r"^\\#", "[#]", pattern.rstrip("/")) for pattern in patterns])
         first_section = next(index for index, line in enumerate(ignore) if line.startswith("{{ if "))
         self.assertLess(ignore.index(twins[-1]), first_section, "the twins must apply to every role")
 
@@ -178,10 +180,12 @@ class SourceContractTests(unittest.TestCase):
                 path = fixture.source / "home" / stray
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"stray\n")
-            ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "--no-index", "--stdin"],
-                                     input="".join(f"home/{s}\n" for s in strays), capture_output=True,
-                                     text=True, timeout=30, env=fixture_git_env())
-            self.assertEqual(ignored.stdout.split(), [f"home/{s}" for s in strays])
+            # NUL-separated bytes: text mode on Windows would send CRLF, and git
+            # reads the CR as part of each path.
+            ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "--no-index", "-z", "--stdin"],
+                                     input=b"".join(f"home/{s}".encode() + b"\0" for s in strays),
+                                     capture_output=True, timeout=30, env=fixture_git_env())
+            self.assertEqual([p.decode() for p in ignored.stdout.split(b"\0") if p], [f"home/{s}" for s in strays])
             managed = fixture.run("managed", "--include=files", "--nul-path-separator")
             self.assert_success(managed)
             self.assertEqual({path.replace("\\", "/") for path in managed.stdout.split("\0") if path},
