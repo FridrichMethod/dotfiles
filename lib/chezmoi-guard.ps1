@@ -1,5 +1,5 @@
 # Per-home native binding, maintenance and Windows binary-trust guard. Sourcing has no filesystem effects.
-# PowerShell 5.1 compatible: both installed profile variants load this library.
+# Windows PowerShell 5.1 compatible. The PowerShell 7 profile, the login updater, doctor.ps1 and setup-host.ps1 (through lib/bootstrap.ps1) load it.
 function Test-DotfilesMarkerObject {
     param([Parameter(Mandatory)][string]$Path)
     try { [void][IO.File]::GetAttributes($Path); return $true }

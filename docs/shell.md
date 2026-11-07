@@ -48,8 +48,8 @@ only when a person runs them; native Windows has no kit installation. See
 [payloads](payloads.md).
 
 Tab cycles completions; Up/Down search history by prefix. RightArrow at the
-end of the line accepts a prediction, and F2 switches prediction views. The
-profile asks for history and plugin predictions in the list view only with
+end of the line accepts a prediction, and in the list view F2 switches
+prediction views. The profile asks for history and plugin predictions in the list view only with
 PSReadLine 2.2 on PowerShell 7.2 or later; older versions, down to the 7.0
 floor, keep PSReadLine's own prediction defaults. With fzf/PSFzf present,
 Ctrl+R searches history, Ctrl+T inserts paths and Alt+C changes directory.
@@ -80,7 +80,8 @@ A Terminal restart loads changes.
 
 fcitx5 rewrites its profile, so the native source deploys the authoritative
 baseline as a private regular file rather than a link; fcitx5's own `conf/`
-state stays unmanaged.
+state stays unmanaged. Like a Terminal UI save above, an fcitx5 rewrite is
+destination drift at which the next login update stops until it is reconciled.
 On lab-ubuntu, GNOME owns the X keymap. The deployed .xprofile sets CapsLock as
 Hyper_L for the fcitx5 language trigger and frees Super+Space for cycling input
 methods. It uses /usr/bin/gsettings because the Linuxbrew command lacks GNOME's

@@ -34,7 +34,7 @@ These files are installed on every host, including fresh machines and clusters, 
 
 - Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
 - Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
-- Native install: follow the H7-native/HW-native blocks (`docs/bootstrap.md`); convert or recover an existing home only by `docs/chezmoi-migration/takeover.md` and `support-boundary.md`.
+- Native install: follow the H7-native/HW-native blocks (`docs/bootstrap.md`; a new home takes Fresh home by hand); convert or recover an existing home only by `docs/chezmoi-migration/takeover.md` and `support-boundary.md`.
 - Install or update the payload repos now: `sync-payloads [ITEM...]`, or `sh scripts/payload-update.sh --now` (Windows: `scripts/payload-update.ps1 -Now`, unelevated)
 - Run checks: `pre-commit run --all-files`
 
@@ -138,7 +138,7 @@ negative assertion.
 ## Payload repos
 
 - coding-agent-kit, PyMOLScripts and awesome-skills own their installation, update, selection and locking. Dotfiles calls them only through the commands in `config/payloads.tsv`, the one place naming their URLs, paths, commands and the kit channel (`0.7`), and the items a platform has (an item without a `windows-install` row, the kit, is not available on native Windows: no default item there, and naming it is an info, exit 0); a channel or command change is a reviewed change of that file (`docs/payloads.md`). No submodules, bump workflows or consumer-side pins.
-- `scripts/payload-update.sh` and `.ps1` keep one contract: a person runs them in the foreground (`--now`/`-Now` or `sync-payloads`, which needs and follows the validated native binding); any other call, the retired `--auto`/`--worker` included even with `--now`, prints one usage line and exits 2 (sourced: returns 2, leaking nothing); no login, schedule, stamp, record or lock of their own; exit 75 is no failure, others exit 1 with a retry line; downloads bounded by `DOTFILES_PAYLOAD_TIMEOUT`, each staged alone in a fresh private temporary directory removed afterwards and never piped into a shell, one failed download ending the run's downloads. `tests/payload-update.sh` covers it.
+- `scripts/payload-update.sh` and `.ps1` keep one contract: a person runs them in the foreground (`--now`/`-Now` or `sync-payloads`, which needs and follows the validated native binding); any other call, the retired `--auto`/`--worker` included even with `--now`, prints one usage line and exits 2 (the `.sh` twin, sourced, returns 2 and leaks nothing); no login, schedule, stamp, record or lock of their own; exit 75 is no failure, others exit 1 with a retry line; downloads bounded by `DOTFILES_PAYLOAD_TIMEOUT`, each staged alone in a fresh private temporary directory removed afterwards and never piped into a shell, one failed download ending the run's downloads. `tests/payload-update.sh` covers it.
 
 ## Login updates and terminal output
 
@@ -150,7 +150,7 @@ negative assertion.
 ## Windows
 
 - Native chezmoi deploys regular files unelevated after actual profile/ACL preflight; there is no elevated or scheduled task.
-- Windows receives an explicit subset of the shared targets (`home/.chezmoiignore`), not every target. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell files must stay out of a Windows `$HOME`; extend the subset only for tools that run natively on Windows.
+- Windows receives only the shared targets that `home/.chezmoiignore` does not exclude for `win`, as the hosts column of `tests/fixtures/chezmoi/targets.tsv` pins, so a new shared target reaches Windows unless excluded. Git Bash sources `~/.bashrc` and `~/.bash_profile`, so the POSIX shell files must stay out of a Windows `$HOME`; let a target reach Windows only for tools that run natively there.
 - Windows targets live under `home/` like every other target, including `Documents/PowerShell/` and `AppData/Local/Packages/`. No installer special-casing is needed because both live under `$HOME`.
 - Windows Terminal `settings.json` is a regular file chezmoi applies; a UI save is destination drift to reconcile ([shell](docs/shell.md)). Edits need a Terminal restart.
 - Keep machine-specific user-profile paths out of tracked Windows files: write `Join-Path $HOME ...`, not `C:\Users\<name>\...`. Both PowerShell profiles load conda lazily through a `function global:conda` stub; `conda init powershell` would add an eager, absolute-path hook block, so treat it as drift to fix, not to commit.

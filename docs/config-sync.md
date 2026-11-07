@@ -129,8 +129,8 @@ Unknown portable keys are not silently deployed as shared policy.
 Codex hooks are host runtime state; the native modify leaves them in place like
 any other unowned field.
 
-Codex rules deploy as an opaque, authoritative ordinary file through a literal
-include; siblings such as `default.rules` are untouched.
+Codex rules deploy as an opaque, authoritative ordinary file: the plain source
+`home/dot_codex/rules/portable.rules`; siblings such as `default.rules` are untouched.
 
 ## Codex override precedence and retirement
 

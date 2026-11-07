@@ -1,7 +1,7 @@
 # Stage 4 operator takeover and recovery
 
-This procedure is for the reviewed compatibility release, with the physical
-`common/` and host paths still present. It is not permission to skip candidate
+This procedure converts and recovers existing homes; its Stow conversion steps
+run only in a checkout of `bf99958` (below). It is not permission to skip candidate
 CI, import whole application directories, or force a whole-home apply. The
 corrected Stage 4 release `bf9995809ca7564c0728f87bcbefe91c8a3cc5e0` passed exact
 hosted CI/e2e and lab ordinary takeover. It is the supported Stow recovery bridge
@@ -15,9 +15,10 @@ Since Stage 6, the steps that convert a home still deployed by Stow (the old
 updater, its lock and the Windows restow task, and the Stow links) run only in
 a checkout of `bf99958`, the immutable recovery and conversion source: current
 `main` has none of them. The native inspection, initialization and update
-steps apply on current `main` as well. A fresh home follows H7-native or
-HW-native in [bootstrap.md](../bootstrap.md); a native home follows
-[Updates and edits after takeover](#updates-and-edits-after-takeover) and the
+steps apply on current `main` as well. A fresh home follows
+[Fresh home by hand](../bootstrap.md#fresh-home-by-hand) or
+[Fresh Windows home by hand](../bootstrap.md#fresh-windows-home-by-hand); a native
+home follows [Updates and edits after takeover](#updates-and-edits-after-takeover) and the
 [update contract](../update-contract.md).
 
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 3.4, PowerShell 7 entrypoints
@@ -185,9 +186,10 @@ chezmoi --source "$source" --working-tree "$source" \
 Before the first managed destination mutation, write the ownership file privately as
 exactly three UTF-8 LF-terminated lines: `dotfiles-chezmoi-v1`, canonical
 destination, canonical source. It is local metadata, never a managed target or
-revision receipt. Keep the maintenance marker in place. Every legacy installer,
-sync wrapper/backend, updater and scheduled `-Apply` refuses marked destinations;
-direct helper LIVE arguments are checked independently of the invoking HOME.
+revision receipt. Keep the maintenance marker in place. In a `bf99958` checkout
+every legacy installer, sync wrapper/backend, updater and scheduled `-Apply`
+refuses marked destinations, and direct helper LIVE arguments are checked
+independently of the invoking HOME; current `main` has none of those writers.
 
 ```sh
 printf '%s\n' dotfiles-chezmoi-v1 "$destination" "$source" \

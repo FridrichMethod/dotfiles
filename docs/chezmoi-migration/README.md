@@ -151,12 +151,13 @@ migrated or safe to auto-update merely because current-layout tests pass.
 
 ## Release invariant
 
-Current installed files point directly into the legacy `common/` and host paths.
-Login can fast-forward `main` before any new installer runs. Renaming or deleting
-those paths can break shell startup immediately. A compatibility commit does not
-protect a machine that is offline and later skips straight to the final commit.
+Until Stage 6, installed files pointed directly into the legacy `common/` and host
+paths, and login could fast-forward `main` before any new installer ran, so renaming
+or deleting those paths could break shell startup immediately. A compatibility
+commit did not protect a machine that was offline and later skipped straight to the
+final commit.
 
-Keep current Stow paths through the bridge stages, then remove them under the
+The Stow paths stayed through the bridge stages, and Stage 6 removed them under the
 declared support boundary and tested manual upgrade/recovery procedure. The
 user's latest-only decision replaces the earlier all-installations-attestation
 gate. A cutoff does not stop old code from pulling a deletion commit: operators

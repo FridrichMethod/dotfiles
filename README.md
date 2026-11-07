@@ -25,7 +25,8 @@ Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 setup-host installs tools and prints HUMAN blocks for commands it does not run,
 including sudo, authentication, allocations and login-shell changes. It
 provisions verified chezmoi 2.74.0+ and needs no Python environment. Follow the HUMAN
-blocks; H7-native prints the native install
+blocks; H7-native points to the native install, which a new home follows by
+[Fresh home by hand](docs/bootstrap.md#fresh-home-by-hand)
 ([bootstrap playbook](docs/bootstrap.md#h7-native-reviewed-native-configuration-handover)).
 Converting an existing home follows the
 [takeover procedure](docs/chezmoi-migration/takeover.md) and requires ownership
@@ -35,9 +36,11 @@ parent permissions. Prepare only inspected missing directories through the
 native directory-only procedure; plain apply can change existing parent modes.
 
 Homes still deployed by GNU Stow (the pre-chezmoi layout) are unsupported:
-recover or convert one only from its last supported release, `bf99958`, by the
-[support boundary](docs/chezmoi-migration/support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable)
-procedure, never by updating it to current `main`.
+recover or convert one only from its last supported release, `bf99958`: run the
+[takeover procedure](docs/chezmoi-migration/takeover.md) in a checkout of that
+revision, within the
+[support boundary](docs/chezmoi-migration/support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable),
+never by updating it to current `main`.
 
 On other Linux, set `[data].host = "common-only"` in the local chezmoi config,
 check with `./doctor.sh --platform other` and follow the
@@ -58,8 +61,10 @@ cd $HOME\dotfiles
 .\setup-host.ps1 -Host win
 ```
 
-Follow the HW-* HUMAN blocks; HW-native prints the native install. Regular-file
-native updates run unelevated, without a scheduled task or UAC prompt. Both
+Follow the HW-* HUMAN blocks; HW-native points to the native install, which a new
+home follows by
+[Fresh Windows home by hand](docs/bootstrap.md#fresh-windows-home-by-hand).
+Regular-file native updates run unelevated, without a scheduled task or UAC prompt. Both
 actual PowerShell profile paths and ordinary-user destination ACLs must be
 checked before takeover. See
 [the Windows quick start](docs/bootstrap.md#native-windows) and the
@@ -233,11 +238,13 @@ real-host outcomes.
 
 To add a configuration file, add it under `home/` with its chezmoi source name
 (a role-specific variant goes to `home/.hosts/<role>/<target>` behind a one-line
-role-keyed template). Add its row to `tests/fixtures/chezmoi/targets.tsv`, update
-the counts in `tests/chezmoi_source_support.py` (for a shell file also the
-per-role `LINTED` counts in `tests/test_chezmoi_rendered.py`, for a tmux file
-`TMUX_FILES` in `tests/test_tmux.py`), and add a `home/.chezmoiignore`
-role entry unless it applies to every role. A file containing `{{` stays plain;
+role-keyed template; a new template also joins `ROLE_TEMPLATES` in
+`tests/test_chezmoi_source_state.py`). Add its row to
+`tests/fixtures/chezmoi/targets.tsv`, update the counts in
+`tests/chezmoi_source_support.py` (for a shell file also the per-role `LINTED`
+counts in `tests/test_chezmoi_rendered.py`, for a tmux file `TMUX_FILES` in
+`tests/test_tmux.py`), and add a `home/.chezmoiignore` role entry unless it
+applies to every role. A file containing `{{` stays plain;
 use `.tmpl` only for a real template. If it introduces a new parent
 directory, plan the reviewed per-host `apply --include=dirs --recursive=false`
 preparation from the [takeover procedure](docs/chezmoi-migration/takeover.md)
