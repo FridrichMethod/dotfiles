@@ -16,7 +16,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# B5 retargets these to the materialized native source (D-3 policy files).
+# The portable sources in the native tree; the policy files live in home/.policy/ (D-3).
 CLAUDE_SETTINGS = ROOT / "home/.policy/claude-settings.json"
 CLAUDE_GUIDE = ROOT / "home/dot_claude/CLAUDE.md"
 CODEX_GUIDE = ROOT / "home/dot_codex/AGENTS.md"
@@ -259,6 +259,9 @@ AUTO_MODE_MUTATIONS = {
     "soft_deny names GNU Stow": lambda auto: auto["soft_deny"].append("Never remove a GNU Stow link target."),
     "soft_deny names .venv-sync": lambda auto: auto["soft_deny"].append("Never remove .venv-sync."),
     "allow gains non-ASCII prose": lambda auto: auto["allow"].append("Removing caches \u2014 allowed."),
+    "soft_deny moves $defaults": lambda auto: auto["soft_deny"].append(auto["soft_deny"].pop(0)),
+    "allow repeats $defaults": lambda auto: auto["allow"].append("$defaults"),
+    "soft_deny gains non-ASCII prose": lambda auto: auto["soft_deny"].append("Never remove caches \u2014 ever."),
     **{f"soft_deny drops {subject}": _without(subject) for subject in AUTO_MODE_PROTECTED},
 }
 
