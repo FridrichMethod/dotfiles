@@ -36,7 +36,8 @@ update; the manual commands, takeover and recovery live in
 The updater stops, with a warning and without touching the destination, when:
 
 - the source has tracked or untracked changes (ignored files do not count:
-  `home/.chezmoiignore` repeats the `.gitignore` patterns, so none deploys);
+  `home/.chezmoiignore` repeats the `.gitignore` patterns, so none deploys;
+  one in `home/.chezmoidata/` is read as data and makes the apply fail);
 - the native state database is missing or empty, because lost state can turn
   a foreign target into a first apply (recovery is an inspected maintenance
   action);

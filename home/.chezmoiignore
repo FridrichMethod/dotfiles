@@ -10,7 +10,8 @@
 # Patterns name destinations; none removes existing or unmanaged files.
 # What git ignores is never a target: chezmoi skips source names that start
 # with a dot, and every other unanchored .gitignore pattern repeats here, so an
-# editor backup, merge leftover or cache in the checkout stays out of $HOME.
+# editor backup, merge leftover or cache in the checkout stays out of $HOME
+# (a leftover in .chezmoidata/ is read as data and stops the run instead).
 **/Icon?
 **/Desktop.ini
 **/Thumbs.db

@@ -12,8 +12,7 @@
 #   warn      advisory: works, but differs from the documented setup
 #   skip      not checkable here (a PowerShell module on unix, macOS locale)
 #   human     a person must repair it (installer edits, dotfiles before oh-my-zsh)
-# Checks only read. Any git call runs with optional locks off, so it never
-# refreshes an index. Fonts are found by file name, never through fc-list, which
+# Checks only read. Fonts are found by file name, never through fc-list, which
 # creates fontconfig caches under ~/.cache and in its prefix. Tools whose
 # version flag writes are presence-only rows in tools.tsv, so they never
 # run: brew (.git/describe-cache), codex (~/.codex/tmp/arg0), nvim (its log)

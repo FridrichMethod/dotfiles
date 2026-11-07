@@ -6,9 +6,8 @@ repos:
       # Windows Terminal writes settings.json with its own trailing spaces and
       # no final newline; the tracked copy keeps the app's bytes, so a saved
       # file stays comparable with the source. check-json below still
-      # validates it. The p10k configuration and
-      # the fzf preview script keep their upstream bytes, so neither fixer
-      # touches them either.
+      # validates it. The p10k configuration and the fzf preview script keep
+      # their upstream bytes, so neither fixer touches them either.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
         exclude: ^home/(dot_p10k\.zsh|dot_local/bin/executable_my-fzf-preview\.sh|AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings\.json)$

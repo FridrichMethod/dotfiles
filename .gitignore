@@ -1,6 +1,8 @@
 # Files git never tracks in this checkout. chezmoi reads no .gitignore:
 # home/.chezmoiignore repeats every unanchored pattern that does not start
-# with a dot, so nothing listed here deploys from home/ (a test pins it).
+# with a dot, and chezmoi skips dot-named sources, so nothing listed here
+# deploys from home/ (a test pins it). A leftover in home/.chezmoidata/ is
+# read as data instead and stops every native run until it is removed.
 
 # OS metadata
 .DS_Store

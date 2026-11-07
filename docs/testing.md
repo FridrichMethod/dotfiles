@@ -54,9 +54,9 @@ selected official artifact; no Python environment is needed for native tests.
 
 These probes isolate source, destination, configuration, cache, state, HOME and
 temporary directories and use only synthetic credentials. Native modifies run
-with a child PATH that holds only failing python3, python, jq, node, sh, bash
-and pwsh stand-ins (no age), and none of them runs. Parser hooks exclude only
-the exact artificial and production modify templates; native tests parse rendered JSON/TOML
+without Python, jq or age on child PATH; the complete native apply puts failing
+python3, python, jq, node, sh, bash and pwsh stand-ins there and requires that
+none runs. Parser hooks exclude only the exact artificial and production modify templates; native tests parse rendered JSON/TOML
 instead. Ordinary portable inputs and ownership data remain linted. Unix permission
 assertions do not establish Windows ACL behavior; unavailable native platforms
 remain explicit missing evidence.

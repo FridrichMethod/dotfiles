@@ -48,8 +48,8 @@ only when a person runs them; native Windows has no kit installation. See
 [payloads](payloads.md).
 
 Tab cycles completions; Up/Down search history by prefix. RightArrow at the
-end of the line accepts a prediction, and in the list view F2 switches
-prediction views. The profile asks for history and plugin predictions in the list view only with
+end of the line accepts a prediction; with PSReadLine 2.2 or later, F2
+switches between the inline and list prediction views. The profile asks for history and plugin predictions in the list view only with
 PSReadLine 2.2 on PowerShell 7.2 or later; older versions, down to the 7.0
 floor, keep PSReadLine's own prediction defaults. With fzf/PSFzf present,
 Ctrl+R searches history, Ctrl+T inserts paths and Alt+C changes directory.

@@ -151,9 +151,10 @@ migrated or safe to auto-update merely because current-layout tests pass.
 
 ## Release invariant
 
-Until Stage 6, installed files pointed directly into the legacy `common/` and host
-paths, and login could fast-forward `main` before any new installer ran, so renaming
-or deleting those paths could break shell startup immediately. A compatibility
+Until the Stage 4 takeovers, installed files pointed directly into the legacy
+`common/` and host paths (and until B5 the native source read them through
+include bridges), and login could fast-forward `main` before any new installer
+ran, so renaming or deleting those paths could break shell startup immediately. A compatibility
 commit did not protect a machine that was offline and later skipped straight to the
 final commit.
 

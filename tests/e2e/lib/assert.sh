@@ -8,7 +8,8 @@
 # under HOME that lead into the clone, a stow on the login PATH). Sourced
 # after common.sh; same portability rules (no find -printf, no stat, no
 # readlink -f, no date -d except inside the sudo.log audit, which Linux alone
-# needs), and no case statement inside $(...), which Bash 3.2 cannot parse.
+# needs), and no case statement with bare `pattern)` items inside $(...):
+# Bash 3.2 ends the substitution at the first such ')'.
 
 # Guard state: the before-images e2e_step_begin takes, the violations the
 # audits report at the end, and the notes e2e_step_end appends after a row.
