@@ -170,7 +170,10 @@ class SourceContractTests(unittest.TestCase):
     def test_git_ignored_leftovers_in_the_source_are_no_targets(self):
         strays = ("dot_zshrc~", "dot_gitconfig.orig", "#dot_vimrc#", "dot_vimrc.swp", "dot_tmux.conf.rej",
                   "dot_config/tmux/__pycache__/metric.cpython-312.pyc", "dot_config/kitty/debug.log")
-        with SourceFixture("lab-ubuntu") as fixture:
+        # Linux data on every runner (supplemental, as below): validate-host
+        # refuses lab-ubuntu on a macOS or Windows OS, and lab-ubuntu is the
+        # role that manages every stray's neighbour.
+        with SourceFixture("lab-ubuntu", native_os="linux") as fixture:
             for stray in strays:
                 path = fixture.source / "home" / stray
                 path.parent.mkdir(parents=True, exist_ok=True)
