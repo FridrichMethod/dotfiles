@@ -1373,8 +1373,8 @@ exit 0
             Assert-True ($text.Contains($expected)) "HUMAN blocks lack '$expected'"
         }
         $wsl = ($blocks | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
-        Assert-True ($wsl.Contains('~\.wslconfig') -and $wsl.Contains('/etc/wsl.conf') -and $wsl.Contains('mount.vbs')) "HW-wsl lacks the deployed win\wsl files: $wsl"
-        Assert-True (-not $wsl.Contains('not stowed')) 'HW-wsl claims win\wsl is not stowed'
+        Assert-True ($wsl.Contains('~\.wslconfig') -and $wsl.Contains('/etc/wsl.conf') -and $wsl.Contains('mount.vbs')) "HW-wsl lacks the deployed WSL files: $wsl"
+        Assert-True (-not $wsl.Contains('not stowed')) 'HW-wsl claims the WSL files are not stowed'
         $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
         Assert-True (-not @($commands | Where-Object { $_ -match 'setup-git' }).Count) 'a HUMAN block runs gh auth setup-git'
         foreach ($line in @($commands | Where-Object { $_ -match '^git -C ' })) {
@@ -1419,7 +1419,7 @@ exit 0
         $stow = @($manual.Lines | Where-Object { $_ -match 'stow' })
         Assert-Equal $stow.Count 0 "native HUMAN blocks name Stow: $($stow -join ' | ')"
         $wsl = ($blocks | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
-        Assert-True ($wsl.Contains('# The native handover (HW-native) deploys win\wsl into your home.')) "native HW-wsl: $wsl"
+        Assert-True ($wsl.Contains('# The native handover (HW-native) deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home.')) "native HW-wsl: $wsl"
         $auth = ($blocks | Where-Object Id -eq 'HW-auth').Lines -join "`n"
         Assert-True ($auth.Contains('Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.')) "native HW-auth: $auth"
         Assert-True ($auth.Contains('check with .\doctor.ps1 -Online.')) "native HW-auth doctor line: $auth"

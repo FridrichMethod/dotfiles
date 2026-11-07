@@ -1,12 +1,13 @@
 """Tracked text names no retired mechanism and every Markdown link resolves.
 
 The chezmoi migration retired the Stow deployment, the configuration parser
-chain, the old updaters and the payload transition. Their names may stay only
-in the historical record under docs/chezmoi-migration/ and on the lines of the
-reviewed allowlist KEPT below. Each entry names its kind:
+chain, the old updaters, the payload transition and the package trees the
+native source replaced (common/ and the host directories). Their names may
+stay only in the historical record under docs/chezmoi-migration/ and on the
+lines of the reviewed allowlist KEPT below. Each entry names its kind:
 
 - RESIDUE: an ignore line that keeps a host's leftover from stalling updates,
-  or the test that pins it;
+  the test that pins it, or the doc line naming that leftover;
 - RECOVERY: the one pointer from an old-layout home to its recovery release;
 - NEGATIVE: a native test line (or the doc line naming such a pinned check)
   that fails if a retired name, file, flag, row or step comes back.
@@ -37,6 +38,10 @@ RETIRED = re.compile("|".join((
     r"dotfiles-update", r"awesome-skills-update", r"dotfiles-sync-(?:unix|windows)", r"windows-link-trust",
     r"(?<![\w-])(?:unix|windows)-installer", r"installer-contract", r"(?<![\w-])update-hooks(?![\w-])",
     r"sherlock-kit\.md", r"\bstage[ -]?6\b",
+    # A package path from before the native source moved into home/, in
+    # either separator; home/.hosts/<role>/ paths are native.
+    r"(?:(?<=dotfiles/)|(?<![\w./\\~$-]))(?:common|mac|sherlock|wsl-ubuntu|lab-ubuntu|marlowe|win)/(?-i:[a-z._])",
+    r"(?:(?<=dotfiles\\)|(?<![\w./\\~$-]))(?:common|win)\\(?-i:[a-z._])",
 )), re.IGNORECASE)
 
 RESIDUE, RECOVERY, NEGATIVE = "residue", "recovery", "negative"
@@ -66,10 +71,13 @@ HOOK = "a retired updater planted as a tripwire never runs"
 PATH_AUDIT = "the e2e audit fails a retired deployment tool on the login PATH or a link into the clone"
 VENV_AUDIT = "the e2e audit fails when the clone holds the retired parser environment"
 POLICY = "the e2e HUMAN-block policy fails the retired deployment steps"
+SUBMODULES = "names the retired submodule checkouts a host may still hold, which .gitignore hides"
 KEPT = (
     Kept(".gitignore", "/.venv-sync/", 1, RESIDUE, "hides a host's leftover parser environment until it is removed"),
     Kept("tests/test_chezmoi_source_state.py", '"/.venv-sync/"', 1, RESIDUE, "pins that .gitignore line"),
     Kept("README.md", "Homes still deployed by GNU Stow", 1, RECOVERY, "points an old home at bf99958"),
+    Kept("docs/bootstrap.md", "`common/", 3, RESIDUE, SUBMODULES),
+    Kept("docs/payloads.md", "| `common/", 4, RESIDUE, SUBMODULES),
     Kept("docs/testing.md", "`audit-no-stow`", 1, NEGATIVE, "names the pinned e2e audit step: " + PATH_AUDIT),
     Kept("tests/bootstrap-manifest.sh", "DOTFILES_HOST", 5, NEGATIVE, HOST),
     Kept("tests/bootstrap.ps1", "'DOTFILES_HOST'", 1, NEGATIVE, HOST),
@@ -81,6 +89,8 @@ KEPT = (
     Kept("tests/doctor.sh", "DOTFILES_HOST", 11, NEGATIVE, HOST),
     Kept("tests/doctor.sh", "absent='venv-sync stow-links'", 1, NEGATIVE, "the doctor lists no retired rows"),
     Kept("tests/doctor.sh", "'stow-all'", 1, NEGATIVE, STEPS),
+    Kept("tests/doctor.sh", "../../dotfiles/common/coding-agent-kit/", 1, NEGATIVE,
+         "a link the retired kit package left on a host changes no payload row"),
     Kept("tests/powershell-profile.ps1", "'dotfiles-update'", 1, NEGATIVE, HOOK),
     Kept("tests/setup-host.sh", "stow_mentions", 12, NEGATIVE, STEPS),
     Kept("tests/setup-host.sh", "--legacy-stow", 4, NEGATIVE, FLAG),
@@ -268,7 +278,9 @@ RETIRED_SAMPLES = (
     ".git/dotfiles-sync-unix", "dotfiles-sync-windows", "lib/windows-link-trust.ps1",
     "tests/unix-installer.sh", "unix-installer-integration", "docs/windows-installer.md",
     "docs/installer-contract.md", "tests/update-hooks.ps1", "- id: update-hooks", "docs/sherlock-kit.md",
-    "until Stage 6", "stage-6-retirement.md",
+    "until Stage 6", "stage-6-retirement.md", "common/claude/.claude/settings.json",
+    "~/dotfiles/common/zsh/.zshrc", "win/powershell/Documents/PowerShell/profile.ps1", "deploys win\\wsl",
+    "mac/git/.gitconfig_local", "dotfiles\\win\\terminal",
 )
 NATIVE_SAMPLES = (
     "scripts/chezmoi-update.sh", "scripts/payload-update.sh --now", "sync-payloads", "sync-skills",
@@ -279,6 +291,8 @@ NATIVE_SAMPLES = (
     "uv sync", "Stage 5", "~/.codex/AGENTS.override.md", "tests/test_chezmoi_takeover_unix.py",
     "persistentState", "native-config", "an unmarked home runs no updater", "audit-sync-venv",
     "home/.hosts/win/.ssh/config.d/legacy.conf", "docs/update-contract.md", "tests/repository-text.sh",
+    "home/.hosts/wsl-ubuntu/.config/sh/.profile", "--host wsl-ubuntu\\n", "mac/Ubuntu", "common-only",
+    "$HOME\\.ssh\\id_ed25519",
 )
 
 

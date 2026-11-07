@@ -404,7 +404,7 @@ function Get-SetupHumanBlock {
         'HW-wsl' {
             return @{ Kind = 'judgment'; Lines = @(
                     '# Optional, elevated PowerShell. Windows Terminal and WezTerm profiles need the distro named exactly Ubuntu.'
-                    '# The native handover (HW-native) deploys win\wsl into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
+                    '# The native handover (HW-native) deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
                     '# ~\wsl.conf applies only when copied to /etc/wsl.conf inside the distro; the tracked one runs /usr/local/bin/mount-data.sh, which this repository does not ship, and hardcodes a default user.'
                     '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.'
                     'wsl --install -d Ubuntu'
