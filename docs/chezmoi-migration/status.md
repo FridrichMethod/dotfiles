@@ -1,11 +1,27 @@
 # Migration state and next-session record
 
-## Stage 6 progress record (started 2026-11-05)
+## Stage 6 completion record (2026-11-07)
 
-Stage 6 runs from [start-stage-6.md](start-stage-6.md) and
-[stage-6-retirement.md](stage-6-retirement.md). This section records the
-read-only Phase 0, the user's decisions and the coordinator rulings. The
-completion record replaces it when Stage 6 closes.
+This section is the current state. Stage 6 ran 2026-11-05..07 and retired the
+legacy deployment chain: GNU Stow and `stow-all.*`, the AI-sync parser chain
+(`lib/config_sync.py`, `lib/sync-runtime.sh`, TOMLKit, `.venv-sync`,
+`setup-sync.*` and the four `*-sync` wrappers), the legacy updaters
+(`dotfiles-update.*`, `dotfiles-auto-stow.ps1` and the Windows restow task),
+the `--legacy-stow`/`-LegacyStow` mode, the payload transition no-ops,
+`DOTFILES_DIR` and the Stage 2 bridges (the native source is materialized under
+`home/`). `origin/main` went `e3a0762..b287047` (Phase A) and
+`b287047..55a7960014e2177cf7dbf4f282a2a8efbe651995` (Phase B and its review
+fixes), both fast-forward without force, each on an exact SHA that every
+ci.yml job and every bootstrap-e2e job had passed. All six hosts reached
+`55a7960` through their own login updater, passed the per-host acceptance and
+had their exact residue retired; no host's checkout holds a retired submodule
+checkout or `.venv-sync`, and no host has a Stow receipt, wrapper link or
+restow task (moved residue sits in private evidence, listed below). Native chezmoi stays
+v2.74.0. [start-stage-6.md](start-stage-6.md) is archived. Next is Stage 7, the
+removal of every remaining legacy trace in the tree and on the hosts:
+[stage-7-trace-removal.md](stage-7-trace-removal.md), started from
+[start-stage-7.md](start-stage-7.md); the host traces it removes are listed
+below.
 
 ### Phase 0 (read-only, 2026-11-05; mac 2026-11-06)
 
@@ -50,7 +66,7 @@ The plan's file:line references were re-derived on `e3a0762`: most held;
 about 20 were corrected and about 150 unlisted sites were assigned to a
 commit before implementation.
 
-### User decisions (2026-11-05 and 2026-11-06)
+### User decisions (2026-11-05 to 2026-11-07)
 
 The user chose the recommended option everywhere except D-8.
 
@@ -74,8 +90,15 @@ The user chose the recommended option everywhere except D-8.
 | D-16 | Maintenance-gated canary: maintenance on the five remote hosts before `main` moves, Lab first, then host by host | No host pulls the retirement before its turn |
 | D-17 | Keep the takeover and recovery suites with synthetic links; drop only cases that run `stow-all` or `dotfiles-update` | Their coverage does not depend on the retired commands |
 
-The user also approved the one-off Windows Phase 0 task above. Deregistering
-`Dotfiles-Restow-*` waits for a separate approval of its exact command.
+The user also approved, each separately: the one-off Windows Phase 0 task above;
+deregistering `Dotfiles-Restow-76CD67D31195469A` with its exact,
+refuse-on-mismatch command over the administrator SSH session (the task's own
+principal); one-off limited-token tasks on win for the maintenance marker, the
+rollout and the D-8 step; and, for D-8, moving the clean retired submodule
+checkouts and module stores off every host before the `.gitignore` lines go. On
+2026-11-07 the user gave standing approval for such one-off limited win tasks,
+set the goal of removing every legacy trace in a new Stage 7 and moved D-8's
+final step (dropping the `.gitignore` residue lines) there.
 
 ### Coordinator rulings
 
@@ -137,7 +160,29 @@ Sherlock's `~/.config/sh/.profile` and the two Windows PowerShell profiles.
 A transition apply from `b287047` state with the updater's arguments
 converges for all seven roles.
 
-### Aggregate review (2026-11-06)
+### Phase B landing and gates (2026-11-07)
+
+- First candidate `4ca01aa`: ci.yml 42335900524 passed Linux and macOS (the
+  Bash 3.2 fix held) and failed Windows; bootstrap-e2e 42335900611 passed every
+  job but win. Both failures were the git-ignored leftover case: Python wrote
+  CRLF to `git check-ignore --stdin` on Windows. `55a7960` sends NUL-separated
+  bytes and replaces the `**/\#*#` twin with `**/[#]*#`.
+- `55a7960`: ci.yml 42349446858 (Linux behavior and lint, macOS system Bash,
+  Windows native PowerShell) and bootstrap-e2e 42349446830 (lab-ubuntu,
+  wsl-ubuntu, sherlock, marlowe and other in containers; mac and win on hosted
+  runners) passed. The macOS job ran the PowerShell parse gate, bootstrap-ps,
+  the PowerShell 7.0 floor section, e2e-harness and payload-update under
+  `/bin/bash` 3.2; Windows ran bootstrap-ps and the 7.0 floor section.
+- Locally, a fresh clone of `55a7960` without `DOTFILES_SYNC_PYTHON` or
+  `.venv-sync` passed `tests/run.sh --ci` (`test-suite=PASS`, pwsh suites
+  skipped on Lab) and all 32 pre-commit hooks; `gitleaks-history` passed on
+  `4ca01aa`. Every role renders byte-identically at `edb478d` and `55a7960`
+  with and without secrets enrollment, and a transition apply from `b287047`
+  state with the updater's arguments converges for all seven roles.
+- `origin/main` fast-forwarded `b287047..55a7960` (27 commits) with no
+  confirmation prompt.
+
+### Aggregate review (2026-11-06 and 2026-11-07)
 
 Eight read-only reviewers (host transition, code, tests and CI, Windows and
 PowerShell, portability, docs, plan conformance, security) each with two
@@ -174,8 +219,107 @@ items were fixed first (`1e3a229`..`f002545`), the review's after
   PSReadLine 2.0.0 already has `AddToHistoryOption` and
   `GetDefaultAddToHistoryOption`, so the B6 floor holds.
 
-Not fixed in Stage 6 (reported for a later change): the `workingTree` key
-above; `doctor.ps1` and `checks.sh` advise a bare `sync-payloads ITEM` on an
+### Host rollout (2026-11-07)
+
+Order (D-16): the Windows restow task was deregistered first (the exact
+command printed 0 remaining `Dotfiles-Restow-*` tasks); the maintenance marker
+went on the five remote hosts (win through a one-off limited task) before
+`main` moved; Lab took the canary; then each remote host in turn moved its
+marker into private evidence, ran its own login updater (Unix: an interactive
+`sh` reading the old rendered `~/.profile`; win: two login-equivalent updater
+runs in a one-off limited task), passed acceptance and retired its residue.
+Evidence: Lab `~/.local/state/dotfiles-stage6/rollout-20261107/`, the same
+path on each Unix host, and `~\.config\dotfiles-stage6-task\rollout\` on
+win; nothing was deleted on a remote host (the marker and the residue were
+moved into that evidence), and on Lab `.venv-sync` was deleted after a file
+manifest.
+
+| Host | Revision | Targets changed; managed | Doctor after (offline) | Residue retired |
+| --- | --- | --- | --- | --- |
+| lab-ubuntu (canary) | `b287047` -> `55a7960` | `.profile`, `.aliases`, Claude settings; 67 | 79 ok, exit 0 | `.venv-sync`, Stow receipt, 3 AI sync wrapper links and `fcitx5-profile-sync`; 2 retired checkouts and `.git/modules` |
+| wsl-ubuntu | `b287047` -> `55a7960` | The same 3; 63 | 62 ok, 11 missing tmux clones (preexisting) | `.venv-sync`, receipt, 3 wrapper links; 2 retired checkouts and `.git/modules` (8 stores incl. 3 orphans) |
+| mac | `e3a0762` -> `55a7960` | The same 3; 64 | 55 ok, 12 missing, 3 warn, 1 skip (as in Phase 0) | `.venv-sync`, receipt, 3 wrapper links; 4 retired checkouts, `.git/modules` and a `common/` holding only `.DS_Store` |
+| sherlock | `dddc718` -> `55a7960` | The 3 and `~/.config/sh/.profile` (a comment); 62 | 40 ok, 18 missing, 5 warn (as in Phase 0) | `.venv-sync`, receipt, 3 wrapper links; 4 retired checkouts and `.git/modules` |
+| marlowe | `dddc718` -> `55a7960` | The same 3; 62 (ACL `+` kept) | 38 ok, 18 missing, 7 warn with the login env (as in Phase 0); tmux 3.6 | None besides 1 retired checkout and `.git/modules` |
+| win | `57fbc45` -> `55a7960` | Both PowerShell profiles and Claude settings; 26 | 32 ok, 1 warn (`not installed: skills`), exit 0 | `.venv-sync`, `.git\dotfiles-sync-windows\` (4 files), 3 wrapper links and the dangling `claude-as`/`codex-as`; 2 retired checkouts and `.git\modules`; restow task deregistered |
+
+On every host afterwards: full-argument `status --exclude=dirs` empty, both AI
+configs equal to rendered output with unchanged modes, one `persistentState`
+key and no stray `chezmoistate.boltdb`, maintenance absent, the checkout clean
+at `55a7960`, no `venv-sync` or `stow-links` doctor row, `native-config`,
+`rc-pollution` and `payloads` ok (win: `payloads` warn as before), and no
+`[dotfiles]` warning from the login update. Shell smoke: `bash -ic true` exit 0
+everywhere; `zsh -ic true` exit 0 on Lab, WSL and Mac; on Sherlock and Marlowe
+`zsh -n ~/.zshrc` instead, since a fresh interactive zsh would start a
+lingering ssh-agent on a shared login node (site rule 1) and no live agent
+existed to reuse; win's PowerShell 7 and 5.1 profiles parsed with no error and
+loaded. Kept, as planned: payload stamps and logs (D-9), the installed kit's
+own `claude-as`/`codex-as` links, every recovery store and historical
+manifest. With the user's approval the clean retired submodule checkouts and
+every `.git/modules` store were moved off all six checkouts too (below); by the
+user's later decision the D-8 `.gitignore` lines, their pin test and the
+AGENTS.md rule stay for Stage 7.
+
+### Host traces left for Stage 7
+
+Listed read-only on 2026-11-07 after the rollout; Stage 7 deletes them
+(stage-7-trace-removal.md, Phase H1 and S7-6/S7-7). Paths are relative to
+the home directory. On every host the checkout `~/dotfiles` is clean at
+`55a7960`, the binding `~/.config/dotfiles/native` holds its three lines and
+no maintenance marker exists. The retired submodule checkouts no longer sit
+under `~/dotfiles/common/`: Stage 6 moved each (no stash and no unpushed
+commit anywhere) with the whole `.git/modules` into that host's
+`~/.local/state/dotfiles-stage6/rollout-20261107/retired/` (stores in
+`retired/git-modules/`), so the D-8 `.gitignore` lines now hide nothing on
+any host; by the user's decision they stay for Stage 7's R5. State below is
+each moved checkout read against its own store with an explicit work tree.
+`common/codex/coding-agent-kit` shares its store with
+`common/coding-agent-kit/coding-agent-kit` (the submodule kept its first
+name) and the store's index follows the newer checkout, so the older copy
+reads as differing files, not as work: the store has no stash and no
+unpushed commit. The `.git` extras `cursor`, `sg-*` and `rr-cache` are other
+tools' files, not dotfiles traces.
+
+- **lab-ubuntu**
+  - In `~/dotfiles`: empty old-layout directories `lab-ubuntu/fcitx5/.config/fcitx5/conf` (empty tool directories, not legacy: `.claude/worktrees`, `.ruff_cache/0.7.4`); `.git/config` keeps 4 `submodule.*` entries.
+  - Payload state in `.local/state/dotfiles/payload/`: `kit.stamp`, `payload.log`, `pymol.stamp`, `skills.stamp`.
+  - Moved retired checkouts in `.local/state/dotfiles-stage6/rollout-20261107/retired/`: `common/coding-agent-kit/coding-agent-kit` (HEAD `9bba5a6`, clean, stash 0, unpushed 0); `common/pymol/PyMOLScripts` (HEAD `3926cf9`, clean, stash 0, unpushed 0).
+  - Stage 6 evidence `.local/state/dotfiles-stage6/`: `phase0-20261105/`, `design-20261106/` and `rollout-20261107/` (every host's probes, doctor and trace logs; `lab-snap/`; `lab-residue/` with the Stow receipt copy, the deleted `.venv-sync`'s manifest and `pyvenv.cfg` and the removed links' targets; `retired/`). Worktree `.worktrees/stage7-plan` (branch `stage7/plan`) is kept for the Stage 7 session.
+  - Earlier migration evidence in `.local/state/`: `dotfiles-chezmoi-migration-recovery`, `dotfiles-cleanup`, `dotfiles-consolidation-20261103`, `dotfiles-stage4-9c1a31f`, `dotfiles-stage4-age-bootstrap-lab-ubuntu`, `dotfiles-stage4-before-secret-publication-bf999580`, `dotfiles-stage4-bf99958-config-before.toml`, `dotfiles-stage4-bf99958-file-apply`, `dotfiles-stage4-bf99958-refreshed59`, `dotfiles-stage4-codex-astra-xhigh-74985d08`, `dotfiles-stage4-codex-normalization-74985d08`, `dotfiles-stage4-preserved-planning-20261102`, `dotfiles-stage4-secret-canary-74985d08f6ec`, `dotfiles-stage4-secret-canary-normalized-74985d08f6ec`, `dotfiles-stage4-secret-canary-proc-recheck-74985d08f6ec`, `dotfiles-stage4-secret-canary-typed-identity-15068b9936dc`, `dotfiles-stage4-secret-enrollment-lab-bf999580`, `dotfiles-stage4-secret-prebridge-typed-identity-74985d08`, `dotfiles-stage4-secret-prebridge-typed-identity-74985d08-02`, `dotfiles-stage5-reinit`, `dotfiles-stage5-rollout`.
+- **wsl-ubuntu**
+  - In `~/dotfiles`: no empty old-layout directory (empty tool directories, not legacy: `.codex`); `.git/config` keeps 8 `submodule.*` entries.
+  - Payload state in `.local/state/dotfiles/payload/`: `kit.stamp`, `payload.log`, `pymol.stamp`, `skills.stamp`.
+  - Moved retired checkouts in `.local/state/dotfiles-stage6/rollout-20261107/retired/`: `common/coding-agent-kit/coding-agent-kit` (HEAD `9bba5a6`, clean, stash 0, unpushed 0); `common/pymol/PyMOLScripts` (HEAD `3926cf9`, clean, stash 0, unpushed 0).
+  - Stage 6 evidence `.local/state/dotfiles-stage6/rollout-20261107/`: `maintenance.released` (the released marker), `snap/`, `residue/` (`venv-sync/`, `dotfiles-sync-unix`, `claude-settings-sync.link`, `codex-config-sync.link`, `codex-rules-sync.link`, `links.txt`), `retired/`, `login.out`, `login.err` and the smoke logs.
+  - Earlier migration evidence in `.local/state/`: `dotfiles-consolidation-20261103`, `dotfiles-stage4-age-bootstrap-wsl-ubuntu`, `dotfiles-stage4-crypto-inputs-wsl-ubuntu`, `dotfiles-stage4-crypto-verify-wsl-ubuntu-host`, `dotfiles-stage4-secret-deploy-wsl-ubuntu-74985d08f6ec`, `dotfiles-stage4-wsl-activation-bf999580`, `dotfiles-stage4-wsl-apply-bf999580`, `dotfiles-stage4-wsl-approved-bf999580`, `dotfiles-stage4-wsl-codex-normalization-74985d08`, `dotfiles-stage4-wsl-final-bf999580`, `dotfiles-stage4-wsl-init-bf999580`, `dotfiles-stage4-wsl-postbridge-bf999580`, `dotfiles-stage4-wsl-preactivation-bf999580`, `dotfiles-stage4-wsl-prebridge-9c1a31f`, `dotfiles-stage4-wsl-preflight-bf999580`, `dotfiles-stage4-wsl-secret-after-normalization-74985d08f6ec`, `dotfiles-stage5-reinit`, `dotfiles-stage5-rollout`.
+- **mac**
+  - In `~/dotfiles`: empty old-layout directories `win/wezterm`, `fedora/bash`, `fedora/zsh`, `ubuntu/bash`, `ubuntu/zsh`; `.git/config` keeps 6 `submodule.*` entries.
+  - Payload state in `.local/state/dotfiles/payload/`: `kit.stamp`, `payload.log`, `pymol.stamp`, `skills.stamp`.
+  - Moved retired checkouts in `.local/state/dotfiles-stage6/rollout-20261107/retired/`: `common/codex/coding-agent-kit` (HEAD `9bba5a6`, 57 files differ from the shared store, stash 0, unpushed 0); `common/coding-agent-kit/coding-agent-kit` (HEAD `9bba5a6`, clean, stash 0, unpushed 0); `common/pymol/PyMOLScripts` (HEAD `3926cf9`, clean, stash 0, unpushed 0); `common/sherlock-kit/sherlock-kit` (HEAD `c52a8ff`, clean, stash 0, unpushed 0).
+  - Stage 6 evidence `.local/state/dotfiles-stage6/rollout-20261107/`: `maintenance.released` (the released marker), `snap/`, `residue/` (`venv-sync/`, `dotfiles-sync-unix`, `claude-settings-sync.link`, `codex-config-sync.link`, `codex-rules-sync.link`, `links.txt`), `retired/`, `login.out`, `login.err` and the smoke logs.
+  - Earlier migration evidence in `.local/state/`: `dotfiles-consolidation-20261103`, `dotfiles-stage4-age-bootstrap-mac`, `dotfiles-stage4-crypto-inputs-mac`, `dotfiles-stage4-crypto-verify-mac-host`, `dotfiles-stage4-crypto-verify-mac-R`, `dotfiles-stage4-mac-activation-bf999580`, `dotfiles-stage4-mac-afterinit56-bf999580`, `dotfiles-stage4-mac-apply-bf999580`, `dotfiles-stage4-mac-approved-bf999580`, `dotfiles-stage4-mac-current56-bf999580`, `dotfiles-stage4-mac-preparation-bf999580`, `dotfiles-stage4-mac-review-bf999580`, `dotfiles-stage4-mac-secret-canary-74985d08f6ec`, `dotfiles-stage4-mac-secret-canary-pre-ff-74985d08f6ec`, `dotfiles-stage5-reinit`, `dotfiles-stage5-rollout`.
+- **sherlock**
+  - In `~/dotfiles`: no empty old-layout directory; `.git/config` keeps 6 `submodule.*` entries.
+  - Payload state in `.local/state/dotfiles/payload/`: `kit.stamp`, `payload.log`, `pymol.stamp`, `skills.failed`.
+  - Moved retired checkouts in `.local/state/dotfiles-stage6/rollout-20261107/retired/`: `common/codex/coding-agent-kit` (HEAD `9bba5a6`, 57 files differ from the shared store, stash 0, unpushed 0); `common/coding-agent-kit/coding-agent-kit` (HEAD `9bba5a6`, clean, stash 0, unpushed 0); `common/pymol/PyMOLScripts` (HEAD `800e7ac`, clean, stash 0, unpushed 0); `common/sherlock-kit/sherlock-kit` (HEAD `78bb33b`, clean, stash 0, unpushed 0).
+  - Stage 6 evidence `.local/state/dotfiles-stage6/rollout-20261107/`: `maintenance.released` (the released marker), `snap/`, `residue/` (`venv-sync/`, `dotfiles-sync-unix`, `claude-settings-sync.link`, `codex-config-sync.link`, `codex-rules-sync.link`, `links.txt`), `retired/`, `login.out`, `login.err` and the smoke logs.
+  - Earlier migration evidence in `.local/state/`: `dotfiles-consolidation-20261103`, `dotfiles-stage4-age-bootstrap-sherlock`, `dotfiles-stage4-bf999-fresh`, `dotfiles-stage4-bf999-postapply-review`, `dotfiles-stage4-bf999-prebridge`, `dotfiles-stage4-bf999-run`, `dotfiles-stage4-crypto-inputs-sherlock`, `dotfiles-stage4-crypto-verify-sherlock-host`, `dotfiles-stage4-secret-deploy-sherlock-15068b9936dc`, `dotfiles-stage4-secret-pre-ff-sherlock-15068b9936dc`, `dotfiles-stage4-sherlock-kit-0.7`, `dotfiles-stage4-sherlock-kit-operators-20261103`, `dotfiles-stage4-sherlock-nfs-repeat-fixture-15068-01`, `dotfiles-stage4-sherlock-secret-adapter-15068b9936dc`, `dotfiles-stage5-reinit`, `dotfiles-stage5-rollout`.
+- **marlowe**
+  - In `~/dotfiles`: no empty old-layout directory; `.git/config` keeps 2 `submodule.*` entries.
+  - Payload state in `.local/state/dotfiles/payload/`: `kit.stamp`, `payload.log`, `pymol.stamp`, `skills.failed`.
+  - Moved retired checkouts in `.local/state/dotfiles-stage6/rollout-20261107/retired/`: `common/pymol/PyMOLScripts` (HEAD `41785ca`, clean, stash 0, unpushed 0).
+  - Stage 6 evidence `.local/state/dotfiles-stage6/rollout-20261107/`: `maintenance.released` (the released marker), `snap/`, an empty `residue/`, `retired/`, `login.out`, `login.err` and the smoke logs.
+  - Earlier migration evidence in `.local/state/`: `dotfiles-consolidation-20261103`, `dotfiles-marlowe-runtime-dryrun-20261103-01`, `dotfiles-marlowe-runtime-dryrun-20261103-02`, `dotfiles-marlowe-tmux-dryrun-20261103-01`, `dotfiles-marlowe-tmux-install-20261104-01`, `dotfiles-stage4-age-bootstrap-marlowe`, `dotfiles-stage4-bf999-fresh`, `dotfiles-stage4-bf999-prebridge`, `dotfiles-stage4-bf999-run`, `dotfiles-stage4-crypto-inputs-marlowe`, `dotfiles-stage4-crypto-verify-marlowe-host`, `dotfiles-stage4-marlowe-secret-adapter-74985d08f6ec`, `dotfiles-stage4-secret-deploy-marlowe-74985d08f6ec`, `dotfiles-stage4-secret-pre-ff-marlowe-74985d08f6ec`, `dotfiles-stage5-reinit`, `dotfiles-stage5-rollout`.
+- **win**
+  - In `~\dotfiles`: no empty old-layout directory; `.git\config` keeps 6 `submodule.*` entries.
+  - `~\AppData\Local\dotfiles\payload\` (empty).
+  - Moved retired checkouts in `~\.config\dotfiles-stage6-task\rollout\retired\`: `common\coding-agent-kit\coding-agent-kit` (HEAD `9bba5a6`, clean, stash 0, unpushed 0); `common\pymol\PyMOLScripts` (HEAD `800e7ac`, clean, stash 0, unpushed 0); stores in `retired\git-modules\`.
+  - `~\.config\dotfiles-stage6-task\`: Phase 0's `run.ps1`/`run.log`, the marker task's `marker.ps1`/`marker.log`, and `rollout\` (`run.ps1`, `run.log`, `retired.ps1`, `retired.log`, `maintenance.released`, `snap\` with the four pre-update targets, `residue\` with `.venv-sync`, `dotfiles-sync-windows`, `claude-settings-sync.link`, `codex-config-sync.link`, `codex-rules-sync.link`, `claude-as.link`, `codex-as.link`, and `retired\`).
+  - Earlier evidence: `~\.config\dotfiles-stage5-task\` (`run.ps1`, `run.log`) and `~\.config\chezmoi\stage5-reinit\` (`chezmoi.toml.before`, `reinit-win.ps1`).
+
+### Findings not fixed in Stage 6
+
+Reported for a later change: the `workingTree` key in the coordinator rulings; `doctor.ps1` and `checks.sh` advise a bare `sync-payloads ITEM` on an
 unmarked home under maintenance or without a guard, and print the `-Now` hook
 path unquoted; the payload hooks' retry line names `sync-payloads` there too;
 `lib/terminal.sh` keeps a p10k instant-prompt branch no login caller uses any
@@ -189,9 +333,40 @@ where git matches `.gitignore` case-insensitively, a case variant of an ignored
 name (`dot_zshrc.ORIG`) still deploys; a leftover in `home/.chezmoidata/` stops
 every native run until it is removed (it predates Stage 6 and fails closed).
 
+### Measured line deltas
+
+`git diff --numstat -M e3a0762 55a7960` (312 files: 5 added, 96 deleted, 122
+modified, 89 pure renames), by category (doc: every `*.md`; test: the rest of
+`tests/`; code: everything else, including the `home/` sources):
+
+| Category | Files | Added | Deleted | Net | Tracked text lines `e3a0762` -> `55a7960` |
+| --- | --- | --- | --- | --- | --- |
+| code | 203 | 430 | 3686 | -3256 | 22139 -> 18883 (232 -> 156 files) |
+| test | 77 | 5060 | 8943 | -3883 | 29413 -> 25530 (114 -> 104 files) |
+| doc | 30 | 1945 | 1972 | -27 | 14518 -> 14491 (40 -> 37 files) |
+
+This records commit is not counted. No speedup was measured or is claimed.
+The remaining custom helpers and their purpose: `lib/chezmoi-guard.sh`/`.ps1`
+(home binding, maintenance and Windows binary trust); `scripts/chezmoi-update.sh`/`.ps1`
+(the thin native login updater); `scripts/payload-update.sh`/`.ps1` (the
+explicit payload command); `lib/terminal.sh`/`.ps1` (status output);
+`lib/bootstrap/*.sh`, `lib/bootstrap.ps1`, `setup-host.*` and `doctor.*`
+(day-zero provisioning and the offline doctor).
+
+### Unfinished gates
+
+- win: an interactive PowerShell 7 session by the user should show history and
+  plugin predictions in the list view and bold-blue directories (B6); a
+  scheduled task cannot open one.
+- Mac tmux 3.8 adversarial-menu failures remain the recorded baseline; the
+  macOS CI job installs no tmux.
+- Sherlock and Marlowe: an interactive zsh was not started on the login nodes
+  (above); the preexisting login-env gaps and missing tmux clones stay.
+- The findings below are reported, not fixed.
+
 ## Stage 5 completion record (2026-11-04)
 
-This section is the current state. Stage 5 ran 2026-11-03..04 and landed: local
+Stage 5 ran 2026-11-03..04 and landed: local
 and remote main fast-forwarded from `b9f9d61` to
 `dddc71831944acdf80813532f5935867093dd59b` (85 commits, 69 files, +3765/-2043),
 without force or history rewrite. Five Unix hosts reached `dddc718` through
@@ -199,11 +374,9 @@ their actual login updater and passed the reviewed `persistentState` re-init.
 Windows followed on 2026-11-04 through a one-off limited-token task the user
 approved: its own updater moved it to `57fbc45` (`dddc718` code plus the Stage 5
 records) and it passed the same re-init, so all six hosts are converged and
-re-initialized. Native chezmoi stays v2.74.0. Stage 6 has not started; its plan
-is [stage-6-retirement.md](stage-6-retirement.md) and its fresh-session prompt is
-[start-stage-6.md](start-stage-6.md). The stage records after this one are
-history; the stage summary, decisions and retirement gate further down stay
-current.
+re-initialized. Native chezmoi stays v2.74.0. Stage 6 followed (above). The
+stage records after this one are history; the stage summary, decisions and
+retirement gate further down stay current.
 
 ### Landing and gates
 
@@ -871,7 +1044,7 @@ before the main fast-forward.
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
 | 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e; closure `a5d9ad7` passed exact CI 41719265671 | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Six packages, two review-fix branches and docs landed at `dddc718`; exact CI 41832666587 and bootstrap e2e 41832666818 passed | Five Unix hosts at `dddc718` through the actual updater, with the reviewed `persistentState` re-init; Marlowe's login env has tmux 3.6a; win at `57fbc45` (same code plus the Stage 5 records) through its own updater and the same re-init on 2026-11-04, by a user-approved limited-token task | [Stage 5 record](#stage-5-completion-record-2026-11-04), [rollout](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04) |
-| 6 | In progress: Phase A landed at `b287047`; Phase B and the review fixes implemented, landing pending | No host target changed yet | [Stage 6 progress record](#stage-6-progress-record-started-2026-11-05), plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
+| 6 | Complete: Phase A at `b287047`, Phase B and review fixes at `55a7960` (ci 42349446858, e2e 42349446830) | All six hosts at `55a7960` through their own updater; residue and retired checkouts retired; restow task deregistered | [Stage 6 completion record](#stage-6-completion-record-2026-11-07), plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
 
 ## Decisions and open choices
 

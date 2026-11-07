@@ -114,10 +114,9 @@ bridge. It changes the boundary as follows;
 
 ## Stage 6 boundary
 
-Stage 6 (legacy retirement) is implemented on the coordinator integration
-branch; landing, the final exact-SHA CI and e2e, and every host step (Phase C)
-are pending, and their outcomes go to [status.md](status.md). The repository
-side retires, in order: the legacy-stow setup and doctor mode, the receipt and
+Stage 6 (legacy retirement) is done: it landed at `55a7960` and every host
+reached it ([status.md](status.md#stage-6-completion-record-2026-11-07)). The
+repository side retired, in order: the legacy-stow setup and doctor mode, the receipt and
 the environment host selector (B1, `4dc9f78`); the Stow installers, ignore
 file, link-trust helper and old login updaters (B2, `c5bdca4`); the
 configuration parser chain, its environment and wrappers (B3, `240338d`); the
@@ -138,9 +137,12 @@ auto-mode prose that named retired paths (D-10, `e243a2f`).
   guards `$PSStyle` and the PSReadLine 2.2 prediction options, and B1 deleted
   the HW-stow check with its `LinkTarget` read. The 7.0 entrypoint and 5.1
   profile floors are unchanged.
-- Quiescence before main moves (maintenance on the five remote hosts, Lab
-  first, D-16) and exact residue retirement belong to Phase C. The `.gitignore`
-  residue lines stay until every host is verified clean (D-8).
+- Phase C quiesced the five remote hosts before main moved (D-16), took Lab as
+  the canary, then updated each host through its own login updater and retired
+  its exact residue; the retired submodule checkouts moved into each host's
+  private evidence. The `.gitignore` residue lines stay for Stage 7, which
+  removes them with the remaining host traces
+  ([Stage 7](stage-7-trace-removal.md)).
 
 ### Historical Sherlock delivery residue (manual)
 

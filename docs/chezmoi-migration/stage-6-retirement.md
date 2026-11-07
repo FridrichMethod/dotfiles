@@ -23,12 +23,13 @@ stdlib/platform behavior tests.
 [status.md](status.md)). Also follow [fleet rollout](fleet-rollout.md) and
 [secrets and SSH](secrets-and-ssh.md).
 
-**State:** Implemented, not landed. Phase A is integrated on the coordinator
-branch (A2 `42328b2`, A1 `414b00a`, A3 `1677e50`, A4 `17a6fcb`) and Phase B
-follows it in order: B1 `4dc9f78`, B2 `c5bdca4`, B3 `240338d`, B4 `c97e2e1`,
-B6 `a82b69c`, B5 `5dae7da`, D-10 `e243a2f`, then B7. Landing, the final
-exact-SHA CI and e2e and Phase C are pending; their outcomes go to the
-Stage 6 record in [status.md](status.md). Stage 5 landed on main as
+**State:** Complete. Phase A (A2 `42328b2`, A1 `414b00a`, A3 `1677e50`, A4
+`17a6fcb`) landed at `b287047`; Phase B (B1 `4dc9f78`, B2 `c5bdca4`, B3
+`240338d`, B4 `c97e2e1`, B6 `a82b69c`, B5 `5dae7da`, D-10 `e243a2f`, B7
+`edb478d`) and its review fixes landed at `55a7960`, and Phase C brought all six
+hosts there. Outcomes are in the
+[Stage 6 completion record](status.md#stage-6-completion-record-2026-11-07);
+the remaining traces go to [Stage 7](stage-7-trace-removal.md). Stage 5 landed on main as
 `b9f9d61..dddc718`; all six hosts took its login update and re-init, Windows
 last on 2026-11-04 (gate R3).
 
@@ -222,14 +223,14 @@ names; distinguish that from active runtime dependencies.
 **Owner:** Independent verification worker; review deletion sets read-only.
 The concrete plan is [Native-only verification plan](#native-only-verification-plan).
 
-- [ ] Use a fresh isolated checkout/home with no sync venv, no installed TOMLKit
+- [x] Use a fresh isolated checkout/home with no sync venv, no installed TOMLKit
   and no external jq. Complete documented native initialization/diff/apply and
   a second convergent apply for each supported platform/host combination.
-- [ ] Exercise known local edits, malformed mutable config, private attributes,
+- [x] Exercise known local edits, malformed mutable config, private attributes,
   unrelated siblings and configured fast-forward update refusal cases.
-- [ ] Run preserved shell, tmux, PowerShell, AI policy and payload behavior suites
+- [x] Run preserved shell, tmux, PowerShell, AI policy and payload behavior suites
   against the final layout. Python stdlib remains allowed for those purposes.
-- [ ] Verify minimum-version failure is actionable and the documented source
+- [x] Verify minimum-version failure is actionable and the documented source
   edit/add/merge workflow works without legacy paths.
 - [x] Verify checks and documentation no longer instruct a new user to create
   `.venv-sync`, run setup-sync or install Stow for native dotfile deployment.
@@ -999,24 +1000,24 @@ Recorded findings for the user, not retirement work:
 
 ### Execute the six-host retirement
 
-- [ ] Build and verify the final consolidated native-only source in an isolated
+- [x] Build and verify the final consolidated native-only source in an isolated
   checkout first. Apply no deletion commit to a live checkout while its old
   updater/workers can still run. Coordinate publication with the fleet order.
-- [ ] Recheck all six targets using existing access. Read the latest follow-up
+- [x] Recheck all six targets using existing access. Read the latest follow-up
   in fleet-rollout.md: Windows direct access was repaired and verified; lab
   self-SSH rejection does not block local access. Do not assume the planning
   snapshot still holds or that a reused master proves fresh login. Follow
   cluster rules and record specific access/allocation blockers. Win passed its
   Stage 5 gate R3 on 2026-11-04; its F7 managed count still needs measuring.
-- [ ] Quiesce reachable hosts before crossing the cutoff. Execute one final-source
+- [x] Quiesce reachable hosts before crossing the cutoff. Execute one final-source
   canary, then the other reachable unblocked hosts, with one owner per target and
   private recovery snapshots. Preserve current access until new access is proven
   or its site-constrained validation limitation is explicitly recorded.
-- [ ] On each migrated host, verify config/secret consumer paths, preserved auth,
+- [x] On each migrated host, verify config/secret consumer paths, preserved auth,
   applicable shell/app smoke, second apply and thin updater behavior. Retire exact
   obsolete links, tasks, helpers and sync environments only after replacement
   checks pass; preserve custom content, local commits and unrelated checkouts.
-- [ ] Record host-by-host execution and exceptions in status.md. Do not leave
+- [x] Record host-by-host execution and exceptions in status.md. Do not leave
   otherwise executable host cleanup as instructions for the user. Unreachable
   hosts can remain explicit exceptions to source retirement, never false success.
 

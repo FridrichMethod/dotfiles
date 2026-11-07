@@ -568,7 +568,7 @@ approximation:
   every file that is itself an e2e wrapper when it looks for the real tool,
   so a call is logged once and never bounces between the copies. The retired
   deployment tool is no longer wrapped (retirement decision D-11(a) in the
-  [migration record](chezmoi-migration/status.md#user-decisions-2026-11-05-and-2026-11-06)),
+  [migration record](chezmoi-migration/status.md#user-decisions-2026-11-05-to-2026-11-07)),
   and nothing the native flow runs installs it: the login-PATH audit of
   criterion 5 fails any copy the machine did not have before the run, and
   `audit-clone-links` any link under HOME that leads into the clone, which is

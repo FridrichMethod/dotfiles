@@ -219,7 +219,7 @@ The other former `.stowrc` ignores covered OS/editor/cache artifacts and the
 retired `coding-agent-kit`, `PyMOLScripts`, `sherlock-kit` checkouts; none of
 the 91 tracked paths matched them. There is no tracked `.stow-local-ignore` in
 these packages. Stage 6 removed `.stowrc` with Stow; `.gitignore` keeps the
-leftover-checkout lines until Phase C. The native model deploys only
+leftover-checkout lines until Stage 7. The native model deploys only
 inventoried targets; it must not import ignored checkouts.
 
 | Role | Current package paths | Legacy-only helpers excluded | Stage 2 ordinary/assets targets | Stage 3 complete native targets |

@@ -1,5 +1,15 @@
 # Fresh-session prompt: Stage 6
 
+> Archived: this stage is complete ([status.md](status.md)); do not start a session from this prompt.
+
+> Completed. Stage 6 landed at `55a7960` on 2026-11-07 after exact CI
+> 42349446858 and bootstrap e2e 42349446830, and all six hosts reached it
+> through their own login updater. Its decisions, review, host results and the
+> host traces it leaves are in
+> [status.md](status.md#stage-6-completion-record-2026-11-07). The next
+> session starts from [start-stage-7.md](start-stage-7.md). The prompt below
+> is the original handoff, kept as history; do not run it again.
+
 Paste the block below into a new session to run Stage 6, the legacy retirement.
 It assumes the Stage 5 records are on main. The canonical plan is
 [stage-6-retirement.md](stage-6-retirement.md); the prompt adds the session

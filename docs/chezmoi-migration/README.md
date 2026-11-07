@@ -1,10 +1,11 @@
 # Chezmoi migration handoff
 
-Status: Stage 6 (legacy retirement) is implemented on the coordinator
-integration branch; landing, the final exact-SHA CI and e2e and the host-side
-Phase C are pending (see [status.md](status.md) and the
-[Stage 6 plan](stage-6-retirement.md)). Stage 5 (ecosystem simplification) is
-done. It landed at `dddc718` after exact CI 41832666587 and bootstrap e2e
+Status: Stage 6 (legacy retirement) is done. It landed at `55a7960` (Phase A
+at `b287047`) after exact CI 42349446858 and bootstrap e2e 42349446830, and all
+six hosts reached it through their own login updater with their residue
+retired ([completion record](status.md#stage-6-completion-record-2026-11-07)).
+Next is Stage 7, the trace removal ([plan](stage-7-trace-removal.md)). Stage 5
+(ecosystem simplification) is done. It landed at `dddc718` after exact CI 41832666587 and bootstrap e2e
 41832666818; the five Unix hosts reached it through their login updater and
 took the reviewed `persistentState` re-init, and Windows did the same on
 2026-11-04 (at `57fbc45`) through a user-approved limited-token task.
@@ -13,8 +14,8 @@ static credentials enrolled on the five Unix hosts. Runtime `bf99958`, encrypted
 source `74985d08` and formatting correction `15068b9` passed their exact hosted
 CI/e2e gates before main landing and relevant host operations. Recovery custody
 is established. Actual outcomes, historical partial operations and application
-limits are recorded in [status.md](status.md). The Stage 6 session prompt is
-[start-stage-6.md](start-stage-6.md). Initial research baseline: `738f619`;
+limits are recorded in [status.md](status.md). The Stage 7 session prompt is
+[start-stage-7.md](start-stage-7.md). Initial research baseline: `738f619`;
 consolidation baseline: `1a9d30b`. The completed review's old-layout/tool-support
 plan is now integrated in [support-boundary.md](support-boundary.md); do not
 execute its old standalone prompt. Takeover and recovery use
@@ -142,7 +143,8 @@ remains an import stub. Mirrored first-party skills remain identical.
 | [3. Native configuration](stage-3-native-config.md) | Native AI modifies; complete candidate needs no sync venv | Implemented with explicit safe input refusals | Isolated native fixtures; Stage 4 performs takeover |
 | [4. Takeover](stage-4-takeover.md) | Declared cutoff, tested handover, real canary takeover, secret enrollment, thin login adapter | Ordered work packages with paths, guards, recovery and platform gates | Agent executes under the user's recorded six-host authorization |
 | [5. Ecosystem simplification](stage-5-ecosystem.md) | Smaller provisioning/diagnostics/payload integration and verified old-tool branch removal | Done at `dddc718`; [completion record](status.md#stage-5-completion-record-2026-11-04) | D7 resolved as explicit-only payloads; all six hosts updated and re-initialized (win on 2026-11-04, at `57fbc45`) |
-| [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Implemented (A1-A4, B1-B7); landing and Phase C pending; [session prompt](start-stage-6.md) | Roll out to all reachable unblocked hosts; record exceptions without an all-host waiting gate |
+| [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Done at `55a7960`; [completion record](status.md#stage-6-completion-record-2026-11-07) | All six hosts at `55a7960` through their own updater; residue retired and the restow task deregistered |
+| [7. Trace removal](stage-7-trace-removal.md) | Remove every remaining legacy trace in the tree and on the six hosts | Planned; [session prompt](start-stage-7.md) | Starts from the host traces the Stage 6 record lists |
 
 Stages run in this order. Code completion and real-host operations are different
 facts: record both. Old installations may become unsupported at the declared
@@ -166,8 +168,8 @@ must disable old hooks and address running workers/tasks BEFORE crossing it.
 Document that unsupported installations cannot safely assume automatic upgrades.
 Do not add a fleet service or require an inventory of every offline installation.
 See [the cutoff procedure](support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable).
-Executed in Stage 6 on the repository side; the host side follows the
-Stage 6 record in [status.md](status.md).
+Executed in Stage 6 on the repository side and on all six hosts
+([Stage 6 record](status.md#stage-6-completion-record-2026-11-07)).
 The implementing agent executes that procedure on accessible hosts. Quiesce old
 writers before publishing/crossing the breaking revision; a subsequent cleanup
 cannot repair an auto-pull race retroactively. Follow the fleet rollout order.
