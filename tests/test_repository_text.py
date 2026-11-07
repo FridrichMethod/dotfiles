@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -249,6 +250,9 @@ def broken_links(root, files):
     dirs = {str(p) for f in files for p in PurePosixPath(f).parents}
     slugs, problems = {}, []
     for source in sorted(f for f in files if f.endswith(".md")):
+        if not (root / source).is_file():
+            problems.append(f"{source}: tracked but missing from the work tree")
+            continue
         for number, target in relative_links((root / source).read_text(encoding="utf-8")):
             path, _, anchor = target.partition("#")
             dest = resolve(source, path) if path else source
@@ -257,7 +261,8 @@ def broken_links(root, files):
                 continue
             if anchor and dest.endswith(".md"):
                 if dest not in slugs:
-                    slugs[dest] = heading_slugs((root / dest).read_text(encoding="utf-8"))
+                    target_file = root / dest
+                    slugs[dest] = heading_slugs(target_file.read_text(encoding="utf-8")) if target_file.is_file() else set()
                 if anchor not in slugs[dest]:
                     problems.append(f"{source}:{number}: no heading for {target}")
     return problems
@@ -342,6 +347,13 @@ class MarkdownLinkTests(unittest.TestCase):
         self.assertEqual(list(relative_links(text)), [(1, "x.md#y"), (5, "../z.md")])
         self.assertIsNone(resolve("README.md", "../outside.md"))
         self.assertEqual(resolve("docs/a.md", "../tests/COVERAGE.md"), "tests/COVERAGE.md")
+
+    def test_missing_tracked_markdown_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.md").write_text("[gone](gone.md)\n", encoding="utf-8")
+            problems = broken_links(root, ["a.md", "gone.md"])
+        self.assertEqual(problems, ["gone.md: tracked but missing from the work tree"])
 
     def test_tracked_markdown_links_and_anchors_resolve(self):
         problems = broken_links(ROOT, tracked(ROOT))
