@@ -88,7 +88,7 @@ repos:
         entry: tests/test-entrypoints.sh
         language: script
         pass_filenames: false
-        files: ^(\.pre-commit-config\.yaml|tests/[^/]+\.(sh|ps1)|tests/test_environment\.py|tests/lib/environment\.(sh|ps1)|tests/fixtures/chezmoi/targets\.tsv)$
+        files: ^(\.pre-commit-config\.yaml|\.github/workflows/ci\.yml|tests/[^/]+\.(sh|ps1)|tests/test_environment\.py|tests/lib/environment\.(sh|ps1)|tests/fixtures/chezmoi/targets\.tsv)$
       - id: repository-text
         name: retired mechanism names and Markdown links
         entry: tests/repository-text.sh

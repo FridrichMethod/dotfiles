@@ -106,6 +106,7 @@ KEPT = (
     Kept("tests/shell-profile.sh", "dotfiles-update", 1, NEGATIVE, HOOK),
     Kept("tests/test-entrypoints.sh", "grep -Fqi stow", 2, NEGATIVE, "tests/run.sh requires no retired tool"),
     Kept("tests/test-entrypoints.sh", "mentions GNU Stow", 2, NEGATIVE, "tests/run.sh requires no retired tool"),
+    Kept("tests/test-entrypoints.sh", "\\bstow\\b", 1, NEGATIVE, "no ci.yml job installs the retired tool"),
     Kept("tests/test_ai_policy.py", "AUTO_MODE_RETIRED = ", 1, NEGATIVE, "auto-mode prose names no retired path"),
     Kept("tests/test_ai_policy.py", "soft_deny names", 2, NEGATIVE, "mutations of that auto-mode prose check"),
     Kept("tests/test_chezmoi_codex.py", '".venv-sync").exists()', 1, NEGATIVE, VENV),

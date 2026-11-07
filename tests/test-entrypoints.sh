@@ -135,7 +135,8 @@ python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_environment.py' -v
 # reads and the hook configuration. Files are selected as pre-commit
 # selects them: re.search of the hook's files, then of its exclude and the
 # top-level one; a shell linter must also declare its types.
-python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" "$TEST_DIR/fixtures/chezmoi/targets.tsv" <<'PY'
+python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" "$TEST_DIR/fixtures/chezmoi/targets.tsv" \
+    "$REPO_ROOT/.github/workflows/ci.yml" <<'PY'
 import re
 import sys
 
@@ -173,7 +174,7 @@ need = {
                        'tests/test_payload_download.py'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
                          'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py',
-                         'tests/fixtures/chezmoi/targets.tsv'],
+                         'tests/fixtures/chezmoi/targets.tsv', '.github/workflows/ci.yml'],
     'repository-text': ['README.md', 'AGENTS.md', 'docs/bootstrap.md', '.gitignore',
                         'tests/test_repository_text.py', 'tests/repository-text.sh'],
     'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
@@ -291,6 +292,19 @@ entries = {hook.get('entry') for variants in hooks.values() for hook in variants
 for suite in runner_suites:
     if 'tests/' + suite not in entries:
         missed.append(f'Linux pre-commit behavior pass omits {suite}')
+# Kept from the retirement: the Linux job alone has a real tmux, from apt,
+# and requires it, so its cases fail instead of skipping; no job installs
+# the retired deployment tool.
+workflow = open(sys.argv[4], encoding='utf-8').read()
+linux = re.search(r'\n  linux:\n(.*?)\n  [a-z]+:\n', workflow, re.S)
+linux = linux.group(1) if linux else ''
+if 'DOTFILES_TEST_REQUIRE_TMUX: "1"' not in linux:
+    missed.append('ci.yml: the Linux job does not set DOTFILES_TEST_REQUIRE_TMUX: "1"')
+if not re.search(r'apt-get install --yes (?:\S+ )*tmux\b', linux):
+    missed.append('ci.yml: the Linux job does not apt-get install tmux')
+for line in workflow.splitlines():
+    if re.search(r'\b(?:apt-get|brew|choco|winget|pip) install\b', line) and re.search(r'\bstow\b', line, re.I):
+        missed.append(f'ci.yml installs a retired tool: {line.strip()}')
 if missed:
     sys.exit('ERROR: ' + '; '.join(missed))
 PY
