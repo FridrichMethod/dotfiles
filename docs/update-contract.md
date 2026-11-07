@@ -1,7 +1,7 @@
 # Native login update contract
 
-A login updates only a home that native chezmoi owns, through the updater of
-the source that home is bound to. This page is the durable contract of that
+A login updates only a home whose chezmoi config names it and a dotfiles
+checkout, through that checkout's updater. This page is the durable contract of that
 update; the manual commands, takeover and recovery live in
 [takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover).
 
@@ -21,15 +21,36 @@ update; the manual commands, takeover and recovery live in
 
 - Maintenance comes first: while `~/.config/dotfiles/maintenance` exists, in
   any form, nothing runs.
-- `~/.config/dotfiles/native` must be a regular file of exactly three
-  terminated lines: `dotfiles-chezmoi-v1`, the home and an absolute source.
-  The profile reads only enough to find that source's guard
-  (`lib/chezmoi-guard.sh` or `.ps1`), which validates the whole binding before
-  the source's `scripts/chezmoi-update.sh` or `.ps1` runs.
-- An invalid binding prints one warning and runs nothing.
-- An unmarked home runs nothing and prints nothing. There is no fallback to
-  `~/dotfiles`, an environment variable or any other checkout, and a retired
-  checkout's guard or updater is never sourced.
+- The source is the checkout `~/.config/chezmoi/chezmoi.toml` names. The
+  profile reads only its first top-level `sourceDir` line, to find that
+  checkout's guard (`lib/chezmoi-guard.sh` or `.ps1`), which validates the
+  whole config, as text and without running chezmoi, before the checkout's
+  `scripts/chezmoi-update.sh` or `.ps1` runs; the updater takes every path
+  from the validated result.
+- Only the form `chezmoi init` writes through `home/.chezmoi.toml.tmpl`
+  passes: a regular file, not a link, whose lines before the first table hold
+  exactly one `sourceDir = "VALUE"` and one `destDir = "VALUE"` line at column
+  0, with LF line ends and no quote, backslash or control character in VALUE.
+  `destDir` is the canonical home; `sourceDir` is a canonical checkout root
+  holding `.chezmoiroot` (and `.git` under PowerShell). On Windows the values
+  are `C:/...` paths, compared with backslashes and ignoring case. A top-level
+  `workingTree` key, any other spelling of the three keys, a line starting
+  with a quote and a multi-line string before the first table are refused. A
+  hand edit that leaves this form disables updates with a warning. A re-init
+  from the clone (`native_cz init`, `Invoke-NativeCz @('init')` on Windows,
+  the helpers of [Fresh home by hand](bootstrap.md#fresh-home-by-hand)),
+  after keeping a private copy of the config, resets every value the
+  template owns (`sourceDir`, `destDir`, `persistentState`, `mode`, the
+  owned `[git]` and `[update]` settings and `[data].host`), folding a single
+  other spelling of each key, keeps every other key, a top-level
+  `workingTree` key included, and fails, leaving the config unchanged, when a
+  key the template owns has two spellings: first remove by hand every
+  spelling of `workingTree`, the second spelling and any key that needs
+  quotes.
+- A config the guard refuses prints one warning and runs nothing.
+- A home without `~/.config/chezmoi/chezmoi.toml` runs nothing and prints
+  nothing. There is no fallback to `~/dotfiles`, an environment variable or
+  any other checkout.
 
 ## Refusals
 
@@ -52,7 +73,7 @@ The updater stops, with a warning and without touching the destination, when:
 
 - Every run passes the full explicit argument set: `--source`,
   `--working-tree`, `--destination`, `--config`, `--cache` and
-  `--persistent-state` of the bound home, so inherited XDG or chezmoi settings
+  `--persistent-state` of the home, so inherited XDG or chezmoi settings
   cannot redirect it, plus `--mode=file --no-tty --error-on-conflict
   --less-interactive --no-pager --use-builtin-diff --use-builtin-age=true
   --use-builtin-git=false --force=false`.
@@ -80,7 +101,7 @@ The updater stops, with a warning and without touching the destination, when:
 
 ## New targets
 
-A target added to the source reaches every bound home through this update,
+A target added to the source reaches every home through this update,
 which stops on it when:
 
 - its parent directory is missing: an operator first prepares exactly that
@@ -110,8 +131,12 @@ update runs.
   local remotes and disposable homes, refusals, divergence, conflicts and the
   PowerShell profile tail.
 - `tests/test_chezmoi_update_config.py`: the safe update configuration.
-- `tests/test_chezmoi_guard.py`: binding validation and the sh and Bash login
-  dispatch, with and without the Sherlock overlay.
-- `tests/shell-profile.sh`: quiet unmarked logins under sh, dash, Bash and zsh.
+- `tests/test_chezmoi_guard.py`: the config validation (every refusal) and
+  the sh and Bash login dispatch, with and without the Sherlock overlay.
+- `tests/test_chezmoi_provision.py`: the validation against real `chezmoi
+  init` output.
+- `tests/shell-profile.sh`: the login dispatch under sh, dash, Bash and zsh:
+  quiet without a config, one warning for an invalid one, the configured
+  checkout's updater for a valid one.
 - `tests/powershell-profile.ps1`: the PowerShell 7 tail's structure and
   placement.

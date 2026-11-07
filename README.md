@@ -109,8 +109,10 @@ or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
 After native handover, interactive login checks once per session and calls
 chezmoi update with explicit paths, `--exclude=dirs`, fast-forward-only Git, closed stdin and
 conflict handling. It refuses dirty source, missing/empty native state and OneDrive
-source writes; failures warn and leave the shell usable. An unmarked home runs
-no updater and prints nothing; see the [update contract](docs/update-contract.md).
+source writes; failures warn and leave the shell usable. It updates only the
+checkout `~/.config/chezmoi/chezmoi.toml` names (its `sourceDir`); a home
+without that config runs no updater and prints nothing; see the
+[update contract](docs/update-contract.md).
 A persistent maintenance marker blocks the update hook and explicit payload runs
 during takeover.
 Windows Terminal still needs a restart to load settings changes.
@@ -183,8 +185,9 @@ its roots. Selection and migration stay with that repository's installer.
 
 No login, profile or schedule installs or refreshes the payload repos. A person
 runs `sync-payloads`, which installs absent items and updates installed ones in
-the foreground and keeps no state. It runs the hook of the validated bound
-source and refuses an invalid binding; an unmarked home has no binding, so run
+the foreground and keeps no state. It runs the hook of the checkout the
+validated chezmoi config names and refuses a config the guard refuses; a home
+without that config names no checkout, so run
 `sh <checkout>/scripts/payload-update.sh --now` there. Exit 75 (another run
 holds the repository's lock) is no failure. Exit 3 for configured
 person-status items requires following the upstream installer's message;

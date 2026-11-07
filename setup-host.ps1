@@ -334,7 +334,7 @@ function Test-SetupHumanDone {
         # login updater can pull it. No tracked file is a symlink, so Git
         # needs neither core.symlinks nor Developer Mode.
         'HW-clone' { return Test-Path -LiteralPath (Join-Path $RepoRoot '.git') }
-        'HW-native' { return Test-BootstrapNativeReady -RepoRoot $RepoRoot }
+        'HW-native' { return Test-BootstrapChezmoiReady -RepoRoot $RepoRoot }
         'HW-execution-policy' {
             if (-not $IsWindows) { return $false }
             return Test-SetupExecutionPolicy
@@ -373,8 +373,8 @@ function Get-SetupHumanBlock {
             return @{ Kind = 'judgment'; Lines = @(
                     '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.'
                     '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.'
-                    '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.'
-                    '# Snapshot exact targets, initialize with all paths explicit and establish the home binding.'
+                    '# Discover both actual CurrentUserAllHosts paths as the ordinary user.'
+                    '# Snapshot exact targets and initialize with all paths explicit.'
                     '# Native regular-file updates need no elevation or scheduled task.'
                 ) }
         }

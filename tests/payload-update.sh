@@ -45,7 +45,7 @@ FIXTURE=$TEST_TMP/repo
 mkdir -p "$TEST_TMP/bin" "$FIXTURE/scripts" "$FIXTURE/lib" "$FIXTURE/config" \
     "$REMOTE/coding-agent-kit/main" "$REMOTE/PyMOLScripts/main" "$REMOTE/awesome-skills/main"
 cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/"
-# The guard and .chezmoiroot make the fixture a source a home can be bound to.
+# The guard and .chezmoiroot make the fixture a source a chezmoi config can name.
 cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
 sed "s#https://raw.githubusercontent.com/FridrichMethod/#file://$REMOTE/#g" \
@@ -256,7 +256,8 @@ expect_text "$ERR" "unknown item 'nope'"
 expect_events ''
 
 # A failed install says how to retry and fails the run, and the other items
-# still run; nothing is recorded. Exit 75 (another run holds the repo's
+# still run; nothing is recorded. Where sync-payloads refuses (here: a home
+# without a chezmoi config), the retry line is this hook's --now line. Exit 75 (another run holds the repo's
 # lock) is no failure. An exit with the item's person-status row
 # (awesome-skills' 3: an interrupted update it cannot undo alone;
 # PyMOLScripts' 3: a locally edited rc file it will not overwrite) is worded
@@ -268,19 +269,35 @@ FAKE_KIT_STATUS=1 now
 expect_events 'kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes'
-expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 1); retry with: sync-payloads kit'
+RERUN="sh '$FIXTURE/scripts/payload-update.sh' --now"
+expect_text "$ERR" "[dotfiles] [error] kit: install failed (exit 1); retry with: $RERUN kit"
 FAKE_PYMOL_STATUS=75 now pymol
 [[ "$STATUS" == 0 ]] || fail '--now failed on exit 75'
-expect_line "$OUT" '[dotfiles] [info] pymol: another run holds its lock; run sync-payloads pymol again once it has finished'
+expect_line "$OUT" "[dotfiles] [info] pymol: another run holds its lock; run $RERUN pymol again once it has finished"
 FAKE_SKILLS_STATUS=3 now skills
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for an exit that waits for a person'
-expect_text "$ERR" '[dotfiles] [error] skills: stopped for a person (exit 3): do what its message says, then run sync-payloads skills'
+expect_text "$ERR" "[dotfiles] [error] skills: stopped for a person (exit 3): do what its message says, then run $RERUN skills"
 FAKE_KIT_STATUS=3 now kit
-expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 3); retry with: sync-payloads kit'
+expect_text "$ERR" "[dotfiles] [error] kit: install failed (exit 3); retry with: $RERUN kit"
 FAKE_PYMOL_STATUS=3 now pymol
 [[ "$STATUS" == 1 ]] || fail 'a PyMOL exit 3 was not a failure'
-expect_text "$ERR" '[dotfiles] [error] pymol: stopped for a person (exit 3): do what its message says, then run sync-payloads pymol'
+expect_text "$ERR" "[dotfiles] [error] pymol: stopped for a person (exit 3): do what its message says, then run $RERUN pymol"
 expect_no_state 'a failed run'
+# config_home SOURCE: the case's home with the chezmoi config init writes,
+# naming SOURCE.
+config_home() {
+    mkdir -p "$HOME_DIR/.config/chezmoi"
+    printf 'destDir = "%s"\nsourceDir = "%s"\n\n[data]\n  host = "lab-ubuntu"\n' "$HOME_DIR" "$1" \
+        >"$HOME_DIR/.config/chezmoi/chezmoi.toml"
+}
+# A home whose config names this checkout retries with sync-payloads, which
+# runs this hook; one naming another checkout gets this hook's line.
+config_home "$FIXTURE"
+FAKE_KIT_STATUS=1 now kit
+expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 1); retry with: sync-payloads kit'
+config_home "$TEST_TMP"
+FAKE_KIT_STATUS=1 now kit
+expect_text "$ERR" "[dotfiles] [error] kit: install failed (exit 1); retry with: $RERUN kit"
 
 # A download that stalls (a 127.0.0.1 port that accepts and never answers)
 # ends within DOTFILES_PAYLOAD_TIMEOUT, and the run tries no other download,
@@ -420,11 +437,10 @@ env HOME="$HOME_DIR" PATH="$TEST_TMP/bare" EVENTS="$EVENTS" TMPDIR="$TEST_TMP" \
 [[ "$STATUS" == 1 ]] || fail 'a run without curl or wget succeeded'
 expect_text "$ERR" 'neither curl nor wget is installed'
 
-# The aliases run the --now mode through the home binding's source;
-# sync-skills is sync-payloads skills.
+# The aliases run the --now mode through the source the chezmoi config
+# names; sync-skills is sync-payloads skills.
 new_home
-mkdir -p "$HOME_DIR/.config/dotfiles"
-printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$HOME_DIR" "$FIXTURE" >"$HOME_DIR/.config/dotfiles/native"
+config_home "$FIXTURE"
 in_env bash --noprofile --norc -c 'shopt -s expand_aliases; . "$1"
 sync-skills
 sync-payloads pymol' _ "$REPO_ROOT/home/dot_aliases" >"$OUT" 2>"$ERR" || fail 'the aliases failed'

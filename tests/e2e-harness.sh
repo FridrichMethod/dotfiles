@@ -73,10 +73,14 @@ expect_no_text() {
 # only the full explicit argument set docs/bootstrap.md native_cz passes, in
 # that order, against the clone at ~/dotfiles (exit 2 otherwise), logs the
 # rest of each call to E2E_STUB_LOG when that is set, and plays a five-file
-# source: the two managed lists, a directory-only apply of one absent
+# source: an init that writes the top-level keys home/.chezmoi.toml.tmpl
+# sets (destDir, mode, persistentState and sourceDir, sorted, before the seed
+# config's own lines, as toToml writes them; E2E_STUB_INIT=foreign names
+# another home), the two managed lists, a directory-only apply of one absent
 # directory under the home, a file apply that writes each target (refused
-# before the home binding exists) and the state database, and a diff that
-# names each target whose bytes differ (E2E_STUB_DIFF=1 adds one).
+# until the config names this home and the clone) and the state database,
+# and a diff that names each target whose bytes differ (E2E_STUB_DIFF=1 adds
+# one).
 write_chezmoi_stub() {
     cat >"$1" <<'SH'
 #!/bin/sh
@@ -108,10 +112,18 @@ shift 5
 files='.bashrc .profile .zshrc .config/sh/.profile .ssh/config'
 case $* in
     init)
-        [ -f "$home/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$home/.config/chezmoi/chezmoi.toml" ] || {
+        config=$home/.config/chezmoi/chezmoi.toml
+        [ -f "$config" ] && [ ! -L "$config" ] || {
             printf 'stub chezmoi: init without a regular local config\n' >&2
             exit 1
         }
+        dest=$home
+        [ "${E2E_STUB_INIT:-}" != foreign ] || dest=/elsewhere
+        {
+            printf 'destDir = "%s"\nmode = "file"\npersistentState = "%s/.local/state/chezmoi/chezmoi.boltdb"\nsourceDir = "%s"\n' \
+                "$dest" "$dest" "$src"
+            cat "$config"
+        } >"$config.new" && mv -f "$config.new" "$config" || exit 1
         ;;
     'managed --include=dirs') printf '%s\n' .config .config/sh .ssh ;;
     'managed --include=files,symlinks') printf '%s\n' $files ;;
@@ -131,8 +143,9 @@ case $* in
         mkdir -m 700 "$4" || exit 1
         ;;
     'apply --exclude=dirs')
-        [ -f "$home/.config/dotfiles/native" ] || {
-            printf 'stub chezmoi: a target change before the home binding\n' >&2
+        grep -qxF "destDir = \"$home\"" "$home/.config/chezmoi/chezmoi.toml" 2>/dev/null &&
+            grep -qxF "sourceDir = \"$src\"" "$home/.config/chezmoi/chezmoi.toml" || {
+            printf 'stub chezmoi: a target change before the config names this home and the clone\n' >&2
             exit 1
         }
         for f in $files; do
@@ -799,8 +812,9 @@ write_chezmoi_stub "$CZBIN/chezmoi"
 fresh_home() { # NAME: a fresh home in FRESH_HOME, its stub log in FRESH_LOG
     FRESH_HOME="$UNIT/fresh/$1/home dir"
     FRESH_LOG="$UNIT/fresh/$1/stub.log"
-    mkdir -p "$FRESH_HOME/dotfiles"
+    mkdir -p "$FRESH_HOME/dotfiles/lib"
     printf 'home\n' >"$FRESH_HOME/dotfiles/.chezmoiroot"
+    cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$FRESH_HOME/dotfiles/lib/"
     printf '# /etc/skel\n' >"$FRESH_HOME/.bashrc"
     : >"$FRESH_LOG"
 }
@@ -815,11 +829,10 @@ fresh_run() {
         exec env -i HOME="$FRESH_HOME" PATH="$CZBIN:/usr/bin:/bin" LC_ALL=C E2E_STUB_LOG="$FRESH_LOG" "$@" \
             "$shell" -c ". $(e2e_quote "$UNIT/fresh.sh") && $code") >"$FRESH_HOME.out" 2>"$FRESH_HOME.err" || FRESH_RC=$?
 }
-expect_refusal() { # NAME TEXT: FRESH_RC 1, TEXT on stderr, no apply and no binding written
+expect_refusal() { # NAME TEXT: FRESH_RC 1, TEXT on stderr, no apply
     expect_eq "$1: exit" "$FRESH_RC" 1
     expect_text "$1: stderr" "$FRESH_HOME.err" "$2"
     expect_no_text "$1: no apply" "$FRESH_LOG" apply
-    [ ! -s "$FRESH_HOME/.config/dotfiles/native" ] || fail "$1: a binding was written"
 }
 for shell in bash sh zsh; do
     case $shell in
@@ -851,27 +864,28 @@ apply --include=dirs --recursive=false $phys_home/.ssh
 apply --exclude=dirs
 apply --exclude=dirs
 diff --exclude=dirs"
-    printf '%s\n' dotfiles-chezmoi-v1 "$phys_home" "$phys_home/dotfiles" >"$UNIT/fresh/want-native"
-    cmp -s "$UNIT/fresh/want-native" "$FRESH_HOME/.config/dotfiles/native" || fail "fresh $shell binding bytes: $(cat "$FRESH_HOME/.config/dotfiles/native")"
-    expect_eq "fresh $shell binding mode" "$(ls -l "$FRESH_HOME/.config/dotfiles/native" | cut -c1-10)" '-rw-------'
-    printf 'umask = 0o077\n\n[data]\nhost = "lab-ubuntu"\n' >"$UNIT/fresh/want-config"
-    cmp -s "$UNIT/fresh/want-config" "$FRESH_HOME/.config/chezmoi/chezmoi.toml" || fail "fresh $shell seed config: $(cat "$FRESH_HOME/.config/chezmoi/chezmoi.toml")"
+    # The seed config with the top-level lines the stub init wrote, which
+    # the clone's guard accepts as naming this home and the clone.
+    printf 'destDir = "%s"\nmode = "file"\npersistentState = "%s/.local/state/chezmoi/chezmoi.boltdb"\nsourceDir = "%s"\numask = 0o077\n\n[data]\nhost = "lab-ubuntu"\n' \
+        "$phys_home" "$phys_home" "$phys_home/dotfiles" >"$UNIT/fresh/want-config"
+    cmp -s "$UNIT/fresh/want-config" "$FRESH_HOME/.config/chezmoi/chezmoi.toml" || fail "fresh $shell config: $(cat "$FRESH_HOME/.config/chezmoi/chezmoi.toml")"
+    expect_eq "fresh $shell config source" "$(. "$REPO_ROOT/lib/chezmoi-guard.sh" && dotfiles_chezmoi_source "$FRESH_HOME")" "$phys_home/dotfiles"
+    [ ! -e "$FRESH_HOME/.config/dotfiles" ] || fail "fresh $shell created ~/.config/dotfiles"
     expect_eq "fresh $shell backup mode" "$(ls -ld "$FRESH_HOME/.local/state/dotfiles-fresh-backup" | cut -c1-10)" 'drwx------'
     printf '# /etc/skel\n' >"$UNIT/fresh/want-bashrc"
     cmp -s "$UNIT/fresh/want-bashrc" "$FRESH_HOME/.local/state/dotfiles-fresh-backup/.bashrc" || fail "fresh $shell kept no copy of the skel .bashrc"
     [ ! -e "$FRESH_HOME/.local/state/dotfiles-fresh-backup/.profile" ] || fail "fresh $shell copied a .profile that did not exist"
     [ ! -e "$FRESH_HOME/.config/dotfiles/maintenance" ] || fail "fresh $shell created maintenance"
-    [ -s "$FRESH_HOME/.local/state/chezmoi/chezmoi.boltdb" ] || fail "fresh $shell has no bound state database"
+    [ -s "$FRESH_HOME/.local/state/chezmoi/chezmoi.boltdb" ] || fail "fresh $shell has no state database"
     expect_eq "fresh $shell targets" "$(cat "$FRESH_HOME/.bashrc")" '# native .bashrc'
     expect_text "fresh $shell result" "$FRESH_HOME.out" 'native_handover: lab-ubuntu deployed; copies of the files it replaced are in ~/.local/state/dotfiles-fresh-backup'
 done
 
-# Each refusal exits 1 before a target or the binding is written, and
-# before the seed config exists when there was none: an earlier native
-# install, maintenance, a local config, a state database or the backup
-# directory; a role it does not know (win has its own procedure); a shell
-# outside the clone.
-for rel in .config/dotfiles/native .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
+# Each refusal exits 1 before a target is written, and before the seed
+# config exists when there was none: maintenance, a local config, a state
+# database or the backup directory; a role it does not know (win has its own
+# procedure); a shell outside the clone.
+for rel in .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
     .local/state/chezmoi/chezmoi.boltdb .local/state/dotfiles-fresh-backup; do
     fresh_home "exists$(printf '%s' "$rel" | tr '/.' '--')"
     mkdir -p "$(dirname "$FRESH_HOME/$rel")"
@@ -894,8 +908,13 @@ expect_refusal 'fresh outside the clone' 'native_handover: run it from the dotfi
 [ ! -e "$FRESH_HOME/.config/chezmoi/chezmoi.toml" ] || fail 'fresh outside the clone created the seed config'
 FRESH_CWD=$FRESH_HOME fresh_run "$BASH" 'native_cz managed --include=dirs'
 expect_refusal 'native_cz outside the clone' 'native_cz: run it from the dotfiles clone'
+# A config init wrote that does not name this home and the clone stops it
+# before any apply.
+fresh_home foreign-config
+fresh_run "$BASH" 'native_handover lab-ubuntu' E2E_STUB_INIT=foreign
+expect_refusal 'fresh config naming another home' 'native_handover: ~/.config/chezmoi/chezmoi.toml does not name this home and this clone; inspect it privately'
 # A link, or an entry of the wrong kind, at a managed path stops it before
-# the binding and before any apply.
+# any apply.
 fresh_home link
 ln -s .bashrc "$FRESH_HOME/.profile"
 fresh_run "$BASH" 'native_handover lab-ubuntu'
@@ -927,11 +946,10 @@ printf 'ok: Fresh home by hand under the stub chezmoi\n'
 # e2e_handover_problems: the end state the native-handover step requires,
 # against a home that has it, then against one mutation at a time.
 HP="$UNIT/hp"
-mkdir -p "$HP/good/dotfiles" "$HP/good/.config/dotfiles" "$HP/good/.config/chezmoi" \
+mkdir -p "$HP/good/dotfiles/lib" "$HP/good/.config/dotfiles" "$HP/good/.config/chezmoi" \
     "$HP/good/.local/state/chezmoi" "$HP/good/.local/state/dotfiles-fresh-backup"
-hp_phys=$(cd -P "$HP/good" && pwd -P)
-printf '%s\n' dotfiles-chezmoi-v1 "$hp_phys" "$hp_phys/dotfiles" >"$HP/good/.config/dotfiles/native"
-chmod 600 "$HP/good/.config/dotfiles/native"
+printf 'home\n' >"$HP/good/dotfiles/.chezmoiroot"
+cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$HP/good/dotfiles/lib/"
 printf 'umask = 63\n\n[data]\n  host = "lab-ubuntu"\n' >"$HP/good/.config/chezmoi/chezmoi.toml"
 printf 'db\n' >"$HP/good/.local/state/chezmoi/chezmoi.boltdb"
 printf '# native .zshrc\n' >"$HP/good/.zshrc"
@@ -951,30 +969,33 @@ hp_case() {
         printf '%s|%s\n' "$E2E_HANDOVER_DETAIL" "$E2E_HANDOVER_KEPT"
     )
 }
-fix_binding() { # the copy's binding names the copy
+# name_copy [DEST [SOURCE]]: the copy's config names DEST (default the copy)
+# and SOURCE (default the copy's clone) in the lines chezmoi init writes.
+name_copy() {
     local phys
     phys=$(pwd -P)
-    printf '%s\n' dotfiles-chezmoi-v1 "$phys" "$phys/dotfiles" >.config/dotfiles/native
+    { printf 'destDir = "%s"\nsourceDir = "%s"\n' "${1:-$phys}" "${2:-$phys/dotfiles}" && cat .config/chezmoi/chezmoi.toml; } >.config/chezmoi/top.toml &&
+        mv .config/chezmoi/top.toml .config/chezmoi/chezmoi.toml
 }
-expect_eq 'handover end state' "$(hp_case own 'fix_binding')" '|1'
+expect_eq 'handover end state' "$(hp_case own 'name_copy')" '|1'
 while IFS='|' read -r name mutation want; do
-    got=$(hp_case "$name" "fix_binding; $mutation")
+    got=$(hp_case "$name" "$mutation")
     case $got in
         *"$want"*) ;;
         *) fail "handover problem $name: [$got] lacks [$want]" ;;
     esac
 done <<'ROWS'
-foreign|printf '%s\n' dotfiles-chezmoi-v1 /elsewhere /elsewhere/dotfiles >.config/dotfiles/native|~/.config/dotfiles/native is not the three-line binding of this home to the clone
-extra|printf '\n' >>.config/dotfiles/native|~/.config/dotfiles/native is not the three-line binding of this home to the clone
-mode|chmod 644 .config/dotfiles/native|~/.config/dotfiles/native is -rw-r--r--, not -rw-------
-nobinding|rm .config/dotfiles/native|~/.config/dotfiles/native is missing, a link or not a regular file
-role|printf '[data]\nhost = "mac"\n' >.config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml does not select host lab-ubuntu
-configlink|mv .config/chezmoi/chezmoi.toml .config/chezmoi/real.toml && ln -s real.toml .config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml is missing, a link or not a regular file
-maintenance|: >.config/dotfiles/maintenance|~/.config/dotfiles/maintenance exists
-nostate|: >.local/state/chezmoi/chezmoi.boltdb|~/.local/state/chezmoi/chezmoi.boltdb is missing or empty
-zshrc|rm .zshrc && ln -s .config .zshrc|~/.zshrc is missing, a link or not a regular file
-nocopy|rm .local/state/dotfiles-fresh-backup/.bashrc|no byte-identical copy of ~/.bashrc in ~/.local/state/dotfiles-fresh-backup
-changed|printf 'edited\n' >.local/state/dotfiles-fresh-backup/.bashrc|no byte-identical copy of ~/.bashrc in ~/.local/state/dotfiles-fresh-backup
+elsewhere|name_copy /elsewhere|~/.config/chezmoi/chezmoi.toml does not name this home and the clone
+othersource|mkdir -p other && printf 'home\n' >other/.chezmoiroot && name_copy "" "$(pwd -P)/other"|~/.config/chezmoi/chezmoi.toml does not name this home and the clone
+twice|name_copy && name_copy|~/.config/chezmoi/chezmoi.toml does not name this home and the clone
+nosource|name_copy && grep -v '^sourceDir = ' .config/chezmoi/chezmoi.toml >c && mv c .config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml does not name this home and the clone
+role|name_copy && sed 's/host = "lab-ubuntu"/host = "mac"/' .config/chezmoi/chezmoi.toml >c && mv c .config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml does not select host lab-ubuntu
+configlink|name_copy && mv .config/chezmoi/chezmoi.toml .config/chezmoi/real.toml && ln -s real.toml .config/chezmoi/chezmoi.toml|~/.config/chezmoi/chezmoi.toml is missing, a link or not a regular file
+maintenance|name_copy && : >.config/dotfiles/maintenance|~/.config/dotfiles/maintenance exists
+nostate|name_copy && : >.local/state/chezmoi/chezmoi.boltdb|~/.local/state/chezmoi/chezmoi.boltdb is missing or empty
+zshrc|name_copy && rm .zshrc && ln -s .config .zshrc|~/.zshrc is missing, a link or not a regular file
+nocopy|name_copy && rm .local/state/dotfiles-fresh-backup/.bashrc|no byte-identical copy of ~/.bashrc in ~/.local/state/dotfiles-fresh-backup
+changed|name_copy && printf 'edited\n' >.local/state/dotfiles-fresh-backup/.bashrc|no byte-identical copy of ~/.bashrc in ~/.local/state/dotfiles-fresh-backup
 ROWS
 
 # The clone-link audit: a relative and an absolute link into the clone, a
@@ -1016,7 +1037,7 @@ printf 'ok: handover end state and clone links\n'
 # chezmoi whose first file apply also links a home path into the clone.
 SRC="$TEST_TMP/src"
 TEST_BIN="$TEST_TMP/bin"
-mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/scripts" "$SRC/tests" "$TEST_BIN"
+mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/lib" "$SRC/scripts" "$SRC/tests" "$TEST_BIN"
 cat >"$TEST_TMP/gitconfig" <<EOF
 [user]
 	name = Fixture
@@ -1028,6 +1049,7 @@ cat >"$TEST_TMP/gitconfig" <<EOF
 EOF
 export GIT_CONFIG_GLOBAL="$TEST_TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
 cp "$REPO_ROOT/docs/bootstrap.md" "$SRC/docs/bootstrap.md"
+cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$SRC/lib/chezmoi-guard.sh"
 printf 'home\n' >"$SRC/.chezmoiroot"
 write_chezmoi_stub "$SRC/fixture/chezmoi"
 
@@ -1038,7 +1060,8 @@ write_chezmoi_stub "$SRC/fixture/chezmoi"
 # state is what the blocks and the handover leave behind: the apt marker the
 # apt-get stub writes, ~/.local/bin/claude from the gated installer, the
 # chezmoi it installs from the clone once claude is done (so one run applies
-# that and leaves only H7-native), and the home binding of the handover.
+# that and leaves only H7-native), and the local config the fresh-home step
+# leaves (the clone's guard accepts it as naming this home and the clone).
 # --check writes nothing.
 cat >"$SRC/setup-host.sh" <<'SH'
 #!/bin/bash
@@ -1085,10 +1108,8 @@ apt_done=0 claude_done=0 omz=0 cz=0 native=0
 [ ! -x "$HOME/.local/bin/claude" ] || claude_done=1
 [ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ] || omz=1
 [ ! -x "$HOME/.local/bin/chezmoi" ] || cz=1
-marker=$HOME/.config/dotfiles/native config=$HOME/.config/chezmoi/chezmoi.toml
-if [ -f "$marker" ] && [ ! -L "$marker" ] && [ -f "$config" ] && [ ! -L "$config" ] &&
-    [ ! -e "$HOME/.config/dotfiles/maintenance" ] &&
-    [ "$(cat "$marker")" = "$(printf '%s\n%s\n%s' dotfiles-chezmoi-v1 "$(cd "$HOME" && pwd -P)" "$root")" ]; then
+if [ ! -e "$HOME/.config/dotfiles/maintenance" ] &&
+    [ "$(. "$root/lib/chezmoi-guard.sh" && dotfiles_chezmoi_source "$HOME")" = "$root" ]; then
     native=1
 fi
 held=''
@@ -1138,7 +1159,7 @@ else
     held="$held${held:+ }S5-claude"
 fi
 if [ "$native" = 1 ]; then
-    printf '%s\n' 'H7-native done native binding and local config present; configuration review remains an operator step'
+    printf '%s\n' 'H7-native done ~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
 else
     printf '%s\n' 'H7-native human follow Fresh home by hand in docs/bootstrap.md to initialize and deploy this home'
     held="$held${held:+ }H7-native"
@@ -1177,8 +1198,8 @@ printf '[dotfiles] [ok] setup-host: nothing blocking remains for %s\n' "$host" >
 exit 0
 SH
 
-# doctor.sh: exit 1 until the gated installer ran and the home is bound to
-# this checkout, 0 after; --tsv prints the five-column report, with a
+# doctor.sh: exit 1 until the gated installer ran and the home's chezmoi
+# config names this checkout, 0 after; --tsv prints the five-column report, with a
 # native-config row and a payloads row that is ok once the
 # payload-update.sh stub ran; --smoke exits like a run. Any other argument
 # is exit 2.
@@ -1198,9 +1219,7 @@ done
 root=$(cd "$(dirname "$0")" && pwd -P)
 claude=missing native=human rc=1
 [ ! -x "$HOME/.local/bin/claude" ] || claude=ok
-marker=$HOME/.config/dotfiles/native
-if [ -f "$marker" ] && [ ! -L "$marker" ] && [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] &&
-    [ "$(cat "$marker")" = "$(printf '%s\n%s\n%s' dotfiles-chezmoi-v1 "$(cd "$HOME" && pwd -P)" "$root")" ]; then
+if [ "$(. "$root/lib/chezmoi-guard.sh" && dotfiles_chezmoi_source "$HOME")" = "$root" ]; then
     native=ok
 fi
 [ "$claude" != ok ] || [ "$native" != ok ] || rc=0
@@ -1208,7 +1227,7 @@ if [ "$tsv" = 1 ]; then
     printf 'status\tid\ttier\tdetail\tfix\n'
     printf 'ok\tgit\tcore\t2.43.0\t-\n'
     printf '%s\tclaude\tai\t%s\tdocs/bootstrap.md S5-claude\n' "$claude" "$HOME/.local/bin/claude"
-    printf '%s\tnative-config\tcore\tbinding of %s\tdocs/bootstrap.md H7-native\n' "$native" "$HOME"
+    printf '%s\tnative-config\tcore\tconfig of %s\tdocs/bootstrap.md H7-native\n' "$native" "$HOME"
     if [ -f "$HOME/.local/share/e2e-payloads" ]; then
         printf 'ok\tpayloads\tai\tinstalled: kit, pymol, skills\t-\n'
     else
@@ -1217,7 +1236,7 @@ if [ "$tsv" = 1 ]; then
 else
     printf '[dotfiles] [ok] core git: 2.43.0\n'
     [ "$claude" = ok ] || printf '[dotfiles] [error] ai claude: missing (docs/bootstrap.md S5-claude)\n'
-    [ "$native" = ok ] || printf '[dotfiles] [error] core native-config: no binding of %s to this checkout (docs/bootstrap.md H7-native)\n' "$HOME"
+    [ "$native" = ok ] || printf '[dotfiles] [error] core native-config: no config of %s naming this checkout (docs/bootstrap.md H7-native)\n' "$HOME"
 fi
 exit "$rc"
 SH
@@ -1369,8 +1388,7 @@ expect_one_fail() {
 
 # The clean run: every step passes, the reminders are skipped once, the
 # apply loop ends in four runs with only H7-native left, the documented
-# handover binds the home and converges, and the audits see only human and
-# negative phases.
+# handover converges, and the audits see only human and negative phases.
 CLEAN_HOME="$TEST_TMP/home dir"
 run_inside clean "$REV_CLEAN" "$CLEAN_HOME"
 if [ "$RUN_RC" != 0 ]; then
@@ -1401,7 +1419,7 @@ expect_step clean apply-2 pass 'exit 3; blocks: S5-claude(inspect) H7-native(jud
 expect_step clean S5-claude pass '1 line(s) run as printed (run-gate)'
 expect_step clean apply-3 pass 'exit 3; applied 1 step(s); pending: H7-native'
 expect_step clean apply-4 pass 'exit 3 after 4 run(s); only H7-native pending; blocks: H7-native(judgment) H7-auth(auth) H7-doctor(judgment)'
-expect_step clean native-handover pass "native_handover lab-ubuntu exit 0; 2 earlier file(s) kept byte for byte; bound to $CLEAN_PHYS/dotfiles"
+expect_step clean native-handover pass "native_handover lab-ubuntu exit 0; 2 earlier file(s) kept byte for byte; the config names $CLEAN_PHYS/dotfiles"
 expect_step clean second-apply pass 'exit 0, nothing applied, HOME untouched'
 expect_step clean check-done pass 'exit 0; nothing left to apply; no writes'
 expect_step clean login-shell pass 'exit 0; silent'
@@ -1444,8 +1462,9 @@ expect_text 'clean env.txt' "$CLEAN_OUT/env.txt" 'host=lab-ubuntu flow=unix prof
 [ ! -s "$CLEAN_OUT/snapshots/doctor-initial.newer" ] || fail "clean: doctor-initial wrote in HOME: $(cat "$CLEAN_OUT/snapshots/doctor-initial.newer")"
 [ -f "$CLEAN_OUT/snapshots/check-done.newer" ] && [ ! -s "$CLEAN_OUT/snapshots/check-done.newer" ] ||
     fail 'clean: check-done has no empty no-write snapshot'
-printf '%s\n' dotfiles-chezmoi-v1 "$CLEAN_PHYS" "$CLEAN_PHYS/dotfiles" >"$TEST_TMP/want-native"
-cmp -s "$TEST_TMP/want-native" "$CLEAN_HOME/.config/dotfiles/native" || fail 'clean: the home binding is not the documented one'
+expect_eq 'clean: the config names the clone' \
+    "$(. "$REPO_ROOT/lib/chezmoi-guard.sh" && dotfiles_chezmoi_source "$CLEAN_HOME")" "$CLEAN_PHYS/dotfiles"
+[ ! -e "$CLEAN_HOME/.config/dotfiles" ] || fail 'clean: the fresh-home step created ~/.config/dotfiles'
 [ -f "$CLEAN_HOME/.zshrc" ] && [ ! -L "$CLEAN_HOME/.zshrc" ] || fail 'clean: ~/.zshrc is not a regular file'
 for rel in .bashrc .profile; do
     expect_eq "clean kept $rel" "$(cat "$CLEAN_HOME/.local/state/dotfiles-fresh-backup/$rel")" '# /etc/skel'

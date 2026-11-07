@@ -247,35 +247,39 @@ if ($IsInteractive -and -not $IsAgentSession) {
     # (scripts/payload-update.ps1): sync-payloads [pymol] [skills], both by
     # default (coding-agent-kit installs nothing on native Windows);
     # sync-skills is sync-payloads skills. As at the tail, they run the hook
-    # of the source the validated native binding names and refuse an invalid
-    # binding; an unmarked home has no binding, so they refuse there and name
-    # the -Now line to run from its checkout.
+    # of the source checkout ~/.config/chezmoi/chezmoi.toml names (its
+    # sourceDir, validated by that checkout's lib/chezmoi-guard.ps1) and
+    # refuse a config it refuses; a home without the config has no source, so
+    # they refuse there and name the -Now line to run from its checkout.
     function global:sync-payloads {
         try {
-            $native = $null
-            try { $native = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/native') -Force -ErrorAction Stop }
+            $config = $null
+            try { $config = Get-Item -LiteralPath (Join-Path $HOME '.config/chezmoi/chezmoi.toml') -Force -ErrorAction Stop }
             catch [System.Management.Automation.ItemNotFoundException] { }
-            if ($native) {
-                if ($native -isnot [IO.FileInfo] -or ($native.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                    throw 'Native marker must be a regular file.'
+            if ($config) {
+                if ($config -isnot [IO.FileInfo] -or ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                    throw 'The chezmoi config must be a regular file.'
                 }
-                $text = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($native.FullName))
-                if ($text -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') { throw 'Invalid native marker.' }
-                $source = $Matches[2]
-                if (-not [IO.Path]::IsPathFullyQualified($source)) { throw 'Native source must be absolute.' }
+                $text = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($config.FullName))
+                $source = $null
+                foreach ($line in ($text -split "`n")) {
+                    if ($line.TrimStart([char[]]@(' ', "`t")).StartsWith('[', [StringComparison]::Ordinal)) { break }
+                    if ($line -cmatch '\AsourceDir = "([^"\r\n]+)"\z') { $source = $Matches[1]; break }
+                }
+                if (-not $source -or -not [IO.Path]::IsPathFullyQualified($source)) { throw 'The chezmoi config has no absolute top-level sourceDir line.' }
                 $guard = Join-Path $source 'lib/chezmoi-guard.ps1'
-                if (-not (Test-Path -LiteralPath $guard -PathType Leaf)) { throw 'Native source guard is unavailable.' }
+                if (-not (Test-Path -LiteralPath $guard -PathType Leaf)) { throw 'The source checkout has no lib/chezmoi-guard.ps1.' }
                 . $guard
-                $dotfiles = (Get-DotfilesNativeBinding -HomePath $HOME).Source
+                $dotfiles = (Get-DotfilesChezmoiPaths -HomePath $HOME).Source
             }
             else {
-                [Console]::Error.WriteLine('[dotfiles] Payload update needs a native home binding; in an unmarked home run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')
+                [Console]::Error.WriteLine('[dotfiles] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')
                 $global:LASTEXITCODE = 1
                 return
             }
         }
         catch {
-            [Console]::Error.WriteLine('[dotfiles] Payload update refused: review the native source binding privately.')
+            [Console]::Error.WriteLine('[dotfiles] Payload update refused: ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; review it privately.')
             $global:LASTEXITCODE = 1
             return
         }
@@ -332,42 +336,46 @@ Remove-Variable IsAgentSession
 # --- Dotfiles auto-update check -------------------------------------------
 # Last, mirroring the tail of ~/.zshrc, so the prompt and modules above are
 # ready first. Like zsh, which returns before it for non-interactive shells,
-# a script run in a console or piped in never updates. Only a home bound by
-# ~/.config/dotfiles/native updates, through its source's
-# scripts/chezmoi-update.ps1, which keeps the session-once and opt-out guards;
-# an unmarked home runs nothing and prints nothing. The payload repos install
-# only when a person runs sync-payloads.
+# a script run in a console or piped in never updates. Only a home with
+# ~/.config/chezmoi/chezmoi.toml updates, through the
+# scripts/chezmoi-update.ps1 of the source checkout the config names, which
+# keeps the session-once and opt-out guards; a home without the config runs
+# nothing and prints nothing. The payload repos install only when a person
+# runs sync-payloads.
 if ($IsInteractive) {
     & {
         try {
-            # A native source can be an independent clone. Read only the source
-            # hint here so its guard can validate the complete binding.
+            # The source can be an independent clone. Read only its sourceDir
+            # line here, so that checkout's guard validates the whole config.
             $DotfilesMaintenance = $null
             try { $DotfilesMaintenance = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/maintenance') -Force -ErrorAction Stop }
             catch [System.Management.Automation.ItemNotFoundException] { }
             if ($DotfilesMaintenance) { return }
-            $DotfilesNative = $null
-            try { $DotfilesNative = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/native') -Force -ErrorAction Stop }
+            $DotfilesConfig = $null
+            try { $DotfilesConfig = Get-Item -LiteralPath (Join-Path $HOME '.config/chezmoi/chezmoi.toml') -Force -ErrorAction Stop }
             catch [System.Management.Automation.ItemNotFoundException] { }
-            if (-not $DotfilesNative) { return }
-            if ($DotfilesNative -isnot [IO.FileInfo] -or ($DotfilesNative.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                throw 'Native marker must be a regular file.'
+            if (-not $DotfilesConfig) { return }
+            if ($DotfilesConfig -isnot [IO.FileInfo] -or ($DotfilesConfig.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw 'The chezmoi config must be a regular file.'
             }
-            $DotfilesText = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($DotfilesNative.FullName))
-            if ($DotfilesText -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') {
-                throw 'Invalid native marker.'
+            $DotfilesText = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($DotfilesConfig.FullName))
+            $DotfilesDir = $null
+            foreach ($DotfilesLine in ($DotfilesText -split "`n")) {
+                if ($DotfilesLine.TrimStart([char[]]@(' ', "`t")).StartsWith('[', [StringComparison]::Ordinal)) { break }
+                if ($DotfilesLine -cmatch '\AsourceDir = "([^"\r\n]+)"\z') { $DotfilesDir = $Matches[1]; break }
             }
-            $DotfilesDir = $Matches[2]
-            if (-not [IO.Path]::IsPathFullyQualified($DotfilesDir)) { throw 'Native source must be absolute.' }
+            if (-not $DotfilesDir -or -not [IO.Path]::IsPathFullyQualified($DotfilesDir)) {
+                throw 'The chezmoi config has no absolute top-level sourceDir line.'
+            }
             $DotfilesGuard = Join-Path $DotfilesDir 'lib/chezmoi-guard.ps1'
-            if (-not (Test-Path -LiteralPath $DotfilesGuard -PathType Leaf)) { throw 'Native source guard is unavailable.' }
+            if (-not (Test-Path -LiteralPath $DotfilesGuard -PathType Leaf)) { throw 'The source checkout has no lib/chezmoi-guard.ps1.' }
             . $DotfilesGuard
             if (Test-DotfilesMaintenance -HomePath $HOME) { return }
-            $DotfilesDir = (Get-DotfilesNativeBinding -HomePath $HOME).Source
+            $DotfilesDir = (Get-DotfilesChezmoiPaths -HomePath $HOME).Source
             $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
             if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
         }
-        catch { [Console]::Error.WriteLine('[dotfiles] Profile hooks skipped: review the native source binding privately.') }
+        catch { [Console]::Error.WriteLine('[dotfiles] Profile hooks skipped: review ~/.config/chezmoi/chezmoi.toml and its source checkout privately.') }
     }
 }
 Remove-Variable IsInteractive

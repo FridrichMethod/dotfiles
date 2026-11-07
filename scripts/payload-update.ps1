@@ -65,6 +65,21 @@ $PayloadFailed = & { try {
         }
     }
     function Get-PayloadField([string]$Name, [string]$Field) { $rows["$Name`t$Field"] }
+    # What reruns this hook: sync-payloads where it runs this hook (this
+    # home's chezmoi config names this checkout), else this hook's -Now line:
+    # sync-payloads refuses a home without a valid config. A missing guard is
+    # tested, never dot-sourced: PowerShell would look its path up as a
+    # command name, searching every module on PSModulePath.
+    $rerun = "& '" + $PSCommandPath.Replace("'", "''") + "' -Now"
+    $guard = Join-Path $Repo 'lib/chezmoi-guard.ps1'
+    if (Test-Path -LiteralPath $guard -PathType Leaf) {
+        try {
+            . $guard
+            $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+            if ((Get-DotfilesChezmoiPaths -HomePath $HOME).Source.Equals((Resolve-DotfilesDirectory $Repo), $comparison)) { $rerun = 'sync-payloads' }
+        }
+        catch { } # No valid config: the -Now line.
+    }
 
     $script:PayloadOffline = $false
     function Invoke-DotfilesPayloadScript {
@@ -173,13 +188,13 @@ $PayloadFailed = & { try {
         }
         catch { Write-DotfilesLog error "$($Name): $($_.Exception.Message)" }
         if ($status -eq 0) { Write-DotfilesLog ok "$($Name): $action done" }
-        elseif ($status -eq 75) { Write-DotfilesLog info "$($Name): another run holds its lock; run sync-payloads $Name again once it has finished" }
+        elseif ($status -eq 75) { Write-DotfilesLog info "$($Name): another run holds its lock; run $rerun $Name again once it has finished" }
         else {
             $person = Get-PayloadField $Name 'person-status'
             if ($person -and "$status" -ceq $person) {
-                Write-DotfilesLog error "$($Name): stopped for a person (exit $status): do what its message says, then run sync-payloads $Name"
+                Write-DotfilesLog error "$($Name): stopped for a person (exit $status): do what its message says, then run $rerun $Name"
             }
-            else { Write-DotfilesLog error "$($Name): $action failed (exit $status); retry with: sync-payloads $Name" }
+            else { Write-DotfilesLog error "$($Name): $action failed (exit $status); retry with: $rerun $Name" }
         }
         $script:PayloadStatus = $status
     }

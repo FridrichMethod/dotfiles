@@ -16,13 +16,13 @@
     refusing a pending HW-clone (the clone is the harness's own, so that
     block means setup-host.ps1 did not accept it). It then hands the home to
     native chezmoi with docs/bootstrap.md "Fresh Windows home by hand"
-    (Invoke-NativeHandover -Role win from the clone) and checks the binding,
-    the local config, the state database and the private copies it
-    promises, requires a second -Yes to exit 0 applying nothing, a -Check to
-    exit 0 with nothing left, the deployed profile (a regular file) to load
-    silently, the payload repos to install, an empty Invoke-NativeCz diff
-    with every managed target a regular file, doctor.ps1 -Host win to exit
-    0, tests/chezmoi.ps1 to pass with the provisioned
+    (Invoke-NativeHandover -Role win from the clone) and checks the local
+    config (sourceDir, destDir, host), the state database and the private
+    copies it promises, requires a second -Yes to exit 0 applying nothing, a
+    -Check to exit 0 with nothing left, the deployed profile (a regular
+    file) to load silently, the payload repos to install, an empty
+    Invoke-NativeCz diff with every managed target a regular file,
+    doctor.ps1 -Host win to exit 0, tests/chezmoi.ps1 to pass with the provisioned
     ~\.local\bin\chezmoi.exe, no task change after the apply loop, and the
     clone to stay clean after every step. Between steps PATH is rebuilt
     from the registry, as a new terminal reads it. tests/e2e/inside.sh is

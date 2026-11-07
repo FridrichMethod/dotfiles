@@ -42,6 +42,32 @@ case ${HOME-} in
     /*) ;;
     *) fail 'payload-update: HOME must be an absolute path.' ;;
 esac
+# quote WORD: WORD in single quotes, for a line a person pastes.
+quote() {
+    _q_rest=$1 _q_done='' _q_mark="'"
+    while :; do
+        case $_q_rest in
+            *"$_q_mark"*)
+                _q_done=$_q_done${_q_rest%%"$_q_mark"*}"$_q_mark\\$_q_mark$_q_mark"
+                _q_rest=${_q_rest#*"$_q_mark"}
+                ;;
+            *) break ;;
+        esac
+    done
+    printf '%s%s%s%s\n' "$_q_mark" "$_q_done" "$_q_rest" "$_q_mark"
+}
+# rerun: what reruns this hook. sync-payloads where it runs this hook (this
+# home's chezmoi config names this checkout), else this hook's --now line:
+# sync-payloads refuses a home without a valid config.
+rerun="sh $(quote "$repo/scripts/payload-update.sh") --now"
+if [ -r "$repo/lib/chezmoi-guard.sh" ]; then
+    # shellcheck source=lib/chezmoi-guard.sh
+    . "$repo/lib/chezmoi-guard.sh"
+    if configured=$(dotfiles_chezmoi_source "$HOME") &&
+        [ "$configured" = "$(CDPATH='' cd -P -- "$repo" && pwd -P)" ]; then
+        rerun=sync-payloads
+    fi
+fi
 config=$repo/config/payloads.tsv
 [ -r "$config" ] || fail "payload-update: missing $config."
 tab=$(printf '\t')
@@ -194,9 +220,9 @@ run() {
     eval "$value" || status=$?
     case $status in
         0) dotfiles_log ok "$1: $action done" ;;
-        75) dotfiles_log info "$1: another run holds its lock; run sync-payloads $1 again once it has finished" ;;
-        "$person") dotfiles_log error "$1: stopped for a person (exit $status): do what its message says, then run sync-payloads $1" ;;
-        *) dotfiles_log error "$1: $action failed (exit $status); retry with: sync-payloads $1" ;;
+        75) dotfiles_log info "$1: another run holds its lock; run $rerun $1 again once it has finished" ;;
+        "$person") dotfiles_log error "$1: stopped for a person (exit $status): do what its message says, then run $rerun $1" ;;
+        *) dotfiles_log error "$1: $action failed (exit $status); retry with: $rerun $1" ;;
     esac
     return "$status"
 }

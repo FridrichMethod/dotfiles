@@ -6,14 +6,14 @@ set -euo pipefail
 #                    [--tsv] [--quiet] [--online] [--smoke] [--list]
 # Example: ./doctor.sh --host lab-ubuntu
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
-# has, plus structural checks (locale, the native binding, PATH order,
+# has, plus structural checks (locale, the chezmoi config, PATH order,
 # rc-file pollution, oh-my-zsh order, Homebrew nvm and the payload repos of
 # config/payloads.tsv). Read-only and offline: it installs nothing, writes
 # nothing and uses no network unless --online (auth status probes) or
 # --smoke (an interactive zsh) asks for it.
-# On a native-owned home (one with ~/.config/dotfiles/native) the host
-# defaults to the [data].host of ~/.config/chezmoi/chezmoi.toml, read as
-# text; nothing else selects one, and it is never guessed. common-only as
+# On a home with ~/.config/chezmoi/chezmoi.toml the host defaults to the
+# [data].host of that config, read as text; nothing else selects one, and it
+# is never guessed. common-only as
 # that [data].host means the detected platform, as --platform. The win host
 # is checked by doctor.ps1.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
@@ -75,8 +75,8 @@ usage() {
         'and of the structural setup (locale, native-config, path-order, rc-pollution,' \
         'omz-order, nvm-homebrew, payloads).' \
         '' \
-        'Host selection (default: on a native-owned home the [data].host of its' \
-        'native ~/.config/chezmoi/chezmoi.toml):' \
+        'Host selection (default: on a home with ~/.config/chezmoi/chezmoi.toml the' \
+        '[data].host of that config):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \
         '                      (win: pwsh -File doctor.ps1 -Host win)' \
         '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
@@ -194,8 +194,8 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 
 # Host and profile. --platform runs without an overlay: only all/unix rows.
-# Only a native-owned home records a role, in its native config, which needs
-# no git; nothing else selects a host. Its common-only role, without --host
+# Only a home with ~/.config/chezmoi/chezmoi.toml records a role, in that
+# config, which needs no git; nothing else selects a host. Its common-only role, without --host
 # or --platform, means the platform the doctor detects, without an overlay,
 # and the doctor says so.
 if [[ -z "$PLATFORM" && $HOST_SET == 0 ]] && bootstrap_recorded_common_only; then
@@ -210,10 +210,10 @@ if [[ -n "$PLATFORM" ]]; then
     HOST=
 else
     if [[ $HOST_SET == 0 ]]; then
-        bootstrap_native_home ||
+        bootstrap_configured_home ||
             usage_error "no host given and none recorded for this home; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
         HOST=$(bootstrap_resolve_host) ||
-            usage_error "no host given and none recorded for this home: its native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
+            usage_error "no host given and none recorded for this home: its ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (known: $(known_hosts_line)) or --platform PLATFORM."
     fi
     [[ "$HOST" != win ]] || reject_win
     PROFILE=$(bootstrap_profile_for_host "$HOST") ||

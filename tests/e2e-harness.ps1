@@ -6,12 +6,12 @@
 # the driver resolves them: each setup-host.ps1 run (realistic -Yes output
 # with winget's blank progress lines and CRLF endings), each child pwsh the
 # native-handover and native-converged steps start (the stub writes the
-# binding, config, state database and private copies Fresh Windows home by
-# hand leaves, or the diff and managed list of the convergence check), the
+# config, state database and private copies Fresh Windows home by hand
+# leaves, or the diff and managed list of the convergence check), the
 # elevation probe, the scheduled task list, the registry PATH rebuild and the
 # HOME snapshots of the no-write steps. The clean-clone check and rev-parse
 # run real git on a temp repository standing in for the clone; the clone's
-# lib/chezmoi-guard.ps1 judges the binding for real; Invoke-E2EProcess, the
+# lib/chezmoi-guard.ps1 judges the config's sourceDir and destDir for real; Invoke-E2EProcess, the
 # run.ps1 refusals and setup-host.ps1 -PrintManual run as real child pwsh
 # processes with their caches kept under the temp dir off Windows; the
 # docs/bootstrap.md fence of Fresh Windows home by hand is parsed and
@@ -217,8 +217,8 @@ function Get-BlockLines {
         'HW-native' {
             'judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.',
             '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.',
-            '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.',
-            '# Snapshot exact targets, initialize with all paths explicit and establish the home binding.',
+            '# Discover both actual CurrentUserAllHosts paths as the ordinary user.',
+            '# Snapshot exact targets and initialize with all paths explicit.',
             '# Native regular-file updates need no elevation or scheduled task.'
         }
         'HW-execution-policy' {
@@ -311,11 +311,13 @@ function New-HandoverClone {
 }
 
 function Write-HandoverState {
-    # What Invoke-NativeHandover -Role win leaves in Home, with the binding
-    # spelled through the clone's own lib/chezmoi-guard.ps1, as Variant says:
-    # clean, bad-marker (the home line names another directory), maintenance,
-    # no-copy (no private copy of the files it replaced) or no-state (an empty
-    # bound state database).
+    # What Invoke-NativeHandover -Role win leaves in Home, with the config's
+    # top-level destDir and sourceDir in the form chezmoi init writes (on
+    # Windows forward slashes and an upper-case drive) from the paths the
+    # clone's own lib/chezmoi-guard.ps1 resolves, as Variant says: clean,
+    # bad-config (destDir names another directory), maintenance, no-copy (no
+    # private copy of the files it replaced) or no-state (an empty state
+    # database).
     param([string]$Variant)
     $userHome = $E2E['Home']
     . (Join-Path $E2E['Clone'] 'lib/chezmoi-guard.ps1')
@@ -331,9 +333,15 @@ function Write-HandoverState {
             [IO.File]::Copy($path, $copy)
         }
     }
-    $boundHome = if ($Variant -ceq 'bad-marker') { Join-Path $destination 'elsewhere' } else { $destination }
-    New-File (Join-Path $userHome '.config/dotfiles/native') "dotfiles-chezmoi-v1`n$boundHome`n$source`n"
-    New-File (Join-Path $userHome '.config/chezmoi/chezmoi.toml') "[data]`n  host = `"win`"`n"
+    $configHome = if ($Variant -ceq 'bad-config') { Join-Path $destination 'elsewhere' } else { $destination }
+    $form = {
+        param([string]$Path)
+        if (-not $IsWindows) { return $Path }
+        $Path = $Path.Replace('\', '/')
+        return $Path.Substring(0, 1).ToUpperInvariant() + $Path.Substring(1)
+    }
+    New-File (Join-Path $userHome '.config/chezmoi/chezmoi.toml') ("destDir = `"$(& $form $configHome)`"`nsourceDir = `"$(& $form $source)`"`n" +
+        "`n[data]`n  host = `"win`"`n")
     New-File (Join-Path $userHome '.local/state/chezmoi/chezmoi.boltdb') $(if ($Variant -ceq 'no-state') { '' } else { 'db' })
     New-File (Join-Path $userHome '.gitconfig') "[user]`n`tname = native`n"
     New-File (Join-Path $userHome 'Documents/PowerShell/profile.ps1') "# native profile`n"
@@ -397,7 +405,7 @@ function Use-DryRun {
         $err = [Collections.Generic.List[string]]::new()
         $code = 0
         switch -CaseSensitive ($mode) {
-            { $_ -cin @('clean', 'bad-marker', 'maintenance', 'no-copy', 'no-state') } {
+            { $_ -cin @('clean', 'bad-config', 'maintenance', 'no-copy', 'no-state') } {
                 Write-HandoverState $mode
                 $out.Add('Invoke-NativeHandover: win deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup')
             }
@@ -860,7 +868,7 @@ try {
         Assert-Equal (Get-E2ETsvCounts $tsv) 'ok=1 missing=2 warn=1 ' 'status counts of a -Tsv report'
         $log = Join-Path $case 'doctor.out'
         [IO.File]::WriteAllText($log, ((@('[dotfiles] [ok] git 2.51.0') + @(1..6 | ForEach-Object { "[dotfiles] [warn] tool $_ below its floor" }) +
-                    @('[dotfiles] [error] native-config: no binding of this home')) -join "`r`n"))
+                    @('[dotfiles] [error] native-config: there is no ~/.config/chezmoi/chezmoi.toml')) -join "`r`n"))
         Assert-Equal (Get-E2EProblemLines $log) (@(1..5 | ForEach-Object { "[dotfiles] [warn] tool $_ below its floor" }) -join ' | ') 'the first five problem lines'
     }
 
@@ -1161,7 +1169,7 @@ try {
         $source = Resolve-DotfilesDirectory $clone
         $rows = @(Get-SummaryRows)
         Assert-Equal (Get-RowShape $rows) 'native-handover:pass handover-token:note' "the rows:`n$(Get-SummaryText)"
-        Assert-Equal $rows[0].Detail "Invoke-NativeHandover -Role win exit 0; 1 earlier file(s) kept byte for byte; bound to $source" 'the verdict'
+        Assert-Equal $rows[0].Detail "Invoke-NativeHandover -Role win exit 0; 1 earlier file(s) kept byte for byte; the config names $source" 'the verdict'
         Assert-Equal $rows[1].Detail 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance' 'the token note'
         $runner = Join-Path (Join-Path $E2E['Out'] 'handover') 'run.ps1'
         $call = $script:ProcessCalls[0]
@@ -1181,7 +1189,7 @@ try {
         Assert-True (@(Get-SummaryRows)[0].Detail.Contains('exit 0; 0 earlier file(s) kept byte for byte')) 'nothing to keep in an empty home'
 
         foreach ($failure in @(
-                @{ Mode = 'bad-marker'; Text = 'lib/chezmoi-guard.ps1 refuses the home binding: Native ownership binding must name this destination and a repository root.' }
+                @{ Mode = 'bad-config'; Text = 'lib/chezmoi-guard.ps1 refuses the config: destDir must be this home.' }
                 @{ Mode = 'maintenance'; Text = '~\.config\dotfiles\maintenance exists' }
                 @{ Mode = 'no-copy'; Text = 'no same-hash copy of ~\.gitconfig in ~\.local\state\dotfiles-fresh-backup' }
                 @{ Mode = 'no-state'; Text = '~\.local\state\chezmoi\chezmoi.boltdb is missing or empty' }

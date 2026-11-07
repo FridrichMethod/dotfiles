@@ -113,33 +113,43 @@ if [ -r "$HOME/.config/sh/.profile" ]; then
     . "$HOME/.config/sh/.profile"
 fi
 
-# Both shells use the same home binding. zsh calls this after ssh-agent/env
-# setup; bash/sh calls it here. Maintenance survives unrelated future logins.
-# Only a bound home updates; an unmarked home runs nothing and prints nothing.
+# Both shells read the same chezmoi config. zsh calls this after
+# ssh-agent/env setup; bash/sh calls it here. Maintenance survives unrelated
+# future logins. Only a home with ~/.config/chezmoi/chezmoi.toml updates; one
+# without it runs nothing and prints nothing.
 _dotfiles_login_updates() {
     case $- in *i*) ;; *) return 0 ;; esac
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
         return 0
     fi
-    if [ ! -e "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ]; then
+    if [ ! -e "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
         return 0
     fi
-    # Read only enough to locate the shared validator. Any malformed marker
-    # prevents the dispatch; nothing falls back to another checkout.
+    # Read only the first top-level sourceDir line, to locate the shared
+    # validator there. Any config it refuses prevents the dispatch; nothing
+    # falls back to another checkout. The read stays outside the command
+    # substitution: Bash 3.2 (macOS) cannot parse a case statement inside one.
+    _df_hook_root=''
+    if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+        while IFS= read -r _df_line || [ -n "$_df_line" ]; do
+            case ${_df_line#"${_df_line%%[![:blank:]]*}"} in '['*) break ;; esac
+            case $_df_line in
+                'sourceDir = "/'*'"')
+                    _df_hook_root=${_df_line#'sourceDir = "'}
+                    _df_hook_root=${_df_hook_root%'"'}
+                    break
+                    ;;
+            esac
+        done <"$HOME/.config/chezmoi/chezmoi.toml"
+    fi
     if ! _df_hook_root=$(
-        [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
-        {
-            IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_root
-        } <"$HOME/.config/dotfiles/native" || exit 1
-        [ "$_df_version" = dotfiles-chezmoi-v1 ] || exit 1
-        [ "${_df_root#/}" != "$_df_root" ] || exit 1
-        [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
+        [ -n "$_df_hook_root" ] && [ -r "$_df_hook_root/lib/chezmoi-guard.sh" ] || exit 1
         # shellcheck source=/dev/null
-        . "$_df_root/lib/chezmoi-guard.sh"
-        dotfiles_native_source "$HOME"
+        . "$_df_hook_root/lib/chezmoi-guard.sh"
+        dotfiles_chezmoi_source "$HOME"
     ); then
-        printf '%s\n' '[dotfiles] [warn] Native home binding is invalid; automatic updates skipped.' >&2
-        unset _df_hook_root
+        printf '%s\n' '[dotfiles] [warn] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.' >&2
+        unset _df_hook_root _df_line
         return 0
     fi
     _df_update=$_df_hook_root/scripts/chezmoi-update.sh
@@ -150,7 +160,7 @@ _dotfiles_login_updates() {
         printf '%s\n' '[dotfiles] [warn] Native updater is unavailable; inspect the source checkout.' >&2
     fi
     # The payload repos install only when a person runs sync-payloads.
-    unset _df_hook_root _df_update
+    unset _df_hook_root _df_update _df_line
 }
 if [ -z "${ZSH_VERSION:-}" ]; then
     _dotfiles_login_updates

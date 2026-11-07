@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import unittest
 
+from chezmoi_source_support import SourceFixture
 from chezmoi_support import ChezmoiFixture
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +34,7 @@ def current_user_sid():
 class WindowsTakeoverTests(unittest.TestCase):
     def test_regular_file_mode_overrides_stale_local_symlink_configuration(self):
         self.setup_native()
-        self.config.write_text('mode="symlink"\n' + self.config.read_text())
+        self.config.write_text('mode="symlink"\n' + self.config.read_text(), newline="\n")
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("skipped or failed", result.stderr)
@@ -49,8 +50,10 @@ class WindowsTakeoverTests(unittest.TestCase):
         if not self.pwsh or not self.git_exe:
             self.skipTest("PowerShell 7 and Git required")
         self.home = self.f.destination
-        self.marker = self.home / ".config/dotfiles/native"
-        self.marker.parent.mkdir(parents=True)
+        self.maintenance = self.home / ".config/dotfiles/maintenance"
+        self.maintenance.parent.mkdir(parents=True)
+        self.config = self.home / ".config/chezmoi/chezmoi.toml"
+        self.config.parent.mkdir(parents=True)
         self.repo = self.f.source
         self.env = dict(self.f.env)
         self.env["PATH"] = os.pathsep.join((str(self.f.binary.parent), str(Path(self.git_exe).parent),
@@ -70,9 +73,25 @@ class WindowsTakeoverTests(unittest.TestCase):
     def guard(self, body):
         return self.ps(". " + ps_string(ROOT / "lib/chezmoi-guard.ps1") + ";" + body)
 
-    def bind(self):
-        self.marker.write_bytes(("dotfiles-chezmoi-v1\n" + str(self.home.resolve()) + "\n" +
-                                 str(self.repo.resolve()) + "\n").encode())
+    @staticmethod
+    def chezmoi_path(path):
+        # The form chezmoi init writes on Windows: forward slashes, upper-case drive.
+        text = Path(path).resolve().as_posix()
+        return text[0].upper() + text[1:]
+
+    def top(self, source=None, home=None):
+        # The top-level lines chezmoi init writes, which the login updater reads.
+        return ('destDir = "' + self.chezmoi_path(home or self.home) + '"\n' +
+                'sourceDir = "' + self.chezmoi_path(source or self.repo) + '"\n')
+
+    def configure(self, tables="", source=None, home=None):
+        # Always LF: text mode would write CRLF here, which the guard refuses.
+        self.config.write_bytes((self.top(source, home) + tables).encode())
+
+    def make_checkout(self, path):
+        # What the PowerShell guard requires of a source: .git and .chezmoiroot.
+        (path / ".git").mkdir(parents=True, exist_ok=True)
+        (path / ".chezmoiroot").write_text("home\n")
 
     def git(self, *args, cwd=None):
         return subprocess.run([self.git_exe, *args], cwd=cwd or self.repo, env=self.env,
@@ -80,7 +99,6 @@ class WindowsTakeoverTests(unittest.TestCase):
                               check=True, timeout=30).stdout.strip()
 
     def setup_native(self):
-        self.bind()
         (self.repo / "home").mkdir()
         (self.repo / ".chezmoiroot").write_text("home\n")
         (self.repo / "home/dot_sample").write_text("initial\n")
@@ -93,14 +111,11 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.git("remote", "add", "origin", str(self.remote))
         self.git("fetch", "origin")
         self.git("branch", "--set-upstream-to=origin/main", "main")
-        config = self.home / ".config/chezmoi/chezmoi.toml"
-        config.parent.mkdir(parents=True)
-        config.write_text("[git]\nautoAdd=false\nautoCommit=false\nautoPush=false\n"
-                          "[update]\ncommand='git'\nargs=['-c','rebase.autoStash=false','-c',"
-                          "'merge.autoStash=false','pull','--ff-only','--no-rebase','--no-autostash',"
-                          "'--no-recurse-submodules']\nrecurseSubmodules=false\n")
-        self.config = config
-        self.f.config = config
+        self.configure("[git]\nautoAdd=false\nautoCommit=false\nautoPush=false\n"
+                       "[update]\ncommand='git'\nargs=['-c','rebase.autoStash=false','-c',"
+                       "'merge.autoStash=false','pull','--ff-only','--no-rebase','--no-autostash',"
+                       "'--no-recurse-submodules']\nrecurseSubmodules=false\n")
+        self.f.config = self.config
         self.f.cache = self.home / ".cache/chezmoi"
         self.f.state = self.home / ".local/state/chezmoi/chezmoi.boltdb"
         self.f.cache.mkdir(parents=True)
@@ -150,33 +165,88 @@ class WindowsTakeoverTests(unittest.TestCase):
         return self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";" + before +
                        "Invoke-DotfilesNativeUpdate -HomePath " + ps_string(self.home) + ";" + after)
 
-    def test_malformed_marker_and_partial_handover_fail_closed(self):
-        for value in (b"", b"bad\n", b"dotfiles-chezmoi-v1\nwrong\nwrong\n"):
-            self.marker.write_bytes(value)
-            result = self.guard("try {Get-DotfilesNativeBinding -HomePath " + ps_string(self.home) +
-                                " | Out-Null;throw 'binding accepted'}catch{if($_ -match 'binding accepted'){throw}}")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.marker.read_bytes(), value)
+    def paths(self, home=None):
+        return self.guard("Get-DotfilesChezmoiPaths -HomePath " + ps_string(home or self.home) +
+                          " | ConvertTo-Json -Compress")
+
+    def test_malformed_config_fails_closed(self):
+        self.make_checkout(self.repo)
+        valid = self.top() + "umask = 63\n\n[data]\n  host = \"win\"\n"
+        exact = 'sourceDir = "' + self.chezmoi_path(self.repo) + '"\n'
+        destination = 'destDir = "' + self.chezmoi_path(self.home) + '"\n'
+        for name, value in (("empty", ""), ("no destDir", valid.replace(destination, "")),
+                            ("no sourceDir", valid.replace(exact, "")),
+                            ("two sourceDir lines", valid.replace(exact, exact * 2)),
+                            ("two destDir lines", valid.replace(destination, destination * 2)),
+                            ("sourceDir after a table", valid.replace(exact, "") + exact),
+                            ("a case variant", valid.replace("sourceDir =", "SourceDir =")),
+                            ("a workingTree key", valid.replace(exact, exact + exact.replace("sourceDir", "workingTree"))),
+                            ("a quoted key", valid.replace("sourceDir =", '"sourceDir" =')),
+                            ("leading blanks", valid.replace(exact, "  " + exact)),
+                            ("a literal string", valid.replace(exact, exact.replace('"', "'"))),
+                            ("an escaped value", valid.replace(exact, exact.replace("/", "\\\\"))),
+                            ("a backslash value", valid.replace(exact, exact.replace("/", "\\"))),
+                            ("a trailing comment", valid.replace(exact, exact[:-1] + " # here\n")),
+                            ("a multi-line string", valid.replace(exact, 'note = """\n' + exact + '"""\n')),
+                            ("CRLF", valid.replace("\n", "\r\n")),
+                            ("a byte-order mark", "\ufeff" + valid),
+                            ("a drive-relative source", valid.replace(exact, 'sourceDir = "C:dotfiles"\n')),
+                            ("a rooted source", valid.replace(exact, 'sourceDir = "/dotfiles"\n')),
+                            ("a UNC source", valid.replace(exact, 'sourceDir = "//server/share"\n'))):
+            with self.subTest(config=name):
+                self.config.write_bytes(value.encode())
+                result = self.paths()
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(self.config.read_bytes(), value.encode())
+        for name, value in (("chezmoi layout", valid),
+                            ("keys after the first table",
+                             valid + 'sourceDir = "C:/elsewhere"\nworkingTree = "C:/elsewhere"\n')):
+            with self.subTest(config=name):
+                self.config.write_bytes(value.encode())
+                result = self.paths()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(Path(json.loads(result.stdout)["Source"]), self.repo)
 
     def test_maintenance_persists_in_fresh_process(self):
-        (self.marker.parent / "maintenance").mkdir()
+        self.maintenance.mkdir()
         for _ in range(2):
             result = self.guard("if(-not(Test-DotfilesMaintenance -HomePath " + ps_string(self.home) +
                                 ")){throw 'maintenance absent'}")
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_binding_rejects_copied_home_and_noncanonical_source(self):
+    def test_config_rejects_copied_home_and_noncanonical_source(self):
         self.git("init", "--template=")
         (self.repo / ".chezmoiroot").write_text("home\n")
-        self.bind()
-        result = self.guard("Get-DotfilesNativeBinding -HomePath " + ps_string(self.home) + " | ConvertTo-Json -Compress")
+        self.configure("[data]\n  host = \"win\"\n")
+        result = self.paths()
         self.assertEqual(result.returncode, 0, result.stderr)
         value = json.loads(result.stdout)
         self.assertEqual(Path(value["Destination"]), self.home)
         self.assertEqual(Path(value["Source"]), self.repo)
-        self.marker.write_text("dotfiles-chezmoi-v1\n" + str(self.f.root) + "\n" + str(self.repo) + "\n")
-        result = self.guard("Get-DotfilesNativeBinding -HomePath " + ps_string(self.home))
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(Path(value["Config"]), self.config)
+        # Windows paths compare ignoring case and slash direction.
+        lower = str(self.home.resolve())
+        result = self.paths(lower[0].lower() + lower[1:])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Path(json.loads(result.stdout)["Source"]), self.repo)
+        drive = self.chezmoi_path(self.home)[0]
+        self.config.write_bytes(self.config.read_bytes().replace(('destDir = "' + drive).encode(),
+                                                                 ('destDir = "' + drive.lower()).encode()))
+        self.assertEqual(self.paths().returncode, 0)
+        linked = self.f.root / "linked source"
+        self.junction(linked, self.repo)
+        no_git = self.f.root / "no git"
+        no_git.mkdir()
+        (no_git / ".chezmoiroot").write_text("home\n")
+        for name, kwargs in (("copied home", {"home": self.f.root}), ("junction source", {"source": linked}),
+                             ("no .git", {"source": no_git})):
+            with self.subTest(config=name):
+                self.configure("[data]\n  host = \"win\"\n", **kwargs)
+                if name == "junction source":
+                    # resolve() would follow the junction: name it as written.
+                    self.config.write_bytes(self.config.read_bytes().replace(
+                        self.chezmoi_path(self.repo).encode(), (self.chezmoi_path(self.f.root) + "/linked source").encode()))
+                self.assertNotEqual(self.paths().returncode, 0)
 
     def test_update_excludes_directories_and_applies_files_in_existing_parent(self):
         self.setup_native()
@@ -192,10 +262,10 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.git("push", "origin", "main")
         trace = self.f.root / "native update arguments.json"
         before = "$script:nativeProcess=(Get-Item Function:Invoke-DotfilesNativeProcess).ScriptBlock;" + \
-            "function Invoke-DotfilesNativeProcess {param($Program,$Arguments,$Binding);" + \
+            "function Invoke-DotfilesNativeProcess {param($Program,$Arguments,$Paths);" + \
             "if($Arguments -contains 'update'){ConvertTo-Json -InputObject @($Arguments) -Compress | " + \
             "Set-Content -LiteralPath " + ps_string(trace) + "};" + \
-            "& $script:nativeProcess $Program $Arguments $Binding};"
+            "& $script:nativeProcess $Program $Arguments $Paths};"
         result = self.update(before)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
@@ -267,7 +337,7 @@ class WindowsTakeoverTests(unittest.TestCase):
 
     def test_unsafe_old_update_configuration_refuses(self):
         self.setup_native()
-        self.config.write_text("[update]\ncommand='git'\nargs=['pull','--rebase','--autostash']\n")
+        self.configure("[update]\ncommand='git'\nargs=['pull','--rebase','--autostash']\n")
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("[dotfiles]", result.stdout + result.stderr)
@@ -279,7 +349,7 @@ class WindowsTakeoverTests(unittest.TestCase):
             result = self.update(before)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((self.home / ".sample").read_text(), "initial\n")
-        (self.marker.parent / "maintenance").touch()
+        self.maintenance.touch()
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
@@ -344,26 +414,28 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD"), head)
         self.assertEqual(self.git("stash", "list"), "")
 
-    def test_marker_directory_and_dangling_link_are_owned_but_unbound(self):
+    def test_config_directory_or_dangling_link_is_refused(self):
         for kind in ("directory", "link"):
             if kind == "directory":
-                self.marker.mkdir()
+                self.config.mkdir()
             else:
-                self.marker.symlink_to(self.f.root / "absent")
-            result = self.guard("if(-not(Test-DotfilesNativeOwned " + ps_string(self.home) +
-                                ")){throw 'not owned'}")
+                self.config.symlink_to(self.f.root / "absent")
+            result = self.guard("if(-not(Test-DotfilesConfigExists " + ps_string(self.home) +
+                                ")){throw 'config absent'}")
             self.assertEqual(result.returncode, 0, result.stderr)
-            result = self.guard("Get-DotfilesNativeBinding " + ps_string(self.home))
+            result = self.guard("Get-DotfilesChezmoiPaths " + ps_string(self.home))
             self.assertNotEqual(result.returncode, 0)
             if kind == "directory":
-                self.marker.rmdir()
+                self.config.rmdir()
             else:
-                self.marker.unlink()
+                self.config.unlink()
+        result = self.guard("if(Test-DotfilesConfigExists " + ps_string(self.home) + "){throw 'config present'}")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_profile_dispatch_uses_marker_and_maintenance_in_fresh_shells(self):
+    def test_profile_dispatch_uses_config_and_maintenance_in_fresh_shells(self):
         profile = ROOT / "home/Documents/PowerShell/profile.ps1"
-        # A checkout at the old default ~/dotfiles, with every hook and a real
-        # guard: an unmarked home must still run none of them.
+        # A checkout at ~/dotfiles, with every hook and a real guard: a home
+        # without a chezmoi config must still run none of them.
         fake_repo = self.home / "dotfiles"
         (fake_repo / "scripts").mkdir(parents=True)
         (fake_repo / "lib").mkdir()
@@ -380,31 +452,30 @@ class WindowsTakeoverTests(unittest.TestCase):
                 "if($tail.Count -ne 1){throw 'profile tail not found'};Invoke-Expression $tail[0].Extent.Text")
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)
-        # An unmarked home runs nothing and prints nothing.
+        # A home without a chezmoi config runs nothing and prints nothing.
         self.assertFalse(trace.exists(), trace.read_text() if trace.exists() else "")
         self.assertEqual(result.stdout.strip(), "")
         self.assertEqual(result.stderr.strip(), "")
-        # A native source may be independent from a checkout at the old default ~/dotfiles.
-        native_repo = self.f.root / "bound source"
-        (native_repo / "scripts").mkdir(parents=True)
-        (native_repo / "lib").mkdir()
-        (native_repo / ".git").mkdir()
-        (native_repo / ".chezmoiroot").write_text("home\n")
-        shutil.copyfile(ROOT / "lib/chezmoi-guard.ps1", native_repo / "lib/chezmoi-guard.ps1")
+        # The configured source may live outside ~/dotfiles.
+        independent_source = self.f.root / "independent source"
+        (independent_source / "scripts").mkdir(parents=True)
+        (independent_source / "lib").mkdir()
+        self.make_checkout(independent_source)
+        shutil.copyfile(ROOT / "lib/chezmoi-guard.ps1", independent_source / "lib/chezmoi-guard.ps1")
         for name in ("chezmoi-update", "payload-update"):
-            (native_repo / ("scripts/" + name + ".ps1")).write_text(
-                "Add-Content -LiteralPath " + ps_string(trace) + " -Value 'native-" + name + "'\n")
-        # Even the guard in the retired checkout must never be sourced.
+            (independent_source / ("scripts/" + name + ".ps1")).write_text(
+                "Add-Content -LiteralPath " + ps_string(trace) + " -Value 'source-" + name + "'\n")
+        # The guard in a checkout the config does not name is never sourced.
         (fake_repo / "lib/chezmoi-guard.ps1").write_text(
-            "Add-Content -LiteralPath " + ps_string(trace) + " -Value 'stale-guard';throw 'stale guard loaded'\n")
-        self.marker.write_bytes(("dotfiles-chezmoi-v1\n" + str(self.home) + "\n" + str(native_repo) + "\n").encode())
+            "Add-Content -LiteralPath " + ps_string(trace) + " -Value 'other-guard';throw 'other guard loaded'\n")
+        self.configure("[data]\n  host = \"win\"\n", source=independent_source)
         result = self.ps(body)
         self.assertEqual(result.returncode, 0, result.stderr)
         # A login updates; payloads install only through sync-payloads.
-        self.assertEqual(trace.read_text().splitlines(), ["native-chezmoi-update"])
+        self.assertEqual(trace.read_text().splitlines(), ["source-chezmoi-update"])
         trace.unlink()
         # A failing updater leaves the shell usable and the caller's preferences intact.
-        updater = native_repo / "scripts/chezmoi-update.ps1"
+        updater = independent_source / "scripts/chezmoi-update.ps1"
         saved = updater.read_bytes()
         updater.write_text("throw 'updater failed'\n")
         result = self.ps(body + ";if($ErrorActionPreference -ne 'Stop'){throw 'caller preference changed'};'profile continued'")
@@ -412,26 +483,30 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertIn("profile continued", result.stdout)
         self.assertIn("[dotfiles] Profile hooks skipped", result.stderr)
         updater.write_bytes(saved)
-        self.marker.write_text("malformed marker cannot fall back\n")
-        result = self.ps(body)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("[dotfiles]", result.stdout + result.stderr)
-        self.assertFalse(trace.exists())
-        self.marker.unlink()
-        for marker_kind in ("directory", "dangling-link"):
-            if marker_kind == "directory":
-                self.marker.mkdir()
+        # A config the guard refuses never falls back to another checkout.
+        for malformed in (self.top(source=independent_source).split("\n", 1)[0] + "\n[data]\n",
+                          self.top(home=self.f.root, source=independent_source)):
+            self.config.write_bytes(malformed.encode())
+            result = self.ps(body)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((result.stdout + result.stderr).count("[dotfiles]"), 1, result.stderr)
+            self.assertFalse(trace.exists())
+        self.config.unlink()
+        for config_kind in ("directory", "dangling-link"):
+            if config_kind == "directory":
+                self.config.mkdir()
             else:
-                self.marker.symlink_to(self.f.root / "missing-marker-referent")
+                self.config.symlink_to(self.f.root / "missing-config-referent")
             result = self.ps(body)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("[dotfiles]", result.stdout + result.stderr)
             self.assertFalse(trace.exists())
-            if marker_kind == "directory":
-                self.marker.rmdir()
+            if config_kind == "directory":
+                self.config.rmdir()
             else:
-                self.marker.unlink()
-        (self.marker.parent / "maintenance").touch()
+                self.config.unlink()
+        self.configure("[data]\n  host = \"win\"\n", source=independent_source)
+        self.maintenance.touch()
         for _ in range(2):
             result = self.ps(body)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -441,22 +516,46 @@ class WindowsTakeoverTests(unittest.TestCase):
         shell = Path(os.environ["SYSTEMROOT"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
         if not shell.is_file():
             self.skipTest("Windows PowerShell 5.1 not available")
-        self.bind()
-        # The updater's binary check lives in the guard too and must parse there.
-        body = ". " + ps_string(ROOT / "lib/chezmoi-guard.ps1") + ";if(-not(Test-DotfilesNativeOwned " + ps_string(self.home) + ")){throw 'not owned'}" + \
-            ";foreach($f in 'Test-DotfilesNativeChezmoiPath','Test-DotfilesTrustedFileSecurity','Open-DotfilesNativeChezmoi')" + \
-            "{if(-not(Get-Command $f -CommandType Function -ErrorAction SilentlyContinue)){throw ($f+' missing')}};exit 0"
-        encoded = base64.b64encode(body.encode("utf-16le")).decode()
-        # Match the PS7 fixture budget, including hosted e2e process startup.
-        result = subprocess.run([str(shell), "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-                                cwd=self.f.root, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        # The config real chezmoi init writes here, in the source it names.
+        with SourceFixture("win") as fixture:
+            result = fixture.run("init")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rendered = fixture.config.read_bytes()
+            # init made the source a Git repository, as the guard requires.
+            self.assertTrue((fixture.source / ".git").is_dir())
+            target = fixture.destination / ".config/chezmoi/chezmoi.toml"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(rendered)
+            self.assertIn(b'\nsourceDir = "' + self.chezmoi_path(fixture.source).encode() + b'"\n', rendered)
+            self.assertNotIn(b"\r", rendered)
+            guard = "$ErrorActionPreference='Stop';. " + ps_string(ROOT / "lib/chezmoi-guard.ps1") + ";"
+            # The updater's binary check lives in the guard too and must parse there.
+            body = (guard + "$p=Get-DotfilesChezmoiPaths -HomePath " + ps_string(fixture.destination) +
+                    ";if($p.Source -ne " + ps_string(fixture.source) + "){throw ('source '+$p.Source)}" +
+                    ";if(-not(Test-DotfilesConfigExists " + ps_string(fixture.destination) + ")){throw 'config absent'}" +
+                    ";foreach($f in 'Test-DotfilesNativeChezmoiPath','Test-DotfilesTrustedFileSecurity','Open-DotfilesNativeChezmoi')" +
+                    "{if(-not(Get-Command $f -CommandType Function -ErrorAction SilentlyContinue)){throw ($f+' missing')}}" +
+                    ";[IO.File]::WriteAllText(" + ps_string(target) + ",[IO.File]::ReadAllText(" + ps_string(target) +
+                    ").Replace(\"`n\",\"`r`n\"))" +
+                    ";try{Get-DotfilesChezmoiPaths -HomePath " + ps_string(fixture.destination) +
+                    " | Out-Null;throw 'CRLF accepted'}catch{if($_ -match 'CRLF accepted'){throw}}" +
+                    ";[IO.File]::WriteAllBytes(" + ps_string(target) + ",[Convert]::FromBase64String('" +
+                    base64.b64encode(rendered).decode() + "'));exit 0")
+            for executable in (str(shell), self.pwsh):
+                with self.subTest(shell=executable):
+                    encoded = base64.b64encode(body.encode("utf-16le")).decode()
+                    # Match the PS7 fixture budget, including hosted e2e process startup.
+                    result = subprocess.run([executable, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                                            cwd=fixture.root, env=self.env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, timeout=60)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(target.read_bytes(), rendered)
 
-    def test_binding_rejects_repository_subdirectory_as_source(self):
+    def test_config_rejects_repository_subdirectory_as_source(self):
         self.setup_native()
-        self.marker.write_bytes(("dotfiles-chezmoi-v1\n" + str(self.home) + "\n" +
-                                 str(self.repo / "home") + "\n").encode())
-        result = self.guard("Get-DotfilesNativeBinding " + ps_string(self.home))
+        tables = self.config.read_bytes().decode().split("\n", 2)[2]
+        self.configure(tables, source=self.repo / "home")
+        result = self.guard("Get-DotfilesChezmoiPaths " + ps_string(self.home))
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
@@ -474,9 +573,9 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(trace.exists(), "unattended update executed a local Git callback")
         probe = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") +
-                        ";$binding=Get-DotfilesNativeBinding " + ps_string(self.home) +
+                        ";$paths=Get-DotfilesChezmoiPaths " + ps_string(self.home) +
                         ";$r=Invoke-DotfilesNativeProcess " + ps_string(self.git_exe) +
-                        " @('config','--get-regexp','^(core.hooksPath|core.fsmonitor|maintenance.auto|gc.auto)$') $binding;" +
+                        " @('config','--get-regexp','^(core.hooksPath|core.fsmonitor|maintenance.auto|gc.auto)$') $paths;" +
                         "$r.Output")
         self.assertEqual(probe.returncode, 0, probe.stderr)
         lines = probe.stdout.lower().splitlines()
@@ -484,35 +583,43 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertIn("gc.auto 0", lines)
         self.assertIn("core.fsmonitor false", lines)
 
-    def test_binding_rejects_non_dotfiles_repository_root(self):
+    def test_config_rejects_non_dotfiles_repository_root(self):
         self.setup_native()
         (self.repo / ".chezmoiroot").unlink()
-        result = self.guard("Get-DotfilesNativeBinding " + ps_string(self.home))
+        result = self.guard("Get-DotfilesChezmoiPaths " + ps_string(self.home))
         self.assertNotEqual(result.returncode, 0)
 
-    def test_local_native_defaults_cannot_force_conflict_or_switch_git_tree(self):
+    def test_local_chezmoi_defaults_cannot_force_conflict_or_switch_git_tree(self):
         self.setup_native()
         alternative = self.f.root / "other repository"
         self.git("clone", str(self.remote), str(alternative))
-        self.config.write_text("workingTree=" + json.dumps(str(alternative)) +
-                               "\nforce=true\nuseBuiltinGit=true\n" + self.config.read_text())
+        text = self.config.read_bytes()
         (self.home / ".sample").write_text("private edited destination\n")
         (self.repo / "home/dot_sample").write_text("new portable\n")
         self.git("add", ".")
         self.git("commit", "-qm", "portable edit")
         self.git("push", "origin", "main")
         previous = self.git("rev-parse", "HEAD", cwd=alternative)
+        # A local workingTree key would redirect a later init's sourceDir: refused.
+        self.config.write_bytes(b"workingTree = " + json.dumps(str(alternative)).encode() + b"\n" + text)
+        head = self.git("rev-parse", "HEAD")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((result.stdout + result.stderr).count("[dotfiles]"), 1, result.stderr)
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=alternative), previous)
+        # Local force and useBuiltinGit defaults lose to the explicit flags.
+        self.config.write_bytes(b"force = true\nuseBuiltinGit = true\n" + text)
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.home / ".sample").read_text(), "private edited destination\n")
-        self.assertEqual(self.git("rev-parse", "HEAD", cwd=alternative), previous)
         (self.home / ".sample").write_text("initial\n")
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.home / ".sample").read_text(), "new portable\n")
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=alternative), previous)
 
-    def test_git_worktree_redirect_cannot_escape_native_source_binding(self):
+    def test_git_worktree_redirect_cannot_escape_the_configured_source(self):
         self.setup_native()
         alternative = self.f.root / "redirected source"
         alternative.mkdir()

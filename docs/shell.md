@@ -8,8 +8,9 @@ loads it from .bashrc; zsh sources it immediately after its uniqueness setup.
 Host aliases and profile files live under ~/.config/sh/. Preserve shared site
 prefixes such as /apps/miniconda3; per-user conda and Juliaup paths use HOME.
 The vi alias selects nvim only when available, leaving native vi usable otherwise.
-An interactive login updates only a home bound by ~/.config/dotfiles/native
-([update contract](update-contract.md)); an unmarked home runs nothing.
+An interactive login updates only a home whose ~/.config/chezmoi/chezmoi.toml
+names it and a dotfiles checkout ([update contract](update-contract.md)); a
+home without that config runs nothing.
 
 nvm discovery honors an explicit NVM_DIR, then ~/.nvm, then
 ${XDG_CONFIG_HOME:-~/.config}/nvm. The profile reads default-alias chains with the read builtin without

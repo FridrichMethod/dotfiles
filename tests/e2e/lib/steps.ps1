@@ -42,9 +42,9 @@ function Invoke-E2EStepNativeHandover {
     # run by a child pwsh -NoProfile -NonInteractive from the clone. The step
     # log starts with the HW-native block it stands in for. It passes when the
     # child exits 0 and the end state is the documented one: the clone's
-    # lib/chezmoi-guard.ps1 accepts the home binding as naming the clone, the
-    # local config is a regular file selecting win, no maintenance, a
-    # non-empty bound state database, and a same-hash private copy of each of
+    # lib/chezmoi-guard.ps1 accepts the local config as naming this home and
+    # the clone, that config selects win, no maintenance, a non-empty state
+    # database, and a same-hash private copy of each of
     # .gitconfig and the two profile.ps1 files that existed before. The
     # runner token is elevated (it has no ordinary one), which the procedure
     # warns about and a note records; the ordinary-token login-updater check
@@ -80,14 +80,14 @@ function Invoke-E2EStepNativeHandover {
     $source = ''
     try {
         . (Join-Path $E2E['Clone'] 'lib/chezmoi-guard.ps1')
-        $binding = Get-DotfilesNativeBinding -HomePath $userHome
+        $paths = Get-DotfilesChezmoiPaths -HomePath $userHome
         $expected = Resolve-DotfilesDirectory $E2E['Clone']
-        $source = [string]$binding.Source
+        $source = [string]$paths.Source
         if (-not $source.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
-            $problems.Add("the home binding names $source, not the clone $expected")
+            $problems.Add("the config's sourceDir names $source, not the clone $expected")
         }
     }
-    catch { $problems.Add("lib/chezmoi-guard.ps1 refuses the home binding: $($_.Exception.Message)") }
+    catch { $problems.Add("lib/chezmoi-guard.ps1 refuses the config: $($_.Exception.Message)") }
     $config = Join-Path $userHome '.config/chezmoi/chezmoi.toml'
     if (-not (Test-E2ERegularFile $config)) { $problems.Add('~\.config\chezmoi\chezmoi.toml is missing, a link or not a regular file') }
     elseif ([IO.File]::ReadAllText($config) -cnotmatch '(?m)^\s*host\s*=\s*[''"]win[''"]') {
@@ -109,7 +109,7 @@ function Invoke-E2EStepNativeHandover {
         Complete-E2EStep fail "Invoke-NativeHandover -Role win exit 0, but $($problems -join '; ')"
         return
     }
-    Complete-E2EStep pass "Invoke-NativeHandover -Role win exit 0; $kept earlier file(s) kept byte for byte; bound to $source"
+    Complete-E2EStep pass "Invoke-NativeHandover -Role win exit 0; $kept earlier file(s) kept byte for byte; the config names $source"
     if (Test-E2EElevated) {
         Write-E2ENote handover-token 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance'
     }
@@ -322,7 +322,7 @@ function Invoke-E2EStepWinget {
 
 function Invoke-E2EStepDoctorInitial {
     # doctor.ps1 -Host win -Tsv on the fresh home exits 1 (the tools and the
-    # native binding are missing) and writes nothing, in TEMP or HOME.
+    # chezmoi config are missing) and writes nothing, in TEMP or HOME.
     Start-E2EStep doctor-initial check:doctor-initial
     Start-E2ENoWrite doctor-initial
     $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') `

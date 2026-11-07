@@ -34,13 +34,13 @@ omz-order core X-recovery
 nvm-homebrew ai S4-nvm
 payloads ai H7-payloads'
 
-# bootstrap_native_state ROOT: this home's native binding as one word: ok,
-# maintenance, unbound (no ~/.config/dotfiles/native), invalid (a marker the
-# guard rejects), "elsewhere PATH" (bound to the checkout PATH, not ROOT),
-# config (no regular ~/.config/chezmoi/chezmoi.toml) or guard (no readable
-# ROOT/lib/chezmoi-guard.sh). The binding guard is shared with the native
-# updater; no second marker parser.
-bootstrap_native_state() (
+# bootstrap_chezmoi_state ROOT: this home's chezmoi config as one word: ok,
+# maintenance, config (~/.config/chezmoi/chezmoi.toml absent, a link or not a
+# regular file), invalid (a regular config ROOT's guard refuses), "elsewhere
+# PATH" (its sourceDir is the checkout PATH, not ROOT) or guard (no readable
+# ROOT/lib/chezmoi-guard.sh). The guard's validator is the login updater's;
+# no second config parser.
+bootstrap_chezmoi_state() (
     if [ ! -r "$1/lib/chezmoi-guard.sh" ]; then
         printf '%s\n' guard
         return 0
@@ -49,52 +49,55 @@ bootstrap_native_state() (
     . "$1/lib/chezmoi-guard.sh"
     if dotfiles_maintenance_active "$HOME"; then
         state=maintenance
-    elif ! source=$(dotfiles_native_source "$HOME" 2>/dev/null); then
-        state=unbound
-        ! dotfiles_native_owned "$HOME" || state=invalid
+    elif [ ! -f "${HOME%/}/.config/chezmoi/chezmoi.toml" ] || [ -L "${HOME%/}/.config/chezmoi/chezmoi.toml" ]; then
+        state=config
+    elif ! source=$(dotfiles_chezmoi_source "$HOME" 2>/dev/null); then
+        state=invalid
     elif [ "$source" != "$(cd "$1" && pwd -P)" ]; then
         state="elsewhere $source"
-    elif [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
-        state=ok
     else
-        state=config
+        state=ok
     fi
     printf '%s\n' "$state"
 )
 
-# bootstrap_native_ready ROOT: 0 when this home is bound to ROOT with its
-# local config in place (setup-host's H7-native).
-bootstrap_native_ready() {
-    [ "$(bootstrap_native_state "$1")" = ok ]
+# bootstrap_chezmoi_ready ROOT: 0 when this home's chezmoi config names this
+# home and ROOT (setup-host's H7-native).
+bootstrap_chezmoi_ready() {
+    [ "$(bootstrap_chezmoi_state "$1")" = ok ]
 }
 
-# bootstrap_check_native_config ROOT: the native binding, named by cause. A
-# binding to another checkout (this doctor runs from a worktree or second
-# clone) only warns.
+# bootstrap_check_native_config ROOT: this home's chezmoi config, named by
+# cause. A config naming another checkout (this doctor runs from a worktree
+# or second clone) only warns.
+# shellcheck disable=SC2088 # a literal ~ for the reader, never expanded
 bootstrap_check_native_config() {
     local state
-    state=$(bootstrap_native_state "$1")
+    state=$(bootstrap_chezmoi_state "$1")
     case $state in
         ok)
-            bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
+            bootstrap_check_result ok '~/.config/chezmoi/chezmoi.toml names this home and this checkout; use a scoped diff to review configuration'
             ;;
         'elsewhere '*)
-            bootstrap_check_result warn "this home is bound to ${state#elsewhere }, not to this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its native state"
+            bootstrap_check_result warn "~/.config/chezmoi/chezmoi.toml names the checkout ${state#elsewhere }, not this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its state"
             ;;
         maintenance)
             bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md'
             ;;
-        unbound)
-            bootstrap_check_result human 'no native binding (~/.config/dotfiles/native): this home has no first deployment; follow Fresh home by hand in docs/bootstrap.md'
+        config)
+            if ! bootstrap_configured_home; then
+                bootstrap_check_result human 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh home by hand in docs/bootstrap.md'
+            elif [ -L "${HOME%/}/.config/chezmoi/chezmoi.toml" ]; then
+                bootstrap_check_result human '~/.config/chezmoi/chezmoi.toml is a link; inspect it and never overwrite it blindly'
+            else
+                bootstrap_check_result human '~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly'
+            fi
             ;;
         invalid)
-            bootstrap_check_result human 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly'
-            ;;
-        config)
-            bootstrap_check_result human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow Fresh home by hand in docs/bootstrap.md'
+            bootstrap_check_result human '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly'
             ;;
         *)
-            bootstrap_check_result human "$1/lib/chezmoi-guard.sh is unreadable, so the native binding cannot be checked; use a complete checkout"
+            bootstrap_check_result human "$1/lib/chezmoi-guard.sh is unreadable, so the chezmoi config cannot be checked; use a complete checkout"
             ;;
     esac
 }
@@ -459,19 +462,19 @@ bootstrap_check_locale() {
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 
 # bootstrap_payload_hook ROOT: the payload hook a person runs by path. On a
-# native-owned home that is the hook of the source its binding names, which
-# sync-payloads runs, never ROOT's unless bound to ROOT; 1 when the binding
-# does not resolve (maintenance, invalid, or no guard in ROOT). Elsewhere
-# ROOT's.
+# home with a chezmoi config that is the hook of the source its sourceDir
+# names, which sync-payloads runs, never ROOT's unless the config names ROOT;
+# 1 when the config does not resolve (a link or not a regular file, invalid,
+# maintenance, or no guard in ROOT). Without a config ROOT's.
 bootstrap_payload_hook() {
     local state
-    if ! bootstrap_native_home; then
+    if ! bootstrap_configured_home; then
         printf '%s\n' "$1/scripts/payload-update.sh"
         return 0
     fi
-    state=$(bootstrap_native_state "$1")
+    state=$(bootstrap_chezmoi_state "$1")
     case $state in
-        ok | config) printf '%s\n' "$(cd "$1" && pwd -P)/scripts/payload-update.sh" ;;
+        ok) printf '%s\n' "$(cd "$1" && pwd -P)/scripts/payload-update.sh" ;;
         'elsewhere '*) printf '%s\n' "${state#elsewhere }/scripts/payload-update.sh" ;;
         *) return 1 ;;
     esac
@@ -481,8 +484,9 @@ bootstrap_payload_hook() {
 # (default kit pymol skills) passes its unix-probe row of
 # ROOT/config/payloads.tsv and an installed kit left the Claude helpers. Only
 # a person installs the payload repos, so every shortfall names what to run
-# and only warns: sync-payloads where a native binding exists, else this
-# checkout's --now line (sync-payloads refuses an unmarked home).
+# and only warns: sync-payloads where the chezmoi config resolves, else this
+# checkout's --now line (sync-payloads refuses a home without a valid config,
+# and so does every hook under maintenance).
 bootstrap_check_payloads() {
     local config=$1/config/payloads.tsv items item line probe path hook advice
     local short='' found='' issues=''
@@ -516,12 +520,9 @@ bootstrap_check_payloads() {
         fi
     done
     if [ -n "$short" ]; then
-        if ! bootstrap_native_home; then
-            advice="sh $1/scripts/payload-update.sh --now ITEM"
-        elif hook=$(bootstrap_payload_hook "$1"); then
-            advice="sync-payloads ITEM (sh $hook --now ITEM)"
-        else
-            advice='sync-payloads ITEM'
+        advice="sh $(printf '%q' "$1/scripts/payload-update.sh") --now ITEM"
+        if bootstrap_configured_home && hook=$(bootstrap_payload_hook "$1"); then
+            advice="sync-payloads ITEM (sh $(printf '%q' "$hook") --now ITEM)"
         fi
         issues="$issues; not installed: ${short#, }: run $advice"
         case $short in

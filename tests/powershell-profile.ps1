@@ -125,7 +125,7 @@ $tailMarker = '# --- Dotfiles auto-update check'
 $tailAt = $text7.IndexOf($tailMarker)
 Assert-True ($tailAt -gt 0) 'the update hook block is present'
 $tail = $text7.Substring([Math]::Max($tailAt, 0))
-Assert-True ($tail.Contains('scripts/chezmoi-update.ps1')) 'the update hook runs the bound source''s scripts/chezmoi-update.ps1'
+Assert-True ($tail.Contains('scripts/chezmoi-update.ps1')) 'the update hook runs the configured source''s scripts/chezmoi-update.ps1'
 Assert-True ($tail -notmatch '(?i)\$env:') 'the update hook reads no environment variable'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
@@ -638,30 +638,41 @@ else {
     Write-Output 'SKIP: PSReadLine unavailable'
 }
 
-Write-Output '--- payload commands follow the home binding'
+Write-Output '--- payload commands follow the home chezmoi config'
 # sync-payloads and sync-skills, lifted into a child with a fake HOME, run the
-# hook of the source a valid native marker names (never the checkout at
-# ~\dotfiles or its guard) and pass its exit status through; an unmarked home
-# and an invalid marker refuse without running any hook; maintenance surfaces
-# the bound hook's own refusal.
+# hook of the source a valid ~/.config/chezmoi/chezmoi.toml names (never the
+# checkout at ~\dotfiles or its guard) and pass its exit status through; a
+# home without a config and a config the guard refuses run no hook;
+# maintenance surfaces the configured hook's own refusal.
 $syncRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-sync-test-" + [guid]::NewGuid().ToString('N'))
 try {
     $syncHome = Join-Path $syncRoot 'home'
-    $bound = Join-Path $syncRoot 'bound source'
-    $stale = Join-Path $syncHome 'dotfiles'
+    $configured = Join-Path $syncRoot 'configured source'
+    $other = Join-Path $syncHome 'dotfiles'
     $syncTrace = Join-Path $syncRoot 'trace'
-    $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $bound 'scripts'),
-        (Join-Path $bound 'lib'), (Join-Path $bound '.git'), (Join-Path $stale 'scripts'), (Join-Path $stale 'lib')
-    [IO.File]::WriteAllText((Join-Path $bound '.chezmoiroot'), "home`n")
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'lib/chezmoi-guard.ps1') -Destination (Join-Path $bound 'lib/chezmoi-guard.ps1')
-    foreach ($checkout in @{ Path = $bound; Name = 'bound' }, @{ Path = $stale; Name = 'stale' }) {
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $syncHome '.config/chezmoi'),
+        (Join-Path $configured 'scripts'), (Join-Path $configured 'lib'), (Join-Path $configured '.git'), (Join-Path $other 'scripts'), (Join-Path $other 'lib')
+    [IO.File]::WriteAllText((Join-Path $configured '.chezmoiroot'), "home`n")
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'lib/chezmoi-guard.ps1') -Destination (Join-Path $configured 'lib/chezmoi-guard.ps1')
+    foreach ($checkout in @{ Path = $configured; Name = 'configured' }, @{ Path = $other; Name = 'other' }) {
         [IO.File]::WriteAllText((Join-Path $checkout.Path 'scripts/payload-update.ps1'),
             "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value ('$($checkout.Name) ' + (`$args -join ' '))`nexit 4`n")
     }
-    [IO.File]::WriteAllText((Join-Path $stale 'lib/chezmoi-guard.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'stale-guard'`n")
-    $canonical = & { . (Join-Path $repoRoot 'lib/chezmoi-guard.ps1'); $args | ForEach-Object { Resolve-DotfilesDirectory $_ } } $syncHome $bound
-    $syncMarker = Join-Path $syncHome '.config/dotfiles/native'
-    $valid = "dotfiles-chezmoi-v1`n$($canonical[0])`n$($canonical[1])`n"
+    [IO.File]::WriteAllText((Join-Path $other 'lib/chezmoi-guard.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'other-guard'`n")
+    # The form chezmoi init writes: on Windows forward slashes and an
+    # upper-case drive; elsewhere the canonical path (/var is /private/var on
+    # macOS), as the guard compares them.
+    $forms = & {
+        . (Join-Path $repoRoot 'lib/chezmoi-guard.ps1')
+        foreach ($path in $args) {
+            $resolved = Resolve-DotfilesDirectory $path
+            if ($IsWindows) { $resolved = $resolved.Replace('\', '/'); $resolved = $resolved.Substring(0, 1).ToUpperInvariant() + $resolved.Substring(1) }
+            $resolved
+        }
+    } $syncHome $configured $syncRoot
+    $syncConfig = Join-Path $syncHome '.config/chezmoi/chezmoi.toml'
+    $sourceLine = "sourceDir = `"$($forms[1])`""
+    $valid = "destDir = `"$($forms[0])`"`n$sourceLine`n`n[data]`n  host = 'win'`n"
     $syncChild = @'
 Set-Variable -Name HOME -Value $env:DOTFILES_TEST_HOME -Force -Scope Global
 $ast = [Management.Automation.Language.Parser]::ParseFile($env:DOTFILES_TEST_PROFILE, [ref]$null, [ref]$null)
@@ -672,11 +683,11 @@ foreach ($name in 'sync-payloads', 'sync-skills') {
 $global:LASTEXITCODE = 7; sync-payloads pymol; $first = $LASTEXITCODE
 $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
 '@
-    # Invoke-SyncCase PREPARE: a fresh trace and marker, PREPARE, one child run.
+    # Invoke-SyncCase PREPARE: a fresh trace and config, PREPARE, one child run.
     function Invoke-SyncCase([scriptblock]$Prepare) {
-        # A linked marker goes as a link (dangling ones too), never its target.
-        try { if ([IO.File]::GetAttributes($syncMarker) -band [IO.FileAttributes]::ReparsePoint) { [IO.File]::Delete($syncMarker) } } catch { }
-        Remove-Item -LiteralPath $syncTrace, $syncMarker -Recurse -Force -ErrorAction Ignore
+        # A linked config goes as a link (dangling ones too), never its target.
+        try { if ([IO.File]::GetAttributes($syncConfig) -band [IO.FileAttributes]::ReparsePoint) { [IO.File]::Delete($syncConfig) } } catch { }
+        Remove-Item -LiteralPath $syncTrace, $syncConfig -Recurse -Force -ErrorAction Ignore
         & $Prepare
         $run = Invoke-Child $powerShell @('-NoProfile', '-NonInteractive', '-Command', $syncChild) -Environment @{
             DOTFILES_TEST_HOME = $syncHome; DOTFILES_TEST_PROFILE = $profile7; DOTFILES_TEST_TRACE = $syncTrace
@@ -684,62 +695,64 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
         $events = if (Test-Path -LiteralPath $syncTrace) { @(Get-Content -LiteralPath $syncTrace) -join '|' } else { '' }
         [pscustomobject]@{ Out = $run.Out; Err = $run.Err; Events = $events; Text = "out=$($run.Out) err=$($run.Err) events=$events" }
     }
-    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }
-    Assert-True ($case.Events -ceq 'bound -Now pymol|bound -Now skills' -and $case.Out -ceq 'exit=4,4' -and -not $case.Err) "a valid binding runs its source's hook, not ~\dotfiles's ($($case.Text))"
+    $refused = '[dotfiles] Payload update refused: ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; review it privately.'
+    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) }
+    Assert-True ($case.Events -ceq 'configured -Now pymol|configured -Now skills' -and $case.Out -ceq 'exit=4,4' -and -not $case.Err) "a valid config runs its source's hook, not ~\dotfiles's ($($case.Text))"
     $case = Invoke-SyncCase { }
-    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update needs a native home binding; in an unmarked home run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')) "an unmarked home refuses and runs no hook, not even ~\dotfiles's ($($case.Text))"
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')) "a home without a config refuses and runs no hook, not even ~\dotfiles's ($($case.Text))"
     $invalid = [ordered]@{
-        'extra line'      = { [IO.File]::WriteAllText($syncMarker, $valid + "`n") }
-        'other version'   = { [IO.File]::WriteAllText($syncMarker, $valid.Replace('-v1', '-v2')) }
-        'CRLF'            = { [IO.File]::WriteAllText($syncMarker, $valid.Replace("`n", "`r`n")) }
-        'relative source' = { [IO.File]::WriteAllText($syncMarker, "dotfiles-chezmoi-v1`n$($canonical[0])`nstale`n") }
-        'other home'      = { [IO.File]::WriteAllText($syncMarker, "dotfiles-chezmoi-v1`n$syncRoot`n$($canonical[1])`n") }
-        'directory'       = { $null = New-Item -ItemType Directory -Path $syncMarker }
+        'two sourceDir lines' = { [IO.File]::WriteAllText($syncConfig, $valid.Replace($sourceLine, "$sourceLine`n$sourceLine")) }
+        'a literal string'    = { [IO.File]::WriteAllText($syncConfig, $valid.Replace($sourceLine, $sourceLine.Replace('"', "'"))) }
+        'CRLF'                = { [IO.File]::WriteAllText($syncConfig, $valid.Replace("`n", "`r`n")) }
+        'relative source'     = { [IO.File]::WriteAllText($syncConfig, $valid.Replace($sourceLine, 'sourceDir = "dotfiles"')) }
+        'other home'          = { [IO.File]::WriteAllText($syncConfig, $valid.Replace("destDir = `"$($forms[0])`"", "destDir = `"$($forms[2])`"")) }
+        'a workingTree key'   = { [IO.File]::WriteAllText($syncConfig, $valid.Replace($sourceLine, "$sourceLine`n$($sourceLine.Replace('sourceDir', 'workingTree'))")) }
+        'directory'           = { $null = New-Item -ItemType Directory -Path $syncConfig }
     }
-    # A marker that is a link, dangling or to a valid marker, refuses too and
+    # A config that is a link, dangling or to a valid config, refuses too and
     # never falls back to ~\dotfiles. A symbolic link on Windows needs
     # elevation or Developer Mode (hosted runners are elevated).
-    $validCopy = Join-Path $syncRoot 'valid marker'
+    $validCopy = Join-Path $syncRoot 'valid config'
     [IO.File]::WriteAllText($validCopy, $valid)
     $linkProbe = Join-Path $syncRoot 'link probe'
     try { $null = New-Item -ItemType SymbolicLink -Path $linkProbe -Target $validCopy -ErrorAction Stop; [IO.File]::Delete($linkProbe) }
     catch { $linkProbe = $null }
     if ($linkProbe) {
-        $gone = Join-Path $syncRoot 'removed marker'
+        $gone = Join-Path $syncRoot 'removed config'
         $invalid['dangling link'] = {
             [IO.File]::WriteAllText($gone, $valid)
-            $null = New-Item -ItemType SymbolicLink -Path $syncMarker -Target $gone
+            $null = New-Item -ItemType SymbolicLink -Path $syncConfig -Target $gone
             [IO.File]::Delete($gone)
         }
-        $invalid['link to a valid marker'] = { $null = New-Item -ItemType SymbolicLink -Path $syncMarker -Target $validCopy }
+        $invalid['link to a valid config'] = { $null = New-Item -ItemType SymbolicLink -Path $syncConfig -Target $validCopy }
     }
-    else { Write-Output 'SKIP: linked sync-payloads markers (cannot create a symbolic link here)' }
+    else { Write-Output 'SKIP: linked sync-payloads configs (cannot create a symbolic link here)' }
     foreach ($entry in $invalid.GetEnumerator()) {
         $case = Invoke-SyncCase $entry.Value
-        Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update refused: review the native source binding privately.')) "an invalid binding ($($entry.Key)) refuses without running a hook ($($case.Text))"
+        Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains($refused)) "an invalid config ($($entry.Key)) refuses without running a hook ($($case.Text))"
     }
-    # A valid marker whose source has no guard refuses as well.
-    $boundGuard = Join-Path $bound 'lib/chezmoi-guard.ps1'
-    Move-Item -LiteralPath $boundGuard -Destination "$boundGuard.hidden"
-    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) } }
-    finally { Move-Item -LiteralPath "$boundGuard.hidden" -Destination $boundGuard }
-    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update refused: review the native source binding privately.')) "a bound source without its guard refuses without running a hook ($($case.Text))"
-    # A bound source without the hook fails with one line and exit 1, not a
-    # leftover 0.
-    $hookPath = Join-Path $bound 'scripts/payload-update.ps1'
+    # A valid config whose source has no guard refuses as well.
+    $sourceGuard = Join-Path $configured 'lib/chezmoi-guard.ps1'
+    Move-Item -LiteralPath $sourceGuard -Destination "$sourceGuard.hidden"
+    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) } }
+    finally { Move-Item -LiteralPath "$sourceGuard.hidden" -Destination $sourceGuard }
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains($refused)) "a configured source without its guard refuses without running a hook ($($case.Text))"
+    # A configured source without the hook fails with one line and exit 1, not
+    # a leftover 0.
+    $hookPath = Join-Path $configured 'scripts/payload-update.ps1'
     Move-Item -LiteralPath $hookPath -Destination "$hookPath.hidden"
-    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) } }
+    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) } }
     finally { Move-Item -LiteralPath "$hookPath.hidden" -Destination $hookPath }
     Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update unavailable:') -and
-        -not $case.Err.Contains('CommandNotFound')) "a bound source without the hook fails with exit 1 ($($case.Text))"
+        -not $case.Err.Contains('CommandNotFound')) "a configured source without the hook fails with exit 1 ($($case.Text))"
     # A hook that ends without exit leaves no stale exit status behind.
-    [IO.File]::WriteAllText((Join-Path $bound 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
-    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid) }
+    [IO.File]::WriteAllText((Join-Path $configured 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
+    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) }
     Assert-True ($case.Events -ceq 'quiet|quiet' -and $case.Out -ceq 'exit=0,0') "a hook without exit reports 0, not the caller's last status ($($case.Text))"
     # The real hook's maintenance refusal.
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/payload-update.ps1') -Destination (Join-Path $bound 'scripts/payload-update.ps1') -Force
-    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncMarker, $valid); [IO.File]::WriteAllText((Join-Path $syncHome '.config/dotfiles/maintenance'), '') }
-    Assert-True ($case.Events -ceq '' -and $case.Out.EndsWith('exit=1,1') -and ($case.Out + $case.Err).Contains('payload update refused during maintenance')) "maintenance surfaces the bound hook's refusal ($($case.Text))"
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/payload-update.ps1') -Destination (Join-Path $configured 'scripts/payload-update.ps1') -Force
+    $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid); [IO.File]::WriteAllText((Join-Path $syncHome '.config/dotfiles/maintenance'), '') }
+    Assert-True ($case.Events -ceq '' -and $case.Out.EndsWith('exit=1,1') -and ($case.Out + $case.Err).Contains('payload update refused during maintenance')) "maintenance surfaces the configured hook's refusal ($($case.Text))"
     Remove-Item -LiteralPath (Join-Path $syncHome '.config/dotfiles/maintenance') -Force
 }
 finally {

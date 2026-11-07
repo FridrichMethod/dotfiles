@@ -362,11 +362,12 @@ step_H7_payloads_check() {
 }
 
 # Nothing installs the payload repos at login: a person runs the --now line,
-# or sync-payloads in an interactive shell of a native home, to install and
-# later update them. On a native home the line names the hook of the source
-# the binding names (bootstrap_payload_hook), as sync-payloads does; without
-# one, only notes. An unmarked home has no binding, so sync-payloads refuses
-# there and only the line is named.
+# or sync-payloads in an interactive shell of a home with a chezmoi config,
+# to install and later update them. On such a home the line names the hook of
+# the source its sourceDir names (bootstrap_payload_hook), as sync-payloads
+# does; under maintenance or while the config does not resolve from this
+# checkout, only notes. A home without the config has no source, so
+# sync-payloads refuses there and only the line is named.
 step_H7_payloads_plan() {
     local hook
     steps_block_begin H7-payloads judgment
@@ -374,16 +375,16 @@ step_H7_payloads_plan() {
         '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them' \
         "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)"
     if ! hook=$(bootstrap_payload_hook "$STEPS_ROOT"); then
-        printf '%s\n' "# this native home's binding does not resolve from this checkout (the doctor's native-config row says why); once it does, run sync-payloads [ITEM...] in an interactive shell"
+        printf '%s\n' "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's native-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
         steps_block_end
         return 0
     fi
-    if bootstrap_native_home; then
-        printf '# this native home is bound to %s: the line below runs that source'\''s hook, as sync-payloads does\n' \
+    if bootstrap_configured_home; then
+        printf '# this home'\''s config names the checkout %s: the line below runs its hook, as sync-payloads does\n' \
             "${hook%/scripts/payload-update.sh}"
         printf '%s\n' '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
     else
-        printf '%s\n' '# rerun the line below to update them later (sync-payloads needs a native home binding, which this home lacks). To install them now, in the foreground:'
+        printf '%s\n' '# rerun the line below to update them later (sync-payloads needs ~/.config/chezmoi/chezmoi.toml, which this home lacks). To install them now, in the foreground:'
     fi
     printf 'sh %s --now\n' "$(steps_quote "$hook")"
     steps_block_end
@@ -424,9 +425,10 @@ step_H7_doctor_plan() {
 }
 
 # --- H7-native (operator-owned configuration handover) ---------------------
+# shellcheck disable=SC2088 # a literal ~ for the reader, never expanded
 step_H7_native_check() {
-    if bootstrap_native_ready "$STEPS_ROOT"; then
-        STEP_DETAIL='native binding and local config present; configuration review remains an operator step'
+    if bootstrap_chezmoi_ready "$STEPS_ROOT"; then
+        STEP_DETAIL='~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
         return 0
     fi
     STEP_DETAIL='follow Fresh home by hand in docs/bootstrap.md to initialize and deploy this home'
@@ -438,7 +440,6 @@ step_H7_native_plan() {
     printf '%s\n' \
         '# Follow Fresh home by hand in docs/bootstrap.md from this checkout.' \
         "# Select local [data].host = $STEPS_HOST explicitly; setup-host never initializes or applies configuration." \
-        '# Review exact targets and private backups, then initialize with all native paths explicit.' \
-        '# Establish the home-bound native marker only during that reviewed procedure; never use blanket force.'
+        '# Review exact targets and private backups, then initialize with all native paths explicit; never use blanket force.'
     steps_block_end
 }

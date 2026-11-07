@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # Host, profile and platform detection for doctor.sh and setup-host.sh: the
-# host a native-owned home's local config selects.
+# host a configured home's ~/.config/chezmoi/chezmoi.toml selects.
 # Sourced only; defines functions and changes no shell options. Bash 3.2
 # compatible and `set -u` safe; nothing here splits words by the caller's IFS.
 # No here-documents (see manifest.sh): text reaches awk through a pipe.
@@ -161,13 +161,13 @@ bootstrap_brew_bin() {
     return 1
 }
 
-# bootstrap_native_home: 0 when this home has the native ownership marker
-# ~/.config/dotfiles/native in any form, the existence test of
-# dotfiles_native_owned (lib/chezmoi-guard.sh); the native-config check
-# judges its content. Such a home records its role in its native config.
-bootstrap_native_home() {
+# bootstrap_configured_home: 0 when ~/.config/chezmoi/chezmoi.toml exists in
+# any form, the existence test of dotfiles_config_exists
+# (lib/chezmoi-guard.sh); the native-config check judges the config. Such a
+# home records its role in that config.
+bootstrap_configured_home() {
     [ -n "${HOME:-}" ] || return 1
-    [ -e "${HOME%/}/.config/dotfiles/native" ] || [ -L "${HOME%/}/.config/dotfiles/native" ]
+    [ -e "${HOME%/}/.config/chezmoi/chezmoi.toml" ] || [ -L "${HOME%/}/.config/chezmoi/chezmoi.toml" ]
 }
 
 # bootstrap_native_host: the role, common-only or a known host, that the one
@@ -222,19 +222,19 @@ bootstrap_native_host() {
     esac
 }
 
-# bootstrap_recorded_common_only: 0 when this home is native-owned and its
-# local config selects common-only (no host overlay).
+# bootstrap_recorded_common_only: 0 when this home has a local config that
+# selects common-only (no host overlay).
 bootstrap_recorded_common_only() {
-    bootstrap_native_home && [ "$(bootstrap_native_host)" = common-only ]
+    bootstrap_configured_home && [ "$(bootstrap_native_host)" = common-only ]
 }
 
-# bootstrap_resolve_host: the host a native-owned home's local config selects
+# bootstrap_resolve_host: the host a configured home's local config selects
 # (bootstrap_native_host). Returns 1 on any other home, for an unclear role
 # and for common-only (bootstrap_recorded_common_only tells that case apart).
 # Never guesses an overlay.
 bootstrap_resolve_host() {
     local host
-    bootstrap_native_home || return 1
+    bootstrap_configured_home || return 1
     host=$(bootstrap_native_host) || return 1
     [ "$host" != common-only ] || return 1
     printf '%s\n' "$host"

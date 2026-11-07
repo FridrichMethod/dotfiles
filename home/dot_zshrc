@@ -254,6 +254,6 @@ if ! _is_agent_session && [[ ${TERM_PROGRAM:-} == WezTerm || (-n ${WT_SESSION:-}
     typeset -g POWERLEVEL9K_TERM_SHELL_INTEGRATION=true
 fi
 
-# Shared home-bound update dispatch, after ssh-agent/env is ready.
+# Shared login update dispatch (~/.profile), after ssh-agent/env is ready.
 (($+functions[_dotfiles_login_updates])) && _dotfiles_login_updates
 unset -f _dotfiles_login_updates

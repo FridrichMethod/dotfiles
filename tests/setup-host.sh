@@ -689,8 +689,8 @@ mkdir -p "$FIXTURE/scripts"
 cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/payload-update.sh"
 cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
 chmod 755 "$FIXTURE/setup-host.sh"
-# A committed .chezmoiroot, as the real checkout has: the native binding guard
-# accepts only a source that names its root.
+# A committed .chezmoiroot, as the real checkout has: the config guard accepts
+# only a sourceDir that holds it.
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
 "$REAL_GIT" -C "$FIXTURE" init -q
 "$REAL_GIT" -C "$FIXTURE" add -A
@@ -838,8 +838,9 @@ expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-payloads judgment'
 expect_text check-fresh out '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them'
 expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.7'
-# An unmarked home has no binding for sync-payloads, so only the line is named.
-expect_line check-fresh '# rerun the line below to update them later (sync-payloads needs a native home binding, which this home lacks). To install them now, in the foreground:'
+# A home without a chezmoi config: sync-payloads refuses there, so only the
+# line is named.
+expect_line check-fresh '# rerun the line below to update them later (sync-payloads needs ~/.config/chezmoi/chezmoi.toml, which this home lacks). To install them now, in the foreground:'
 expect_no_text check-fresh out '(or sync-payloads'
 PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
 expect_line check-fresh "$PAYLOAD_LINE"
@@ -870,34 +871,54 @@ for repo in coding-agent-kit PyMOLScripts awesome-skills; do
 done
 grep -Fq -- '--connect-timeout 10 --max-time 60' "$CURL_ARGS_LOG" || fail 'the payload downloads are not bounded'
 
-# On a native home the payload line runs the hook of the source the binding
-# names, as sync-payloads does, never this checkout's; a binding that does
-# not resolve leaves only notes.
-new_home payloads-native
-mkdir -p "$CASE_HOME/.config/dotfiles" "$TEST_TMP/bound-elsewhere"
-printf 'home\n' >"$TEST_TMP/bound-elsewhere/.chezmoiroot"
-printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$CASE_HOME" "$TEST_TMP/bound-elsewhere" >"$CASE_HOME/.config/dotfiles/native"
-run_case payloads-native-elsewhere -- --host lab-ubuntu --check --only H7-payloads
-expect_line payloads-native-elsewhere 'HUMAN-BEGIN H7-payloads judgment'
-expect_line payloads-native-elsewhere "# this native home is bound to $TEST_TMP/bound-elsewhere: the line below runs that source's hook, as sync-payloads does"
-expect_line payloads-native-elsewhere "sh $TEST_TMP/bound-elsewhere/scripts/payload-update.sh --now"
-expect_no_text payloads-native-elsewhere out "$FIXTURE/scripts/payload-update.sh"
-printf 'extra\n' >>"$CASE_HOME/.config/dotfiles/native"
-run_case payloads-native-invalid -- --host lab-ubuntu --check --only H7-payloads
-expect_line payloads-native-invalid 'HUMAN-BEGIN H7-payloads judgment'
-expect_line payloads-native-invalid "# this native home's binding does not resolve from this checkout (the doctor's native-config row says why); once it does, run sync-payloads [ITEM...] in an interactive shell"
-expect_no_text payloads-native-invalid out 'payload-update.sh'
-expect_no_text payloads-native-invalid out '# rerun the line below'
-# Bound to this checkout, the line runs this checkout's hook.
-printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$CASE_HOME" "$FIXTURE" >"$CASE_HOME/.config/dotfiles/native"
-run_case payloads-native-bound -- --host lab-ubuntu --check --only H7-payloads
-expect_line payloads-native-bound "# this native home is bound to $FIXTURE: the line below runs that source's hook, as sync-payloads does"
-expect_line payloads-native-bound "sh $FIXTURE/scripts/payload-update.sh --now"
-expect_line payloads-native-bound '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+# On a home with a chezmoi config the payload line runs the hook of the
+# source its sourceDir names, as sync-payloads does, never this checkout's; a
+# config that does not resolve, or maintenance, leaves only notes.
+new_home payloads-configured
+# write_case_config SOURCE: CASE_HOME's config naming SOURCE, as init writes it.
+write_case_config() {
+    mkdir -p "$CASE_HOME/.config/chezmoi"
+    printf 'destDir = "%s"\nsourceDir = "%s"\n\n[data]\n  host = "lab-ubuntu"\n' "$CASE_HOME" "$1" \
+        >"$CASE_HOME/.config/chezmoi/chezmoi.toml"
+}
+mkdir -p "$TEST_TMP/source elsewhere"
+printf 'home\n' >"$TEST_TMP/source elsewhere/.chezmoiroot"
+write_case_config "$TEST_TMP/source elsewhere"
+run_case payloads-source-elsewhere -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-source-elsewhere 'HUMAN-BEGIN H7-payloads judgment'
+expect_line payloads-source-elsewhere "# this home's config names the checkout $TEST_TMP/source elsewhere: the line below runs its hook, as sync-payloads does"
+expect_line payloads-source-elsewhere "sh $TEST_TMP/source\\ elsewhere/scripts/payload-update.sh --now"
+expect_no_text payloads-source-elsewhere out "$FIXTURE/scripts/payload-update.sh"
+write_case_config "$TEST_TMP/source elsewhere/"
+run_case payloads-config-invalid -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-config-invalid 'HUMAN-BEGIN H7-payloads judgment'
+expect_line payloads-config-invalid "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's native-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+# The block names no hook; the check line names this checkout's --now line,
+# since sync-payloads refuses such a config.
+! grep -Eq 'payload-update\.sh --now$' "$TEST_TMP/payloads-config-invalid.out" ||
+    fail 'payloads-config-invalid: the H7-payloads block names a hook'
+expect_no_text payloads-config-invalid out '# rerun the line below'
+expect_text payloads-config-invalid out "H7-payloads human not installed: kit, pymol, skills: run sh $FIXTURE/scripts/payload-update.sh --now ITEM;"
+# Under maintenance every hook refuses, so a config that resolves leaves the
+# same notes.
+write_case_config "$FIXTURE"
+mkdir -p "$CASE_HOME/.config/dotfiles"
+: >"$CASE_HOME/.config/dotfiles/maintenance"
+run_case payloads-maintenance -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-maintenance "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's native-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+expect_no_text payloads-maintenance out '# rerun the line below'
+rm "$CASE_HOME/.config/dotfiles/maintenance"
+# A config naming this checkout runs this checkout's hook.
+write_case_config "$FIXTURE"
+run_case payloads-source-here -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-source-here "# this home's config names the checkout $FIXTURE: the line below runs its hook, as sync-payloads does"
+expect_line payloads-source-here "sh $FIXTURE/scripts/payload-update.sh --now"
+expect_line payloads-source-here '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
 
 # --- debian apply: every step, in phase order --------------------------------
 
-# A fresh, unmarked home: apply installs chezmoi but never binds the home.
+# A fresh home without a chezmoi config: apply installs chezmoi but never
+# initializes the home.
 new_home apply
 run_case apply -- --host lab-ubuntu --yes --tier all
 expect_rc apply 3
@@ -925,8 +946,8 @@ expect_text apply out "S4-chezmoi done applied: verify and extract only chezmoi 
 expect_line apply 'HUMAN-BEGIN H7-native judgment'
 expect_text apply err 'HUMAN steps pending: S5-claude H7-native'
 [ -x "$CASE_HOME/.local/bin/chezmoi" ] || fail 'S4-chezmoi did not install chezmoi'
-[ ! -e "$CASE_HOME/.config/dotfiles/native" ] && [ ! -e "$CASE_HOME/.config/chezmoi" ] ||
-    fail 'apply initialized or bound the native home'
+[ ! -e "$CASE_HOME/.config/chezmoi" ] ||
+    fail 'apply initialized the home'
 
 [ "$(sha "$CASE_HOME/$CLAUDE_SCRATCH_REL")" = "$SHA_CLAUDE" ] || fail 'claude installer not staged'
 [ -f "$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh" ] || fail 'oh-my-zsh not cloned'
@@ -1000,18 +1021,16 @@ expect_text reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_text reapply out "S4-chezmoi done chezmoi 2.74.0 at $CASE_HOME/.local/bin/chezmoi"
 expect_line reapply 'HUMAN-BEGIN H7-native judgment'
 
-# Once the home is bound to this checkout with its local config, H7-native
+# Once the home's chezmoi config names this home and this checkout, H7-native
 # is done and nothing blocks; --host still wins over [data].host.
-mkdir -p "$CASE_HOME/.config/dotfiles" "$CASE_HOME/.config/chezmoi"
-printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$CASE_HOME" "$FIXTURE" >"$CASE_HOME/.config/dotfiles/native"
-printf '%s\n' '[data]' "host = 'lab-ubuntu'" >"$CASE_HOME/.config/chezmoi/chezmoi.toml"
+write_case_config "$FIXTURE"
 run_case native-done -- --host lab-ubuntu --yes --tier all
 expect_rc native-done 0
 expect_no_installs native-done
-expect_text native-done out 'H7-native done native binding and local config present; configuration review remains an operator step'
+expect_text native-done out 'H7-native done ~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
 expect_no_text native-done out 'HUMAN-BEGIN H7-native'
 expect_line native-done 'HUMAN-BEGIN H7-auth auth'
-expect_line native-done "# this native home is bound to $FIXTURE: the line below runs that source's hook, as sync-payloads does"
+expect_line native-done "# this home's config names the checkout $FIXTURE: the line below runs its hook, as sync-payloads does"
 expect_text native-done out 'nothing blocking remains for lab-ubuntu'
 run_case native-check-done -- --host lab-ubuntu --check --tier all
 expect_rc native-check-done 0

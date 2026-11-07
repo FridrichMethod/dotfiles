@@ -378,23 +378,26 @@ fi
 
 # sync-payloads and sync-skills (home/dot_aliases) in each interactive
 # shell, zsh without interactivecomments too (oh-my-zsh sets it, a bare zsh
-# does not): a valid native binding runs its source's hook, never the checkout
-# at ~/dotfiles, with the arguments and exit status passed through; an
-# unmarked home runs no hook and names the --now line to run instead, once
-# per call. Sourcing is silent and leaves no helper variable behind.
+# does not): a valid chezmoi config runs its source's hook, never the checkout
+# at ~/dotfiles, with the arguments and exit status passed through; a home
+# without a config and a config the guard refuses run no hook and say so,
+# once per call. Sourcing is silent and leaves no helper variable behind.
 sync_failures=0 sync_home=$TEST_TMP/sync-home
-sync_refusal='[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.'
-mkdir -p "$sync_home/.config/dotfiles"
-for checkout in "$TEST_TMP/bound" "$sync_home/dotfiles"; do
+sync_refusals='[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.
+[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; payload update refused.'
+mkdir -p "$sync_home/.config/chezmoi"
+for checkout in "$TEST_TMP/configured" "$sync_home/dotfiles"; do
     mkdir -p "$checkout/scripts" "$checkout/lib"
     printf '%s\n' "printf '${checkout##*/} %s\\n' \"\$*\" >>\"\$SYNC_TRACE\"" 'exit 4' \
         >"$checkout/scripts/payload-update.sh"
 done
-printf 'home\n' >"$TEST_TMP/bound/.chezmoiroot"
-cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/bound/lib/"
-sync_binding="dotfiles-chezmoi-v1
-$(cd -P "$sync_home" && pwd -P)
-$(cd -P "$TEST_TMP/bound" && pwd -P)"
+printf 'home\n' >"$TEST_TMP/configured/.chezmoiroot"
+cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/configured/lib/"
+# sync_config SOURCE: the config chezmoi init writes, naming SOURCE.
+sync_config() {
+    printf 'destDir = "%s"\nsourceDir = "%s"\n\n[data]\n  host = "lab-ubuntu"\n' \
+        "$(cd -P "$sync_home" && pwd -P)" "$1" >"$sync_home/.config/chezmoi/chezmoi.toml"
+}
 for test_shell in sh dash bash zsh; do
     # The cases run with PATH=/usr/bin:/bin, so run the shell by full path.
     test_shell_path=$(command -v "$test_shell") || continue
@@ -403,65 +406,98 @@ for test_shell in sh dash bash zsh; do
         zsh) sync_flags=(-f -i) ;;
         *) sync_flags=(-i) ;;
     esac
-    for binding in native unmarked; do
-        rm -f "$sync_home/.config/dotfiles/native" "$TEST_TMP/sync-trace"
-        [ "$binding" = unmarked ] || printf '%s\n' "$sync_binding" >"$sync_home/.config/dotfiles/native"
+    for home_kind in configured unconfigured invalid; do
+        rm -f "$sync_home/.config/chezmoi/chezmoi.toml" "$TEST_TMP/sync-trace"
+        case $home_kind in
+            configured) sync_config "$(cd -P "$TEST_TMP/configured" && pwd -P)" ;;
+            invalid) sync_config "$(cd -P "$TEST_TMP/configured" && pwd -P)/" ;;
+        esac
         # shellcheck disable=SC2016
         out=$(env -i HOME="$sync_home" PATH=/usr/bin:/bin TERM=dumb \
             SYNC_TRACE="$TEST_TMP/sync-trace" "$test_shell_path" "${sync_flags[@]}" -c '. "$1"
                 eval "sync-payloads kit pymol"; first=$?; eval sync-skills
-                printf "%s %s %s\n" "$first" "$?" "$(set | grep -c "^_df_")"' aliases \
+                printf "%s %s %s\n" "$first" "$?" "$({ if [ -n "${BASH_VERSION-}" ]; then compgen -v; else set; fi; } | grep -c "^_df_")"' aliases \
             "$REPO_ROOT/home/dot_aliases" </dev/null 2>"$TEST_TMP/sync-err") || :
+        case $home_kind in
+            unconfigured) sync_refusal=${sync_refusals%%$'\n'*} ;;
+            *) sync_refusal=${sync_refusals#*$'\n'} ;;
+        esac
         refusals=$(grep -c -F -x -e "$sync_refusal" "$TEST_TMP/sync-err" || :)
         noise=$(grep -v -F -x -e "$sync_refusal" "$TEST_TMP/sync-err" |
             grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' || :)
         trace=$(cat "$TEST_TMP/sync-trace" 2>/dev/null || :)
-        if [ "$binding" = native ]; then
-            expected_out='4 4 0' expected_refusals=0 expected_trace="bound --now kit pymol"$'\n'"bound --now skills"
+        if [ "$home_kind" = configured ]; then
+            expected_out='4 4 0' expected_refusals=0 expected_trace="configured --now kit pymol"$'\n'"configured --now skills"
         else
             expected_out='1 1 0' expected_refusals=2 expected_trace=''
         fi
         if [ "$out" != "$expected_out" ] || [ "$refusals" != "$expected_refusals" ] || [ -n "$noise" ] ||
             [ "$trace" != "$expected_trace" ]; then
-            printf 'FAIL sync-payloads %s (%s): out=[%s] refusals=[%s] noise=[%s] trace=[%s]\n' "$binding" \
+            printf 'FAIL sync-payloads %s (%s): out=[%s] refusals=[%s] noise=[%s] trace=[%s]\n' "$home_kind" \
                 "$test_shell" "$out" "$refusals" "$noise" "$(printf '%s' "$trace" | tr '\n' ';')" >&2
             sync_failures=$((sync_failures + 1))
         fi
     done
 done
 
-# The login update of an unmarked home, through home/dot_profile (sh, dash,
-# Bash) and the ~/.zshrc tail (zsh), runs no updater, not even one of a
-# checkout at the old default ~/dotfiles, and prints nothing.
+# The login update through home/dot_profile (sh, dash, Bash) and the ~/.zshrc
+# tail (zsh): a home without a chezmoi config runs no updater, not even one
+# of a checkout at ~/dotfiles, and prints nothing; a config the guard refuses
+# warns once and runs nothing; a valid config runs only its source's updater.
+# No helper variable is left behind.
 login_failures=0 login_home=$TEST_TMP/login-home
-mkdir -p "$login_home/dotfiles/scripts" "$login_home/.oh-my-zsh"
+login_warning='[dotfiles] [warn] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.'
+mkdir -p "$login_home/dotfiles/scripts" "$login_home/.oh-my-zsh" "$login_home/.config/chezmoi" \
+    "$TEST_TMP/login-source/scripts" "$TEST_TMP/login-source/lib"
+printf 'home\n' >"$TEST_TMP/login-source/.chezmoiroot"
+cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/login-source/lib/"
 for hook in chezmoi-update payload-update; do
     # shellcheck disable=SC2016
     printf 'printf "%%s\\n" %s >>"$LOGIN_TRACE"\n' "$hook" >"$login_home/dotfiles/scripts/$hook.sh"
+    # shellcheck disable=SC2016
+    printf 'printf "%%s\\n" "source %s" >>"$LOGIN_TRACE"\n' "$hook" >"$TEST_TMP/login-source/scripts/$hook.sh"
 done
 ln -s "$REPO_ROOT/home/dot_profile" "$login_home/.profile"
 ln -s "$REPO_ROOT/home/dot_zshrc" "$login_home/.zshrc"
 : >"$login_home/.oh-my-zsh/oh-my-zsh.sh"
+login_source=$(cd -P "$TEST_TMP/login-source" && pwd -P)
 for test_shell in sh dash bash zsh; do
     # The cases run with PATH=/usr/bin:/bin, so run the shell by full path.
     test_shell_path=$(command -v "$test_shell") || continue
-    # shellcheck disable=SC2016
+    # Variables only: Bash's set also prints function bodies.
+    login_leaks='{ if [ -n "${BASH_VERSION-}" ]; then compgen -v; else set; fi; } | grep -c "^_df_" || :'
     case $test_shell in
-        bash) login_args=(--noprofile --norc -i -c '. "$HOME/.profile"') ;;
-        zsh) login_args=(-d -i -c true) ;;
-        *) login_args=(-i -c '. "$HOME/.profile"') ;;
+        bash) login_args=(--noprofile --norc -i -c ". \"\$HOME/.profile\"; $login_leaks") ;;
+        zsh) login_args=(-d -i -c "$login_leaks") ;;
+        *) login_args=(-i -c ". \"\$HOME/.profile\"; $login_leaks") ;;
     esac
-    rm -f "$TEST_TMP/login-trace"
-    login_rc=0
-    out=$(env -i HOME="$login_home" PATH=/usr/bin:/bin TERM=dumb LOGIN_TRACE="$TEST_TMP/login-trace" \
-        "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
-    noise=$(grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' "$TEST_TMP/login-err" || :)
-    trace=$(cat "$TEST_TMP/login-trace" 2>/dev/null || :)
-    if [ "$login_rc" != 0 ] || [ -n "$out" ] || [ -n "$noise" ] || [ -e "$TEST_TMP/login-trace" ]; then
-        printf 'FAIL unmarked login (%s): rc=%s out=[%s] noise=[%s] trace=[%s]\n' "$test_shell" \
-            "$login_rc" "$out" "$noise" "$(printf '%s' "$trace" | tr '\n' ';')" >&2
-        login_failures=$((login_failures + 1))
-    fi
+    for state in unconfigured invalid configured; do
+        rm -f "$TEST_TMP/login-trace" "$login_home/.config/chezmoi/chezmoi.toml"
+        case $state in
+            invalid) printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$TEST_TMP" && pwd -P)" "$login_source" \
+                >"$login_home/.config/chezmoi/chezmoi.toml" ;;
+            configured) printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$login_home" && pwd -P)" "$login_source" \
+                >"$login_home/.config/chezmoi/chezmoi.toml" ;;
+        esac
+        login_rc=0
+        out=$(env -i HOME="$login_home" PATH=/usr/bin:/bin TERM=dumb LOGIN_TRACE="$TEST_TMP/login-trace" \
+            "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
+        warnings=$(grep -c -F -x -e "$login_warning" "$TEST_TMP/login-err" || :)
+        noise=$(grep -v -F -x -e "$login_warning" "$TEST_TMP/login-err" |
+            grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' || :)
+        trace=$(cat "$TEST_TMP/login-trace" 2>/dev/null || :)
+        case $state in
+            unconfigured) expected_warnings=0 expected_trace='' ;;
+            invalid) expected_warnings=1 expected_trace='' ;;
+            configured) expected_warnings=0 expected_trace='source chezmoi-update' ;;
+        esac
+        if [ "$login_rc" != 0 ] || [ "$out" != 0 ] || [ "$warnings" != "$expected_warnings" ] || [ -n "$noise" ] ||
+            [ "$trace" != "$expected_trace" ]; then
+            printf 'FAIL %s login (%s): rc=%s out=[%s] warnings=[%s] noise=[%s] trace=[%s]\n' "$state" "$test_shell" \
+                "$login_rc" "$out" "$warnings" "$noise" "$(printf '%s' "$trace" | tr '\n' ';')" >&2
+            login_failures=$((login_failures + 1))
+        fi
+    done
 done
 
 [ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] && [ "$sync_failures" = 0 ] &&

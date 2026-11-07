@@ -93,17 +93,28 @@ destinations) and to fold its case variants into that key (a config holding two
 of them fails init and is left unchanged); a plain command naming only the
 config then uses that database, while the updater's explicit
 `--persistent-state` still wins.
-`test_chezmoi_provision.py` resolves a native-owned home's role for the doctor
+`test_chezmoi_provision.py` resolves a configured home's role for the doctor
 and setup-host from `[data].host` alone, reads chezmoi init's real rendering of
-it, and reports H7-native done on a home bound to this checkout and pending on
-one bound to another.
+it (also from a seed with a case variant of `sourceDir` and `mode = "symlink"`),
+requires that `lib/chezmoi-guard.sh` accepts that rendering, and reports
+H7-native done on a home whose config names this checkout and pending on one
+whose config names another.
 
 On native Windows, `test_chezmoi_takeover_windows.py` also pins the login
 updater to `~/.local/bin/chezmoi.exe`: a `chezmoi.com` or `chezmoi.cmd`
 earlier on PATH or beside it never runs, a valid exe runs with no chezmoi on
 PATH, and a missing exe, a foreign owner, a foreign Modify grant, a symlinked
 exe or a junction at `.local\bin` or `.local` each print one warning, naming
-`docs/bootstrap.md W1-chezmoi` and no SID, and apply nothing. A unit case,
+`docs/bootstrap.md W1-chezmoi` and no SID, and apply nothing. Its config
+cases hold `Get-DotfilesChezmoiPaths` to the form chezmoi init writes there
+(`C:/...` values, compared ignoring case and slash direction, a source with
+`.git` and `.chezmoiroot`): under Windows PowerShell 5.1 and PowerShell 7 it
+accepts the real init output and refuses CRLF, and under PowerShell 7 every
+other form refuses (a missing or second line, a case variant, a `workingTree`
+key, a quoted key, an escape or backslash, a drive-relative, rooted or UNC
+`sourceDir`, a junction path, no `.git`, another home, a directory or dangling
+link); the PowerShell 7 profile tail runs only the configured checkout's
+updater and warns once for a config the guard refuses. A unit case,
 loading only `lib/chezmoi-guard.ps1` (which also loads under Windows
 PowerShell 5.1), accepts foreign read and deny entries and OWNER RIGHTS but
 not a foreign owner or append right, a null DACL, or an object, compound or
@@ -193,12 +204,14 @@ the hook runs) and identical in both profiles, installs out of the profile and
 Windows PowerShell 5.1 syntax ASCII-only, and requires that the login tail
 runs no payload hook and reads no environment variable. It runs
 `sync-payloads` and `sync-skills`, lifted into a child with a fake home: a
-valid native marker runs its source's hook, never the checkout at
-`~\dotfiles` or its guard; an unmarked home refuses with the `-Now` line to
-run instead; six invalid markers, two linked ones (dangling or to a valid
-marker, where a symbolic link can be made) and a bound source without its
-guard refuse without running a hook; a bound source without the hook fails
-with exit 1; maintenance surfaces the real hook's refusal; the hook's exit
+valid `~/.config/chezmoi/chezmoi.toml` runs the hook of the checkout it names,
+never the checkout at `~\dotfiles` or its guard; a home without a config
+refuses with the `-Now` line to run instead; seven invalid configs (a second
+`sourceDir`, a literal string, CRLF, a relative `sourceDir`, another home, a
+`workingTree` key, a directory), two linked ones (dangling or to a valid
+config, where a symbolic link can be made) and a configured checkout without
+its guard refuse without running a hook; a configured checkout without the
+hook fails with exit 1; maintenance surfaces the real hook's refusal; the hook's exit
 status passes through, and one that ends without `exit` reports 0, not the
 caller's `$LASTEXITCODE`.
 It holds the PowerShell 7.0 floor: every `$PSStyle` use (7.2+) sits in the
@@ -238,21 +251,36 @@ client's missing-page error must never reach the preview, and the C client
 must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
 fetches a missing page from GitHub. It then runs `sync-payloads kit pymol`
 and `sync-skills` from `home/dot_aliases` in interactive sh, dash, Bash and
-`zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid native
-marker runs its source's hook, never the checkout at `~/dotfiles`, with the
-arguments and exit status passed through, silently and without leaving a
-helper variable, and an unmarked home runs no hook and names the `--now` line
-instead. It also requires that an interactive login of an unmarked
-home under sh, dash, Bash and zsh runs no updater, even with a checkout at
-~/dotfiles, and prints nothing. `tests/test_chezmoi_guard.py` adds the
-refusals under sh, Bash and zsh: a valid marker's source wins over the
-checkout at `~/dotfiles`, whose guard and hook never run; an unmarked home and
-an invalid marker (an unterminated extra line, another version, a relative
-source, another home, a symlink, a directory) refuse before any hook; and
-maintenance refuses before any state is
-written. It also requires that no login through `home/dot_profile`, with
-or without Sherlock's overlay, runs a payload hook, while a bound home's update
-dispatch stays.
+`zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid chezmoi
+config runs the hook of the checkout it names, never the checkout at
+`~/dotfiles`, with the arguments and exit status passed through, silently and
+without leaving a helper variable, while a home without a config and an
+invalid config run no hook and say so. It also requires that an interactive
+login under sh, dash, Bash and zsh runs no updater and prints nothing in a
+home without a config, even with a checkout at ~/dotfiles, warns once and
+runs nothing for an invalid config, and runs only the configured checkout's
+updater for a valid one, without leaving a helper variable.
+`tests/test_chezmoi_guard.py` checks `dotfiles_chezmoi_source` under sh, Bash
+and zsh: the layout chezmoi init writes (also without a final newline, with
+keys after the first table and an indented header) prints the canonical
+`sourceDir`, and every other form refuses silently and writes nothing: no
+config, a link, a dangling link, a directory, a missing or second `sourceDir`
+or `destDir`, either only inside a table, a case variant, a `workingTree` key,
+a quoted key, leading blanks, other spacing, a literal string, an escape, a
+quote or control character, a trailing comment, CRLF, a multi-line string, an
+empty, relative, linked, trailing-slash or dot-segment `sourceDir`, one
+without `.chezmoiroot`, another or a linked `destDir` and a byte-order mark;
+`HOME=/` never probes the UNC-like `//.config`, and sourcing defines only the
+three guard functions. It adds the `sync-payloads` refusals under sh, Bash
+and zsh: a valid config's checkout wins over the checkout at `~/dotfiles`,
+whose guard and hook never run; a home without a config and an invalid config
+(another home, a relative `sourceDir`, a second `sourceDir`, CRLF, a checkout
+without its guard, a symlink, a directory) refuse before any hook; and
+maintenance refuses before any state is written. It also requires that no
+login through `home/dot_profile`, with or without Sherlock's overlay, runs a
+payload hook, while a configured home's update dispatch stays; and a text
+check keeps PowerShell 7-only syntax and an unguarded `$IsWindows` out of
+`lib/chezmoi-guard.ps1`.
 
 `tests/test_ai_integration.py` evaluates the account preview of
 `custom/fzf-tab.zsh` under the context fzf-tab really looks up; with
@@ -275,16 +303,20 @@ checkouts, homes and Homebrew prefixes with stubbed tools and local clone
 remotes. Network commands outside `--online` fail the doctor suite; `sudo`,
 `chsh`, `apt-get`, `conda` and `git lfs` are tripwires in the installer suite;
 find snapshots prove that the doctor and `setup-host.sh --check` write nothing.
-Every fixture case runs the native mode, the only one. The doctor binds its
-fixture home to the fixture checkout once the unmarked-home cases have run. The
+Every fixture case runs the native mode, the only one. The doctor writes its
+fixture home's chezmoi config for the fixture checkout once the cases without
+a config have run. The
 setup-host fixture serves a pinned chezmoi archive whose executable answers only
 `--version` (any other command is a tripwire), so S4-chezmoi installs it and a
-full apply ends at H7-native. The doctor reads a bound home's role from the one
-quoted `host` line of the `[data]` table of its local config, exits 2 for a
-missing, repeated, unknown or malformed one and for an unmarked home without
-`--host` or `--platform`, treats `common-only` as common only, names the cause
-in its `native-config` row (only another checkout's binding merely warns) and
-keeps the offline, write-free and no-`TMPDIR` promises. The setup-host cases
+full apply ends at H7-native. The doctor reads a configured home's role from
+the one quoted `host` line of the `[data]` table of its local config, also
+when the guard refuses the config, exits 2 for a missing, repeated, unknown or
+malformed one and for a home without a config and without `--host` or
+`--platform`, treats `common-only` as common only, names the cause in its
+`native-config` row (absent, a link, a directory, each invalid form, an
+unreadable guard; only a config naming another checkout merely warns), gives
+the shell-quoted `--now` line wherever `sync-payloads` would refuse, and keeps
+the offline, write-free and no-`TMPDIR` promises. The setup-host cases
 refuse an unknown argument, check each host's exact step order, take `--host` over
 `[data].host`, and let an existing login env satisfy H2-alloc; S6-nerd-font
 counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
@@ -301,9 +333,10 @@ cache unless `TLDR_AUTO_UPDATE_DISABLED` is set. `tests/bootstrap-windows.sh`
 runs `tests/bootstrap.ps1`, the Windows twins against shims, wherever pwsh
 exists and prints a `SKIP:` line otherwise; the Windows job runs that suite and
 the validator from `tests/run.ps1`. Its cases run the native mode too and mirror
-the Unix ones (a healthy bound host with gh telemetry off and no writes, the
-`native-config` causes, a checkout reached through a junction or symlink
-counting as the bound one). The healthy fixture puts a chezmoi shim on PATH and,
+the Unix ones (a healthy configured host with gh telemetry off and no writes,
+the `native-config` causes, the quoted `-Now` payload advice wherever
+`sync-payloads` refuses, a checkout reached through a junction or symlink
+counting as the configured one). The healthy fixture puts a chezmoi shim on PATH and,
 on Windows, gives the fixture home a private copy of the real chezmoi
 (`DOTFILES_TEST_CHEZMOI`, else PATH's) as `~/.local/bin/chezmoi.exe`, so
 W1-chezmoi is done and an apply ends at HW-native; a Windows run without a real
@@ -412,8 +445,9 @@ kit's installed update, starting in `/`, outside the caller's working
 directory, where git finds no planted `TMPDIR/.git` (dotfiles chooses only the
 directory an installer starts in; git it runs from elsewhere is its own); a
 failed download, the wget fallback and a host with neither; and the
-`sync-payloads` and `sync-skills` aliases through a native binding of the
-fixture. `tests/test_payload_download.py`
+`sync-payloads` and `sync-skills` aliases through the fixture's chezmoi
+config; and the retry lines, which name `sync-payloads` only where the
+config names this checkout and the hook's own quoted `--now` line elsewhere. `tests/test_payload_download.py`
 adds loopback deadlines for curl, wget (behind `timeout` or `gtimeout`;
 without either it fails before any request) and PowerShell, and the
 failed-download latch, with no staging or state left behind.
@@ -727,10 +761,10 @@ step in `summary.tsv`:
 8. **The handover is the documented one and converges.** `native-handover`
    runs the clone's Fresh home by hand functions, which must define exactly
    `native_cz` and `native_handover` and nothing else at the top level, and
-   `native_handover H` (or `common-only`) must exit 0 and leave the exact
-   binding (`dotfiles-chezmoi-v1`, the physical home, the physical clone,
-   mode 0600), a regular local config selecting the role, no maintenance marker,
-   a non-empty bound state database, a regular `~/.zshrc` and a byte-identical
+   `native_handover H` (or `common-only`) must exit 0 and leave a regular
+   local config that the clone's guard accepts as naming the physical home and
+   the physical clone and that selects the role, no maintenance marker,
+   a non-empty state database, a regular `~/.zshrc` and a byte-identical
    copy of every rc file that existed before in
    `~/.local/state/dotfiles-fresh-backup`. After the payloads,
    `native-converged` requires an empty `native_cz diff --exclude=dirs` and
@@ -824,7 +858,7 @@ cd ~/dotfiles && native_cz diff --exclude=dirs              # paste the function
 ```
 
 Nothing but the HUMAN blocks and the handover changed the home when
-`~/.config/dotfiles/native` and the deployed regular files (`~/.zshrc`
+`~/.config/chezmoi/chezmoi.toml` and the deployed regular files (`~/.zshrc`
 among them) appear only after the `native_handover` line, the backup
 directory `~/.local/state/dotfiles-fresh-backup` holds the earlier rc files
 byte for byte, and `getent passwd "$USER"` still names the same login shell

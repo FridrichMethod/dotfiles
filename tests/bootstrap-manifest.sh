@@ -530,8 +530,8 @@ assert_eq "$(cd "$TEST_TMP" && BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS
 
 # --------------------------------------------------------- host resolution
 echo '==> host resolution'
-# Only a native-owned home's local config selects a host: an unmarked home
-# resolves none and is never common only.
+# Only a home's chezmoi config selects a host: a home without one resolves
+# none and is never common only.
 resolve() {
     bash -c 'set -eu; . "$1"; bootstrap_resolve_host' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
@@ -539,19 +539,18 @@ common_only() {
     bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
 [ ! -e "$TEST_HOME/.config" ] || fail 'the host resolution cases need a home without ~/.config'
-assert_status 1 'unmarked home' resolve
-assert_status 1 'an unmarked home is not common only' common_only
-mkdir -p "$TEST_HOME/.config/dotfiles" "$TEST_HOME/.config/chezmoi"
-: >"$TEST_HOME/.config/dotfiles/native"
+assert_status 1 'a home without a config' resolve
+assert_status 1 'a home without a config is not common only' common_only
+mkdir -p "$TEST_HOME/.config/chezmoi"
 printf '[data]\nhost = "sherlock"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
-assert_eq "$(resolve)" sherlock 'native role'
-assert_status 1 'a native role is not common only' common_only
+assert_eq "$(resolve)" sherlock 'config role'
+assert_status 1 'a config role is not common only' common_only
 printf '[data]\nhost = "common-only"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
-assert_status 1 'native common-only resolves no host' resolve
-assert_status 0 'native common-only' common_only
+assert_status 1 'config common-only resolves no host' resolve
+assert_status 0 'config common-only' common_only
 printf '[data]\nhost = "ubuntu"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
-assert_status 1 'unknown native role' resolve
-# The sections below expect an unmarked home.
+assert_status 1 'unknown config role' resolve
+# The sections below expect a home without a config.
 rm -rf "$TEST_HOME/.config"
 
 # ------------------------------------------------------- real manifests

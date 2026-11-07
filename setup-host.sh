@@ -40,8 +40,8 @@ usage() {
         'blocks (sudo, sign-in, native handover) that a person runs. See docs/bootstrap.md.' \
         '' \
         '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
-        '                    on a native-owned home to the [data].host of' \
-        '                    ~/.config/chezmoi/chezmoi.toml; common-only there' \
+        '                    on a home with ~/.config/chezmoi/chezmoi.toml to its' \
+        '                    [data].host; common-only there' \
         '                    needs --host. The win host uses setup-host.ps1.' \
         '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
         '                    (default core,cli,ai)' \
@@ -209,16 +209,16 @@ if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
     exit 2
 fi
 
-# Only a native-owned home records a role, in its native config; nothing else
-# selects a host. Its common-only role means no host overlay, and there is no
+# Only a home with ~/.config/chezmoi/chezmoi.toml records a role, in that
+# config; nothing else selects a host. Its common-only role means no host overlay, and there is no
 # --platform here: every step needs an overlay.
 COMMON_ONLY_HINT='setup-host needs one: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe), or follow X-other-linux in docs/bootstrap.md'
-if [[ -z "$HOST" ]] && bootstrap_native_home; then
+if [[ -z "$HOST" ]] && bootstrap_configured_home; then
     if bootstrap_recorded_common_only; then
         usage_error "the native config of this home selects [data].host common-only (no host overlay); $COMMON_ONLY_HINT"
     fi
     HOST=$(bootstrap_resolve_host) ||
-        usage_error "no host: this home's native ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)"
+        usage_error "no host: this home's ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)"
 fi
 [[ -n "$HOST" ]] || usage_error 'no host: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)'
 if [[ "$HOST" == win ]]; then

@@ -89,21 +89,19 @@ step_S4_chezmoi_plan
         self.assertNotIn("init --apply", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
-    def bind_native(self, *config_lines, source=ROOT):
-        """Bind this home to SOURCE with a local config of CONFIG_LINES."""
-        marker = self.home / ".config/dotfiles/native"
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(f"dotfiles-chezmoi-v1\n{self.home.resolve()}\n{source}\n")
+    def write_config(self, *config_lines, source=ROOT):
+        """Give this home a local config naming SOURCE, then CONFIG_LINES."""
         config = self.home / ".config/chezmoi/chezmoi.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
-        config.write_text("".join(f"{line}\n" for line in config_lines))
+        config.write_text(f'destDir = "{self.home.resolve()}"\nsourceDir = "{source}"\n'
+                          + "".join(f"{line}\n" for line in config_lines))
 
     def home_snapshot(self):
         return sorted((str(path.relative_to(self.home)), path.lstat().st_mtime_ns)
                       for path in self.home.rglob("*"))
 
     def test_native_role_selects_host_without_receipt_or_environment(self):
-        self.bind_native("[data]", "host = 'lab-ubuntu'")
+        self.write_config("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
         for script, step in (("doctor.sh", "native-config"), ("setup-host.sh", "H7-native")):
             with self.subTest(script=script):
@@ -120,7 +118,7 @@ step_S4_chezmoi_plan
         os_release = self.base / "os-release"
         os_release.write_text("ID=ubuntu\n")
         self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
-        self.bind_native("[data]", 'host = "common-only"')
+        self.write_config("[data]", 'host = "common-only"')
         doctor = self.run_script("doctor.sh", "--list")
         self.assertEqual(doctor.returncode, 0, doctor.stderr)
         self.assertIn("selects [data].host common-only (no host overlay): checking as --platform debian",
@@ -135,7 +133,7 @@ step_S4_chezmoi_plan
         for lines in (("[git]", "autoAdd = false"), ("[data]", "host = 'fedora'"),
                       ("[data]", "host = 'mac'", "host = 'lab-ubuntu'")):
             with self.subTest(lines=lines):
-                self.bind_native(*lines)
+                self.write_config(*lines)
                 doctor = self.run_script("doctor.sh", "--list")
                 self.assertEqual(doctor.returncode, 2, doctor.stderr)
                 self.assertIn("selects no single known [data].host; pass --host HOST", doctor.stderr)
@@ -150,8 +148,8 @@ step_S4_chezmoi_plan
         self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
         return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-native")
 
-    def test_bound_home_reports_h7_native_done(self):
-        self.bind_native("[data]", "host = 'lab-ubuntu'")
+    def test_configured_home_reports_h7_native_done(self):
+        self.write_config("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
         result = self.check_h7_native()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -160,30 +158,41 @@ step_S4_chezmoi_plan
         other = self.base / "other-checkout"
         other.mkdir()
         (other / ".chezmoiroot").write_text("home\n")
-        self.bind_native("[data]", "host = 'lab-ubuntu'", source=other.resolve())
+        self.write_config("[data]", "host = 'lab-ubuntu'", source=other.resolve())
         result = self.check_h7_native()
         self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
         self.assertRegex(result.stdout, r"(?m)^H7-native human ")
 
     def test_native_role_reader_accepts_chezmoi_init_output(self):
-        # The doctor's text reader against the real init rendering (toToml).
+        # The doctor's text reader and the login updater's source lookup
+        # against the real init rendering (toToml), also from a seed with a
+        # case variant of sourceDir (the template folds it) and mode symlink.
         roles = ("common-only", "mac" if sys.platform == "darwin" else "lab-ubuntu")
+        guard = '. "$1/lib/chezmoi-guard.sh"; dotfiles_chezmoi_source "$2"'
         for role in roles:
-            with self.subTest(role=role), SourceFixture(role) as fixture:
-                fixture.config.write_text(f'[data]\nhost = "{role}"\nlocal_canary = "x"\n'
-                                          '[data.decoy]\nhost = "win"\n[git]\nautoCommit = true\n')
-                result = fixture.run("init")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                rendered = fixture.config.read_bytes()
-                self.assertIn("[data]", rendered.decode().splitlines())
-                self.bind_native()
-                (self.home / ".config/chezmoi/chezmoi.toml").write_bytes(rendered)
-                reader = subprocess.run(
-                    [shutil.which("bash"), "-c", '. "$1/lib/bootstrap/platform.sh"; bootstrap_native_host', "_",
-                     str(ROOT)], env=self.env, text=True, capture_output=True, stdin=subprocess.DEVNULL,
-                    check=False)
-                self.assertEqual(reader.returncode, 0, reader.stderr)
-                self.assertEqual(reader.stdout, f"{role}\n")
+            for seed in ("", 'SOURCEDIR = "/elsewhere"\nmode = "symlink"\n'):
+                with self.subTest(role=role, seed=seed), SourceFixture(role) as fixture:
+                    fixture.config.write_text(f'{seed}[data]\nhost = "{role}"\nlocal_canary = "x"\n'
+                                              '[data.decoy]\nhost = "win"\n[git]\nautoCommit = true\n')
+                    result = fixture.run("init")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    rendered = fixture.config.read_bytes()
+                    self.assertIn("[data]", rendered.decode().splitlines())
+                    (self.home / ".config/chezmoi").mkdir(parents=True, exist_ok=True)
+                    (self.home / ".config/chezmoi/chezmoi.toml").write_bytes(rendered)
+                    reader = subprocess.run(
+                        [shutil.which("bash"), "-c", '. "$1/lib/bootstrap/platform.sh"; bootstrap_native_host', "_",
+                         str(ROOT)], env=self.env, text=True, capture_output=True, stdin=subprocess.DEVNULL,
+                        check=False)
+                    self.assertEqual(reader.returncode, 0, reader.stderr)
+                    self.assertEqual(reader.stdout, f"{role}\n")
+                    placed = fixture.destination / ".config/chezmoi/chezmoi.toml"
+                    placed.parent.mkdir(parents=True, exist_ok=True)
+                    placed.write_bytes(rendered)
+                    lookup = subprocess.run(["sh", "-c", guard, "_", str(ROOT), str(fixture.destination)],
+                                            text=True, capture_output=True, stdin=subprocess.DEVNULL, check=False)
+                    self.assertEqual((lookup.returncode, lookup.stdout, lookup.stderr),
+                                     (0, f"{fixture.source}\n", ""))
 
     def archive_fixture(self, digest_ok=True):
         repo = self.base / "repo"

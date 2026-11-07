@@ -19,28 +19,38 @@ alias kstanford='kinit -l 25h -r 7d zyli2002@stanford.edu && { ! command -v kren
 # Install or update the payload repos now, in the foreground:
 # sync-payloads [kit] [pymol] [skills] (default: all); sync-skills is
 # sync-payloads skills. Like the login dispatch in ~/.profile, they run the
-# hook of the source the native home binding names and refuse an invalid
-# binding; an unmarked home has no binding, so they refuse there and name the
-# --now line to run from its checkout.
+# hook of the source checkout ~/.config/chezmoi/chezmoi.toml names (its
+# sourceDir, validated by that checkout's lib/chezmoi-guard.sh) and refuse a
+# config it refuses; a home without the config has no source, so they refuse
+# there and name the --now line to run from its checkout.
 # shellcheck source=/dev/null
 _dotfiles_sync_payloads() (
-    if [ -e "$HOME/.config/dotfiles/native" ] || [ -L "$HOME/.config/dotfiles/native" ]; then
-        if ! _df_root=$(
-            [ -f "$HOME/.config/dotfiles/native" ] && [ ! -L "$HOME/.config/dotfiles/native" ] || exit 1
-            {
-                IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_root
-            } <"$HOME/.config/dotfiles/native" || exit 1
-            [ "$_df_version" = dotfiles-chezmoi-v1 ] || exit 1
-            [ "${_df_root#/}" != "$_df_root" ] || exit 1
-            [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
-            . "$_df_root/lib/chezmoi-guard.sh"
-            dotfiles_native_source "$HOME"
-        ); then
-            printf '%s\n' '[dotfiles] [error] Native home binding is invalid; payload update refused.' >&2
-            exit 1
-        fi
-    else
-        printf '%s\n' '[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.' >&2
+    if [ ! -e "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+        printf '%s\n' '[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.' >&2
+        exit 1
+    fi
+    # Read only the first top-level sourceDir line, to locate that checkout's
+    # guard, outside the command substitution: Bash 3.2 (macOS) cannot parse a
+    # case statement inside one.
+    _df_root=''
+    if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+        while IFS= read -r _df_line || [ -n "$_df_line" ]; do
+            case ${_df_line#"${_df_line%%[![:blank:]]*}"} in '['*) break ;; esac
+            case $_df_line in
+                'sourceDir = "/'*'"')
+                    _df_root=${_df_line#'sourceDir = "'}
+                    _df_root=${_df_root%'"'}
+                    break
+                    ;;
+            esac
+        done <"$HOME/.config/chezmoi/chezmoi.toml"
+    fi
+    if ! _df_root=$(
+        [ -n "$_df_root" ] && [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
+        . "$_df_root/lib/chezmoi-guard.sh"
+        dotfiles_chezmoi_source "$HOME"
+    ); then
+        printf '%s\n' '[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; payload update refused.' >&2
         exit 1
     fi
     sh "$_df_root/scripts/payload-update.sh" --now "$@"

@@ -3,11 +3,11 @@
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/chezmoi-guard.ps1')
 
 function Invoke-DotfilesNativeProcess {
-    param([string]$Program, [string[]]$Arguments, [object]$Binding)
+    param([string]$Program, [string[]]$Arguments, [object]$Paths)
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $Program
     foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
-    $start.WorkingDirectory = $Binding.Source
+    $start.WorkingDirectory = $Paths.Source
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardInput = $true
@@ -17,8 +17,8 @@ function Invoke-DotfilesNativeProcess {
     foreach ($key in @($start.Environment.Keys)) {
         if ($key -like 'GIT_*' -or $key -like 'CHEZMOI_*') { [void]$start.Environment.Remove($key) }
     }
-    $start.Environment['HOME'] = $Binding.Destination
-    $start.Environment['USERPROFILE'] = $Binding.Destination
+    $start.Environment['HOME'] = $Paths.Destination
+    $start.Environment['USERPROFILE'] = $Paths.Destination
     $start.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $start.Environment['GIT_ASKPASS'] = ''
     $start.Environment['SSH_ASKPASS'] = ''
@@ -59,41 +59,41 @@ function Invoke-DotfilesNativeUpdate {
     try {
         if (Test-DotfilesMaintenance $HomePath) { return }
         $env:_DOTFILES_CHECKED = '1'
-        $binding = Get-DotfilesNativeBinding $HomePath
-        if (-not [IO.File]::Exists($binding.State) -or ([IO.FileInfo]$binding.State).Length -eq 0) {
+        $paths = Get-DotfilesChezmoiPaths $HomePath
+        if (-not [IO.File]::Exists($paths.State) -or ([IO.FileInfo]$paths.State).Length -eq 0) {
             [Console]::Error.WriteLine('[dotfiles] Native state is missing or empty; inspected recovery is required before automatic update.')
             return
         }
-        if ($binding.Source -match '(?i)OneDrive') {
+        if ($paths.Source -match '(?i)OneDrive') {
             [Console]::Error.WriteLine('[dotfiles] Native update skipped: use the documented independent-clone procedure for OneDrive.')
             return
         }
         # Only the provisioned executable, verified and held open until both
         # chezmoi runs have exited (finally below); never a PATH match.
-        $chezmoi = Open-DotfilesNativeChezmoi $binding.Destination
+        $chezmoi = Open-DotfilesNativeChezmoi $paths.Destination
         if ($null -eq $chezmoi) {
             [Console]::Error.WriteLine('[dotfiles] Native update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators (docs/bootstrap.md W1-chezmoi).')
             return
         }
         $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-        $root = Invoke-DotfilesNativeProcess $git.Source @('-C', $binding.Source, 'rev-parse', '--show-toplevel') $binding
+        $root = Invoke-DotfilesNativeProcess $git.Source @('-C', $paths.Source, 'rev-parse', '--show-toplevel') $paths
         if ($root.Code -ne 0 -or -not $root.Output.Trim() -or
-            -not (Resolve-DotfilesDirectory $root.Output.Trim()).Equals($binding.Source, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Git working tree differs from the native source binding.'
+            -not (Resolve-DotfilesDirectory $root.Output.Trim()).Equals($paths.Source, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Git working tree differs from the configured sourceDir.'
         }
-        $clean = Invoke-DotfilesNativeProcess $git.Source @('-C', $binding.Source, 'status', '--porcelain=v1', '--untracked-files=all') $binding
+        $clean = Invoke-DotfilesNativeProcess $git.Source @('-C', $paths.Source, 'status', '--porcelain=v1', '--untracked-files=all') $paths
         if ($clean.Code -ne 0 -or $clean.Output) { throw 'Source is not clean.' }
-        $arguments = @('--source', $binding.Source, '--working-tree', $binding.Source, '--destination', $binding.Destination,
-            '--config', $binding.Config, '--cache', $binding.Cache, '--persistent-state', $binding.State,
+        $arguments = @('--source', $paths.Source, '--working-tree', $paths.Source, '--destination', $paths.Destination,
+            '--config', $paths.Config, '--cache', $paths.Cache, '--persistent-state', $paths.State,
             '--mode=file', '--no-tty', '--less-interactive', '--error-on-conflict', '--no-pager', '--use-builtin-diff', '--use-builtin-age=true',
             '--use-builtin-git=false', '--force=false')
         $safeConfig = '{{ and (eq .chezmoi.config.update.command "git") ' +
             '(eq (toJson .chezmoi.config.update.args) (toJson (list "-c" "rebase.autoStash=false" "-c" "merge.autoStash=false" "pull" "--ff-only" "--no-rebase" "--no-autostash" "--no-recurse-submodules"))) ' +
             '(not .chezmoi.config.update.recurseSubmodules) .chezmoi.config.update.apply ' +
             '(not .chezmoi.config.git.autoadd) (not .chezmoi.config.git.autocommit) (not .chezmoi.config.git.autopush) }}'
-        $config = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('execute-template', $safeConfig)) $binding
+        $config = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('execute-template', $safeConfig)) $paths
         if ($config.Code -ne 0 -or $config.Output.Trim() -cne 'true') { throw 'Native update configuration is unsafe.' }
-        $updated = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $binding
+        $updated = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $paths
         if ($updated.Code -ne 0) { throw 'Native update failed.' }
     }
     catch {

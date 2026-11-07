@@ -17,10 +17,9 @@
     Microsoft Store alias that prints no version does not count);
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
-    native-config checks the home-bound native configuration signal, named
-    by cause: a binding to another checkout only warns, and on Windows a
-    bound home whose ~/.local/bin/chezmoi.exe the login updater refuses is
-    human.
+    native-config checks this home's chezmoi config, named by cause: a
+    config naming another checkout only warns, and on Windows a configured
+    home whose ~/.local/bin/chezmoi.exe the login updater refuses is human.
 
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
@@ -141,30 +140,38 @@ function Get-DoctorToolResult {
 }
 
 function Get-DoctorNativeConfigResult {
-    # doctor.sh's bootstrap_check_native_config: the native binding, named by
-    # cause. A binding to another checkout only warns. On Windows a bound home
-    # also needs the one chezmoi.exe the login updater runs (a read-only
-    # check); Unix updaters use the PATH chezmoi.
-    $native = Get-BootstrapNativeState -RepoRoot $RepoRoot
-    $freshHome = 'follow Fresh Windows home by hand in docs/bootstrap.md'
+    # doctor.sh's bootstrap_check_native_config: this home's chezmoi config,
+    # named by cause. A config naming another checkout only warns. On Windows
+    # a configured home also needs the one chezmoi.exe the login updater runs
+    # (a read-only check); Unix updaters use the PATH chezmoi.
+    $native = Get-BootstrapChezmoiState -RepoRoot $RepoRoot
+    $config = Join-Path $HOME '.config/chezmoi/chezmoi.toml'
     switch -CaseSensitive ($native.State) {
         'ok' {
             if ($IsWindows -and -not (Test-BootstrapNativeChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
-                return New-DoctorResult human native-config core ("native binding and local config present, but the login updater refuses ~/.local/bin/chezmoi.exe " +
+                return New-DoctorResult human native-config core ('~/.config/chezmoi/chezmoi.toml names this home and this checkout, but the login updater refuses ~/.local/bin/chezmoi.exe ' +
                     '(missing, a link, under a linked directory, or not private to you, SYSTEM and Administrators) and never uses a PATH chezmoi, ' +
-                    'so native updates do not run; let setup-host.ps1 W1-chezmoi install a private copy') W1-chezmoi
+                    'so login updates do not run; let setup-host.ps1 W1-chezmoi install a private copy') W1-chezmoi
             }
-            return New-DoctorResult ok native-config core 'native binding and local config present; review configuration with scoped native diff' HW-native
+            return New-DoctorResult ok native-config core '~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff' HW-native
         }
         'elsewhere' {
-            return New-DoctorResult warn native-config core "this home is bound to $($native.Source), not to this checkout $($native.Checkout); run $(Join-Path $native.Source 'doctor.ps1') for its native state" HW-native
+            return New-DoctorResult warn native-config core "~/.config/chezmoi/chezmoi.toml names the checkout $($native.Source), not this checkout $($native.Checkout); run $(Join-Path $native.Source 'doctor.ps1') for its state" HW-native
         }
         'maintenance' { return New-DoctorResult human native-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' HW-native }
-        'unbound' { return New-DoctorResult human native-config core "no native binding (~/.config/dotfiles/native): this home has no first deployment; $freshHome" HW-native }
-        'invalid' { return New-DoctorResult human native-config core 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly' HW-native }
-        'config' { return New-DoctorResult human native-config core "the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; $freshHome" HW-native }
+        'config' {
+            if (-not $native.Exists) {
+                return New-DoctorResult human native-config core 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh Windows home by hand in docs/bootstrap.md' HW-native
+            }
+            $item = Get-Item -LiteralPath $config -Force -ErrorAction SilentlyContinue
+            if (-not $item -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                return New-DoctorResult human native-config core '~/.config/chezmoi/chezmoi.toml is a link; inspect it and never overwrite it blindly' HW-native
+            }
+            return New-DoctorResult human native-config core '~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly' HW-native
+        }
+        'invalid' { return New-DoctorResult human native-config core '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly' HW-native }
     }
-    return New-DoctorResult human native-config core "$(Join-Path $RepoRoot 'lib/chezmoi-guard.ps1') is unreadable, so the native binding cannot be checked; use a complete checkout" HW-native
+    return New-DoctorResult human native-config core "$(Join-Path $RepoRoot 'lib/chezmoi-guard.ps1') is unreadable, so the chezmoi config cannot be checked; use a complete checkout" HW-native
 }
 
 function Get-DoctorStructuralResults {
@@ -177,8 +184,9 @@ function Get-DoctorPayloadResult {
     # windows-install row of config/payloads.tsv, pymol skills) that installs
     # here passes its windows-probe row. Only a person installs the payload
     # repos, so every shortfall names what to run and only warns:
-    # sync-payloads where a native binding exists, else this checkout's -Now
-    # line (sync-payloads refuses an unmarked home). An item without a
+    # sync-payloads where the chezmoi config resolves, else this checkout's
+    # quoted -Now line (sync-payloads refuses a home without a valid config,
+    # and so does every hook under maintenance). An item without a
     # windows-install row (the kit, which installs nothing on native Windows)
     # is not checked, as the hook does not run it.
     $step = Get-BootstrapDocRef -Step H7-payloads -ProfileName windows
@@ -212,10 +220,8 @@ function Get-DoctorPayloadResult {
         else { $found += $item }
     }
     if ($short.Count) {
-        $advice = 'sync-payloads ITEM'
-        if ((Get-BootstrapNativeState -RepoRoot $RepoRoot).State -ceq 'unbound') {
-            $advice = "& $(Join-Path (Join-Path $RepoRoot 'scripts') 'payload-update.ps1') -Now ITEM"
-        }
+        $advice = "& '" + (Join-Path (Join-Path $RepoRoot 'scripts') 'payload-update.ps1').Replace("'", "''") + "' -Now ITEM"
+        if ((Get-BootstrapChezmoiState -RepoRoot $RepoRoot).State -cin @('ok', 'elsewhere')) { $advice = 'sync-payloads ITEM' }
         $issues += "not installed: $($short -join ', '): run $advice"
     }
     if ($issues.Count) { return New-DoctorResult warn payloads ai ($issues -join '; ') $step }

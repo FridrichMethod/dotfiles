@@ -43,10 +43,10 @@ from this checkout, stop and say so.
 8. Run the H7-payloads line only if the person wants the payload repos now;
    no login installs them. Follow the H7-native block, Fresh home by hand in
    `docs/bootstrap.md`: explicit local host data, native paths, private
-   backups and the home-bound writer signal. Do not improvise `init --apply`
-   or force a whole home.
-   setup-host only provisions tools and never creates the signal, initializes
-   configuration or applies it.
+   backups and the local config init writes, which names this home and the
+   checkout. Do not improvise `init --apply` or force a whole home.
+   setup-host only provisions tools and never initializes configuration or
+   applies it.
 9. Finish with `./doctor.sh --host H --smoke`; exit 0 is the completion gate.
 10. Report what was installed, which HUMAN blocks remain, and every failure with
     its `docs/bootstrap.md <step-id>` reference.
@@ -59,7 +59,8 @@ Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 `micromamba shell init`, never edit rc files, and never commit.
 
 Provisioning is native only: it installs the verified chezmoi release and
-creates no virtual environment. Doctor checks the native binding and tool; a
-binding to another checkout only warns. On a native-owned home the default
-host is the local config's `[data].host`; nothing else selects one. It
+creates no virtual environment. Doctor checks the tool and that the local
+chezmoi config names this home and this checkout; a config naming another
+checkout only warns. With a local config the default host is its
+`[data].host`; nothing else selects one. It
 remains offline and write-free; native diff/apply is a separate operation.

@@ -611,55 +611,56 @@ function Write-BootstrapHumanBlock {
     'HUMAN-END'
 }
 
-function Get-BootstrapNativeState {
-    # This home's native binding: State ok, maintenance, unbound (no
-    # marker), invalid (a marker the guard rejects), elsewhere (Source names
-    # the bound checkout, Checkout this one), config (no regular local
-    # config) or guard (no guard library). The checkout path is resolved as
-    # the binding is, so a junction or symlink to the bound checkout is that
-    # checkout. The guard is shared with the native updater; no second
-    # marker parser.
+function Get-BootstrapChezmoiState {
+    # This home's chezmoi config: State ok, maintenance, config
+    # (~/.config/chezmoi/chezmoi.toml absent, a link or not a regular file;
+    # Exists tells absent apart), invalid (a regular config the guard
+    # refuses), elsewhere (Source names the checkout the config names,
+    # Checkout this one) or guard (no guard library). The checkout path is
+    # resolved as the config's sourceDir is, so a junction or symlink to that
+    # checkout is that checkout. The guard's validator is the login updater's;
+    # no second config parser.
     param([Parameter(Mandatory)][string]$RepoRoot)
     $guard = Join-Path $RepoRoot 'lib/chezmoi-guard.ps1'
     $state = 'guard'
     $source = ''
     $checkout = $RepoRoot
+    $exists = $false
     if ([IO.File]::Exists($guard)) {
         try {
             . $guard
-            $binding = $null
+            $exists = Test-DotfilesConfigExists -HomePath $HOME
+            $config = $null
+            if ($exists) { $config = Get-Item -LiteralPath (Join-Path $HOME '.config/chezmoi/chezmoi.toml') -Force -ErrorAction SilentlyContinue }
             if (Test-DotfilesMaintenance -HomePath $HOME) { $state = 'maintenance' }
+            elseif (-not $config -or $config.PSIsContainer -or ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $state = 'config' }
             else {
-                try { $binding = Get-DotfilesNativeBinding -HomePath $HOME }
-                catch { $state = if (Test-DotfilesNativeOwned -HomePath $HOME) { 'invalid' } else { 'unbound' } }
-            }
-            if ($binding) {
+                $state = 'invalid'
+                $paths = Get-DotfilesChezmoiPaths -HomePath $HOME
                 $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-                $config = Get-Item -LiteralPath $binding.Config -Force -ErrorAction SilentlyContinue
                 $checkout = Resolve-DotfilesDirectory $RepoRoot
-                if (-not $binding.Source.Equals($checkout, $comparison)) {
+                if (-not $paths.Source.Equals($checkout, $comparison)) {
                     $state = 'elsewhere'
-                    $source = $binding.Source
+                    $source = $paths.Source
                 }
-                elseif (-not $config -or $config.PSIsContainer -or ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $state = 'config' }
                 else { $state = 'ok' }
             }
         }
-        catch { $state = 'invalid' }
+        catch { if ($state -cne 'maintenance' -and $state -cne 'config') { $state = 'invalid' } }
     }
-    return [pscustomobject]@{ State = $state; Source = $source; Checkout = $checkout }
+    return [pscustomobject]@{ State = $state; Source = $source; Checkout = $checkout; Exists = $exists }
 }
 
-function Test-BootstrapNativeReady {
+function Test-BootstrapChezmoiReady {
     param([Parameter(Mandatory)][string]$RepoRoot)
-    return (Get-BootstrapNativeState -RepoRoot $RepoRoot).State -ceq 'ok'
+    return (Get-BootstrapChezmoiState -RepoRoot $RepoRoot).State -ceq 'ok'
 }
 
 function Test-BootstrapNativeChezmoi {
     # Windows: true when the native login updater would run HomePath's
     # ~/.local/bin/chezmoi.exe (Open-DotfilesNativeChezmoi of RepoRoot's
-    # lib/chezmoi-guard.ps1, on the destination a home binding resolves
-    # to): a regular file, no link at it, .local or .local\bin, owned by and
+    # lib/chezmoi-guard.ps1, on the resolved home): a regular file, no link
+    # at it, .local or .local\bin, owned by and
     # writable only by this user, SYSTEM and Administrators. Read-only: the
     # file is opened for reading and closed at once. False without the guard.
     param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$HomePath)

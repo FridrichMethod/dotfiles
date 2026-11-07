@@ -1,5 +1,5 @@
-# Per-home native binding, maintenance and Windows binary-trust guard. Sourcing has no filesystem effects.
-# Windows PowerShell 5.1 compatible. The PowerShell 7 profile, the login updater, doctor.ps1 and setup-host.ps1 (through lib/bootstrap.ps1) load it.
+# Per-home chezmoi config lookup, maintenance and Windows binary-trust guard. Sourcing has no filesystem effects.
+# Windows PowerShell 5.1 compatible. The PowerShell 7 profile, the login updater, scripts/payload-update.ps1 (its rerun line), doctor.ps1 and setup-host.ps1 (through lib/bootstrap.ps1) load it.
 function Test-DotfilesMarkerObject {
     param([Parameter(Mandatory)][string]$Path)
     try { [void][IO.File]::GetAttributes($Path); return $true }
@@ -12,9 +12,10 @@ function Test-DotfilesMaintenance {
     return Test-DotfilesMarkerObject (Join-Path $HomePath '.config/dotfiles/maintenance')
 }
 
-function Test-DotfilesNativeOwned {
+function Test-DotfilesConfigExists {
+    # HomePath's chezmoi config exists in any form, a dangling link included.
     param([Parameter(Mandatory)][string]$HomePath)
-    return Test-DotfilesMarkerObject (Join-Path $HomePath '.config/dotfiles/native')
+    return Test-DotfilesMarkerObject (Join-Path $HomePath '.config/chezmoi/chezmoi.toml')
 }
 
 function Resolve-DotfilesDirectory {
@@ -40,37 +41,72 @@ function Resolve-DotfilesDirectory {
     return $current.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
-function Get-DotfilesNativeBinding {
+function Get-DotfilesChezmoiPaths {
+    # The source checkout and state paths HomePath's chezmoi config names, or a
+    # throw. lib/chezmoi-guard.sh's dotfiles_chezmoi_source rules: a regular
+    # file, not a link, strict UTF-8, whose lines before the first table hold
+    # exactly one 'sourceDir = "VALUE"' and one 'destDir = "VALUE"' line at
+    # column 0, LF line ends, and no quote, backslash or control character in
+    # VALUE; any other spelling of either key, a workingTree key, a line
+    # starting with a quote and a multi-line string before the first table
+    # throw. On Windows a value is 'C:/...' as chezmoi writes it, compared with
+    # backslashes and ignoring case; elsewhere it starts with '/' and compares
+    # exactly. destDir is the resolved home; sourceDir is a resolved directory
+    # holding .git and .chezmoiroot. Reads text only and never runs chezmoi.
     param([Parameter(Mandatory)][string]$HomePath)
+    $onWindows = ($PSVersionTable.PSEdition -ceq 'Desktop') -or ((Test-Path Variable:IsWindows) -and $IsWindows)
+    $comparison = [StringComparison]::Ordinal
+    $absolute = '\A/'
+    if ($onWindows) {
+        $comparison = [StringComparison]::OrdinalIgnoreCase
+        $absolute = '\A[A-Za-z]:/'
+    }
     $destination = Resolve-DotfilesDirectory $HomePath
-    if (-not [IO.Directory]::Exists($destination)) { throw 'Invalid native destination binding.' }
-    $marker = Join-Path $destination '.config/dotfiles/native'
-    $attributes = [IO.File]::GetAttributes($marker)
+    if (-not [IO.Directory]::Exists($destination)) { throw 'This home does not resolve to a directory.' }
+    $config = Join-Path $destination '.config/chezmoi/chezmoi.toml'
+    $attributes = [IO.File]::GetAttributes($config)
     if (($attributes -band [IO.FileAttributes]::ReparsePoint) -or ($attributes -band [IO.FileAttributes]::Directory)) {
-        throw 'Native ownership marker must be a regular file.'
+        throw 'The chezmoi config must be a regular file.'
     }
     $utf8 = New-Object Text.UTF8Encoding($false, $true)
-    $content = $utf8.GetString([IO.File]::ReadAllBytes($marker))
-    if ($content -cnotmatch '\Adotfiles-chezmoi-v1\n([^\r\n]+)\n([^\r\n]+)\n\z') {
-        throw 'Invalid native ownership binding.'
+    $text = $utf8.GetString([IO.File]::ReadAllBytes($config))
+    $layout = 'The chezmoi config needs exactly one top-level sourceDir and destDir line, each a double-quoted string without escapes.'
+    $values = @{}
+    foreach ($line in ($text -split "`n")) {
+        $trimmed = $line.TrimStart([char[]]@(' ', "`t"))
+        if ($trimmed.StartsWith('[', [StringComparison]::Ordinal)) { break }
+        if ($trimmed.Contains('"""') -or $trimmed.Contains("'''") -or
+            $trimmed.StartsWith('"', [StringComparison]::Ordinal) -or $trimmed.StartsWith("'", [StringComparison]::Ordinal)) {
+            throw $layout
+        }
+        if ($line -cmatch '\A(sourceDir|destDir) = "([^"\\\x00-\x1F\x7F]+)"\z') {
+            if ($values.ContainsKey($Matches[1])) { throw $layout }
+            $values[$Matches[1]] = $Matches[2]
+        }
+        elseif ($trimmed -imatch '\A(sourcedir|destdir|workingtree)[\s=]') { throw $layout }
     }
-    $boundHome = $Matches[1]
-    $boundSource = $Matches[2]
-    if (-not [IO.Path]::IsPathRooted($boundHome) -or -not [IO.Path]::IsPathRooted($boundSource)) {
-        throw 'Native ownership paths must be absolute.'
+    if (-not $values.ContainsKey('sourceDir') -or -not $values.ContainsKey('destDir')) { throw $layout }
+    $configuredSource = $values['sourceDir']
+    $configuredDestination = $values['destDir']
+    if ($configuredSource -cnotmatch $absolute -or $configuredDestination -cnotmatch $absolute) {
+        throw 'sourceDir and destDir must be absolute.'
     }
-    $source = Resolve-DotfilesDirectory $boundSource
-    if (-not $boundHome.Equals($destination, [StringComparison]::OrdinalIgnoreCase) -or
-        -not $boundSource.Equals($source, [StringComparison]::OrdinalIgnoreCase) -or
+    if ($onWindows) {
+        $configuredSource = $configuredSource.Replace('/', '\')
+        $configuredDestination = $configuredDestination.Replace('/', '\')
+    }
+    if (-not $configuredDestination.Equals($destination, $comparison)) { throw 'destDir must be this home.' }
+    $source = Resolve-DotfilesDirectory $configuredSource
+    if (-not $configuredSource.Equals($source, $comparison) -or
         -not [IO.Directory]::Exists($source) -or
         -not (Test-DotfilesMarkerObject (Join-Path $source '.git')) -or
         -not [IO.File]::Exists((Join-Path $source '.chezmoiroot'))) {
-        throw 'Native ownership binding must name this destination and a repository root.'
+        throw 'sourceDir must be a canonical dotfiles checkout root.'
     }
     return [pscustomobject]@{
         Source = $source
         Destination = $destination
-        Config = Join-Path $destination '.config/chezmoi/chezmoi.toml'
+        Config = $config
         Cache = Join-Path $destination '.cache/chezmoi'
         State = Join-Path $destination '.local/state/chezmoi/chezmoi.boltdb'
     }

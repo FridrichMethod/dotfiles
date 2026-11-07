@@ -121,23 +121,24 @@ login, profile or schedule installs or updates a payload repo (any other call
 is a usage error, see below), and the script keeps no state of its own.
 
 ```sh
-sync-payloads [kit] [pymol] [skills]                      # home/dot_aliases; follows the home binding
+sync-payloads [kit] [pymol] [skills]                      # home/dot_aliases; follows the chezmoi config
 sync-skills                                               # sync-payloads skills
 sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]   # default: DOTFILES_PAYLOAD_ITEMS
 ```
 
-`sync-payloads` and `sync-skills` are aliases of interactive shells. In a
-native home they run the hook of the source `~/.config/dotfiles/native`
-names, validated with that source's `lib/chezmoi-guard.sh` exactly as the
-login dispatch in `home/dot_profile` does; an invalid binding prints
-`[dotfiles] [error] Native home binding is invalid; payload update refused.`
-and returns 1 without running any checkout's hook. An unmarked home has no
-binding: they print
-`[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.`
+`sync-payloads` and `sync-skills` are aliases of interactive shells. They run
+the hook of the checkout `~/.config/chezmoi/chezmoi.toml` names (its
+`sourceDir`), validated with that checkout's `lib/chezmoi-guard.sh` exactly as
+the login dispatch in `home/dot_profile` does; a config the guard refuses
+prints
+`[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; payload update refused.`
+and returns 1 without running any checkout's hook. A home without that config
+names no checkout: they print
+`[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.`
 and return 1 without running a hook; run that line from the checkout there.
 Otherwise they return the hook's status. The `--now` line runs the checkout
-its path names, without that check: on a native home use `sync-payloads`, or
-the path of the source the binding names. Under persistent maintenance a
+its path names, without that check: on a home with a valid config use
+`sync-payloads`, or the path of the checkout the config names. Under persistent maintenance a
 `--now` run prints `dotfiles: payload update refused during maintenance.` and
 exits 1 before anything runs.
 
@@ -158,6 +159,13 @@ item with one line:
   message just above names what to do;
 - any other status: `kit: install failed (exit 1); retry with: sync-payloads
   kit`.
+
+These lines name `sync-payloads` only where it runs this hook: this home's
+chezmoi config is valid and names this checkout. Anywhere else, where
+`sync-payloads` refuses or runs another checkout's hook, they name this
+hook's own line instead, its path in single quotes:
+`retry with: sh '/path/to/dotfiles/scripts/payload-update.sh' --now kit`
+(Windows: `& 'C:\path\to\dotfiles\scripts\payload-update.ps1' -Now pymol`).
 
 It exits 1 when an item failed, and 0 otherwise. A failed item is retried
 only by a person's next run.
@@ -212,20 +220,20 @@ sync-skills
 & $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]
 ```
 
-Like their Unix twins, the functions run the hook of the source a native
-home's binding names, read from a marker that must be a regular file, not a
-reparse point, and validated by that source's `lib/chezmoi-guard.ps1`; an
-invalid binding prints
-`[dotfiles] Payload update refused: review the native source binding privately.`
-and sets `$LASTEXITCODE` to 1 without running a hook. An unmarked home has no
-binding: they print
-`[dotfiles] Payload update needs a native home binding; in an unmarked home run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.`
-and set `$LASTEXITCODE` to 1 without running a hook. A bound source without
-`scripts/payload-update.ps1` prints
+Like their Unix twins, the functions run the hook of the checkout
+`~/.config/chezmoi/chezmoi.toml` names, a config that must be a regular file,
+not a reparse point, validated by that checkout's `lib/chezmoi-guard.ps1`; a
+config the guard refuses prints
+`[dotfiles] Payload update refused: ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; review it privately.`
+and sets `$LASTEXITCODE` to 1 without running a hook. A home without that
+config names no checkout: they print
+`[dotfiles] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.`
+and set `$LASTEXITCODE` to 1 without running a hook. A configured checkout
+without `scripts/payload-update.ps1` prints
 `[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.`
 and sets `$LASTEXITCODE` to 1. The `-Now` line runs the
-checkout its path names, without that check: on a native home use the
-functions, or the path of the source the binding names.
+checkout its path names, without that check: on a home with a valid config
+use the functions, or the path of the checkout the config names.
 
 ## Knobs
 
@@ -271,24 +279,27 @@ lock: concurrent runs converge.
   item's probe and, once the kit's passes, checks that the three helpers are
   in `~/.claude/coding-agent-kit/`; `.\doctor.ps1` checks only the items with
   a `windows-install` row, so neither the kit nor its helpers, and names an
-  item the file does not know. Missing items end with what to run: on a
-  native home `run sync-payloads ITEM`, which on Unix also names the bound
-  source's hook by path (none while the binding does not resolve); on an
-  unmarked home, where `sync-payloads` refuses, the running clone's line
-  alone (`run sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
-  `run & <clone>\scripts\payload-update.ps1 -Now ITEM`).
+  item the file does not know. Missing items end with what to run: where the
+  home's chezmoi config resolves, `run sync-payloads ITEM`, which on Unix
+  also names, shell-quoted, the hook of the checkout the config names;
+  wherever `sync-payloads` refuses (no config, a config the guard refuses,
+  maintenance), the running clone's line alone, its path quoted
+  (`run sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
+  `run & '<clone>\scripts\payload-update.ps1' -Now ITEM`).
   When the kit or one of its helpers is missing, it also says what fails until
   then. All of it is `warn`,
   never `missing`. It only reads paths and files, never a record of an
   earlier run, so the doctor stays read-only.
 - `./setup-host.sh` prints H7-payloads as a non-blocking judgment block until
   the `payloads` row is `ok`. Its run line,
-  `sh '<hook>' --now`, runs the running clone's hook on an unmarked home and
-  the bound source's on a native home, and installs the selected items now
-  and, run again later, updates them, as `sync-payloads` does in an
-  interactive shell of a native home (an unmarked home's block names only the
-  line). While a native home's binding does not resolve, the
-  block prints no run line and points at the doctor's `native-config` row.
+  `sh '<hook>' --now`, runs the running clone's hook on a home without a
+  chezmoi config and the hook of the checkout the config names otherwise, and
+  installs the selected items now and, run again later, updates them, as
+  `sync-payloads` does in an interactive shell of a configured home (the
+  block of a home without a config names only the line). On a home with a
+  chezmoi config, under maintenance or while the config does not resolve
+  from this checkout, the block prints no run line and points at the
+  doctor's `native-config` row.
 - `./setup-host.sh`, `setup-host.ps1` and the login update never run an
   installer of a payload repository.
 

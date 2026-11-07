@@ -182,11 +182,10 @@ e2e_extract_fence() {
 }
 
 # e2e_handover_problems ROLE: the end state Fresh home by hand promises,
-# checked after native_handover ROLE: (a) the binding
-# ~/.config/dotfiles/native is a regular file of exactly the three lines
-# dotfiles-chezmoi-v1, the physical HOME and the physical clone, mode
-# -rw-------; (b) the local config is a regular file whose [data] host is
-# ROLE; (c) no maintenance marker; (d) the state database
+# checked after native_handover ROLE: (a) the clone's lib/chezmoi-guard.sh
+# accepts the local config ~/.config/chezmoi/chezmoi.toml as naming this
+# home and the physical clone; (b) that config's [data] host is ROLE; (c) no
+# maintenance marker; (d) the state database
 # ~/.local/state/chezmoi/chezmoi.boltdb exists and is not empty; (e)
 # ~/.zshrc is a regular file, not a link; (f) every rc file of E2E_RC_FILES
 # that existed when the step began (its E2E_RC_BEFORE digest) has a
@@ -194,24 +193,18 @@ e2e_extract_fence() {
 # E2E_HANDOVER_DETAIL to the problems ("; "-separated, empty when none) and
 # E2E_HANDOVER_KEPT to the number of copies found; returns 1 on a problem.
 e2e_handover_problems() {
-    local role=$1 marker=$HOME/.config/dotfiles/native config=$HOME/.config/chezmoi/chezmoi.toml
-    local keep=$HOME/.local/state/dotfiles-fresh-backup want mode name before out=''
+    local role=$1 config=$HOME/.config/chezmoi/chezmoi.toml
+    local keep=$HOME/.local/state/dotfiles-fresh-backup source name before out=''
     E2E_HANDOVER_KEPT=0
-    if [ ! -f "$marker" ] || [ -L "$marker" ]; then
-        out="$out${out:+; }~/.config/dotfiles/native is missing, a link or not a regular file"
-    else
-        want=$(printf '%s\n%s\n%s' dotfiles-chezmoi-v1 "$(cd -P -- "$HOME" && pwd -P)" "$(cd -P -- "$E2E_CLONE" && pwd -P)")
-        if [ "$(wc -l <"$marker" | tr -d ' ')" != 3 ] || [ "$(cat "$marker")" != "$want" ]; then
-            out="$out${out:+; }~/.config/dotfiles/native is not the three-line binding of this home to the clone"
-        fi
-        # shellcheck disable=SC2012 # the mode column only; no stat -c or -f on both userlands
-        mode=$(ls -l "$marker" | cut -c1-10)
-        [ "$mode" = -rw------- ] || out="$out${out:+; }~/.config/dotfiles/native is $mode, not -rw-------"
-    fi
     if [ ! -f "$config" ] || [ -L "$config" ]; then
         out="$out${out:+; }~/.config/chezmoi/chezmoi.toml is missing, a link or not a regular file"
-    elif ! grep -E "^[[:space:]]*host[[:space:]]*=[[:space:]]*['\"]${role}['\"]" "$config" >/dev/null 2>&1; then
-        out="$out${out:+; }~/.config/chezmoi/chezmoi.toml does not select host $role"
+    else
+        # shellcheck source=lib/chezmoi-guard.sh
+        source=$(. "$E2E_CLONE/lib/chezmoi-guard.sh" && dotfiles_chezmoi_source "$HOME") || source=''
+        [ -n "$source" ] && [ "$source" = "$(cd -P -- "$E2E_CLONE" && pwd -P)" ] ||
+            out="$out${out:+; }~/.config/chezmoi/chezmoi.toml does not name this home and the clone"
+        grep -E "^[[:space:]]*host[[:space:]]*=[[:space:]]*['\"]${role}['\"]" "$config" >/dev/null 2>&1 ||
+            out="$out${out:+; }~/.config/chezmoi/chezmoi.toml does not select host $role"
     fi
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
         out="$out${out:+; }~/.config/dotfiles/maintenance exists"
@@ -272,7 +265,7 @@ e2e_step_native_handover() {
         return 1
     fi
     phys=$(cd -P -- "$E2E_CLONE" && pwd -P)
-    e2e_step_end pass "native_handover $role exit 0; $E2E_HANDOVER_KEPT earlier file(s) kept byte for byte; bound to $phys"
+    e2e_step_end pass "native_handover $role exit 0; $E2E_HANDOVER_KEPT earlier file(s) kept byte for byte; the config names $phys"
 }
 
 # e2e_step_check_done: after the handover, ./setup-host.sh --host H --check

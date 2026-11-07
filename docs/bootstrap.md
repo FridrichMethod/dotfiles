@@ -38,8 +38,10 @@ They do not initialize or apply configuration. The blocking
 H7-native / HW-native step points to [Fresh home by hand](#fresh-home-by-hand)
 ([Fresh Windows home by hand](#fresh-windows-home-by-hand) on Windows):
 explicit local host selection, private copies of the files a first apply
-replaces, and the per-home writer binding.
-Native doctor checks chezmoi and that binding; it never invokes transforms.
+replaces, and the local config `chezmoi init` writes, whose top-level
+`sourceDir` and `destDir` name the checkout and the home the login updater
+uses. Native doctor checks chezmoi and that config; it never invokes
+transforms.
 An active maintenance marker pauses login updates and payload installs until
 a person removes it ([update contract](update-contract.md)).
 
@@ -71,25 +73,28 @@ f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -x
 ### H7-native: Reviewed native configuration handover
 
 Follow [Fresh home by hand](#fresh-home-by-hand). Provisioning does not own this
-operation and prints no blanket apply command. A valid native binding matching
-this checkout and regular local config, with maintenance absent, satisfies the
+operation and prints no blanket apply command. A regular local config whose
+`sourceDir` and `destDir` this checkout's `lib/chezmoi-guard.sh` accepts as
+naming this checkout and this home, with maintenance absent, satisfies the
 bootstrap handoff check; it does not substitute for the procedure's native diff,
 second apply or application checks. Run from another checkout (a worktree or a
 second clone), setup-host keeps H7-native pending.
 
 The doctor's `native-config` row names the cause. `ok`: the handoff state above.
-`warn`, which does not fail the run: the home is bound to another checkout,
-whose doctor it names. `human`: active maintenance, a missing or invalid
-binding, a local config that is absent or not a regular file (a link or a
-directory), or no readable `lib/chezmoi-guard.sh` in this checkout; on Windows
+`warn`, which does not fail the run: the config names another checkout, whose
+doctor it names. `human`: active maintenance, no local config (a new home gets
+it from [Fresh home by hand](#fresh-home-by-hand)), a config that is a link or
+not a regular file, a config the guard refuses (not exactly one top-level
+`sourceDir` and `destDir` line naming this home and a canonical checkout, as
+[the update contract](update-contract.md#selection) describes), or no
+readable `lib/chezmoi-guard.sh` in this checkout; on Windows
 also a `~/.local/bin/chezmoi.exe` the login updater refuses
 ([HW-native](#hw-native-windows-native-handover)).
 
 #### Fresh home by hand
 
-A fresh home has no links into a dotfiles checkout, no
-`~/.config/dotfiles/native`, no maintenance marker and no
-`~/.config/chezmoi/chezmoi.toml`. Nothing else writes it, so it
+A fresh home has no links into a dotfiles checkout, no maintenance marker and
+no `~/.config/chezmoi/chezmoi.toml`. Nothing else writes it, so it
 needs neither the quiescence nor the maintenance marker of
 [takeover.md](chezmoi-migration/takeover.md), and it runs that procedure's
 commands with the same explicit arguments. Anything else, or a function below
@@ -128,7 +133,7 @@ native_handover() {
     _nh_src=$(pwd -P) && _nh_home=$(cd -P -- "$HOME" && pwd -P) || return 1
     [ -f "$_nh_src/.chezmoiroot" ] || { printf '%s\n' 'native_handover: run it from the dotfiles clone' >&2; return 1; }
     _nh_keep=$_nh_home/.local/state/dotfiles-fresh-backup
-    for _nh_rel in .config/dotfiles/native .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
+    for _nh_rel in .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
         .local/state/chezmoi/chezmoi.boltdb .local/state/dotfiles-fresh-backup; do
         if [ -e "$_nh_home/$_nh_rel" ] || [ -L "$_nh_home/$_nh_rel" ]; then
             printf 'native_handover: ~/%s exists, so this is no fresh home; follow docs/chezmoi-migration/takeover.md\n' "$_nh_rel" >&2
@@ -139,6 +144,12 @@ native_handover() {
     (umask 077 && mkdir -p "$_nh_home/.config/chezmoi" "$_nh_keep" &&
         printf 'umask = 0o077\n\n[data]\nhost = "%s"\n' "$_nh_role" >"$_nh_home/.config/chezmoi/chezmoi.toml") || return 1
     native_cz init || return 1
+    # The config init wrote must name this home and the clone, as the login
+    # updater requires; checked before the first change to a target.
+    if ! (. "$_nh_src/lib/chezmoi-guard.sh" && [ "$(dotfiles_chezmoi_source "$_nh_home")" = "$_nh_src" ]); then
+        printf '%s\n' 'native_handover: ~/.config/chezmoi/chezmoi.toml does not name this home and this clone; inspect it privately' >&2
+        return 1
+    fi
     native_cz managed --include=dirs >"$_nh_keep/dirs" || return 1
     native_cz managed --include=files,symlinks >"$_nh_keep/files" || return 1
     # Only a real directory may stand where a directory goes, and only a
@@ -159,10 +170,6 @@ native_handover() {
             (umask 077 && mkdir -p "$(dirname -- "$_nh_keep/$_nh_rel")" && cp "$_nh_home/$_nh_rel" "$_nh_keep/$_nh_rel") ||
             return 1
     done <"$_nh_keep/files"
-    # The home binding, before the first change to a target.
-    (umask 077 && mkdir -p "$_nh_home/.config/dotfiles" &&
-        printf '%s\n' dotfiles-chezmoi-v1 "$_nh_home" "$_nh_src" >"$_nh_home/.config/dotfiles/native" &&
-        chmod 600 "$_nh_home/.config/dotfiles/native") || return 1
     # Exactly the absent directories, one at a time, parents first.
     while IFS= read -r _nh_rel; do
         [ -e "$_nh_home/$_nh_rel" ] || native_cz apply --include=dirs --recursive=false "$_nh_home/$_nh_rel" || return 1
@@ -183,8 +190,13 @@ executables 0700). It stops on a link, or an entry of the wrong kind, at any
 managed path. It copies each regular file it is about to replace into
 `~/.local/state/dotfiles-fresh-backup/` (0700), such as the `/etc/skel`
 `.bashrc`, `.profile` or `.bash_profile`, because the first apply with no
-native state replaces such a file without asking. It writes the three-line
-0600 binding before the first target change, creates only the absent managed
+native state replaces such a file without asking. Right after init, before
+the first target change, it checks with the clone's `lib/chezmoi-guard.sh`
+that the config init wrote (top-level `sourceDir` and `destDir`) names this
+home and the clone. Init already leaves a non-empty state database, so once
+the first apply deploys `~/.profile` and `~/.zshrc`, an interactive login in
+another shell runs the login updater (keep `DOTFILES_AUTO_UPDATE=0` there, as
+[Quick start](#quick-start) says). It creates only the absent managed
 directories, one at a time, parents first, applies twice and requires an empty
 `native_cz diff --exclude=dirs`. It never forces and never creates
 maintenance. The managed paths come from this repository's own source, so the
@@ -232,8 +244,8 @@ started; the check does not make the path tamper-proof.
 W1-chezmoi is done only when a chezmoi at or above the floor works and the
 updater would run `~/.local/bin/chezmoi.exe`, by the same read-only check. A
 chezmoi only elsewhere on PATH (winget, scoop), which the updater never runs,
-or a copy that is linked or not private leaves it todo, and on a bound home
-`doctor.ps1`'s `native-config` row reports `human` naming this section. If the
+or a copy that is linked or not private leaves it todo, and on a configured
+home `doctor.ps1`'s `native-config` row reports `human` naming this section. If the
 updater warns, inspect `~/.local/bin/chezmoi.exe`; remove a link there, and
 make a linked `.local` or `.local\bin` a real directory; then rerun
 `setup-host.ps1` so W1-chezmoi installs a private copy over a regular file.
@@ -247,9 +259,9 @@ ordinary, unelevated user; it checks the actual CurrentUserAllHosts path in
 both shells. Native regular-file updates need no elevation or scheduled task.
 `doctor.ps1`'s `native-config` row gives the verdicts of
 [H7-native](#h7-native-reviewed-native-configuration-handover), with
-`lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the bound
-checkout counts as that checkout. One verdict is Windows only: with the
-binding otherwise `ok`, the row is `human`, citing
+`lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the
+checkout the config names counts as that checkout. One verdict is Windows
+only: with the config otherwise `ok`, the row is `human`, citing
 [W1-chezmoi](#w1-chezmoi-windows-native-chezmoi-binary), when the login updater
 would refuse `~/.local/bin/chezmoi.exe`. That check only opens the file for
 reading.
@@ -263,10 +275,11 @@ requires both PowerShell editions to load `~\Documents\PowerShell\profile.ps1`
 and `~\Documents\WindowsPowerShell\profile.ps1`; a Documents folder
 redirected to OneDrive is a takeover.md case. `~\.local\bin\chezmoi.exe`
 must be a regular file with no link at it, `.local` or `.local\bin`, the file
-the login updater runs. It warns when elevated. The local config holds only
+the login updater runs. It warns when elevated. The seed config holds only
 `[data]` `host = "win"`. Each chezmoi run gets the full argument array, with
-stdin closed; the copies, the binding, the directory order, the double apply
-and the empty diff are as on Unix.
+stdin closed; the copies, the config check after init (with the clone's
+`lib/chezmoi-guard.ps1`), the directory order, the double apply and the empty
+diff are as on Unix.
 
 ```powershell
 function Invoke-NativeCz {
@@ -314,7 +327,7 @@ function Invoke-NativeHandover {
     $source = Resolve-DotfilesDirectory $clone
     $destination = Resolve-DotfilesDirectory $HOME
     $keep = Join-Path $destination '.local\state\dotfiles-fresh-backup'
-    foreach ($relative in @('.config\dotfiles\native', '.config\dotfiles\maintenance', '.config\chezmoi\chezmoi.toml',
+    foreach ($relative in @('.config\dotfiles\maintenance', '.config\chezmoi\chezmoi.toml',
             '.local\state\chezmoi\chezmoi.boltdb', '.local\state\dotfiles-fresh-backup')) {
         if (Test-DotfilesMarkerObject (Join-Path $destination $relative)) {
             throw "Invoke-NativeHandover: ~\$relative exists, so this is no fresh home; follow docs/chezmoi-migration/takeover.md"
@@ -347,6 +360,13 @@ function Invoke-NativeHandover {
     [void][IO.Directory]::CreateDirectory($keep)
     [IO.File]::WriteAllText((Join-Path $destination '.config\chezmoi\chezmoi.toml'), "[data]`nhost = `"$Role`"`n", $utf8)
     [void](Invoke-NativeCz @('init'))
+    # The config init wrote must name this home and the clone, as the login
+    # updater requires; checked before the first change to a target.
+    $paths = $null
+    try { $paths = Get-DotfilesChezmoiPaths -HomePath $destination } catch { }
+    if (-not $paths -or -not $paths.Source.Equals($source, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Invoke-NativeHandover: ~\.config\chezmoi\chezmoi.toml does not name this home and this clone; inspect it privately'
+    }
     $directories = @((Invoke-NativeCz @('managed', '--include=dirs')) -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_.Replace('/', '\') })
     $files = @((Invoke-NativeCz @('managed', '--include=files,symlinks')) -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_.Replace('/', '\') })
     # Only a real directory may stand where a directory goes, and only a
@@ -366,9 +386,6 @@ function Invoke-NativeHandover {
             [IO.File]::Copy($path, $copy)
         }
     }
-    # The home binding, before the first change to a target.
-    [void][IO.Directory]::CreateDirectory((Join-Path $destination '.config\dotfiles'))
-    [IO.File]::WriteAllText((Join-Path $destination '.config\dotfiles\native'), "dotfiles-chezmoi-v1`n$destination`n$source`n", $utf8)
     # Exactly the absent directories, one at a time, parents first.
     foreach ($relative in $directories) {
         $path = Join-Path $destination $relative
@@ -574,9 +591,9 @@ exec zsh -l
 ```
 
 `--list` resolves the host like every other mode, and `--host` or `--platform`
-always wins. On a native-owned home (one with `~/.config/dotfiles/native`, in
-any form) the host is the one quoted `host` line of the `[data]` table in
-`~/.config/chezmoi/chezmoi.toml`, read as text, without chezmoi or git. A
+always wins. On a home with `~/.config/chezmoi/chezmoi.toml` (in any form) the
+host is the one quoted `host` line of the `[data]` table of that config, read
+as text, without chezmoi or git. A
 missing, repeated, unknown or otherwise spelled role, or a linked or absent
 config, exits 2 asking for `--host`. Any other home needs `--host` or
 `--platform` and exits 2 otherwise (for example in a fresh clone or a linked
@@ -587,7 +604,7 @@ and warns that it did.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a native-owned home its `[data].host` (`common-only` there: the detected platform without an overlay); elsewhere none, exit 2. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a home with `~/.config/chezmoi/chezmoi.toml` its `[data].host` (`common-only` there: the detected platform without an overlay); elsewhere none, exit 2. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
@@ -603,12 +620,13 @@ the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
 `tools.tsv` rows the doctor runs structural checks: `locale`, `native-config`,
 `path-order`, `rc-pollution`, `omz-order`, `nvm-homebrew` and `payloads`.
-`native-config` names the state of this home's native binding by cause
+`native-config` names the state of this home's chezmoi config by cause
 ([H7-native](#h7-native-reviewed-native-configuration-handover)). `payloads`
 warns, never fails, while an item of
 `DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
 installed kit lacks a Claude helper, and names what to run: `sync-payloads
-ITEM`, or in an unmarked home, where `sync-payloads` refuses, this checkout's
+ITEM` where the config resolves, or wherever `sync-payloads` refuses (no
+config, a config the guard refuses, maintenance), this checkout's quoted
 `--now` line ([H7-payloads](#h7-payloads-payload-repos)).
 The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
@@ -636,7 +654,7 @@ at HW-clone).
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (a native-owned home's `[data].host`); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and `common-only` as that `[data].host` exits 2 asking for `--host` |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (the `[data].host` of the home's `~/.config/chezmoi/chezmoi.toml`); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and `common-only` as that `[data].host` exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |
@@ -1007,8 +1025,8 @@ have a minimum), the overlay the person chose, and a complete checkout.
 
 - **Check:** `uname -sm; cat /etc/os-release 2>/dev/null || sw_vers; ldd --version 2>/dev/null | head -n 1; git -C ~/dotfiles status --porcelain`
 - **Install:** `git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles`
-  (any path; native login updates follow the home binding that handover
-  writes). The checkout has no submodules; the payload repos install only when
+  (any path; login updates follow the `sourceDir` that `chezmoi init` records
+  in `~/.config/chezmoi/chezmoi.toml`). The checkout has no submodules; the payload repos install only when
   you run them, through their own installers ([H7-payloads](#h7-payloads-payload-repos)).
 - **Verify:** the status is empty. setup-host's P0-preflight line records the
   OS, architecture, glibc and detected platform, and warns about uncommitted
@@ -1879,24 +1897,25 @@ selects the items a run without arguments installs and the doctor checks.
   `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
   (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
-  warns and names what to run. In an unmarked home that is this checkout's
-  `--now` line (`sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
-  `& <clone>\scripts\payload-update.ps1 -Now ITEM`), since `sync-payloads`
-  needs a native binding. On a native-owned home it is `sync-payloads ITEM`
-  and, on Unix, the `--now` line of the hook of the source its binding names,
-  never the checkout the doctor runs from, and none while the binding does not
-  resolve.
+  warns and names what to run. Where the home's chezmoi config resolves, it
+  is `sync-payloads ITEM` and, on Unix, the `--now` line of the hook of the
+  checkout the config names, never the checkout the doctor runs from.
+  Wherever `sync-payloads` refuses (no config, a config the guard refuses,
+  maintenance), it is this checkout's quoted `--now` line
+  (`sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
+  `& '<clone>\scripts\payload-update.ps1' -Now ITEM`).
 - **Install:** the line the setup-host block prints, which works before the
   dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
   `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
-  update. On a native-owned home the block names the script of the source the
-  binding names (and says so), never the checkout setup-host runs from, and
-  only a note while the binding does not resolve. In an interactive shell
-  with the dotfiles applied, `sync-payloads [ITEM...]` does the same and
-  `sync-skills` runs only the skills; they run the bound checkout's script,
-  refuse an invalid binding, and in an unmarked home refuse with the `--now`
-  line to run instead. Any call of the script without `--now` first prints a
+  update. On a home with a chezmoi config the block names the script of the
+  checkout the config names (and says so), never the checkout setup-host runs
+  from, and only a note under maintenance or while the config does not
+  resolve. In an interactive shell with the dotfiles applied,
+  `sync-payloads [ITEM...]` does the same and
+  `sync-skills` runs only the skills; they run the configured checkout's
+  script, refuse a config the guard refuses, and in a home without a config
+  refuse with the `--now` line to run instead. Any call of the script without `--now` first prints a
   usage line and exits 2. An installer's exit
   75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`

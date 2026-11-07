@@ -1,119 +1,250 @@
-"""Home ownership guards: the native binding, maintenance and login dispatch."""
+"""Home guards: the source the chezmoi config names, maintenance and login dispatch."""
 
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+GUARD = ROOT / "lib/chezmoi-guard.sh"
+# Absolute paths: the children run with PATH=os.defpath, which may lack a
+# shell found here (an HPC login env provides zsh).
+SHELLS = {name: path for name in ("sh", "bash", "zsh") if (path := shutil.which(name))}
+
+
+def config_text(home, source, top="", tables=""):
+    # The layout chezmoi init writes (BurntSushi toml): the top-level keys
+    # sorted, one 'KEY = "VALUE"' each, then the tables.
+    return (f'destDir = "{home}"\nencryption = "age"\nmode = "file"\n'
+            f'persistentState = "{home}/.local/state/chezmoi/chezmoi.boltdb"\n'
+            f'sourceDir = "{source}"\numask = 63\n{top}\n'
+            '[age]\n  identity = "/nonexistent/key.txt"\n\n[data]\n  host = "lab-ubuntu"\n\n'
+            '[git]\n  autoAdd = false\n\n[update]\n  command = "git"\n  recurseSubmodules = false\n'
+            + tables)
 
 
 @unittest.skipIf(os.name == "nt", "POSIX shell execution")
-class WriterGuardTests(unittest.TestCase):
+class ChezmoiSourceTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        # macOS TMPDIR may use /var rather than canonical /private/var.
+        self.root = Path(temporary.name).resolve()
+        self.home, self.source = self.root / "a home", self.root / "a source"
+        self.config = self.home / ".config/chezmoi/chezmoi.toml"
+        self.config.parent.mkdir(parents=True)
+        (self.source / "home").mkdir(parents=True)
+        (self.source / ".chezmoiroot").write_text("home\n")
+
+    def lookup(self, shell="sh", home=None):
+        return subprocess.run([SHELLS.get(shell, shell), "-c", '. "$1"; dotfiles_chezmoi_source "$2"', "guard",
+                               str(GUARD), str(home or self.home)], capture_output=True, timeout=15,
+                              env={"PATH": os.defpath, "HOME": str(self.home)})
+
+    def place(self, data):
+        if self.config.is_symlink() or self.config.is_file():
+            self.config.unlink()
+        elif self.config.is_dir():
+            self.config.rmdir()
+        if data is not None:
+            self.config.write_bytes(data.encode() if isinstance(data, str) else data)
+
+    def test_prints_the_canonical_source_of_the_layout_chezmoi_writes(self):
+        valid = config_text(self.home, self.source)
+        accepted = {
+            "chezmoi layout": valid,
+            "no final newline": valid.rstrip("\n"),
+            "keys after the first table": valid + 'sourceDir = "/elsewhere"\nworkingTree = "/elsewhere"\n',
+            "indented header": valid.replace("\n[age]\n", '\n\t [age]\nsourceDir = "/elsewhere"\n', 1),
+            "comment lines": "# sourceDir = \"/elsewhere\"\n" + valid,
+        }
+        for shell in ("sh", "bash", *(["zsh"] if "zsh" in SHELLS else [])):
+            for name, data in accepted.items():
+                with self.subTest(shell=shell, config=name):
+                    self.place(data)
+                    before = sorted(self.root.rglob("*"))
+                    result = self.lookup(shell)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (0, f"{self.source}\n".encode(), b""))
+                    self.assertEqual(sorted(self.root.rglob("*")), before)
+
+    def test_refuses_every_other_form_silently(self):
+        valid = config_text(self.home, self.source)
+        exact = f'sourceDir = "{self.source}"\n'
+        linked_source, linked_home = self.root / "linked source", self.root / "linked home"
+        linked_source.symlink_to(self.source)
+        linked_home.symlink_to(self.home)
+        (self.root / "another home").mkdir()
+        (self.root / "plain").mkdir()
+        refused = {
+            "no sourceDir": valid.replace(exact, ""),
+            "no destDir": valid.replace(f'destDir = "{self.home}"\n', ""),
+            "two sourceDir lines": valid.replace(exact, exact * 2),
+            "two destDir lines": f'destDir = "{self.home}"\n' + valid,
+            "sourceDir only in a table": valid.replace(exact, "").replace("[data]\n", "[data]\n" + exact),
+            "a case variant beside the key": valid.replace(exact, exact + f'SourceDir = "{self.source}"\n'),
+            "a case variant instead": valid.replace("sourceDir =", "sourcedir ="),
+            "an upper-case destDir": valid.replace("destDir =", "DESTDIR ="),
+            "a workingTree key": valid.replace(exact, exact + f'workingTree = "{self.source}"\n'),
+            "a workingtree case variant": valid.replace(exact, exact + f'WORKINGTREE = "{self.source}"\n'),
+            "a quoted key": valid.replace("sourceDir =", '"sourceDir" ='),
+            "a quoted key beside": valid.replace(exact, exact + "'umask2' = 1\n"),
+            "leading blanks": valid.replace(exact, "  " + exact),
+            "no spaces around =": valid.replace("sourceDir = ", "sourceDir="),
+            "two spaces before =": valid.replace("sourceDir = ", "sourceDir  = "),
+            "a literal string": valid.replace(exact, f"sourceDir = '{self.source}'\n"),
+            "a backslash escape": valid.replace(exact, f'sourceDir = "{self.source}\\u0000"\n'),
+            "a quote in the value": valid.replace(exact, f'sourceDir = "{self.source}" # "\n'),
+            "a control character": valid.replace(exact, f'sourceDir = "{self.source}\t"\n'),
+            "a trailing comment": valid.replace(exact, f'sourceDir = "{self.source}" # here\n'),
+            "CRLF": valid.replace("\n", "\r\n"),
+            "a multi-line basic string": valid.replace(exact, 'note = """\n' + exact + '"""\n'),
+            "a multi-line literal string": valid.replace(exact, "note = '''\n" + exact + "'''\n"),
+            "an empty value": valid.replace(exact, 'sourceDir = ""\n'),
+            "a relative source": valid.replace(exact, 'sourceDir = "a source"\n'),
+            "a linked source": valid.replace(exact, f'sourceDir = "{linked_source}"\n'),
+            "a trailing slash": valid.replace(exact, f'sourceDir = "{self.source}/"\n'),
+            "a dot segment": valid.replace(exact, f'sourceDir = "{self.root}/./a source"\n'),
+            "no .chezmoiroot": valid.replace(exact, f'sourceDir = "{self.root / "plain"}"\n'),
+            "the home subdirectory": valid.replace(exact, f'sourceDir = "{self.source / "home"}"\n'),
+            "destDir another home": valid.replace(f'destDir = "{self.home}"', f'destDir = "{self.root / "another home"}"'),
+            "destDir a linked path": valid.replace(f'destDir = "{self.home}"', f'destDir = "{linked_home}"'),
+            "a byte-order mark": "\ufeff" + valid,
+        }
+        for shell in ("sh", "bash", *(["zsh"] if "zsh" in SHELLS else [])):
+            for name, data in refused.items():
+                with self.subTest(shell=shell, config=name):
+                    self.place(data)
+                    result = self.lookup(shell)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"", b""))
+        self.place(None)
+        for kind in ("absent", "directory", "link", "dangling link"):
+            with self.subTest(config=kind):
+                if kind == "directory":
+                    self.config.mkdir()
+                elif kind != "absent":
+                    target = self.root / ("saved config" if kind == "link" else "missing config")
+                    if kind == "link":
+                        target.write_text(valid)
+                    self.config.symlink_to(target)
+                result = self.lookup()
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"", b""))
+                self.place(None)
+
     def test_root_ancestor_does_not_become_a_windows_unc_path(self):
         # Git Bash treats //.config as UNC, not the local POSIX root.
         # Record the actual shell predicates without querying a network path.
         command = '[() { printf "%s\\n" "$2"; return 1; }; . "$1"; '
-        command += 'dotfiles_native_owned /; dotfiles_maintenance_active /'
-        result = subprocess.run(["bash", "--noprofile", "--norc", "-c", command,
-                                 "guard", str(ROOT / "lib/chezmoi-guard.sh")],
+        command += 'dotfiles_config_exists /; dotfiles_maintenance_active /; dotfiles_chezmoi_source /'
+        result = subprocess.run(["bash", "--noprofile", "--norc", "-c", command, "guard", str(GUARD)],
                                 capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.stdout.splitlines(), ["/.config/dotfiles/native"] * 2 +
-                         ["/.config/dotfiles/maintenance"] * 2)
+        self.assertEqual(result.stdout.splitlines(), ["/.config/chezmoi/chezmoi.toml"] * 2 +
+                         ["/.config/dotfiles/maintenance"] * 2 + ["/.config/chezmoi/chezmoi.toml"])
 
-    def test_native_binding_requires_exactly_three_terminated_lines(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            home = Path(temporary).resolve()
-            marker = home / ".config/dotfiles/native"
-            marker.parent.mkdir(parents=True)
-            (home / ".chezmoiroot").write_text("home\n")
-            binding = f"dotfiles-chezmoi-v1\n{home}\n{home}\n".encode()
-            for data, expected in ((binding, 0), (binding + b"unterminated", 1),
-                                   (binding + b"\n", 1), (binding[:-1], 1)):
-                with self.subTest(data=data):
-                    marker.write_bytes(data)
-                    result = subprocess.run(["sh", "-c", '. "$1"; dotfiles_native_source "$2"',
-                                             "guard", str(ROOT / "lib/chezmoi-guard.sh"), str(home)],
-                                            capture_output=True, timeout=15)
-                    self.assertEqual(result.returncode, expected)
+    def test_sourcing_defines_three_functions_and_writes_nothing(self):
+        def shell(code):
+            return subprocess.run(["bash", "--noprofile", "--norc", "-c", code, "guard", str(GUARD)],
+                                  cwd=self.root, capture_output=True, text=True, timeout=15,
+                                  env={"PATH": os.defpath, "HOME": str(self.home)})
 
-    def test_logins_start_no_payload_run_and_update_only_a_bound_home(self):
+        before = shell("compgen -v")
+        after = shell('. "$1"; compgen -v; declare -F | sed "s/^declare -f /function /"')
+        self.assertEqual((before.stderr, after.stderr), ("", ""))
+        # PIPESTATUS appears once a pipeline has run.
+        self.assertEqual(sorted(set(after.stdout.splitlines()) - set(before.stdout.splitlines()) - {"PIPESTATUS"}),
+                         ["function dotfiles_chezmoi_source", "function dotfiles_config_exists",
+                          "function dotfiles_maintenance_active"])
+        self.assertEqual(sorted(self.root.rglob("*")), sorted([self.home, self.home / ".config",
+                                                               self.config.parent, self.source,
+                                                               self.source / "home",
+                                                               self.source / ".chezmoiroot"]))
+
+
+@unittest.skipIf(os.name == "nt", "POSIX shell execution")
+class WriterGuardTests(unittest.TestCase):
+    def test_logins_start_no_payload_run_and_update_only_a_configured_home(self):
         # No profile path runs a payload hook, with or without Sherlock's
-        # overlay, whose site rule forbids detached login-node workers. A bound
-        # home runs only its source's updater; an unmarked home runs nothing,
-        # not even the hooks of a checkout at the old default ~/dotfiles, and
-        # prints nothing. zsh (the .zshrc tail) is in tests/shell-profile.sh
-        # and the native takeover suite.
+        # overlay, whose site rule forbids detached login-node workers. A
+        # configured home runs only its source's updater; an invalid config
+        # warns once and runs nothing; a home without a config runs nothing,
+        # not even the hooks of a checkout at ~/dotfiles, and prints nothing.
+        # zsh (the .zshrc tail) is in tests/shell-profile.sh and the login
+        # updater suite.
         with tempfile.TemporaryDirectory() as temporary:
             # macOS TMPDIR may use /var rather than canonical /private/var.
             root = Path(temporary).resolve()
             home, source = root / "home", root / "source"
             default = home / "dotfiles"
             trace = root / "trace"
-            for path in (home / ".config/dotfiles", home / ".config/sh", source / "scripts",
+            for path in (home / ".config/chezmoi", home / ".config/sh", source / "scripts",
                          source / "lib", default / "scripts"):
                 path.mkdir(parents=True)
             (source / ".chezmoiroot").write_text("home\n")
-            shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
-            for checkout, name in ((source, "bound"), (default, "default")):
+            shutil.copyfile(GUARD, source / "lib/chezmoi-guard.sh")
+            for checkout, name in ((source, "source"), (default, "default")):
                 for hook in ("chezmoi-update", "payload-update"):
                     (checkout / f"scripts/{hook}.sh").write_text(f'printf "%s\\n" "{name} {hook}" >>"$TRACE"\n')
-            marker, overlay = home / ".config/dotfiles/native", home / ".config/sh/.profile"
+            config, overlay = home / ".config/chezmoi/chezmoi.toml", home / ".config/sh/.profile"
             env = {"HOME": str(home), "PATH": os.defpath, "TERM": "dumb", "SCRATCH": "",
                    "TRACE": str(trace)}
             for sherlock in (False, True):
                 if sherlock:
                     shutil.copyfile(ROOT / "home/.hosts/sherlock/.config/sh/.profile", overlay)
-                for native in (True, False):
-                    if native:
-                        marker.write_text(f"dotfiles-chezmoi-v1\n{home}\n{source}\n")
+                for state in ("configured", "invalid", "unconfigured"):
+                    if state == "unconfigured":
+                        config.unlink()
                     else:
-                        marker.unlink()
+                        config.write_text(config_text(home, source if state == "configured" else default))
                     for shell in ("sh", "bash"):
-                        with self.subTest(sherlock=sherlock, native=native, shell=shell):
+                        with self.subTest(sherlock=sherlock, state=state, shell=shell):
                             trace.unlink(missing_ok=True)
                             flags = ["--noprofile", "--norc"] if shell == "bash" else []
-                            result = subprocess.run([shell, *flags, "-i", "-c", '. "$1"', "profile",
+                            result = subprocess.run([SHELLS.get(shell, shell), *flags, "-i", "-c", '. "$1"', "profile",
                                                      str(ROOT / "home/dot_profile")],
                                                     env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                                     text=True, timeout=15)
                             self.assertEqual(result.returncode, 0, result.stderr)
-                            if native:
-                                self.assertEqual(trace.read_text().splitlines(), ["bound chezmoi-update"])
+                            warnings = [line for line in result.stderr.splitlines() if "[dotfiles]" in line]
+                            if state == "configured":
+                                self.assertEqual(trace.read_text().splitlines(), ["source chezmoi-update"])
+                                self.assertEqual(warnings, [])
                             else:
                                 self.assertFalse(trace.exists(), trace.read_text() if trace.exists() else "")
-                                self.assertNotIn("[dotfiles]", result.stderr)
+                                self.assertEqual(warnings, [] if state == "unconfigured" else [
+                                    "[dotfiles] [warn] ~/.config/chezmoi/chezmoi.toml does not name this home "
+                                    "and a dotfiles checkout; automatic updates skipped."])
 
-    def test_sync_payload_commands_run_only_the_validated_native_source(self):
+    def test_sync_payload_commands_run_only_the_validated_config_source(self):
         # sync-payloads/sync-skills resolve the hook as the login dispatcher
-        # does: a valid marker's source wins over the checkout at ~/dotfiles,
-        # whose guard and hook never run; an unmarked home and an invalid
-        # marker refuse before any hook; maintenance surfaces the bound hook's
-        # own refusal before any state.
-        # Absolute paths: the children run with PATH=os.defpath, which may lack a
-        # shell found here (an HPC login env provides zsh).
-        shells = {name: path for name in ("sh", "bash", "zsh") if (path := shutil.which(name))}
-        refusal = "[dotfiles] [error] Native home binding is invalid; payload update refused.\n"
-        no_binding = ("[dotfiles] [error] Payload update needs a native home binding; in an unmarked home run "
-                      "sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.\n")
+        # does: a valid config's source wins over the checkout at ~/dotfiles,
+        # whose guard and hook never run; a home without a config and an
+        # invalid config refuse before any hook; maintenance surfaces the
+        # configured hook's own refusal before any state.
+        refusal = ("[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a "
+                   "dotfiles checkout; payload update refused.\n")
+        no_config = ("[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run "
+                     "sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.\n")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            home, source = root / "home", root / "bound source"
-            stale = home / "dotfiles"
+            home, source = root / "home", root / "configured source"
+            other = home / "dotfiles"
+            unguarded = root / "unguarded source"
             trace, state = root / "trace", root / "state"
-            for path in (home / ".config/dotfiles", source / "scripts", source / "lib",
-                         stale / "scripts", stale / "lib"):
+            for path in (home / ".config/chezmoi", source / "scripts", source / "lib",
+                         other / "scripts", other / "lib", unguarded / "scripts"):
                 path.mkdir(parents=True)
-            (source / ".chezmoiroot").write_text("home\n")
-            shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
-            for checkout, name in ((source, "bound"), (stale, "stale")):
+            for checkout in (source, other, unguarded):
+                (checkout / ".chezmoiroot").write_text("home\n")
+            shutil.copyfile(GUARD, source / "lib/chezmoi-guard.sh")
+            for checkout, name in ((source, "source"), (other, "other"), (unguarded, "unguarded")):
                 (checkout / "scripts/payload-update.sh").write_text(
                     f'printf "{name} %s\\n" "$*" >>"$TRACE"\nexit 4\n')
-            (stale / "lib/chezmoi-guard.sh").write_text('printf "stale-guard\\n" >>"$TRACE"\n')
-            marker = home / ".config/dotfiles/native"
-            valid = f"dotfiles-chezmoi-v1\n{home}\n{source}\n".encode()
+            (other / "lib/chezmoi-guard.sh").write_text('printf "other-guard\\n" >>"$TRACE"\n')
+            config = home / ".config/chezmoi/chezmoi.toml"
+            valid = config_text(home, source)
             env = {"HOME": str(home), "PATH": os.defpath, "TRACE": str(trace), "XDG_STATE_HOME": str(state)}
             # eval: zsh does not expand an alias defined earlier in one -c string.
             code = ('[ -z "${BASH_VERSION-}" ] || shopt -s expand_aliases; . "$1"; '
@@ -122,52 +253,55 @@ class WriterGuardTests(unittest.TestCase):
 
             def run(shell):
                 trace.unlink(missing_ok=True)
-                result = subprocess.run([shells[shell], *(["-f"] if shell == "zsh" else []), "-c", code,
+                result = subprocess.run([SHELLS[shell], *(["-f"] if shell == "zsh" else []), "-c", code,
                                          "aliases", str(ROOT / "home/dot_aliases")],
                                         env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                         text=True, timeout=15)
                 return result, trace.read_text().splitlines() if trace.exists() else []
 
-            def bind(content=None, kind="file"):
-                if marker.is_symlink() or marker.is_file():
-                    marker.unlink()
-                elif marker.is_dir():
-                    marker.rmdir()
+            def configure(content=None, kind="file"):
+                if config.is_symlink() or config.is_file():
+                    config.unlink()
+                elif config.is_dir():
+                    config.rmdir()
                 if kind == "symlink":
-                    (root / "linked marker").write_bytes(valid)
-                    marker.symlink_to(root / "linked marker")
+                    (root / "linked config").write_text(valid)
+                    config.symlink_to(root / "linked config")
                 elif kind == "directory":
-                    marker.mkdir()
+                    config.mkdir()
                 elif content is not None:
-                    marker.write_bytes(content)
+                    config.write_text(content)
 
-            invalid = {"unterminated extra": (valid + b"extra", "file"),
-                       "other version": (valid.replace(b"-v1", b"-v2"), "file"),
-                       "relative source": (f"dotfiles-chezmoi-v1\n{home}\nstale\n".encode(), "file"),
-                       "other home": (f"dotfiles-chezmoi-v1\n{root}\n{source}\n".encode(), "file"),
+            exact = f'sourceDir = "{source}"\n'
+            invalid = {"other home": (config_text(root, source), "file"),
+                       "relative source": (valid.replace(exact, 'sourceDir = "configured source"\n'), "file"),
+                       "two sourceDir lines": (valid.replace(exact, exact * 2), "file"),
+                       "CRLF": (valid.replace("\n", "\r\n"), "file"),
+                       "a source without its guard": (config_text(home, unguarded), "file"),
                        "symlink": (None, "symlink"), "directory": (None, "directory")}
-            for shell in shells:
-                with self.subTest(shell=shell, binding="unmarked"):
-                    bind()
+            for shell in SHELLS:
+                with self.subTest(shell=shell, config="absent"):
+                    configure()
                     result, events = run(shell)
-                    self.assertEqual((result.stdout, result.stderr), ("1 1\n", no_binding * 2))
+                    self.assertEqual((result.stdout, result.stderr), ("1 1\n", no_config * 2))
                     self.assertEqual(events, [])
-                with self.subTest(shell=shell, binding="valid non-default source"):
-                    bind(valid)
+                with self.subTest(shell=shell, config="valid non-default source"):
+                    configure(valid)
                     result, events = run(shell)
                     self.assertEqual((result.stdout, result.stderr), ("4 4\n", ""))
-                    self.assertEqual(events, ["bound --now kit pymol", "bound --now skills"])
+                    self.assertEqual(events, ["source --now kit pymol", "source --now skills"])
                 for name, (content, kind) in invalid.items():
-                    with self.subTest(shell=shell, binding=name):
-                        bind(content, kind)
+                    with self.subTest(shell=shell, config=name):
+                        configure(content, kind)
                         result, events = run(shell)
-                        self.assertEqual((result.stdout, result.stderr), ("1 1\n", refusal * 2))
                         self.assertEqual(events, [])
-            bind(valid)
+                        self.assertEqual((result.stdout, result.stderr), ("1 1\n", refusal * 2))
+            configure(valid)
+            (home / ".config/dotfiles").mkdir()
             (home / ".config/dotfiles/maintenance").touch()
             shutil.copyfile(ROOT / "scripts/payload-update.sh", source / "scripts/payload-update.sh")
-            for shell in shells:
-                with self.subTest(shell=shell, binding="maintenance"):
+            for shell in SHELLS:
+                with self.subTest(shell=shell, config="maintenance"):
                     result, events = run(shell)
                     self.assertEqual(result.stdout, "1 1\n")
                     self.assertEqual(result.stderr,
@@ -187,6 +321,25 @@ class WriterGuardTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stderr, b"dotfiles: payload update refused during maintenance.\n")
             self.assertEqual(sorted(path.name for path in home.iterdir()), [".config"])
+
+
+class PowerShellGuardTextTests(unittest.TestCase):
+    # lib/chezmoi-guard.ps1 must parse and run under Windows PowerShell 5.1,
+    # which the Windows suite loads for real; this text check runs anywhere.
+    def test_guard_uses_no_powershell_7_only_syntax_or_api(self):
+        text = (ROOT / "lib/chezmoi-guard.ps1").read_text(encoding="utf-8")
+        code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        code = re.sub(r"'(?:[^']|'')*'|\"(?:[^\"`]|`.)*\"", "''", code)
+        # Null-coalescing, pipeline chains and a .NET Core-only path API; a
+        # ternary would not parse there either, which the 5.1 load proves.
+        for token in ("??", " && ", " || ", "IsPathFullyQualified"):
+            with self.subTest(token=token):
+                self.assertNotIn(token, code)
+        # $IsWindows is undefined there, so every use is guarded first.
+        uses = [code[max(0, match.start() - 40):match.end()] for match in re.finditer(r"\$IsWindows\b", code)]
+        self.assertTrue(uses)
+        for use in uses:
+            self.assertTrue(use.endswith("(Test-Path Variable:IsWindows) -and $IsWindows"), use)
 
 
 if __name__ == "__main__":

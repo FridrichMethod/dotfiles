@@ -1,6 +1,6 @@
 #!/bin/sh
-# Native login update: one attempt per interactive session, no installation,
-# receipts, retries or fallback writer. The home binding survives partial apply.
+# Login update: one attempt per interactive session; it installs nothing and
+# never retries.
 
 case $- in
     *i*) ;;
@@ -14,17 +14,24 @@ _dotfiles_native_update() (
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
         return 0
     fi
-    _df_marker=$HOME/.config/dotfiles/native
-    [ -f "$_df_marker" ] && [ ! -L "$_df_marker" ] || return 1
-    {
-        IFS= read -r _df_version && IFS= read -r _df_home && IFS= read -r _df_source
-    } <"$_df_marker" || return 1
-    [ "$_df_version" = dotfiles-chezmoi-v1 ] || return 1
-    case $_df_source in /*) ;; *) return 1 ;; esac
-    [ -r "$_df_source/lib/chezmoi-guard.sh" ] || return 1
+    # Read only the first top-level sourceDir line of the config, to locate
+    # the shared validator there; every path below comes from its result.
+    [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ] || return 1
+    _df_source=''
+    while IFS= read -r _df_line || [ -n "$_df_line" ]; do
+        case ${_df_line#"${_df_line%%[![:blank:]]*}"} in '['*) break ;; esac
+        case $_df_line in
+            'sourceDir = "/'*'"')
+                _df_source=${_df_line#'sourceDir = "'}
+                _df_source=${_df_source%'"'}
+                break
+                ;;
+        esac
+    done <"$HOME/.config/chezmoi/chezmoi.toml"
+    [ -n "$_df_source" ] && [ -r "$_df_source/lib/chezmoi-guard.sh" ] || return 1
     # shellcheck source=lib/chezmoi-guard.sh
     . "$_df_source/lib/chezmoi-guard.sh"
-    _df_source=$(dotfiles_native_source "$HOME") || return 1
+    _df_source=$(dotfiles_chezmoi_source "$HOME") || return 1
     _df_home=$(CDPATH='' cd -P -- "$HOME" && pwd -P) || return 1
     # Lost or empty state would make apply treat a foreign target as a first
     # apply, so a missing or empty state database refuses the update.
@@ -82,7 +89,7 @@ _dotfiles_native_update() (
 )
 
 if ! _dotfiles_native_update; then
-    printf '%s\n' '[dotfiles] [warn] Native update did not complete; inspect the binding, source, backend and destination privately before retrying.' >&2
+    printf '%s\n' '[dotfiles] [warn] Update did not complete; inspect the config, source, backend and destination privately before retrying.' >&2
 fi
 export _DOTFILES_CHECKED=1
 unset -f _dotfiles_native_update

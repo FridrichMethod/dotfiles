@@ -23,7 +23,9 @@ class UpdateFixture(ChezmoiFixture):
         self.state = self.destination / ".local/state/chezmoi/chezmoi.boltdb"
         for directory in (self.config.parent, self.cache, self.state.parent):
             directory.mkdir(parents=True, exist_ok=True)
-        self.config.write_text('[data]\nhost="common-only"\n[git]\nautoAdd=false\n'
+        # The top-level lines chezmoi init writes, which the login updater reads.
+        self.top = f'destDir = "{self.destination}"\nsourceDir = "{self.source}"\n'
+        self.config.write_text(self.top + '[data]\nhost="common-only"\n[git]\nautoAdd=false\n'
                                'autoCommit=false\nautoPush=false\n[update]\ncommand="git"\n'
                                f'args={json.dumps(UPDATE_ARGS)}\nrecurseSubmodules=false\n',
                                encoding="utf-8")
@@ -50,11 +52,8 @@ class UpdateFixture(ChezmoiFixture):
         self.git("branch", "--set-upstream-to=origin/main")
         self.producer = self.root / "producer"
         self.git("clone", str(self.remote), str(self.producer), cwd=self.root)
-        self.marker = self.destination / ".config/dotfiles/native"
-        self.marker.parent.mkdir(mode=0o700)
-        self.marker.write_text(f"dotfiles-chezmoi-v1\n{self.destination}\n{self.source}\n",
-                               encoding="utf-8")
-        self.marker.chmod(0o600)
+        self.maintenance = self.destination / ".config/dotfiles/maintenance"
+        self.maintenance.parent.mkdir(mode=0o700)
         applied = self.run("apply")
         if applied.returncode:
             raise AssertionError("initial inspected native fixture apply failed")
@@ -102,7 +101,7 @@ class UnixTakeoverTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, "login must stay usable")
         self.assertIn("[dotfiles] [warn]", result.stderr)
 
-    def test_clean_fast_forward_applies_and_uses_bound_home_despite_xdg_and_git_overrides(self):
+    def test_clean_fast_forward_applies_to_the_configured_home_despite_xdg_and_git_overrides(self):
         with UpdateFixture() as f:
             f.advance()
             result = f.hook(env={"XDG_CONFIG_HOME": str(f.root / "wrong-config"),
@@ -159,7 +158,7 @@ class UnixTakeoverTests(unittest.TestCase):
                 self.assertFalse(target.exists())
                 self.assertFalse(target.is_symlink())
                 self.assertEqual((f.destination / ".sample").read_text(), "before\n")
-                self.assertTrue(f.marker.is_file())
+                self.assertTrue(f.config.read_text().startswith(f.top))
                 # Native update may fast-forward before the apply refuses.
                 self.assertEqual(f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD", cwd=f.producer))
 
@@ -196,7 +195,7 @@ class UnixTakeoverTests(unittest.TestCase):
                      '[update]\ncommand="git"\nargs=["pull", "--rebase", "--autostash"]\n'):
             with self.subTest(config=text), UpdateFixture() as f:
                 f.advance()
-                f.config.write_text(text)
+                f.config.write_text(f.top + text)
                 before = f.git("rev-parse", "HEAD")
                 self.assert_warning(f.hook())
                 self.assertEqual(f.git("rev-parse", "HEAD"), before)
@@ -209,7 +208,7 @@ class UnixTakeoverTests(unittest.TestCase):
             f.advance()
             self.assert_warning(f.hook())
             self.assertEqual(target.read_text(), "keep live edit\n")
-            self.assertTrue(f.marker.is_file())
+            self.assertTrue(f.config.read_text().startswith(f.top))
             self.assertEqual(f.git("stash", "list"), "")
 
     def test_unavailable_remote_warns_without_apply_or_source_changes(self):
@@ -220,25 +219,33 @@ class UnixTakeoverTests(unittest.TestCase):
             self.assertEqual(f.git("rev-parse", "HEAD"), before)
             self.assertEqual((f.destination / ".sample").read_text(), "before\n")
 
-    def test_invalid_binding_and_onedrive_refuse_before_native_state_write(self):
-        for kind in ("copied-home", "partial", "symlink", "OneDrive"):
+    def test_invalid_config_and_onedrive_refuse_before_state_write(self):
+        for kind in ("other-home", "no-source-line", "symlink", "working-tree", "OneDrive"):
             with self.subTest(kind=kind), UpdateFixture() as f:
+                f.advance()
+                before = f.git("rev-parse", "HEAD")
                 state_before = f.state.read_bytes()
-                if kind == "copied-home":
-                    f.marker.write_text(f"dotfiles-chezmoi-v1\n{f.root}\n{f.source}\n")
-                elif kind == "partial":
-                    f.marker.write_text("dotfiles-chezmoi-v1\n")
+                text = f.config.read_text()
+                if kind == "other-home":
+                    f.config.write_text(text.replace(f'destDir = "{f.destination}"', f'destDir = "{f.root}"'))
+                elif kind == "no-source-line":
+                    f.config.write_text(text.replace(f'sourceDir = "{f.source}"\n', ""))
                 elif kind == "symlink":
-                    backup = f.marker.with_name("saved-native")
-                    f.marker.rename(backup)
-                    f.marker.symlink_to(backup)
+                    backup = f.config.with_name("saved-config")
+                    f.config.rename(backup)
+                    f.config.symlink_to(backup)
+                elif kind == "working-tree":
+                    # A local workingTree key would redirect a later init's sourceDir.
+                    f.config.write_text(f'workingTree = "{f.source}"\n' + text)
                 else:
                     moved = f.root / "OneDrive source"
                     f.source.rename(moved)
                     f.source = moved
-                    f.marker.write_text(f"dotfiles-chezmoi-v1\n{f.destination}\n{f.source}\n")
+                    f.config.write_text(text.replace(f'sourceDir = "{f.root / "source state"}"',
+                                                     f'sourceDir = "{moved}"'))
                 self.assert_warning(f.hook())
                 self.assertEqual(f.state.read_bytes(), state_before)
+                self.assertEqual(f.git("rev-parse", "HEAD"), before)
 
     def test_optout_noninteractive_nested_session_and_maintenance_skip(self):
         for option in ("optout", "noninteractive", "nested", "maintenance"):
@@ -250,7 +257,7 @@ class UnixTakeoverTests(unittest.TestCase):
                 elif option == "nested":
                     env["_DOTFILES_CHECKED"] = "1"
                 elif option == "maintenance":
-                    f.marker.with_name("maintenance").touch()
+                    f.maintenance.touch()
                 before = f.git("rev-parse", "HEAD")
                 state_before = f.state.read_bytes()
                 result = f.hook(env=env, interactive=option != "noninteractive")
@@ -337,7 +344,7 @@ class UnixTakeoverTests(unittest.TestCase):
                 self.assertIn("[--no-tty][--error-on-conflict]", calls[1])
                 self.assertNotIn("[--force]", calls[1])
 
-    def test_profiles_select_native_source_binding_and_maintenance_survives_new_logins(self):
+    def test_profiles_select_the_configured_source_and_maintenance_survives_new_logins(self):
         for shell in ("bash", "zsh"):
             executable = shutil.which(shell)
             if executable is None:
@@ -357,7 +364,7 @@ class UnixTakeoverTests(unittest.TestCase):
                         "-ic", '. "$HOME/.profile"' if shell == "bash" else 'source "$HOME/.zshrc"']
                 for maintenance in (False, True, True):
                     if maintenance:
-                        f.marker.with_name("maintenance").touch()
+                        f.maintenance.touch()
                         if log.exists():
                             log.unlink()
                     result = subprocess.run(args, env=env, cwd=f.root, stdin=subprocess.DEVNULL,
@@ -370,9 +377,9 @@ class UnixTakeoverTests(unittest.TestCase):
                         # A login updates; payloads install only through sync-payloads.
                         self.assertEqual(log.read_text().splitlines(), ["chezmoi-update"])
 
-    def test_noninteractive_profile_skips_invalid_native_binding_quietly(self):
+    def test_noninteractive_profile_skips_invalid_config_quietly(self):
         with UpdateFixture() as f:
-            f.marker.write_text("partial takeover\n")
+            f.config.write_text(f.config.read_text().replace(f.top, ""))
             result = f.hook("home/dot_profile", interactive=False)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(result.stdout + result.stderr, "")

@@ -227,18 +227,26 @@ function Set-FixtureChezmoi($Fixture) {
     if ($IsWindows -and $script:RealChezmoi -and -not [IO.File]::Exists($privateCopy)) { Install-FixtureChezmoi $privateCopy }
 }
 
-function Set-FixtureNativeBound {
-    # The fixture home bound to Source (default: the fixture checkout) with a
-    # local config and a provisioned chezmoi. The marker holds canonical
-    # paths, as the guard compares them (/var is /private/var on macOS).
+function ConvertTo-FixtureChezmoiPath([string]$Path) {
+    # The form chezmoi init writes: on Windows forward slashes and an
+    # upper-case drive; elsewhere the canonical path (/var is /private/var on
+    # macOS), as the guard compares them.
+    $resolved = Resolve-DotfilesDirectory $Path
+    if (-not $IsWindows) { return $resolved }
+    $resolved = $resolved.Replace('\', '/')
+    return $resolved.Substring(0, 1).ToUpperInvariant() + $resolved.Substring(1)
+}
+
+function Set-FixtureConfigured {
+    # The fixture home's local config naming this home and Source (default:
+    # the fixture checkout) in the top-level lines chezmoi init writes, with
+    # the role, and a provisioned chezmoi.
     param($Fixture, [string]$Source = $Fixture.Repo)
     [IO.File]::WriteAllText((Join-Path $Source '.chezmoiroot'), "home`n")
-    $marker = Join-Path $Fixture.Home '.config/dotfiles/native'
     $config = Join-Path $Fixture.Home '.config/chezmoi/chezmoi.toml'
-    foreach ($path in @($marker, $config)) { [void][IO.Directory]::CreateDirectory((Split-Path -Parent $path)) }
-    $binding = "dotfiles-chezmoi-v1`n$(Resolve-DotfilesDirectory $Fixture.Home)`n$(Resolve-DotfilesDirectory $Source)`n"
-    [IO.File]::WriteAllText($marker, $binding)
-    [IO.File]::WriteAllText($config, "[data]`nhost = 'win'`n")
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $config))
+    [IO.File]::WriteAllText($config, "destDir = `"$(ConvertTo-FixtureChezmoiPath $Fixture.Home)`"`n" +
+        "sourceDir = `"$(ConvertTo-FixtureChezmoiPath $Source)`"`n`n[data]`n  host = 'win'`n")
     Set-FixtureChezmoi $Fixture
 }
 
@@ -845,7 +853,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
-        Set-FixtureNativeBound $fixture
+        Set-FixtureConfigured $fixture
         # Like recent real gh releases, this gh writes a telemetry device id
         # on every command, --version included, unless GH_TELEMETRY=0.
         New-Shim $fixture.Bin 'gh' @"
@@ -865,7 +873,7 @@ exit 0
             $cells[1]
         }
         Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('native-config', 'payloads')) -join ',') 'doctor ids'
-        Assert-True ($run.Lines -contains "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-") "native-config row: $($run.Stdout)"
+        Assert-True ($run.Lines -contains "ok`tnative-config`tcore`t~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff`t-") "native-config row: $($run.Stdout)"
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'doctor wrote files'
         $events = Get-FixtureEvents $fixture
         Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version' -and $events -contains 'gh --version') "version probes did not run: $($events -join '; ')"
@@ -889,7 +897,7 @@ exit 0
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture -Except @('wezterm')
-        Set-FixtureNativeBound $fixture
+        Set-FixtureConfigured $fixture
         New-ToolShim $fixture.Bin 'fzf' '0.44.1'
         $run = Invoke-Fixture $fixture doctor.ps1 @{}
         Assert-Exit $run 1 'outdated fzf'
@@ -948,7 +956,7 @@ exit 0
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
-        Set-FixtureNativeBound $fixture
+        Set-FixtureConfigured $fixture
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Online = $true; Tsv = $true }; Assert-Exit $run 0 'online doctor'
         foreach ($expected in @('gh auth status', 'claude auth status', 'codex login status')) { Assert-True ((Get-FixtureEvents $fixture) -contains $expected) "No $expected" }
         Assert-True ($run.Lines -contains "ok`tgh-auth`tcli`tgh is authenticated`t-") 'gh-auth row'
@@ -988,77 +996,89 @@ exit 0
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
-        Set-FixtureNativeBound $fixture
+        Set-FixtureConfigured $fixture
         $native = @{ Tsv = $true }
         $fix = 'docs/bootstrap.md HW-native'
         $repo = Resolve-DotfilesDirectory $fixture.Repo
         function Get-NativeConfigRow($Run) { return @($Run.Lines | Where-Object { $_ -cmatch "^[a-z]+`tnative-config`t" }) -join '|' }
         $run = Invoke-Fixture $fixture doctor.ps1 $native
-        Assert-Exit $run 0 'bound home'
-        Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-" 'bound row'
+        Assert-Exit $run 0 'configured home'
+        Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`t~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff`t-" 'configured row'
 
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
         $run = Invoke-Fixture $fixture doctor.ps1 $native
-        Assert-Exit $run 0 'bound home again'
-        Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-" 'bound row again'
+        Assert-Exit $run 0 'configured home again'
+        Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`t~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff`t-" 'configured row again'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'the native-config check wrote or removed files'
 
+        # Nothing else creates ~/.config/dotfiles: only a person's maintenance
+        # marker lives there.
         $maintenance = Join-Path $fixture.Home '.config/dotfiles/maintenance'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $maintenance))
         [IO.File]::WriteAllText($maintenance, '')
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'maintenance'
         Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tmaintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md`t$fix" 'maintenance row'
         [IO.File]::Delete($maintenance)
+        [IO.Directory]::Delete((Split-Path -Parent $maintenance))
 
-        $marker = Join-Path $fixture.Home '.config/dotfiles/native'
-        $binding = [IO.File]::ReadAllText($marker)
-        [IO.File]::WriteAllText($marker, "$($binding)extra`n")
-        $run = Invoke-Fixture $fixture doctor.ps1 $native
-        Assert-Exit $run 1 'invalid binding'
-        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tthe native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly`t$fix" 'invalid row'
-        [IO.File]::Delete($marker)
-        $run = Invoke-Fixture $fixture doctor.ps1 $native
-        Assert-Exit $run 1 'no binding'
-        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tno native binding (~/.config/dotfiles/native): this home has no first deployment; follow Fresh Windows home by hand in docs/bootstrap.md`t$fix" 'unbound row'
-        # sync-payloads needs a binding, so an unmarked home's payload advice
-        # is this checkout's -Now line.
-        $run = Invoke-Fixture $fixture doctor.ps1 $native @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        # Wherever sync-payloads refuses (a config the guard refuses, no
+        # config), the payload advice is this checkout's quoted -Now line.
         $hook = Join-Path (Join-Path $fixture.Repo 'scripts') 'payload-update.ps1'
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run & $hook -Now ITEM`tdocs/bootstrap.md H7-payloads") "unbound payloads row: $($run.Stdout)"
-        [IO.File]::WriteAllText($marker, $binding)
-
+        $nowAdvice = "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run & '$hook' -Now ITEM`tdocs/bootstrap.md H7-payloads"
         $config = Join-Path $fixture.Home '.config/chezmoi/chezmoi.toml'
         $configText = [IO.File]::ReadAllText($config)
+        $invalid = "human`tnative-config`tcore`t~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly`t$fix"
+        foreach ($variant in @(@('a case variant', $configText.Replace('sourceDir =', 'SourceDir =')),
+                @('a second destDir line', (($configText -split "`n", 2)[0] + "`n" + $configText)),
+                @('CRLF', $configText.Replace("`n", "`r`n")),
+                @('a workingTree key', ("workingTree = 'x'`n" + $configText)))) {
+            [IO.File]::WriteAllText($config, $variant[1])
+            $run = Invoke-Fixture $fixture doctor.ps1 $native
+            Assert-Exit $run 1 "invalid config: $($variant[0])"
+            Assert-Equal (Get-NativeConfigRow $run) $invalid "invalid row: $($variant[0])"
+        }
+        $run = Invoke-Fixture $fixture doctor.ps1 $native @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        Assert-True ($run.Lines -contains $nowAdvice) "invalid-config payloads row: $($run.Stdout)"
         [IO.File]::Delete($config)
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'no local config'
-        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tthe local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow Fresh Windows home by hand in docs/bootstrap.md`t$fix" 'config row'
+        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tthere is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh Windows home by hand in docs/bootstrap.md`t$fix" 'absent config row'
+        $run = Invoke-Fixture $fixture doctor.ps1 $native @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        Assert-True ($run.Lines -contains $nowAdvice) "absent-config payloads row: $($run.Stdout)"
+        [void][IO.Directory]::CreateDirectory($config)
+        $run = Invoke-Fixture $fixture doctor.ps1 $native
+        Assert-Exit $run 1 'config directory'
+        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`t~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly`t$fix" 'config directory row'
+        [IO.Directory]::Delete($config)
         [IO.File]::WriteAllText($config, $configText)
+        $run = Invoke-Fixture $fixture doctor.ps1 $native @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run sync-payloads ITEM`tdocs/bootstrap.md H7-payloads") "configured payloads row: $($run.Stdout)"
 
         $guard = Join-Path $fixture.Repo 'lib/chezmoi-guard.ps1'
         [IO.File]::Move($guard, "$guard.hidden")
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'no guard'
-        Assert-True ((Get-NativeConfigRow $run) -cmatch "^human`tnative-config`tcore`t.+lib.chezmoi-guard\.ps1 is unreadable, so the native binding cannot be checked; use a complete checkout`t$fix$") "guard row: $($run.Stdout)"
+        Assert-True ((Get-NativeConfigRow $run) -cmatch "^human`tnative-config`tcore`t.+lib.chezmoi-guard\.ps1 is unreadable, so the chezmoi config cannot be checked; use a complete checkout`t$fix$") "guard row: $($run.Stdout)"
         [IO.File]::Move("$guard.hidden", $guard)
 
-        # Bound to another checkout, as from a worktree or second clone: warn,
-        # naming both, and setup-host keeps the handover pending.
+        # A config naming another checkout, as from a worktree or second
+        # clone: warn, naming both, and setup-host keeps HW-native pending.
         $other = Join-Path $fixture.Root 'other'
         [void][IO.Directory]::CreateDirectory((Join-Path $other '.git'))
-        Set-FixtureNativeBound $fixture -Source $other
+        Set-FixtureConfigured $fixture -Source $other
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 0 'another checkout'
         $otherResolved = Resolve-DotfilesDirectory $other
         $row = Get-NativeConfigRow $run
-        Assert-True ($row.StartsWith("warn`tnative-config`tcore`tthis home is bound to $otherResolved, not to this checkout $repo; run ") -and
-            $row.EndsWith("doctor.ps1 for its native state`t$fix")) "elsewhere row: $($run.Stdout)"
+        Assert-True ($row.StartsWith("warn`tnative-config`tcore`t~/.config/chezmoi/chezmoi.toml names the checkout $otherResolved, not this checkout $repo; run ") -and
+            $row.EndsWith("doctor.ps1 for its state`t$fix")) "elsewhere row: $($run.Stdout)"
         $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
         Assert-True ([bool]($check.Lines -cmatch '^HW-native human ')) "HW-native for another checkout: $($check.Stdout)"
 
-        # The checkout reached through a junction or symlink is the bound one,
-        # for the doctor and for setup-host's HW-native alike.
-        Set-FixtureNativeBound $fixture
+        # The checkout reached through a junction or symlink is the configured
+        # one, for the doctor and for setup-host's HW-native alike.
+        Set-FixtureConfigured $fixture
         $link = Join-Path $fixture.Root 'repo-link'
         if ($IsWindows) { [void](New-Item -ItemType Junction -Path $link -Target $fixture.Repo) }
         else { [void](New-Item -ItemType SymbolicLink -Path $link -Target $fixture.Repo) }
@@ -1081,7 +1101,7 @@ exit 0
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
-        Set-FixtureNativeBound $fixture
+        Set-FixtureConfigured $fixture
         $native = @{ Tsv = $true }
         $installed = Join-Path $fixture.Home '.local/bin/chezmoi.exe'
         function Get-NativeConfigRow($Run) { return @($Run.Lines | Where-Object { $_ -cmatch "^[a-z]+`tnative-config`t" }) -join '|' }
@@ -1378,15 +1398,15 @@ exit 0
         $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' } $environment
         foreach ($id in @('W1-winget', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')) { Assert-True (@($check.Lines -like "$id done *").Count -eq 1) "$id not done after apply" }
 
-        # Once bound, only non-blocking blocks remain: they print, and the run exits 0.
-        Set-FixtureNativeBound $fixture
+        # Once configured, only non-blocking blocks remain: they print, and the run exits 0.
+        Set-FixtureConfigured $fixture
         # FAKE_PSRESOURCE_INSTALLED has PSResourceGet report CompletionPredictor
         # without its module directory; give it one, so no step is left todo.
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Modules 'CompletionPredictor'))
         $final = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment
         Assert-Exit $final 0 'apply with only non-blocking HUMAN steps'
         $finalBlocks = Get-HumanBlocks $final.Lines
-        Assert-True (@($finalBlocks | ForEach-Object Id) -contains 'HW-auth') 'HW-auth block missing once bound'
+        Assert-True (@($finalBlocks | ForEach-Object Id) -contains 'HW-auth') 'HW-auth block missing once configured'
         Assert-Equal $final.Lines[-1] '[dotfiles] [ok] setup-host: nothing blocking remains for win' 'done summary'
         Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' } $environment) 0 'check once only non-blocking steps remain'
     }
