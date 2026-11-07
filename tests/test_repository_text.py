@@ -41,8 +41,8 @@ RETIRED = re.compile("|".join((
     r"sherlock-kit\.md", r"\bstage[ -]?6\b",
     # A package path from before the native source moved into home/, in
     # either separator; home/.hosts/<role>/ paths are native.
-    r"(?:(?<=dotfiles/)|(?<![\w./\\~$-]))(?:common|mac|sherlock|wsl-ubuntu|lab-ubuntu|marlowe|win)/(?-i:[a-z._])",
-    r"(?:(?<=dotfiles\\)|(?<![\w./\\~$-]))(?:common|win)\\(?-i:[a-z._])",
+    r"(?<!\.hosts[/\\])(?<![\w.-])(?-i:common|mac|sherlock|wsl-ubuntu|lab-ubuntu|marlowe|win)/(?!/)",
+    r"(?<!\.hosts[/\\])(?<![\w.-])(?-i:common|win)\\(?=[\w.*$])",
 )), re.IGNORECASE)
 
 RESIDUE, RECOVERY, NEGATIVE = "residue", "recovery", "negative"
@@ -75,7 +75,13 @@ POLICY = "the e2e HUMAN-block policy fails the retired deployment steps"
 SUBMODULES = "names the retired submodule checkouts a host may still hold, which .gitignore hides"
 KEPT = (
     Kept(".gitignore", "/.venv-sync/", 1, RESIDUE, "hides a host's leftover parser environment until it is removed"),
-    Kept("tests/test_chezmoi_source_state.py", '"/.venv-sync/"', 1, RESIDUE, "pins that .gitignore line"),
+    Kept(".gitignore", "/common/", 4, RESIDUE, "hides a retired submodule checkout a host may still hold until it is removed"),
+    Kept("tests/test_chezmoi_source_state.py", 'for pattern in ("/.venv-sync/", "/common/codex', 1, RESIDUE,
+         "pins those .gitignore lines"),
+    Kept("tests/test_chezmoi_source_state.py", '"/common/coding-agent-kit/coding-agent-kit/"', 1, RESIDUE,
+         "pins those .gitignore lines"),
+    Kept("tests/test_chezmoi_source_state.py", '"/common/sherlock-kit/sherlock-kit/"', 1, RESIDUE,
+         "pins those .gitignore lines"),
     Kept("README.md", "Homes still deployed by GNU Stow", 1, RECOVERY, "points an old home at bf99958"),
     Kept("docs/bootstrap.md", "`common/", 3, RESIDUE, SUBMODULES),
     Kept("docs/payloads.md", "| `common/", 4, RESIDUE, SUBMODULES),
@@ -289,7 +295,8 @@ RETIRED_SAMPLES = (
     "docs/installer-contract.md", "tests/update-hooks.ps1", "- id: update-hooks", "docs/sherlock-kit.md",
     "until Stage 6", "stage-6-retirement.md", "common/claude/.claude/settings.json",
     "~/dotfiles/common/zsh/.zshrc", "win/powershell/Documents/PowerShell/profile.ps1", "deploys win\\wsl",
-    "mac/git/.gitconfig_local", "dotfiles\\win\\terminal",
+    "mac/git/.gitconfig_local", "dotfiles\\win\\terminal", "$ROOT/common/claude", "`common/`", "common/*",
+    "common\\PACKAGE", "$DOTFILES/win/x",
 )
 NATIVE_SAMPLES = (
     "scripts/chezmoi-update.sh", "scripts/payload-update.sh --now", "sync-payloads", "sync-skills",
@@ -300,8 +307,8 @@ NATIVE_SAMPLES = (
     "uv sync", "Stage 5", "~/.codex/AGENTS.override.md", "tests/test_chezmoi_takeover_unix.py",
     "persistentState", "native-config", "an unmarked home runs no updater", "audit-sync-venv",
     "home/.hosts/win/.ssh/config.d/legacy.conf", "docs/update-contract.md", "tests/repository-text.sh",
-    "home/.hosts/wsl-ubuntu/.config/sh/.profile", "--host wsl-ubuntu\\n", "mac/Ubuntu", "common-only",
-    "$HOME\\.ssh\\id_ed25519",
+    "home/.hosts/wsl-ubuntu/.config/sh/.profile", "--host wsl-ubuntu\\n", "common-only",
+    "$HOME\\.ssh\\id_ed25519", "Mac/Windows", "home/.hosts/win\\.ssh", "home\\.hosts\\win\\x",
 )
 
 
@@ -355,9 +362,9 @@ class MarkdownLinkTests(unittest.TestCase):
     def test_missing_tracked_markdown_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "a.md").write_text("[gone](gone.md)\n", encoding="utf-8")
+            (root / "a.md").write_text("[gone](gone.md)\n[part](gone.md#x)\n", encoding="utf-8")
             problems = broken_links(root, ["a.md", "gone.md"])
-        self.assertEqual(problems, ["gone.md: tracked but missing from the work tree"])
+        self.assertEqual(problems, ["a.md:2: no heading for gone.md#x", "gone.md: tracked but missing from the work tree"])
 
     def test_tracked_markdown_links_and_anchors_resolve(self):
         problems = broken_links(ROOT, tracked(ROOT))

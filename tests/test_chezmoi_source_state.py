@@ -149,7 +149,7 @@ class SourceContractTests(unittest.TestCase):
                                 stdout=subprocess.PIPE, text=True, timeout=30).stdout
         modes = {entry.split("\t", 1)[1]: entry.split(" ", 1)[0] for entry in listed.split("\0") if entry}
         self.assertEqual({path: mode for path, mode in modes.items() if mode not in ("100644", "100755")}, {})
-        executable = re.compile(r"^(?:encrypted_)?(?:private_)?(?:readonly_)?(?:empty_)?executable_")
+        executable = re.compile(r"^(?:create_|modify_)?(?:encrypted_)?(?:private_)?(?:readonly_)?(?:empty_)?executable_")
         wrong = {path: mode for path, mode in modes.items() if path.startswith("home/")
                  and (mode == "100755") != bool(executable.match(PurePosixPath(path).name))}
         self.assertEqual(wrong, {})
