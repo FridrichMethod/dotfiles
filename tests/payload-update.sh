@@ -203,12 +203,13 @@ rm "$HOME_DIR/.config/dotfiles/maintenance"
 expect_events ''
 expect_no_state 'a call without --now'
 
-# sourced SHELL: source the hook from an interactive SHELL, directly and from
-# a function, as rc files read before Stage 5 did. Prints "rc=DIRECT NESTED
+# sourced SHELL [ARGS]: source the hook from an interactive SHELL, directly
+# and from a function, as rc files read before Stage 5 did, with the
+# space-separated ARGS as its positional parameters. Prints "rc=DIRECT NESTED
 # unchanged" when the shell's flags, options and traps are as before and the
 # hook left none of its variables or functions behind, else what leaked.
 sourced() {
-    local shell=$1
+    local shell=$1 args=${2-}
     shift
     case $shell in
         bash) set -- bash --noprofile --norc -i -c ;;
@@ -216,11 +217,12 @@ sourced() {
         sh) set -- sh -i -c ;;
     esac
     # shellcheck disable=SC2016 # expanded by the sourcing shell
-    in_env PAYLOAD_HOOK="$FIXTURE/scripts/payload-update.sh" "$@" 'saved_flags=$-; saved_options=$(set +o); saved_traps=$(trap)
+    in_env PAYLOAD_HOOK="$FIXTURE/scripts/payload-update.sh" PAYLOAD_ARGS="$args" "$@" 'saved_flags=$-; saved_options=$(set +o); saved_traps=$(trap)
+        eval "set -- $PAYLOAD_ARGS"
         . "$PAYLOAD_HOOK"; direct=$?
         via_function() { . "$PAYLOAD_HOOK"; }
-        via_function; nested=$?
-        leaked=$(set | grep -E "^(repo|config|tab|timeout|connect|staging|offline|failed|item|arg)=" | cut -d= -f1 | tr "\n" " ")
+        via_function "$@"; nested=$?
+        leaked=$(set | grep -E "^(repo|config|tab|timeout|connect|staging|offline|failed|item|argument)=" | cut -d= -f1 | tr "\n" " ")
         for f in fail field known payload_script unstage installed run dotfiles_log; do
             [ "$(command -v "$f")" != "$f" ] || leaked="$leaked$f() "
         done
@@ -231,19 +233,22 @@ sourced() {
 
 # Sourced, each call prints the usage line and returns 2 to the sourcing
 # shell, which stays alive with its flags, options and traps unchanged and
-# none of the hook's variables or functions defined.
+# none of the hook's variables or functions defined: with no arguments, and
+# with --now followed by a retired flag, which takes the argument scan.
 for shell in bash zsh sh; do
     command -v "$shell" >/dev/null 2>&1 || {
         printf 'SKIP: %s not installed\n' "$shell"
         continue
     }
-    new_home
-    sourced "$shell"
-    expect_events ''
-    [[ "$(cat "$OUT")" == 'rc=2 2 unchanged' ]] || fail "sourcing the hook under $shell: $(cat "$OUT")"
-    [[ "$(grep -v -e 'job control' -e 'terminal process group' -e 'access tty' -e '^stty: ' "$ERR" || :)" == "$USAGE"$'\n'"$USAGE" ]] ||
-        fail "sourcing the hook under $shell did not print one usage line per call"
-    expect_no_state "sourcing the hook under $shell"
+    for args in '' '--now --auto'; do
+        new_home
+        sourced "$shell" "$args"
+        expect_events ''
+        [[ "$(cat "$OUT")" == 'rc=2 2 unchanged' ]] || fail "sourcing the hook under $shell with [$args]: $(cat "$OUT")"
+        [[ "$(grep -v -e 'job control' -e 'terminal process group' -e 'access tty' -e '^stty: ' "$ERR" || :)" == "$USAGE"$'\n'"$USAGE" ]] ||
+            fail "sourcing the hook under $shell with [$args] did not print one usage line per call"
+        expect_no_state "sourcing the hook under $shell with [$args]"
+    done
 done
 # A login runs none either; the update dispatch is all that remains there.
 in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/home/dot_profile" >"$OUT" 2>"$ERR" ||
