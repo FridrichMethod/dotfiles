@@ -1,5 +1,7 @@
 # Fresh-session prompt: Stage 3
 
+> Archived: this stage is complete ([status.md](status.md)); do not start a session from this prompt.
+
 ```text
 Implement only Stage 3 of the chezmoi migration. Do not redo Stage 2 or continue
 automatically into Stage 4; no real HOME takeover or secret enrollment here.

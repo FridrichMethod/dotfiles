@@ -11,6 +11,15 @@ the current state in [status.md](status.md). Plain native apply changes existing
 directory modes; use the corrected file-only procedure below.
 See [status](status.md) for actual host outcomes and [fleet order](fleet-rollout.md).
 
+Since Stage 6, the steps that convert a home still deployed by Stow (the old
+updater, its lock and the Windows restow task, and the Stow links) run only in
+a checkout of `bf99958`, the immutable recovery and conversion source: current
+`main` has none of them. The native inspection, initialization and update
+steps apply on current `main` as well. A fresh home follows H7-native or
+HW-native in [bootstrap.md](../bootstrap.md); a native home follows
+[Updates and edits after takeover](#updates-and-edits-after-takeover) and the
+[update contract](../update-contract.md).
+
 The native floor is chezmoi 2.74.0. Bash 3.2, tmux 3.4, PowerShell 7 entrypoints
 and PowerShell 5.1's existing profile remain supported at their current floors
 (W1-chezmoi and `sync-payloads` included). Use separate native Windows and WSL
@@ -245,7 +254,7 @@ and legacy Windows task disabled. Record actual results for each host separately
 ## Updates and edits after takeover
 
 Interactive startup invokes `scripts/chezmoi-update.sh` or `.ps1` once per
-session. It uses the marker's source rather than a stale `DOTFILES_DIR`, refuses
+session. It uses the marker's source and never another checkout, refuses
 dirty tracked/untracked source, missing/empty native state and OneDrive source writes,
 and validates the safe native update override before calling it. Routine updates
 pin `--mode=file` even when an older local config selected symlinks, and use
@@ -305,10 +314,10 @@ or earlier file changes; it is not a transactional refusal. Do not remove the
 exclusion, delete state, or run plain apply to bypass it. Reconcile and require
 full file convergence after preparing the exact missing directories.
 
-`DOTFILES_AUTO_UPDATE=0` disables native login updates. `DOTFILES_AUTO_STOW` and
-`DOTFILES_HOST` remain legacy-only. Payloads are explicit-only (Stage 5 decision
-D7): no login, profile or schedule installs or refreshes them, and
-`DOTFILES_PAYLOAD_AUTO_UPDATE` is inert. `sync-payloads [ITEM...]` runs
+`DOTFILES_AUTO_UPDATE=0` disables native login updates; no other environment
+variable selects a host or re-enables a retired hook. Payloads are explicit-only
+(Stage 5 decision D7): no login, profile or schedule installs or refreshes
+them. `sync-payloads [ITEM...]` runs
 `scripts/payload-update.sh --now` (Windows: `payload-update.ps1 -Now`) from the
 validated bound source in the foreground and refuses an invalid binding;
 maintenance refuses it too. No new scheduler, revision acknowledgement database

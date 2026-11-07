@@ -404,7 +404,7 @@ keep the whole kit.
 | `common/codex/coding-agent-kit` (from before the kit moved to its own package) | `.git/modules/common/codex/coding-agent-kit` |
 | `common/coding-agent-kit/coding-agent-kit` | `.git/modules/common/codex/coding-agent-kit` (the submodule kept its first name) |
 | `common/pymol/PyMOLScripts` | `.git/modules/common/pymol/PyMOLScripts` |
-| `common/sherlock-kit/sherlock-kit` ([sherlock-kit.md](sherlock-kit.md)) | `.git/modules/common/sherlock-kit/sherlock-kit` |
+| `common/sherlock-kit/sherlock-kit` ([Sherlock residue](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual)) | `.git/modules/common/sherlock-kit/sherlock-kit` |
 
 A pull across a submodule's removal leaves its checkout on every host where it
 was checked out. They are harmless:
@@ -423,7 +423,7 @@ with `rm -rf <path>` (`Remove-Item -LiteralPath <path> -Recurse -Force` on
 Windows). Its repository under `.git/modules` can go the same way once no
 other leftover uses it: both kit leftovers share one, so remove it only after
 both checkouts are gone. Keep the `.gitignore` lines until no host has a
-leftover (Stage 6 Phase C removes them after verification).
+leftover; they go only once every host is verified clean.
 
 ## The kit on a dotfiles host
 

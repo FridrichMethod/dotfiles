@@ -7,7 +7,7 @@ deployment uses chezmoi 2.74.0 or newer.
 
 | Use | Requirements |
 | --- | --- |
-| Native Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities; no sync venv |
+| Native Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities; no Python environment |
 | Native Windows installation | chezmoi 2.74.0+, PowerShell 7+, Git; ordinary file updates are unelevated |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Payload repos ([payloads.md](payloads.md)) | `scripts/payload-update.*`, which `sync-payloads` runs: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
@@ -120,8 +120,9 @@ of missing them; manifest parity tests require every ID to remain documented.
 
 The Sherlock toolkit is installed and pinned by consumer projects from its
 [standalone repository](https://github.com/FridrichMethod/sherlock-kit).
-Dotfiles does not install `shk`, toolkit rules or skills. See
-[sherlock-kit.md](sherlock-kit.md) for migration of older hosts.
+Dotfiles does not install `shk`, toolkit rules or skills. What earlier
+delivery can leave on an old home is listed in the
+[support boundary](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual).
 
 ### Desktop tier
 

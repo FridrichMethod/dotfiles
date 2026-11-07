@@ -96,7 +96,7 @@ class ClaudeNativeTests(unittest.TestCase):
             self.assertEqual(snapshot(fixture.source), before)
 
     def test_stale_host_settings_render_the_portable_policy(self):
-        # The live file tests/ai-config-sync.sh merged, now rendered natively:
+        # A stale live host file, rendered natively:
         # policy keys come from the portable file, plugin-copied hooks clear,
         # and machine-local keys stay.
         copied = [{"hooks": [{"type": "command", "command": "old-plugin-copy"}]}]

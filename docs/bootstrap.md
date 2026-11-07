@@ -92,8 +92,9 @@ also a `~/.local/bin/chezmoi.exe` the login updater refuses
 
 #### Fresh home by hand
 
-A fresh home has no Stow links, no `~/.config/dotfiles/native`, no maintenance
-marker and no `~/.config/chezmoi/chezmoi.toml`. Nothing else writes it, so it
+A fresh home has no links into a dotfiles checkout, no
+`~/.config/dotfiles/native`, no maintenance marker and no
+`~/.config/chezmoi/chezmoi.toml`. Nothing else writes it, so it
 needs neither the quiescence nor the maintenance marker of
 [takeover.md](chezmoi-migration/takeover.md), and it runs that procedure's
 commands with the same explicit arguments. Anything else, or a function below
@@ -583,7 +584,7 @@ any form) the host is the one quoted `host` line of the `[data]` table in
 missing, repeated, unknown or otherwise spelled role, or a linked or absent
 config, exits 2 asking for `--host`. Any other home needs `--host` or
 `--platform` and exits 2 otherwise (for example in a fresh clone or a linked
-worktree); `DOTFILES_HOST` selects nothing. `common-only` as that
+worktree); no environment variable selects one. `common-only` as that
 `[data].host` means the doctor checks the platform it detects (`macos`,
 `debian`, `hpc` or `other`) without an overlay, exactly as `--platform` would,
 and warns that it did.
@@ -1493,7 +1494,8 @@ nodes.
 **Sherlock toolkit.** Consumer projects install and pin `shk` from its
 [standalone repository](https://github.com/FridrichMethod/sherlock-kit).
 Neither setup-host nor the handover installs its launcher, rules or skill.
-[sherlock-kit.md](sherlock-kit.md) covers retirement of earlier delivery.
+What earlier delivery can leave on an old home is listed in the
+[support boundary](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual).
 
 **OS and glibc.** Record `cat /etc/os-release` and `ldd --version` on each
 cluster; vendor binaries and conda-forge builds each need a minimum glibc.

@@ -1,9 +1,10 @@
 # Dotfiles
 
 Cross-platform configuration for macOS, WSL/Ubuntu, Stanford Sherlock, Marlowe
-and native Windows, deployed by native chezmoi as regular files. The native
-source lives in `home/`.
-Secret enrollment is explicit and encrypted; mutable auth/runtime state stays local.
+and native Windows, deployed by native chezmoi as regular files from the source
+state in `home/`. Each home selects its role through explicit local
+`[data].host`. Secret enrollment is explicit and encrypted; mutable
+auth/runtime state stays local.
 
 ## Quick Start
 
@@ -22,21 +23,24 @@ cd ~/dotfiles
 
 Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 setup-host installs tools and prints HUMAN blocks for commands it does not run,
-including sudo, authentication, allocations and login-shell changes. The default
-native path explicitly provisions verified chezmoi 2.74.0+ and creates no sync
-venv. Follow the HUMAN blocks, then the
-[native initialization/takeover procedure](docs/chezmoi-migration/takeover.md).
-Existing homes require ownership review and private backups before first apply.
+including sudo, authentication, allocations and login-shell changes. It
+provisions verified chezmoi 2.74.0+ and needs no Python environment. Follow the HUMAN
+blocks; H7-native prints the native install
+([bootstrap playbook](docs/bootstrap.md#h7-native-reviewed-native-configuration-handover)).
+Converting an existing home follows the
+[takeover procedure](docs/chezmoi-migration/takeover.md) and requires ownership
+review and private backups before first apply.
 File apply and login updates use `--exclude=dirs` to preserve existing shared
 parent permissions. Prepare only inspected missing directories through the
 native directory-only procedure; plain apply can change existing parent modes.
 
-GNU Stow deployment is retired. A home still deployed by Stow is unsupported:
-convert it from the recovery bridge `bf99958` under the
-[support boundary](docs/chezmoi-migration/support-boundary.md) before updating.
+Homes still deployed by GNU Stow (the pre-chezmoi layout) are unsupported:
+recover or convert one only from its last supported release, `bf99958`, by the
+[support boundary](docs/chezmoi-migration/support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable)
+procedure, never by updating it to current `main`.
 
-For native common-only installation on other Linux, select `common-only` in
-local chezmoi data and use `./doctor.sh --platform other`; install prerequisites by the
+On other Linux, set `[data].host = "common-only"` in the local chezmoi config,
+check with `./doctor.sh --platform other` and follow the
 [other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions).
 setup-host requires a supported explicit host. Do not build HPC environments
 outside a Slurm allocation or under scratch.
@@ -54,7 +58,7 @@ cd $HOME\dotfiles
 .\setup-host.ps1 -Host win
 ```
 
-Follow the HW-* HUMAN blocks and the native takeover procedure. Regular-file
+Follow the HW-* HUMAN blocks; HW-native prints the native install. Regular-file
 native updates run unelevated, without a scheduled task or UAC prompt. Both
 actual PowerShell profile paths and ordinary-user destination ACLs must be
 checked before takeover. See
@@ -192,10 +196,10 @@ sync-skills                           # sync-payloads skills
 ```
 
 On native Windows use these profile functions or `scripts/payload-update.ps1 -Now` in an ordinary, unelevated PowerShell. It manages PyMOLScripts and
-awesome-skills, not the kit. Retired submodule checkouts stay ignored as
-[leftover checkouts](docs/payloads.md#leftover-checkouts); inspect local work
-before removing one by hand. [Sherlock toolkit migration](docs/sherlock-kit.md) is
-separate: consumer projects pin/install their own toolkit.
+awesome-skills, not the kit. Inspect local work before removing a leftover
+checkout by hand ([leftover checkouts](docs/payloads.md#leftover-checkouts)).
+The [sherlock-kit](https://github.com/FridrichMethod/sherlock-kit) toolkit is
+separate: consumer projects pin/install their own.
 
 ## Checks and contribution
 
@@ -217,16 +221,15 @@ behavior. The
 optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.
 
-The [chezmoi migration](docs/chezmoi-migration/status.md) includes native
-Claude/Codex modifies, ordinary source under `home/`, explicit local `[data].host`
-and Stage 4 guarded takeover/update/provisioning. Native apply needs no sync venv.
-The [native contract](docs/config-sync.md#native-configuration-and-stage-4-handover) documents
-native serialization for policy changes, preservation of unchanged Claude/Codex input,
-exact ownership and safe refusal of unsupported inputs.
-CI requires verified v2.74.0; local native probes skip if chezmoi is absent,
-while an invalid explicit path fails. Unmarked homes run no login updater. Real
-takeover and selected secret enrollment require the [Stage 4 procedure](docs/chezmoi-migration/takeover.md)
-and recorded release gates; fixture passes are not real-host outcomes.
+The [chezmoi migration record](docs/chezmoi-migration/status.md) holds the
+staged history, gates and per-host outcomes. The
+[native contract](docs/config-sync.md#native-configuration) documents
+serialization, preserved Claude/Codex input, exact ownership and refusal of
+unsupported inputs. CI requires verified v2.74.0; local native probes skip if
+chezmoi is absent, while an invalid explicit path fails. Converting an existing
+home and enrolling selected secrets follow
+[takeover.md](docs/chezmoi-migration/takeover.md); fixture passes are not
+real-host outcomes.
 
 To add a configuration file, add it under `home/` with its chezmoi source name
 (a role-specific variant goes to `home/.hosts/<role>/<target>` behind a one-line
@@ -239,8 +242,8 @@ preparation from the [takeover procedure](docs/chezmoi-migration/takeover.md)
 before landing. Also check each applicable native host for an existing
 unmanaged file at the new path: the login update stops on it as a first-target
 conflict until it is reconciled under that procedure. For a file that applies
-on Windows, name its parent's ACL model first (see
-[start-stage-5.md](docs/chezmoi-migration/start-stage-5.md)). Native homes
+on Windows, name its parent's ACL model first (see the
+[update contract](docs/update-contract.md#new-targets)). Native homes
 receive the change through the login update. Keep secrets local, code in
 its shell dialect and documentation in English ASCII. Follow
 [AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy.

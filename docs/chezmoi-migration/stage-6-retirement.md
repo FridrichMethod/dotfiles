@@ -23,8 +23,14 @@ stdlib/platform behavior tests.
 [status.md](status.md)). Also follow [fleet rollout](fleet-rollout.md) and
 [secrets and SSH](secrets-and-ssh.md).
 
-**State:** Not started. Stage 5 landed on main as `b9f9d61..dddc718`; all six
-hosts took its login update and re-init, Windows last on 2026-11-04 (gate R3).
+**State:** Implemented, not landed. Phase A is integrated on the coordinator
+branch (A2 `42328b2`, A1 `414b00a`, A3 `1677e50`, A4 `17a6fcb`) and Phase B
+follows it in order: B1 `4dc9f78`, B2 `c5bdca4`, B3 `240338d`, B4 `c97e2e1`,
+B6 `a82b69c`, B5 `5dae7da`, D-10 `e243a2f`, then B7. Landing, the final
+exact-SHA CI and e2e and Phase C are pending; their outcomes go to the
+Stage 6 record in [status.md](status.md). Stage 5 landed on main as
+`b9f9d61..dddc718`; all six hosts took its login update and re-init, Windows
+last on 2026-11-04 (gate R3).
 
 Notation: every `file:line` is at `dddc718`. **Confirmed** = seen in code at the
 cited line; **Inference** = reasoned from code, not executed; **Uncertain** =
@@ -168,14 +174,14 @@ Each item names the commits of the ordered list below that do it.
 
 **Owner:** Source worker, exact subtrees allocated from the Stage 5 inventory.
 
-- [ ] Materialize the native source's ordinary files from their canonical legacy
+- [x] Materialize the native source's ordinary files from their canonical legacy
   content and remove temporary include/copy bridges. Preserve real templates only
-  where machine differences require them. (B5)
-- [ ] Move the canonical portable AI values into native source data/template
+  where machine differences require them. (B5 `5dae7da`)
+- [x] Move the canonical portable AI values into native source data/template
   locations. Keep one ownership definition and one policy value source. (A1, B5)
-- [ ] Verify output parity before deleting old physical package paths. Retain
+- [x] Verify output parity before deleting old physical package paths. Retain
   intended shell override composition and native Windows applicability. (B5)
-- [ ] Update tests that read `common/` directly to use native source or rendered
+- [x] Update tests that read `common/` directly to use native source or rendered
   fixtures. Preserve new tmux configuration and its stdlib metric runtime. (B5)
 
 ### Runtime and caller retirement
@@ -184,27 +190,27 @@ Each item names the commits of the ordered list below that do it.
 
 Audit and remove each item only once no supported caller needs it:
 
-- [ ] `stow-all.sh`, `stow-all.ps1`, `.stowrc`, normal symlink-trust helpers and
+- [x] `stow-all.sh`, `stow-all.ps1`, `.stowrc`, normal symlink-trust helpers and
   retired auto-stow/update implementation selected for removal in Stage 5.
-  Preserve the thin native login update adapter required by D6. (B2)
-- [ ] Retired Sherlock/kit/PyMOL link repair, `filter.codex-portable` cleanup,
+  Preserve the thin native login update adapter required by D6. (B2 `c5bdca4`)
+- [x] Retired Sherlock/kit/PyMOL link repair, `filter.codex-portable` cleanup,
   generated-override repair, `scripts/awesome-skills-update.sh` and remaining old
   layout consumers/fixtures listed in `support-boundary.md`. Delete them with
   their old owners instead of porting them into chezmoi. Keep a short manual
   override-shadowing warning and old-host upgrade instructions. (B2 for the
-  installer repairs, which live only in `stow-all.*`; B4 for the shim)
+  installer repairs, which live only in `stow-all.*`; B4 `c97e2e1` for the shim)
 - [x] `lib/config_sync.py`, `lib/sync-runtime.sh`, three AI sync wrappers and
   fcitx5 materialization helper. (B3)
 - [x] `setup-sync.sh`, `setup-sync.ps1`, `requirements-sync.txt`, sync-specific
   `.venv-sync` probes/setup, `DOTFILES_SYNC_PYTHON` support and old dependency rows.
   (B1, B3)
-- [ ] Bootstrap S4/W1 branches and edges in `lib/bootstrap/steps-runtimes.sh`,
+- [x] Bootstrap S4/W1 branches and edges in `lib/bootstrap/steps-runtimes.sh`,
   `steps.sh`, `steps-human.sh`, `checks.sh`, `manifest.sh`, `lib/bootstrap.ps1`,
-  `setup-host.*` and `doctor.*`, as they exist after Stage 5. (B1)
+  `setup-host.*` and `doctor.*`, as they exist after Stage 5. (B1 `4dc9f78`)
 - [x] Unconditional parser runtime checks in `tests/run.*`, fixture environment
   support, legacy sync tests, pre-commit hooks and all CI parser-provision steps.
   (A2, B3)
-- [ ] Corresponding bootstrap fixtures/e2e steps, tool/document parity entries,
+- [x] Corresponding bootstrap fixtures/e2e steps, tool/document parity entries,
   obsolete docs and mirrored skill instructions. (A3, A4, B1-B4, B7)
 
 Search active callers with `rg` across tracked sources, not ignored third-party
@@ -225,8 +231,9 @@ The concrete plan is [Native-only verification plan](#native-only-verification-p
   against the final layout. Python stdlib remains allowed for those purposes.
 - [ ] Verify minimum-version failure is actionable and the documented source
   edit/add/merge workflow works without legacy paths.
-- [ ] Verify checks and documentation no longer instruct a new user to create
+- [x] Verify checks and documentation no longer instruct a new user to create
   `.venv-sync`, run setup-sync or install Stow for native dotfile deployment.
+  (B7: enforced on every commit by `tests/test_repository_text.py`)
 
 ## Ordered commits
 
@@ -559,7 +566,8 @@ Edit:
   configuration" `:106-134` legacy bullets; tests/COVERAGE.md.
 - `common/claude/.claude/settings.json:168-169`: autoMode prose names "GNU Stow
   link target" and `.venv-sync` (D-10; a separate reviewed commit that a human
-  applies; rendered Claude settings change on every host).
+  applies; rendered Claude settings change on every host). Done: D-10
+  `e243a2f`, the exact diff the user approved on 2026-11-06.
 
 **B4 `refactor!: end the Stage 5 payload transition`**
 
@@ -673,6 +681,11 @@ gone; the pwsh floor stays 7.0. What remains: the profile sets `$PSStyle`
 `scripts/chezmoi-update.sh:39` (`command -v chezmoi`) accept a PATH chezmoi by
 design. `Test-SetupStowed`'s `LinkTarget` use leaves with B1.
 
+Implemented as `a82b69c` (`fix: guard PowerShell 7.2 profile features so the
+7.0 floor holds`) under D-15(a) and its ruling: `$PSStyle` and every PSReadLine
+2.2-only prediction option sit behind feature guards, and Unix keeps the PATH
+chezmoi. The heading above is the planning name.
+
 **B7 `docs: close Stage 6`**
 
 - README, AGENTS.md (drop every "until Stage 6" clause and the Stow/legacy rules;
@@ -685,6 +698,16 @@ design. `Test-SetupStowed`'s `LinkTarget` use leaves with B1.
   recovery tasks visible.
 - Optional repository test that retired names appear only under
   `docs/chezmoi-migration/**` and the kept `.gitignore` residue lines (D-12).
+
+Implemented: `tests/test_repository_text.py` (hook `repository-text`, run on
+every commit) scans every tracked file and path outside
+`docs/chezmoi-migration/` with a reviewed allowlist whose entries name their
+kind (residue, recovery or native negative) and exact line count, and checks
+every relative Markdown link and anchor, history included. D-7 moved the
+identifiers of `docs/sherlock-kit.md` into support-boundary.md (Historical
+Sherlock delivery residue) before deleting it. `start-stage-1.md` to
+`start-stage-5.md` are archived in place; `start-stage-6.md`, the status.md
+Stage 6 record and the remaining boxes wait for the Phase C records commit.
 
 ### Phase C: fleet rollout and residue retirement
 
@@ -716,7 +739,7 @@ design. `Test-SetupStowed`'s `LinkTarget` use leaves with B1.
 | `lib/bootstrap/steps-guard.sh`; rc-pollution check (D-14) | Stage 5 kept both as cheap tripwires; after Stage 6 the checkout-unchanged invariant has no `.venv-sync` exception |
 | `.gitignore:55` and `:74-86` | Residue guards (D-8) |
 | `.gitattributes` CRLF rules (retargeted in B5) and `*.age -text` | Byte parity |
-| `.gitleaks.toml` covering the native `[attribute_]dot_secrets` encoding (only the eight approved Claude age ciphertexts allowlisted) | Secret scanning |
+| `.gitleaks.toml` covering the native `[attribute_]dot_secrets` encoding; its allowlist is one regex for `home/private_dot_secrets/encrypted_private_claude-<name>.age` (eight such files today) | Secret scanning |
 | No-externals and no-submodule tests (`tests/test_chezmoi_source_state.py:57-73`) | Stage 5 invariants |
 | tmux floor 3.4 (`tools.tsv:34`, `hpc-login-env.yml:24`), Linux CI apt `tmux` and `DOTFILES_TEST_REQUIRE_TMUX=1` | A missing or old tmux fails CI instead of skipping |
 | Native suites (`tests/chezmoi.*`, `chezmoi-takeover.*`, every `test_chezmoi_*.py`, `chezmoi_support.py`, `chezmoi_source_support.py`) and behavior suites (shell, tmux, PowerShell, terminal, AI integration, payload, doctor, setup-host, bootstrap, e2e) | Coverage, retargeted, not deleted |
@@ -738,8 +761,11 @@ design. `Test-SetupStowed`'s `LinkTarget` use leaves with B1.
    the `.venv-sync`/`venv-sync` negatives in `tests/test_chezmoi_provision.py`
    (`:98`, `:262`, `:312`), the cleared-knob assertion in
    `tests/test_environment.py`); the D-12 retired-name test and the A4
-   e2e `.venv-sync` audit; D-10 prose in `common/claude/.claude/settings.json`
-   until D-10 lands; `DOTFILES_DIR` only where D-6 keeps it:
+   e2e `.venv-sync` audit; `DOTFILES_DIR` only where D-6 keeps it. B7 replaces
+   this grep with `tests/test_repository_text.py` (D-12): a broader pattern
+   over every tracked file and path outside `docs/chezmoi-migration/`, with an
+   explicit reviewed allowlist (kind and exact count). The grep below is the
+   planning form:
 
    ```sh
    git grep -n -E 'tomlkit|config_sync|sync-runtime|DOTFILES_SYNC_PYTHON|DOTFILES_DIR|setup-sync|venv-sync|stow-all|dotfiles-update|dotfiles-auto-stow|awesome-skills-update|stow-links|legacy-stow|LegacyStow|BOOTSTRAP_LEGACY_STOW|DOTFILES_AUTO_STOW|DOTFILES_PAYLOAD_AUTO_UPDATE|dotfiles-sync-(unix|windows)|windows-link-trust|requirements-sync' -- ':!docs/chezmoi-migration'
@@ -900,7 +926,8 @@ docs 11,807 -> 12,202; all tracked text 62,496 -> 64,218.
    legacy scripts), Codex ownership (`test_chezmoi_codex.py`). A1/B2 handle them;
    review with tests/COVERAGE.md.
 8. **Policy prose change propagates** (D-10): rendered Claude settings change on
-   every host.
+   every host. D-10 is done (`e243a2f`); the change reaches each host at its
+   Stage 6 update.
 9. **Big-bang landing.** Land the A commits first; keep B commits atomic and in
    order; one `ci/**` run per checkpoint.
 10. **Pre-existing doctor gaps mistaken for regressions** (missing tmux plugin
@@ -922,6 +949,12 @@ docs 11,807 -> 12,202; all tracked text 62,496 -> 64,218.
 ## Open decisions
 
 Ask the user these, with the recommendations, before the commits that need them.
+
+Answered on 2026-11-05 and 2026-11-06 (status.md, User decisions). Three
+answers differ from the recommendations below: D-2 chose (b), the dot-directory
+`home/.hosts/<role>/`; D-3 (a) put the policy directory inside the source as
+`home/.policy/`, not at the repository root; and D-8 chose (b). D-10 is done
+(`e243a2f`).
 
 | ID | Decision | Options (recommendation first) |
 | --- | --- | --- |

@@ -87,6 +87,14 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.pre-commit-config\.yaml|tests/[^/]+\.(sh|ps1)|tests/test_environment\.py|tests/lib/environment\.(sh|ps1)|tests/fixtures/chezmoi/targets\.tsv)$
+      - id: repository-text
+        name: retired mechanism names and Markdown links
+        entry: tests/repository-text.sh
+        language: script
+        pass_filenames: false
+        # Any tracked file can bring a retired name back and any deletion can
+        # break a link, so this whole-repository scan runs on every commit.
+        always_run: true
       - id: chezmoi-native
         name: isolated native chezmoi deployment, transforms and encryption
         entry: tests/chezmoi.sh

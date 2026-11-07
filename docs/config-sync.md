@@ -1,6 +1,6 @@
 # Native AI configuration contract
 
-## Native configuration and Stage 4 handover
+## Native configuration
 
 The native source has `home/dot_claude/modify_private_settings.json` and
 `home/dot_codex/modify_private_config.toml`. They use the native
@@ -8,9 +8,10 @@ The native source has `home/dot_claude/modify_private_settings.json` and
 policy raw with a source-relative `include` of `home/.policy/claude-settings.json`
 and `home/.policy/codex-config.toml` (a dot-directory chezmoi never deploys), and
 let chezmoi write private regular files. Native deployment invokes no Python,
-external jq, TOMLKit, custom writer or sync environment. Stage 4 adds the
-reviewed [takeover procedure](chezmoi-migration/takeover.md). Candidate CI and
-rollout results are recorded separately in the migration status.
+external jq, TOML library, custom writer or virtual environment. Converting an
+existing home follows the reviewed
+[takeover procedure](chezmoi-migration/takeover.md); host results are recorded
+in the [migration status](chezmoi-migration/status.md).
 
 Claude retains recursive object merge with portable leaves winning and arrays
 replaced wholesale, including empty arrays. Local model, additionalDirectories
@@ -64,8 +65,8 @@ types and JSON number spelling are not, so `1` and `"1"` or `1.0` still rewrite.
 A Claude no-op also keeps duplicate live keys whose native last value already
 matches. This is a conservative equality check, not a new parser or formatting
 engine. Second apply converges. `private_` normally produces Unix 0600;
-stricter/readonly existing modes and actual Windows ACLs need Stage 4
-destination review. An administrative synthetic ACL is not that review.
+stricter/readonly existing modes and actual Windows ACLs need the takeover
+procedure's destination review. An administrative synthetic ACL is not that review.
 Neither failures nor native conflict refusal promise a whole-home transaction.
 Exit status matters even when stderr is empty; routine apply must retain
 `--mode=file --less-interactive --no-tty --error-on-conflict --force=false`, closed stdin

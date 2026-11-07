@@ -1,5 +1,7 @@
 # Fresh-session prompt: Stage 1
 
+> Archived: this stage is complete ([status.md](status.md)); do not start a session from this prompt.
+
 Paste the following into a new session opened in the dotfiles repository. This
 replaces both earlier startup prompts; the compatibility-removal work is part of
 the staged migration. Later stages must write their own next-session prompt in

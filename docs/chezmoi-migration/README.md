@@ -1,17 +1,19 @@
 # Chezmoi migration handoff
 
-Status: Stage 5 (ecosystem simplification) is done. It landed at `dddc718`
-after exact CI 41832666587 and bootstrap e2e 41832666818; the five Unix hosts
-reached it through their login updater and took the reviewed `persistentState`
-re-init, and Windows did the same on 2026-11-04 (at `57fbc45`) through a
-user-approved limited-token task.
+Status: Stage 6 (legacy retirement) is implemented on the coordinator
+integration branch; landing, the final exact-SHA CI and e2e and the host-side
+Phase C are pending (see [status.md](status.md) and the
+[Stage 6 plan](stage-6-retirement.md)). Stage 5 (ecosystem simplification) is
+done. It landed at `dddc718` after exact CI 41832666587 and bootstrap e2e
+41832666818; the five Unix hosts reached it through their login updater and
+took the reviewed `persistentState` re-init, and Windows did the same on
+2026-11-04 (at `57fbc45`) through a user-approved limited-token task.
 Stage 4 native takeover is accepted on all six hosts, with all eight approved
 static credentials enrolled on the five Unix hosts. Runtime `bf99958`, encrypted
 source `74985d08` and formatting correction `15068b9` passed their exact hosted
 CI/e2e gates before main landing and relevant host operations. Recovery custody
 is established. Actual outcomes, historical partial operations and application
-limits are recorded in [status.md](status.md). Stage 6 is next and has not
-started: read that record, then the fresh-session prompt
+limits are recorded in [status.md](status.md). The Stage 6 session prompt is
 [start-stage-6.md](start-stage-6.md). Initial research baseline: `738f619`;
 consolidation baseline: `1a9d30b`. The completed review's old-layout/tool-support
 plan is now integrated in [support-boundary.md](support-boundary.md); do not
@@ -123,10 +125,10 @@ plaintext credentials or decryption identities. Real enrollment belongs to Stage
 Do not use `exact_` or broad removal rules on shared `.ssh`, `.claude`, `.codex`,
 `.oh-my-zsh`, `.tmux` or payload directories.
 
-The current `AGENTS.md` describes Stow/TOMLKit as active implementation rules.
-The coordinator updates only rules needed by the stage being implemented, citing
-this migration direction and preserving only the layout/version contract still
-supported by that stage. Apply the explicit support-cutoff decision; do not keep
+Stage 6 removed the Stow/TOMLKit rules from `AGENTS.md`; until then it
+described them as active implementation rules. The coordinator updated only
+rules needed by the stage being implemented, citing this migration direction
+and preserving only the layout/version contract still supported by that stage. Apply the explicit support-cutoff decision; do not keep
 old retention rules active indefinitely or copy them into the native architecture.
 Do not leave future agents with contradictory active instructions. `CLAUDE.md`
 remains an import stub. Mirrored first-party skills remain identical.
@@ -140,7 +142,7 @@ remains an import stub. Mirrored first-party skills remain identical.
 | [3. Native configuration](stage-3-native-config.md) | Native AI modifies; complete candidate needs no sync venv | Implemented with explicit safe input refusals | Isolated native fixtures; Stage 4 performs takeover |
 | [4. Takeover](stage-4-takeover.md) | Declared cutoff, tested handover, real canary takeover, secret enrollment, thin login adapter | Ordered work packages with paths, guards, recovery and platform gates | Agent executes under the user's recorded six-host authorization |
 | [5. Ecosystem simplification](stage-5-ecosystem.md) | Smaller provisioning/diagnostics/payload integration and verified old-tool branch removal | Done at `dddc718`; [completion record](status.md#stage-5-completion-record-2026-11-04) | D7 resolved as explicit-only payloads; all six hosts updated and re-initialized (win on 2026-11-04, at `57fbc45`) |
-| [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Next; [fresh-session prompt](start-stage-6.md) | Roll out to all reachable unblocked hosts; record exceptions without an all-host waiting gate |
+| [6. Retirement](stage-6-retirement.md) | Delete old source/runtime and execute tested host-side retirement | Implemented (A1-A4, B1-B7); landing and Phase C pending; [session prompt](start-stage-6.md) | Roll out to all reachable unblocked hosts; record exceptions without an all-host waiting gate |
 
 Stages run in this order. Code completion and real-host operations are different
 facts: record both. Old installations may become unsupported at the declared
@@ -162,6 +164,8 @@ must disable old hooks and address running workers/tasks BEFORE crossing it.
 Document that unsupported installations cannot safely assume automatic upgrades.
 Do not add a fleet service or require an inventory of every offline installation.
 See [the cutoff procedure](support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable).
+Executed in Stage 6 on the repository side; the host side follows the
+Stage 6 record in [status.md](status.md).
 The implementing agent executes that procedure on accessible hosts. Quiesce old
 writers before publishing/crossing the breaking revision; a subsequent cleanup
 cannot repair an auto-pull race retroactively. Follow the fleet rollout order.

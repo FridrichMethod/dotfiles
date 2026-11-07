@@ -11,8 +11,7 @@ if [[ ! -f "$TEST_DIR/test_ai_integration.py" ]]; then
     echo 'ERROR: required AI integration test suite is missing.' >&2
     exit 1
 fi
-# test_ai_integration.py is standard-library only and never runs the AI-sync
-# parser, so a plain python3 runs it.
+# test_ai_integration.py is standard-library only, so a plain python3 runs it.
 command -v python3 >/dev/null 2>&1 || {
     echo 'ERROR: python3 is required for the AI integration tests.' >&2
     exit 1

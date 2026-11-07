@@ -1,5 +1,7 @@
 # Fresh-session prompt: Stage 4
 
+> Archived: this stage is complete ([status.md](status.md)); do not start a session from this prompt.
+
 ```text
 Implement only Stage 4 of the chezmoi migration. Do not redo Stage 3 or proceed
 automatically into Stages 5/6. Keep legacy physical source paths through this

@@ -76,6 +76,7 @@ node --test "$TEST_DIR/claude-customizations.cjs"
 
 tests=(
     test-entrypoints.sh
+    repository-text.sh
     chezmoi.sh
     terminal.sh
     shell-profile.sh

@@ -5,10 +5,12 @@ This is a source-derived migration inventory, not a live HOME scan or deployment
 record. No real secrets, account labels, SSH endpoints or remote hosts were read
 for this inventory. Stage numbers refer to the [migration plan](README.md).
 
-Historical since Stage 6 B5: the package paths below no longer exist and no
-test parses this table. The expected native targets live in
-`tests/fixtures/chezmoi/targets.tsv`; the reproducible check below runs only on
-a revision before B5.
+Historical (Stages 2-5): the package-to-target mapping before Stage 6. Stage 6
+B5 (`5dae7da`, parent `a82b69c`) materialized the source under `home/`; the
+package paths below no longer exist and no test parses this table. The
+expected per-role target sets live in `tests/fixtures/chezmoi/targets.tsv`; the
+reproducible check below and its line references describe the old layout and
+run only on a revision before B5 (for example `a82b69c`).
 
 Stage 4 keeps all 95 physical package paths, 67 ordinary native source entries and
 two AI modifies. Role target totals remain 49/56/55/59/54/54/26. Login profile

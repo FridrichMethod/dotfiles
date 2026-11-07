@@ -1,5 +1,7 @@
 # Fresh-session prompt: Stage 5
 
+> Archived: this stage is complete ([status.md](status.md)); do not start a session from this prompt.
+
 > Completed. Stage 5 landed at `dddc718` on 2026-11-04 after exact CI
 > 41832666587 and bootstrap e2e 41832666818. Its packages, user decisions,
 > review, host results (Windows finished on 2026-11-04) and open findings

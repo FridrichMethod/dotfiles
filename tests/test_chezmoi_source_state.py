@@ -223,7 +223,7 @@ class SourceContractTests(unittest.TestCase):
             # Native managed output uses platform separators; the table uses '/'.
             managed_files = {path.replace("\\", "/") for path in managed.stdout.split("\0") if path}
             # The payload repos install the launchers and Claude helpers; no
-            # role manages them (formerly the Stow check in ai-config-sync.sh).
+            # role manages them.
             self.assertEqual({path for path in managed_files for kit in KIT_PATHS
                               if path == kit or path.startswith(kit + "/")}, set())
             self.assertEqual(managed_files, set(expected))

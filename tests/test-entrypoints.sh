@@ -174,6 +174,8 @@ need = {
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
                          'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py',
                          'tests/fixtures/chezmoi/targets.tsv'],
+    'repository-text': ['README.md', 'AGENTS.md', 'docs/bootstrap.md', '.gitignore',
+                        'tests/test_repository_text.py', 'tests/repository-text.sh'],
     'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
                        'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                        'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',

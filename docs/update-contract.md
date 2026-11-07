@@ -76,6 +76,23 @@ The updater stops, with a warning and without touching the destination, when:
 - A source fast-forward can succeed before apply refuses a target. The update
   is not a whole-home transaction.
 
+## New targets
+
+A target added to the source reaches every bound home through this update,
+which stops on it when:
+
+- its parent directory is missing: an operator first prepares exactly that
+  directory with the reviewed directory-only apply of
+  [takeover.md](chezmoi-migration/takeover.md), since the update excludes
+  directories;
+- an unmanaged file already sits at its path: that first-target conflict
+  waits until it is reconciled under the same procedure.
+
+On Windows, a new target under an existing parent inherits that parent's ACL.
+Name the parent's ACL model for each new Windows target, and when the parent
+is broader than the intended file ACL, materialize the file under a reviewed
+protected ACL instead of relying on inheritance.
+
 ## Not provided
 
 No scheduler, receipts, locks, retries within a session, elevation or payload

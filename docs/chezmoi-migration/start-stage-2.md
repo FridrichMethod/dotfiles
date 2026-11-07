@@ -1,5 +1,7 @@
 # Fresh-session prompt: Stage 2
 
+> Archived: this stage is complete ([status.md](status.md)); do not start a session from this prompt.
+
 ```text
 Implement only Stage 2 of the chezmoi migration; do not restart Stage 1 or
 continue automatically into Stage 3.

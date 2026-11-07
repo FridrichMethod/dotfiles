@@ -70,10 +70,11 @@ LASTEXITCODE, which zoxide's directory tracking can reset. The tracked theme
 lives in home/dot_config/oh-my-posh, uses a release-tagged schema and ASCII
 glyph escapes, and supports shell integration/transient prompts. Re-render it
 after upgrades.
-Windows Terminal settings are a regular file that chezmoi applies; a Terminal
-UI save edits it in place and shows up as destination drift (`chezmoi diff`) to
-reconcile under the takeover procedure, and a Terminal restart is required for
-changes to load.
+Windows Terminal settings deploy as a native regular file. A Terminal UI save
+rewrites the live file, which shows up as destination drift (`chezmoi diff`);
+the next login update stops at it like any changed target until the edit is
+committed to the source or reconciled ([update contract](update-contract.md)).
+A Terminal restart loads changes.
 
 ## Lab input settings
 

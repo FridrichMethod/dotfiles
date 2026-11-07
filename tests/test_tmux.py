@@ -1,4 +1,4 @@
-"""The stowed tmux config loads TPM offline and agrees with bootstrap.
+"""The deployed tmux config loads TPM offline and agrees with bootstrap.
 
 Use a private server and a fake TPM: no user's server, plugins, shell startup
 files or network are reached. Real upstream plugin smoke checks are manual.

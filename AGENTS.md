@@ -17,7 +17,7 @@ six hosts.
 - Keep secrets and machine-specific absolute paths out of version control.
 - Write documentation, guides and skills in English using printable ASCII, tabs and line breaks only; the English-documentation hook enforces the character set. Payload repos use their own checks.
 - Preserve the layering: shared `home/` files first, then the role variant from `home/.hosts/<role>/`.
-- Update `README.md`, `setup-host` usage and script comments together when setup behavior changes.
+- Update `README.md`, setup-host/doctor usage and script comments together when setup behavior changes.
 
 ## Weight and dependencies
 
@@ -34,7 +34,7 @@ These files are installed on every host, including fresh machines and clusters, 
 
 - Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
 - Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
-- Native initialization/takeover: follow `docs/chezmoi-migration/takeover.md`.
+- Native install: follow the H7-native/HW-native blocks (`docs/bootstrap.md`); convert or recover an existing home only by `docs/chezmoi-migration/takeover.md` and `support-boundary.md`.
 - Install or update the payload repos now: `sync-payloads [ITEM...]`, or `sh scripts/payload-update.sh --now` (Windows: `scripts/payload-update.ps1 -Now`, unelevated)
 - Run checks: `pre-commit run --all-files`
 
@@ -44,21 +44,30 @@ Keep this guide below 28,000 bytes; move explanatory material to canonical docs,
 
 After modifying any file, run `pre-commit run --all-files` to ensure changes pass CI checks before committing.
 
-The [chezmoi migration](docs/chezmoi-migration/README.md) is staged. The native
-source uses explicit local `[data].host` and native AI transforms. Preserve
-unsupported-input refusal, exact ownership/policy parity and the pinned
-WebP/terminfo bytes. Provisioning is native only, without a sync venv.
-Maintenance blocks future dotfiles updates AND payload runs. First apply
-is not an ownership guard: review exact targets and private snapshots first.
-Real takeover follows exact candidate CI gates and existing D11 authority;
-commits/publication require active authorization. Enroll only privately selected
-static secrets with explicit recipients/bootstrap/recovery; no plaintext,
-identities or recurring OAuth state in source. Never force routine apply.
-Pin `--exclude=dirs` on native file apply/update to preserve shared parents;
-the tested release has no effective config-key equivalent. Prepare only exact
-missing directories with reviewed native directory-only apply. Future missing
-parents require that preparation before retry; a failure is not transactional.
-Review local umask and existing private-parent modes before takeover/enrollment.
+Native chezmoi owns deployment; history, gates and host outcomes are in the
+[migration record](docs/chezmoi-migration/status.md). Preserve unsupported-input
+refusal, exact AI ownership/policy parity and the pinned WebP/terminfo bytes.
+Maintenance blocks dotfiles updates AND payload runs. First apply is not an
+ownership guard: review exact targets and private snapshots first. Host installs
+and residue retirement follow exact candidate CI gates and existing D11
+authority; commits/publication require active authorization. Enroll only
+privately selected static secrets with explicit recipients/bootstrap/recovery;
+no plaintext, identities or recurring OAuth state in source. Never force routine
+apply. Pin `--exclude=dirs` on native file apply/update to preserve shared
+parents; the tested release has no effective config-key equivalent. Prepare only
+exact missing directories with reviewed native directory-only apply. Future
+missing parents require that preparation before retry; a failure is not
+transactional. Review local umask and existing private-parent modes before
+install/enrollment. Old-layout homes are unsupported; recovery and conversion
+start only from `bf99958` ([support boundary](docs/chezmoi-migration/support-boundary.md)).
+Keep the `.gitignore` residue lines (retired parser environment and submodule
+checkouts) until every host is verified clean: the updater refuses untracked
+files.
+
+`tests/test_repository_text.py` keeps retired mechanism names out of tracked
+files outside `docs/chezmoi-migration/` and every Markdown link resolving; extend
+its allowlist only for a reviewed residue guard, recovery pointer or native
+negative assertion.
 
 ## Shell conventions
 
@@ -136,7 +145,7 @@ Review local umask and existing private-parent modes before takeover/enrollment.
 - Keep status output in lib/terminal.sh/.ps1, with DOTFILES_COLOR=auto|always|never; nonempty NO_COLOR and TERM=dumb disable it. Preserve plain redirected logs, PowerShell stream capture and caller preferences. Under auto only, recognize p10k instant-prompt capture through __p9k_instant_prompt_active and a numeric still-terminal saved fd; all other hidden terminals stay plain. Never pass a nonnumeric fd to dash -t. Add no formatting dependency.
 
 - Interactive logins update only a home bound by `~/.config/dotfiles/native`, after the maintenance check, through the bound source's `scripts/chezmoi-update.sh`/`.ps1` ([update-contract.md](docs/update-contract.md)); an unmarked home runs nothing and prints nothing, with no checkout fallback. `DOTFILES_AUTO_UPDATE=0` disables the hook. Windows runs only the private `~/.local/bin/chezmoi.exe`, never a PATH match.
-- The source holds regular files only, so Windows clones need no `core.symlinks`. Keep the `.gitignore` lines of the retired submodule checkouts and `/.venv-sync/` until every host's residue is verified gone (Stage 6 Phase C).
+- The source holds regular files only, so Windows clones need no `core.symlinks`.
 
 ## Windows
 
