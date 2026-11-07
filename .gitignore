@@ -1,5 +1,6 @@
-# Files git never tracks in this checkout. chezmoi deploys only the managed
-# source under home/ (.chezmoiroot), so these patterns need no deployment twin.
+# Files git never tracks in this checkout. chezmoi reads no .gitignore:
+# home/.chezmoiignore repeats every unanchored pattern that does not start
+# with a dot, so nothing listed here deploys from home/ (a test pins it).
 
 # OS metadata
 .DS_Store

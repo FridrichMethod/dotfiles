@@ -8,6 +8,38 @@
 {{- end -}}
 # .hosts/ and .policy/ hold template inputs; chezmoi deploys no source dot-directory.
 # Patterns name destinations; none removes existing or unmanaged files.
+# What git ignores is never a target: chezmoi skips source names that start
+# with a dot, and every other unanchored .gitignore pattern repeats here, so an
+# editor backup, merge leftover or cache in the checkout stays out of $HOME.
+**/Icon?
+**/Desktop.ini
+**/Thumbs.db
+**/ehthumbs.db
+**/$RECYCLE.BIN
+**/*.stackdump
+**/*~
+**/*.swp
+**/*.swo
+**/*.swn
+**/*.swm
+**/*.tmp
+**/*.bak
+**/*.orig
+**/*.rej
+**/*.patch
+**/\#*#
+**/*.iml
+**/*.code-workspace
+**/*.sublime-project
+**/*.sublime-workspace
+**/*.log
+**/__pycache__
+**/*.py[cod]
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/coverage.xml
 # Enrollment is local and explicit; host selection is not a decryption boundary.
 {{ if not (and $enrollStaticSecrets (has .host (list "mac" "wsl-ubuntu" "lab-ubuntu" "sherlock" "marlowe"))) }}
 .secrets

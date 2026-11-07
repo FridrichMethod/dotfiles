@@ -154,6 +154,36 @@ class SourceContractTests(unittest.TestCase):
                  and (mode == "100755") != bool(executable.match(PurePosixPath(path).name))}
         self.assertEqual(wrong, {})
 
+    def test_chezmoiignore_mirrors_every_gitignore_pattern(self):
+        # chezmoi reads no .gitignore, so whatever git ignores under home/
+        # (an editor backup, a merge .orig, a cache) would deploy on the next
+        # login update. chezmoi already skips source names starting with a
+        # dot; every other unanchored pattern has an unconditional twin.
+        patterns = [line for line in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+                    if line and not line.startswith(("#", ".", "/", "!"))]
+        ignore = (ROOT / "home/.chezmoiignore").read_text(encoding="utf-8").splitlines()
+        twins = [line for line in ignore if line.startswith("**/")]
+        self.assertEqual(twins, ["**/" + pattern.rstrip("/") for pattern in patterns])
+        first_section = next(index for index, line in enumerate(ignore) if line.startswith("{{ if "))
+        self.assertLess(ignore.index(twins[-1]), first_section, "the twins must apply to every role")
+
+    def test_git_ignored_leftovers_in_the_source_are_no_targets(self):
+        strays = ("dot_zshrc~", "dot_gitconfig.orig", "#dot_vimrc#", "dot_vimrc.swp", "dot_tmux.conf.rej",
+                  "dot_config/tmux/__pycache__/metric.cpython-312.pyc", "dot_config/kitty/debug.log")
+        with SourceFixture("lab-ubuntu") as fixture:
+            for stray in strays:
+                path = fixture.source / "home" / stray
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"stray\n")
+            ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "--no-index", "--stdin"],
+                                     input="".join(f"home/{s}\n" for s in strays), capture_output=True,
+                                     text=True, timeout=30, env=fixture_git_env())
+            self.assertEqual(ignored.stdout.split(), [f"home/{s}" for s in strays])
+            managed = fixture.run("managed", "--include=files", "--nul-path-separator")
+            self.assert_success(managed)
+            self.assertEqual({path.replace("\\", "/") for path in managed.stdout.split("\0") if path},
+                             set(expected_entries("lab-ubuntu")))
+
     def test_gitignore_keeps_the_host_residue_guards(self):
         # Without these lines the native updater's untracked-file check refuses
         # every login on a host that still holds the residue (D-8, Risk 2).
