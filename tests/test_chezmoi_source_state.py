@@ -3,8 +3,9 @@
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
+import re
 import shutil
 import subprocess
 import tomllib
@@ -136,13 +137,22 @@ class SourceContractTests(unittest.TestCase):
             found += [name for name in filenames if name.startswith(".chezmoiexternal.")]
         self.assertEqual(found, [])
 
-    def test_repository_tracks_no_submodules(self):
+    def test_repository_tracks_only_regular_files(self):
         # The doctor no longer diagnoses retired submodule checkouts (D9); the
-        # native updater passes --recurse-submodules=false. Keep the invariant.
+        # native updater passes --recurse-submodules=false. A tracked symlink
+        # becomes a text file holding its target on a Windows clone without
+        # core.symlinks, and chezmoi would deploy that text, so the checkout
+        # holds regular files only. Under home/ the executable bit sits
+        # exactly on the executable_ sources.
         self.assertFalse((ROOT / ".gitmodules").exists())
-        listed = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-s"], check=True,
+        listed = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-s", "-z"], check=True,
                                 stdout=subprocess.PIPE, text=True, timeout=30).stdout
-        self.assertEqual([line for line in listed.splitlines() if line.startswith("160000 ")], [])
+        modes = {entry.split("\t", 1)[1]: entry.split(" ", 1)[0] for entry in listed.split("\0") if entry}
+        self.assertEqual({path: mode for path, mode in modes.items() if mode not in ("100644", "100755")}, {})
+        executable = re.compile(r"^(?:encrypted_)?(?:private_)?(?:readonly_)?(?:empty_)?executable_")
+        wrong = {path: mode for path, mode in modes.items() if path.startswith("home/")
+                 and (mode == "100755") != bool(executable.match(PurePosixPath(path).name))}
+        self.assertEqual(wrong, {})
 
     def test_gitignore_keeps_the_host_residue_guards(self):
         # Without these lines the native updater's untracked-file check refuses
