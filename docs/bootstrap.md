@@ -2230,14 +2230,23 @@ content, so an edit to a file that was already modified still fails. Start from
 a clean checkout; P0-preflight warns when it is not, also because the native
 login update does not run from a checkout with uncommitted changes.
 
-- **Check:** `git -C ~/dotfiles status --porcelain` (must print nothing)
-- **Install:** if it lists a file, read `git -C ~/dotfiles diff <file>`. When the
-  diff is only an installer's block, discard it with
-  `git -C ~/dotfiles restore <file>`; when your own edits are in the same file,
-  delete just the block by hand.
-- **Verify:** the check prints nothing and the doctor's `rc-pollution` check is `ok`.
-- **Human:** yes (judgment: confirm the diff is only the installer's block before
-  discarding it)
+- **Check:** the doctor's `rc-pollution` row (`./doctor.sh --tsv`) for the rc
+  files in `$HOME`, and `git -C ~/dotfiles status --porcelain` (must print
+  nothing) for the checkout.
+- **Install:** for an rc file in `$HOME`, review the installer's block with the
+  private targeted native diff
+  ([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover))
+  and delete just that block by hand, keeping its intent in `~/.profile` as
+  above; `~/.zshrc.pre-oh-my-zsh` is the upstream installer's backup: keep
+  anything of yours from it, then remove it. For a checkout file, read
+  `git -C ~/dotfiles diff <file>`. When the diff is only an installer's block,
+  discard it with `git -C ~/dotfiles restore <file>`; when your own edits are
+  in the same file, delete just the block by hand.
+- **Verify:** the checkout check prints nothing, the targeted native diff of
+  each rc file you edited is empty, and the doctor's `rc-pollution` check is
+  `ok`.
+- **Human:** yes (judgment: confirm each diff is only the installer's block
+  before discarding it)
 
 ## Appendix: recovery
 

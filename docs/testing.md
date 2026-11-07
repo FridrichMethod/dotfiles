@@ -54,8 +54,9 @@ selected official artifact; no Python environment is needed for native tests.
 
 These probes isolate source, destination, configuration, cache, state, HOME and
 temporary directories and use only synthetic credentials. Native modifies run
-without Python, jq or age on child PATH. Parser hooks exclude only the exact
-artificial and production modify templates; native tests parse rendered JSON/TOML
+with a child PATH that holds only failing python3, python, jq, node, sh, bash
+and pwsh stand-ins (no age), and none of them runs. Parser hooks exclude only
+the exact artificial and production modify templates; native tests parse rendered JSON/TOML
 instead. Ordinary portable inputs and ownership data remain linted. Unix permission
 assertions do not establish Windows ACL behavior; unavailable native platforms
 remain explicit missing evidence.
@@ -242,7 +243,7 @@ fzf-tab does, with a fake C client (the `tldr` formula Homebrew removed in
 tlrc (only `--color always`): both must show the colored page, a
 client's missing-page error must never reach the preview, and the C client
 must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
-fetches a missing page from GitHub. Last, it runs `sync-payloads kit pymol`
+fetches a missing page from GitHub. It then runs `sync-payloads kit pymol`
 and `sync-skills` from `home/dot_aliases` in interactive sh, dash, Bash and
 `zsh -f` (without the `interactivecomments` oh-my-zsh sets): a valid native
 marker runs its source's hook, never the checkout at `~/dotfiles`, with the
@@ -287,7 +288,7 @@ unmarked-home cases have run. The setup-host fixture serves a pinned chezmoi
 archive whose executable answers only `--version` (any other command is a
 tripwire), so S4-chezmoi installs it and a full apply ends at H7-native. The
 doctor reads a bound home's role from the one quoted `host` line of the `[data]`
-table of its local config, ignores every environment variable, exits 2 for a
+table of its local config, ignores the retired environment selector, exits 2 for a
 missing, repeated, unknown or malformed one and for an unmarked home without
 `--host` or `--platform`, treats `common-only` as common only, names the cause
 in its `native-config` row (only another checkout's binding and a stray

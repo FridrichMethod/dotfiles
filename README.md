@@ -234,7 +234,9 @@ real-host outcomes.
 To add a configuration file, add it under `home/` with its chezmoi source name
 (a role-specific variant goes to `home/.hosts/<role>/<target>` behind a one-line
 role-keyed template). Add its row to `tests/fixtures/chezmoi/targets.tsv`, update
-the counts in `tests/chezmoi_source_support.py`, and add a `home/.chezmoiignore`
+the counts in `tests/chezmoi_source_support.py` (for a shell file also the
+per-role `LINTED` counts in `tests/test_chezmoi_rendered.py`, for a tmux file
+`TMUX_FILES` in `tests/test_tmux.py`), and add a `home/.chezmoiignore`
 role entry unless it applies to every role. A file containing `{{` stays plain;
 use `.tmpl` only for a real template. If it introduces a new parent
 directory, plan the reviewed per-host `apply --include=dirs --recursive=false`

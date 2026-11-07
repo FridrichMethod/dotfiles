@@ -380,7 +380,7 @@ passes too early makes the hook update an item that was never installed.
 
 coding-agent-kit 0.7 installs nothing on native Windows (it never had
 account switching there, only the three helpers), and `config/payloads.tsv`
-has no `windows-*` rows for it, so from the pull on the PowerShell hook and
+has no `windows-*` rows for it, so the PowerShell hook and
 `.\doctor.ps1` leave the kit out. What a 0.6 install left stays, frozen:
 `%LOCALAPPDATA%\coding-agent-kit\` and the three helper copies in
 `~\.claude\coding-agent-kit\`, which the `settings.json` commands keep
