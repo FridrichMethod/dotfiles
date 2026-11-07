@@ -228,6 +228,22 @@ class SourceContractTests(unittest.TestCase):
             with self.subTest(hosts=hosts), self.assertRaises(ValueError):
                 role_set(hosts)
 
+    def test_every_tracked_source_feeds_a_listed_target(self):
+        # The unconditional .chezmoiignore twins match target names, so a new
+        # source named like a git-ignored file (a target called build, say)
+        # would vanish silently. Every tracked home/ file is a table source,
+        # a role template, a policy modify, a chezmoi control file, a hidden
+        # input or an enrolled Claude secret; a listed target must then render
+        # for its roles (check_role).
+        listed = {source for _target, _hosts, source, _mode, _shell in target_rows() if "{host}" not in source}
+        known = listed | {"home/" + name for name in ROLE_TEMPLATES} | set(POLICY_INCLUDES) | {
+            "home/.chezmoi.toml.tmpl", "home/.chezmoiignore"}
+        secret = re.compile(r"home/private_dot_secrets/encrypted_private_claude-[a-z0-9]+[.]age")
+        unlisted = [path for path in tracked_home() if path not in known and not secret.fullmatch(path)
+                    and not path.startswith(("home/.hosts/", "home/.policy/", "home/.chezmoidata/",
+                                             "home/.chezmoitemplates/"))]
+        self.assertEqual(unlisted, [])
+
     def test_only_role_templates_remain_and_none_reads_the_working_tree(self):
         tracked = tracked_home()
         templates = {path.removeprefix("home/") for path in tracked
