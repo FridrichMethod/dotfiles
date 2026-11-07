@@ -165,8 +165,8 @@
     ],
     "soft_deny": [
       "$defaults",
-      "Never remove a GNU Stow link target in the dotfiles repository, or the ~/.claude, ~/.codex, ~/.ssh and ~/.config trees those links point into: deleting a link target silently breaks every host that stows it.",
-      "Never remove a conda or mamba environment directory, .venv-sync, or any other Python environment directory: they are expensive to rebuild and are not tracked in git.",
+      "Never remove a file of the chezmoi source state in the dotfiles repository (its home/ directory and the .chezmoiroot file that selects it), the ~/.claude, ~/.codex, ~/.ssh and ~/.config trees it deploys into, or the chezmoi state in ~/.local/state/chezmoi: a removed source file silently leaves its target unmanaged or breaks the next update on every host, and those trees and that state hold credentials, keys and machine-local data that git cannot restore.",
+      "Never remove a conda or mamba environment directory, or any other Python environment directory: they are expensive to rebuild and are not tracked in git.",
       "Never remove untracked or unstaged work in a git repository. When the git status shown with the command reports staged, modified or untracked files, move them aside or stash them instead of deleting them."
     ]
   },
