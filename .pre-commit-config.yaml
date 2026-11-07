@@ -6,12 +6,14 @@ repos:
       # Windows Terminal rewrites its settings.json on every UI save, with
       # its own trailing spaces and no final newline. Reformatting it here
       # only starts a fight the app always wins, so leave its bytes alone;
-      # check-json below still validates it.
+      # check-json below still validates it. The p10k configuration and
+      # the fzf preview script keep their upstream bytes, so neither fixer
+      # touches them either.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: ^home/(dot_p10k\.zsh|AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings\.json)$
+        exclude: ^home/(dot_p10k\.zsh|dot_local/bin/executable_my-fzf-preview\.sh|AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings\.json)$
       - id: end-of-file-fixer
-        exclude: ^home/AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings\.json$
+        exclude: ^home/(dot_p10k\.zsh|dot_local/bin/executable_my-fzf-preview\.sh|AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings\.json)$
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json

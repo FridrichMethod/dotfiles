@@ -261,7 +261,7 @@ RENDERED_ONLY = set(UPSTREAM) | {'.local/bin/claude-limited', '.xprofile'}
 def selects(variant, path):
     files, exclude = variant.get('files'), variant.get('exclude')
     return bool((files is None or files.search(path)) and not any(e and e.search(path) for e in (exclude, top_exclude)))
-for name, paths in (('trailing-whitespace', [UPSTREAM['.p10k.zsh'], TERMINAL]), ('end-of-file-fixer', [TERMINAL]),
+for name, paths in (('trailing-whitespace', [*UPSTREAM.values(), TERMINAL]), ('end-of-file-fixer', [*UPSTREAM.values(), TERMINAL]),
                     ('shellcheck', [UPSTREAM['.local/bin/my-fzf-preview.sh']]), ('shfmt', list(UPSTREAM.values()))):
     for path in paths:
         if any(selects(variant, path) for variant in hooks.get(name, [])):
