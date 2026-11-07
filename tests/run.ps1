@@ -60,7 +60,7 @@ Write-Output '==> test_ai_policy.py'
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'test_ai_policy.py') -PathType Leaf)) {
     throw 'Required AI policy test suite is missing.'
 }
-# Standard library only, so the plain interpreter runs it without the sync runtime.
+# Standard library only, so the plain interpreter runs it.
 & python -I -B -m unittest discover -s $PSScriptRoot -p 'test_ai_policy.py' -v
 if ($LASTEXITCODE -ne 0) { throw 'Portable AI policy tests failed.' }
 

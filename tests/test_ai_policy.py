@@ -1,6 +1,6 @@
 """Portable AI policy and agent-instruction invariants, read from the sources.
 
-Standard library only: no chezmoi, sync runtime or network. The native modify
+Standard library only: no chezmoi or network. The native modify
 templates carry these portable values onto every host (test_chezmoi_claude.py,
 test_chezmoi_codex.py); this suite pins the values themselves. Each check is a
 pure function, and the mutation cases prove it rejects the drift it names.
