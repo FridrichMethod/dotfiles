@@ -126,8 +126,8 @@ e2e_failure_detail() {
 # stands in for the allocation. skip: a reminder for the person (sign-in,
 # chsh, a dialog, a choice the harness must not make). fail: a block the
 # harness must not act on (a GUI installer, a Homebrew conflict or shared
-# prefix, a foreign nvm, the oh-my-zsh recovery, a retired legacy step) and
-# every (id, kind) it does not know.
+# prefix, a foreign nvm, the oh-my-zsh recovery) and every (id, kind) it does
+# not know.
 e2e_block_policy() {
     case $1:$2 in
         H1-apt-core:sudo | H1-locale:sudo | H1-linuxbrew:sudo | H1-homebrew:sudo) printf 'run-all\n' ;;

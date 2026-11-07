@@ -5,9 +5,9 @@
 # handover through docs/bootstrap.md "Fresh Windows home by hand", the second
 # apply, the no-write -Check that finds nothing left, the profile load, the
 # payload repos, the native convergence check, the final doctor, the isolated
-# native fixtures and the task and sync-runtime audits: the native Windows
-# bootstrap, driven the way "Running it with an agent" says an agent drives
-# it. Dot-source only, after steps.ps1.
+# native fixtures and the task audit: the native Windows bootstrap, driven the
+# way "Running it with an agent" says an agent drives it. Dot-source only,
+# after steps.ps1.
 
 function Invoke-E2EBlocks {
     # Act on an exit-3 run's blocks in printed order; $false once a block is
@@ -111,8 +111,8 @@ function Invoke-E2EApplyLoop {
 
 function Invoke-E2EFlowWin {
     # The whole sequence for the win host. The scheduled task identities are
-    # read just before and just after the apply loop; the two audits run
-    # whatever broke the flow before them.
+    # read just before and just after the apply loop; the audit runs whatever
+    # broke the flow before it.
     Invoke-E2EStepClone
     Invoke-E2EOrSkip winget { Invoke-E2EStepWinget }
     Invoke-E2EOrSkip doctor-initial { Invoke-E2EStepDoctorInitial }
@@ -132,5 +132,4 @@ function Invoke-E2EFlowWin {
     Invoke-E2EOrSkip doctor-final { Invoke-E2EStepDoctorFinal }
     Invoke-E2EOrSkip native-fixtures { Invoke-E2EStepNativeFixtures }
     Invoke-E2EAuditTasks
-    Invoke-E2EAuditSyncVenv
 }

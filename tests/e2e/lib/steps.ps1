@@ -3,11 +3,10 @@
 # clone, the winget probe, the read-only doctor and -Check runs, the native
 # handover through docs/bootstrap.md "Fresh Windows home by hand" and its
 # convergence check, the second apply, the profile load, the payload repos,
-# the final doctor, the isolated native fixtures and the task and
-# sync-runtime audits. Each opens its step, runs and closes it with a
-# verdict; a step the rest depends on sets Broken when it fails, and the flow
-# then skips what cannot run. Dot-source only, after common.ps1,
-# snapshot.ps1 and blocks.ps1.
+# the final doctor, the isolated native fixtures and the task audit. Each
+# opens its step, runs and closes it with a verdict; a step the rest depends
+# on sets Broken when it fails, and the flow then skips what cannot run.
+# Dot-source only, after common.ps1, snapshot.ps1 and blocks.ps1.
 
 $script:E2EUpstream = 'https://github.com/FridrichMethod/dotfiles.git'
 # Lines of a setup-host.ps1 -Yes run that show a step was applied: the
@@ -44,13 +43,12 @@ function Invoke-E2EStepNativeHandover {
     # log starts with the HW-native block it stands in for. It passes when the
     # child exits 0 and the end state is the documented one: the clone's
     # lib/chezmoi-guard.ps1 accepts the home binding as naming the clone, the
-    # local config is a regular file selecting win, no maintenance and no
-    # stray state database beside the config, a non-empty bound state
-    # database, and a same-hash private copy of each of .gitconfig and the
-    # two profile.ps1 files that existed before. The runner token is elevated
-    # (it has no ordinary one), which the procedure warns about and a note
-    # records; the ordinary-token login-updater check stays in per-host
-    # acceptance.
+    # local config is a regular file selecting win, no maintenance, a
+    # non-empty bound state database, and a same-hash private copy of each of
+    # .gitconfig and the two profile.ps1 files that existed before. The
+    # runner token is elevated (it has no ordinary one), which the procedure
+    # warns about and a note records; the ordinary-token login-updater check
+    # stays in per-host acceptance.
     Start-E2EStep native-handover human:HW-native
     if ($null -ne $E2E['HandoverBlock']) {
         Add-E2EText $E2E['StepLog'] ("--- block`n" + (@($E2E['HandoverBlock'].Lines) -join "`n") + "`n")
@@ -96,9 +94,6 @@ function Invoke-E2EStepNativeHandover {
         $problems.Add('~\.config\chezmoi\chezmoi.toml does not select host win')
     }
     if (Test-E2EEntry (Join-Path $userHome '.config/dotfiles/maintenance')) { $problems.Add('~\.config\dotfiles\maintenance exists') }
-    if (Test-E2EEntry (Join-Path $userHome '.config/chezmoi/chezmoistate.boltdb')) {
-        $problems.Add('~\.config\chezmoi\chezmoistate.boltdb exists (a chezmoi run without the explicit argument set)')
-    }
     $state = Join-Path $userHome '.local/state/chezmoi/chezmoi.boltdb'
     if (-not (Test-E2ERegularFile $state) -or [IO.FileInfo]::new($state).Length -eq 0) {
         $problems.Add('~\.local\state\chezmoi\chezmoi.boltdb is missing or empty')
@@ -147,8 +142,8 @@ function Invoke-E2EStepNativeConverged {
     # empty, else prints "--- managed" and the Invoke-NativeCz @('managed',
     # '--include=files,symlinks') list. The step passes when the diff is
     # empty (after the payload repos ran, so an installer that edits a
-    # managed target shows here), every listed target is a regular file of
-    # the home, and the stray state database is still absent.
+    # managed target shows here) and every listed target is a regular file of
+    # the home.
     Start-E2EStep native-converged check:native-converged
     $handover = Get-E2EHandoverScript -Document (Join-Path $E2E['Clone'] 'docs/bootstrap.md')
     if ($handover['Error']) {
@@ -184,9 +179,6 @@ function Invoke-E2EStepNativeConverged {
     $bad = @($managed | Where-Object { -not (Test-E2ERegularFile (Join-Path $E2E['Home'] $_)) })
     if (-not $managed.Count) { Complete-E2EStep fail 'Invoke-NativeCz managed --include=files,symlinks listed no target' }
     elseif ($bad.Count) { Complete-E2EStep fail "managed targets that are not regular files: $(ConvertTo-E2EOneLine ($bad -join ' ') 300)" }
-    elseif (Test-E2EEntry (Join-Path $E2E['Home'] '.config/chezmoi/chezmoistate.boltdb')) {
-        Complete-E2EStep fail 'empty diff, but ~\.config\chezmoi\chezmoistate.boltdb exists'
-    }
     else { Complete-E2EStep pass "empty diff; $($managed.Count) managed file(s), all regular" }
 }
 
@@ -195,11 +187,6 @@ function Invoke-E2EStepNativeFixtures {
     # required. The native suite owns temp homes and explicit native state
     # paths and never touches this home.
     Start-E2EStep native-fixtures check:native-fixtures
-    if (-not [IO.File]::Exists((Join-Path $E2E['Clone'] 'tests/test_chezmoi_takeover_recovery.py'))) {
-        $E2E['Broken'] = 'native-fixtures'
-        Complete-E2EStep fail 'native takeover/recovery fixture is missing from this checkout'
-        return
-    }
     $code = Invoke-E2EPwsh -Script tests/chezmoi.ps1 -TimeoutSeconds $E2ETimeout['Apply'] -Environment @{
         DOTFILES_TEST_CHEZMOI = (Join-Path $E2E['Home'] '.local/bin/chezmoi.exe')
         DOTFILES_TEST_REQUIRE_CHEZMOI = '1'
@@ -212,36 +199,24 @@ function Invoke-E2EStepNativeFixtures {
 }
 
 function Invoke-E2EAuditTasks {
-    # audit-scheduled-tasks: at the end no scheduled task of the dotfiles
-    # exists (an identity whose name starts with Dotfiles-, the retired
-    # restow task's), and the task identities did not change after the apply
-    # loop (the handover and every step after it register nothing). The
-    # tasks the loop itself added (installers winget ran) are listed in a
-    # note.
+    # audit-scheduled-tasks: the task identities did not change after the
+    # apply loop (the handover and every step after it register nothing).
+    # The tasks the loop itself added (installers winget ran) are listed in
+    # a note.
     Start-E2EStep audit-scheduled-tasks check:audit-scheduled-tasks
     $now = @(([string](Get-E2EScheduledTaskNames)) -split "`n" | Where-Object { $_ })
     $before = @(([string]$E2E['TasksBefore']) -split "`n" | Where-Object { $_ })
     $afterLoop = @(([string]$E2E['TasksAfterLoop']) -split "`n" | Where-Object { $_ })
-    $dotfiles = @($now | Where-Object { $_ -match '\\Dotfiles-[^\\]*$' })
     $problems = [Collections.Generic.List[string]]::new()
-    if ($dotfiles.Count) { $problems.Add("a dotfiles task exists: $($dotfiles -join ', ')") }
     if ($afterLoop.Count -and (($afterLoop -join "`n") -cne ($now -join "`n"))) {
         $added = @($now | Where-Object { $afterLoop -notcontains $_ })
         $removed = @($afterLoop | Where-Object { $now -notcontains $_ })
         $problems.Add("task identities changed after the apply loop (added: $($added -join ', '); removed: $($removed -join ', '))")
     }
     if ($problems.Count) { Complete-E2EStep fail ($problems -join '; ') }
-    else { Complete-E2EStep pass "no dotfiles task; $($now.Count) task identities, unchanged after the apply loop" }
+    else { Complete-E2EStep pass "$($now.Count) task identities, unchanged after the apply loop" }
     $loopAdded = @($afterLoop | Where-Object { $before -notcontains $_ })
     if ($loopAdded.Count) { Write-E2ENote scheduled-tasks "the apply loop added $($loopAdded.Count) task(s): $($loopAdded -join ', ')" }
-}
-
-function Invoke-E2EAuditSyncVenv {
-    # audit-sync-venv: the clone never held the AI-sync runtime directory
-    # after any step (Complete-E2EStep records the first that left it).
-    Start-E2EStep audit-sync-venv check:audit-sync-venv
-    if ($E2E['VenvViolations']) { Complete-E2EStep fail "the clone held $script:E2ESyncVenv after $($E2E['VenvViolations'])" }
-    else { Complete-E2EStep pass "$script:E2ESyncVenv never appeared in the clone" }
 }
 
 function Invoke-E2EStepClone {

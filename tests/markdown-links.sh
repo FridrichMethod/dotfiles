@@ -9,5 +9,5 @@ set -euo pipefail
 # Reads the real checkout's tracked files with the caller's Git environment
 # (a commit hook's index included); it creates no fixture repository.
 TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_repository_text.py' -v
-echo "repository-text=PASS"
+python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_markdown_links.py' -v
+echo "markdown-links=PASS"

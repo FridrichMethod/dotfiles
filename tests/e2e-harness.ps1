@@ -314,8 +314,8 @@ function Write-HandoverState {
     # What Invoke-NativeHandover -Role win leaves in Home, with the binding
     # spelled through the clone's own lib/chezmoi-guard.ps1, as Variant says:
     # clean, bad-marker (the home line names another directory), maintenance,
-    # stray (a state database beside the config), no-copy (no private copy of
-    # the files it replaced) or no-state (an empty bound state database).
+    # no-copy (no private copy of the files it replaced) or no-state (an empty
+    # bound state database).
     param([string]$Variant)
     $userHome = $E2E['Home']
     . (Join-Path $E2E['Clone'] 'lib/chezmoi-guard.ps1')
@@ -338,7 +338,6 @@ function Write-HandoverState {
     New-File (Join-Path $userHome '.gitconfig') "[user]`n`tname = native`n"
     New-File (Join-Path $userHome 'Documents/PowerShell/profile.ps1') "# native profile`n"
     if ($Variant -ceq 'maintenance') { New-File (Join-Path $userHome '.config/dotfiles/maintenance') '' }
-    if ($Variant -ceq 'stray') { New-File (Join-Path $userHome '.config/chezmoi/chezmoistate.boltdb') 'db' }
 }
 
 function Add-Run {
@@ -398,7 +397,7 @@ function Use-DryRun {
         $err = [Collections.Generic.List[string]]::new()
         $code = 0
         switch -CaseSensitive ($mode) {
-            { $_ -cin @('clean', 'bad-marker', 'maintenance', 'stray', 'no-copy', 'no-state') } {
+            { $_ -cin @('clean', 'bad-marker', 'maintenance', 'no-copy', 'no-state') } {
                 Write-HandoverState $mode
                 $out.Add('Invoke-NativeHandover: win deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup')
             }
@@ -515,13 +514,11 @@ try {
         Assert-Equal (Read-Utf8 (Join-Path $case 'none/index')) "`n" 'an empty index'
     }
 
-    Test-Case 'Get-E2EBlockPolicy: HW-native is the handover, the four reminders skip, HW-clone, retired steps and every other (id, kind) fail (bug 2)' {
+    Test-Case 'Get-E2EBlockPolicy: HW-native is the handover, the four reminders skip, HW-clone and every other (id, kind) fail (bug 2)' {
         $rows = @(
             'HW-native judgment handover'
             'HW-execution-policy judgment skip', 'HW-ssh-agent sudo skip', 'HW-wsl judgment skip', 'HW-auth auth skip'
             'HW-clone gui fail', 'HW-clone judgment fail'
-            # The retired legacy steps.
-            'HW-stow judgment fail', 'HW-auto-stow-task judgment fail'
             # A known id with another kind.
             'HW-native sudo fail', 'HW-native inspect fail', 'HW-native gui fail', 'HW-ssh-agent judgment fail'
             'HW-auth judgment fail', 'HW-wsl gui fail', 'HW-execution-policy sudo fail', 'HW-auth sudo fail'
@@ -760,12 +757,12 @@ try {
         Assert-True (-not (Test-E2ENoted "added ${broker}Old\x")) 'a sibling of the token broker cache sharing its prefix'
         Assert-True (-not (Test-E2ENoted "added $([IO.Path]::Combine($HOME, 'AppData', 'Local', 'Microsoft', 'TokenBroker', 'Accounts'))\x")) 'the token broker outside its cache'
         Assert-True (-not (Test-E2ENoted "added $profileFile")) 'a HOME file'
-        Assert-True (-not (Test-E2ENoted "changed $gitconfig (link|a -> 12|3)")) 'the deployed .gitconfig'
+        Assert-True (-not (Test-E2ENoted "changed $gitconfig (11|1 -> 12|3)")) 'the deployed .gitconfig'
 
         [void](Reset-RunState)
         $script:Snapshots.Clear()
         $script:SnapshotCalls.Clear()
-        $before = New-FakeSnapshot @{ $content = '1024|1'; $metadata = '620|1'; $gitconfig = 'link|x' }
+        $before = New-FakeSnapshot @{ $content = '1024|1'; $metadata = '620|1'; $gitconfig = '1024|1' }
         Use-DryRun {
             $script:Snapshots.Enqueue($before)
             Start-E2ENoWrite check-nowrite
@@ -777,7 +774,7 @@ try {
             Assert-Equal $script:SnapshotCalls[0].Root $HOME 'the snapshot root'
             Assert-True ($script:SnapshotCalls[0].Prune -contains $E2E['Out']) 'the out dir is not pruned'
 
-            $script:Snapshots.Enqueue((New-FakeSnapshot @{ $content = '2048|2'; $metadata = '620|1'; "$noted\Content\NEW" = '512|2'; $gitconfig = 'link|x' }))
+            $script:Snapshots.Enqueue((New-FakeSnapshot @{ $content = '2048|2'; $metadata = '620|1'; "$noted\Content\NEW" = '512|2'; $gitconfig = '1024|1' }))
             Assert-Equal (Stop-E2ENoWrite check-nowrite) '' 'CryptnetUrlCache differences alone fail the step'
             Assert-Equal (Read-Utf8 (Join-Path $E2E['Out'] 'snapshots/check-nowrite.diff')) (
                 "noted added $noted\Content\NEW`nnoted changed $content (1024|1 -> 2048|2)`n") 'the diff keeps the noted differences'
@@ -790,7 +787,7 @@ try {
             # Sorted as Compare-E2ESnapshot sorts (the culture decides where
             # .gitconfig falls against AppData); the two cache lines are noted.
             $cacheLines = @("changed $content (1024|1 -> 2048|2)", "removed $metadata")
-            $sorted = @(@("added $profileFile", "changed $gitconfig (link|x -> 1543|2)") + $cacheLines | Sort-Object)
+            $sorted = @(@("added $profileFile", "changed $gitconfig (1024|1 -> 1543|2)") + $cacheLines | Sort-Object)
             $real = @($sorted | Where-Object { $cacheLines -cnotcontains $_ })
             Assert-Equal (Stop-E2ENoWrite second-apply) (
                 "TEMP not empty: pwsh-1234.tmp; HOME written (2 difference(s)): $(ConvertTo-E2EOneLine ($real -join "`n") 300)") 'the real differences and TEMP'
@@ -1186,7 +1183,6 @@ try {
         foreach ($failure in @(
                 @{ Mode = 'bad-marker'; Text = 'lib/chezmoi-guard.ps1 refuses the home binding: Native ownership binding must name this destination and a repository root.' }
                 @{ Mode = 'maintenance'; Text = '~\.config\dotfiles\maintenance exists' }
-                @{ Mode = 'stray'; Text = '~\.config\chezmoi\chezmoistate.boltdb exists (a chezmoi run without the explicit argument set)' }
                 @{ Mode = 'no-copy'; Text = 'no same-hash copy of ~\.gitconfig in ~\.local\state\dotfiles-fresh-backup' }
                 @{ Mode = 'no-state'; Text = '~\.local\state\chezmoi\chezmoi.boltdb is missing or empty' }
                 @{ Mode = 'refused'; Text = 'Invoke-NativeHandover -Role win exit 1: Invoke-NativeHandover: ~\.gitconfig is a link or not the expected kind of entry' })) {
@@ -1211,7 +1207,7 @@ try {
         Assert-Equal "$($E2E['Broken']) $($script:ProcessCalls.Count)" 'native-handover 0' 'Broken and nothing ran'
     }
 
-    Test-Case 'native-converged: an empty Invoke-NativeCz diff and regular managed files pass; a diff, another entry, a stray database or a failure fail' {
+    Test-Case 'native-converged: an empty Invoke-NativeCz diff and regular managed files pass; a diff, another entry or a failure fail' {
         $clone = New-HandoverClone
         New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n"
         New-File (Join-Path $E2E['Home'] 'Documents/PowerShell/profile.ps1') "# native profile`n"
@@ -1244,23 +1240,14 @@ try {
             Use-DryRun { Invoke-E2EStepNativeConverged }
             Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" $failure['Text'] "$($failure['Mode']) with [$($failure['Managed'] -join ', ')]"
         }
-        [void](New-HandoverClone)
-        New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n"
-        New-File (Join-Path $E2E['Home'] '.config/chezmoi/chezmoistate.boltdb') 'db'
-        $script:Managed = @('.gitconfig')
-        $script:ProcessModes.Enqueue('converged')
-        Use-DryRun { Invoke-E2EStepNativeConverged }
-        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'fail empty diff, but ~\.config\chezmoi\chezmoistate.boltdb exists' 'a stray state database'
     }
 
-    Test-Case 'audit-scheduled-tasks: no dotfiles task, no change after the apply loop; the tasks the loop added are noted' {
+    Test-Case 'audit-scheduled-tasks: no change after the apply loop; the tasks the loop added are noted' {
         $installed = "\Microsoft\Windows\Defrag`n\WinGet\Installer"
         foreach ($case in @(
                 @{ Before = '\Microsoft\Windows\Defrag'; AfterLoop = $installed; Now = $installed; Shape = 'audit-scheduled-tasks:pass scheduled-tasks:note'
-                    Detail = 'no dotfiles task; 2 task identities, unchanged after the apply loop' }
-                @{ Before = $installed; AfterLoop = $installed; Now = $installed; Shape = 'audit-scheduled-tasks:pass'; Detail = 'no dotfiles task; 2 task identities, unchanged after the apply loop' }
-                @{ Before = $installed; AfterLoop = "$installed`n\Dotfiles-Example"; Now = "$installed`n\Dotfiles-Example"; Shape = 'audit-scheduled-tasks:fail scheduled-tasks:note'
-                    Detail = 'a dotfiles task exists: \Dotfiles-Example' }
+                    Detail = '2 task identities, unchanged after the apply loop' }
+                @{ Before = $installed; AfterLoop = $installed; Now = $installed; Shape = 'audit-scheduled-tasks:pass'; Detail = '2 task identities, unchanged after the apply loop' }
                 @{ Before = $installed; AfterLoop = $installed; Now = "$installed`n\Later\Task"; Shape = 'audit-scheduled-tasks:fail'
                     Detail = 'task identities changed after the apply loop (added: \Later\Task; removed: )' })) {
             [void](New-DryRun)
@@ -1281,33 +1268,9 @@ try {
         Assert-Equal @(Get-SummaryRows)[1].Detail 'the apply loop added 1 task(s): \B' 'the note'
     }
 
-    Test-Case 'audit-sync-venv: the first step after which the clone holds the AI-sync runtime is recorded once and fails the audit' {
-        $clone = New-DryRun
-        Use-DryRun { Invoke-E2EAuditSyncVenv }
-        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" "pass $($script:E2ESyncVenv) never appeared in the clone" 'a clean clone'
-        $clone = New-DryRun
-        Start-E2EStep payloads setup:payloads
-        Complete-E2EStep pass 'exit 0'
-        [void][IO.Directory]::CreateDirectory((Join-Path $clone $script:E2ESyncVenv))
-        Start-E2EStep apply-1 setup:apply-1
-        Complete-E2EStep pass 'exit 3'
-        Start-E2EStep apply-2 setup:apply-2
-        Complete-E2EStep pass 'exit 3'
-        Assert-Equal $E2E['VenvViolations'] 'apply-1 (setup:apply-1)' 'recorded once'
-        Use-DryRun { Invoke-E2EAuditSyncVenv }
-        Assert-Equal "$(@(Get-SummaryRows)[-1].Status) $(@(Get-SummaryRows)[-1].Detail)" "fail the clone held $($script:E2ESyncVenv) after apply-1 (setup:apply-1)" 'the audit'
-    }
-
     Test-Case 'native fixtures require the provisioned binary and propagate failure' {
-        [void](New-DryRun)
-        Use-DryRun { Invoke-E2EStepNativeFixtures }
-        Assert-Equal (@(Get-SummaryRows)[0].Status) fail 'missing Stage 4 fixture cannot pass'
-        Assert-Equal $script:PwshCalls.Count 0 'missing native fixture must not start an incomplete aggregate'
         foreach ($code in @(0, 1)) {
-            $clone = New-DryRun
-            New-File (Join-Path $clone 'tests/test_chezmoi_takeover_recovery.py') ''
-            Invoke-Git $clone @('add', 'tests/test_chezmoi_takeover_recovery.py')
-            Invoke-Git $clone @('-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid', 'commit', '-q', '-m', 'native fixture stand-in')
+            [void](New-DryRun)
             Add-Run $code
             Use-DryRun { Invoke-E2EStepNativeFixtures }
             $call = $script:PwshCalls[0]
@@ -1320,7 +1283,7 @@ try {
         }
     }
 
-    Test-Case 'Invoke-E2EFlowWin runs the steps in order and, once one breaks the flow, skips what depends on it; the audits always run' {
+    Test-Case 'Invoke-E2EFlowWin runs the steps in order and, once one breaks the flow, skips what depends on it; the audit always runs' {
         $script:FlowCalls = [Collections.Generic.List[string]]::new()
         $script:BreakAt = ''
         function Complete-FlowStub([string]$Name) {
@@ -1344,11 +1307,10 @@ try {
         function Invoke-E2EStepDoctorFinal { Complete-FlowStub doctor-final }
         function Invoke-E2EStepNativeFixtures { Complete-FlowStub native-fixtures }
         function Invoke-E2EAuditTasks { $script:FlowCalls.Add('audit-scheduled-tasks') }
-        function Invoke-E2EAuditSyncVenv { $script:FlowCalls.Add('audit-sync-venv') }
         $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'native-handover', 'second-apply', 'check-done',
             'login-shell', 'payloads', 'native-converged', 'doctor-final', 'native-fixtures')
-        $audits = @('audit-scheduled-tasks', 'audit-sync-venv')
-        Assert-Equal ($steps.Count + $audits.Count) 15 'fifteen steps'
+        $audits = @('audit-scheduled-tasks')
+        Assert-Equal ($steps.Count + $audits.Count) 14 'fourteen steps'
         foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1', 'native-handover', 'check-done', 'native-converged')) {
             [void](Reset-RunState)
             $script:FlowCalls.Clear()

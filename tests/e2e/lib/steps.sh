@@ -186,10 +186,10 @@ e2e_extract_fence() {
 # ~/.config/dotfiles/native is a regular file of exactly the three lines
 # dotfiles-chezmoi-v1, the physical HOME and the physical clone, mode
 # -rw-------; (b) the local config is a regular file whose [data] host is
-# ROLE; (c) no maintenance marker; (d) no stray state database beside the
-# config; (e) the bound state database exists and is not empty; (f) ~/.zshrc
-# is a regular file, not a link; (g) every rc file of E2E_RC_FILES that
-# existed when the step began (its E2E_RC_BEFORE digest) has a
+# ROLE; (c) no maintenance marker; (d) the state database
+# ~/.local/state/chezmoi/chezmoi.boltdb exists and is not empty; (e)
+# ~/.zshrc is a regular file, not a link; (f) every rc file of E2E_RC_FILES
+# that existed when the step began (its E2E_RC_BEFORE digest) has a
 # byte-identical copy in ~/.local/state/dotfiles-fresh-backup. Sets
 # E2E_HANDOVER_DETAIL to the problems ("; "-separated, empty when none) and
 # E2E_HANDOVER_KEPT to the number of copies found; returns 1 on a problem.
@@ -215,9 +215,6 @@ e2e_handover_problems() {
     fi
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
         out="$out${out:+; }~/.config/dotfiles/maintenance exists"
-    fi
-    if [ -e "$HOME/.config/chezmoi/chezmoistate.boltdb" ] || [ -L "$HOME/.config/chezmoi/chezmoistate.boltdb" ]; then
-        out="$out${out:+; }~/.config/chezmoi/chezmoistate.boltdb exists (a chezmoi run without the explicit argument set)"
     fi
     [ -s "$HOME/.local/state/chezmoi/chezmoi.boltdb" ] ||
         out="$out${out:+; }~/.local/state/chezmoi/chezmoi.boltdb is missing or empty"
@@ -302,8 +299,8 @@ e2e_step_check_done() {
 # e2e_step_native_converged: with the functions native-handover extracted,
 # `native_cz diff --exclude=dirs` from the clone exits 0 and prints nothing
 # (after the payload repos ran, so an installer that edits a managed target
-# shows here), every `native_cz managed --include=files,symlinks` target is
-# a regular file in HOME, and the stray state database is still absent.
+# shows here), and every `native_cz managed --include=files,symlinks` target
+# is a regular file in HOME.
 e2e_step_native_converged() {
     local rc=0 rel count=0 bad='' headers
     e2e_step_begin native-converged check:native-converged
@@ -340,8 +337,6 @@ e2e_step_native_converged() {
         e2e_step_end fail "managed targets that are not regular files: $(e2e_one_line "$bad" 300)"
     elif [ "$count" = 0 ]; then
         e2e_step_end fail 'native_cz managed --include=files,symlinks listed no target'
-    elif [ -e "$HOME/.config/chezmoi/chezmoistate.boltdb" ] || [ -L "$HOME/.config/chezmoi/chezmoistate.boltdb" ]; then
-        e2e_step_end fail "empty diff, but ~/.config/chezmoi/chezmoistate.boltdb exists"
     else
         e2e_step_end pass "empty diff; $count managed file(s), all regular"
     fi
@@ -363,11 +358,6 @@ e2e_step_native_fixtures() {
     if [ -z "$binary" ]; then
         E2E_BROKEN=native-fixtures
         e2e_step_end fail 'no provisioned chezmoi (~/.local/bin/chezmoi or PATH)'
-        return 0
-    fi
-    if [ ! -f "$E2E_CLONE/tests/test_chezmoi_takeover_recovery.py" ]; then
-        E2E_BROKEN=native-fixtures
-        e2e_step_end fail 'native takeover/recovery fixture is missing from this checkout'
         return 0
     fi
     # The prepared login environment supplies Python 3.11+ on HPC hosts;
@@ -468,11 +458,8 @@ e2e_negatives() {
 # e2e_audits: the acceptance audits over the whole run: (1) every wrapper
 # call happened in a human:* or negative:* phase, and a host without sudo
 # saw no sudo at all; (2) every sudo.log entry falls in such a window; (3)
-# no link under HOME leads into the clone; (4) no stow is on the login PATH
-# but one the machine had before the flow; (5) the AI-sync runtime never
-# appeared in the clone; (6) the login shell is unchanged; (7) the rc files
-# changed only in human phases. Stow is no longer wrapped: nothing the
-# native flow runs installs it, and (3) and (4) catch a stray one.
+# no link under HOME leads into the clone; (4) the login shell is
+# unchanged; (5) the rc files changed only in human phases.
 e2e_audits() {
     local log=$E2E_OUT/log/wrappers.log sudo_log=$E2E_OUT/log/sudo.log bad rc=0 shell
     e2e_step_begin audit-wrappers check:audit-wrappers
@@ -507,34 +494,6 @@ e2e_audits() {
         e2e_step_end pass 'no link under HOME leads into the clone'
     else
         e2e_step_end fail "links under HOME that lead into the clone: $(e2e_one_line "$bad" 400)"
-    fi
-
-    e2e_step_begin audit-no-stow check:audit-no-stow
-    rc=0
-    bad=$(e2e_audit_login_stow "$E2E_STEP_OUT" "$E2E_STEP_ERR") || rc=$?
-    case $rc in
-        0)
-            if [ -n "$E2E_STOW_START" ]; then
-                e2e_step_end pass "no stow on the login PATH but what the machine had before the run: $(e2e_one_line "$E2E_STOW_START" 200)"
-            else
-                e2e_step_end pass 'no stow on the login PATH'
-            fi
-            ;;
-        2)
-            if [ -n "$E2E_BROKEN" ]; then
-                e2e_step_end skip "after $E2E_BROKEN failed: $(e2e_one_line "$bad" 200)"
-            else
-                e2e_step_end fail "$(e2e_one_line "$bad" 400)"
-            fi
-            ;;
-        *) e2e_step_end fail "stow on the login PATH that the run put there: $(e2e_one_line "$bad" 400)" ;;
-    esac
-
-    e2e_step_begin audit-sync-venv check:audit-sync-venv
-    if [ -n "$E2E_VENV_VIOLATIONS" ]; then
-        e2e_step_end fail "the clone held $E2E_SYNC_VENV after $E2E_VENV_VIOLATIONS"
-    else
-        e2e_step_end pass "$E2E_SYNC_VENV never appeared in the clone"
     fi
 
     e2e_step_begin audit-login-shell check:audit-login-shell

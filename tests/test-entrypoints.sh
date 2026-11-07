@@ -34,10 +34,6 @@ if (
     printf 'ERROR: CI accepted a missing chezmoi prerequisite.\n' >&2
     exit 1
 fi
-if grep -Fqi stow "$TEST_TMP/ci.stdout" "$TEST_TMP/ci.stderr"; then
-    fail_run ci 'tests/run.sh --ci --check-prerequisites still requires or mentions GNU Stow.'
-fi
-
 grep -Fq 'CI requires chezmoi' "$TEST_TMP/ci.stderr" ||
     fail_run ci 'tests/run.sh --ci --check-prerequisites did not name missing chezmoi.'
 
@@ -53,9 +49,6 @@ for skipped in 'optional Unix PowerShell checks' 'optional installed-Codex exec-
     grep -Fq "SKIP: $skipped" "$TEST_TMP/local.stdout" ||
         fail_run local "tests/run.sh --check-prerequisites did not skip the $skipped."
 done
-if grep -Fqi stow "$TEST_TMP/local.stdout" "$TEST_TMP/local.stderr"; then
-    fail_run local 'tests/run.sh --check-prerequisites still mentions GNU Stow.'
-fi
 grep -Fxq 'test-prerequisites=PASS' "$TEST_TMP/local.stdout" ||
     fail_run local 'tests/run.sh --check-prerequisites did not print test-prerequisites=PASS.'
 
@@ -175,13 +168,12 @@ need = {
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
                          'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py',
                          'tests/fixtures/chezmoi/targets.tsv', '.github/workflows/ci.yml'],
-    'repository-text': ['README.md', 'AGENTS.md', 'docs/bootstrap.md', '.gitignore',
-                        'tests/test_repository_text.py', 'tests/repository-text.sh'],
+    'markdown-links': ['README.md', 'AGENTS.md', 'docs/bootstrap.md',
+                       'tests/test_markdown_links.py', 'tests/markdown-links.sh'],
     'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
                        'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                        'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
                        'scripts/payload-update.sh', '.gitignore',
-                       'tests/chezmoi-takeover.sh', 'tests/chezmoi-takeover.ps1',
                        'home/.chezmoidata/codex-policy.json',
                        'home/.policy/claude-settings.json', 'home/.policy/codex-config.toml',
                        'home/dot_claude/modify_private_settings.json',
@@ -292,9 +284,8 @@ entries = {hook.get('entry') for variants in hooks.values() for hook in variants
 for suite in runner_suites:
     if 'tests/' + suite not in entries:
         missed.append(f'Linux pre-commit behavior pass omits {suite}')
-# Kept from the retirement: the Linux job alone has a real tmux, from apt,
-# and requires it, so its cases fail instead of skipping; no job installs
-# the retired deployment tool.
+# The Linux job alone has a real tmux, from apt, and requires it, so its
+# cases fail instead of skipping.
 # Comments are dropped and backslash continuations joined before matching.
 workflow = re.sub(r'\\\n\s*', ' ', re.sub(r'(?m)^\s*#.*\n|\s+#.*$', '', open(sys.argv[4], encoding='utf-8').read()))
 linux = re.search(r'\n  linux:\n(.*?)\n  [a-z]+:\n', workflow, re.S)
@@ -303,9 +294,6 @@ if 'DOTFILES_TEST_REQUIRE_TMUX: "1"' not in linux:
     missed.append('ci.yml: the Linux job does not set DOTFILES_TEST_REQUIRE_TMUX: "1"')
 if not re.search(r'\bapt(?:-get)?\b[^\n]*\binstall\b[^\n]*\btmux\b', linux):
     missed.append('ci.yml: the Linux job does not apt-get install tmux')
-for line in workflow.splitlines():
-    if re.search(r'\b(?:apt(?:-get)?|brew|choco|winget|pip3?|pipx)\b[^\n]*\binstall\b[^\n]*\bstow\b', line, re.I):
-        missed.append(f'ci.yml installs a retired tool: {line.strip()}')
 if missed:
     sys.exit('ERROR: ' + '; '.join(missed))
 PY

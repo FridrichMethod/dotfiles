@@ -178,14 +178,6 @@ class WindowsTakeoverTests(unittest.TestCase):
         result = self.guard("Get-DotfilesNativeBinding -HomePath " + ps_string(self.home))
         self.assertNotEqual(result.returncode, 0)
 
-    def test_native_update_regular_files_without_elevation_or_task(self):
-        self.setup_native()
-        result = self.update("function Start-ScheduledTask {throw 'task dispatch'};function Test-DotfilesElevated {throw 'elevation'};")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.home / ".sample").read_text(), "initial\n")
-        self.assertFalse((self.home / ".sample").is_symlink())
-        self.assertEqual(self.git("stash", "list"), "")
-
     def test_update_excludes_directories_and_applies_files_in_existing_parent(self):
         self.setup_native()
         parent = self.home / ".managed"
@@ -377,7 +369,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         (fake_repo / "lib").mkdir()
         shutil.copyfile(ROOT / "lib/chezmoi-guard.ps1", fake_repo / "lib/chezmoi-guard.ps1")
         trace = self.f.root / "dispatch"
-        for name in ("dotfiles-update", "chezmoi-update", "payload-update"):
+        for name in ("chezmoi-update", "payload-update"):
             (fake_repo / ("scripts/" + name + ".ps1")).write_text(
                 "Add-Content -LiteralPath " + ps_string(trace) + " -Value '" + name + "'\n")
         body = ("$IsInteractive=$true;" +

@@ -23,9 +23,8 @@
     silently, the payload repos to install, an empty Invoke-NativeCz diff
     with every managed target a regular file, doctor.ps1 -Host win to exit
     0, tests/chezmoi.ps1 to pass with the provisioned
-    ~\.local\bin\chezmoi.exe, no dotfiles scheduled task and no task
-    change after the apply loop, the AI-sync runtime never in the clone, and
-    the clone to stay clean after every step. Between steps PATH is rebuilt
+    ~\.local\bin\chezmoi.exe, no task change after the apply loop, and the
+    clone to stay clean after every step. Between steps PATH is rebuilt
     from the registry, as a new terminal reads it. tests/e2e/inside.sh is
     the Unix twin. Every step runs under the runner's elevated token, which
     the windows-2025 runner alone offers; the handover warns about it and

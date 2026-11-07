@@ -256,9 +256,7 @@ class Enrollment(IsolatedHome):
                     os.waitpid(pid, 0)
                 shown = output.decode(errors="replace")[-2000:]
                 self.assertTrue(log.exists(), "fzf-tab never ran the fake fzf; the terminal showed:\n" + shown)
-                # Kit 0.6 names the label option --set-label in this hint and
-                # 0.7 --label; either release may be the installed one.
-                previews = [line.replace("(claude-as --set-label ", "(claude-as --label ") for line in log.read_text().splitlines()]
+                previews = log.read_text().splitlines()
                 self.assertEqual(previews, expected, shown)
 
 

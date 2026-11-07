@@ -174,7 +174,6 @@ name = "second"
             diff = fixture.run("diff", str(target))
             self.assertEqual((diff.returncode, diff.stdout), (0, ""), diff.stderr)
             self.assertEqual(list(Path(fixture.env["PATH"]).iterdir()), [])
-            self.assertFalse((fixture.source / ".venv-sync").exists())
             if os.name != "nt":
                 self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 

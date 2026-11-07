@@ -43,7 +43,7 @@ export LC_ALL=C
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset ZSH ZSH_CUSTOM NVM_DIR XDG_CONFIG_HOME XDG_DATA_HOME BAT_CONFIG_DIR \
     BOOTSTRAP_CONFIG BOOTSTRAP_UNAME_S BOOTSTRAP_UNAME_M BOOTSTRAP_OS_RELEASE \
-    BOOTSTRAP_PROC_VERSION LMOD_DIR SLURM_JOB_ID WSL_DISTRO_NAME DOTFILES_HOST
+    BOOTSTRAP_PROC_VERSION LMOD_DIR SLURM_JOB_ID WSL_DISTRO_NAME
 
 # shellcheck source=lib/bootstrap/manifest.sh
 . "$FIXTURE/lib/bootstrap/manifest.sh"
@@ -531,24 +531,20 @@ assert_eq "$(cd "$TEST_TMP" && BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS
 # --------------------------------------------------------- host resolution
 echo '==> host resolution'
 # Only a native-owned home's local config selects a host: an unmarked home
-# resolves none and is never common only, whatever DOTFILES_HOST says.
+# resolves none and is never common only.
 resolve() {
-    # resolve [VAR=VALUE...]
-    env "$@" bash -c 'set -eu; . "$1"; bootstrap_resolve_host' _ "$FIXTURE/lib/bootstrap/platform.sh"
+    bash -c 'set -eu; . "$1"; bootstrap_resolve_host' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
 common_only() {
-    # common_only [VAR=VALUE...]
-    env "$@" bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only' _ "$FIXTURE/lib/bootstrap/platform.sh"
+    bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
 [ ! -e "$TEST_HOME/.config" ] || fail 'the host resolution cases need a home without ~/.config'
 assert_status 1 'unmarked home' resolve
-assert_status 1 'unmarked home ignores DOTFILES_HOST' resolve DOTFILES_HOST=sherlock
-assert_status 1 'unmarked home: an empty DOTFILES_HOST is not common only' common_only DOTFILES_HOST=
+assert_status 1 'an unmarked home is not common only' common_only
 mkdir -p "$TEST_HOME/.config/dotfiles" "$TEST_HOME/.config/chezmoi"
 : >"$TEST_HOME/.config/dotfiles/native"
 printf '[data]\nhost = "sherlock"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
 assert_eq "$(resolve)" sherlock 'native role'
-assert_eq "$(resolve DOTFILES_HOST=marlowe)" sherlock 'native role over DOTFILES_HOST'
 assert_status 1 'a native role is not common only' common_only
 printf '[data]\nhost = "common-only"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
 assert_status 1 'native common-only resolves no host' resolve

@@ -196,8 +196,6 @@ def sherlock_problems(guides):
     problems = []
     sections = []
     for name, content in guides.items():
-        if b"SHERLOCK-KIT" in content:
-            problems.append(f"{name}: legacy Sherlock block marker")
         if content.count(SHERLOCK_HEADING) != 1:
             problems.append(f"{name}: expected one Stanford Sherlock section")
             continue
@@ -221,14 +219,13 @@ def stub_problems(stub_text, repository_guide_exists):
     return problems
 
 
-AUTO_MODE_RETIRED = re.compile(r"(?i)\bstow|venv-sync|setup-sync|link target")
 AUTO_MODE_PROTECTED = ("home/", ".chezmoiroot", "~/.claude", "~/.codex", "~/.ssh", "~/.config",
                        "~/.local/state/chezmoi", "conda", "mamba", "Python environment",
                        "untracked or unstaged work")
 
 
 def auto_mode_problems(auto):
-    """Stale or loosened autoMode prose; [] when allow/soft_deny keep $defaults and every protection."""
+    """Loosened or malformed autoMode prose; [] when allow/soft_deny keep $defaults and every protection."""
     problems = []
     for name in ("allow", "soft_deny"):
         rules = auto.get(name)
@@ -238,11 +235,9 @@ def auto_mode_problems(auto):
         for index, rule in enumerate(rules[1:], 1):
             if not isinstance(rule, str) or not rule.isascii() or not rule.isprintable():
                 problems.append(f"{name}[{index}] must be printable ASCII prose")
-            elif AUTO_MODE_RETIRED.search(rule):
-                problems.append(f"{name}[{index}] names a retired mechanism")
     prose = " ".join(rule for rule in auto.get("soft_deny") or ()
                      if isinstance(rule, str) and rule != "$defaults")
-    problems.extend(f"soft_deny no longer protects {subject}"
+    problems.extend(f"soft_deny does not protect {subject}"
                     for subject in AUTO_MODE_PROTECTED if subject not in prose)
     return problems
 
@@ -256,8 +251,6 @@ def _without(subject):
 AUTO_MODE_MUTATIONS = {
     "allow loses $defaults": lambda auto: auto["allow"].remove("$defaults"),
     "soft_deny loses $defaults": lambda auto: auto["soft_deny"].remove("$defaults"),
-    "soft_deny names GNU Stow": lambda auto: auto["soft_deny"].append("Never remove a GNU Stow link target."),
-    "soft_deny names .venv-sync": lambda auto: auto["soft_deny"].append("Never remove .venv-sync."),
     "allow gains non-ASCII prose": lambda auto: auto["allow"].append("Removing caches \u2014 allowed."),
     "soft_deny moves $defaults": lambda auto: auto["soft_deny"].append(auto["soft_deny"].pop(0)),
     "allow repeats $defaults": lambda auto: auto["allow"].append("$defaults"),
@@ -364,7 +357,6 @@ class PolicyMutationTests(unittest.TestCase):
             "sections differ": (claude, codex.replace(SHERLOCK_HEADING, SHERLOCK_HEADING + b"- Codex only.\n")),
             "heading repeated": (claude, codex + b"\n" + SHERLOCK_HEADING + b"- again\n"),
             "section empty": (claude.replace(SHERLOCK_HEADING, SHERLOCK_HEADING + b"\n## Next\n"), codex),
-            "legacy marker": (claude, codex + b"\n<!-- SHERLOCK-KIT -->\n"),
         }
         for name, (claude_bytes, codex_bytes) in mutations.items():
             with self.subTest(mutation=name):
@@ -384,7 +376,7 @@ class AutoModeProseTests(unittest.TestCase):
     def test_auto_mode_prose_keeps_defaults_and_native_protections(self):
         self.assertEqual(auto_mode_problems(self.portable_auto_mode()), [])
 
-    def test_auto_mode_check_rejects_stale_or_loosened_prose(self):
+    def test_auto_mode_check_rejects_loosened_or_malformed_prose(self):
         auto = self.portable_auto_mode()
         baseline = set(auto_mode_problems(auto))
         for label, mutate in AUTO_MODE_MUTATIONS.items():

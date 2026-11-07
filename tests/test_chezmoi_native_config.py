@@ -18,7 +18,6 @@ class NativeConfigTests(unittest.TestCase):
         empty_bin = fixture.root / "empty-bin"
         empty_bin.mkdir(exist_ok=True)
         fixture.env["PATH"] = str(empty_bin)
-        self.assertFalse((fixture.root / ".venv-sync").exists())
         name = "modify_private_settings.json" if kind == "json" else "modify_private_config.toml"
         shutil.copyfile(FIXTURES / name, fixture.source / name)
         if kind == "json":

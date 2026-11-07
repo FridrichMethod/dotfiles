@@ -126,7 +126,7 @@ $tailAt = $text7.IndexOf($tailMarker)
 Assert-True ($tailAt -gt 0) 'the update hook block is present'
 $tail = $text7.Substring([Math]::Max($tailAt, 0))
 Assert-True ($tail.Contains('scripts/chezmoi-update.ps1')) 'the update hook runs the bound source''s scripts/chezmoi-update.ps1'
-Assert-True (-not $tail.Contains('dotfiles-update') -and $tail -notmatch '(?i)\$env:') 'the update hook has no unmarked-home fallback and reads no environment variable'
+Assert-True ($tail -notmatch '(?i)\$env:') 'the update hook reads no environment variable'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
 function Get-Assignments($Ast, [string]$Left) {

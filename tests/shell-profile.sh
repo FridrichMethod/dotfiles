@@ -435,7 +435,7 @@ done
 # checkout at the old default ~/dotfiles, and prints nothing.
 login_failures=0 login_home=$TEST_TMP/login-home
 mkdir -p "$login_home/dotfiles/scripts" "$login_home/.oh-my-zsh"
-for hook in dotfiles-update chezmoi-update payload-update; do
+for hook in chezmoi-update payload-update; do
     # shellcheck disable=SC2016
     printf 'printf "%%s\\n" %s >>"$LOGIN_TRACE"\n' "$hook" >"$login_home/dotfiles/scripts/$hook.sh"
 done

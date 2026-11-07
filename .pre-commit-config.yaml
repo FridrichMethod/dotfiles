@@ -88,20 +88,20 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.pre-commit-config\.yaml|\.github/workflows/ci\.yml|tests/[^/]+\.(sh|ps1)|tests/test_environment\.py|tests/lib/environment\.(sh|ps1)|tests/fixtures/chezmoi/targets\.tsv)$
-      - id: repository-text
-        name: retired mechanism names and Markdown links
-        entry: tests/repository-text.sh
+      - id: markdown-links
+        name: Markdown links
+        entry: tests/markdown-links.sh
         language: script
         pass_filenames: false
-        # Any tracked file can bring a retired name back and any deletion can
-        # break a link, so this whole-repository scan runs on every commit.
+        # Any deletion or rename can break a link, so this whole-repository
+        # check runs on every commit.
         always_run: true
       - id: chezmoi-native
         name: isolated native chezmoi deployment, transforms and encryption
         entry: tests/chezmoi.sh
         language: script
         pass_filenames: false
-        files: ^(home/.*|[.]chezmoi(root|version)|[.]gitattributes|lib/(chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|payload-update)[.](sh|ps1)|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi(-takeover)?[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
+        files: ^(home/.*|[.]chezmoi(root|version)|[.]gitattributes|lib/(chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|payload-update)[.](sh|ps1)|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh

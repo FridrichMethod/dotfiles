@@ -1,11 +1,10 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2034 # the guard state (E2E_VENV_VIOLATIONS, E2E_LOGIN_SHELL_START, E2E_STOW_START) is read by steps.sh and inside.sh
+# shellcheck disable=SC2034 # the guard state (E2E_LOGIN_SHELL_START) is read by steps.sh and inside.sh
 # The checks of tests/e2e/inside.sh that watch the home and the clone: the
 # no-write snapshots (an empty TMPDIR, HOME by find -newer and entry count),
-# the clean-clone rule, the per-step guards (rc-file digests, the AI-sync
-# runtime in the clone), the login-shell run and the acceptance audits
-# (wrappers.log phases, sudo.log timestamps against the timeline, links
-# under HOME that lead into the clone, a stow on the login PATH). Sourced
+# the clean-clone rule, the per-step guard (rc-file digests), the login-shell
+# run and the acceptance audits (wrappers.log phases, sudo.log timestamps
+# against the timeline, links under HOME that lead into the clone). Sourced
 # after common.sh; same portability rules (no find -printf, no stat, no
 # readlink -f, no date -d except inside the sudo.log audit, which Linux alone
 # needs), and no case statement with bare `pattern)` items inside $(...):
@@ -13,16 +12,10 @@
 
 # Guard state: the before-images e2e_step_begin takes, the violations the
 # audits report at the end, and the notes e2e_step_end appends after a row.
-# E2E_SYNC_VENV is the AI-sync runtime directory the legacy route made in
-# the clone; the native flow never creates it.
 E2E_RC_FILES='.bashrc .profile .bash_profile .zshrc .zshenv .zprofile'
 E2E_RC_BEFORE='' E2E_RC_VIOLATIONS=''
-E2E_SYNC_VENV=.venv-sync
-E2E_VENV_VIOLATIONS=''
 E2E_PENDING_NOTES=''
 E2E_LOGIN_SHELL_START=''
-# The stow executables the machine had before the flow (e2e_stow_start).
-E2E_STOW_START=''
 E2E_LOGIN_DETAIL=''
 E2E_LOGIN_ENV=()
 E2E_PRUNE=()
@@ -81,9 +74,7 @@ e2e_guard_before() {
 # e2e_guard_after STEP PHASE: compare with the before-images. The rc files
 # may change during a human:* phase only (recorded as a note: the
 # native-handover step, in human:H7-native, replaces the /etc/skel files
-# with the deployed ones after keeping a copy of each). The first step after
-# which the clone holds E2E_SYNC_VENV (a directory, a file or a link) is
-# recorded once for the audit.
+# with the deployed ones after keeping a copy of each).
 e2e_guard_after() {
     local step=$1 phase=$2 after changed
     after=$(e2e_rc_sums)
@@ -93,10 +84,6 @@ e2e_guard_after() {
             human:*) E2E_PENDING_NOTES="${E2E_PENDING_NOTES}rc-files${E2E_TAB}changed during $phase: $changed$E2E_NL" ;;
             *) E2E_RC_VIOLATIONS="$E2E_RC_VIOLATIONS${E2E_RC_VIOLATIONS:+; }$step ($phase): $changed" ;;
         esac
-    fi
-    if [ -z "$E2E_VENV_VIOLATIONS" ] && [ -n "${E2E_CLONE:-}" ] &&
-        { [ -e "$E2E_CLONE/$E2E_SYNC_VENV" ] || [ -L "$E2E_CLONE/$E2E_SYNC_VENV" ]; }; then
-        E2E_VENV_VIOLATIONS="$step ($phase)"
     fi
 }
 
@@ -260,14 +247,14 @@ e2e_audit_wrappers() {
 }
 
 # e2e_audit_clone_links: every link under HOME, outside the clone, E2E_OUT,
-# E2E_SRC and E2E_SNAPSHOT_PRUNE, that leads into the clone (a Stow link, or
-# anything else a step made point at the checkout), one per line. A link
-# whose text names the clone's basename is resolved without following it
-# further than cd -P does: its target (absolute, or the link's directory
-# plus the text) when that is a directory, else the target's directory, and
-# it counts when that is the physical clone or lies under it, a dangling
-# link into the clone included. 0 when there are none. BSD-safe: no
-# readlink -f, no find -printf.
+# E2E_SRC and E2E_SNAPSHOT_PRUNE, that leads into the clone (anything a step
+# made point at the checkout), one per line. A link whose text names the
+# clone's basename is resolved without following it further than cd -P
+# does: its target (absolute, or the link's directory plus the text) when
+# that is a directory, else the target's directory, and it counts when that
+# is the physical clone or lies under it, a dangling link into the clone
+# included. 0 when there are none. BSD-safe: no readlink -f, no find
+# -printf.
 e2e_audit_clone_links() {
     local phys base path found
     local prune=()
@@ -311,68 +298,6 @@ e2e_clone_link() {
         "$3" | "$3"/*) return 0 ;;
     esac
     return 1
-}
-
-# e2e_stow_paths PATH_VALUE: every executable named stow in the
-# colon-separated PATH_VALUE, in PATH order, one per line.
-e2e_stow_paths() {
-    local rest=$1 dir
-    while [ -n "$rest" ]; do
-        dir=${rest%%:*}
-        case $rest in
-            *:*) rest=${rest#*:} ;;
-            *) rest= ;;
-        esac
-        if [ -n "$dir" ] && [ -f "$dir/stow" ] && [ -x "$dir/stow" ]; then
-            printf '%s\n' "$dir/stow"
-        fi
-    done
-    return 0
-}
-
-# e2e_stow_start: set E2E_STOW_START to the stow executables on the system
-# PATH and on the PATH a fresh `bash -l` reports, before any step ran: what
-# the machine had before the flow (a runner may ship one).
-e2e_stow_start() {
-    local out=$E2E_OUT/log/stow-start.out path=''
-    local run=()
-    e2e_login_env
-    [ -z "${E2E_TIMEOUT_BIN:-}" ] || run=("$E2E_TIMEOUT_BIN" "$E2E_TIMEOUT_CHECK")
-    if (cd "$HOME" && exec ${run[@]+"${run[@]}"} "${E2E_LOGIN_ENV[@]}" bash -lc 'printf "E2E_PATH=%s\n" "$PATH"') \
-        </dev/null >"$out" 2>"$E2E_OUT/log/stow-start.err"; then
-        path=$(e2e_login_text "$out" | sed -n 's/^E2E_PATH=//p' | sed -n 1p)
-    fi
-    E2E_STOW_START=$(e2e_stow_paths "$E2E_SYS_PATH${path:+:$path}")
-}
-
-# e2e_stow_new: the lines on stdin (stow paths) that E2E_STOW_START lacks.
-# A function of its own: Bash 3.2 ends $(...) at a case pattern's ')'.
-e2e_stow_new() {
-    local line
-    while IFS= read -r line; do
-        case $E2E_NL$E2E_STOW_START$E2E_NL in
-            *"$E2E_NL$line$E2E_NL"*) ;;
-            *) printf '%s\n' "$line" ;;
-        esac
-    done
-}
-
-# e2e_audit_login_stow OUT ERR: every stow executable on the PATH of a fresh
-# login shell (e2e_login_run) that the machine did not have before the flow
-# (E2E_STOW_START), one per line. Nothing the native flow runs installs
-# Stow (core.Brewfile and the hpc login env have no stow), so any is a
-# finding. 0 when there is none; 2 when the login shell printed no PATH.
-e2e_audit_login_stow() {
-    local rc=0 path new
-    e2e_login_run "$1" "$2" 'printf "E2E_PATH=%s\n" "$PATH"' || rc=$?
-    path=$(e2e_login_text "$1" | sed -n 's/^E2E_PATH=//p' | sed -n 1p)
-    if [ "$rc" != 0 ] || [ -z "$path" ]; then
-        printf 'the login shell exited %s and printed no PATH\n' "$rc"
-        return 2
-    fi
-    new=$(e2e_stow_paths "$path" | e2e_stow_new)
-    printf '%s' "${new:+$new$E2E_NL}"
-    [ -z "$new" ]
 }
 
 # e2e_audit_no_sudo LOG: on a host without sudo (E2E_SUDO=no: the clusters,

@@ -90,9 +90,9 @@ function Get-E2EBlockPolicy {
     # home by hand. skip: a reminder for the person about a non-blocking step
     # (the execution policy, the ssh-agent service, WSL, sign-in). fail:
     # HW-clone, the blocking step the clone step performed and verified
-    # itself, so pending it means setup-host.ps1 did not accept the clone; a
-    # retired legacy step; and every (id, kind) it does not know, a known id
-    # with another kind included.
+    # itself, so pending it means setup-host.ps1 did not accept the clone;
+    # and every (id, kind) it does not know, a known id with another kind
+    # included.
     param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Kind)
     switch -CaseSensitive ("${Id}:$Kind") {
         'HW-native:judgment' { return 'handover' }

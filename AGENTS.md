@@ -64,10 +64,8 @@ Keep the `.gitignore` residue lines (retired parser environment and submodule
 checkouts) until every host is verified clean: the updater refuses untracked
 files.
 
-`tests/test_repository_text.py` keeps retired mechanism names out of tracked
-files outside `docs/chezmoi-migration/` and every Markdown link resolving; extend
-its allowlist only for a reviewed residue guard, recovery pointer or native
-negative assertion.
+`tests/test_markdown_links.py` keeps every relative Markdown link and `#anchor`
+in files outside `docs/chezmoi-migration/` resolving.
 
 ## Shell conventions
 

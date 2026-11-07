@@ -89,14 +89,13 @@ Source and state guards: `test_chezmoi_source_state.py` fails on a
 a tracked gitlink. `test_chezmoi_update_config.py` requires the template, and so
 init, to write `persistentState` as
 `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash form (Unix and Windows
-destinations), to fold its case variants into that key (a config holding two of
-them fails init and is left unchanged), and to add only that key to a config the
-previous template wrote; a plain command naming only the config then shares the
-bound database without a stray `chezmoistate.boltdb`, while the updater's
-explicit `--persistent-state` still wins. `test_chezmoi_provision.py` resolves a
-native-owned home's role for the doctor and setup-host from `[data].host` alone
-(no environment variable), reads chezmoi init's real rendering of it, and keeps
-H7-native done on a bound home with a stray state database.
+destinations) and to fold its case variants into that key (a config holding two
+of them fails init and is left unchanged); a plain command naming only the
+config then shares the bound database without a stray `chezmoistate.boltdb`,
+while the updater's explicit `--persistent-state` still wins.
+`test_chezmoi_provision.py` resolves a native-owned home's role for the doctor
+and setup-host from `[data].host` alone, reads chezmoi init's real rendering of
+it, and keeps H7-native done on a bound home with a stray state database.
 
 On native Windows, `test_chezmoi_takeover_windows.py` also pins the login
 updater to `~/.local/bin/chezmoi.exe`: a `chezmoi.com` or `chezmoi.cmd`
@@ -125,18 +124,11 @@ with a file and line. The hook enforces the character set; English wording is
 also a documentation policy and review requirement. The payload repos have
 their own independent hooks.
 
-`tests/repository-text.sh` runs `tests/test_repository_text.py` on every
-commit: its hook has `always_run`, since any file can bring a retired name back
-and any deletion can break a link. It scans every tracked text file and path
-outside `docs/chezmoi-migration/`, the historical record, for the names of
-retired mechanisms (the list is in the test), and fails on any hit its reviewed
-allowlist does not cover. Each entry names its kind (a residue guard, the
-recovery pointer or a native negative assertion) and its exact line count, so
-an entry that matches fewer, more or doubly covered lines also fails. It also
-requires that every relative link in tracked Markdown, history included,
-resolves to a tracked file or directory and that every `#anchor` matches a
-GitHub heading slug. `test_chezmoi_source_state.py` separately requires that no
-file is tracked under the retired package roots.
+`tests/markdown-links.sh` runs `tests/test_markdown_links.py` on every commit
+(its hook has `always_run`, since any deletion or rename can break a link):
+every relative link in tracked Markdown resolves to a tracked file or directory
+and every `#anchor` matches a GitHub heading slug. Files under
+`docs/chezmoi-migration/` are not checked as link sources; links into them are.
 
 Test entrypoints load `tests/lib/environment.sh` or `.ps1` to clear inherited
 DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and
@@ -160,7 +152,7 @@ The entrypoint test also checks pre-commit's files/exclude selection, the inputs
 each named hook must run on (among them the payload scripts,
 `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`, `checks.sh` and
 `steps-human.sh` (the H7-native verdict), `doctor.sh` and `setup-host.sh`; the
-repository-text hook runs on every path), and coverage of the complete
+markdown-links hook runs on every path), and coverage of the complete
 shell-suite list. The e2e-harness and e2e-harness-windows hooks cover harness
 unit/fixture tests; these hooks do not run Docker or install into the real home.
 Linux CI first checks prerequisites without running behavior tests, then
@@ -280,41 +272,39 @@ ids, with every id but the `X-` ones in some list. `tests/doctor.sh` and
 `tests/setup-host.sh` run the entry points under `env -i` against fixture
 checkouts, homes and Homebrew prefixes with stubbed tools and local clone
 remotes. Network commands outside `--online` fail the doctor suite; `sudo`,
-`chsh`, `apt-get`, `conda`, `git lfs` and the retired deployment tool are
-tripwires in the installer suite; find snapshots prove that the doctor and
-`setup-host.sh --check` write nothing. Every fixture case runs the native mode,
-the only one. The doctor binds its fixture home to the fixture checkout once the
-unmarked-home cases have run. The setup-host fixture serves a pinned chezmoi
-archive whose executable answers only `--version` (any other command is a
-tripwire), so S4-chezmoi installs it and a full apply ends at H7-native. The
-doctor reads a bound home's role from the one quoted `host` line of the `[data]`
-table of its local config, ignores the retired environment selector, exits 2 for a
+`chsh`, `apt-get`, `conda` and `git lfs` are tripwires in the installer suite;
+find snapshots prove that the doctor and `setup-host.sh --check` write nothing.
+Every fixture case runs the native mode, the only one. The doctor binds its
+fixture home to the fixture checkout once the unmarked-home cases have run. The
+setup-host fixture serves a pinned chezmoi archive whose executable answers only
+`--version` (any other command is a tripwire), so S4-chezmoi installs it and a
+full apply ends at H7-native. The doctor reads a bound home's role from the one
+quoted `host` line of the `[data]` table of its local config, exits 2 for a
 missing, repeated, unknown or malformed one and for an unmarked home without
 `--host` or `--platform`, treats `common-only` as common only, names the cause
 in its `native-config` row (only another checkout's binding and a stray
 `chezmoistate.boltdb`, which it leaves in place, merely warn) and keeps the
-offline, write-free and no-`TMPDIR` promises. The setup-host cases print HUMAN
-text that names no retired deployment step, refuse the retired deployment flag,
-check each host's exact step order, take `--host` over `[data].host`, and let an
-existing login env satisfy H2-alloc; S6-nerd-font counts a Nerd Font in a system
-font directory as installed. `tests/doctor.sh` also runs the real `./doctor.sh`
-with the real manifest against the test machine's own tools (`--platform debian`
-and `--platform other` with `--tsv`, an empty temporary `HOME`): every line must
-keep the TSV contract, the exit code must be 0 or 1, and the home, `TMPDIR` and
-checkout must stay unchanged, so a runner whose tools print unexpected versions
-or write state on `--version` fails CI. The checkout scan skips `.git`, where
-any other git process may write meanwhile; the fixture cases cover the doctor's
-own git. An empty home cannot show writes that depend on state, so fixture fakes
-model them: gh writes its device id unless `GH_TELEMETRY=0`, and the tldr C
-client refreshes a stale page cache unless `TLDR_AUTO_UPDATE_DISABLED` is set.
-`tests/bootstrap-windows.sh` runs `tests/bootstrap.ps1`, the Windows twins
-against shims, wherever pwsh exists and prints a `SKIP:` line otherwise; the
-Windows job runs that suite and the validator from `tests/run.ps1`. Its cases
-run the native mode too and mirror the Unix ones (a healthy bound host with gh
-telemetry off and no writes, the `native-config` causes, a checkout reached
-through a junction or symlink counting as the bound one, HUMAN text without a
-retired step). The healthy fixture puts a chezmoi shim on PATH and, on Windows,
-gives the fixture home a private copy of the real chezmoi
+offline, write-free and no-`TMPDIR` promises. The setup-host cases refuse an
+unknown argument, check each host's exact step order, take `--host` over
+`[data].host`, and let an existing login env satisfy H2-alloc; S6-nerd-font
+counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
+also runs the real `./doctor.sh` with the real manifest against the test
+machine's own tools (`--platform debian` and `--platform other` with `--tsv`, an
+empty temporary `HOME`): every line must keep the TSV contract, the exit code
+must be 0 or 1, and the home, `TMPDIR` and checkout must stay unchanged, so a
+runner whose tools print unexpected versions or write state on `--version` fails
+CI. The checkout scan skips `.git`, where any other git process may write
+meanwhile; the fixture cases cover the doctor's own git. An empty home cannot
+show writes that depend on state, so fixture fakes model them: gh writes its
+device id unless `GH_TELEMETRY=0`, and the tldr C client refreshes a stale page
+cache unless `TLDR_AUTO_UPDATE_DISABLED` is set. `tests/bootstrap-windows.sh`
+runs `tests/bootstrap.ps1`, the Windows twins against shims, wherever pwsh
+exists and prints a `SKIP:` line otherwise; the Windows job runs that suite and
+the validator from `tests/run.ps1`. Its cases run the native mode too and mirror
+the Unix ones (a healthy bound host with gh telemetry off and no writes, the
+`native-config` causes, a checkout reached through a junction or symlink
+counting as the bound one). The healthy fixture puts a chezmoi shim on PATH and,
+on Windows, gives the fixture home a private copy of the real chezmoi
 (`DOTFILES_TEST_CHEZMOI`, else PATH's) as `~/.local/bin/chezmoi.exe`, so
 W1-chezmoi is done and an apply ends at HW-native; a Windows run without a real
 chezmoi skips those cases (CI requires one). There a PATH-only chezmoi, a copy
@@ -566,13 +556,7 @@ approximation:
   after `/etc/paths`). `inside.sh`'s own copy in `$E2E_OUT/bin` is reached
   only outside login shells. With two copies on PATH, each wrapper skips
   every file that is itself an e2e wrapper when it looks for the real tool,
-  so a call is logged once and never bounces between the copies. The retired
-  deployment tool is no longer wrapped (retirement decision D-11(a) in the
-  [migration record](chezmoi-migration/status.md#user-decisions-2026-11-05-to-2026-11-07)),
-  and nothing the native flow runs installs it: the login-PATH audit of
-  criterion 5 fails any copy the machine did not have before the run, and
-  `audit-clone-links` any link under HOME that leads into the clone, which is
-  what a stray one would leave.
+  so a call is logged once and never bounces between the copies.
 - `wsl-ubuntu` is detected through `WSL_DISTRO_NAME` and `/mnt/wsl/Ubuntu`,
   not a Microsoft kernel: there is no Windows interop (`wslview`, the Windows
   credential helper) and no `/etc/wsl.conf`.
@@ -625,12 +609,11 @@ approximation:
   doctor, the no-write `-Tsv` and `-Check` runs, a second `-Yes` that applies
   nothing and a `-Check` with nothing left, a clean clone after every step, a
   silent load of the deployed profile, the payload repos, the documented
-  handover and an empty native diff), plus `audit-scheduled-tasks` (no task of
-  the dotfiles at the end, the task identities unchanged after the apply loop,
-  the tasks the loop added listed in a note) and `audit-sync-venv`. There are
-  no negatives and no wrapper, sudo or rc audits there, since there are no
-  wrappers and no sudo log. The home snapshots note, rather than fail, a
-  change under `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows'
+  handover and an empty native diff), plus `audit-scheduled-tasks` (the task
+  identities unchanged after the apply loop, the tasks the loop added listed in
+  a note). There are no negatives and no wrapper, sudo or rc audits there, since
+  there are no wrappers and no sudo log. The home snapshots note, rather than
+  fail, a change under `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows'
   per-user CRL and OCSP cache, which every process of the runner account
   writes, the Actions agent's own HTTPS traffic included (the first CI run
   saw an entry appear during `-Check`, whose probes are all local). The same
@@ -678,7 +661,7 @@ handover), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the same
 | `HW-native` (`judgment`) | handover: never run line by line; once it alone is pending and a run applied nothing, the loop ends and `native-handover` runs Fresh Windows home by hand (`Invoke-NativeHandover -Role win` in a child `pwsh -NoProfile -NonInteractive` from the clone) under `human:HW-native` |
 | `HW-clone` (any kind) | **fail**: it blocks the flow, and the harness made and checked the clone itself, so a pending HW-clone means setup-host has not accepted it |
 | `HW-execution-policy`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, installs WSL, starts a service nor signs in |
-| any other id or kind, the retired Windows deployment steps included | **fail**, with the block's text in the detail |
+| any other id or kind | **fail**, with the block's text in the detail |
 
 The Windows login-shell step then loads the deployed profile in a child `pwsh`
 started without `-NoProfile`, which must exit 0 and print nothing, with the
@@ -714,16 +697,12 @@ step in `summary.tsv`:
    `human:*` or `negative:*` window of `log/timeline`, and every non-indented
    line of that log is such a timestamped entry, so a log in a shape the
    audit cannot parse fails it instead of passing unread; (c) no link under
-   HOME, outside the clone, resolves into the clone (`audit-clone-links`),
-   no copy of the retired deployment tool is on the login PATH but one the
-   machine had before the run (`audit-no-stow`), and the retired parser
-   environment never exists in the clone after any step (`audit-sync-venv`);
-   (d) the login shell from `getent passwd` (`dscl` on macOS) is the same at
-   the start and the end, and the sha256 of
-   `~/.bashrc`, `~/.profile`, `~/.bash_profile`, `~/.zshrc`, `~/.zshenv` and
-   `~/.zprofile` (those that exist) does not change across any non-human
-   step; a change during a `human:*` step, the handover's included, is
-   recorded as a note.
+   HOME, outside the clone, resolves into the clone (`audit-clone-links`); (d)
+   the login shell from `getent passwd` (`dscl` on macOS) is the same at the
+   start and the end, and the sha256 of `~/.bashrc`, `~/.profile`,
+   `~/.bash_profile`, `~/.zshrc`, `~/.zshenv` and `~/.zprofile` (those that
+   exist) does not change across any non-human step; a change during a `human:*`
+   step, the handover's included, is recorded as a note.
 6. **A login shell starts clean.** Under `env -i` with the system PATH,
    `bash -lc 'exec <zsh> -il -c exit'` (the login env's zsh on hpc) exits 0
    with empty stdout and empty stderr, apart from what is not a message: on
@@ -752,12 +731,12 @@ step in `summary.tsv`:
    `native_cz` and `native_handover` and nothing else at the top level, and
    `native_handover H` (or `common-only`) must exit 0 and leave the exact
    binding (`dotfiles-chezmoi-v1`, the physical home, the physical clone,
-   mode 0600), a regular local config selecting the role, no maintenance
-   marker, no stray `~/.config/chezmoi/chezmoistate.boltdb`, a non-empty bound
-   state database, a regular `~/.zshrc` and a byte-identical copy of every rc
-   file that existed before in `~/.local/state/dotfiles-fresh-backup`. After
-   the payloads, `native-converged` requires an empty
-   `native_cz diff --exclude=dirs` and every managed target a regular file.
+   mode 0600), a regular local config selecting the role, no maintenance marker,
+   a non-empty bound state database, a regular `~/.zshrc` and a byte-identical
+   copy of every rc file that existed before in
+   `~/.local/state/dotfiles-fresh-backup`. After the payloads,
+   `native-converged` requires an empty `native_cz diff --exclude=dirs` and
+   every managed target a regular file.
 
 Each host also runs its negative cases as separate steps
 (`negative:<token>`): the platform refusals (`--host wsl-ubuntu --check` in

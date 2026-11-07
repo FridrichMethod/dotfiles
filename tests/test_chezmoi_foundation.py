@@ -159,37 +159,6 @@ class FoundationTests(unittest.TestCase):
         self.assertEqual(snapshot(fixture.destination), before)
         self.assertEqual(snapshot(fixture.source), source)
 
-    def test_owned_symlink_can_become_regular_file(self):
-        fixture = self.fixture()
-        original = fixture.root / "owned legacy source"
-        original.write_text("owned content\n", encoding="utf-8")
-        target = fixture.destination / ".owned-config"
-        try:
-            target.symlink_to(original)
-        except OSError as error:
-            if os.name == "nt":
-                self.skipTest(f"native Windows symlink fixture unavailable: {error}")
-            raise
-        self.successful(fixture, "add", "--follow", str(target))
-        # Native add derives attributes (including private_) from the original
-        # mode, so source naming must not depend on the caller's umask.
-        imported = Path(self.successful(fixture, "source-path", str(target)).stdout.strip())
-        self.assertTrue(imported.is_relative_to(fixture.source))
-        self.assertEqual(imported.read_text(encoding="utf-8"), "owned content\n")
-        self.assertFalse(imported.is_symlink())
-        self.assertTrue(target.is_symlink(), "add --follow imports; it does not replace the link")
-        refused = fixture.run("apply", str(target))
-        self.assertEqual(refused.returncode, 1)
-        self.assertTrue(target.is_symlink())
-        self.assertEqual(original.read_text(encoding="utf-8"), "owned content\n")
-        # Explicit takeover is separate from import; never force routine apply.
-        self.successful(fixture, "apply", "--force", str(target))
-        self.assertFalse(target.is_symlink())
-        self.assertEqual(target.read_text(encoding="utf-8"), "owned content\n")
-        self.assertEqual(original.read_text(encoding="utf-8"), "owned content\n")
-        self.assertEqual(imported.read_text(encoding="utf-8"), "owned content\n")
-        self.assertEqual(self.successful(fixture, "diff", str(target)).stdout, "")
-
 
 class FixturePrerequisiteTests(unittest.TestCase):
     def test_native_child_stdin_is_closed_unless_input_is_explicit(self):

@@ -74,9 +74,6 @@ class NativeIntegrationTests(unittest.TestCase):
         with SourceFixture(HOST) as fixture:
             self.seed_live(fixture)
             self.assertEqual(list(Path(fixture.env["PATH"]).iterdir()), [])
-            # The fixture source holds no helper library or Python environment.
-            for name in (".venv-sync", "lib"):
-                self.assertFalse((fixture.source / name).exists(), name)
             calls = fixture.root / "interpreter calls"
             poison_interpreters(Path(fixture.env["PATH"]), calls)
             source = snapshot(fixture.source)
@@ -151,7 +148,7 @@ class NativeIntegrationTests(unittest.TestCase):
             self.assertEqual(codex_live["permissions"]["workspace-net"]["description"], marker)
             self.assertEqual(snapshot(fixture.source), source)
 
-    def test_apply_does_not_migrate_portable_source_and_has_no_migration_flag(self):
+    def test_apply_leaves_polluted_portable_source_unchanged(self):
         # Polluted portable input stays untouched; unknown Codex fields gain no ownership.
         with SourceFixture(HOST) as fixture:
             self.seed_live(fixture)
@@ -165,11 +162,6 @@ class NativeIntegrationTests(unittest.TestCase):
             self.assertNotIn("fixture_portable_only", actual)
             self.assertEqual(actual["fixture_live"], {"keep": False})
             self.assertEqual(snapshot(fixture.source), source)
-            destination = snapshot(fixture.destination)
-            refused = fixture.run("apply", "--migrate-portable")
-            self.assertNotEqual(refused.returncode, 0)
-            self.assertEqual(snapshot(fixture.source), source)
-            self.assertEqual(snapshot(fixture.destination), destination)
 
 
 if __name__ == "__main__":

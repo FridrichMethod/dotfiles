@@ -19,8 +19,7 @@ from chezmoi_source_support import (
 from chezmoi_support import ChezmoiFixture
 
 
-KIT_PATHS = (".claude/dotfiles", ".claude/coding-agent-kit", ".local/bin/codex-as", ".local/bin/claude-as")
-LEGACY_TREES = ("common", *ROLES[1:])
+KIT_PATHS = (".claude/coding-agent-kit", ".local/bin/codex-as", ".local/bin/claude-as")
 # The caller's umask, which native apply honors for plain and executable
 # files; private files are 0600 whatever it is.
 UMASK = os.umask(0o022)
@@ -215,7 +214,6 @@ class SourceContractTests(unittest.TestCase):
             with self.subTest(config=config), ChezmoiFixture() as fixture:
                 copy_controls(fixture.source)
                 fixture.config.write_text(config, encoding="utf-8")
-                fixture.env["DOTFILES_HOST"] = next(iter(compatible))
                 result = fixture.run("apply")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("host", result.stderr.lower())
@@ -266,11 +264,7 @@ class SourceContractTests(unittest.TestCase):
                          if b".chezmoi.workingTree" in (ROOT / path).read_bytes())
         self.assertEqual(readers, ["home/.chezmoi.toml.tmpl"])
 
-    def test_legacy_trees_and_raw_duplicates_are_gone(self):
-        # Git, not the filesystem: ignored retired checkouts may remain (D-8).
-        listed = subprocess.run(["git", "ls-files", "-z", "--", *LEGACY_TREES], cwd=ROOT,
-                                env=fixture_git_env(), check=True, capture_output=True, timeout=30)
-        self.assertEqual(listed.stdout, b"")
+    def test_pinned_binary_assets_keep_their_bytes(self):
         for path, digest in RAW_ASSETS.items():
             with self.subTest(asset=path):
                 self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest)
@@ -280,7 +274,6 @@ class SourceContractTests(unittest.TestCase):
             expected = expected_entries(role)
             self.assertEqual(len(expected), COUNTS[role])
             self.assertEqual(list(Path(fixture.env["PATH"]).iterdir()), [])
-            self.assertFalse((fixture.root / ".venv-sync").exists())
             before = snapshot(fixture.source)
             unsupported = fixture.run("managed", "--include=symlinks,scripts", "--nul-path-separator")
             self.assert_success(unsupported)

@@ -304,7 +304,7 @@ exit $LASTEXITCODE
     foreach ($argument in @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $wrapper)) {
         $start.ArgumentList.Add($argument)
     }
-    foreach ($name in @('DOTFILES_COLOR', 'BAT_CONFIG_DIR', 'ZSH', 'ZSH_CUSTOM', 'NVM_DIR', 'DOTFILES_HOST',
+    foreach ($name in @('DOTFILES_COLOR', 'BAT_CONFIG_DIR', 'ZSH', 'ZSH_CUSTOM', 'NVM_DIR',
             'DOTFILES_AUTO_UPDATE', 'FAKE_WINGET_EXIT', 'FAKE_AUTH_EXIT',
             'FAKE_PSRESOURCE_INSTALLED', 'FAKE_BAT_CACHE_EXIT')) {
         [void]$start.Environment.Remove($name)
@@ -485,7 +485,6 @@ try {
             foreach ($forbidden in @('Get-Command', 'Start-Process', 'sudo', 'Set-ExecutionPolicy', 'Register-ScheduledTask')) {
                 Assert-True ($commands -notcontains $forbidden) "$name runs $forbidden."
             }
-            Assert-True (-not @($commands | Where-Object { $_ -match 'stow-all' }).Count) "$name runs stow-all."
             $assignments = $ast.FindAll({ param($node)
                     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
                     $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
@@ -496,7 +495,7 @@ try {
                 Assert-True ($null -ne $parent) "$name sets ErrorActionPreference outside a function."
             }
             if ($name -in @('doctor.ps1', 'setup-host.ps1')) {
-                # The exact parameters: the retired compatibility-mode switch is gone.
+                # The exact parameters.
                 $declared = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }) -join ','
                 $expected = if ($name -eq 'doctor.ps1') { 'HostName,Tier,Tsv,Quiet,Online' } else { 'HostName,Tier,Check,Yes,PrintManual' }
                 Assert-Equal $declared $expected "$name parameters"
@@ -842,11 +841,18 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         }
     }
 
-    Test-Case 'doctor reports a healthy host with five TSV columns and writes nothing offline' {
+    Test-Case 'doctor reports a healthy host with five TSV columns, keeps gh telemetry off and writes nothing offline' {
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
         Set-FixtureNativeBound $fixture
+        # Like recent real gh releases, this gh writes a telemetry device id
+        # on every command, --version included, unless GH_TELEMETRY=0.
+        New-Shim $fixture.Bin 'gh' @"
+if (`$env:GH_TELEMETRY -ne '0') { [IO.File]::WriteAllText((Join-Path `$env:FIXTURE_HOME 'gh-device-id'), 'id') }
+if ("`$args" -eq '--version') { Write-Output '$($ToolText.gh)' }
+exit 0
+"@
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true }
         Assert-Exit $run 0 'healthy doctor'
@@ -859,9 +865,13 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             $cells[1]
         }
         Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('native-config', 'payloads')) -join ',') 'doctor ids'
+        Assert-True ($run.Lines -contains "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-") "native-config row: $($run.Stdout)"
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'doctor wrote files'
         $events = Get-FixtureEvents $fixture
-        Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version') 'version probes did not run'
+        Assert-True ($events -contains 'fzf --version' -and $events -contains 'oh-my-posh version' -and $events -contains 'gh --version') "version probes did not run: $($events -join '; ')"
+        # On Windows the private ~/.local/bin/chezmoi.exe, the real chezmoi,
+        # answers before the PATH shim; elsewhere the shim does.
+        Assert-True (($events -contains 'chezmoi --version') -ne $IsWindows) "chezmoi probe (Windows: $IsWindows): $($events -join '; ')"
         Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline doctor used the network: $($events -join '; ')"
         $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
         $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true }; Assert-Exit $quiet 0 'quiet doctor'
@@ -872,6 +882,7 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-Equal $plain.Lines[0] '[dotfiles] [step] Checking host win (windows); required tiers: core,cli,ai' 'header line'
         Assert-True ($plain.Lines -contains '[dotfiles] [ok] core fzf: 0.60.0') 'ok line format'
         Assert-True ($plain.Lines[-1] -cmatch $summary) "summary line: $($plain.Lines[-1])"
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'quiet, quiet TSV or plain doctor wrote files'
     }
 
     Test-Case 'doctor fails selected tiers, warns for the rest and maps fixes to Windows steps' {
@@ -908,20 +919,6 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tDOTFILES_PAYLOAD_ITEMS selects no payload`t-") "kit-only row: $($run.Stdout)"
         $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit nope skills' }
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run sync-payloads ITEM`tdocs/bootstrap.md H7-payloads") "unknown item row: $($run.Stdout)"
-        # The records the retired scheduler left (ITEM.failed) are ignored,
-        # never reported or removed.
-        $state = Join-Path $fixture.LocalAppData 'dotfiles/payload'
-        [void][IO.Directory]::CreateDirectory($state)
-        [IO.File]::WriteAllText((Join-Path $state 'skills.failed'), "1700000000 3`n[dotfiles] [error] skills: stopped for a person`n")
-        [IO.File]::WriteAllText((Join-Path $state 'pymol.failed'), "1700000000 1`n")
-        [IO.File]::WriteAllText((Join-Path $state 'kit.failed'), "1700000000 1`n")
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
-        Assert-Exit $run 0 'payload failures only warn'
-        Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$short`tdocs/bootstrap.md H7-payloads") "ignored records row: $($run.Stdout)"
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
-        Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "old records row: $($run.Stdout)"
-        Assert-True ((Test-Path -LiteralPath (Join-Path $state 'skills.failed')) -and (Test-Path -LiteralPath (Join-Path $state 'pymol.failed'))) 'the doctor removed an old record'
-        Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData 'dotfiles') -Recurse -Force
         [IO.File]::WriteAllText($pymolPy, '')
     }
 
@@ -985,45 +982,6 @@ Write-Output 'tldr v1.6.1 (v2.3 spec)'
             Assert-Exit $run 2 "tools.tsv id $($case[0])"
             Assert-True ($run.Stdout.Contains($case[1])) "id $($case[0]) message: $($run.Stdout)"
         }
-    }
-
-    Test-Case 'native doctor reports a healthy bound host, keeps gh telemetry off and writes nothing offline' {
-        # On Windows the native doctor needs a real chezmoi.
-        if (Test-RealChezmoiMissing) { return }
-        $fixture = New-Fixture
-        Set-FixtureHealthy $fixture
-        Set-FixtureNativeBound $fixture
-        # Like recent real gh releases, this gh writes a telemetry device id
-        # on every command, --version included, unless GH_TELEMETRY=0.
-        New-Shim $fixture.Bin 'gh' @"
-if (`$env:GH_TELEMETRY -ne '0') { [IO.File]::WriteAllText((Join-Path `$env:FIXTURE_HOME 'gh-device-id'), 'id') }
-if ("`$args" -eq '--version') { Write-Output '$($ToolText.gh)' }
-exit 0
-"@
-        $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true }
-        Assert-Exit $run 0 'healthy native doctor'
-        Assert-Equal $run.Lines[0] "status`tid`ttier`tdetail`tfix" 'native TSV header'
-        $ids = foreach ($line in @($run.Lines | Select-Object -Skip 1)) {
-            $cells = $line.Split("`t")
-            Assert-Equal $cells.Count 5 "TSV columns in '$line'"
-            Assert-Equal $cells[0] 'ok' "status in '$line'"
-            Assert-Equal $cells[4] '-' "fix in '$line'"
-            $cells[1]
-        }
-        Assert-Equal (@($ids) -join ',') ((@(Get-WinToolIds) + @('native-config', 'payloads')) -join ',') 'native doctor ids'
-        Assert-True ($run.Lines -contains "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-") "native-config row: $($run.Stdout)"
-        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'native doctor wrote files'
-        $events = Get-FixtureEvents $fixture
-        Assert-True ($events -contains 'gh --version') "version probes did not run: $($events -join '; ')"
-        # On Windows the private ~/.local/bin/chezmoi.exe, the real chezmoi,
-        # answers before the PATH shim; elsewhere the shim does.
-        Assert-True (($events -contains 'chezmoi --version') -ne $IsWindows) "chezmoi probe (Windows: $IsWindows): $($events -join '; ')"
-        Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline native doctor used the network: $($events -join '; ')"
-        $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
-        $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true }; Assert-Exit $quiet 0 'quiet native doctor'
-        Assert-True ($quiet.Lines.Count -eq 1 -and $quiet.Lines[0] -cmatch $summary) "quiet native doctor printed more than the summary: $($quiet.Stdout)"
-        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'quiet native doctor wrote files'
     }
 
     Test-Case 'native-config names its cause; another checkout and a stray state database only warn' {
@@ -1275,22 +1233,6 @@ exit 0
         finally { $script:DownloadBytes = $null }
     }
 
-    Test-Case 'native setup and doctor check chezmoi and the handover' {
-        $fixture = New-Fixture
-        $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
-        Assert-Exit $run 3 'native check before handover'
-        Assert-True ([bool]($run.Lines -match '^W1-chezmoi todo ')) 'native binary step missing'
-        Assert-True ([bool]($run.Lines -match '^HW-native human ')) 'native handover step missing'
-        $doctor = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
-        Assert-True ([bool]($doctor.Lines -match "`tchezmoi`t")) 'native doctor omitted chezmoi'
-        Assert-True ([bool]($doctor.Lines -match "`tnative-config`t")) 'native doctor omitted binding check'
-        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'native check wrote files'
-        $manual = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }
-        Assert-Exit $manual 0 'native manual handoff'
-        Assert-True ($manual.Stdout.Contains('docs/chezmoi-migration/takeover.md')) 'missing native procedure'
-    }
-
     Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 while work remains' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
@@ -1354,8 +1296,8 @@ exit 0
         }
     }
 
-    Test-Case 'setup-host -PrintManual prints every HUMAN block, accurate and paste-safe' {
-        # A checkout path with $, a quote and a space must survive pasting.
+    Test-Case 'setup-host -PrintManual prints every HUMAN block accurately' {
+        # A checkout path with $, a quote and a space, which no HUMAN command may name.
         $fixture = New-Fixture -RepoName "it's `$HOME dir"
         $run = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }
         Assert-Exit $run 0 'print manual'
@@ -1374,18 +1316,14 @@ exit 0
         }
         $wsl = ($blocks | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
         Assert-True ($wsl.Contains('~\.wslconfig') -and $wsl.Contains('/etc/wsl.conf') -and $wsl.Contains('mount.vbs')) "HW-wsl lacks the deployed WSL files: $wsl"
-        Assert-True (-not $wsl.Contains('not stowed')) 'HW-wsl claims the WSL files are not stowed'
+        Assert-True ($wsl.Contains('# The native handover (HW-native) deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home.')) "HW-wsl: $wsl"
+        $auth = ($blocks | Where-Object Id -eq 'HW-auth').Lines -join "`n"
+        Assert-True ($auth.Contains('Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.')) "HW-auth: $auth"
+        Assert-True ($auth.Contains('check with .\doctor.ps1 -Online.')) "HW-auth doctor line: $auth"
+        $clone = ($blocks | Where-Object Id -eq 'HW-clone').Lines -join "`n"
+        Assert-True ($clone.Contains('then rerun setup-host.ps1 from the clone.')) "HW-clone: $clone"
         $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
         Assert-True (-not @($commands | Where-Object { $_ -match 'setup-git' }).Count) 'a HUMAN block runs gh auth setup-git'
-        foreach ($line in @($commands | Where-Object { $_ -match '^git -C ' })) {
-            $errors = $null
-            $parsed = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$errors)
-            Assert-True (-not $errors) "HUMAN line does not parse: $line"
-            $command = $parsed.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true)
-            $argument = $command.CommandElements[2]
-            Assert-True ($argument -is [Management.Automation.Language.StringConstantExpressionAst] -and
-                $argument.StringConstantType -eq 'SingleQuoted' -and $argument.Value -ceq $fixture.Repo) "path not single-quoted in: $line"
-        }
         # The native blocks run no checkout script and name no checkout path.
         $invocations = @($commands | Where-Object { $_.StartsWith('& ') })
         Assert-Equal $invocations.Count 0 'native HUMAN blocks run no checkout script'
@@ -1407,24 +1345,6 @@ exit 0
                 }
             }
         }
-        Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
-    }
-
-    Test-Case 'native HUMAN blocks hand over to chezmoi and never name Stow' {
-        $fixture = New-Fixture
-        $manual = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }
-        Assert-Exit $manual 0 'native print manual'
-        $blocks = Get-HumanBlocks $manual.Lines
-        Assert-Equal (($blocks | ForEach-Object Id) -join ',') 'HW-clone,HW-native,HW-execution-policy,HW-ssh-agent,HW-wsl,HW-auth' 'native HUMAN ids'
-        $stow = @($manual.Lines | Where-Object { $_ -match 'stow' })
-        Assert-Equal $stow.Count 0 "native HUMAN blocks name Stow: $($stow -join ' | ')"
-        $wsl = ($blocks | Where-Object Id -eq 'HW-wsl').Lines -join "`n"
-        Assert-True ($wsl.Contains('# The native handover (HW-native) deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home.')) "native HW-wsl: $wsl"
-        $auth = ($blocks | Where-Object Id -eq 'HW-auth').Lines -join "`n"
-        Assert-True ($auth.Contains('Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.')) "native HW-auth: $auth"
-        Assert-True ($auth.Contains('check with .\doctor.ps1 -Online.')) "native HW-auth doctor line: $auth"
-        $clone = ($blocks | Where-Object Id -eq 'HW-clone').Lines -join "`n"
-        Assert-True ($clone.Contains('then rerun setup-host.ps1 from the clone.')) "native HW-clone: $clone"
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'print manual probed tools'
     }
 

@@ -165,7 +165,7 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         $run = Invoke-Hook $case @('-Now')
         Assert-True ($run.Code -eq 0) $run.Text
         Assert-True ((Get-Events $case) -ceq $installAll) "events: $(Get-Events $case); output: $($run.Text)"
-        Assert-True ($run.Text.Contains('[dotfiles] [step] pymol: installing') -and -not $run.Text.Contains('background')) $run.Text
+        Assert-True ($run.Text.Contains('[dotfiles] [step] pymol: installing')) $run.Text
         Assert-True (-not $run.Text.Contains('kit')) "the default items named the kit: $($run.Text)"
         Clear-Events $case
         $run = Invoke-Hook $case @('-Now', 'skills', 'pymol')

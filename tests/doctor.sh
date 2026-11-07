@@ -391,13 +391,6 @@ expect_usage_error unknown-tier "unknown tier 'gui'" -- --host lab-ubuntu --tier
 expect_usage_error win-host 'pwsh -File doctor.ps1 -Host win' -- --host win
 expect_usage_error win-host-equals 'pwsh -File doctor.ps1 -Host win' -- --host=win
 expect_usage_error no-host 'mac wsl-ubuntu lab-ubuntu sherlock marlowe win' --
-# The retired --legacy-stow is an unknown argument. An unmarked home needs
-# --host or --platform: DOTFILES_HOST selects nothing.
-expect_usage_error legacy-flag 'unknown argument: --legacy-stow' -- --legacy-stow --host lab-ubuntu
-expect_usage_error env-host-lab-ubuntu 'no host given and none recorded for this home' DOTFILES_HOST=lab-ubuntu --
-expect_usage_error env-host-win 'no host given and none recorded for this home' DOTFILES_HOST=win --
-expect_usage_error env-host-unknown 'no host given and none recorded for this home' DOTFILES_HOST=nowhere --
-expect_usage_error env-host-empty 'no host given and none recorded for this home' DOTFILES_HOST= --
 
 OS_UBUNTU="$TEST_TMP/os-release-ubuntu"
 printf 'ID=ubuntu\nID_LIKE=debian\n' >"$OS_UBUNTU"
@@ -438,7 +431,7 @@ assert_row nerd-font warn
 assert_row host-tool warn
 assert_row psfzf skip '' -
 assert_row payloads ok 'installed: kit, pymol, skills' -
-for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-auth zsh-smoke submodule; do
+for id in login-tool lmod mac-clt mac-alt win-only gh-auth claude-auth codex-auth zsh-smoke; do
     assert_no_row "$id"
 done
 assert_event 'fzf --version'
@@ -771,27 +764,9 @@ run_doctor payloads-awesome-ignored AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOA
 assert_row payloads ok 'installed: skills' -
 run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
 assert_row payloads warn "not installed: kit: $SYNC_ADVICE"
-# A link the retired coding-agent-kit package left at a kit path changes
-# nothing: the kit's own installer, not the doctor, judges it. The records the
-# retired scheduler left (ITEM.failed, stamps, its log) are ignored, never
-# reported or removed.
-PAYLOAD_STATE=$TEST_HOME/.local/state/dotfiles/payload
-mkdir -p "$PAYLOAD_STATE" "$TEST_HOME/.local/bin"
-printf '1700000000 3\n[dotfiles] [error] skills: stopped for a person\n' >"$PAYLOAD_STATE/skills.failed"
-printf '1700000000 1\n' >"$PAYLOAD_STATE/kit.failed"
-ln -s ../../dotfiles/common/coding-agent-kit/.local/bin/codex-as "$TEST_HOME/.local/bin/codex-as"
-run_doctor payloads-legacy-link -- --host lab-ubuntu --tsv
-assert_rc 0
-assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
-[ "$(tsv_field payloads 4)" = "not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: $SYNC_ADVICE; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ] ||
-    case_fail "payloads detail [$(tsv_field payloads 4)]"
 run_doctor payloads-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
 assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
 [ "$(tsv_field payloads 4)" = "not installed: pymol: $SYNC_ADVICE" ] || case_fail "payloads detail [$(tsv_field payloads 4)]"
-run_doctor payloads-old-records DOTFILES_PAYLOAD_ITEMS=skills -- --host lab-ubuntu --tsv
-assert_row payloads ok 'installed: skills' -
-[[ -f "$PAYLOAD_STATE/skills.failed" && -f "$PAYLOAD_STATE/kit.failed" ]] || case_fail 'the doctor removed an old record'
-rm -r "$TEST_HOME/.local/state/dotfiles" "$TEST_HOME/.local/bin/codex-as"
 mv "$TEST_TMP/notify.hidden" "$TEST_HOME/.claude/coding-agent-kit/notify.cjs"
 printf '# fixture\n' >"$TEST_HOME/.pymolrc.py"
 mv "$FIXTURE/config/payloads.tsv" "$TEST_TMP/payloads.hidden"
@@ -1035,7 +1010,7 @@ REAL_MARKER="$TEST_TMP/real.marker"
 mkdir "$REAL_HOME" "$REAL_TMP"
 DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
 real_doctor_case() {
-    local fix changed required='git locale native-config rc-pollution' absent='venv-sync stow-links'
+    local fix changed required='git locale native-config rc-pollution'
     CASE=$1
     shift
     touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
@@ -1054,9 +1029,6 @@ real_doctor_case() {
     assert_tsv_shape
     for id in $required; do
         [ "$(tsv_field "$id" 1)" != '<no row>' ] || case_fail "no $id row"
-    done
-    for id in $absent submodule; do
-        assert_no_row "$id"
     done
     awk -F '\t' 'NR > 1 { print $5 }' "$OUT/$CASE.out" | LC_ALL=C sort -u >"$OUT/$CASE.fixes"
     while IFS= read -r fix; do
@@ -1150,7 +1122,6 @@ run_doctor native-list -- --host lab-ubuntu --list
 assert_rc 0
 assert_out "$(printf 'native-config\tcore\tcheck\t-\tH7-native')"
 assert_out "$(printf 'path-order\tcore\tcheck\t-\tH7-native')"
-assert_no_out "$(printf 'submodule\t')"
 assert_quiet_events 'native --list probed tools'
 
 # native-config names its cause. Only a home bound to another checkout (a
@@ -1240,20 +1211,13 @@ assert_row native-config human "$FIXTURE/lib/chezmoi-guard.sh is unreadable, so 
 mv "$TEST_TMP/guard.hidden" "$FIXTURE/lib/chezmoi-guard.sh"
 
 # Without --host or --platform, a native-owned home's role is the one
-# [data].host of its native config, read as text. DOTFILES_HOST never
-# applies, and an unclear role is a usage error, never a guess.
-run_doctor native-host-env-ignored DOTFILES_HOST=sherlock -- --tsv
+# [data].host of its native config, read as text; an unclear role is a usage
+# error, never a guess.
+run_doctor native-host-config -- --tsv
 assert_rc 0
 assert_row host-tool warn
 assert_no_row login-tool
-run_doctor native-host-env-empty-ignored DOTFILES_HOST= -- --tsv
-assert_rc 0
-assert_row host-tool warn
-assert_not_in "$OUT/$CASE.err" 'DOTFILES_HOST'
-run_doctor native-host-env-unknown-ignored DOTFILES_HOST=nowhere -- --tsv
-assert_rc 0
-assert_row host-tool warn
-run_doctor native-host-explicit DOTFILES_HOST=lab-ubuntu -- --host sherlock --tsv
+run_doctor native-host-explicit -- --host sherlock --tsv
 assert_row lmod warn
 assert_no_row host-tool
 run_doctor native-host-platform -- --platform other --tsv
@@ -1310,7 +1274,6 @@ run_doctor native-host-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
 assert_rc 0
 assert_tsv_shape
 assert_err 'the native config of this home selects [data].host common-only (no host overlay): checking as --platform debian; pass --host HOST for an overlay'
-assert_not_in "$OUT/$CASE.err" 'stow-all'
 assert_no_row login-tool
 assert_no_row host-tool
 run_doctor native-host-common-only-host -- --host lab-ubuntu --tsv

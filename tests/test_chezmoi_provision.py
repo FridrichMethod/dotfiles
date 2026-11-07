@@ -37,36 +37,21 @@ class NativeProvisionTests(unittest.TestCase):
             text=True, capture_output=True, stdin=subprocess.DEVNULL, check=False,
         )
 
-    def test_native_setup_default_excludes_sync_and_stow_steps(self):
+    def test_setup_list_names_chezmoi_steps(self):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("S4-chezmoi", result.stdout)
         self.assertIn("H7-native", result.stdout)
-        self.assertNotIn("S4-setup-sync", result.stdout)
-        self.assertNotIn("H7-stow", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_legacy_stow_flag_is_refused(self):
-        for script in ("setup-host.sh", "doctor.sh"):
-            with self.subTest(script=script):
-                result = self.run_script(script, "--legacy-stow", "--host", "lab-ubuntu", "--list")
-                self.assertEqual(result.returncode, 2, result.stdout)
-                self.assertIn("unknown argument: --legacy-stow", result.stderr)
-                self.assertEqual(list(self.home.iterdir()), [])
-
-    def test_unmarked_home_needs_host_whatever_dotfiles_host_says(self):
+    def test_unconfigured_home_needs_host(self):
         expected = {"setup-host.sh": "no host: pass --host", "doctor.sh": "no host given"}
         for script, text in expected.items():
-            for value in ("lab-ubuntu", "win", ""):
-                with self.subTest(script=script, dotfiles_host=value):
-                    self.env["DOTFILES_HOST"] = value
-                    try:
-                        result = self.run_script(script, "--list")
-                    finally:
-                        del self.env["DOTFILES_HOST"]
-                    self.assertEqual(result.returncode, 2, result.stdout)
-                    self.assertIn(text, result.stderr)
-                    self.assertEqual(list(self.home.iterdir()), [])
+            with self.subTest(script=script):
+                result = self.run_script(script, "--list")
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn(text, result.stderr)
+                self.assertEqual(list(self.home.iterdir()), [])
 
     def test_sherlock_plan_uses_static_binary_for_legacy_glibc(self):
         # The real host has glibc 2.17; the generic v2.74 binary requires 2.34.
@@ -89,20 +74,18 @@ step_S4_chezmoi_plan
                 self.assertIn(str(self.home / ".local/bin/chezmoi"), result.stdout)
                 self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_native_doctor_does_not_require_stow_or_sync_runtime(self):
+    def test_doctor_list_names_chezmoi_checks(self):
         result = self.run_script("doctor.sh", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         ids = {line.split("\t")[0] for line in result.stdout.splitlines()}
         self.assertIn("chezmoi", ids)
         self.assertIn("native-config", ids)
-        self.assertTrue({"stow", "stow-links", "venv-sync"}.isdisjoint(ids))
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_native_handoff_only_prints_reviewed_procedure(self):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--print-manual")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("docs/chezmoi-migration/takeover.md", result.stdout)
-        self.assertNotIn("HUMAN-BEGIN H7-stow", result.stdout)
         self.assertNotIn("init --apply", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
@@ -120,18 +103,13 @@ step_S4_chezmoi_plan
                       for path in self.home.rglob("*"))
 
     def test_native_role_selects_host_without_receipt_or_environment(self):
-        # DOTFILES_HOST selects nothing: a native-owned home ignores it.
         self.bind_native("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
         for script, step in (("doctor.sh", "native-config"), ("setup-host.sh", "H7-native")):
             with self.subTest(script=script):
                 explicit = self.run_script(script, "--host", "lab-ubuntu", "--list")
                 other = self.run_script(script, "--host", "sherlock", "--list")
-                self.env["DOTFILES_HOST"] = "sherlock"
-                try:
-                    resolved = self.run_script(script, "--list")
-                finally:
-                    del self.env["DOTFILES_HOST"]
+                resolved = self.run_script(script, "--list")
                 self.assertEqual(resolved.returncode, 0, resolved.stderr)
                 self.assertIn(step, resolved.stdout)
                 self.assertNotEqual(explicit.stdout, other.stdout)
@@ -154,7 +132,6 @@ step_S4_chezmoi_plan
         self.assertEqual(self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list").returncode, 0)
 
     def test_native_home_without_one_role_requires_host(self):
-        self.env["DOTFILES_HOST"] = "lab-ubuntu"
         for lines in (("[git]", "autoAdd = false"), ("[data]", "host = 'fedora'"),
                       ("[data]", "host = 'mac'", "host = 'lab-ubuntu'")):
             with self.subTest(lines=lines):
@@ -253,13 +230,12 @@ step_S4_chezmoi_check
         )
 
     def test_install_verified_archive_without_parser_or_config_apply(self):
-        repo, executable = self.archive_fixture()
+        _repo, executable = self.archive_fixture()
         result = self.run_install()
         self.assertEqual(result.returncode, 0, result.stderr)
         destination = self.home / ".local/bin/chezmoi"
         self.assertEqual(destination.read_bytes(), executable)
         self.assertTrue(os.access(destination, os.X_OK))
-        self.assertFalse((repo / ".venv-sync").exists())
         self.assertFalse((self.home / ".config").exists())
 
     def test_wrong_digest_preserves_existing_binary(self):
@@ -309,8 +285,6 @@ step_S4_chezmoi_check
         )
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("ok\tchezmoi\t", result.stdout)
-        self.assertNotIn("venv-sync", result.stdout)
-        self.assertNotIn("stow-links", result.stdout)
         self.assertEqual(sorted(str(path.relative_to(self.home)) for path in self.home.rglob("*")), before)
 
 

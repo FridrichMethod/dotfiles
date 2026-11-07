@@ -58,7 +58,7 @@ class WriterGuardTests(unittest.TestCase):
             (source / ".chezmoiroot").write_text("home\n")
             shutil.copyfile(ROOT / "lib/chezmoi-guard.sh", source / "lib/chezmoi-guard.sh")
             for checkout, name in ((source, "bound"), (default, "default")):
-                for hook in ("chezmoi-update", "dotfiles-update", "payload-update"):
+                for hook in ("chezmoi-update", "payload-update"):
                     (checkout / f"scripts/{hook}.sh").write_text(f'printf "%s\\n" "{name} {hook}" >>"$TRACE"\n')
             marker, overlay = home / ".config/dotfiles/native", home / ".config/sh/.profile"
             env = {"HOME": str(home), "PATH": os.defpath, "TERM": "dumb", "SCRATCH": "",

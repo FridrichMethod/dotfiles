@@ -2,8 +2,8 @@
 
 # Fixture tests for setup-host.sh and lib/bootstrap/{fetch,steps*}.sh. Every
 # package manager, download and clone remote is a local stub; sudo, chsh,
-# stow, apt-get and git lfs are tripwires; each case runs under `env -i` with
-# its own fixture home, never the real one.
+# apt-get and git lfs are tripwires; each case runs under `env -i` with its
+# own fixture home, never the real one.
 # The [y/N] prompt cases run on a pseudo terminal from python3's pty module
 # and are skipped, with a note on stderr, where that is unavailable.
 
@@ -230,21 +230,6 @@ run_tty_case() {
     set -e
 }
 
-# stow_mentions NAME: lines of NAME's stderr and HUMAN blocks that name
-# Stow. The fixture paths are removed first: a random mktemp suffix or a
-# TMPDIR could spell "stow" by chance.
-stow_mentions() {
-    awk -v tmp="$TEST_TMP" '
-        function strip(s, i) {
-            while ((i = index(s, tmp)) > 0) s = substr(s, 1, i - 1) substr(s, i + length(tmp))
-            return s
-        }
-        /^HUMAN-BEGIN / { inside = 1 }
-        (FILENAME ~ /[.]err$/ || inside) && tolower(strip($0)) ~ /stow/ { print FILENAME ": " $0 }
-        /^HUMAN-END$/ { inside = 0 }
-    ' "$TEST_TMP/$1.out" "$TEST_TMP/$1.err"
-}
-
 # --- stubs -------------------------------------------------------------------
 
 cat >"$FAKE_BIN/git" <<'SH'
@@ -438,7 +423,7 @@ cat >"$FAKE_BIN/xcode-select" <<'SH'
 echo /Library/Developer/CommandLineTools
 SH
 
-for tripwire in sudo chsh stow apt-get apt conda; do
+for tripwire in sudo chsh apt-get apt conda; do
     cat >"$FAKE_BIN/$tripwire" <<SH
 #!/bin/sh
 printf 'TRIPWIRE $tripwire %s\n' "\$*" >>"\$EVENT_LOG"
@@ -758,19 +743,10 @@ expect_text wrong-platform err 'is macOS, but this kernel is Linux'
 run_case wrong-distro BOOTSTRAP_OS_RELEASE="$OS_ROCKY" -- --host lab-ubuntu --check
 expect_rc wrong-distro 2
 
-# The retired --legacy-stow is an unknown argument. An unmarked home needs
-# --host: DOTFILES_HOST selects nothing.
-run_case legacy-flag -- --legacy-stow --host lab-ubuntu --check
-expect_rc legacy-flag 2
-expect_text legacy-flag err 'unknown argument: --legacy-stow'
-expect_no_events legacy-flag
-for value in lab-ubuntu win ''; do
-    run_case env-host-ignored DOTFILES_HOST="$value" -- --check
-    expect_rc env-host-ignored 2
-    expect_text env-host-ignored err 'no host: pass --host'
-    expect_no_text env-host-ignored out 'P0-preflight'
-    expect_no_events env-host-ignored
-done
+run_case unknown-option -- --bogus --host lab-ubuntu --check
+expect_rc unknown-option 2
+expect_text unknown-option err 'unknown argument: --bogus'
+expect_no_events unknown-option
 
 # Never as root: it would install into /root or leave root-owned files.
 run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
@@ -869,7 +845,6 @@ PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
 expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
 expect_text check-fresh out 'H7-native human blocked by S3-clones'
-[ -z "$(stow_mentions check-fresh)" ] || fail "check-fresh names Stow: $(stow_mentions check-fresh)"
 expect_no_events check-fresh
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
@@ -949,7 +924,6 @@ expect_line apply "printf '%s  %s\\n' $SHA_CLAUDE $CASE_HOME/$CLAUDE_SCRATCH_REL
 expect_text apply out "S4-chezmoi done applied: verify and extract only chezmoi from ${URL_CHEZMOI##*/} to $CASE_HOME/.local/bin/chezmoi"
 expect_line apply 'HUMAN-BEGIN H7-native judgment'
 expect_text apply err 'HUMAN steps pending: S5-claude H7-native'
-[ -z "$(stow_mentions apply)" ] || fail "apply names Stow: $(stow_mentions apply)"
 [ -x "$CASE_HOME/.local/bin/chezmoi" ] || fail 'S4-chezmoi did not install chezmoi'
 [ ! -e "$CASE_HOME/.config/dotfiles/native" ] && [ ! -e "$CASE_HOME/.config/chezmoi" ] ||
     fail 'apply initialized or bound the native home'
@@ -1911,7 +1885,7 @@ expect_line recovery '# Turn it into the oh-my-zsh checkout in place, then rerun
 expect_no_events recovery
 [ ! -e "$CASE_HOME/.oh-my-zsh/custom/themes" ] || fail 'recovery case cloned plugins'
 
-# The same recovery under --check names no Stow.
+# The same recovery under --check.
 new_home native-recovery
 mkdir -p "$CASE_HOME/.oh-my-zsh/custom"
 printf '# deployed\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
@@ -1920,7 +1894,6 @@ expect_rc native-recovery 3
 expect_line native-recovery 'HUMAN-BEGIN X-recovery judgment'
 expect_line native-recovery '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
 expect_no_events native-recovery
-[ -z "$(stow_mentions native-recovery)" ] || fail "native recovery names Stow: $(stow_mentions native-recovery)"
 
 # --- rc-pollution guard ------------------------------------------------------
 
@@ -1946,7 +1919,6 @@ new_home native-dirty
 run_case native-dirty -- --host lab-ubuntu --check --only S3-dirs
 expect_rc native-dirty 3
 expect_text native-dirty err "uncommitted changes in $FIXTURE: home/dot_zshrc; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
-expect_no_text native-dirty err 'stowed'
 "$REAL_GIT" -C "$FIXTURE" checkout -q -- home/dot_zshrc
 
 mkdir -p "$FIXTURE/home/extra"
@@ -2085,8 +2057,6 @@ expect_no_text native-hpc-login-env out 'HUMAN-BEGIN H2-alloc'
 expect_no_events native-hpc-login-env
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'native hpc --check wrote files'
-[ -z "$(stow_mentions native-hpc-login-env)" ] ||
-    fail "native hpc names Stow: $(stow_mentions native-hpc-login-env)"
 
 # Without a login env, the native allocation gate holds as before.
 new_home native-hpc-fresh
@@ -2098,7 +2068,6 @@ expect_line native-hpc-fresh 'sh_dev -t 1:00:00'
 expect_line native-hpc-fresh "$FIXTURE/setup-host.sh --host sherlock"
 expect_text native-hpc-fresh out 'S2-login-env todo blocked by H2-alloc'
 expect_no_events native-hpc-fresh
-[ -z "$(stow_mentions native-hpc-fresh)" ] || fail "native hpc names Stow: $(stow_mentions native-hpc-fresh)"
 run_case native-hpc-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- \
     --host sherlock --check
 expect_text native-hpc-alloc out 'H2-alloc done inside Slurm job 1'
@@ -2130,7 +2099,6 @@ expect_no_text mac-check out 'stop unless'
 expect_text mac-check out 'S2-brew-bundle todo blocked by H1-homebrew'
 expect_text mac-check out "S4-chezmoi todo chezmoi >= 2.74.0 is missing; install the verified release into $CASE_HOME/.local/bin/chezmoi"
 expect_text mac-check out 'H7-native human blocked by S3-clones'
-[ -z "$(stow_mentions mac-check)" ] || fail "mac-check names Stow: $(stow_mentions mac-check)"
 expect_no_events mac-check
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'mac --check wrote files'
@@ -2243,16 +2211,13 @@ expect_line manual "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dot
 expect_line manual '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
 expect_text manual out '# ./setup-host.sh --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)'
 expect_text manual out "# ./setup-host.sh --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
-expect_no_text manual out '--legacy-stow'
 [ "$(grep -c '^HUMAN-BEGIN ' "$TEST_TMP/manual.out")" = "$(grep -c '^HUMAN-END$' "$TEST_TMP/manual.out")" ] ||
     fail 'unbalanced HUMAN blocks'
-[ -z "$(stow_mentions manual)" ] || fail "manual names Stow: $(stow_mentions manual)"
 expect_no_events manual
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail '--print-manual wrote files'
 
-# The native default hands configuration over to chezmoi (H7-native); its
-# HUMAN text names no Stow, and its rerun lines carry no legacy flag.
+# Every host's --print-manual has the H7-native block.
 for host in lab-ubuntu wsl-ubuntu sherlock marlowe mac; do
     if [ "$host" = mac ]; then
         run_case "native-manual-$host" "${MAC_ENV[@]}" -- --host "$host" --print-manual
@@ -2261,8 +2226,6 @@ for host in lab-ubuntu wsl-ubuntu sherlock marlowe mac; do
     fi
     expect_rc "native-manual-$host" 0
     expect_line "native-manual-$host" 'HUMAN-BEGIN H7-native judgment'
-    [ -z "$(stow_mentions "native-manual-$host")" ] ||
-        fail "native-manual-$host names Stow: $(stow_mentions "native-manual-$host")"
 done
 expect_line native-manual-lab-ubuntu '# do not run gh auth setup-git: it rewrites ~/.gitconfig, which the dotfiles manage; .gitconfig_local sets the helper'
 expect_line native-manual-lab-ubuntu "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones."
