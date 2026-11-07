@@ -135,7 +135,7 @@ KEPT = (
     Kept("tests/e2e-harness.sh", "AI-sync runtime directory (or", 1, NEGATIVE, VENV_AUDIT),
     Kept("tests/e2e-harness.sh", "hides the AI-sync runtime", 1, NEGATIVE, VENV_AUDIT),
     Kept("tests/e2e/inside.sh", "e2e_stow_start", 1, NEGATIVE, PATH_AUDIT),
-    Kept("tests/e2e/lib/assert.sh", "stow", 15, NEGATIVE, PATH_AUDIT),
+    Kept("tests/e2e/lib/assert.sh", "stow", 17, NEGATIVE, PATH_AUDIT),
     Kept("tests/e2e/lib/assert.sh", "(a Stow link", 1, NEGATIVE, PATH_AUDIT),
     Kept("tests/e2e/lib/assert.sh", "E2E_STOW_START)", 2, NEGATIVE, PATH_AUDIT),
     Kept("tests/e2e/lib/assert.sh", "E2E_STOW_START=''", 1, NEGATIVE, PATH_AUDIT),

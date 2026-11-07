@@ -6,9 +6,9 @@
 # runtime in the clone), the login-shell run and the acceptance audits
 # (wrappers.log phases, sudo.log timestamps against the timeline, links
 # under HOME that lead into the clone, a stow on the login PATH). Sourced
-# after common.sh; same
-# portability rules (no find -printf, no stat, no readlink -f, no date -d
-# except inside the sudo.log audit, which Linux alone needs).
+# after common.sh; same portability rules (no find -printf, no stat, no
+# readlink -f, no date -d except inside the sudo.log audit, which Linux alone
+# needs), and no case statement inside $(...), which Bash 3.2 cannot parse.
 
 # Guard state: the before-images e2e_step_begin takes, the violations the
 # audits report at the end, and the notes e2e_step_end appends after a row.
@@ -344,25 +344,32 @@ e2e_stow_start() {
     E2E_STOW_START=$(e2e_stow_paths "$E2E_SYS_PATH${path:+:$path}")
 }
 
+# e2e_stow_new: the lines on stdin (stow paths) that E2E_STOW_START lacks.
+# A function of its own: Bash 3.2 ends $(...) at a case pattern's ')'.
+e2e_stow_new() {
+    local line
+    while IFS= read -r line; do
+        case $E2E_NL$E2E_STOW_START$E2E_NL in
+            *"$E2E_NL$line$E2E_NL"*) ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done
+}
+
 # e2e_audit_login_stow OUT ERR: every stow executable on the PATH of a fresh
 # login shell (e2e_login_run) that the machine did not have before the flow
 # (E2E_STOW_START), one per line. Nothing the native flow runs installs
 # Stow (core.Brewfile and the hpc login env have no stow), so any is a
 # finding. 0 when there is none; 2 when the login shell printed no PATH.
 e2e_audit_login_stow() {
-    local rc=0 path new line
+    local rc=0 path new
     e2e_login_run "$1" "$2" 'printf "E2E_PATH=%s\n" "$PATH"' || rc=$?
     path=$(e2e_login_text "$1" | sed -n 's/^E2E_PATH=//p' | sed -n 1p)
     if [ "$rc" != 0 ] || [ -z "$path" ]; then
         printf 'the login shell exited %s and printed no PATH\n' "$rc"
         return 2
     fi
-    new=$(e2e_stow_paths "$path" | while IFS= read -r line; do
-        case $E2E_NL$E2E_STOW_START$E2E_NL in
-            *"$E2E_NL$line$E2E_NL"*) ;;
-            *) printf '%s\n' "$line" ;;
-        esac
-    done)
+    new=$(e2e_stow_paths "$path" | e2e_stow_new)
     printf '%s' "${new:+$new$E2E_NL}"
     [ -z "$new" ]
 }
