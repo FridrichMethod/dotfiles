@@ -95,6 +95,89 @@ The user also approved the one-off Windows Phase 0 task above. Deregistering
   redirects `.chezmoi.workingTree`, which the validate-host include and the
   `sourceDir` written at init read.
 
+### Phase A landing (2026-11-06)
+
+`origin/main` fast-forwarded `e3a0762..b287047`: A2 `42328b2`, A1 `414b00a`,
+A3 `1677e50`, A4 `17a6fcb`, this record `482a182` and the fix `b287047`. The
+first candidate, `482a182`, passed ci.yml 42265020284; its bootstrap-e2e run
+42265020590 failed one win native-fixtures case,
+`test_legacy_target_guard_uses_ancestors_and_explicit_target`, whose unrelated
+path lay under the runner's `%TEMP%`, inside the home the e2e handover had bound.
+`b287047` moved that path outside the fixture root (test only). On `b287047`,
+ci.yml 42267438732 (Linux, macOS, Windows) and bootstrap-e2e 42267438773 (all
+eight jobs) passed; the macOS job parsed every PowerShell file (8) and Windows
+ran 43 bootstrap cases. No rendered target changed, so a host that pulled
+Phase A applied nothing.
+
+### Phase B implementation (2026-11-06)
+
+Each commit was written test-first on the previous tip, then checked read-only
+by a separate verifier, with one fix round:
+
+| Key | Commit | Subject |
+| --- | --- | --- |
+| B1 | `4dc9f78` | drop the legacy-stow mode from setup-host and the doctor |
+| B2 | `c5bdca4` | retire the Stow deployment path and the legacy updaters |
+| B3 | `240338d` | retire the AI-sync parser chain |
+| B4 | `c97e2e1` | end the Stage 5 payload transition |
+| B6 | `a82b69c` | guard PowerShell 7.2 profile features so the 7.0 floor holds |
+| B5 | `5dae7da` | materialize the native source and remove the Stage 2 bridges |
+| D-10 | `e243a2f` | describe the native layout in the Claude auto-mode soft_deny rules |
+| B7 | `edb478d` | close Stage 6 |
+
+B5's first verification found that the bash shfmt variant inherited
+`types: [shell]`, which identify does not give `dot_` names, so three bash
+sources were skipped; the fix (every shell-lint variant sets `types: [file]`,
+pinned by test-entrypoints) is part of `5dae7da`. A fresh clone of `edb478d`
+without `DOTFILES_SYNC_PYTHON` or `.venv-sync` passed `tests/run.sh --ci` and
+all 32 pre-commit hooks. Rendering every role at `b287047` and at `edb478d`
+gives identical managed sets, modes and types; bytes change only in
+`~/.profile`, `~/.aliases`, `~/.claude/settings.json` (D-10), a comment in
+Sherlock's `~/.config/sh/.profile` and the two Windows PowerShell profiles.
+A transition apply from `b287047` state with the updater's arguments
+converges for all seven roles.
+
+### Aggregate review (2026-11-06)
+
+Eight read-only reviewers (host transition, code, tests and CI, Windows and
+PowerShell, portability, docs, plan conformance, security) each with two
+skeptics per finding, then a completeness critic. The commit verifiers' open
+items were fixed first (`1e3a229`..`f002545`), the review's after
+(`968bf53`..`2ae3b3f`):
+
+- `968bf53`: B1's login-stow audit ran a case statement inside `$(...)`,
+  which Bash 3.2 cannot parse; the macOS job and the mac e2e row would have
+  failed at source time.
+- `cacee89`: the checkout holds regular files only (no tracked symlink or
+  gitlink) with the executable bit exactly on `executable_` sources; B5 had
+  removed the index-mode inventory that enforced it.
+- `43143a2`: chezmoi reads no `.gitignore`, so a git-ignored leftover under
+  `home/` (an editor backup, a merge `.orig`) deployed on the next login
+  update; `home/.chezmoiignore` now mirrors every unanchored pattern.
+- `caec8c2`: Linux CI's apt tmux and `DOTFILES_TEST_REQUIRE_TMUX=1`, and no
+  Stow install, are pinned.
+- `819ea93`, `46d9bd5`, `5c73e2c`, `57c4a24`, `01953cf`, `ca56404`: the
+  upstream shell files stay out of both whitespace fixers; the sourced
+  `--now --auto` payload call, the auto-mode mutations, a missing tracked
+  Markdown file, exact rendered modes and spaced retired spellings are tested.
+- `1e3a229`, `f002545`, `2ae3b3f`: the HW-wsl note names the deployed files,
+  and the wording the reviews found false is corrected.
+- Refuted: the PowerShell 7 history handler does not need PSReadLine 2.1;
+  PSReadLine 2.0.0 already has `AddToHistoryOption` and
+  `GetDefaultAddToHistoryOption`, so the B6 floor holds.
+
+Not fixed in Stage 6 (reported for a later change): the `workingTree` key
+above; `doctor.ps1` and `checks.sh` advise a bare `sync-payloads ITEM` on an
+unmarked home under maintenance or without a guard, and print the `-Now` hook
+path unquoted; the payload hooks' retry line names `sync-payloads` there too;
+`lib/terminal.sh` keeps a p10k instant-prompt branch no login caller uses any
+more; Claude Code's built-in protected-path check no longer covers the moved
+policy sources (`home/.policy/`, `home/dot_claude/CLAUDE.md`), and
+`soft_deny[1]` does not name `~/.secrets` (both policy changes need the
+owner's approval); a paste-safety loop in `tests/bootstrap.ps1` no longer has
+a line to check; `chezmoi-update.ps1`'s redirected-stdout guard and the
+gitleaks allowlist have no test (both predate Stage 6).
+
 ## Stage 5 completion record (2026-11-04)
 
 This section is the current state. Stage 5 ran 2026-11-03..04 and landed: local
@@ -777,7 +860,7 @@ before the main fast-forward.
 | 3 | Native Claude/Codex candidate implemented; validation record below | Isolated fixtures only; no takeover/enrollment | Exact policy/ownership, safe input refusal and complete native source |
 | 4 | Runtime `bf99958`, encrypted source `74985d08` and formatting correction `15068b9` passed exact CI/e2e and reached main; worktree policy `493f395` passed its exact CI/e2e; closure `a5d9ad7` passed exact CI 41719265671 | All six native takeovers accepted; all five Unix eight-file secret enrollments accepted; Windows enrollment stays false | [Evidence](stage-4-evidence.md), [operator procedure](takeover.md) |
 | 5 | Six packages, two review-fix branches and docs landed at `dddc718`; exact CI 41832666587 and bootstrap e2e 41832666818 passed | Five Unix hosts at `dddc718` through the actual updater, with the reviewed `persistentState` re-init; Marlowe's login env has tmux 3.6a; win at `57fbc45` (same code plus the Stage 5 records) through its own updater and the same re-init on 2026-11-04, by a user-approved limited-token task | [Stage 5 record](#stage-5-completion-record-2026-11-04), [rollout](fleet-rollout.md#stage-5-rollout-as-run-2026-11-04) |
-| 6 | In progress: Phase 0 and decisions recorded; Phase A (preparation) implemented | No host changed yet | [Stage 6 progress record](#stage-6-progress-record-started-2026-11-05), plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
+| 6 | In progress: Phase A landed at `b287047`; Phase B and the review fixes implemented, landing pending | No host changed yet | [Stage 6 progress record](#stage-6-progress-record-started-2026-11-05), plan [stage-6-retirement.md](stage-6-retirement.md), prompt [start-stage-6.md](start-stage-6.md) |
 
 ## Decisions and open choices
 
