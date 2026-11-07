@@ -20,6 +20,10 @@ from chezmoi_support import ChezmoiFixture
 
 KIT_PATHS = (".claude/dotfiles", ".claude/coding-agent-kit", ".local/bin/codex-as", ".local/bin/claude-as")
 LEGACY_TREES = ("common", *ROLES[1:])
+# The caller's umask, which native apply honors for plain and executable
+# files; private files are 0600 whatever it is.
+UMASK = os.umask(0o022)
+os.umask(UMASK)
 # The only templates that remain: one raw role-variant include each.
 ROLE_TEMPLATES = {
     "dot_config/bash/dot_bashrc.tmpl": ".config/bash/.bashrc",
@@ -276,11 +280,9 @@ class SourceContractTests(unittest.TestCase):
                         if entry.mode == "private":
                             self.assertEqual(mode, 0o600, oct(mode))
                         elif entry.mode == "executable":
-                            # Native executable attributes respect the caller's
-                            # umask: 0700 is valid under umask 077.
-                            self.assertEqual(mode & 0o700, 0o700, oct(mode))
+                            self.assertEqual(mode, 0o777 & ~UMASK, oct(mode))
                         else:
-                            self.assertEqual(mode & 0o111, 0, oct(mode))
+                            self.assertEqual(mode, 0o666 & ~UMASK, oct(mode))
             for name, content in unmanaged.items():
                 self.assertEqual((fixture.destination / name).read_bytes(), content)
             applied = snapshot(fixture.destination)
