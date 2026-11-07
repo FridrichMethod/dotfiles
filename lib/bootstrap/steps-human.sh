@@ -429,16 +429,16 @@ step_H7_native_check() {
         STEP_DETAIL='native binding and local config present; configuration review remains an operator step'
         return 0
     fi
-    STEP_DETAIL='follow docs/chezmoi-migration/takeover.md to initialize and hand over this home'
+    STEP_DETAIL='follow Fresh home by hand in docs/bootstrap.md to initialize and deploy this home'
     return 1
 }
 
 step_H7_native_plan() {
     steps_block_begin H7-native judgment
     printf '%s\n' \
-        '# Follow docs/chezmoi-migration/takeover.md from this checkout.' \
+        '# Follow Fresh home by hand in docs/bootstrap.md from this checkout.' \
         "# Select local [data].host = $STEPS_HOST explicitly; setup-host never initializes or applies configuration." \
-        '# Quiesce existing writers, review exact targets and private backups, then initialize with all native paths explicit.' \
+        '# Review exact targets and private backups, then initialize with all native paths explicit.' \
         '# Establish the home-bound native marker only during that reviewed procedure; never use blanket force.'
     steps_block_end
 }

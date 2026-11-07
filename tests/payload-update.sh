@@ -166,8 +166,8 @@ expect_text() {
 expect_line() {
     grep -Fxq -- "$2" "$1" || fail "${1##*/} lacks the line: $2"
 }
-# expect_no_state: no run wrote payload state of its own (stamps, failure
-# records or a log) into the case's home.
+# expect_no_state: no run wrote payload state of its own into the case's
+# home.
 expect_no_state() {
     [[ ! -e "$HOME_DIR/.local/state" ]] || fail "$1 created $HOME_DIR/.local/state"
 }
@@ -183,15 +183,15 @@ wait_for() {
 
 USAGE='dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]'
 
-# Nothing installs a payload repo unless a person runs it. Any other call, a
-# bare item or the retired --auto and --worker (with --now too), is a usage
-# error: one line on stderr and exit 2 before anything else, under
-# maintenance too, with no event and no state.
+# Nothing installs a payload repo unless a person runs it. Any call without
+# --now first, a bare item or an unknown argument, is a usage error: one line
+# on stderr and exit 2 before anything else, under maintenance too, with no
+# event and no state.
 new_home
 mkdir -p "$HOME_DIR/.config/dotfiles"
 for maintenance in '' 1; do
     [[ -z "$maintenance" ]] || : >"$HOME_DIR/.config/dotfiles/maintenance"
-    for mode in '' --auto '--worker kit pymol skills' kit '--now --auto' '--now kit --worker'; do
+    for mode in '' kit '--help' '--bogus --now kit' 'kit --now'; do
         STATUS=0
         # shellcheck disable=SC2086 # the mode's words
         in_env sh "$FIXTURE/scripts/payload-update.sh" $mode >"$OUT" 2>"$ERR" || STATUS=$?
@@ -203,54 +203,7 @@ rm "$HOME_DIR/.config/dotfiles/maintenance"
 expect_events ''
 expect_no_state 'a call without --now'
 
-# sourced SHELL [ARGS]: source the hook from an interactive SHELL, directly
-# and from a function, as rc files read before Stage 5 did, with the
-# space-separated ARGS as its positional parameters. Prints "rc=DIRECT NESTED
-# unchanged" when the shell's flags, options and traps are as before and the
-# hook left none of its variables or functions behind, else what leaked.
-sourced() {
-    local shell=$1 args=${2-}
-    shift
-    case $shell in
-        bash) set -- bash --noprofile --norc -i -c ;;
-        zsh) set -- zsh -f -i -c 'setopt extended_glob nounset glob_dots; eval "$1"' zsh ;;
-        sh) set -- sh -i -c ;;
-    esac
-    # shellcheck disable=SC2016 # expanded by the sourcing shell
-    in_env PAYLOAD_HOOK="$FIXTURE/scripts/payload-update.sh" PAYLOAD_ARGS="$args" "$@" 'saved_flags=$-; saved_options=$(set +o); saved_traps=$(trap)
-        eval "set -- $PAYLOAD_ARGS"
-        . "$PAYLOAD_HOOK"; direct=$?
-        via_function() { . "$PAYLOAD_HOOK"; }
-        via_function "$@"; nested=$?
-        leaked=$(set | grep -E "^(repo|config|tab|timeout|connect|staging|offline|failed|item|argument)=" | cut -d= -f1 | tr "\n" " ")
-        for f in fail field known payload_script unstage installed run dotfiles_log; do
-            [ "$(command -v "$f")" != "$f" ] || leaked="$leaked$f() "
-        done
-        if [ "$-" = "$saved_flags" ] && [ "$(set +o)" = "$saved_options" ] && [ "$(trap)" = "$saved_traps" ] &&
-            [ -z "$leaked" ]; then echo "rc=$direct $nested unchanged"; else echo "rc=$direct $nested leaked=[$leaked]"; fi' \
-        >"$OUT" 2>"$ERR" || fail "sourcing the hook from $shell failed"
-}
-
-# Sourced, each call prints the usage line and returns 2 to the sourcing
-# shell, which stays alive with its flags, options and traps unchanged and
-# none of the hook's variables or functions defined: with no arguments, and
-# with --now followed by a retired flag, which takes the argument scan.
-for shell in bash zsh sh; do
-    command -v "$shell" >/dev/null 2>&1 || {
-        printf 'SKIP: %s not installed\n' "$shell"
-        continue
-    }
-    for args in '' '--now --auto'; do
-        new_home
-        sourced "$shell" "$args"
-        expect_events ''
-        [[ "$(cat "$OUT")" == 'rc=2 2 unchanged' ]] || fail "sourcing the hook under $shell with [$args]: $(cat "$OUT")"
-        [[ "$(grep -v -e 'job control' -e 'terminal process group' -e 'access tty' -e '^stty: ' "$ERR" || :)" == "$USAGE"$'\n'"$USAGE" ]] ||
-            fail "sourcing the hook under $shell with [$args] did not print one usage line per call"
-        expect_no_state "sourcing the hook under $shell with [$args]"
-    done
-done
-# A login runs none either; the update dispatch is all that remains there.
+# A login runs none either: it only dispatches the update.
 in_env bash --noprofile --norc -i -c '. "$1"' _ "$REPO_ROOT/home/dot_profile" >"$OUT" 2>"$ERR" ||
     fail 'home/dot_profile failed'
 expect_events ''

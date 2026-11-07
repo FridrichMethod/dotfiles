@@ -91,11 +91,12 @@ init, to write `persistentState` as
 `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash form (Unix and Windows
 destinations) and to fold its case variants into that key (a config holding two
 of them fails init and is left unchanged); a plain command naming only the
-config then shares the bound database without a stray `chezmoistate.boltdb`,
-while the updater's explicit `--persistent-state` still wins.
+config then uses that database, while the updater's explicit
+`--persistent-state` still wins.
 `test_chezmoi_provision.py` resolves a native-owned home's role for the doctor
 and setup-host from `[data].host` alone, reads chezmoi init's real rendering of
-it, and keeps H7-native done on a bound home with a stray state database.
+it, and reports H7-native done on a home bound to this checkout and pending on
+one bound to another.
 
 On native Windows, `test_chezmoi_takeover_windows.py` also pins the login
 updater to `~/.local/bin/chezmoi.exe`: a `chezmoi.com` or `chezmoi.cmd`
@@ -282,10 +283,9 @@ full apply ends at H7-native. The doctor reads a bound home's role from the one
 quoted `host` line of the `[data]` table of its local config, exits 2 for a
 missing, repeated, unknown or malformed one and for an unmarked home without
 `--host` or `--platform`, treats `common-only` as common only, names the cause
-in its `native-config` row (only another checkout's binding and a stray
-`chezmoistate.boltdb`, which it leaves in place, merely warn) and keeps the
-offline, write-free and no-`TMPDIR` promises. The setup-host cases refuse an
-unknown argument, check each host's exact step order, take `--host` over
+in its `native-config` row (only another checkout's binding merely warns) and
+keeps the offline, write-free and no-`TMPDIR` promises. The setup-host cases
+refuse an unknown argument, check each host's exact step order, take `--host` over
 `[data].host`, and let an existing login env satisfy H2-alloc; S6-nerd-font
 counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
 also runs the real `./doctor.sh` with the real manifest against the test
@@ -365,9 +365,10 @@ expects. The command cases fail without `node`. `tests/run.ps1` runs the same
 file natively on Windows, where only the wiring cases run, and
 `tests/claude-customizations.cjs` runs the commands without a shell there and
 on Unix: with `process.platform` forced to `win32` and to Unix values, against
-stand-in helpers, a missing helper exits 0 silently only on `win32` and 1
-with its path elsewhere, and a present one runs with its exit status kept on
-every platform; and on the installed helpers, skipping without them.
+stand-in helpers, a command runs no helper on `win32` and exits 0 silently
+there, present or not, while elsewhere a missing helper exits 1 with its path
+and a present one runs with its exit status kept; and on the installed
+helpers, skipping without them.
 
 The optional real fzf-tab PTY fixture waits for complete expected preview
 output, including the account descriptions, before ending the interaction.
@@ -394,12 +395,9 @@ installers served from `file://` URLs: the real `config/payloads.tsv` with its
 directory (a URL anywhere else fails the suite) and a curl that refuses every
 other URL but a loopback port. Every field of `config/payloads.tsv` is one
 the hooks read. Nothing installs unless a person runs it: a call without
-`--now` (none, a bare item, the retired `--auto` and `--worker`, also after
-`--now`, under maintenance too) prints one usage line on stderr and exits 2;
-sourced from an interactive Bash, zsh or sh, directly or from a function, it
-returns 2 after that line and leaves the shell's flags, options and traps
-alone with none of its variables or functions defined; none writes state, and
-a login through `home/dot_profile` runs no installer. `--now` installs the
+`--now` first (none, a bare item or an unknown argument, under maintenance
+too) prints one usage line on stderr and exits 2; none writes state, and a
+login through `home/dot_profile` runs no installer. `--now` installs the
 default items in config order, the kit on the declared channel with stdin
 closed, runs each installed item's update command the next time, keeps no
 state of its own and returns only once its installer has finished. The suite
@@ -421,8 +419,8 @@ without either it fails before any request) and PowerShell, and the
 failed-download latch, with no staging or state left behind.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
-call without `-Now`, the retired `-Auto` and `-Worker` included (with `-Now`
-too), prints one usage line and exits 2, under maintenance too; a run naming
+call without `-Now` (none, a bare item or an unknown argument) prints one
+usage line and exits 2, under maintenance too; a run naming
 the kit says it is not available there and runs nothing for it; no run
 records anything; a download's directory is private (mode 0700; on Windows an
 access list that grants only this account and inherits nothing) and one that

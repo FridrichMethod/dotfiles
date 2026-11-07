@@ -10,7 +10,7 @@ from chezmoi_source_support import ROOT, SourceFixture, expected_entries, snapsh
 
 
 # Frozen oracle for home/.chezmoidata/codex-policy.json, independent of it:
-# changing the owned or retired set is a reviewed edit of both files.
+# changing the owned set is a reviewed edit of both files.
 POLICY = (
     (("model",), "string"),
     (("model_reasoning_effort",), "string"),
@@ -31,11 +31,6 @@ POLICY = (
     (("memories", "generate_memories"), "bool"),
     (("memories", "use_memories"), "bool"),
     (("tui", "status_line"), "string-array"),
-)
-RETIRED = (
-    ("sandbox_mode",),
-    ("sandbox_workspace_write",),
-    ("features", "js_repl"),
 )
 TYPE_CHECKS = {
     "string": lambda value: type(value) is str,
@@ -79,22 +74,18 @@ class CodexPolicyMetadataTests(unittest.TestCase):
         self.assertTrue(MANIFEST.is_file(), "native Codex ownership manifest is missing")
         expected = {"codexPolicy": {
             "owned": [{"path": list(path), "type": kind} for path, kind in POLICY],
-            "retired": [list(path) for path in RETIRED],
         }}
         self.assertEqual(json.loads(MANIFEST.read_text(encoding="utf-8")), expected)
-        self.assertEqual((len(POLICY), len(RETIRED)), (19, 3))
+        self.assertEqual(len(POLICY), 19)
 
     def test_portable_leaves_are_exactly_the_owned_paths_with_their_types(self):
         # An unowned portable key would never deploy (unknown portable fields
-        # do not become policy); a retired one would fight the removal.
+        # do not become policy).
         actual = dict(leaves(tomllib.loads(PORTABLE.read_text(encoding="utf-8"))))
         self.assertEqual(set(actual), {path for path, _kind in POLICY})
         for path, kind in POLICY:
             with self.subTest(owned=path):
                 self.assertTrue(TYPE_CHECKS[kind](actual[path]), f"{path} is not {kind}")
-        for path in RETIRED:
-            with self.subTest(retired=path):
-                self.assertFalse(any(owned[:len(path)] == path for owned, _kind in POLICY))
 
 
 class CodexNativeTests(unittest.TestCase):
@@ -126,9 +117,9 @@ class CodexNativeTests(unittest.TestCase):
     def test_native_round_trip_retains_unknown_types_and_exact_ownership(self):
         initial = '''# Canonical output intentionally replaces comments.
 model = "old"
-sandbox_mode = "old"
-sandbox_workspace_write = {network_access = true}
-"features.js_repl" = "literal survives"
+local_mode = "old"
+local_table = {network_access = true}
+"features.local" = "literal survives"
 max_integer = 9223372036854775807
 min_integer = -9223372036854775808
 float = 1.25
@@ -137,7 +128,7 @@ offset = 2026-11-01T12:34:56-08:00
 utc = 2026-11-01T20:34:56Z
 escaped = "first\\r\\nsecond"
 [features]
-js_repl = true
+local = true
 unknown = false
 [projects."/tmp/synthetic.project"]
 trust_level = "trusted"
@@ -154,11 +145,6 @@ name = "second"
             source_before = snapshot(fixture.source)
             expected = tomllib.loads(initial)
             portable = tomllib.loads(PORTABLE.read_text(encoding="utf-8"))
-            for path in RETIRED:
-                parent = expected
-                for key in path[:-1]:
-                    parent = parent[key]
-                del parent[path[-1]]
             for path, _kind in POLICY:
                 parent = expected
                 for key in path[:-1]:
@@ -257,10 +243,9 @@ local_model = 4
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(target.read_bytes(), app_bytes)
 
-    def test_owned_type_changes_and_retired_keys_are_not_formatting_noops(self):
+    def test_owned_type_changes_are_not_formatting_noops(self):
         cases = (policy_text({("model",): 1}),
-                 policy_text({("features", "multi_agent"): 1}),
-                 policy_text() + 'sandbox_mode = "old"\n')
+                 policy_text({("features", "multi_agent"): 1}))
         for live in cases:
             with self.subTest(live=live), SourceFixture(HOST) as fixture:
                 target = self.prepare(fixture)
@@ -302,15 +287,17 @@ local_model = 4
 
     def test_local_data_cannot_expand_or_replace_ownership(self):
         with SourceFixture(HOST) as fixture:
+            # Local data that drops model from the owned set and adds unknown
+            # would leave model alone and fail on unknown, which the portable
+            # TOML lacks; the committed schema owns model and not unknown.
             fixture.config.write_text(
-                f'[data]\nhost = "{HOST}"\n[data.codexPolicy]\nowned = []\nretired = [["unknown"]]\n',
+                f'[data]\nhost = "{HOST}"\n[data.codexPolicy]\nowned = [{{path = ["unknown"], type = "string"}}]\n',
                 encoding="utf-8", newline="\n",
             )
-            target = self.prepare(fixture, 'model = "old"\nunknown = "keep"\nsandbox_mode = "old"\n')
+            target = self.prepare(fixture, 'model = "old"\nunknown = "keep"\n')
             actual = self.apply(fixture, target)
             self.assertEqual(actual["model"], tomllib.loads(PORTABLE.read_text())["model"])
             self.assertEqual(actual["unknown"], "keep")
-            self.assertNotIn("sandbox_mode", actual)
 
     def test_every_required_policy_path_is_present_and_typed(self):
         for path, kind in POLICY:
@@ -369,15 +356,14 @@ local_model = 4
                  '"literal.dot" = {"*" = [[2026-11-01]]}\n',
                  '[[unknown]]\nvalue = {nested = [12:34:56]}\n',
                  'model = 2026-11-01T12:34:56\n',
-                 'sandbox_mode = 2026-11-01\n',
-                 '[features]\njs_repl = 12:34:56\n')
+                 '[features]\nlocal = 12:34:56\n')
         for text in cases:
             for origin in ("live", "portable"):
                 with self.subTest(text=text, origin=origin), SourceFixture(HOST) as fixture:
                     fixture.env["TZ"] = "America/Los_Angeles"
                     portable = policy_text() + text if origin == "portable" else None
                     if origin == "portable" and text.startswith("[features]"):
-                        portable = policy_text() + "features.js_repl = 12:34:56\n"
+                        portable = policy_text() + "features.local = 12:34:56\n"
                     if origin == "portable" and text.startswith("model ="):
                         portable = policy_text(missing=("model",)) + text
                     target = self.prepare(fixture, text if origin == "live" else 'keep = "live"\n', portable)

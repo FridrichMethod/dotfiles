@@ -42,9 +42,8 @@ test('Git fixtures use ordinary empty config and template paths', () => {
 });
 
 // Each settings.json command with the platform it sees forced: coding-agent-kit
-// installs no helpers on native Windows (0.7 and later), so there a missing
-// helper is silent, while a v0.6 copy left there still runs; elsewhere a
-// missing helper stays visible.
+// installs no helpers on native Windows, so there the command runs none and
+// exits 0; elsewhere a missing helper stays visible.
 const helperCommands = () => [
   ['statusline.cjs', settings.statusLine.command],
   ['notify.cjs', settings.hooks.Notification[0].hooks[0].command],
@@ -78,7 +77,7 @@ test('a missing helper is silent only on native Windows', () => {
   }
 });
 
-test('a present helper runs on every platform, its exit status kept', () => {
+test('a present helper runs off native Windows, its exit status kept; native Windows runs none', () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'claude home '));
   try {
     const target = path.join(temporary, '.claude', 'coding-agent-kit');
@@ -87,11 +86,15 @@ test('a present helper runs on every platform, its exit status kept', () => {
       fs.writeFileSync(path.join(target, name),
         `exports.main = () => { process.stdout.write('${name} ran'); process.exitCode = 2; };\n`);
     }
-    for (const platform of ['win32', 'linux', 'darwin']) {
+    for (const platform of ['linux', 'darwin']) {
       for (const [name, command] of helperCommands()) {
         const result = runAs(platform, temporary, command);
         assert.deepEqual([result.status, result.stdout], [2, `${name} ran`], `${platform}: ${command}: ${result.stderr}`);
       }
+    }
+    for (const [, command] of helperCommands()) {
+      const windows = runAs('win32', temporary, command);
+      assert.deepEqual([windows.status, windows.stdout, windows.stderr], [0, '', ''], command);
     }
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

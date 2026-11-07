@@ -274,7 +274,8 @@ def bash_tool(command):
 # Claude Code writes to its stdin there (inputs as in the kit's own suite),
 # the exit status, and the stream that must carry output (None: neither may).
 # A command that cannot load its helper exits 1 instead, except on native
-# Windows, where the kit installs none (tests/claude-customizations.cjs).
+# Windows, where the kit installs none and the command runs no helper
+# (tests/claude-customizations.cjs).
 HELPER_RUNS = {
     "statusline.cjs": ("statusLine", [({"model": {"display_name": "Opus"}}, 0, "stdout")]),
     "notify.cjs": ("Notification", [({"hook_event_name": "Notification", "notification_type": "idle_prompt"},

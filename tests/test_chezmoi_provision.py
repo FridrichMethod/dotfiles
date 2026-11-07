@@ -85,7 +85,7 @@ step_S4_chezmoi_plan
     def test_native_handoff_only_prints_reviewed_procedure(self):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--print-manual")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("docs/chezmoi-migration/takeover.md", result.stdout)
+        self.assertIn("# Follow Fresh home by hand in docs/bootstrap.md from this checkout.", result.stdout)
         self.assertNotIn("init --apply", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
@@ -152,8 +152,6 @@ step_S4_chezmoi_plan
 
     def test_bound_home_reports_h7_native_done(self):
         self.bind_native("[data]", "host = 'lab-ubuntu'")
-        # A stray state database warns in the doctor but never reopens the handover.
-        (self.home / ".config/chezmoi/chezmoistate.boltdb").write_text("")
         before = self.home_snapshot()
         result = self.check_h7_native()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

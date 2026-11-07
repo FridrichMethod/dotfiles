@@ -293,7 +293,7 @@ cat >"$UNIT/apply.out" <<'OUT'
 P0-preflight done host lab-ubuntu, profile debian, Linux x86_64
 H1-apt-core human missing apt packages: zsh
 S5-claude human blocked by H1-apt-core: Claude Code is not installed
-H7-native human follow docs/chezmoi-migration/takeover.md to initialize and hand over this home
+H7-native human follow Fresh home by hand in docs/bootstrap.md to initialize and deploy this home
 HUMAN-BEGIN H1-apt-core sudo
 # docs/bootstrap.md H1-apt-core
 sudo apt-get update
@@ -311,7 +311,7 @@ printf '%s  %s\n' 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
 HUMAN-END
 HUMAN-BEGIN H7-native judgment
 # docs/bootstrap.md H7-native
-# Follow docs/chezmoi-migration/takeover.md from this checkout.
+# Follow Fresh home by hand in docs/bootstrap.md from this checkout.
 # Select local [data].host = lab-ubuntu explicitly; setup-host never initializes or applies configuration.
 HUMAN-END
 OUT
@@ -1032,7 +1032,7 @@ printf 'home\n' >"$SRC/.chezmoiroot"
 write_chezmoi_stub "$SRC/fixture/chezmoi"
 
 # The setup-host.sh stub keeps the real one's native shape: no mode flag
-# (an unknown argument, a legacy one included, is exit 2), the root and WSL
+# (an unknown argument is exit 2), the root and WSL
 # refusals (exit 2), plan lines, the HUMAN blocks with the real frames, the
 # pending line on stderr and exit 3 while a blocking step is pending. Its
 # state is what the blocks and the handover leave behind: the apt marker the
@@ -1140,7 +1140,7 @@ fi
 if [ "$native" = 1 ]; then
     printf '%s\n' 'H7-native done native binding and local config present; configuration review remains an operator step'
 else
-    printf '%s\n' 'H7-native human follow docs/chezmoi-migration/takeover.md to initialize and hand over this home'
+    printf '%s\n' 'H7-native human follow Fresh home by hand in docs/bootstrap.md to initialize and deploy this home'
     held="$held${held:+ }H7-native"
 fi
 printf '%s\n' 'H7-auth human sign in to GitHub, Claude Code and Codex (not checked offline)' \
@@ -1162,7 +1162,7 @@ elif [ "$claude_done" = 0 ]; then
 fi
 if [ "$native" = 0 ]; then
     printf '%s\n' 'HUMAN-BEGIN H7-native judgment' '# docs/bootstrap.md H7-native' \
-        '# Follow docs/chezmoi-migration/takeover.md from this checkout.' \
+        '# Follow Fresh home by hand in docs/bootstrap.md from this checkout.' \
         "# Select local [data].host = $host explicitly; setup-host never initializes or applies configuration." 'HUMAN-END'
 fi
 printf '%s\n' 'HUMAN-BEGIN H7-auth auth' '# docs/bootstrap.md H7-auth' 'ssh-keygen -t ed25519' \
@@ -1180,8 +1180,8 @@ SH
 # doctor.sh: exit 1 until the gated installer ran and the home is bound to
 # this checkout, 0 after; --tsv prints the five-column report, with a
 # native-config row and a payloads row that is ok once the
-# payload-update.sh stub ran; --smoke exits like a run. A legacy mode flag
-# is an unknown argument.
+# payload-update.sh stub ran; --smoke exits like a run. Any other argument
+# is exit 2.
 cat >"$SRC/doctor.sh" <<'SH'
 #!/bin/bash
 # e2e-harness fixture: a doctor.sh stand-in (see tests/e2e-harness.sh).

@@ -236,9 +236,9 @@ if ($pythonUtf8.Count -eq 1) {
     if ($utf8Rule -isnot [System.Management.Automation.Language.IfStatementAst] -or (Get-Commands $utf8Rule)) { $utf8Rule = $null }
     $savedPython = @{ PYTHONUTF8 = $env:PYTHONUTF8; PYTHONIOENCODING = $env:PYTHONIOENCODING }
     try {
-        # Inherited value -> expected PYTHONUTF8. utf-8 is what this profile
-        # used to export, so terminals started before the change are fixed too.
-        foreach ($case in @(@($null, $null, '1'), @('utf-8', $null, '1'), @('cp936', $null, $null), @($null, '0', '0'))) {
+        # Inherited value -> expected PYTHONUTF8: an explicit setting of
+        # either variable wins.
+        foreach ($case in @(@($null, $null, '1'), @('utf-8', $null, $null), @('cp936', $null, $null), @($null, '0', '0'))) {
             $env:PYTHONIOENCODING, $env:PYTHONUTF8 = $case[0], $case[1]
             if ($utf8Rule) { Invoke-Expression $utf8Rule.Extent.Text }
             Assert-True ($utf8Rule -and $env:PYTHONUTF8 -eq $case[2] -and $env:PYTHONIOENCODING -eq $case[0]) "PYTHONIOENCODING=[$($case[0])] PYTHONUTF8=[$($case[1])] -> PYTHONUTF8=[$($case[2])] (got [$env:PYTHONUTF8])"

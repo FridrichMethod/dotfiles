@@ -35,14 +35,13 @@ one `### <step-id>:` heading per step, and checks that
 New installations use native chezmoi. Both setup-host entrypoints install its
 pinned, SHA256-verified release explicitly and create no virtual environment.
 They do not initialize or apply configuration. The blocking
-H7-native / HW-native step points to the reviewed
-[takeover procedure](chezmoi-migration/takeover.md), including explicit local
-host selection, quiescence, private snapshots and the per-home writer binding.
-A fresh home, with no earlier install, takes the shorter
-[Fresh home by hand](#fresh-home-by-hand) procedure instead
-([Fresh Windows home by hand](#fresh-windows-home-by-hand) on Windows).
+H7-native / HW-native step points to [Fresh home by hand](#fresh-home-by-hand)
+([Fresh Windows home by hand](#fresh-windows-home-by-hand) on Windows):
+explicit local host selection, private copies of the files a first apply
+replaces, and the per-home writer binding.
 Native doctor checks chezmoi and that binding; it never invokes transforms.
-An active maintenance marker means handover is still incomplete.
+An active maintenance marker pauses login updates and payload installs until
+a person removes it ([update contract](update-contract.md)).
 
 ### S4-chezmoi: Native chezmoi binary
 
@@ -71,7 +70,7 @@ f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -x
 
 ### H7-native: Reviewed native configuration handover
 
-Follow [takeover.md](chezmoi-migration/takeover.md). Provisioning does not own this
+Follow [Fresh home by hand](#fresh-home-by-hand). Provisioning does not own this
 operation and prints no blanket apply command. A valid native binding matching
 this checkout and regular local config, with maintenance absent, satisfies the
 bootstrap handoff check; it does not substitute for the procedure's native diff,
@@ -80,11 +79,7 @@ second clone), setup-host keeps H7-native pending.
 
 The doctor's `native-config` row names the cause. `ok`: the handoff state above.
 `warn`, which does not fail the run: the home is bound to another checkout,
-whose doctor it names, or, with the binding otherwise `ok`,
-`~/.config/chezmoi/chezmoistate.boltdb` exists, a separate state database that
-a chezmoi command without the updater's full explicit argument set wrote (run
-every manual native command with that set, as takeover.md says; the doctor
-never removes the file, and setup-host still counts H7-native done). `human`: active maintenance, a missing or invalid
+whose doctor it names. `human`: active maintenance, a missing or invalid
 binding, a local config that is absent or not a regular file (a link or a
 directory), or no readable `lib/chezmoi-guard.sh` in this checkout; on Windows
 also a `~/.local/bin/chezmoi.exe` the login updater refuses
@@ -198,8 +193,9 @@ names a pasted shell function cannot split portably). Afterwards
 `./setup-host.sh --host H` exits 0, the next interactive login runs the native
 updater, and `./doctor.sh --host H --smoke` is the gate. Delete the backup
 directory once nothing in it is needed. Run any later manual native command as
-`native_cz ARGS...` from the clone: without the explicit arguments chezmoi
-writes the stray `chezmoistate.boltdb` the doctor warns about.
+`native_cz ARGS...` from the clone, which passes every native path explicitly,
+as the login updater does; a plain `chezmoi` command uses the configured
+source, destination and state database.
 
 ### W1-chezmoi: Windows native chezmoi binary
 
@@ -246,9 +242,9 @@ of [takeover.md](chezmoi-migration/takeover.md) use it.
 
 ### HW-native: Windows native handover
 
-Follow [takeover.md](chezmoi-migration/takeover.md), including actual
-CurrentUserAllHosts discovery in both shells and ordinary-user destination ACL
-checks. Native regular-file updates need no elevation or scheduled task.
+Follow [Fresh Windows home by hand](#fresh-windows-home-by-hand) as the
+ordinary, unelevated user; it checks the actual CurrentUserAllHosts path in
+both shells. Native regular-file updates need no elevation or scheduled task.
 `doctor.ps1`'s `native-config` row gives the verdicts of
 [H7-native](#h7-native-reviewed-native-configuration-handover), with
 `lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the bound
@@ -256,7 +252,7 @@ checkout counts as that checkout. One verdict is Windows only: with the
 binding otherwise `ok`, the row is `human`, citing
 [W1-chezmoi](#w1-chezmoi-windows-native-chezmoi-binary), when the login updater
 would refuse `~/.local/bin/chezmoi.exe`. That check only opens the file for
-reading and comes before the stray state database warning.
+reading.
 
 #### Fresh Windows home by hand
 
@@ -1869,9 +1865,8 @@ install and update only when a person runs `scripts/payload-update.sh --now`
 absent item and updates each installed one through the repository's own
 installer, named in [`config/payloads.tsv`](../config/payloads.tsv). No login,
 profile or schedule installs or refreshes them, on any home, and the script
-keeps no state of its own: files older automatic runs left (`ITEM.stamp`,
-`ITEM.failed`, `payload.log`) are ignored and never removed. Each run
-downloads its repository's unpinned `main` install script; the kit's installs
+keeps no state of its own. Each run downloads its repository's unpinned `main`
+install script; the kit's installs
 the newest patch release of the channel the file declares.
 [payloads.md](payloads.md) is the contract.
 
@@ -1901,9 +1896,8 @@ selects the items a run without arguments installs and the doctor checks.
   with the dotfiles applied, `sync-payloads [ITEM...]` does the same and
   `sync-skills` runs only the skills; they run the bound checkout's script,
   refuse an invalid binding, and in an unmarked home refuse with the `--now`
-  line to run instead. Any other call of the script than `--now` (the retired
-  `--auto` and `--worker` included) prints a usage line and exits 2. An
-  installer's exit
+  line to run instead. Any call of the script without `--now` first prints a
+  usage line and exits 2. An installer's exit
   75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),

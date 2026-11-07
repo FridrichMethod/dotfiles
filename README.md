@@ -150,9 +150,9 @@ caches, generated memories or machine-specific absolute paths.
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) supplies
 account launchers, completions and Claude helpers on Linux, macOS and WSL.
 Dotfiles keeps their configuration but no copy of the kit implementation.
-Native Windows does not install/check the kit: missing helpers exit silently
-there, while existing 0.6 helper copies still run; missing Unix helpers fail
-visibly. Launcher/account operation belongs to the kit's own documentation.
+Native Windows does not install/check the kit: the helper commands run no
+helper there and exit 0; missing Unix helpers fail visibly. Launcher/account
+operation belongs to the kit's own documentation.
 Claude's status-line command enables the kit's ANSI colors for captured output,
 while preserving an explicit `CODING_AGENT_KIT_COLOR` setting. `NO_COLOR` and
 `TERM=dumb` disable colors. The renderer lives in the kit; the command and color

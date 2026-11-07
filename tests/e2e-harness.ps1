@@ -204,7 +204,7 @@ function Get-WingetLines {
 
 function Get-BlockLines {
     # One HUMAN block as setup-host.ps1 prints it natively for a clone at
-    # Clone (Get-SetupHumanBlock: paths single-quoted, quotes doubled).
+    # Clone (Get-SetupHumanBlock); no block names the clone's path.
     param([string]$Id, [string]$Clone)
     $body = switch -CaseSensitive ($Id) {
         'HW-clone' {
@@ -215,10 +215,10 @@ function Get-BlockLines {
             'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
         }
         'HW-native' {
-            'judgment', '# Follow docs/chezmoi-migration/takeover.md from this checkout.',
+            'judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.',
             '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.',
             '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.',
-            '# Quiesce writers, snapshot exact targets, initialize with all paths explicit and establish the home binding.',
+            '# Snapshot exact targets, initialize with all paths explicit and establish the home binding.',
             '# Native regular-file updates need no elevation or scheduled task.'
         }
         'HW-execution-policy' {
@@ -501,7 +501,7 @@ try {
 
         $partialDirectory = Join-Path $case 'partial'
         $partial = @(ConvertFrom-E2EBlocks -Directory $partialDirectory -Output @(
-                'HUMAN-END', 'HUMAN-BEGIN HW-native judgment', '# Follow docs/chezmoi-migration/takeover.md from this checkout.', 'HUMAN-END',
+                'HUMAN-END', 'HUMAN-BEGIN HW-native judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.', 'HUMAN-END',
                 'HUMAN-BEGIN HW-wsl Judgment', 'wsl --install -d Ubuntu', 'HUMAN-END',
                 'HUMAN-BEGIN HW-auth auth extra', 'codex login', 'HUMAN-END',
                 'HUMAN-BEGIN HW-auth auth', 'gh auth login --git-protocol ssh'))
@@ -1153,7 +1153,7 @@ try {
     Test-Case 'native-handover runs the documented Fresh Windows home by hand functions and requires the end state they promise' {
         $clone = New-HandoverClone
         New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n`tname = runner`n"
-        $E2E['HandoverBlock'] = [pscustomobject]@{ Id = 'HW-native'; Kind = 'judgment'; Lines = @('# Follow docs/chezmoi-migration/takeover.md from this checkout.') }
+        $E2E['HandoverBlock'] = [pscustomobject]@{ Id = 'HW-native'; Kind = 'judgment'; Lines = @('# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.') }
         $script:ProcessModes.Enqueue('clean')
         $script:Elevated = $true
         Use-DryRun { Invoke-E2EStepNativeHandover }
@@ -1169,7 +1169,7 @@ try {
         Assert-Equal "$($call.WorkingDirectory) $($call.Timeout)" "$clone 3600" 'from the clone under the apply limit'
         $handover = Get-E2EHandoverScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
         Assert-Equal (Read-Utf8 $runner) ($handover['Text'] + "`nInvoke-NativeHandover -Role win`n") 'the runner: the fence and its one call'
-        Assert-True ([IO.File]::ReadAllText($E2E['StepLog']).StartsWith("--- block`n# Follow docs/chezmoi-migration/takeover.md from this checkout.`n")) 'the step log starts with the HW-native block'
+        Assert-True ([IO.File]::ReadAllText($E2E['StepLog']).StartsWith("--- block`n# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.`n")) 'the step log starts with the HW-native block'
         Assert-Equal "$($E2E['Broken']) $($E2E['Phase'])" ' ' 'Broken and the phase after the step'
         $timeline = @(Get-E2ELines (Join-Path $E2E['Out'] 'log/timeline') | Where-Object { $_ } | ForEach-Object { $_.Split("`t", 2)[1].Replace("`t", ' ') })
         Assert-Equal ($timeline -join ', ') 'begin human:HW-native, end human:HW-native' 'the phase'

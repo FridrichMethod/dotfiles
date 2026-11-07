@@ -40,11 +40,10 @@ from this checkout, stop and say so.
    still to apply. Re-run step 5 after each block until H7-native is the only one
    left.
 8. Run the H7-payloads line only if the person wants the payload repos now;
-   no login installs them. Follow the H7-native block: a new home takes Fresh
-   home by hand in `docs/bootstrap.md` (no quiescence or maintenance marker);
-   an existing home takes `docs/chezmoi-migration/takeover.md`: explicit local
-   host data, native paths, quiescence, private backups and the home-bound
-   writer signal. Do not improvise `init --apply` or force a whole home.
+   no login installs them. Follow the H7-native block, Fresh home by hand in
+   `docs/bootstrap.md`: explicit local host data, native paths, private
+   backups and the home-bound writer signal. Do not improvise `init --apply`
+   or force a whole home.
    setup-host only provisions tools and never creates the signal, initializes
    configuration or applies it.
 9. Finish with `./doctor.sh --host H --smoke`; exit 0 is the completion gate.
@@ -60,7 +59,6 @@ Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 
 Provisioning is native only: it installs the verified chezmoi release and
 creates no virtual environment. Doctor checks the native binding and tool; a
-binding to another checkout or a stray `~/.config/chezmoi/chezmoistate.boltdb`
-only warns. On a native-owned home the default host is the local config's
-`[data].host`; nothing else selects one. It remains offline and write-free;
-native diff/apply is a separate operation.
+binding to another checkout only warns. On a native-owned home the default
+host is the local config's `[data].host`; nothing else selects one. It
+remains offline and write-free; native diff/apply is a separate operation.

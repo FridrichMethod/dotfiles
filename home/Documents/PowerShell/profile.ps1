@@ -78,11 +78,10 @@ if ($IsInteractive -and -not $IsAgentSession) {
     # conda.exe) writes pipes in the ANSI code page, which this decoder would
     # turn into U+FFFD, so put it in UTF-8 mode. Unlike PYTHONIOENCODING, that
     # also makes a Python parent decode its Python children as UTF-8. A user
-    # or parent setting wins, except PYTHONIOENCODING=utf-8, which this
-    # profile used to export and which UTF-8 mode agrees with.
+    # or parent setting of either variable wins.
     try {
         [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-        if (-not $env:PYTHONUTF8 -and (-not $env:PYTHONIOENCODING -or $env:PYTHONIOENCODING -eq 'utf-8')) {
+        if (-not $env:PYTHONUTF8 -and -not $env:PYTHONIOENCODING) {
             $env:PYTHONUTF8 = '1'
         }
     }
@@ -342,8 +341,7 @@ if ($IsInteractive) {
     & {
         try {
             # A native source can be an independent clone. Read only the source
-            # hint here so its guard can validate the complete binding; never
-            # execute a retired checkout's guard or updater.
+            # hint here so its guard can validate the complete binding.
             $DotfilesMaintenance = $null
             try { $DotfilesMaintenance = Get-Item -LiteralPath (Join-Path $HOME '.config/dotfiles/maintenance') -Force -ErrorAction Stop }
             catch [System.Management.Automation.ItemNotFoundException] { }

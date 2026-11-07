@@ -30,15 +30,13 @@ own state are in its README; this file covers only how dotfiles calls them.
 
 `home/.policy/claude-settings.json` runs the helpers by their home-relative
 path, for example
-`node -e "const f=require('os').homedir()+'/.claude/coding-agent-kit/statusline.cjs';if(process.platform!=='win32'||require('fs').existsSync(f))require(f).main()"`,
+`node -e "const f=require('os').homedir()+'/.claude/coding-agent-kit/statusline.cjs';if(process.platform!=='win32')require(f).main()"`,
 so they need Node.js 22 or newer on PATH. On Unix a missing helper stays
 visible: the command exits 1, so Claude Code shows no status line and a
 non-blocking hook error. On native Windows, where the kit installs nothing,
-the command exits 0 silently while the helper is missing (a blank status
-line, no hook), and a copy an older kit release (0.6) left in
-`~\.claude\coding-agent-kit\` still runs. `home/dot_zshrc` appends
-`~/.local/share/zsh/site-functions` to `fpath` before oh-my-zsh runs
-`compinit`, so the kit's zsh completions load.
+the command runs no helper and exits 0 (a blank status line, no hook).
+`home/dot_zshrc` appends `~/.local/share/zsh/site-functions` to `fpath` before
+oh-my-zsh runs `compinit`, so the kit's zsh completions load.
 
 ## config/payloads.tsv
 
@@ -173,12 +171,10 @@ both files and the installer never touches), or forced with that command (its
 `--force`, `-Force` on Windows, which keeps the edited file as
 `NAME.local-<timestamp>`).
 
-Any other call, without `--now` (no arguments, a bare item such as
-`sh .../payload-update.sh kit`, or the retired `--auto` and `--worker`, which
-are refused after `--now` too), prints
+Any call without `--now` first (no arguments, a bare item such as
+`sh .../payload-update.sh kit`, or any other argument) prints
 `dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]` on stderr and
-exits 2 before anything else, under maintenance too. Sourced, it returns 2
-after that line and sets no variable, option or trap.
+exits 2 before anything else, under maintenance too.
 
 Sherlock's site rules forbid detached login-node workers, and dotfiles starts
 none: no login starts a run (`tests/test_chezmoi_guard.py` checks bash and sh
@@ -201,9 +197,9 @@ foreground, an unknown item failing the run, exit 75 no failure and the
 and 0 otherwise, so `$LASTEXITCODE` is the run's status, not an installer's.
 Under maintenance a `-Now` run warns
 `dotfiles: payload update refused during maintenance.` and exits 1. A call
-without `-Now`, or with the retired `-Auto` or `-Worker` (with `-Now` too),
-prints `dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]` on stderr
-and exits 2, under maintenance too.
+without `-Now` prints
+`dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]` on stderr and
+exits 2, under maintenance too.
 
 Run it and the functions below from an ordinary PowerShell: an installer run
 elevated would leave its git clone owned by Administrators, which Git then
@@ -245,21 +241,6 @@ in. The repositories' own variables (for example
 reach their installers unchanged, and on Unix `XDG_DATA_HOME` moves the kit's
 managed root, which its probe follows.
 
-`AWESOME_SKILLS_AUTO_UPDATE`, the old skill hook's opt-out, is read by
-nothing any more. This page used to promise that the automatic runs and the
-doctor would honor `AWESOME_SKILLS_AUTO_UPDATE=0` until 2027-01-31; that
-support ended early, in Stage 5 of the chezmoi migration, together with the
-automatic runs, and the promise is withdrawn. Name the items on the command
-instead, for example `sync-payloads kit pymol`: in a shell that still exports
-`AWESOME_SKILLS_AUTO_UPDATE=0`, a bare `sync-payloads` and the H7-payloads
-`--now` line install or update awesome-skills too, and the doctor's
-`payloads` row checks `skills` again, unless it sets
-`DOTFILES_PAYLOAD_ITEMS='kit pymol'`. The old skill hook's other
-variables (`AWESOME_SKILLS_FORCE`, `AWESOME_SKILLS_BG`,
-`AWESOME_SKILLS_INSTALLER_URL`, `AWESOME_SKILLS_REFRESH_DAYS`,
-`_AWESOME_SKILLS_CHECKED`) and the opt-out and session marker of the
-automatic runs are read by nothing either.
-
 ## State
 
 Dotfiles keeps no payload state. A host that had the automatic runs before
@@ -269,9 +250,8 @@ Stage 5 may still hold their `ITEM.stamp`, `ITEM.failed` and `payload.log` in
 that directory by hand if you like.
 
 The repositories keep their own state: the kit's managed root in
-`${XDG_DATA_HOME:-~/.local/share}/coding-agent-kit/` (Unix only; see
-[the kit leaving native Windows](#the-kit-leaves-native-windows) for what a
-0.6 install left there), awesome-skills' library in
+`${XDG_DATA_HOME:-~/.local/share}/coding-agent-kit/` (Unix only),
+awesome-skills' library in
 `${XDG_DATA_HOME:-~/.local/share}/awesome-skills/library` and its selections
 and ownership manifests (`claude.json`, `codex.json`) and its lock in
 `~/.local/share/awesome-skills/` (Windows both in
@@ -376,27 +356,6 @@ and their contract documentation together, in one reviewed change:
 A probe that never passes makes every run reinstall the item; a probe that
 passes too early makes the hook update an item that was never installed.
 
-## The kit leaves native Windows
-
-coding-agent-kit 0.7 installs nothing on native Windows (it never had
-account switching there, only the three helpers), and `config/payloads.tsv`
-has no `windows-*` rows for it, so the PowerShell hook and
-`.\doctor.ps1` leave the kit out. What a 0.6 install left stays, frozen:
-`%LOCALAPPDATA%\coding-agent-kit\` and the three helper copies in
-`~\.claude\coding-agent-kit\`, which the `settings.json` commands keep
-running, and `kit.stamp` or `kit.failed` in `%LOCALAPPDATA%\dotfiles\payload\`,
-which nothing reads any more. To remove them, from an ordinary PowerShell 7:
-
-```powershell
-pwsh -NoProfile -File "$env:LOCALAPPDATA\coding-agent-kit\install.ps1" -Uninstall -Purge
-Remove-Item -LiteralPath "$env:LOCALAPPDATA\dotfiles\payload\kit.stamp", "$env:LOCALAPPDATA\dotfiles\payload\kit.failed" -ErrorAction Ignore
-```
-
-Claude Code then shows no status line there and its notification and Git hook
-check commands do nothing, without an error, since on native Windows they
-exit 0 while a helper is missing. WSL, and an ssh session into a Unix host,
-keep the whole kit.
-
 ## Leftover checkouts
 
 | Leftover checkout | Its repository |
@@ -444,12 +403,8 @@ dotfiles adds:
 - The fzf-tab preview in `home/dot_oh-my-zsh/custom/fzf-tab.zsh` shows
   the kit's `--info NAME` for an account, offline and without opening a
   credential, so emails and labels show in previews, screen shares and agent
-  transcripts; no token is printed. It calls the older spelling,
-  `codex-as --account-info NAME` or `claude-as --account-info NAME`, which
-  every release keeps accepting, so it works on a host that still runs 0.6
-  until `sync-payloads kit` updates it. By hand, use the kit 0.7 names: `--info`
-  (`-i`), `--list` (`-l`), `claude-as --label NAME LABEL` and `--version`
-  (`-V`).
+  transcripts; no token is printed. By hand, use `--info` (`-i`), `--list`
+  (`-l`), `claude-as --label NAME LABEL` and `--version` (`-V`).
 - The launchers color their messages by `CODING_AGENT_KIT_COLOR`, not
   `DOTFILES_COLOR`.
 - Develop the kit in a clone of its own. Never edit its managed root: its
@@ -462,7 +417,7 @@ sync-payloads                                   # each item: install done or upd
 ./doctor.sh --host <host>                       # payloads ok
 ls ~/.claude/coding-agent-kit/                  # check-git-hooks.cjs notify.cjs statusline.cjs
 readlink ~/.local/bin/codex-as                  # a path in the kit's managed root, .../current/bin/codex-as
-codex-as --version                              # kit 0.7 and later: coding-agent-kit X.Y.Z (managed vX.Y.Z, channel X.Y)
+codex-as --version                              # coding-agent-kit X.Y.Z (managed vX.Y.Z, channel X.Y)
 ls -l ~/.pymolrc ~/.pymolrc.py                  # regular files
 ```
 

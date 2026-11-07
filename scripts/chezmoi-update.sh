@@ -26,8 +26,8 @@ _dotfiles_native_update() (
     . "$_df_source/lib/chezmoi-guard.sh"
     _df_source=$(dotfiles_native_source "$HOME") || return 1
     _df_home=$(CDPATH='' cd -P -- "$HOME" && pwd -P) || return 1
-    # Lost state can make native apply treat a foreign link as a first apply.
-    # Initial takeover/recovery therefore stays an inspected maintenance action.
+    # Lost or empty state would make apply treat a foreign target as a first
+    # apply, so a missing or empty state database refuses the update.
     [ -f "$_df_home/.local/state/chezmoi/chezmoi.boltdb" ] &&
         [ -s "$_df_home/.local/state/chezmoi/chezmoi.boltdb" ] || return 1
     case $_df_source in

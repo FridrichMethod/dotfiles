@@ -15,8 +15,7 @@
     does, and it keeps no state of its own. Run it unelevated: an elevated
     run's git clones would belong to Administrators.
 
-    Any other call, without -Now or with the retired -Auto or -Worker (with
-    -Now too), prints one usage line on stderr and exits 2.
+    Any call without -Now prints one usage line on stderr and exits 2.
 .NOTES
     DOTFILES_PAYLOAD_ITEMS lists the items without arguments (default: those
     with a windows-install row, pymol skills); DOTFILES_PAYLOAD_TIMEOUT
@@ -25,17 +24,13 @@
 #>
 [CmdletBinding()]
 param(
-    # -Auto and -Worker are the retired automatic modes, declared only so
-    # that a call naming them is refused as a usage error below.
-    [switch]$Auto,
     [switch]$Now,
-    [switch]$Worker,
     [Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Item
 )
 
 # Only a person's -Now run does anything. Any other call is a usage error,
 # before anything else, maintenance included.
-if (-not $Now -or $Auto -or $Worker) {
+if (-not $Now) {
     [Console]::Error.WriteLine('dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]')
     exit 2
 }

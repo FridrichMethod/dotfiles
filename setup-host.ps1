@@ -355,18 +355,10 @@ function Test-SetupHumanDone {
     return $false
 }
 
-function ConvertTo-SetupQuoted {
-    # A single-quoted PowerShell literal, so a pasted path never expands $
-    # or backticks (CodeGeneration also doubles the typographic quotes).
-    param([Parameter(Mandatory)][string]$Text)
-    return "'" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($Text) + "'"
-}
-
 function Get-SetupHumanBlock {
     # Kind and lines for one HUMAN step. Each line is a '# ' note or a
     # self-contained command: no Set-Location or variable carries over.
     param([Parameter(Mandatory)][string]$Id)
-    $repo = ConvertTo-SetupQuoted $RepoRoot
     switch -CaseSensitive ($Id) {
         'HW-clone' {
             return @{ Kind = 'judgment'; Lines = @(
@@ -379,10 +371,10 @@ function Get-SetupHumanBlock {
         }
         'HW-native' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# Follow docs/chezmoi-migration/takeover.md from this checkout.'
+                    '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.'
                     '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.'
                     '# Discover both actual CurrentUserAllHosts paths and inspect destination ACLs as the ordinary user.'
-                    '# Quiesce writers, snapshot exact targets, initialize with all paths explicit and establish the home binding.'
+                    '# Snapshot exact targets, initialize with all paths explicit and establish the home binding.'
                     '# Native regular-file updates need no elevation or scheduled task.'
                 ) }
         }

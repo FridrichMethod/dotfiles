@@ -52,7 +52,7 @@ try {
     $base = 'file://' + $(if ($slashed.StartsWith('/')) { '' } else { '/' }) + $slashed + '/'
     $config = [IO.File]::ReadAllText((Join-Path $repoRoot 'config/payloads.tsv'))
     Assert-True ($config.Contains('https://raw.githubusercontent.com/FridrichMethod/PyMOLScripts/main/install.ps1')) 'config/payloads.tsv no longer downloads PyMOLScripts from raw.githubusercontent.com/FridrichMethod'
-    # coding-agent-kit installs nothing on native Windows (0.7 and later).
+    # coding-agent-kit installs nothing on native Windows.
     Assert-True (-not ($config -match "(?m)^kit`twindows-")) 'config/payloads.tsv has a windows row for the kit, which does not install on native Windows'
     $config = $config.Replace('https://raw.githubusercontent.com/FridrichMethod/', $base).Replace('Join-Path $HOME ', 'Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME ')
     Assert-True (-not ($config -match 'https?://')) 'config/payloads.tsv names a URL outside raw.githubusercontent.com/FridrichMethod'
@@ -70,9 +70,9 @@ try {
     # directory they run from, who may enter it (its mode; on Windows its
     # access list) and its entries. Every fake also records the
     # working directory it runs in, as PowerShell and the process see it, and
-    # where /proc shows it (Linux) its parent's, the hook's or the
-    # background run's (EVENTS.NAME-cwd). The skills fake also leaves the
-    # installed update script of the fixture's windows-update row.
+    # where /proc shows it (Linux) its parent's, the hook's
+    # (EVENTS.NAME-cwd). The skills fake also leaves the installed update
+    # script of the fixture's windows-update row.
     Write-Fixture (Join-Path $remote 'PyMOLScripts/main/install.ps1') @'
 Add-Content -LiteralPath $env:PAYLOAD_EVENTS -Value "pymol-install [$args]"
 $here = Split-Path -Parent $PSCommandPath
@@ -153,7 +153,7 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
     }
     function Get-Events($Case) { @([IO.File]::ReadAllLines($Case.Events)) -join "`n" }
     function Clear-Events($Case) { [IO.File]::WriteAllText($Case.Events, '') }
-    # No run keeps payload state of its own (stamps, failure records, a log).
+    # No run keeps payload state of its own.
     function Assert-NoState($Case, [string]$What) {
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $Case.Data 'dotfiles'))) "$What kept payload state"
     }
@@ -297,7 +297,7 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         }
         finally { $listener.Stop() }
     }
-    Test-Case 'a call without -Now, the retired -Auto and -Worker included (with -Now too), prints one usage line and exits 2' {
+    Test-Case 'a call without -Now, a bare item or an unknown argument included, prints one usage line and exits 2' {
         $case = New-Case
         $usage = 'dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]'
         function Assert-UsageError([string[]]$Arguments, [string]$What) {
@@ -305,11 +305,8 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
             Assert-True ($run.Code -eq 2 -and $run.Text -ceq $usage -and (Get-Events $case) -ceq '') "$($What): exit $($run.Code), events $(Get-Events $case), output: $($run.Text)"
         }
         Assert-UsageError @() 'no arguments'
-        Assert-UsageError @('-Auto') '-Auto'
-        Assert-UsageError @('-Worker', 'pymol', 'skills') '-Worker'
         Assert-UsageError @('pymol') 'a bare item'
-        Assert-UsageError @('-Now', '-Auto') '-Now -Auto'
-        Assert-UsageError @('-Now', 'pymol', '-Worker') '-Now pymol -Worker'
+        Assert-UsageError @('-Bogus') 'an unknown argument'
         # Under maintenance too; a -Now run is refused there. Off Windows only:
         # PowerShell's $HOME on Windows is the account's profile.
         if (-not $IsWindows) {

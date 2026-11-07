@@ -984,7 +984,7 @@ exit 0
         }
     }
 
-    Test-Case 'native-config names its cause; another checkout and a stray state database only warn' {
+    Test-Case 'native-config names its cause and writes nothing; another checkout only warns' {
         if (Test-RealChezmoiMissing) { return }
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
@@ -997,23 +997,17 @@ exit 0
         Assert-Exit $run 0 'bound home'
         Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-" 'bound row'
 
-        # A plain chezmoi command's state database: a warning, never removed.
-        $stray = Join-Path $fixture.Home '.config/chezmoi/chezmoistate.boltdb'
-        [IO.File]::WriteAllText($stray, '')
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
         $run = Invoke-Fixture $fixture doctor.ps1 $native
-        Assert-Exit $run 0 'stray state database'
-        Assert-Equal (Get-NativeConfigRow $run) ("warn`tnative-config`tcore`tnative binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: " +
-            "a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set " +
-            "(docs/chezmoi-migration/takeover.md); the doctor leaves the file in place`t$fix") 'stray row'
-        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'the stray check wrote or removed files'
-        [IO.File]::Delete($stray)
+        Assert-Exit $run 0 'bound home again'
+        Assert-Equal (Get-NativeConfigRow $run) "ok`tnative-config`tcore`tnative binding and local config present; review configuration with scoped native diff`t-" 'bound row again'
+        Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'the native-config check wrote or removed files'
 
         $maintenance = Join-Path $fixture.Home '.config/dotfiles/maintenance'
         [IO.File]::WriteAllText($maintenance, '')
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'maintenance'
-        Assert-True ((Get-NativeConfigRow $run) -cmatch "^human`tnative-config`tcore`tmaintenance is active \(~/\.config/dotfiles/maintenance\).+`t$fix$") "maintenance row: $($run.Stdout)"
+        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tmaintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md`t$fix" 'maintenance row'
         [IO.File]::Delete($maintenance)
 
         $marker = Join-Path $fixture.Home '.config/dotfiles/native'
@@ -1021,11 +1015,11 @@ exit 0
         [IO.File]::WriteAllText($marker, "$($binding)extra`n")
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'invalid binding'
-        Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tthe native binding ~/.config/dotfiles/native is not valid for this home")) "invalid row: $($run.Stdout)"
+        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tthe native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly`t$fix" 'invalid row'
         [IO.File]::Delete($marker)
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'no binding'
-        Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tno native binding (~/.config/dotfiles/native)")) "unbound row: $($run.Stdout)"
+        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tno native binding (~/.config/dotfiles/native): this home has no first deployment; follow Fresh Windows home by hand in docs/bootstrap.md`t$fix" 'unbound row'
         # sync-payloads needs a binding, so an unmarked home's payload advice
         # is this checkout's -Now line.
         $run = Invoke-Fixture $fixture doctor.ps1 $native @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
@@ -1038,7 +1032,7 @@ exit 0
         [IO.File]::Delete($config)
         $run = Invoke-Fixture $fixture doctor.ps1 $native
         Assert-Exit $run 1 'no local config'
-        Assert-True ((Get-NativeConfigRow $run).StartsWith("human`tnative-config`tcore`tthe local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file")) "config row: $($run.Stdout)"
+        Assert-Equal (Get-NativeConfigRow $run) "human`tnative-config`tcore`tthe local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow Fresh Windows home by hand in docs/bootstrap.md`t$fix" 'config row'
         [IO.File]::WriteAllText($config, $configText)
 
         $guard = Join-Path $fixture.Repo 'lib/chezmoi-guard.ps1'
@@ -1110,13 +1104,9 @@ exit 0
         $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
         Assert-True ([bool]($check.Lines -cmatch '^W1-chezmoi done ')) "private copy W1-chezmoi: $($check.Stdout)"
 
-        # Only a PATH chezmoi (winget, scoop): refused, and this verdict comes
-        # before the stray state database warning.
+        # Only a PATH chezmoi (winget, scoop): refused.
         [IO.File]::Delete($installed)
-        $stray = Join-Path $fixture.Home '.config/chezmoi/chezmoistate.boltdb'
-        [IO.File]::WriteAllText($stray, '')
         Assert-BinaryRefused 'PATH-only chezmoi'
-        [IO.File]::Delete($stray)
 
         # Another account may modify it (an inherited sandbox grant, say).
         Install-FixtureChezmoi $installed
@@ -1306,7 +1296,7 @@ exit 0
         Assert-Equal (($blocks | ForEach-Object Kind) -join ',') 'judgment,judgment,judgment,sudo,judgment,auth' 'HUMAN kinds'
         Assert-Equal @($run.Lines | Where-Object { $_ -notmatch '^HUMAN-' }).Count (@($blocks | ForEach-Object { $_.Lines.Count }) | Measure-Object -Sum).Sum 'text outside blocks'
         $text = $run.Stdout
-        foreach ($expected in @('docs/chezmoi-migration/takeover.md',
+        foreach ($expected in @('# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.',
                 '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.',
                 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser', 'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser',
                 'wsl --install -d Ubuntu', 'named exactly Ubuntu', 'git clone https://github.com/FridrichMethod/dotfiles.git',

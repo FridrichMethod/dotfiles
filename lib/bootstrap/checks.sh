@@ -70,33 +70,28 @@ bootstrap_native_ready() {
 
 # bootstrap_check_native_config ROOT: the native binding, named by cause. A
 # binding to another checkout (this doctor runs from a worktree or second
-# clone) and a stray state database that a chezmoi command without the
-# updater's arguments wrote only warn; the doctor never removes that file.
+# clone) only warns.
 bootstrap_check_native_config() {
-    local state stray=$HOME/.config/chezmoi/chezmoistate.boltdb
+    local state
     state=$(bootstrap_native_state "$1")
     case $state in
         ok)
-            if [ -e "$stray" ] || [ -L "$stray" ]; then
-                bootstrap_check_result warn "native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place"
-            else
-                bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
-            fi
+            bootstrap_check_result ok 'native binding and local config present; use scoped native diff to review configuration'
             ;;
         'elsewhere '*)
             bootstrap_check_result warn "this home is bound to ${state#elsewhere }, not to this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its native state"
             ;;
         maintenance)
-            bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): native updates and payload installs stay off until the reviewed procedure removes it; follow docs/chezmoi-migration/takeover.md'
+            bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md'
             ;;
         unbound)
-            bootstrap_check_result human "no native binding (~/.config/dotfiles/native): this home's native handover is not done; follow docs/chezmoi-migration/takeover.md"
+            bootstrap_check_result human 'no native binding (~/.config/dotfiles/native): this home has no first deployment; follow Fresh home by hand in docs/bootstrap.md'
             ;;
         invalid)
-            bootstrap_check_result human 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it, never overwrite it blindly, and follow docs/chezmoi-migration/takeover.md'
+            bootstrap_check_result human 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly'
             ;;
         config)
-            bootstrap_check_result human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow docs/chezmoi-migration/takeover.md'
+            bootstrap_check_result human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow Fresh home by hand in docs/bootstrap.md'
             ;;
         *)
             bootstrap_check_result human "$1/lib/chezmoi-guard.sh is unreadable, so the native binding cannot be checked; use a complete checkout"

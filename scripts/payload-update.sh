@@ -11,26 +11,17 @@
 # DOTFILES_PAYLOAD_ITEMS (the items without arguments; default: kit pymol
 # skills), DOTFILES_PAYLOAD_TIMEOUT (seconds per download, default 60).
 #
-# Any other call, the retired --auto and --worker included (after --now
-# too), prints one usage line on stderr and exits 2 before anything else,
-# maintenance included; sourced, it returns 2 instead and sets no variable
-# or option (the argument scan runs in a subshell).
+# Any call without --now first prints one usage line on stderr and exits 2
+# before anything else, maintenance included.
 
-if [ "${1-}" != --now ] || (
-    for argument; do
-        case $argument in
-            --auto | --worker) exit 0 ;;
-        esac
-    done
-    exit 1
-); then
+if [ "${1-}" != --now ]; then
     printf '%s\n' 'dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]' >&2
-    return 2 2>/dev/null || exit 2
+    exit 2
 fi
 # Persistent operator maintenance refuses an explicit run too.
 if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
     printf '%s\n' 'dotfiles: payload update refused during maintenance.' >&2
-    return 1 2>/dev/null || exit 1
+    exit 1
 fi
 
 set -fu

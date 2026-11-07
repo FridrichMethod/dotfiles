@@ -99,7 +99,8 @@ class UpdateConfigTests(unittest.TestCase):
             result = fixture.run("init")
             self.assertEqual(result.returncode, 0, result.stderr)
             bound = fixture.destination / STATE
-            stray = fixture.config.parent / "chezmoistate.boltdb"
+            # chezmoi's default state path beside the config.
+            default = fixture.config.parent / "chezmoistate.boltdb"
             target = str(fixture.destination / ".gitconfig")
             # The updater's explicit flag still wins over the owned key.
             result = fixture.run("apply", "--exclude=dirs", "--force=false", target)
@@ -114,7 +115,7 @@ class UpdateConfigTests(unittest.TestCase):
                 cwd=fixture.root, env=fixture.env, timeout=30, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertGreater(bound.stat().st_size, 0)
-            self.assertFalse(os.path.lexists(stray))
+            self.assertFalse(os.path.lexists(default))
 
     def test_local_temporals_refuse_init_without_config_rewrite(self):
         role = "win" if os.name == "nt" else "common-only"

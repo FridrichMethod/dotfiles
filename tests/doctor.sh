@@ -402,7 +402,6 @@ printf 'ID=ubuntu\nID_LIKE=debian\n' >"$OS_UBUNTU"
 NATIVE_DIR=$TEST_HOME/.config/dotfiles
 NATIVE_MARKER=$NATIVE_DIR/native
 NATIVE_CONFIG=$TEST_HOME/.config/chezmoi/chezmoi.toml
-STRAY_STATE=$TEST_HOME/.config/chezmoi/chezmoistate.boltdb
 mkdir -p "$NATIVE_DIR" "${NATIVE_CONFIG%/*}"
 bind_native() { printf 'dotfiles-chezmoi-v1\n%s\n%s\n' "$TEST_HOME" "$1" >"$NATIVE_MARKER"; }
 native_config() { printf '%s\n' "$@" >"$NATIVE_CONFIG"; }
@@ -759,9 +758,6 @@ run_doctor payloads-selected DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubunt
 assert_row payloads ok 'installed: skills' -
 run_doctor payloads-none DOTFILES_PAYLOAD_ITEMS= -- --host lab-ubuntu --tsv
 assert_row payloads ok 'DOTFILES_PAYLOAD_ITEMS selects no payload' -
-# The old skill hook's opt-out ended in Stage 5: the row no longer reads it.
-run_doctor payloads-awesome-ignored AWESOME_SKILLS_AUTO_UPDATE=0 DOTFILES_PAYLOAD_ITEMS='skills' -- --host lab-ubuntu --tsv
-assert_row payloads ok 'installed: skills' -
 run_doctor payloads-data-home XDG_DATA_HOME="$TEST_TMP/elsewhere" DOTFILES_PAYLOAD_ITEMS='kit skills' -- --host lab-ubuntu --tsv
 assert_row payloads warn "not installed: kit: $SYNC_ADVICE"
 run_doctor payloads-unselected DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
@@ -1124,24 +1120,16 @@ assert_out "$(printf 'native-config\tcore\tcheck\t-\tH7-native')"
 assert_out "$(printf 'path-order\tcore\tcheck\t-\tH7-native')"
 assert_quiet_events 'native --list probed tools'
 
-# native-config names its cause. Only a home bound to another checkout (a
-# worktree or second clone runs this doctor) and a stray state database
-# warn; the rest is for a person.
+# native-config names its cause, and writes nothing. Only a home bound to
+# another checkout (a worktree or second clone runs this doctor) warns; the
+# rest is for a person.
 NATIVE_REF=$TEST_TMP/native.ref
-: >"$STRAY_STATE"
 : >"$NATIVE_REF"
-run_doctor native-config-stray -- --host lab-ubuntu --tsv
+run_doctor native-config-ok -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row native-config warn "native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: a chezmoi command without the updater's full explicit argument set wrote this separate state database; run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place" \
-    'docs/bootstrap.md H7-native'
-[ -f "$STRAY_STATE" ] || case_fail 'the doctor removed the stray state database'
+assert_row native-config ok 'native binding and local config present' -
 CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$NATIVE_REF" -print)
 [ -z "$CHANGED" ] || case_fail "doctor wrote into the fixture or home: $CHANGED"
-rm "$STRAY_STATE"
-mkdir -p "$STRAY_STATE"
-run_doctor native-config-stray-dir -- --host lab-ubuntu --tsv
-assert_row native-config warn '~/.config/chezmoi/chezmoistate.boltdb exists'
-rmdir "$STRAY_STATE"
 mkdir -p "$TEST_TMP/bound-elsewhere"
 printf 'home\n' >"$TEST_TMP/bound-elsewhere/.chezmoiroot"
 bind_native "$TEST_TMP/bound-elsewhere"
@@ -1185,22 +1173,22 @@ mv "$TEST_TMP/pymolrc.hidden" "$TEST_HOME/.pymolrc.py"
 : >"$NATIVE_DIR/maintenance"
 run_doctor native-config-maintenance -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human 'maintenance is active (~/.config/dotfiles/maintenance)' 'docs/bootstrap.md H7-native'
+assert_row native-config human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' 'docs/bootstrap.md H7-native'
 rm "$NATIVE_DIR/maintenance"
 printf 'dotfiles-chezmoi-v1\n%s\n%s\nextra\n' "$TEST_HOME" "$FIXTURE" >"$NATIVE_MARKER"
 run_doctor native-config-invalid -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human 'the native binding ~/.config/dotfiles/native is not valid for this home' 'docs/bootstrap.md H7-native'
+assert_row native-config human 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-native'
 rm "$NATIVE_MARKER"
 run_doctor native-config-unbound -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human 'no native binding (~/.config/dotfiles/native)' 'docs/bootstrap.md H7-native'
+assert_row native-config human 'no native binding (~/.config/dotfiles/native): this home has no first deployment; follow Fresh home by hand in docs/bootstrap.md' 'docs/bootstrap.md H7-native'
 bind_native "$FIXTURE"
 mv "$NATIVE_CONFIG" "$TEST_TMP/chezmoi.toml"
 ln -s "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
 run_doctor native-config-link -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file' 'docs/bootstrap.md H7-native'
+assert_row native-config human 'the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; follow Fresh home by hand in docs/bootstrap.md' 'docs/bootstrap.md H7-native'
 rm "$NATIVE_CONFIG"
 mv "$TEST_TMP/chezmoi.toml" "$NATIVE_CONFIG"
 mv "$FIXTURE/lib/chezmoi-guard.sh" "$TEST_TMP/guard.hidden"

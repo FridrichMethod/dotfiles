@@ -31,11 +31,11 @@ intentional U+FFFD. Valid Unicode and surrogate pairs remain supported.
 Empty/whitespace live JSON initializes an object; malformed, trailing or
 non-object JSON fails.
 
-Codex applies only the typed owned paths and removes only the retired paths
-listed below. `home/.chezmoidata/codex-policy.json` contains paths/types only;
+Codex applies only the typed owned paths listed below.
+`home/.chezmoidata/codex-policy.json` contains paths/types only;
 `tests/test_chezmoi_codex.py` pins it to a frozen list (19 owned paths with
-types, 3 retired) and requires the portable TOML's leaves to be exactly the
-owned paths with those types. The template reads
+types) and requires the portable TOML's leaves to be exactly the owned paths
+with those types. The template reads
 that manifest literally; local template data cannot expand ownership. Unknown
 portable fields do not become policy. Every existing ancestor must be a table
 before assignment. Quoted dotted keys, literal `"*"`, int64, unknown tables and
@@ -44,7 +44,7 @@ arrays of tables retain their native types without a JSON round trip.
 TOML local date, local time and local datetime are explicitly unsupported by
 this transform: v2.74.0 can shift their wall values, and Windows `TZ=UTC` is not
 a fix. A recursive native type guard rejects these values anywhere in either
-input, including arrays and retired/otherwise unowned fields, before changes
+input, including arrays and unowned fields, before changes
 are emitted. The affected target remains byte-identical. Offset timestamps are
 supported. Physical CRLF is normalized to LF before native parsing, matching
 the tested multiline basic/literal-string consumer semantics; explicit `\r\n`
@@ -98,7 +98,7 @@ mutable target over its modify template.
 
 ## Merge ownership
 
-Codex ownership, required types and retired paths live in
+Codex ownership and required types live in
 `home/.chezmoidata/codex-policy.json`, which the native modify reads literally
 (paths and types only, no values). The current owned fields are:
 
@@ -122,9 +122,8 @@ nonforce login update at `~/.codex/config.toml` until it is reconciled as in
 [takeover.md](chezmoi-migration/takeover.md#reconcile-an-owned-ai-config-key).
 
 Portable values replace these paths only; other live keys and tables are
-retained, with the native serialization described above. Retired `sandbox_mode`,
-the whole `sandbox_workspace_write` table and `features.js_repl` are removed.
-Unknown portable keys are not silently deployed as shared policy.
+retained, with the native serialization described above. Unknown portable keys
+are not silently deployed as shared policy.
 
 Codex hooks are host runtime state; the native modify leaves them in place like
 any other unowned field.

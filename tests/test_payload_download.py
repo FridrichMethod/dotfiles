@@ -131,7 +131,7 @@ class PayloadDownload(unittest.TestCase):
         return [PWSH, "-NoProfile", "-NonInteractive", "-File", str(self.repo / "scripts/payload-update.ps1"), "-Now", *items]
 
     def assert_no_state(self):
-        # The hook keeps no stamps, failure records or log of its own.
+        # The hook keeps no state of its own.
         self.assertFalse((self.home / "state").exists())
         self.assertFalse((self.home / "data/dotfiles").exists())
 

@@ -135,18 +135,6 @@
         ],
         "type": "string-array"
       }
-    ],
-    "retired": [
-      [
-        "sandbox_mode"
-      ],
-      [
-        "sandbox_workspace_write"
-      ],
-      [
-        "features",
-        "js_repl"
-      ]
     ]
   }
 }

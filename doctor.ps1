@@ -18,9 +18,9 @@
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
     native-config checks the home-bound native configuration signal, named
-    by cause: a binding to another checkout and a stray
-    ~/.config/chezmoi/chezmoistate.boltdb only warn, and on Windows a bound
-    home whose ~/.local/bin/chezmoi.exe the login updater refuses is human.
+    by cause: a binding to another checkout only warns, and on Windows a
+    bound home whose ~/.local/bin/chezmoi.exe the login updater refuses is
+    human.
 
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
@@ -142,13 +142,11 @@ function Get-DoctorToolResult {
 
 function Get-DoctorNativeConfigResult {
     # doctor.sh's bootstrap_check_native_config: the native binding, named by
-    # cause. A binding to another checkout and a stray state database that a
-    # chezmoi command without the updater's arguments wrote only warn; the
-    # doctor never removes that file. On Windows a bound home also needs the
-    # one chezmoi.exe the login updater runs (read-only check, before the
-    # stray database); Unix updaters use the PATH chezmoi.
+    # cause. A binding to another checkout only warns. On Windows a bound home
+    # also needs the one chezmoi.exe the login updater runs (a read-only
+    # check); Unix updaters use the PATH chezmoi.
     $native = Get-BootstrapNativeState -RepoRoot $RepoRoot
-    $takeover = 'follow docs/chezmoi-migration/takeover.md'
+    $freshHome = 'follow Fresh Windows home by hand in docs/bootstrap.md'
     switch -CaseSensitive ($native.State) {
         'ok' {
             if ($IsWindows -and -not (Test-BootstrapNativeChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
@@ -156,21 +154,15 @@ function Get-DoctorNativeConfigResult {
                     '(missing, a link, under a linked directory, or not private to you, SYSTEM and Administrators) and never uses a PATH chezmoi, ' +
                     'so native updates do not run; let setup-host.ps1 W1-chezmoi install a private copy') W1-chezmoi
             }
-            $stray = Join-Path $HOME '.config/chezmoi/chezmoistate.boltdb'
-            if (Get-Item -LiteralPath $stray -Force -ErrorAction SilentlyContinue) {
-                return New-DoctorResult warn native-config core ("native binding and local config present, but ~/.config/chezmoi/chezmoistate.boltdb exists: " +
-                    "a chezmoi command without the updater's full explicit argument set wrote this separate state database; " +
-                    'run every manual native command with that argument set (docs/chezmoi-migration/takeover.md); the doctor leaves the file in place') HW-native
-            }
             return New-DoctorResult ok native-config core 'native binding and local config present; review configuration with scoped native diff' HW-native
         }
         'elsewhere' {
             return New-DoctorResult warn native-config core "this home is bound to $($native.Source), not to this checkout $($native.Checkout); run $(Join-Path $native.Source 'doctor.ps1') for its native state" HW-native
         }
-        'maintenance' { return New-DoctorResult human native-config core "maintenance is active (~/.config/dotfiles/maintenance): native updates and payload installs stay off until the reviewed procedure removes it; $takeover" HW-native }
-        'unbound' { return New-DoctorResult human native-config core "no native binding (~/.config/dotfiles/native): this home's native handover is not done; $takeover" HW-native }
-        'invalid' { return New-DoctorResult human native-config core "the native binding ~/.config/dotfiles/native is not valid for this home; inspect it, never overwrite it blindly, and $takeover" HW-native }
-        'config' { return New-DoctorResult human native-config core "the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; $takeover" HW-native }
+        'maintenance' { return New-DoctorResult human native-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' HW-native }
+        'unbound' { return New-DoctorResult human native-config core "no native binding (~/.config/dotfiles/native): this home has no first deployment; $freshHome" HW-native }
+        'invalid' { return New-DoctorResult human native-config core 'the native binding ~/.config/dotfiles/native is not valid for this home; inspect it and never overwrite it blindly' HW-native }
+        'config' { return New-DoctorResult human native-config core "the local config ~/.config/chezmoi/chezmoi.toml is absent or not a regular file; $freshHome" HW-native }
     }
     return New-DoctorResult human native-config core "$(Join-Path $RepoRoot 'lib/chezmoi-guard.ps1') is unreadable, so the native binding cannot be checked; use a complete checkout" HW-native
 }
