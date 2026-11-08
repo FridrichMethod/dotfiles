@@ -1182,7 +1182,7 @@ mv "$TEST_TMP/pymolrc.hidden" "$TEST_HOME/.pymolrc.py"
 : >"$MAINTENANCE_DIR/maintenance"
 run_doctor chezmoi-config-maintenance -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row chezmoi-config human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' 'docs/bootstrap.md H7-deploy'
+assert_row chezmoi-config human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md' 'docs/bootstrap.md H7-deploy'
 rm "$MAINTENANCE_DIR/maintenance"
 # Each config the guard refuses is invalid: a relative or noncanonical
 # sourceDir, another home, a second sourceDir line, a workingTree key, CRLF.

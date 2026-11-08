@@ -24,7 +24,7 @@ own state are in its README; this file covers only how dotfiles calls them.
 
 | Item | Repository | Unix | Native Windows |
 | --- | --- | --- | --- |
-| `kit` | coding-agent-kit | a managed install of channel `0.7`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows), and its launchers never ran natively |
+| `kit` | coding-agent-kit | a managed install of channel `0.7`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows) |
 | `pymol` | PyMOLScripts | `~/.pymolrc` and `~/.pymolrc.py` | the same two files in `$HOME` |
 | `skills` | awesome-skills | its skill copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/`, with selection and visibility managed by its installer | the same, through its `install.ps1` |
 
@@ -251,11 +251,7 @@ managed root, which its probe follows.
 
 ## State
 
-Dotfiles keeps no payload state. A host that had the automatic runs before
-Stage 5 may still hold their `ITEM.stamp`, `ITEM.failed` and `payload.log` in
-`${XDG_STATE_HOME:-~/.local/state}/dotfiles/payload/` (native Windows:
-`%LOCALAPPDATA%\dotfiles\payload\`). Nothing reads or removes them; delete
-that directory by hand if you like.
+Dotfiles keeps no payload state.
 
 The repositories keep their own state: the kit's managed root in
 `${XDG_DATA_HOME:-~/.local/share}/coding-agent-kit/` (Unix only),
@@ -264,8 +260,7 @@ awesome-skills' library in
 and ownership manifests (`claude.json`, `codex.json`) and its lock in
 `~/.local/share/awesome-skills/` (Windows both in
 `%LOCALAPPDATA%\awesome-skills\`). The `skills` probe passes on a manifest or
-the library clone, as awesome-skills documents an install, so an install of
-its older tarball installer, whose manifests have the same names, counts too.
+the library clone, as awesome-skills documents an install.
 PyMOLScripts keeps a copy of the rc files it last installed, which tells a
 local edit from an older upstream version (in
 `${XDG_STATE_HOME:-~/.local/state}/pymolscripts/`, Windows
@@ -306,8 +301,7 @@ lock: concurrent runs converge.
 ## Trust
 
 Each install command downloads its repository's `main` install script, an
-unpinned branch head, over https from raw.githubusercontent.com, the trust
-model the old skill hook had. The kit's `main` script only bootstraps: it
+unpinned branch head, over https from raw.githubusercontent.com. The kit's `main` script only bootstraps: it
 installs and then runs the code of a release of the declared channel, and
 later updates run that release's own installer. A new kit patch release
 therefore reaches a host the next time a person runs `sync-payloads kit`
@@ -367,28 +361,6 @@ and their contract documentation together, in one reviewed change:
 A probe that never passes makes every run reinstall the item; a probe that
 passes too early makes the hook update an item that was never installed.
 
-## Leftover checkouts
-
-| Leftover checkout | Its repository |
-| --- | --- |
-| `common/codex/coding-agent-kit` (from before the kit moved to its own package) | `.git/modules/common/codex/coding-agent-kit` |
-| `common/coding-agent-kit/coding-agent-kit` | `.git/modules/common/codex/coding-agent-kit` (the submodule kept its first name) |
-| `common/pymol/PyMOLScripts` | `.git/modules/common/pymol/PyMOLScripts` |
-| `common/sherlock-kit/sherlock-kit` ([Sherlock residue](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual)) | `.git/modules/common/sherlock-kit/sherlock-kit` |
-
-A pull across a submodule's removal leaves its checkout on every host where it
-was checked out, and the login update refuses that untracked source until the
-checkout is gone.
-`git -C ~/dotfiles status --porcelain --untracked-files=all -- common` lists
-each leftover as an untracked (`??`) path; `git -C <path> status` and
-`git -C <path> log --branches --not --remotes` show whether one holds work of
-yours. Nothing in dotfiles removes them or their repositories under
-`.git/modules`. Once a checkout holds nothing you want, remove it with
-`rm -rf <path>` (`Remove-Item -LiteralPath <path> -Recurse -Force` on
-Windows). Its repository under `.git/modules` can go the same way once no
-other leftover uses it: both kit leftovers share one, so remove it only after
-both checkouts are gone.
-
 ## The kit on a dotfiles host
 
 The kit documents itself in its
@@ -397,8 +369,8 @@ login, completion, concurrency, takeover, resume, the account details, the
 optional configuration file and the `CODING_AGENT_KIT_*` variables. What
 dotfiles adds:
 
-- The Claude and Codex settings and their native modifies
-  ([config-sync.md](config-sync.md)) stay in this repository; the kit needs
+- The Claude and Codex settings and their modify templates
+  ([ai-config.md](ai-config.md)) stay in this repository; the kit needs
   none of them.
 - Dotfiles ships no `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml`,
   so the kit's defaults apply (`codex-as --show-config` prints them). If a host

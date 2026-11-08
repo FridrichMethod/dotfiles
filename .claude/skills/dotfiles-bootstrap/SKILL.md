@@ -1,6 +1,6 @@
 ---
 name: dotfiles-bootstrap
-description: Provision or check a machine for this dotfiles repository (hosts mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win, or another Linux without an overlay). Diagnoses with doctor.sh, installs pinned tools with setup-host.sh, hands sudo, login, GUI and allocation steps to the person, then hands over configuration with native chezmoi. Use when asked to bootstrap, provision, set up or check a host, or when doctor.sh reports missing tools.
+description: Provision or check a machine for this dotfiles repository (hosts mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win, or another Linux without an overlay). Diagnoses with doctor.sh, installs pinned tools with setup-host.sh, hands sudo, login, GUI and allocation steps to the person, then deploys the configuration with chezmoi. Use when asked to bootstrap, provision, set up or check a host, or when doctor.sh reports missing tools.
 compatibility: Needs a clone of this dotfiles repository, Bash 3.2 or newer on macOS and Linux, and PowerShell 7 on Windows.
 metadata:
   playbook: docs/bootstrap.md
@@ -42,7 +42,7 @@ from this checkout, stop and say so.
    left.
 8. Run the H7-payloads line only if the person wants the payload repos now;
    no login installs them. Follow the H7-deploy block, Fresh home by hand in
-   `docs/bootstrap.md`: explicit local host data, native paths, private
+   `docs/bootstrap.md`: explicit local host data, explicit chezmoi paths, private
    backups and the local config init writes, which names this home and the
    checkout. Do not improvise `init --apply` or force a whole home.
    setup-host only provisions tools and never initializes configuration or
@@ -59,9 +59,8 @@ the first apply is the HW-deploy block and the finish is
 Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 `micromamba shell init`, never edit rc files, and never commit.
 
-Provisioning is native only: it installs the verified chezmoi release and
-creates no virtual environment. Doctor checks the tool and that the local
+Provisioning installs the verified chezmoi release. Doctor checks the tool and that the local
 chezmoi config names this home and this checkout; a config naming another
 checkout only warns. With a local config the default host is its
 `[data].host`; nothing else selects one. It
-remains offline and write-free; native diff/apply is a separate operation.
+remains offline and write-free; chezmoi diff and apply are a separate operation.

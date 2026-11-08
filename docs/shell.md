@@ -9,7 +9,7 @@ Host aliases and profile files live under ~/.config/sh/. Preserve shared site
 prefixes such as /apps/miniconda3; per-user conda and Juliaup paths use HOME.
 The vi alias selects nvim only when available, leaving native vi usable otherwise.
 An interactive login updates only a home whose ~/.config/chezmoi/chezmoi.toml
-names it and a dotfiles checkout ([update contract](update-contract.md)); a
+names it and a dotfiles checkout ([login updates](updates.md)); a
 home without that config runs nothing.
 
 nvm discovery honors an explicit NVM_DIR, then ~/.nvm, then
@@ -71,16 +71,16 @@ LASTEXITCODE, which zoxide's directory tracking can reset. The tracked theme
 lives in home/dot_config/oh-my-posh, uses a release-tagged schema and ASCII
 glyph escapes, and supports shell integration/transient prompts. Re-render it
 after upgrades.
-Windows Terminal settings deploy as a native regular file. A Terminal UI save
+Windows Terminal settings deploy as a regular file. A Terminal UI save
 rewrites the live file, which shows up as destination drift (`chezmoi diff`);
 the next login update stops at it like any changed target until the edit is
-committed to the source or reconciled ([update contract](update-contract.md)).
+committed to the source or reconciled ([editing and adding files](updates.md#editing-and-adding-files)).
 A Terminal restart loads changes.
 
 ## Lab input settings
 
-fcitx5 rewrites its profile, so the native source deploys the authoritative
-baseline as a private regular file rather than a link; fcitx5's own `conf/`
+fcitx5 rewrites its profile, so the source deploys the authoritative
+baseline as a private regular file; fcitx5's own `conf/`
 state stays unmanaged. Like a Terminal UI save above, an fcitx5 rewrite is
 destination drift at which the next login update stops until it is reconciled.
 On lab-ubuntu, GNOME owns the X keymap. The deployed .xprofile sets CapsLock as
@@ -167,12 +167,12 @@ at most 2000 recent lines per window pane.
 
 The Space menu groups Sessions, Windows, Panes and Tools, with layout
 save/restore, resize, fzf, extraction, floating shell and plugin/config
-actions. The deployed `~/.config/tmux/which-key.conf` is a manual native tmux
+actions. The deployed `~/.config/tmux/which-key.conf` is a hand-written tmux
 configuration: upstream autobuild is disabled, so reload needs no Python
 menu generation, pip package or virtual environment. Upstream may copy its
 default config into ignored files in its own checkout on first load; the
 deployed menu is then applied. To customize the menu, edit
-`home/dot_config/tmux/which-key.conf` in the checkout; a native home receives it
+`home/dot_config/tmux/which-key.conf` in the checkout; every home receives it
 through the login update once it is committed, since that update refuses a dirty
 checkout.
 

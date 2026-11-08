@@ -1018,7 +1018,7 @@ exit 0
         [IO.File]::WriteAllText($maintenance, '')
         $run = Invoke-Fixture $fixture doctor.ps1 $tsv
         Assert-Exit $run 1 'maintenance'
-        Assert-Equal (Get-ChezmoiConfigRow $run) "human`tchezmoi-config`tcore`tmaintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md`t$fix" 'maintenance row'
+        Assert-Equal (Get-ChezmoiConfigRow $run) "human`tchezmoi-config`tcore`tmaintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md`t$fix" 'maintenance row'
         [IO.File]::Delete($maintenance)
         [IO.Directory]::Delete((Split-Path -Parent $maintenance))
 

@@ -158,7 +158,7 @@ function Get-DoctorChezmoiConfigResult {
         'elsewhere' {
             return New-DoctorResult warn chezmoi-config core "~/.config/chezmoi/chezmoi.toml names the checkout $($homeState.Source), not this checkout $($homeState.Checkout); run $(Join-Path $homeState.Source 'doctor.ps1') for its state" HW-deploy
         }
-        'maintenance' { return New-DoctorResult human chezmoi-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' HW-deploy }
+        'maintenance' { return New-DoctorResult human chezmoi-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md' HW-deploy }
         'config' {
             if (-not $homeState.Exists) {
                 return New-DoctorResult human chezmoi-config core 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh Windows home by hand in docs/bootstrap.md' HW-deploy

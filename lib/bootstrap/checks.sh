@@ -82,7 +82,7 @@ bootstrap_check_chezmoi_config() {
             bootstrap_check_result warn "~/.config/chezmoi/chezmoi.toml names the checkout ${state#elsewhere }, not this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its state"
             ;;
         maintenance)
-            bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md'
+            bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md'
             ;;
         config)
             if ! bootstrap_configured_home; then

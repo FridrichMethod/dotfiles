@@ -32,18 +32,17 @@ one `### <step-id>:` heading per step, and checks that
 
 ## Deploying with chezmoi
 
-New installations use native chezmoi. Both setup-host entrypoints install its
-pinned, SHA256-verified release explicitly and create no virtual environment.
-They do not initialize or apply configuration. The blocking
-H7-deploy / HW-deploy step points to [Fresh home by hand](#fresh-home-by-hand)
+chezmoi deploys every home. Both setup-host entrypoints install its pinned,
+SHA256-verified release explicitly; they do not initialize or apply
+configuration. The blocking H7-deploy / HW-deploy step points to
+[Fresh home by hand](#fresh-home-by-hand)
 ([Fresh Windows home by hand](#fresh-windows-home-by-hand) on Windows):
 explicit local host selection, private copies of the files a first apply
 replaces, and the local config `chezmoi init` writes, whose top-level
 `sourceDir` and `destDir` name the checkout and the home the login updater
-uses. Native doctor checks chezmoi and that config; it never invokes
-transforms.
+uses. The doctor checks chezmoi and that config.
 An active maintenance marker pauses login updates and payload installs until
-a person removes it ([update contract](update-contract.md)).
+a person removes it ([maintenance](updates.md#maintenance)).
 
 ### S4-chezmoi: chezmoi binary
 
@@ -52,13 +51,11 @@ Install the release archive selected by host and architecture from
 the executable after SHA256 verification. An existing executable meeting the
 `tools.tsv` floor is retained. Unsupported architectures fail visibly. A symlink
 or directory at the managed binary destination requires operator judgment.
-No shell rc, native config, marker, auth state or sync environment is created.
+No shell rc, chezmoi config, maintenance marker or auth state is created.
 The official release checksum manifest is the integrity source; this does not
 claim independent signature verification. `--check` only reads and probes.
 Sherlock x86_64 selects the official static musl archive: its glibc 2.17 cannot
-load the generic v2.74.0 Linux binary, which requires glibc 2.34. A private
-staged version probe on Sherlock verified the static binary without installing
-a runtime, creating an environment or changing the destination convention.
+load the generic v2.74.0 Linux binary, which requires glibc 2.34.
 
 By hand on a Linux without an overlay (X-other-linux; glibc 2.34 or later), for
 an absent or regular `~/.local/bin/chezmoi`: `fetch_pinned`
@@ -76,7 +73,7 @@ Follow [Fresh home by hand](#fresh-home-by-hand). Provisioning does not own this
 operation and prints no blanket apply command. A regular local config whose
 `sourceDir` and `destDir` this checkout's `lib/chezmoi-guard.sh` accepts as
 naming this checkout and this home, with maintenance absent, satisfies the
-bootstrap handoff check; it does not substitute for the procedure's native diff,
+bootstrap handoff check; it does not substitute for the procedure's diff,
 second apply or application checks. Run from another checkout (a worktree or a
 second clone), setup-host keeps H7-deploy pending.
 
@@ -86,20 +83,28 @@ doctor it names. `human`: active maintenance, no local config (a new home gets
 it from [Fresh home by hand](#fresh-home-by-hand)), a config that is a link or
 not a regular file, a config the guard refuses (not exactly one top-level
 `sourceDir` and `destDir` line naming this home and a canonical checkout, as
-[the update contract](update-contract.md#selection) describes), or no
+[Login updates](updates.md#selection) describes), or no
 readable `lib/chezmoi-guard.sh` in this checkout; on Windows
 also a `~/.local/bin/chezmoi.exe` the login updater refuses
 ([HW-deploy](#hw-deploy-first-apply-on-windows)).
 
 #### Fresh home by hand
 
-A fresh home has no links into a dotfiles checkout, no maintenance marker and
-no `~/.config/chezmoi/chezmoi.toml`. Nothing else writes it, so it
-needs neither the quiescence nor the maintenance marker of
-[takeover.md](chezmoi-migration/takeover.md), and it runs that procedure's
-commands with the same explicit arguments. Anything else, or a function below
-that stops, goes back to takeover.md. Paste both functions into the shell you
-are working in, then run `home_deploy ROLE` from the clone, where ROLE is
+A fresh home has no `~/.config/chezmoi/chezmoi.toml`, no chezmoi state
+database and no maintenance marker, and at every managed path either nothing,
+a regular file where a file goes or a real directory where a directory goes.
+No updater runs there yet, so it needs no maintenance marker. Both functions
+name every path explicitly in each chezmoi run, as the login updater does,
+but leave out its `--less-interactive`, which would refuse every existing
+file a first apply replaces ([Manual commands](updates.md#manual-commands)).
+When a function stops before init, it names what it found: inspect that
+path, move it aside and run the function again. A stop at or after init
+leaves the seeded config, `~/.local/state/dotfiles-fresh-backup` and, once
+init ran, the state database. The backup holds the only copies of the files
+an apply replaced: move all of them aside, never deleting the backup, before
+running it again. A stop on remaining differences names no path: review
+`home_cz diff --exclude=dirs` privately. Paste both functions into the shell
+you are working in, then run `home_deploy ROLE` from the clone, where ROLE is
 the `--host` value, or `generic` on a Linux without an overlay
 ([X-other-linux](#x-other-linux-other-linux-distributions)):
 
@@ -190,7 +195,7 @@ executables 0700). It stops on a link, or an entry of the wrong kind, at any
 managed path. It copies each regular file it is about to replace into
 `~/.local/state/dotfiles-fresh-backup/` (0700), such as the `/etc/skel`
 `.bashrc`, `.profile` or `.bash_profile`, because the first apply with no
-native state replaces such a file without asking. Right after init, before
+chezmoi state replaces such a file without asking. Right after init, before
 the first target change, it checks with the clone's `lib/chezmoi-guard.sh`
 that the config init wrote (top-level `sourceDir` and `destDir`) names this
 home and the clone. Init already leaves a non-empty state database, so once
@@ -200,14 +205,51 @@ another shell runs the login updater (keep `DOTFILES_AUTO_UPDATE=0` there, as
 directories, one at a time, parents first, applies twice and requires an empty
 `home_cz diff --exclude=dirs`. It never forces and never creates
 maintenance. The managed paths come from this repository's own source, so the
-lists are read one path per line (takeover.md's `--nul-path-separator` guards
-names a pasted shell function cannot split portably). Afterwards
-`./setup-host.sh --host H` exits 0, the next interactive login runs the native
+lists are read one path per line. Afterwards
+`./setup-host.sh --host H` exits 0, the next interactive login runs the login
 updater, and `./doctor.sh --host H --smoke` is the gate. Delete the backup
 directory once nothing in it is needed. Run any later manual chezmoi command as
 `home_cz ARGS...` from the clone, which passes every path explicitly,
 as the login updater does; a plain `chezmoi` command uses the configured
-source, destination and state database.
+source, destination and state database
+([Manual commands](updates.md#manual-commands)).
+
+#### Preparing missing parents
+
+File applies and login updates pass `--exclude=dirs`, so they keep the modes
+and ACLs of existing directories and never create one: a new target whose
+parent directory is missing stops the update
+([New targets](updates.md#new-targets)) until an operator prepares exactly
+that directory. Plain `chezmoi apply` also manages directory modes and can
+broaden an existing 0700 parent or try to chmod a shared parent another
+account owns, and the tested release has no configuration key with the effect
+of `--exclude=dirs`, so a plain apply is never the fix. From the clone, with
+`home_cz` pasted (`Invoke-HomeCz` on Windows):
+
+1. List the managed directories with `home_cz managed --include=dirs`, and
+   inspect each path relative to the canonical home with every ancestor, by
+   `lstat`: tell an absent path from a dangling link, a Windows junction or
+   reparse point, a foreign object or an inaccessible parent. Leave every
+   existing real directory as it is.
+2. For only the reviewed, still-absent directories, parents first and one at
+   a time, run `home_cz apply --include=dirs --recursive=false "$HOME/RELPATH"`
+   with the canonical home in place of `$HOME` where they differ. Recheck
+   absence and ancestors right before each one, and never force. With no
+   absent directory, skip this step: an apply naming no target would select
+   every directory. The source's attributes create a new private parent at
+   0700.
+3. Before enrolling secrets, check that each existing private parent is a
+   real 0700 directory you own: `--exclude=dirs` does not repair an unsafe
+   mode, and a shared existing parent is never chmodded silently. Review the
+   local umask (`umask = 0o077`, which `home_deploy` seeds) the same way.
+4. Retry the update, or run `home_cz --less-interactive --use-builtin-age=true
+   --use-builtin-git=false apply --exclude=dirs` twice
+   ([Manual commands](updates.md#manual-commands)) and require an empty
+   `home_cz diff --exclude=dirs`. The update that stopped may already have
+   fast-forwarded the checkout or changed earlier files; the refusal is not
+   transactional.
+
+`home_deploy` runs steps 1 and 2 itself for a fresh home.
 
 ### W1-chezmoi: chezmoi binary on Windows
 
@@ -222,7 +264,7 @@ this directory explicitly, before PATH; use the full executable path when
 invoking chezmoi manually. No permanent PATH or profile edit, elevation or
 scheduled task is performed.
 
-The native login updater runs only this exact file, never a PATH match. It
+The login updater runs only this exact file, never a PATH match. It
 opens it with `FileShare.Read`, holds it until its chezmoi runs have exited,
 and requires a regular file with no link or junction at it, `.local` or
 `.local\bin` (checked before and after the open), an owner that is you, SYSTEM
@@ -249,14 +291,14 @@ home `doctor.ps1`'s `chezmoi-config` row reports `human` naming this section. If
 updater warns, inspect `~/.local/bin/chezmoi.exe`; remove a link there, and
 make a linked `.local` or `.local\bin` a real directory; then rerun
 `setup-host.ps1` so W1-chezmoi installs a private copy over a regular file.
-Another chezmoi on PATH may stay: neither the updater nor the manual commands
-of [takeover.md](chezmoi-migration/takeover.md) use it.
+Another chezmoi on PATH may stay: neither the updater nor `Invoke-HomeCz`
+uses it.
 
 ### HW-deploy: First apply on Windows
 
 Follow [Fresh Windows home by hand](#fresh-windows-home-by-hand) as the
 ordinary, unelevated user; it checks the actual CurrentUserAllHosts path in
-both shells. Native regular-file updates need no elevation or scheduled task.
+both shells. Updates write regular files and need no elevation or scheduled task.
 `doctor.ps1`'s `chezmoi-config` row gives the verdicts of
 [H7-deploy](#h7-deploy-first-apply), with
 `lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the
@@ -270,16 +312,22 @@ reading.
 
 The Windows twin of [Fresh home by hand](#fresh-home-by-hand), for the same
 fresh home. Run it in an ordinary, unelevated PowerShell 7 in the clone, after
-W1-chezmoi: paste both functions, then `Invoke-HomeDeploy -Role win`. It
-requires both PowerShell editions to load `~\Documents\PowerShell\profile.ps1`
-and `~\Documents\WindowsPowerShell\profile.ps1`; a Documents folder
-redirected to OneDrive is a takeover.md case. `~\.local\bin\chezmoi.exe`
+W1-chezmoi: paste both functions, then `Invoke-HomeDeploy -Role win`. Before
+it, review as the ordinary user, with `icacls`, the ACLs of the existing
+parent directories its targets land in, such as `~\Documents` and
+`~\AppData\Local\Packages`: each file it writes inherits its parent's ACL,
+and the function checks none ([New targets](updates.md#new-targets) says what
+a parent broader than its file needs). It requires both PowerShell editions
+to load `~\Documents\PowerShell\profile.ps1` and
+`~\Documents\WindowsPowerShell\profile.ps1`, so it refuses a Documents
+folder redirected elsewhere (OneDrive). `~\.local\bin\chezmoi.exe`
 must be a regular file with no link at it, `.local` or `.local\bin`, the file
 the login updater runs. It warns when elevated. The seed config holds only
-`[data]` `host = "win"`. Each chezmoi run gets the full argument array, with
-stdin closed; the copies, the config check after init (with the clone's
-`lib/chezmoi-guard.ps1`), the directory order, the double apply and the empty
-diff are as on Unix.
+`[data]` `host = "win"`. Each chezmoi run gets every path explicitly, in an
+argument array, with stdin closed and without `--less-interactive`; the
+copies, the config check after init (with the clone's
+`lib/chezmoi-guard.ps1`), the directory order, the double apply, the empty
+diff and what a stop leaves are as on Unix.
 
 ```powershell
 function Invoke-HomeCz {
@@ -403,12 +451,12 @@ function Invoke-HomeDeploy {
 
 Every platform runs the same sequence: get git (and, if you want an agent to
 drive the rest, one agent CLI), clone to `~/dotfiles`, diagnose,
-preview, apply, handle the HUMAN blocks, hand the home over to native chezmoi,
+preview, apply, handle the HUMAN blocks, deploy the home with chezmoi,
 start a login shell, and finish with the smoke test. Pick the host overlay
 yourself (`mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock`, `marlowe`, `win`);
 nothing guesses it.
 
-> **Ordering note: oh-my-zsh must exist before the handover.** The dotfiles
+> **Ordering note: oh-my-zsh must exist before the first apply.** The dotfiles
 > put files under `~/.oh-my-zsh/custom/`, and once that directory exists,
 > oh-my-zsh can no longer be cloned into `~/.oh-my-zsh`, so zsh aborts where
 > `.zshrc` sources `oh-my-zsh.sh`. `./setup-host.sh` clones it in
@@ -419,7 +467,7 @@ nothing guesses it.
 
 Keep the login update hook quiet while provisioning, in every shell you use for
 it: `export DOTFILES_AUTO_UPDATE=0`. Otherwise the first interactive shell
-after the handover pulls the checkout in the middle of the bootstrap. No shell
+after the first apply pulls the checkout in the middle of the bootstrap. No shell
 installs the payload repos: they install only when you run the
 [H7-payloads](#h7-payloads-payload-repos) line, whenever you choose.
 
@@ -517,7 +565,7 @@ exec "$HOME/micromamba/envs/login/bin/zsh" -l
 ```
 
 The `CONDA_PKGS_DIRS` line puts micromamba's package cache where the overlay
-the handover deploys will put it, under `$SCRATCH`, instead of
+that H7-deploy deploys will put it, under `$SCRATCH`, instead of
 `~/micromamba/pkgs` in your home quota; the env itself stays in your home. From
 then on `ssh sherlock` from a workstation lands in that zsh. Agent CLIs come
 from modules ([S2-modules](#s2-modules-hpc-modules-and-manual-ai-clis)), never
@@ -551,7 +599,8 @@ prints them all). An agent CLI first, if wanted:
 
 ### Other Linux
 
-There is no Fedora, Arch or generic Ubuntu overlay, and `./setup-host.sh` takes
+There is no overlay for Fedora, Arch or an Ubuntu machine other than WSL and
+the lab desktop, and `./setup-host.sh` takes
 only `--host`. Select the `generic` role, install packages yourself, and do
 the platform-neutral setup steps by hand
 ([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_listed`
@@ -697,12 +746,12 @@ because wget follows a redirect to plain http.
 | --- | --- |
 | 0 | Done: every selected step is done or does not apply; non-blocking HUMAN blocks may still be printed |
 | 1 | A step failed |
-| 2 | Usage error or refusal: unknown host (or none: no `--host`, or a native config without one known `[data].host`), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
+| 2 | Usage error or refusal: unknown host (or none: no `--host`, or a local config without one known `[data].host`), `win`, run as root (or through sudo), a machine that is not that host (wrong kernel or distribution, a cluster host without `LMOD_DIR`, `wsl-ubuntu` outside WSL, `lab-ubuntu` inside WSL), no terminal without `--yes`, invalid manifest. `--list` and `--print-manual` skip the machine check |
 | 3 | Work remains: a blocking HUMAN step is pending, or automatic steps are still to apply (under `--check`, after a declined prompt, or while they wait on a HUMAN step); handle the printed blocks and run it again |
 
 `--list` shows which HUMAN steps block. A pending blocking step (Xcode CLT,
 Homebrew, apt packages, Linuxbrew, the Slurm allocation, the Claude Code
-installer, the native handover) holds back the
+installer, the first apply of H7-deploy) holds back the
 steps that need it and makes the run exit 3,
 and so does an automatic step that needs a person's decision first: it shows
 as `human` and prints a judgment block (the oh-my-zsh recovery of S3-clones, a
@@ -782,7 +831,7 @@ The first line names the step and the kind. Every other line up to
 | `alloc` | The person | A Slurm allocation; heavy work on hpc runs only inside one |
 | `chsh` | The person | Changes the login shell and asks for the password |
 | `inspect` | The person reads, then runs | A vendor script that cannot be pinned by digest: read it before it runs |
-| `judgment` | The person decides | A choice with tradeoffs: the native handover, the payload repos, site modules, the final doctor run, execution policy, WSL, a checkout that is not a git clone |
+| `judgment` | The person decides | A choice with tradeoffs: the first apply, the payload repos, site modules, the final doctor run, execution policy, WSL, a checkout that is not a git clone |
 
 Any block whose note says it needs an elevated PowerShell (WSL, the ssh-agent
 service) is the person's to run, whatever its kind.
@@ -814,7 +863,7 @@ service) is the person's to run, whatever its kind.
   running the tests (`--platform debian` and `other`, an empty `HOME`), and
   checks that it changed nothing.
 - The installer never invokes `sudo`, `chsh`, `conda init`, `micromamba shell
-  init` or `git lfs install`, never initializes or applies native
+  init` or `git lfs install`, never initializes or applies the chezmoi
   configuration, and never edits an rc file. It writes nothing inside the
   checkout.
 - No `curl | sh`: every script is downloaded to a scratch directory first, and
@@ -949,12 +998,10 @@ short and send the agent here. The rules they follow:
   `bash <path>` line only after the person approves it in chat, as one visible
   top-level command, or leaves it to the person. **`judgment`** blocks: the
   agent explains the choice and lets the person make it.
-- **Handover.** Natively, the agent follows the H7-deploy block and
-  [takeover.md](chezmoi-migration/takeover.md) with the person; it never
-  improvises `chezmoi init --apply` or forces a whole home. On a fresh home
-  (no earlier install) that is [Fresh home by hand](#fresh-home-by-hand)
+- **First apply.** The agent follows the H7-deploy block,
+  [Fresh home by hand](#fresh-home-by-hand)
   ([Fresh Windows home by hand](#fresh-windows-home-by-hand) on win), with the
-  person.
+  person; it never improvises `chezmoi init --apply` or forces a whole home.
 - **Exit 3** means work remains: a blocking HUMAN step is pending, or automatic
   steps are still to apply, and H7-deploy blocks. The agent re-runs setup-host
   after each block until that step is the only one left, then does the
@@ -1000,10 +1047,10 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
 7. Exit 3 means work remains (a blocking HUMAN step, or steps still to apply).
    Re-run setup-host after each block until H7-deploy (HW-deploy on win) is the
    only one left. Ask me about H7-payloads. Then go through the H7-deploy block
-   and docs/chezmoi-migration/takeover.md with me (on a fresh home: the "Fresh
-   home by hand" procedure under H7-deploy in docs/bootstrap.md); never improvise
-   chezmoi init --apply or force a whole home. Re-run setup-host; it should
-   exit 0.
+   with me: the "Fresh home by hand" procedure under H7-deploy in
+   docs/bootstrap.md ("Fresh Windows home by hand" under HW-deploy on win);
+   never improvise chezmoi init --apply or force a whole home. Re-run
+   setup-host; it should exit 0.
 8. Finish with ./doctor.sh --host H --smoke, then report what changed, what is
    still pending, and every failure with its docs/bootstrap.md step id.
 Never run git lfs install, gh auth setup-git, conda init or micromamba shell init,
@@ -1029,7 +1076,7 @@ have a minimum), the overlay the person chose, and a complete checkout.
   you run them, through their own installers ([H7-payloads](#h7-payloads-payload-repos)).
 - **Verify:** the status is empty. setup-host's P0-preflight line records the
   OS, architecture, glibc and detected platform, and warns about uncommitted
-  changes in the checkout: the native login update does not run from a
+  changes in the checkout: the login update does not run from a
   checkout with uncommitted changes
   ([X-rc-protection](#x-rc-protection-rc-file-protection)).
 - **Human:** yes (judgment: the person names the host overlay; setup-host
@@ -1060,7 +1107,7 @@ Applies to `mac`. Uses the commit-pinned `homebrew` row in
 [`installers.tsv`](../config/bootstrap/installers.tsv). A fresh Homebrew stays
 off PATH until the dotfiles zsh loads oh-my-zsh's `brew` plugin, so `doctor.sh`
 and `setup-host.sh` prepend the directory of the brew they find to their own
-PATH. In a shell before the handover where you run brew by hand, use
+PATH. In a shell before the first apply where you run brew by hand, use
 `eval "$(/opt/homebrew/bin/brew shellenv)"` (Intel: `/usr/local/bin/brew`) in
 that shell only.
 
@@ -1169,7 +1216,7 @@ first apply (H7-deploy) deploys `~/.config/fcitx5/profile` (pinyin and
 mozc) as a regular file.
 
 - **Check:** `command -v fcitx5 && grep -s fcitx5 ~/.xinputrc`
-- **Install:** `im-config -n fcitx5` (as you, no sudo), then the handover,
+- **Install:** `im-config -n fcitx5` (as you, no sudo), then H7-deploy,
   then log out and back in.
 - **Verify:** after the relogin, `pgrep -x fcitx5` finds the daemon and
   `fcitx5-remote` prints 1 or 2.
@@ -1198,7 +1245,7 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   `HOMEBREW_NO_AUTO_UPDATE=1 brew bundle check --no-upgrade --file=config/bootstrap/brew/<tier>.Brewfile`
   for each selected tier answers for Homebrew alone. Keep the variable:
   `brew bundle` otherwise may run `brew update` first, which uses the network
-  and writes the Homebrew prefix. Before the handover, put brew on PATH first, as
+  and writes the Homebrew prefix. Before H7-deploy, put brew on PATH first, as
   H1-homebrew says.
 - **Install:** automatic via setup-host.sh, for each selected tier with a
   missing entry: `brew bundle --no-upgrade` on the Brewfile, less the entries
@@ -1445,15 +1492,15 @@ execs `$HOME/micromamba/envs/login/bin/zsh`.
 - **Install:** automatic via setup-host.sh:
   `micromamba create -y -r "$HOME/micromamba" -n login -f config/bootstrap/hpc-login-env.yml`.
   After editing the yml, the same with `install` instead of `create`.
-  `CONDA_PKGS_DIRS` is inherited. Once the handover deployed it, the overlay
+  `CONDA_PKGS_DIRS` is inherited. Once H7-deploy deployed it, the overlay
   `.profile` points it at a cache under `$SCRATCH`, but the first build runs
-  before the handover, so
+  before H7-deploy, so
   export the overlay's value in the job first; otherwise the cache lands in
   `~/micromamba/pkgs`, inside your home quota (`sh_quota` on Sherlock) and with
   heavy `$HOME` I/O. Sherlock:
   `export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"`; Marlowe:
   `export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs/$USER"`. Check
-  `echo "$SCRATCH"` first: before the handover only the site sets it, and the
+  `echo "$SCRATCH"` first: before H7-deploy only the site sets it, and the
   Marlowe overlay exports its own value.
 - **Verify:** `./doctor.sh --host sherlock` shows `login-env` and the tool rows `ok`.
 - **Human:** no (after H2-alloc)
@@ -1500,9 +1547,9 @@ nodes.
 
 **Sherlock toolkit.** Consumer projects install and pin `shk` from its
 [standalone repository](https://github.com/FridrichMethod/sherlock-kit).
-Neither setup-host nor the handover installs its launcher, rules or skill.
-What earlier delivery can leave on an old home is listed in the
-[support boundary](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual).
+Neither setup-host nor H7-deploy installs its launcher, rules or skill. The
+controller the agents use for Sherlock work is in
+[hosts](hosts.md#sherlock).
 
 **OS and glibc.** Record `cat /etc/os-release` and `ldd --version` on each
 cluster; vendor binaries and conda-forge builds each need a minimum glibc.
@@ -1938,7 +1985,7 @@ elevated command is the person's.
 ### HW-clone: Clone the repository
 
 The checkout tracks no symlink, so Git for Windows needs neither
-`core.symlinks` nor Developer Mode; the native handover writes regular files.
+`core.symlinks` nor Developer Mode; the first apply writes regular files.
 The login updater pulls the checkout, so it must be a git clone, not an
 extracted archive.
 
@@ -2169,7 +2216,7 @@ Other Linux quick start repeats it).
 - **Verify:** `./doctor.sh --platform other --smoke` exits 0.
 - **Human:** yes (sudo: distribution packages)
 
-The native route as one sequence, with `clone_listed` and `fetch_pinned`
+The route as one sequence, with `clone_listed` and `fetch_pinned`
 ([Downloads and clones by hand](#downloads-and-clones-by-hand)) and `home_cz`
 and `home_deploy` ([Fresh home by hand](#fresh-home-by-hand)) pasted first:
 
@@ -2197,11 +2244,11 @@ exec zsh -l
 
 ### X-rc-protection: rc-file protection
 
-On a native home `~/.zshrc`, `~/.bashrc`, `~/.profile` and `~/.gitconfig` are
+On a deployed home `~/.zshrc`, `~/.bashrc`, `~/.profile` and `~/.gitconfig` are
 regular files that chezmoi manages: anything a third-party installer appends
 is a local change at which the next login update stops, so later targets stay
-stale until you review it with a private targeted native diff
-([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover)).
+stale until you review it with a private targeted chezmoi diff
+([Editing and adding files](updates.md#editing-and-adding-files)).
 The doctor's `rc-pollution` check reads the rc files in `$HOME` (read-only):
 it reports `human` for `~/.zshrc.pre-oh-my-zsh`, and for a
 `# >>> Codex installer >>>` block, any conda or mamba initialize block or an nvm
@@ -2230,15 +2277,15 @@ PATH blocks and keep only their intent there.
 setup-host enforces this for its own steps: it records the checkout's state
 before each step and fails the step when anything changed, comparing file
 content, so an edit to a file that was already modified still fails. Start from
-a clean checkout; P0-preflight warns when it is not, also because the native
+a clean checkout; P0-preflight warns when it is not, also because the
 login update does not run from a checkout with uncommitted changes.
 
 - **Check:** the doctor's `rc-pollution` row (`./doctor.sh --host <host> --tsv`)
   for the rc files in `$HOME`, and `git -C ~/dotfiles status --porcelain` (must print
   nothing) for the checkout.
 - **Install:** for an rc file in `$HOME`, review the installer's block with the
-  private targeted native diff
-  ([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover))
+  private targeted chezmoi diff (`home_cz diff --exclude=dirs TARGET`,
+  [Editing and adding files](updates.md#editing-and-adding-files))
   and delete just that block by hand. Keep its intent in the profile source
   (`home/dot_profile`, or the role's `home/.hosts/<role>/.config/sh/.profile`),
   landed through CI like any change, never by editing the deployed
@@ -2247,7 +2294,7 @@ login update does not run from a checkout with uncommitted changes.
   `git -C ~/dotfiles diff <file>`. When the diff is only an installer's block,
   discard it with `git -C ~/dotfiles restore <file>`; when your own edits are
   in the same file, delete just the block by hand.
-- **Verify:** the checkout check prints nothing, the targeted native diff of
+- **Verify:** the checkout check prints nothing, the targeted chezmoi diff of
   each rc file you edited is empty, and the doctor's `rc-pollution` check is
   `ok`.
 - **Human:** yes (judgment: confirm each diff is only the installer's block
@@ -2263,8 +2310,8 @@ login update does not run from a checkout with uncommitted changes.
 - **Verify:** the doctor check that pointed here is `ok`.
 - **Human:** yes (judgment: each recipe moves or replaces files)
 
-**oh-my-zsh after the dotfiles.** `~/.oh-my-zsh/custom/` exists (a native
-directory preparation made it) but `~/.oh-my-zsh/oh-my-zsh.sh` does
+**oh-my-zsh after the dotfiles.** `~/.oh-my-zsh/custom/` exists (applying the
+dotfiles made it) but `~/.oh-my-zsh/oh-my-zsh.sh` does
 not, so S3-clones refuses and the doctor's `omz-order` check says "the dotfiles
 were applied before the clone". Turn the directory into the checkout in place,
 keeping the dotfiles' custom files:
@@ -2336,12 +2383,13 @@ the pinned installer turns `~/.nvm` into its own checkout.
 **`~/.zshrc.pre-oh-my-zsh`.** The upstream oh-my-zsh installer ran: it moved
 your `~/.zshrc` (a regular file) to `~/.zshrc.pre-oh-my-zsh`, wrote its template `~/.zshrc`, and may have
 changed your login shell. Check with `ls -l ~/.zshrc ~/.zshrc.pre-oh-my-zsh`
-and move the template aside (`mv ~/.zshrc ~/.zshrc.omz-template`). On a native
+and move the template aside (`mv ~/.zshrc ~/.zshrc.omz-template`). On a deployed
 home, move `~/.zshrc.pre-oh-my-zsh` back to `~/.zshrc` (a nonforce apply
 refuses an absent target it wrote, as it refuses an edited one), review it with
-a private targeted native diff, and apply only that target with the full
-argument set, `--exclude=dirs` and `--force=false`
-([takeover.md](chezmoi-migration/takeover.md#updates-and-edits-after-takeover)).
+a private targeted chezmoi diff, and apply only that target with the full
+argument set and the mode flags (`home_cz --less-interactive
+--use-builtin-age=true --use-builtin-git=false apply --exclude=dirs ~/.zshrc`;
+[Manual commands](updates.md#manual-commands)).
 Then, if needed, [H7-chsh](#h7-chsh-login-shell).
 
 ## Known limitations
@@ -2365,8 +2413,8 @@ fail-closed behavior beyond what is stated.
 - **lab-ubuntu zsh overlay outside an interactive shell.** Sourcing
   `home/.hosts/lab-ubuntu/.config/zsh/.zshrc` in a non-interactive `zsh` with Linuxbrew
   and the `/apps/miniconda3` mamba hook present prints
-  `compinit: initialization aborted` and `command not found: compdef`. This
-  predates the bootstrap; interactive shells are fine, and
+  `compinit: initialization aborted` and `command not found: compdef`.
+  Interactive shells are fine, and
   `tests/host-overlays.sh` keeps real conda and mamba setup out of the
   Linuxbrew guard checks. Isolated fakes also cover portable tool discovery,
   HOME paths and fallback commands.
@@ -2411,7 +2459,7 @@ fail-closed behavior beyond what is stated.
 - **Windows Terminal re-serializes its settings.** Terminal saves
   `settings.json` in place whenever the file it loads is not in its own form,
   which shows up as destination drift (`chezmoi diff`). Terminal releases can
-  reorder its arrays, so inspect and retain the native serialization in the
+  reorder its arrays, so inspect and retain Terminal's own serialization in the
   source if starting Terminal changes the deployed file. The Windows PowerShell and Command Prompt stubs
   stay `"hidden": true`: Terminal treats a generated profile that its
   `state.json` lists but `settings.json` omits as deleted, so a visible stub
@@ -2428,7 +2476,7 @@ Deferred on purpose; each is a separate change.
   runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
   the login-env form the other overlays use
   (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
-- **The WSL files are not all `$HOME` files.** Native apply deploys
+- **The WSL files are not all `$HOME` files.** chezmoi apply deploys
   `wsl.conf` and `mount.vbs` into `%USERPROFILE%`, where neither does
   anything: `wsl.conf` only works as `/etc/wsl.conf` inside the distribution,
   and its `mount-data.sh` is not shipped
@@ -2449,7 +2497,8 @@ Deferred on purpose; each is a separate change.
 
 ## Acceptance checklist
 
-Fresh-machine acceptance is still pending for the platforms below. Container
+Fresh-machine acceptance is pending for the platforms below: each row is an
+open gate until a real run fills it. Container
 and hosted-runner tests approximate portions of setup; they do not prove site
 policy, real credentials, fresh Windows 11 or untouched macOS behavior.
 Each run starts from a fresh machine, follows the quick start for its
@@ -2475,8 +2524,7 @@ platform, and passes when all of these hold:
 | Native Windows 11, host `win` | | not yet run | |
 
 Keep new acceptance records with their reproducible run artifacts: revision,
-platform, tool versions, options, failures and limitations. Historical runner
-and container receipts are available in Git history, not maintained as current
-operational guarantees here. The [opt-in suite](testing.md#end-to-end-bootstrap-opt-in)
+platform, tool versions, options, failures and limitations. The
+[opt-in suite](testing.md#end-to-end-bootstrap-opt-in)
 implements the HUMAN-block policy and checks idempotence, no-write modes and
-quiet startup. Native site/desktop acceptance remains a separate check.
+quiet startup. Real-machine site and desktop acceptance is a separate check.

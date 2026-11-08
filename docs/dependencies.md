@@ -1,23 +1,44 @@
 # Dependencies
 
-Shell and PowerShell remain the entrypoint languages. Native configuration
-deployment uses chezmoi 2.74.0 or newer.
+Shell and PowerShell are the entrypoint languages. Configuration deployment
+uses chezmoi 2.74.0 or newer. [Version floors](#version-floors) explains the
+floors the design depends on; `config/bootstrap/tools.tsv` holds every tool
+floor the doctor checks.
 
 ## Current requirements
 
 | Use | Requirements |
 | --- | --- |
-| Native Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities; no Python environment |
-| Native Windows installation | chezmoi 2.74.0+, PowerShell 7+, Git; ordinary file updates are unelevated |
+| Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities |
+| Windows installation | chezmoi 2.74.0+, PowerShell 7+, Git; ordinary file updates are unelevated |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
 | Payload repos ([payloads.md](payloads.md)) | `scripts/payload-update.*`, which `sync-payloads` runs: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
 | Contributor checks | pre-commit, Node, Python 3.11+; pinned lint tools; PowerShell required on Windows CI; Docker for the opt-in end-to-end bootstrap suite (`tests/e2e/run.sh`, see [testing.md](testing.md#end-to-end-bootstrap-opt-in)) |
 | Day-zero bootstrap | `doctor.sh` and `setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
 The configured applications (Zsh, Vim, terminals, Codex, Claude, etc.) are needed
-to use their respective settings, not all to deploy the repository. The native
-Claude and Codex merges run inside chezmoi: no Node/npm, `jq`, `uv`, `yq`, `jaq`
-or `dasel` is required for them.
+to use their respective settings, not all to deploy the repository. The
+Claude and Codex merges run inside chezmoi and need no other tool.
+
+## Version floors
+
+Each floor is a minimum, never an exact pin. The table explains the floors the
+design depends on; `config/bootstrap/tools.tsv` holds every tool floor the
+doctor checks, and some (fzf, gh, shfmt and so on) appear only there.
+
+| Tool and floor | Why, and where it holds |
+| --- | --- |
+| chezmoi 2.74.0 | Every deployment and update; `.chezmoiversion` and `tools.tsv` require it, and CI provisions exactly v2.74.0. Sherlock's glibc 2.17 cannot load the generic Linux build (it needs glibc 2.34), so S4-chezmoi installs the official static musl build there |
+| Bash 3.2 | macOS `/bin/bash` is 3.2.57, the macOS CI job runs `/bin/bash`, and `setup-host.sh` runs before Homebrew exists. Hence no here-documents, here-strings or process substitution in the Unix bootstrap |
+| POSIX sh | `home/dot_profile`, `home/dot_aliases` and the login dispatch run under sh, dash, Bash and zsh |
+| Python 3.11 | The stdlib helpers (`python3 -I -B`) and the tests; Linux CI runs 3.11. Ubuntu 22.04's apt python3 (3.10) is below it |
+| tmux 3.4 | The shared config uses 3.4 popup, menu and style features without version checks; Linux CI runs Ubuntu 24.04's 3.4 and fails if the tmux tests would skip. Marlowe meets it only through its login env |
+| Node.js 22 | The Claude helpers the kit installs; 18 and 20 are end of life |
+| PowerShell 7.0 | Every Windows entry point and every library under `lib/` and `tests/e2e/lib/` except `lib/chezmoi-guard.ps1` (5.1, below) declares `#Requires -Version 7.0`. Features of 7.2 (`$PSStyle`, the PSReadLine 2.2 list prediction view) sit behind guards in the PowerShell 7 profile, so 7.0 and 7.1 load it without them |
+| Windows PowerShell 5.1 | Its profile, `home/Documents/WindowsPowerShell/profile.ps1`, is 5.1 syntax and ASCII; `lib/chezmoi-guard.ps1` parses and runs under 5.1, which `tests/test_chezmoi_update_windows.py` checks |
+| Git | Any version that clones and fast-forwards |
+| Claude Code | No client floor: the portable settings set Project instructions under both pluginConfigs IDs, `agents-md@builtin` for clients before 2.1.285 and `cc-plugin-agents-md@builtin`, while any host runs a client older than 2.1.285; the root `CLAUDE.md` stays an `@AGENTS.md` import stub for such clients |
+| Codex | The portable config's `project_doc_fallback_filenames` lets Codex read other repositories' `CLAUDE.md` files |
 
 ## Day-zero tools
 
@@ -48,7 +69,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | Tool | Hosts | When absent |
 | --- | --- | --- |
 | `git` | all | cannot clone or update the dotfiles |
-| `chezmoi` | all | native configuration deployment needs 2.74.0+; setup steps S4-chezmoi / W1-chezmoi provision it explicitly |
+| `chezmoi` | all | configuration deployment needs 2.74.0+; setup steps S4-chezmoi / W1-chezmoi provision it explicitly |
 | `bash` | unix | doctor.sh and setup-host.sh cannot run |
 | `zsh` | unix | no interactive shell for the dotfiles .zshrc |
 | `git-lfs` | unix | the required lfs filter in .gitconfig fails on LFS repositories |
@@ -120,9 +141,8 @@ of missing them; manifest parity tests require every ID to remain documented.
 
 The Sherlock toolkit is installed and pinned by consumer projects from its
 [standalone repository](https://github.com/FridrichMethod/sherlock-kit).
-Dotfiles does not install `shk`, toolkit rules or skills. What earlier
-delivery can leave on an old home is listed in the
-[support boundary](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual).
+Dotfiles does not install `shk`, toolkit rules or skills; [hosts](hosts.md#sherlock)
+names the controller the agents use for Sherlock work.
 
 ### Desktop tier
 
@@ -189,9 +209,9 @@ Unix rows above: without eza, `ll` and `la` fall back to `Get-ChildItem`;
 without bat, `BAT_THEME` is not set; the profile does not use fd; without
 oh-my-posh the prompt is the default `PS>`.
 
-oh-my-posh 31 is an MSIX package. Upgrading from a 29.x installer requires
-`winget uninstall` first. The MSIX package can also update itself through App
-Installer; the theme's `$schema` pin moves with the installed release.
+oh-my-posh 31 is an MSIX package. The MSIX package can also update itself
+through App Installer; the theme's `$schema` pin moves with the installed
+release.
 
 ### Not managed here
 

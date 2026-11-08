@@ -28,7 +28,7 @@ nothing reaches your own, and set `DOTFILES_TEST_KIT_HOME` to it.
 
 Both gitleaks hooks read `.gitleaks.toml`, which extends the defaults with
 any `sk-ant-<kind><nn>` token family and with any file under a `.secrets`
-directory or its native source encoding (`dot_secrets/`, also behind the
+directory or its chezmoi source encoding (`dot_secrets/`, also behind the
 `remove_`, `external_`, `exact_`, `private_` and `readonly_` attribute
 prefixes); only the age ciphertexts
 `home/private_dot_secrets/encrypted_private_claude-<name>.age`, with a
@@ -36,27 +36,27 @@ prefixes); only the age ciphertexts
 
 The Unix entrypoint checks Bash, POSIX sh, Git, Python 3.11+ and Node before
 starting, and the PowerShell entrypoint Git, Node and Python 3.11+; a python3
-below the floor is a named prerequisite failure. No configuration parser
-runtime is provisioned: the native transforms run inside chezmoi.
+below the floor is a named prerequisite failure. The AI config transforms run
+inside chezmoi, so no other parser is provisioned.
 On developer machines, `./tests/run.sh` reports a missing optional
 installed-Codex exec-policy check, or PowerShell check.
 Codex is not installed merely to test dotfiles; its optional executable-policy
 probes supplement the always-run repository rule assertions.
 
-`tests/chezmoi.sh` and `tests/chezmoi.ps1` run the small stdlib native suite.
+`tests/chezmoi.sh` and `tests/chezmoi.ps1` run the small stdlib chezmoi suite.
 `DOTFILES_TEST_CHEZMOI` selects an explicit executable path (invalid paths fail);
 otherwise it resolves `chezmoi` on PATH before restricting child PATH. Missing
 chezmoi skips locally and fails with `DOTFILES_TEST_REQUIRE_CHEZMOI=1` or CI mode.
 CI provisions v2.74.0 through `.github/scripts/install-test-chezmoi.py`, verifying
 reviewed official SHA256 digests before extracting only the binary. Downloads
 never happen inside the suite. Local provisioning should likewise verify the
-selected official artifact; no Python environment is needed for native tests.
+selected official artifact.
 
 These probes isolate source, destination, configuration, cache, state, HOME and
-temporary directories and use only synthetic credentials. Native modifies run
-without Python, jq or age on child PATH; the complete native apply puts failing
+temporary directories and use only synthetic credentials. The modify templates
+run without Python, jq or age on child PATH; the complete apply puts failing
 python3, python, jq, node, sh, bash and pwsh stand-ins there and requires that
-none runs. Parser hooks exclude only the exact artificial and production modify templates; native tests parse rendered JSON/TOML
+none runs. Parser hooks exclude only the exact artificial and production modify templates; the chezmoi tests parse rendered JSON/TOML
 instead. Ordinary portable inputs and ownership data remain linted. Unix permission
 assertions do not establish Windows ACL behavior; unavailable native platforms
 remain explicit missing evidence.
@@ -67,20 +67,20 @@ every role's exact target set, bytes, modes and convergence against
 CRLF included), that only the six role-keyed templates remain and none reads the
 working tree, and, in a real linked worktree with spaces, that source-relative
 includes of `home/.hosts/` and `home/.policy/` return exact bytes while no
-dot-directory becomes a target. Native compatible roles and supplemental OS-data
+dot-directory becomes a target. Compatible roles and supplemental OS-data
 rendering are reported separately. Rendered shell, Python, JSON, TOML and Lua
 output is checked by `test_chezmoi_rendered.py`, with the shell dialect taken
 from the table; optional installed linters report skips. `test-entrypoints.sh`
 requires shellcheck and shfmt to select every shell source the table names, each
 variant with `types: [file]`, since identify gives `dot_` names no shell tag.
 
-The native AI suites cover actual portable Claude/Codex transforms, typed
+The AI suites cover actual portable Claude/Codex transforms, typed
 ownership parity, numeric/Unicode and TOML temporal refusal, CRLF multiline
-semantics, invalid input preservation and complete candidate applies. Native
-compatible-role counts are 49/56/55/59/54/54/26 in role order, with exactly the
+semantics, invalid input preservation and complete candidate applies.
+Compatible-role counts are 49/56/55/59/54/54/26 in role order, with exactly the
 two AI targets added to the ordinary files. Shared auth/trust/payload siblings
-stay unmanaged. Local temporal refusal tests run on every OS; the historical
-Unix timezone characterization skip on Windows remains separate from the
+stay unmanaged. Local temporal refusal tests run on every OS; the Unix
+timezone characterization, which skips on Windows, stays separate from the
 cross-platform safety assertions.
 
 Source and state guards: `test_chezmoi_source_state.py` fails on a
@@ -132,7 +132,7 @@ a writer of `~/.local` that swaps a junction in before the open and a
 prepared directory back before the re-check can still get another
 `chezmoi.exe` started, so these tests do not show the path tamper-proof.
 
-The `english-documentation` hook uses native `pygrep`, configured entirely in
+The `english-documentation` hook uses pre-commit's `pygrep` language, configured entirely in
 `.pre-commit-config.yaml`, to check selected Markdown, reStructuredText,
 plain-text documentation and README-style files in this repository. It checks
 staged files on commit and tracked files with `--all-files`. Only printable
@@ -308,7 +308,7 @@ checkouts, homes and Homebrew prefixes with stubbed tools and local clone
 remotes. Network commands outside `--online` fail the doctor suite; `sudo`,
 `chsh`, `apt-get`, `conda` and `git lfs` are tripwires in the installer suite;
 find snapshots prove that the doctor and `setup-host.sh --check` write nothing.
-Every fixture case runs the native mode, the only one. The doctor writes its
+The doctor writes its
 fixture home's chezmoi config for the fixture checkout once the cases without
 a config have run. The
 setup-host fixture serves a pinned chezmoi archive whose executable answers only
@@ -337,7 +337,7 @@ device id unless `GH_TELEMETRY=0`, and the tldr C client refreshes a stale page
 cache unless `TLDR_AUTO_UPDATE_DISABLED` is set. `tests/bootstrap-windows.sh`
 runs `tests/bootstrap.ps1`, the Windows twins against shims, wherever pwsh
 exists and prints a `SKIP:` line otherwise; the Windows job runs that suite and
-the validator from `tests/run.ps1`. Its cases run the native mode too and mirror
+the validator from `tests/run.ps1`. Its cases mirror
 the Unix ones (a healthy configured host with gh telemetry off and no writes,
 the `chezmoi-config` causes, the quoted `-Now` payload advice wherever
 `sync-payloads` refuses, a checkout reached through a junction or symlink
@@ -831,7 +831,7 @@ leave it off.
 ### Real clusters
 
 Sherlock and Marlowe cannot run the containers (no Docker on a login node, and
-`E2E_NATIVE` is honoured only on macOS), so the owner runs the native bootstrap
+`E2E_NATIVE` is honoured only on macOS), so the owner runs the bootstrap
 by hand once per cluster, on a fresh account home, and checks the criteria
 above the same way. Log in without the RemoteCommand (`ssh sherlock-plain`,
 `ssh marlowe-plain`), paste `home_cz` and `home_deploy` from

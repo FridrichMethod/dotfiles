@@ -1,17 +1,17 @@
 # Dotfiles
 
 Cross-platform configuration for macOS, WSL/Ubuntu, Stanford Sherlock, Marlowe
-and native Windows, deployed by native chezmoi as regular files from the source
+and native Windows, deployed by chezmoi as regular files from the source
 state in `home/`. Each home selects its role through explicit local
 `[data].host`. Secret enrollment is explicit and encrypted; mutable
 auth/runtime state stays local.
 
 ## Quick Start
 
-Clone once per home/platform. Native source selection uses explicit local
+Clone once per home/platform. Role selection uses explicit local
 `[data].host`; the checkout is the source chezmoi reads and stays available for updates.
-For release/rollout gates and actual host outcomes, read the
-[migration status](docs/chezmoi-migration/status.md).
+The six hosts, their access rules and their known limits are in
+[hosts](docs/hosts.md).
 
 ```sh
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
@@ -24,23 +24,19 @@ cd ~/dotfiles
 Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 setup-host installs tools and prints HUMAN blocks for commands it does not run,
 including sudo, authentication, allocations and login-shell changes. It
-provisions verified chezmoi 2.74.0+ and needs no Python environment. Follow the HUMAN
-blocks; H7-deploy points to the first deployment, which a new home follows by
+provisions verified chezmoi 2.74.0+ (the floors the design depends on, and
+why, are in [dependencies](docs/dependencies.md#version-floors);
+`config/bootstrap/tools.tsv` holds every tool floor the doctor checks).
+Follow the HUMAN blocks; H7-deploy points to the first deployment, which a new
+home follows by
 [Fresh home by hand](docs/bootstrap.md#fresh-home-by-hand)
-([bootstrap playbook](docs/bootstrap.md#h7-deploy-first-apply)).
-Converting an existing home follows the
-[takeover procedure](docs/chezmoi-migration/takeover.md) and requires ownership
-review and private backups before first apply.
+([bootstrap playbook](docs/bootstrap.md#h7-deploy-first-apply)): it keeps
+private copies of the files the first apply replaces and stops on anything
+it does not expect at a managed path.
 File apply and login updates use `--exclude=dirs` to preserve existing shared
 parent permissions. Prepare only inspected missing directories through the
-native directory-only procedure; plain apply can change existing parent modes.
-
-Homes still deployed by GNU Stow (the pre-chezmoi layout) are unsupported:
-recover or convert one only from its last supported release, `bf99958`: run the
-[takeover procedure](docs/chezmoi-migration/takeover.md) in a checkout of that
-revision, within the
-[support boundary](docs/chezmoi-migration/support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable),
-never by updating it to current `main`.
+[directory-only procedure](docs/bootstrap.md#preparing-missing-parents); plain
+apply can change existing parent modes.
 
 On other Linux, set `[data].host = "generic"` in the local chezmoi config,
 check with `./doctor.sh --platform other` and follow the
@@ -64,11 +60,12 @@ cd $HOME\dotfiles
 Follow the HW-* HUMAN blocks; HW-deploy points to the first deployment, which a new
 home follows by
 [Fresh Windows home by hand](docs/bootstrap.md#fresh-windows-home-by-hand).
-Regular-file native updates run unelevated, without a scheduled task or UAC prompt. Both
-actual PowerShell profile paths and ordinary-user destination ACLs must be
-checked before takeover. See
-[the Windows quick start](docs/bootstrap.md#native-windows) and the
-[login update contract](docs/update-contract.md).
+Updates write regular files unelevated, without a scheduled task or UAC prompt.
+Fresh Windows home by hand checks both actual PowerShell profile paths; check
+the ordinary user's ACLs on the destination parents before it, since a new
+file inherits its parent's ACL. See
+[the Windows quick start](docs/bootstrap.md#native-windows) and
+[login updates](docs/updates.md).
 
 ### Bootstrapping with Claude Code or Codex
 
@@ -83,7 +80,7 @@ For a session outside the clone, use the
 
 | Path | Purpose |
 | --- | --- |
-| [home](home/) | Native chezmoi source (`.chezmoiroot`): one file per target under its chezmoi source name (`dot_`, `executable_`, `private_`, `empty_`) |
+| [home](home/) | chezmoi source (`.chezmoiroot`): one file per target under its chezmoi source name (`dot_`, `executable_`, `private_`, `empty_`) |
 | `home/.hosts/<role>/` | Role variants of `~/.config/{sh,bash,zsh}` rc files, `~/.gitconfig_local` and `~/.ssh/config.d/legacy.conf`, read raw by one-line role-keyed templates |
 | `home/.policy/` | Portable Claude and Codex policy, read raw by the two modify templates |
 | `home/.chezmoiignore` | The targets of each role: `generic`, `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock`, `marlowe`, `win` |
@@ -106,23 +103,23 @@ or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
 
 ## Auto-update Hooks
 
-After native handover, interactive login checks once per session and calls
+Interactive login checks once per session and calls
 chezmoi update with explicit paths, `--exclude=dirs`, fast-forward-only Git, closed stdin and
-conflict handling. It refuses dirty source, missing/empty native state and OneDrive
+conflict handling. It refuses dirty source, a missing or empty state database and OneDrive
 source writes; failures warn and leave the shell usable. It updates only the
 checkout `~/.config/chezmoi/chezmoi.toml` names (its `sourceDir`); a home
-without that config runs no updater and prints nothing; see the
-[update contract](docs/update-contract.md).
-A persistent maintenance marker blocks the update hook and explicit payload runs
-during takeover.
-Windows Terminal still needs a restart to load settings changes.
+without that config runs no updater and prints nothing; see
+[login updates](docs/updates.md).
+A persistent [maintenance marker](docs/updates.md#maintenance) pauses the
+update hook and explicit payload runs.
+Windows Terminal needs a restart to load settings changes.
 
 | Variable | Effect |
 | --- | --- |
 | `DOTFILES_AUTO_UPDATE=0` | Disable the dotfiles login updater |
 | `DOTFILES_COLOR` | `auto`, `always` or `never`; NO_COLOR/TERM=dumb disable color |
 
-Set opt-outs before shell startup. Do not run a manual native apply while a login
+Set opt-outs before shell startup. Do not run a manual apply while a login
 update runs. [Shell startup](docs/shell.md) covers nvm, conda, PATH ordering,
 PowerShell key bindings, encoding and prompts.
 
@@ -140,18 +137,18 @@ active users and remove completed worktrees and their merged task branches.
 Git ignores `.worktrees/`; OneDrive checkouts retain their independent-clone
 exception.
 
-Claude settings and Codex config are merged into mutable regular files rather
-than linked. Portable values win while credentials, host-only settings and
+Claude settings and Codex config are merged into mutable regular files.
+Portable values win while credentials, host-only settings and
 runtime state stay local. Codex rules deploy as an ordinary file without
-touching `default.rules`. Native modifies use builtin JSON/TOML functions with
-no Python, external jq or virtual environment. Read the
-[native contract](docs/config-sync.md) before migrations or policy edits.
+touching `default.rules`. The modify templates use chezmoi's builtin JSON/TOML
+functions. Read [AI configuration](docs/ai-config.md) before policy edits.
 Authenticate separately on every host. Never commit tokens, histories, trust,
 caches, generated memories or machine-specific absolute paths.
 
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) supplies
 account launchers, completions and Claude helpers on Linux, macOS and WSL.
-Dotfiles keeps their configuration but no copy of the kit implementation.
+Dotfiles holds only their configuration; the kit itself lives in its own
+repository.
 Native Windows does not install/check the kit: the helper commands run no
 helper there and exit 0; missing Unix helpers fail visibly. Launcher/account
 operation belongs to the kit's own documentation.
@@ -167,8 +164,8 @@ alongside model, directory, thread, Git branch, context usage and
 weekly limits. Estimated thread cost appears only when supported by the account
 (Enterprise workspaces in Codex CLI 0.166.0). Edit `tui.status_line` in the tracked
 Codex config to change the shared layout; other TUI preferences remain local. A
-live edit of an owned key stops native login updates at that file until it is
-[reconciled](docs/chezmoi-migration/takeover.md#reconcile-an-owned-ai-config-key).
+live edit of an owned key stops login updates at that file until it is
+[reconciled](docs/ai-config.md#reconciling-an-owned-key).
 
 ## Payload repos
 
@@ -204,8 +201,7 @@ sync-skills                           # sync-payloads skills
 ```
 
 On native Windows use these profile functions or `scripts/payload-update.ps1 -Now` in an ordinary, unelevated PowerShell. It manages PyMOLScripts and
-awesome-skills, not the kit. Inspect local work before removing a leftover
-checkout by hand ([leftover checkouts](docs/payloads.md#leftover-checkouts)).
+awesome-skills, not the kit.
 The [sherlock-kit](https://github.com/FridrichMethod/sherlock-kit) toolkit is
 separate: consumer projects pin/install their own.
 
@@ -229,15 +225,12 @@ behavior. The
 optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.
 
-The [chezmoi migration record](docs/chezmoi-migration/status.md) holds the
-staged history, gates and per-host outcomes. The
-[native contract](docs/config-sync.md#modify-templates) documents
+The [AI configuration](docs/ai-config.md#modify-templates) documents
 serialization, preserved Claude/Codex input, exact ownership and refusal of
-unsupported inputs. CI requires verified v2.74.0; local native probes skip if
-chezmoi is absent, while an invalid explicit path fails. Converting an existing
-home and enrolling selected secrets follow
-[takeover.md](docs/chezmoi-migration/takeover.md); fixture passes are not
-real-host outcomes.
+unsupported inputs. CI requires verified v2.74.0; local chezmoi probes skip if
+chezmoi is absent, while an invalid explicit path fails. Enrolling selected
+secrets or a host follows [secrets](docs/secrets.md); fixture passes are not
+real-host outcomes ([hosts](docs/hosts.md)).
 
 To add a configuration file, add it under `home/` with its chezmoi source name
 (a role-specific variant goes to `home/.hosts/<role>/<target>` behind a one-line
@@ -250,13 +243,14 @@ counts in `tests/test_chezmoi_rendered.py`, for a tmux file `TMUX_FILES` in
 applies to every role. A file containing `{{` stays plain;
 use `.tmpl` only for a real template. If it introduces a new parent
 directory, plan the reviewed per-host `apply --include=dirs --recursive=false`
-preparation from the [takeover procedure](docs/chezmoi-migration/takeover.md)
-before landing. Also check each applicable native host for an existing
+preparation ([Preparing missing parents](docs/bootstrap.md#preparing-missing-parents))
+before landing. Also check each applicable host for an existing
 unmanaged file at the new path: the login update stops on it as a first-target
-conflict until it is reconciled under that procedure. For a file that applies
-on Windows, name its parent's ACL model first (see the
-[update contract](docs/update-contract.md#new-targets)). Native homes
-receive the change through the login update. Keep secrets local, code in
+conflict until it is reconciled
+([Editing and adding files](docs/updates.md#editing-and-adding-files)). For a
+file that applies on Windows, name its parent's ACL model first (see
+[New targets](docs/updates.md#new-targets)). Every home
+receives the change through the login update. Keep secrets local, code in
 its shell dialect and documentation in English ASCII. Follow
 [AGENTS.md](AGENTS.md) for manifest changes, checks and landing policy.
 

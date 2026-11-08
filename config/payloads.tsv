@@ -23,7 +23,7 @@
 # The probes test the paths each installer documents as an install: the kit's
 # managed root (its current/install.sh), PyMOL's two rc files, and
 # awesome-skills' ownership manifests (claude.json, codex.json in its state
-# directory, as its older tarball installer left them too) or library clone.
+# directory) or library clone.
 # Unix values are POSIX sh and Windows values PowerShell 7, evaluated by the
 # hook, the sh one with the kit channel in $channel, and with
 #   payload_script INTERPRETER SOURCE [ARG...]       (sh)

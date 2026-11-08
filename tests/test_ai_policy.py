@@ -24,7 +24,7 @@ CODEX_RULES = ROOT / "home/dot_codex/rules/portable.rules"
 STUB = ROOT / "CLAUDE.md"
 REPOSITORY_GUIDE = ROOT / "AGENTS.md"
 
-# The accepted broad-allow set (docs/config-sync.md, permission policy rationale).
+# The accepted broad-allow set (docs/ai-config.md, permission policy rationale).
 EXPECTED_ALLOW = frozenset({
     "WebSearch",
     "mcp__plugin_everything-claude-code_github__search_code",
