@@ -217,7 +217,7 @@ function Get-BlockLines {
         'HW-deploy' {
             'judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.',
             '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.',
-            '# Discover both actual CurrentUserAllHosts paths as the ordinary user.',
+            '# As the ordinary user, review with icacls the ACLs of the existing destination parents, such as ~\Documents and ~\AppData\Local\Packages; Invoke-HomeDeploy checks both actual CurrentUserAllHosts paths itself.',
             '# Snapshot exact targets and initialize with all paths explicit.',
             '# Updates write regular files and need no elevation or scheduled task.'
         }

@@ -282,9 +282,12 @@ whose guard and hook never run; a home without a config and an invalid config
 without its guard, a symlink, a directory) refuse before any hook; and
 maintenance refuses before any state is written. It also requires that no
 login through `home/dot_profile`, with or without Sherlock's overlay, runs a
-payload hook, while a configured home's update dispatch stays; and a text
-check keeps PowerShell 7-only syntax and an unguarded `$IsWindows` out of
-`lib/chezmoi-guard.ps1`.
+payload hook, while a configured home's update dispatch stays; a text check
+keeps PowerShell 7-only syntax and an unguarded `$IsWindows` out of
+`lib/chezmoi-guard.ps1`; and, wherever pwsh exists (and under Windows
+PowerShell 5.1 on Windows), `Get-DotfilesChezmoiPaths` run under en-US, tr-TR
+and az-Latn-AZ accepts the init layout and refuses `SOURCEDIR`, `sourceDIR`,
+`DESTDIR` and `WORKINGTREE`.
 
 `tests/test_ai_integration.py` evaluates the account preview of
 `custom/fzf-tab.zsh` under the context fzf-tab really looks up; with
@@ -339,8 +342,9 @@ exists and prints a `SKIP:` line otherwise; the Windows job runs that suite and
 the validator from `tests/run.ps1`. Its cases mirror
 the Unix ones (a healthy configured host with gh telemetry off and no writes,
 the `chezmoi-config` causes, the quoted `-Now` payload advice wherever
-`sync-payloads` refuses, a checkout reached through a junction or symlink
-counting as the configured one). The healthy fixture puts a chezmoi shim on PATH and,
+`sync-payloads` refuses, also from a checkout whose path holds a typographic
+apostrophe, a checkout reached through a junction or symlink counting as the
+configured one). The healthy fixture puts a chezmoi shim on PATH and,
 on Windows, gives the fixture home a private copy of the real chezmoi
 (`DOTFILES_TEST_CHEZMOI`, else PATH's) as `~/.local/bin/chezmoi.exe`, so
 W1-chezmoi is done and an apply ends at HW-deploy; a Windows run without a real
@@ -459,8 +463,9 @@ failed-download latch, with no staging or state left behind.
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
 call without `-Now` (none, a bare item or an unknown argument) prints one
 usage line and exits 2, under maintenance too; a run naming
-the kit says it is not available there and runs nothing for it; no run
-records anything; a download's directory is private (mode 0700; on Windows an
+the kit says it is not available there and runs nothing for it; the retry
+line still parses as one command when the checkout's path holds a
+typographic apostrophe; no run records anything; a download's directory is private (mode 0700; on Windows an
 access list that grants only this account and inherits nothing) and one that
 cannot be made runs nothing; every
 installer, a download or an installed script, runs in `$PSHOME`, out of the

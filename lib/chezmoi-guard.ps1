@@ -43,16 +43,20 @@ function Resolve-DotfilesDirectory {
 
 function Get-DotfilesChezmoiPaths {
     # The source checkout and state paths HomePath's chezmoi config names, or a
-    # throw. lib/chezmoi-guard.sh's dotfiles_chezmoi_source rules: a regular
-    # file, not a link, strict UTF-8, whose lines before the first table hold
-    # exactly one 'sourceDir = "VALUE"' and one 'destDir = "VALUE"' line at
-    # column 0, LF line ends, and no quote, backslash or control character in
-    # VALUE; any other spelling of either key, a workingTree key, a line
-    # starting with a quote and a multi-line string before the first table
-    # throw. On Windows a value is 'C:/...' as chezmoi writes it, compared with
-    # backslashes and ignoring case; elsewhere it starts with '/' and compares
-    # exactly. destDir is the resolved home; sourceDir is a resolved directory
-    # holding .git and .chezmoiroot. Reads text only and never runs chezmoi.
+    # throw. lib/chezmoi-guard.sh's dotfiles_chezmoi_source rules, plus two
+    # that only this twin applies: strict UTF-8 for the whole file and a .git
+    # in sourceDir. A regular file, not a link, whose lines before the first
+    # table hold exactly one 'sourceDir = "VALUE"' and one 'destDir = "VALUE"'
+    # line at column 0, LF line ends, and no quote, backslash or control
+    # character in VALUE; any other spelling of either key, a workingTree key,
+    # a line starting with a quote and a multi-line string before the first
+    # table throw. Those spellings are matched ignoring case in every culture,
+    # as the sh twin's spelled-out classes do (a current-culture match misses
+    # SOURCEDIR under tr-TR, where I does not fold to i). On Windows a value
+    # is 'C:/...' as chezmoi writes it, compared with backslashes and ignoring
+    # case; elsewhere it starts with '/' and compares exactly. destDir is the
+    # resolved home; sourceDir is a resolved directory holding .git and
+    # .chezmoiroot. Reads text only and never runs chezmoi.
     param([Parameter(Mandatory)][string]$HomePath)
     $onWindows = ($PSVersionTable.PSEdition -ceq 'Desktop') -or ((Test-Path Variable:IsWindows) -and $IsWindows)
     $comparison = [StringComparison]::Ordinal
@@ -83,7 +87,7 @@ function Get-DotfilesChezmoiPaths {
             if ($values.ContainsKey($Matches[1])) { throw $layout }
             $values[$Matches[1]] = $Matches[2]
         }
-        elseif ($trimmed -imatch '\A(sourcedir|destdir|workingtree)[\s=]') { throw $layout }
+        elseif ([regex]::IsMatch($trimmed, '\A(sourcedir|destdir|workingtree)[\s=]', [Text.RegularExpressions.RegexOptions]'IgnoreCase, CultureInvariant')) { throw $layout }
     }
     if (-not $values.ContainsKey('sourceDir') -or -not $values.ContainsKey('destDir')) { throw $layout }
     $configuredSource = $values['sourceDir']

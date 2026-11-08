@@ -67,10 +67,12 @@ $PayloadFailed = & { try {
     function Get-PayloadField([string]$Name, [string]$Field) { $rows["$Name`t$Field"] }
     # What reruns this hook: sync-payloads where it runs this hook (this
     # home's chezmoi config names this checkout), else this hook's -Now line:
-    # sync-payloads refuses a home without a valid config. A missing guard is
-    # tested, never dot-sourced: PowerShell would look its path up as a
-    # command name, searching every module on PSModulePath.
-    $rerun = "& '" + $PSCommandPath.Replace("'", "''") + "' -Now"
+    # sync-payloads refuses a home without a valid config. CodeGeneration
+    # doubles U+2018 to U+201B as well as the apostrophe: PowerShell ends a
+    # single-quoted string at each. A missing guard is tested, never
+    # dot-sourced: PowerShell would look its path up as a command name,
+    # searching every module on PSModulePath.
+    $rerun = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($PSCommandPath) + "' -Now"
     $guard = Join-Path $Repo 'lib/chezmoi-guard.ps1'
     if (Test-Path -LiteralPath $guard -PathType Leaf) {
         try {

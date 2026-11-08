@@ -225,6 +225,39 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
             Assert-True ($run.Code -eq 1 -and $run.Text.Contains('pymol: install failed (exit 4); retry with: sync-payloads pymol')) $run.Text
         }
     }
+    Test-Case 'the -Now retry line parses as one command for a checkout path with a typographic quote' {
+        # PowerShell also ends a single-quoted string at U+2018 to U+201B, so
+        # the line escapes those too. The child writes its log to a UTF-8
+        # file, which no console code page can mangle.
+        $quoted = Join-Path $testRoot "O$([char]0x2019)Neil"
+        foreach ($file in 'config/payloads.tsv', 'scripts/payload-update.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1') {
+            Write-Fixture (Join-Path $quoted $file) ([IO.File]::ReadAllText((Join-Path $fixture $file)))
+        }
+        $quotedHook = Join-Path $quoted 'scripts/payload-update.ps1'
+        $capture = Join-Path $testRoot 'quoted.log'
+        $wrapper = Join-Path $testRoot 'capture.ps1'
+        Write-Fixture $wrapper @'
+$lines = @(& $env:DOTFILES_TEST_QUOTED_HOOK -Now pymol *>&1 | ForEach-Object { "$_" })
+[IO.File]::WriteAllLines($env:DOTFILES_TEST_CAPTURE, [string[]]$lines)
+exit $LASTEXITCODE
+'@
+        $case = New-Case
+        try {
+            $run = Invoke-Hook $case @() @{ FAKE_PYMOL_STATUS = '4'; DOTFILES_TEST_QUOTED_HOOK = $quotedHook; DOTFILES_TEST_CAPTURE = $capture } $wrapper
+        }
+        finally { foreach ($name in 'DOTFILES_TEST_QUOTED_HOOK', 'DOTFILES_TEST_CAPTURE') { Set-TestVariable $name $null } }
+        $text = [IO.File]::ReadAllText($capture)
+        $marker = 'pymol: install failed (exit 4); retry with: '
+        $line = @($text -split "`r?`n" | Where-Object { $_.Contains($marker) })
+        Assert-True ($run.Code -eq 1 -and $line.Count -eq 1) "exit $($run.Code): $text"
+        $rerun = $line[0].Substring($line[0].IndexOf($marker) + $marker.Length)
+        $errors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseInput($rerun, [ref]$null, [ref]$errors)
+        $command = $ast.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true)
+        $elements = @(if ($command) { $command.CommandElements })
+        Assert-True ($errors.Count -eq 0 -and $command.InvocationOperator -eq 'Ampersand' -and $elements.Count -eq 3 -and
+            $elements[0].Value -ceq $quotedHook -and $elements[1].ParameterName -ceq 'Now' -and $elements[2].Value -ceq 'pymol') "retry line: $rerun"
+    }
     Test-Case 'a download runs alone in a fresh private directory, removed afterwards' {
         # What another user planted in a shared temporary directory is never
         # beside the installer, and no other user can add anything there

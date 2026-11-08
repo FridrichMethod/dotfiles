@@ -1,5 +1,6 @@
 """Home guards: the source the chezmoi config names, maintenance and login dispatch."""
 
+import base64
 import os
 from pathlib import Path
 import re
@@ -340,6 +341,99 @@ class PowerShellGuardTextTests(unittest.TestCase):
         self.assertTrue(uses)
         for use in uses:
             self.assertTrue(use.endswith("(Test-Path Variable:IsWindows) -and $IsWindows"), use)
+
+
+def ps_string(value):
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+@unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 unavailable")
+class PowerShellGuardCultureTests(unittest.TestCase):
+    # Get-DotfilesChezmoiPaths refuses every other spelling of sourceDir,
+    # destDir and workingTree in any culture, as dotfiles_chezmoi_source's
+    # spelled-out classes do: under tr-TR and az-Latn-AZ a match that follows
+    # the current culture does not fold an ASCII I to i. On Windows, Windows
+    # PowerShell 5.1 runs it too.
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        # macOS TMPDIR may use /var rather than canonical /private/var.
+        self.root = Path(temporary.name).resolve()
+        self.source = self.root / "source"
+        (self.source / ".git").mkdir(parents=True)
+        (self.source / ".chezmoiroot").write_text("home\n")
+        self.shells = [shutil.which("pwsh")]
+        desktop = Path(os.environ.get("SYSTEMROOT", "/nonexistent")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+        if os.name == "nt" and desktop.is_file():
+            self.shells.append(str(desktop))
+        # Windows PowerShell cannot load modules from the pwsh 7 module path
+        # this process inherits under tests/chezmoi.ps1, so the child gets no
+        # PSModulePath and each shell builds its own.
+        self.env = {key: value for key, value in os.environ.items() if key.upper() != "PSMODULEPATH"}
+        self.env.update(HOME=str(self.root), POWERSHELL_TELEMETRY_OPTOUT="1",
+                        POWERSHELL_UPDATECHECK="Off", XDG_CACHE_HOME=str(self.root / "cache"),
+                        XDG_CONFIG_HOME=str(self.root / "config"), XDG_DATA_HOME=str(self.root / "data"))
+
+    @staticmethod
+    def form(path):
+        # What chezmoi init writes: on Windows forward slashes and an
+        # upper-case drive.
+        text = path.as_posix()
+        return text[0].upper() + text[1:] if os.name == "nt" else text
+
+    def home_with(self, index, line):
+        # A home whose config is the init layout plus LINE (@HOME@ is the
+        # home's own form) before the tables.
+        home = self.root / f"home {index}"
+        (home / ".config/chezmoi").mkdir(parents=True)
+        (home / ".config/chezmoi/chezmoi.toml").write_bytes(
+            (f'destDir = "{self.form(home)}"\nsourceDir = "{self.form(self.source)}"\n' +
+             line.replace("@HOME@", self.form(home)) + '\n[data]\n  host = "win"\n').encode())
+        return home
+
+    def verdicts(self, shell, culture, homes):
+        # The culture's name, whether a current-culture -imatch folds I to i,
+        # then 'accepted' or 'refused: MESSAGE' for each home, from one child
+        # that sets the culture before it loads the guard.
+        script = ("$ErrorActionPreference='Stop'\n"
+                  f"try {{ $culture = [Globalization.CultureInfo]::GetCultureInfo('{culture}') }}\n"
+                  "catch { 'no-culture'; exit 0 }\n"
+                  "[Threading.Thread]::CurrentThread.CurrentCulture = $culture\n"
+                  "[Threading.Thread]::CurrentThread.CurrentUICulture = $culture\n"
+                  f". {ps_string(ROOT / 'lib/chezmoi-guard.ps1')}\n"
+                  "[Threading.Thread]::CurrentThread.CurrentCulture.Name\n"
+                  "[string]('I' -imatch '\\Ai\\z')\n"
+                  "foreach ($homePath in @(" + ", ".join(ps_string(home) for home in homes) + ")) {\n"
+                  "    try { [void](Get-DotfilesChezmoiPaths -HomePath $homePath); 'accepted' }\n"
+                  "    catch { 'refused: ' + $_.Exception.Message }\n"
+                  "}\nexit 0\n")
+        result = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                                 base64.b64encode(script.encode("utf-16le")).decode()],
+                                cwd=self.root, env=self.env, stdin=subprocess.DEVNULL, capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout.splitlines()
+
+    def test_other_key_spellings_are_refused_in_every_culture(self):
+        source = self.form(self.source)
+        lines = {"the init layout": "", "SOURCEDIR": f'SOURCEDIR = "{source}"\n',
+                 "sourceDIR": f'sourceDIR = "{source}"\n', "DESTDIR": 'DESTDIR = "@HOME@"\n',
+                 "WORKINGTREE": f'WORKINGTREE = "{source}"\n'}
+        homes = {name: self.home_with(index, line) for index, (name, line) in enumerate(lines.items())}
+        for shell in self.shells:
+            for culture in ("en-US", "tr-TR", "az-Latn-AZ"):
+                with self.subTest(shell=shell, culture=culture):
+                    output = self.verdicts(shell, culture, homes.values())
+                    if output[:1] == ["no-culture"]:
+                        self.skipTest(f"{culture} is not available here")
+                    # The culture took hold, and a current-culture match
+                    # really folds differently there.
+                    self.assertEqual(output[:2], [culture, "True" if culture == "en-US" else "False"])
+                    self.assertEqual(len(output), 2 + len(homes), output)
+                    verdicts = dict(zip(homes, output[2:]))
+                    self.assertEqual(verdicts.pop("the init layout"), "accepted")
+                    for name, verdict in verdicts.items():
+                        self.assertTrue(verdict.startswith("refused: "), f"{name}: {verdict}")
 
 
 if __name__ == "__main__":

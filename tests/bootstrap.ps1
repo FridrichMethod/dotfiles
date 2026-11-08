@@ -1093,6 +1093,31 @@ exit 0
         }
     }
 
+    Test-Case 'the -Now payload advice parses as one command for a checkout path with a typographic quote' {
+        # PowerShell also ends a single-quoted string at U+2018 to U+201B, so
+        # the advice escapes those too. The child writes the rows to a UTF-8
+        # file, which no console code page can mangle.
+        $fixture = New-Fixture -RepoName "O$([char]0x2019)Neil"
+        $capture = Join-Path $fixture.State 'doctor.tsv'
+        [IO.File]::WriteAllText((Join-Path $fixture.Repo 'capture-doctor.ps1'), @'
+$rows = @(& (Join-Path $PSScriptRoot 'doctor.ps1') -Tsv *>&1 | ForEach-Object { "$_" })
+[IO.File]::WriteAllLines($env:FIXTURE_CAPTURE, [string[]]$rows)
+exit $LASTEXITCODE
+'@)
+        [void](Invoke-Fixture $fixture capture-doctor.ps1 @{} @{ DOTFILES_PAYLOAD_ITEMS = 'nope'; FIXTURE_CAPTURE = $capture })
+        $prefix = "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run "
+        $row = @([IO.File]::ReadAllLines($capture) | Where-Object { $_.StartsWith($prefix, [StringComparison]::Ordinal) })
+        Assert-Equal $row.Count 1 "payloads row: $([IO.File]::ReadAllText($capture))"
+        $advice = $row[0].Substring($prefix.Length).Split("`t")[0]
+        $errors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseInput($advice, [ref]$null, [ref]$errors)
+        $command = $ast.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true)
+        $elements = @(if ($command) { $command.CommandElements })
+        $hook = Join-Path (Join-Path $fixture.Repo 'scripts') 'payload-update.ps1'
+        Assert-True ($errors.Count -eq 0 -and $command.InvocationOperator -eq 'Ampersand' -and $elements.Count -eq 3 -and
+            $elements[0].Value -ceq $hook -and $elements[1].ParameterName -ceq 'Now' -and $elements[2].Value -ceq 'ITEM') "advice: $advice"
+    }
+
     Test-Case 'on Windows chezmoi-config and W1-chezmoi flag a ~/.local/bin/chezmoi.exe the login updater refuses' {
         if (-not $IsWindows) {
             Skip-Assertion 'the login updater binary check is Windows-only; Unix pwsh keeps the PATH chezmoi readiness.'
@@ -1318,6 +1343,7 @@ exit 0
         $text = $run.Stdout
         foreach ($expected in @('# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.',
                 '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.',
+                '# As the ordinary user, review with icacls the ACLs of the existing destination parents, such as ~\Documents and ~\AppData\Local\Packages; Invoke-HomeDeploy checks both actual CurrentUserAllHosts paths itself.',
                 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser', 'powershell.exe -NoProfile -Command Set-ExecutionPolicy RemoteSigned -Scope CurrentUser',
                 'wsl --install -d Ubuntu', 'named exactly Ubuntu', 'git clone https://github.com/FridrichMethod/dotfiles.git',
                 'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix',

@@ -220,7 +220,10 @@ function Get-DoctorPayloadResult {
         else { $found += $item }
     }
     if ($short.Count) {
-        $advice = "& '" + (Join-Path (Join-Path $RepoRoot 'scripts') 'payload-update.ps1').Replace("'", "''") + "' -Now ITEM"
+        # CodeGeneration doubles U+2018 to U+201B as well as the apostrophe:
+        # PowerShell ends a single-quoted string at each.
+        $hook = Join-Path (Join-Path $RepoRoot 'scripts') 'payload-update.ps1'
+        $advice = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($hook) + "' -Now ITEM"
         if ((Get-BootstrapChezmoiState -RepoRoot $RepoRoot).State -cin @('ok', 'elsewhere')) { $advice = 'sync-payloads ITEM' }
         $issues += "not installed: $($short -join ', '): run $advice"
     }
