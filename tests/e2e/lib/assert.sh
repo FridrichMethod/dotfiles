@@ -237,8 +237,7 @@ e2e_login_shell_of() {
 # e2e_audit_wrappers LOG: the wrappers.log lines ("<epoch>\t<phase>\t<tool>
 # \t<ppid>\t<parent>\t<argv>") whose phase is neither human:* nor
 # negative:*: a sudo or chsh that ran where only the harness's own
-# read-only steps should have. No call is exempt, a version probe
-# included. 0 when there are none.
+# read-only steps should have. 0 when there are none.
 e2e_audit_wrappers() {
     local bad
     bad=$(awk -F '\t' '$2 !~ /^(human|negative):/' "$1" 2>/dev/null)

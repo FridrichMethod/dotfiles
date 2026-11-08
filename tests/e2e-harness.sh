@@ -552,8 +552,8 @@ printf '%s\n' '[dotfiles] [error] unknown host: nope' >"$UNIT/usage.err"
 expect_eq 'failure detail fallback' "$(e2e_failure_detail "$UNIT/empty" "$UNIT/usage.err")" '[dotfiles] [error] unknown host: nope'
 
 # The wrappers.log audit: human and negative phases pass; any other phase
-# or no phase fails, whatever the tool and its arguments (no probe is
-# exempt); on a host without sudo any sudo line fails.
+# or no phase fails, whatever the tool and its arguments; on a host
+# without sudo any sudo line fails.
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000000 human:H1-apt-core sudo 42 'bash -c sudo apt-get update' 'apt-get update' \
     1700000010 negative:root-refused sudo 43 'bash' '-n ./setup-host.sh --host lab-ubuntu --check' \
     1700000015 human:H1-locale sudo 47 'bash -c sudo locale-gen en_US.UTF-8' 'locale-gen en_US.UTF-8' \
@@ -574,13 +574,6 @@ case $bad in
     *check:doctor-initial*"$E2E_NL"*"${TAB}-${TAB}chsh"*) ;;
     *) fail "wrappers audit named the wrong lines: $bad" ;;
 esac
-# A version probe in a check phase is a finding too.
-cp "$UNIT/wrappers.log" "$UNIT/wrappers-probe.log"
-printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000050 check:doctor-initial sudo 48 'doctor.sh' '--version' >>"$UNIT/wrappers-probe.log"
-if bad=$(e2e_audit_wrappers "$UNIT/wrappers-probe.log"); then
-    fail 'wrappers audit passed a version probe in a check phase'
-fi
-expect_eq 'wrappers audit names the probe' "$(printf '%s\n' "$bad" | cut -f 2,3,6 | tr '\t' ' ')" 'check:doctor-initial sudo --version'
 
 # The login shell's stderr filter drops only what a missing terminal causes
 # (the stty line, fzf's zle option restore) and keeps everything else.

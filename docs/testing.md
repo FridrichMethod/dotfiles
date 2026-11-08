@@ -727,18 +727,18 @@ step in `summary.tsv`:
    empty after every step; a dirty tree fails that step.
 5. **Nothing privileged or stateful ran outside a HUMAN block**, by four
    signals: (a) every `log/wrappers.log` line's phase starts with `human:` or
-   `negative:`, with no exemption (the `negative:root-refused` sudo is
-   legitimate); (b) where sudo logs (`E2E_SUDO=yes`, the Linux images: macOS
-   keeps no sudo.log), every `log/sudo.log` timestamp falls inside a
-   `human:*` or `negative:*` window of `log/timeline`, and every non-indented
-   line of that log is such a timestamped entry, so a log in a shape the
-   audit cannot parse fails it instead of passing unread; (c) no link under
-   HOME, outside the clone, resolves into the clone (`audit-clone-links`); (d)
-   the login shell from `getent passwd` (`dscl` on macOS) is the same at the
-   start and the end, and the sha256 of `~/.bashrc`, `~/.profile`,
-   `~/.bash_profile`, `~/.zshrc`, `~/.zshenv` and `~/.zprofile` (those that
-   exist) does not change across any non-human step; a change during a `human:*`
-   step, the deployment's included, is recorded as a note.
+   `negative:` (the `negative:root-refused` sudo is legitimate); (b) where sudo
+   logs (`E2E_SUDO=yes`, the Linux images: macOS keeps no sudo.log), every
+   `log/sudo.log` timestamp falls inside a `human:*` or `negative:*` window of
+   `log/timeline`, and every non-indented line of that log is such a
+   timestamped entry, so a log in a shape the audit cannot parse fails it
+   instead of passing unread; (c) no link under HOME, outside the clone,
+   resolves into the clone (`audit-clone-links`); (d) the login shell from
+   `getent passwd` (`dscl` on macOS) is the same at the start and the end, and
+   the sha256 of `~/.bashrc`, `~/.profile`, `~/.bash_profile`, `~/.zshrc`,
+   `~/.zshenv` and `~/.zprofile` (those that exist) does not change across any
+   non-human step; a change during a `human:*` step, the deployment's included,
+   is recorded as a note.
 6. **A login shell starts clean.** Under `env -i` with the system PATH,
    `bash -lc 'exec <zsh> -il -c exit'` (the login env's zsh on hpc) exits 0
    with empty stdout and empty stderr, apart from what is not a message: on
