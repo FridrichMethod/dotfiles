@@ -1,4 +1,4 @@
-"""Native source contracts; all state belongs to disposable fixtures."""
+"""Source contracts; all state belongs to disposable fixtures."""
 
 import hashlib
 import json
@@ -20,7 +20,7 @@ from chezmoi_support import ChezmoiFixture
 
 
 KIT_PATHS = (".claude/coding-agent-kit", ".local/bin/codex-as", ".local/bin/claude-as")
-# The caller's umask, which native apply honors for plain and executable
+# The caller's umask, which chezmoi apply honors for plain and executable
 # files; private files are 0600 whatever it is.
 UMASK = os.umask(0o022)
 os.umask(UMASK)
@@ -174,7 +174,7 @@ class SourceContractTests(unittest.TestCase):
         # Linux data on every runner (supplemental, as below): validate-host
         # refuses lab-ubuntu on a macOS or Windows OS, and lab-ubuntu is the
         # role that manages every stray's neighbour.
-        with SourceFixture("lab-ubuntu", native_os="linux") as fixture:
+        with SourceFixture("lab-ubuntu", os_override="linux") as fixture:
             for stray in strays:
                 path = fixture.source / "home" / stray
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,8 +203,8 @@ class SourceContractTests(unittest.TestCase):
 
     def test_unselected_invalid_and_incompatible_hosts_fail_before_writing(self):
         compatible = {
-            "Linux": {"common-only", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"},
-            "Darwin": {"common-only", "mac"}, "Windows": {"win"},
+            "Linux": {"generic", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"},
+            "Darwin": {"generic", "mac"}, "Windows": {"win"},
         }[platform.system()]
         configs = ["", '[data]\nhost = ""\n', '[data]\nhost = "guess"\n',
                    '[data]\nhost = 1\n', '[data]\nhost = true\n',
@@ -270,7 +270,7 @@ class SourceContractTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest)
 
     def check_role(self, role, os_override=None):
-        with SourceFixture(role, native_os=os_override) as fixture:
+        with SourceFixture(role, os_override=os_override) as fixture:
             expected = expected_entries(role)
             self.assertEqual(len(expected), COUNTS[role])
             self.assertEqual(list(Path(fixture.env["PATH"]).iterdir()), [])
@@ -280,7 +280,7 @@ class SourceContractTests(unittest.TestCase):
             self.assertEqual(unsupported.stdout, "")
             managed = fixture.run("managed", "--include=files", "--nul-path-separator")
             self.assert_success(managed)
-            # Native managed output uses platform separators; the table uses '/'.
+            # chezmoi managed output uses platform separators; the table uses '/'.
             managed_files = {path.replace("\\", "/") for path in managed.stdout.split("\0") if path}
             # The payload repos install the launchers and Claude helpers; no
             # role manages them.
@@ -308,7 +308,7 @@ class SourceContractTests(unittest.TestCase):
                 target = fixture.destination / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(content)
-            # The native modifies own policy while preserving these live leaves.
+            # The modify templates own policy while preserving these live leaves.
             (fixture.destination / ".claude/settings.json").write_bytes(
                 b'{"model":"fixture-local","fixture_unknown":{"keep":false}}\n')
             (fixture.destination / ".codex/config.toml").write_bytes(
@@ -349,12 +349,12 @@ class SourceContractTests(unittest.TestCase):
             self.assertEqual(diff.stdout, "")
             self.assertEqual(snapshot(fixture.source), before)
 
-    def test_native_os_compatible_roles_exact_files_bytes_modes_and_convergence(self):
+    def test_os_compatible_roles_exact_files_bytes_modes_and_convergence(self):
         system = platform.system()
-        roles = {"Linux": ("common-only", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"),
-                 "Darwin": ("common-only", "mac"), "Windows": ("win",)}[system]
+        roles = {"Linux": ("generic", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe"),
+                 "Darwin": ("generic", "mac"), "Windows": ("win",)}[system]
         for role in roles:
-            with self.subTest(native_os=system, role=role):
+            with self.subTest(os=system, role=role):
                 self.check_role(role)
 
     def test_supplemental_all_role_rendering_with_explicit_os_data(self):
@@ -388,9 +388,9 @@ class SourceContractTests(unittest.TestCase):
                 self.assertEqual((ROOT / f"home/empty_dot_{name}rc").read_bytes(), b"")
                 self.assertFalse((ROOT / f"home/empty_dot_{name}rc.tmpl").exists())
 
-    def test_init_and_native_data_require_explicit_role(self):
-        native_role = "win" if os.name == "nt" else "common-only"
-        for config in ("", f'[data]\nhost = "{native_role}"\n'):
+    def test_init_and_data_require_explicit_role(self):
+        default_role = "win" if os.name == "nt" else "generic"
+        for config in ("", f'[data]\nhost = "{default_role}"\n'):
             with self.subTest(initialized=bool(config)), ChezmoiFixture() as fixture:
                 copy_controls(fixture.source)
                 fixture.config.write_text(config, encoding="utf-8")
@@ -403,12 +403,12 @@ class SourceContractTests(unittest.TestCase):
                     self.assert_success(result)
                     data = fixture.run("execute-template", "{{ .host }}")
                     self.assert_success(data)
-                    self.assertEqual(data.stdout, native_role)
+                    self.assertEqual(data.stdout, default_role)
                     paths = fixture.run("execute-template", "{{ .chezmoi.sourceDir }}\n{{ .chezmoi.workingTree }}")
                     self.assert_success(paths)
                     self.assertEqual([Path(line) for line in paths.stdout.splitlines()],
                                      [fixture.source / "home", fixture.source])
-                # Native init may create fixture-local Git bookkeeping.
+                # chezmoi init may create fixture-local Git bookkeeping.
                 after = {name: value for name, value in snapshot(fixture.source).items()
                          if not name.startswith(".git/")}
                 self.assertEqual(after, before)

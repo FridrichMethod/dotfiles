@@ -155,7 +155,7 @@ function Find-BootstrapCommand {
     if (-not $IsWindows) { $extensions += '' }
     $found = [Collections.Generic.List[string]]::new()
     $entries = @(([string]$env:PATH).Split([IO.Path]::PathSeparator))
-    # The pinned native binary is usable before configuration adds this directory.
+    # The pinned chezmoi binary is usable before configuration adds this directory.
     if ($Name -ceq 'chezmoi') { $entries = @((Join-Path $HOME '.local/bin')) + $entries }
     foreach ($entry in $entries) {
         $directory = $entry.Trim().Trim('"')
@@ -285,7 +285,7 @@ function Get-BootstrapDocRef {
         'windows:S3-bat-theme' { return 'W1-bat-theme' }
         'windows:S6-nerd-font' { return 'W1-font' }
         'windows:S4-chezmoi' { return 'W1-chezmoi' }
-        'windows:H7-native' { return 'HW-native' }
+        'windows:H7-deploy' { return 'HW-deploy' }
         'windows:H7-auth' { return 'HW-auth' }
     }
     return $Step
@@ -656,9 +656,9 @@ function Test-BootstrapChezmoiReady {
     return (Get-BootstrapChezmoiState -RepoRoot $RepoRoot).State -ceq 'ok'
 }
 
-function Test-BootstrapNativeChezmoi {
-    # Windows: true when the native login updater would run HomePath's
-    # ~/.local/bin/chezmoi.exe (Open-DotfilesNativeChezmoi of RepoRoot's
+function Test-BootstrapTrustedChezmoi {
+    # Windows: true when the login updater would run HomePath's
+    # ~/.local/bin/chezmoi.exe (Open-DotfilesChezmoi of RepoRoot's
     # lib/chezmoi-guard.ps1, on the resolved home): a regular file, no link
     # at it, .local or .local\bin, owned by and
     # writable only by this user, SYSTEM and Administrators. Read-only: the
@@ -668,7 +668,7 @@ function Test-BootstrapNativeChezmoi {
     if (-not [IO.File]::Exists($guard)) { return $false }
     try {
         . $guard
-        $held = Open-DotfilesNativeChezmoi -Destination (Resolve-DotfilesDirectory $HomePath)
+        $held = Open-DotfilesChezmoi -Destination (Resolve-DotfilesDirectory $HomePath)
     }
     catch { return $false }
     if ($null -eq $held) { return $false }
@@ -747,7 +747,7 @@ function Install-BootstrapChezmoi {
         finally { $stream.Dispose() }
         [IO.File]::Move($staging, $Destination, $true)
         $staging = $null
-        return New-BootstrapResult installed 'installed SHA256-verified chezmoi; native handover remains separate'
+        return New-BootstrapResult installed 'installed SHA256-verified chezmoi; deploying the home is the separate HW-deploy step'
     }
     catch { return New-BootstrapResult failed "chezmoi install failed: $($_.Exception.Message)" }
     finally {

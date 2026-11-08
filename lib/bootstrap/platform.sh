@@ -163,19 +163,19 @@ bootstrap_brew_bin() {
 
 # bootstrap_configured_home: 0 when ~/.config/chezmoi/chezmoi.toml exists in
 # any form, the existence test of dotfiles_config_exists
-# (lib/chezmoi-guard.sh); the native-config check judges the config. Such a
+# (lib/chezmoi-guard.sh); the chezmoi-config check judges the config. Such a
 # home records its role in that config.
 bootstrap_configured_home() {
     [ -n "${HOME:-}" ] || return 1
     [ -e "${HOME%/}/.config/chezmoi/chezmoi.toml" ] || [ -L "${HOME%/}/.config/chezmoi/chezmoi.toml" ]
 }
 
-# bootstrap_native_host: the role, common-only or a known host, that the one
+# bootstrap_config_host: the role, generic or a known host, that the one
 # host = 'ROLE' or host = "ROLE" line in the [data] table of a regular
-# ~/.config/chezmoi/chezmoi.toml selects, the forms native init writes. Read
+# ~/.config/chezmoi/chezmoi.toml selects, the forms chezmoi init writes. Read
 # as text, never through chezmoi, whose commands may open persistent state.
 # Any other spelling, a second host line or an unknown role returns 1.
-bootstrap_native_host() {
+bootstrap_config_host() {
     local config line table='' value quote rest role='' seen=0
     [ -n "${HOME:-}" ] || return 1
     config=${HOME%/}/.config/chezmoi/chezmoi.toml
@@ -217,25 +217,25 @@ bootstrap_native_host() {
         esac
     done <"$config"
     case $role in
-        common-only | mac | wsl-ubuntu | lab-ubuntu | sherlock | marlowe | win) printf '%s\n' "$role" ;;
+        generic | mac | wsl-ubuntu | lab-ubuntu | sherlock | marlowe | win) printf '%s\n' "$role" ;;
         *) return 1 ;;
     esac
 }
 
-# bootstrap_recorded_common_only: 0 when this home has a local config that
-# selects common-only (no host overlay).
-bootstrap_recorded_common_only() {
-    bootstrap_configured_home && [ "$(bootstrap_native_host)" = common-only ]
+# bootstrap_recorded_generic: 0 when this home has a local config that
+# selects generic (no host overlay).
+bootstrap_recorded_generic() {
+    bootstrap_configured_home && [ "$(bootstrap_config_host)" = generic ]
 }
 
 # bootstrap_resolve_host: the host a configured home's local config selects
-# (bootstrap_native_host). Returns 1 on any other home, for an unclear role
-# and for common-only (bootstrap_recorded_common_only tells that case apart).
+# (bootstrap_config_host). Returns 1 on any other home, for an unclear role
+# and for generic (bootstrap_recorded_generic tells that case apart).
 # Never guesses an overlay.
 bootstrap_resolve_host() {
     local host
     bootstrap_configured_home || return 1
-    host=$(bootstrap_native_host) || return 1
-    [ "$host" != common-only ] || return 1
+    host=$(bootstrap_config_host) || return 1
+    [ "$host" != generic ] || return 1
     printf '%s\n' "$host"
 }

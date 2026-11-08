@@ -8,5 +8,5 @@
 {{- $live = setValueAtPath (list "features" "*") false $live -}}
 {{- $live = setValueAtPath (list "features" "literal.dot") true $live -}}
 {{- $live = setValueAtPath "features.owned" true $live -}}
-{{- $live = deleteValueAtPath "retired.setting" $live -}}
+{{- $live = deleteValueAtPath "removed.setting" $live -}}
 {{- toToml $live }}

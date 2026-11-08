@@ -1,9 +1,9 @@
 #Requires -Version 7.0
 # The steps of tests/e2e/run.ps1 besides the apply loop (flow-win.ps1): the
-# clone, the winget probe, the read-only doctor and -Check runs, the native
-# handover through docs/bootstrap.md "Fresh Windows home by hand" and its
+# clone, the winget probe, the read-only doctor and -Check runs, the first
+# apply through docs/bootstrap.md "Fresh Windows home by hand" and its
 # convergence check, the second apply, the profile load, the payload repos,
-# the final doctor, the isolated native fixtures and the task audit. Each
+# the final doctor, the isolated chezmoi fixtures and the task audit. Each
 # opens its step, runs and closes it with a verdict; a step the rest depends
 # on sets Broken when it fails, and the flow then skips what cannot run.
 # Dot-source only, after common.ps1, snapshot.ps1 and blocks.ps1.
@@ -34,13 +34,13 @@ function Get-E2EFileSha256 {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
-function Invoke-E2EStepNativeHandover {
-    # HW-native done the way a person does it on a fresh home: the clone's
+function Invoke-E2EStepHomeDeploy {
+    # HW-deploy done the way a person does it on a fresh home: the clone's
     # docs/bootstrap.md "Fresh Windows home by hand" functions, checked by
-    # Get-E2EHandoverScript and written with the one call
-    # Invoke-NativeHandover -Role win to handover\run.ps1 under the out dir,
+    # Get-E2EDeployScript and written with the one call
+    # Invoke-HomeDeploy -Role win to deploy\run.ps1 under the out dir,
     # run by a child pwsh -NoProfile -NonInteractive from the clone. The step
-    # log starts with the HW-native block it stands in for. It passes when the
+    # log starts with the HW-deploy block it stands in for. It passes when the
     # child exits 0 and the end state is the documented one: the clone's
     # lib/chezmoi-guard.ps1 accepts the local config as naming this home and
     # the clone, that config selects win, no maintenance, a non-empty state
@@ -49,21 +49,21 @@ function Invoke-E2EStepNativeHandover {
     # runner token is elevated (it has no ordinary one), which the procedure
     # warns about and a note records; the ordinary-token login-updater check
     # stays in per-host acceptance.
-    Start-E2EStep native-handover human:HW-native
-    if ($null -ne $E2E['HandoverBlock']) {
-        Add-E2EText $E2E['StepLog'] ("--- block`n" + (@($E2E['HandoverBlock'].Lines) -join "`n") + "`n")
+    Start-E2EStep home-deploy human:HW-deploy
+    if ($null -ne $E2E['DeployBlock']) {
+        Add-E2EText $E2E['StepLog'] ("--- block`n" + (@($E2E['DeployBlock'].Lines) -join "`n") + "`n")
     }
     $userHome = $E2E['Home']
-    $handover = Get-E2EHandoverScript -Document (Join-Path $E2E['Clone'] 'docs/bootstrap.md')
-    if ($handover['Error']) {
-        $E2E['Broken'] = 'native-handover'
-        Complete-E2EStep fail "docs/bootstrap.md: $($handover['Error'])"
+    $deploy = Get-E2EDeployScript -Document (Join-Path $E2E['Clone'] 'docs/bootstrap.md')
+    if ($deploy['Error']) {
+        $E2E['Broken'] = 'home-deploy'
+        Complete-E2EStep fail "docs/bootstrap.md: $($deploy['Error'])"
         return
     }
-    $directory = Join-Path $E2E['Out'] 'handover'
+    $directory = Join-Path $E2E['Out'] 'deploy'
     [void][IO.Directory]::CreateDirectory($directory)
     $runner = Join-Path $directory 'run.ps1'
-    [IO.File]::WriteAllText($runner, $handover['Text'] + "`nInvoke-NativeHandover -Role win`n", $script:E2EUtf8)
+    [IO.File]::WriteAllText($runner, $deploy['Text'] + "`nInvoke-HomeDeploy -Role win`n", $script:E2EUtf8)
     $before = [ordered]@{}
     foreach ($relative in @('.gitconfig', 'Documents/PowerShell/profile.ps1', 'Documents/WindowsPowerShell/profile.ps1')) {
         $path = Join-Path $userHome $relative
@@ -72,8 +72,8 @@ function Invoke-E2EStepNativeHandover {
     $code = Invoke-E2EProcess -FilePath $E2E['PowerShell'] -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $runner) `
         -WorkingDirectory $E2E['Clone'] -OutFile $E2E['StepOut'] -ErrFile $E2E['StepErr'] -TimeoutSeconds $E2ETimeout['Apply']
     if ($code -ne 0) {
-        $E2E['Broken'] = 'native-handover'
-        Complete-E2EStep fail "Invoke-NativeHandover -Role win exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"
+        $E2E['Broken'] = 'home-deploy'
+        Complete-E2EStep fail "Invoke-HomeDeploy -Role win exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"
         return
     }
     $problems = [Collections.Generic.List[string]]::new()
@@ -105,18 +105,18 @@ function Invoke-E2EStepNativeHandover {
         else { $problems.Add("no same-hash copy of ~\$($relative.Replace('/', '\')) in ~\.local\state\dotfiles-fresh-backup") }
     }
     if ($problems.Count) {
-        $E2E['Broken'] = 'native-handover'
-        Complete-E2EStep fail "Invoke-NativeHandover -Role win exit 0, but $($problems -join '; ')"
+        $E2E['Broken'] = 'home-deploy'
+        Complete-E2EStep fail "Invoke-HomeDeploy -Role win exit 0, but $($problems -join '; ')"
         return
     }
-    Complete-E2EStep pass "Invoke-NativeHandover -Role win exit 0; $kept earlier file(s) kept byte for byte; the config names $source"
+    Complete-E2EStep pass "Invoke-HomeDeploy -Role win exit 0; $kept earlier file(s) kept byte for byte; the config names $source"
     if (Test-E2EElevated) {
-        Write-E2ENote handover-token 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance'
+        Write-E2ENote deploy-token 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance'
     }
 }
 
 function Invoke-E2EStepCheckDone {
-    # After the handover, setup-host.ps1 -Host win -Check has nothing left:
+    # After the first apply, setup-host.ps1 -Host win -Check has nothing left:
     # exit 0, no todo line, no step that blocks completion, and no write in
     # TEMP or HOME.
     Update-E2EPath
@@ -128,46 +128,46 @@ function Invoke-E2EStepCheckDone {
     $output = @(Get-E2ELines $E2E['StepOut'])
     $left = @($output | Where-Object { $_ -cmatch '^[A-Za-z0-9-]+ todo ' -or $_ -cmatch '^[A-Za-z0-9-]+ human .*; blocks completion$' })
     if ($code -ne 0) {
-        Complete-E2EStep fail "exit $code, expected 0 after the handover: $(Get-E2EFailureDetail $output @(Get-E2ELines $E2E['StepErr']))"
+        Complete-E2EStep fail "exit $code, expected 0 after the first apply: $(Get-E2EFailureDetail $output @(Get-E2ELines $E2E['StepErr']))"
     }
     elseif ($left.Count) { Complete-E2EStep fail "exit 0 with steps left: $(ConvertTo-E2EOneLine ($left -join "`n") 300)" }
     elseif ($problems) { Complete-E2EStep fail $problems }
     else { Complete-E2EStep pass 'exit 0; nothing left to apply; no writes' }
 }
 
-function Invoke-E2EStepNativeConverged {
+function Invoke-E2EStepHomeConverged {
     # With the Fresh Windows home by hand functions of the clone, a child pwsh
-    # (handover\converged.ps1 under the out dir) runs Invoke-NativeCz
+    # (deploy\converged.ps1 under the out dir) runs Invoke-HomeCz
     # @('diff', '--exclude=dirs') and exits 4 with the diff when it is not
-    # empty, else prints "--- managed" and the Invoke-NativeCz @('managed',
+    # empty, else prints "--- managed" and the Invoke-HomeCz @('managed',
     # '--include=files,symlinks') list. The step passes when the diff is
     # empty (after the payload repos ran, so an installer that edits a
     # managed target shows here) and every listed target is a regular file of
     # the home.
-    Start-E2EStep native-converged check:native-converged
-    $handover = Get-E2EHandoverScript -Document (Join-Path $E2E['Clone'] 'docs/bootstrap.md')
-    if ($handover['Error']) {
-        Complete-E2EStep fail "docs/bootstrap.md: $($handover['Error'])"
+    Start-E2EStep home-converged check:home-converged
+    $deploy = Get-E2EDeployScript -Document (Join-Path $E2E['Clone'] 'docs/bootstrap.md')
+    if ($deploy['Error']) {
+        Complete-E2EStep fail "docs/bootstrap.md: $($deploy['Error'])"
         return
     }
-    $directory = Join-Path $E2E['Out'] 'handover'
+    $directory = Join-Path $E2E['Out'] 'deploy'
     [void][IO.Directory]::CreateDirectory($directory)
     $runner = Join-Path $directory 'converged.ps1'
     $check = @(
-        '$diff = [string](Invoke-NativeCz @(''diff'', ''--exclude=dirs''))'
+        '$diff = [string](Invoke-HomeCz @(''diff'', ''--exclude=dirs''))'
         'if ($diff.Trim()) { [Console]::Out.Write($diff); exit 4 }'
         '[Console]::Out.WriteLine(''--- managed'')'
-        '[Console]::Out.Write([string](Invoke-NativeCz @(''managed'', ''--include=files,symlinks'')))'
+        '[Console]::Out.Write([string](Invoke-HomeCz @(''managed'', ''--include=files,symlinks'')))'
         'exit 0'
     ) -join "`n"
-    [IO.File]::WriteAllText($runner, $handover['Text'] + "`n" + $check + "`n", $script:E2EUtf8)
+    [IO.File]::WriteAllText($runner, $deploy['Text'] + "`n" + $check + "`n", $script:E2EUtf8)
     $code = Invoke-E2EProcess -FilePath $E2E['PowerShell'] -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $runner) `
         -WorkingDirectory $E2E['Clone'] -OutFile $E2E['StepOut'] -ErrFile $E2E['StepErr'] -TimeoutSeconds $E2ETimeout['Check']
     $output = @(Get-E2ELines $E2E['StepOut'])
     if ($code -eq 4) {
         $headers = @($output | Where-Object { $_ -cmatch '^diff ' } | Select-Object -First 5)
         if (-not $headers.Count) { $headers = @($output | Where-Object { $_.Trim() } | Select-Object -First 3) }
-        Complete-E2EStep fail "Invoke-NativeCz diff --exclude=dirs is not empty: $(ConvertTo-E2EOneLine ($headers -join "`n") 400)"
+        Complete-E2EStep fail "Invoke-HomeCz diff --exclude=dirs is not empty: $(ConvertTo-E2EOneLine ($headers -join "`n") 400)"
         return
     }
     if ($code -ne 0) {
@@ -177,30 +177,30 @@ function Invoke-E2EStepNativeConverged {
     $marker = [Array]::IndexOf([object[]]$output, '--- managed')
     $managed = @(if ($marker -ge 0) { $output | Select-Object -Skip ($marker + 1) | Where-Object { $_.Trim() } })
     $bad = @($managed | Where-Object { -not (Test-E2ERegularFile (Join-Path $E2E['Home'] $_)) })
-    if (-not $managed.Count) { Complete-E2EStep fail 'Invoke-NativeCz managed --include=files,symlinks listed no target' }
+    if (-not $managed.Count) { Complete-E2EStep fail 'Invoke-HomeCz managed --include=files,symlinks listed no target' }
     elseif ($bad.Count) { Complete-E2EStep fail "managed targets that are not regular files: $(ConvertTo-E2EOneLine ($bad -join ' ') 300)" }
     else { Complete-E2EStep pass "empty diff; $($managed.Count) managed file(s), all regular" }
 }
 
-function Invoke-E2EStepNativeFixtures {
+function Invoke-E2EStepChezmoiFixtures {
     # tests/chezmoi.ps1 with the provisioned ~\.local\bin\chezmoi.exe
-    # required. The native suite owns temp homes and explicit native state
+    # required. The chezmoi suite owns temp homes and explicit chezmoi state
     # paths and never touches this home.
-    Start-E2EStep native-fixtures check:native-fixtures
+    Start-E2EStep chezmoi-fixtures check:chezmoi-fixtures
     $code = Invoke-E2EPwsh -Script tests/chezmoi.ps1 -TimeoutSeconds $E2ETimeout['Apply'] -Environment @{
         DOTFILES_TEST_CHEZMOI = (Join-Path $E2E['Home'] '.local/bin/chezmoi.exe')
         DOTFILES_TEST_REQUIRE_CHEZMOI = '1'
     }
     if ($code -ne 0) {
-        $E2E['Broken'] = 'native-fixtures'
-        Complete-E2EStep fail "isolated native suite exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"
+        $E2E['Broken'] = 'chezmoi-fixtures'
+        Complete-E2EStep fail "isolated chezmoi suite exit ${code}: $(Get-E2ELastLine $E2E['StepErr'])"
     }
-    else { Complete-E2EStep pass 'isolated native source/config/takeover/recovery fixtures passed' }
+    else { Complete-E2EStep pass 'isolated chezmoi fixtures passed' }
 }
 
 function Invoke-E2EAuditTasks {
     # audit-scheduled-tasks: the task identities did not change after the
-    # apply loop (the handover and every step after it register nothing).
+    # apply loop (the first apply and every step after it register nothing).
     # The tasks the loop itself added (installers winget ran) are listed in
     # a note.
     Start-E2EStep audit-scheduled-tasks check:audit-scheduled-tasks
@@ -379,8 +379,8 @@ function Invoke-E2EStepLoginShell {
     # The Windows stand-in for the login-shell check: a pwsh that loads the
     # deployed profile (no -NoProfile), non-interactive with its output
     # redirected as an agent terminal or a script host starts it, exits 0 and
-    # prints nothing, and the profile it loads is the regular file the native
-    # handover wrote. The profile gates its interactive setup and the update
+    # prints nothing, and the profile it loads is the regular file the first
+    # apply wrote. The profile gates its interactive setup and the update
     # hook on an interactive console, so silence is the contract
     # (tests/powershell-profile.ps1 covers the interactive paths).
     Update-E2EPath
@@ -392,9 +392,9 @@ function Invoke-E2EStepLoginShell {
     if ($code -ne 0) { Complete-E2EStep fail "exit $code loading ${profilePath}: $(Get-E2ELastLine $E2E['StepErr'])" }
     elseif ($printed.Count) { Complete-E2EStep fail "the profile load printed: $(ConvertTo-E2EOneLine ($printed -join "`n") 300)" }
     elseif (-not (Test-E2ERegularFile $profilePath)) {
-        Complete-E2EStep fail "$profilePath is missing, a link or not a regular file, not the regular file the native handover wrote"
+        Complete-E2EStep fail "$profilePath is missing, a link or not a regular file, not the regular file the first apply wrote"
     }
-    else { Complete-E2EStep pass "exit 0, silent; $profilePath is the regular file the native handover wrote" }
+    else { Complete-E2EStep pass "exit 0, silent; $profilePath is the regular file the first apply wrote" }
 }
 
 function Invoke-E2EStepPayloads {

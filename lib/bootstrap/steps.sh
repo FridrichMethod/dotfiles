@@ -50,7 +50,7 @@ S5-claude inspect ai yes debian
 S5-codex auto ai - debian
 S6-nerd-font auto desktop - lab-ubuntu
 S6-kitty auto desktop - lab-ubuntu
-H7-native judgment - yes macos,debian,hpc
+H7-deploy judgment - yes macos,debian,hpc
 H7-chsh chsh - no macos,debian
 H7-auth auth - no macos,debian,hpc
 H7-payloads judgment - no macos,debian,hpc
@@ -148,8 +148,8 @@ steps_get() {
 # steps_needs ID: the steps that must be done before ID on this profile.
 steps_needs() {
     case $STEPS_PROFILE:$1 in
-        macos:H7-native | debian:H7-native) echo S3-clones S2-brew-bundle S4-chezmoi ;;
-        hpc:H7-native) echo S3-clones S2-login-env S4-chezmoi ;;
+        macos:H7-deploy | debian:H7-deploy) echo S3-clones S2-brew-bundle S4-chezmoi ;;
+        hpc:H7-deploy) echo S3-clones S2-login-env S4-chezmoi ;;
         macos:H1-homebrew | macos:S3-clones | macos:S4-nvm) echo H1-xcode-clt ;;
         macos:S2-brew-bundle) echo H1-homebrew ;;
         debian:S2-brew-bundle) echo H1-linuxbrew ;;

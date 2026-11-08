@@ -319,7 +319,7 @@ bootstrap_doc_ref() {
         windows:S3-bat-theme) printf '%s\n' W1-bat-theme ;;
         windows:S6-nerd-font) printf '%s\n' W1-font ;;
         windows:S4-chezmoi) printf '%s\n' W1-chezmoi ;;
-        windows:H7-native) printf '%s\n' HW-native ;;
+        windows:H7-deploy) printf '%s\n' HW-deploy ;;
         windows:H7-auth) printf '%s\n' HW-auth ;;
         *) printf '%s\n' "$1" ;;
     esac

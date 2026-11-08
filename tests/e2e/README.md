@@ -2,7 +2,7 @@
 
 Opt-in: runs the day-zero bootstrap for real, from a fresh home, on every host
 overlay, the way [Running it with an agent](../../docs/bootstrap.md#running-it-with-an-agent)
-drives it, hands the home to native chezmoi through
+drives it, deploys the home with chezmoi through
 [Fresh home by hand](../../docs/bootstrap.md#fresh-home-by-hand), and checks its
 [acceptance checklist](../../docs/bootstrap.md#acceptance-checklist).
 `./tests/run.sh` and pre-commit never run it; they run only the fast unit test

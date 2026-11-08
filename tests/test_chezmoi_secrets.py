@@ -1,4 +1,4 @@
-"""Disposable native age evidence; no production credentials or secret reports."""
+"""Disposable chezmoi age evidence; no production credentials or secret reports."""
 
 import base64
 import json
@@ -17,7 +17,7 @@ from chezmoi_source_support import ROOT, ROLES, SourceFixture, expected_entries,
 FIXTURES = Path(__file__).parent / "fixtures" / "chezmoi" / "secrets"
 
 
-class NativeSecretTests(unittest.TestCase):
+class SecretTests(unittest.TestCase):
     def test_enrolled_source_contains_only_eight_opaque_age_leaves(self):
         # Read ciphertext only. Private recipient/equality checks belong to the
         # operator; CI must never receive a production decryption identity.
@@ -46,11 +46,11 @@ class NativeSecretTests(unittest.TestCase):
             header = body.split(b"\n--- ", 1)
             self.assertEqual(len(header), 2, "age header authentication must be present")
             self.assertEqual(header[0].count(b"\n-> X25519 "), 6,
-                             "each ciphertext must carry six native recipients")
+                             "each ciphertext must carry six X25519 recipients")
 
     def assert_success(self, result):
         # Do not put captured encryption/decryption output into failure messages.
-        self.assertEqual(result.returncode, 0, "native synthetic age command failed")
+        self.assertEqual(result.returncode, 0, "synthetic age command failed")
 
     def prepare(self, fixture):
         empty_bin = fixture.root / "empty-bin"
@@ -101,10 +101,10 @@ class NativeSecretTests(unittest.TestCase):
 
     def test_unenrolled_and_wrong_host_sources_stay_keyless_with_exact_ordinary_inventory(self):
         for role in ROLES:
-            native_os = "darwin" if role == "mac" else "windows" if role == "win" else "linux"
-            values = (None, "false", "true") if role in ("common-only", "win") else (None, "false")
+            os_override = "darwin" if role == "mac" else "windows" if role == "win" else "linux"
+            values = (None, "false", "true") if role in ("generic", "win") else (None, "false")
             for value in values:
-                with self.subTest(role=role, opt_in=value), SourceFixture(role, native_os=native_os) as fixture:
+                with self.subTest(role=role, opt_in=value), SourceFixture(role, os_override=os_override) as fixture:
                     if value is not None:
                         with fixture.config.open("a", encoding="utf-8") as config:
                             config.write(f"enrollStaticSecrets = {value}\n")
@@ -123,7 +123,7 @@ class NativeSecretTests(unittest.TestCase):
     def test_enrollment_flag_rejects_non_boolean_data_before_destination_writes(self):
         for role in ("lab-ubuntu", "sherlock", "marlowe"):
             for value in ('"true"', '"false"', '""', "1", "0", "[]", "{}"):
-                with self.subTest(role=role, value=value), SourceFixture(role, native_os="linux") as fixture:
+                with self.subTest(role=role, value=value), SourceFixture(role, os_override="linux") as fixture:
                     with fixture.config.open("a", encoding="utf-8") as config:
                         config.write(f"enrollStaticSecrets = {value}\n")
                     result = fixture.run("apply")
@@ -142,9 +142,9 @@ class NativeSecretTests(unittest.TestCase):
                 sibling = target.parent / "application-auth.json"
                 sibling.write_bytes(b"synthetic app-owned refresh state\n")
                 before = snapshot(fixture.source)
-                native_os = "darwin" if role == "mac" else "linux"
+                os_override = "darwin" if role == "mac" else "linux"
                 for _ in range(2):
-                    result = fixture.run("--override-data", json.dumps({"chezmoi": {"os": native_os}}),
+                    result = fixture.run("--override-data", json.dumps({"chezmoi": {"os": os_override}}),
                                          "apply", "--use-builtin-age=true")
                     self.assert_success(result)
                     self.assertTrue(canary not in result.stdout + result.stderr)
@@ -271,7 +271,7 @@ class NativeSecretTests(unittest.TestCase):
             # Remembered deletion is a conflict with our guarded invocation.
             self.assertNotEqual(fixture.run("apply", "--use-builtin-age=true").returncode, 0)
             self.assertFalse(target.exists())
-            # Loss/reset of native state bypasses that protection and seeds again.
+            # Loss/reset of chezmoi's state database bypasses that protection and seeds again.
             fixture.state.unlink()
             self.assert_success(fixture.run("apply", "--use-builtin-age=true"))
             self.assertTrue(target.read_text(encoding="utf-8") == seed)

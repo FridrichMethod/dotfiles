@@ -2,11 +2,11 @@
 # shellcheck disable=SC2034 # E2E_APPLY1_OUT and E2E_APPLY1_RC are read by steps.sh (alloc-first)
 # The unix flow of tests/e2e/inside.sh, for a host with an overlay: clone,
 # doctor-initial, the no-write --check, the setup-host apply loop with its
-# HUMAN blocks up to the H7-native handover, the handover itself through
+# HUMAN blocks up to the H7-deploy step, the first apply itself through
 # docs/bootstrap.md "Fresh home by hand", the second apply, the no-write
 # --check that finds nothing left, the login shell, the payload repos, the
-# native convergence check, the final doctor runs, the negatives, the
-# isolated native fixtures and the audits: the native bootstrap driven the
+# convergence check, the final doctor runs, the negatives, the
+# isolated chezmoi fixtures and the audits: the bootstrap driven the
 # way "Running it with an agent" says an agent drives it. Sourced after
 # steps.sh; same portability rules.
 
@@ -42,8 +42,8 @@ e2e_block_text() {
 # e2e_blocks_actionable DIR: 0 when a block of DIR gives e2e_handle_blocks
 # something to do: a runnable block, the alloc block (exported the first
 # time, refused when it comes back) or a block the policy refuses (reported
-# there with its text). Only skips and the H7-native handover, which the
-# native-handover step does after the loop, mean nothing to do. Prints
+# there with its text). Only skips and the H7-deploy block, which the
+# home-deploy step does after the loop, mean nothing to do. Prints
 # "<id> <kind> <action>" per block.
 e2e_blocks_actionable() {
     local count n row id kind action progress=1
@@ -145,7 +145,7 @@ e2e_handle_blocks() {
                         ;;
                 esac
                 ;;
-            handover) ;;
+            deploy) ;;
             alloc) e2e_handle_alloc "$id" "$1/$n.block" || return 1 ;;
             run-*) e2e_run_block "$id" "$kind" "$action" "$1/$n.block" || return 1 ;;
             *)
@@ -157,15 +157,15 @@ e2e_handle_blocks() {
     done
 }
 
-# e2e_apply_loop: ./setup-host.sh --host H --yes until only the H7-native
-# handover is left, at most eight runs; e2e_loop_next decides on each run.
+# e2e_apply_loop: ./setup-host.sh --host H --yes until only the H7-deploy
+# block is left, at most eight runs; e2e_loop_next decides on each run.
 # blocks: exit 3 with a block to act on, handed to e2e_handle_blocks. rerun:
 # exit 3, nothing to act on, but a step applied ("<id> done applied: "). done:
-# exit 3, nothing to act on, nothing applied, H7-native alone pending and its
-# block printed; the skip reminders are recorded and the native-handover
+# exit 3, nothing to act on, nothing applied, H7-deploy alone pending and its
+# block printed; the skip reminders are recorded and the home-deploy
 # step follows. stuck: any other exit 3 fails as "no progress" (the "HUMAN
 # steps pending:" ids from stderr name what setup-host waits for). early:
-# exit 0 fails, since a fresh home cannot have H7-native done. Exit 1 or 2
+# exit 0 fails, since a fresh home cannot have H7-deploy done. Exit 1 or 2
 # fails naming the step setup-host reported; anything else is the timeout.
 e2e_apply_loop() {
     local n=0 rc name dir plan pending count applied actionable verdict found
@@ -199,13 +199,13 @@ e2e_apply_loop() {
                 ;;
             rerun) e2e_step_end pass "exit 3; applied $count step(s); pending: $pending" ;;
             done)
-                if ! found=$(e2e_blocks_find "$dir" H7-native); then
+                if ! found=$(e2e_blocks_find "$dir" H7-deploy); then
                     E2E_BROKEN=$name
-                    e2e_step_end fail "exit 3 with only H7-native pending, but no H7-native block (blocks: $(e2e_blocks_summary "$dir"))"
+                    e2e_step_end fail "exit 3 with only H7-deploy pending, but no H7-deploy block (blocks: $(e2e_blocks_summary "$dir"))"
                     return 1
                 fi
-                E2E_HANDOVER_BLOCK=$dir/$found.block
-                e2e_step_end pass "exit 3 after $n run(s); only H7-native pending; blocks: $(e2e_blocks_summary "$dir")"
+                E2E_DEPLOY_BLOCK=$dir/$found.block
+                e2e_step_end pass "exit 3 after $n run(s); only H7-deploy pending; blocks: $(e2e_blocks_summary "$dir")"
                 e2e_handle_blocks "$dir" || return 1
                 return 0
                 ;;
@@ -216,7 +216,7 @@ e2e_apply_loop() {
                 ;;
             early)
                 E2E_BROKEN=$name
-                e2e_step_end fail 'exit 0 before the handover: H7-native was already done on a fresh home'
+                e2e_step_end fail 'exit 0 before the first apply: H7-deploy was already done on a fresh home'
                 return 1
                 ;;
             error)
@@ -232,11 +232,11 @@ e2e_apply_loop() {
         esac
     done
     E2E_BROKEN=apply-loop
-    e2e_fail_row apply-loop 'eight apply runs without reaching the handover'
+    e2e_fail_row apply-loop 'eight apply runs without reaching the first apply'
     return 1
 }
 
-# e2e_step_second_apply: after the handover, one more ./setup-host.sh --host
+# e2e_step_second_apply: after the first apply, one more ./setup-host.sh --host
 # H --yes exits 0, applies nothing ("<id> done applied: ..." would be a step
 # that redid its work) and writes nothing in HOME.
 e2e_step_second_apply() {
@@ -258,8 +258,8 @@ e2e_step_second_apply() {
     fi
 }
 
-# e2e_step_handover_host: the native handover of this host's role.
-e2e_step_handover_host() { e2e_step_native_handover "$E2E_SETUP_HOST"; }
+# e2e_step_deploy_host: the first apply of this host's role.
+e2e_step_deploy_host() { e2e_step_home_deploy "$E2E_SETUP_HOST"; }
 
 # e2e_flow_unix: the whole sequence for a host with an overlay.
 e2e_flow_unix() {
@@ -271,15 +271,15 @@ e2e_flow_unix() {
     else
         e2e_skip apply-1 "after $E2E_BROKEN failed"
     fi
-    e2e_or_skip native-handover e2e_step_handover_host
+    e2e_or_skip home-deploy e2e_step_deploy_host
     e2e_or_skip second-apply e2e_step_second_apply
     e2e_or_skip check-done e2e_step_check_done
     e2e_or_skip login-shell e2e_step_login_shell
     e2e_or_skip payloads e2e_step_payloads
-    e2e_or_skip native-converged e2e_step_native_converged
+    e2e_or_skip home-converged e2e_step_home_converged
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
-    e2e_or_skip native-fixtures e2e_step_native_fixtures
+    e2e_or_skip chezmoi-fixtures e2e_step_chezmoi_fixtures
     e2e_audits
 }

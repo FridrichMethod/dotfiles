@@ -8,7 +8,7 @@ case $- in
 esac
 [ -z "${_DOTFILES_CHECKED:-}" ] || return 0 2>/dev/null || exit 0
 
-_dotfiles_native_update() (
+_dotfiles_chezmoi_update() (
     [ "${DOTFILES_AUTO_UPDATE:-1}" != 0 ] || return 0
     # Fixed paths also work before a source checkout/library can be located.
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
@@ -47,7 +47,7 @@ _dotfiles_native_update() (
     command -v git >/dev/null 2>&1 || return 1
 
     # Prevent inherited repository selection or injected config from redirecting
-    # the clean-tree check or native Git update. Keep ordinary SSH host config.
+    # the clean-tree check or chezmoi's Git update. Keep ordinary SSH host config.
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
     unset GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
     export GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=false SSH_ASKPASS=false
@@ -64,7 +64,7 @@ _dotfiles_native_update() (
     _df_dirty=$(git -C "$_df_source" -c core.fsmonitor=false status --porcelain --untracked-files=all --ignore-submodules=none 2>/dev/null) || return 1
     [ -z "$_df_dirty" ] || return 1
 
-    # HOME plus all five native state paths and the working tree are explicit;
+    # HOME plus all five chezmoi state paths and the working tree are explicit;
     # inherited XDG/chezmoi settings cannot redirect this home's update.
     export HOME="$_df_home"
     set -- --source "$_df_source" --working-tree "$_df_source" \
@@ -73,23 +73,25 @@ _dotfiles_native_update() (
         --persistent-state "$_df_home/.local/state/chezmoi/chezmoi.boltdb" \
         --mode=file --no-tty --error-on-conflict --less-interactive --no-pager --use-builtin-diff \
         --use-builtin-age=true --use-builtin-git=false --force=false
-    # Native defaults rebase/autostash. Validate the effective nonsecret subset,
-    # including old local configs, without dumping any source/config/secret data.
+    # chezmoi's default update rebases and autostashes. Validate the effective
+    # nonsecret subset of whatever local config is present, without dumping any
+    # source/config/secret data.
     _df_contract=$("$_df_chezmoi" "$@" execute-template \
         '{{ if and (eq .chezmoi.config.update.command "git") (eq (toJson .chezmoi.config.update.args) "[\"-c\",\"rebase.autoStash=false\",\"-c\",\"merge.autoStash=false\",\"pull\",\"--ff-only\",\"--no-rebase\",\"--no-autostash\",\"--no-recurse-submodules\"]") (not .chezmoi.config.update.recurseSubmodules) (not .chezmoi.config.git.autoadd) (not .chezmoi.config.git.autocommit) (not .chezmoi.config.git.autopush) }}safe{{ end }}' \
         </dev/null 2>/dev/null) || return 1
     [ "$_df_contract" = safe ] || return 1
     # Less-interactive also refuses preexisting new targets with no entry in
-    # native state; error-on-conflict alone can silently adopt/overwrite them.
+    # chezmoi's state; error-on-conflict alone can silently adopt/overwrite them.
     # Transport timeouts bound normal network failures; builtin age and closed
-    # stdin avoid unlock prompts. Native output is not a secret-redaction boundary.
+    # stdin avoid unlock prompts. chezmoi's output is not a secret-redaction
+    # boundary.
     # Preserve shared parent modes. Missing parents require reviewed operator
     # preparation before an unattended update can apply their children.
     "$_df_chezmoi" "$@" update --apply --exclude=dirs --recurse-submodules=false </dev/null >/dev/null 2>&1
 )
 
-if ! _dotfiles_native_update; then
+if ! _dotfiles_chezmoi_update; then
     printf '%s\n' '[dotfiles] [warn] Update did not complete; inspect the config, source, backend and destination privately before retrying.' >&2
 fi
 export _DOTFILES_CHECKED=1
-unset -f _dotfiles_native_update
+unset -f _dotfiles_chezmoi_update

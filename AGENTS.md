@@ -7,7 +7,7 @@ six hosts.
 
 - The native chezmoi source is `home/` (`.chezmoiroot`); source names encode `$HOME` paths and attributes (`dot_`, `executable_`, `private_`, `empty_`), and `home/.chezmoiignore` selects each role's targets.
 - Keep persistent worktrees in `.worktrees/`. Follow the global guides for temporary work, preservation and post-integration cleanup.
-- Role variants live in `home/.hosts/<role>/<target path>`, read raw by one-line role-keyed templates; portable AI policy lives in `home/.policy/`. chezmoi never deploys a source dot-directory. Other Linux distributions use the `common-only` role.
+- Role variants live in `home/.hosts/<role>/<target path>`, read raw by one-line role-keyed templates; portable AI policy lives in `home/.policy/`. chezmoi never deploys a source dot-directory. Other Linux distributions use the `generic` role.
 - One source file per target: plain files stay plain (no `.tmpl`, even with `{{` inside), and `tests/fixtures/chezmoi/targets.tsv` lists every target.
 - Root scripts are person-facing setup/check entry points; `scripts/` contains login and person-run hooks, `lib/` sourced/imported code, and `config/` their data. Place files by their caller.
 
@@ -34,7 +34,7 @@ These files are installed on every host, including fresh machines and clusters, 
 
 - Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
 - Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
-- Native install: follow the H7-native/HW-native blocks (`docs/bootstrap.md`; a new home takes Fresh home by hand); convert or recover an existing home only by `docs/chezmoi-migration/takeover.md` and `support-boundary.md`.
+- First deployment: follow the H7-deploy/HW-deploy blocks (`docs/bootstrap.md`; a new home takes Fresh home by hand); convert or recover an existing home only by `docs/chezmoi-migration/takeover.md` and `support-boundary.md`.
 - Install or update the payload repos now: `sync-payloads [ITEM...]`, or `sh scripts/payload-update.sh --now` (Windows: `scripts/payload-update.ps1 -Now`, unelevated)
 - Run checks: `pre-commit run --all-files`
 
@@ -94,7 +94,7 @@ in files outside `docs/chezmoi-migration/` resolving.
 - Verify every setup-host download before use except inspect rows, which a person reads first. HUMAN execution uses digest gates and installers use no-rc flags (PROFILE=/dev/null, NONINTERACTIVE=1). Preserve the documented distinction between pinned downloads/default-branch clones and package managers' current versions.
 - First-party project skills live only in `.claude/skills/` and `.agents/skills/`, with identical bodies.
 - Provisioning shells export DOTFILES_AUTO_UPDATE=0. Test entrypoints use tests/lib/environment.sh/.ps1 to clear inherited DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and _CODING_AGENT_KIT_ prefixes plus XDG_STATE_HOME/XDG_DATA_HOME; preserve DOTFILES_TEST_* inputs. Fixture Git must drop repository/index overrides before mutation. Keep focused linked-worktree isolation and hook-selection tests; do not scan upstream implementation or mirror every variable in every entrypoint.
-- Without `--host` (or the doctor's `--platform`), the host is the `[data]` `host` line of the home's `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2 asking for `--host`); nothing else selects one, and a home without that config exits 2. `common-only` there means: the doctor checks the detected platform without an overlay and warns; setup-host exits 2 asking for `--host`. The Windows twins check `win`.
+- Without `--host` (or the doctor's `--platform`), the host is the `[data]` `host` line of the home's `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2 asking for `--host`); nothing else selects one, and a home without that config exits 2. `generic` there means: the doctor checks the detected platform without an overlay and warns; setup-host exits 2 asking for `--host`. The Windows twins check `win`.
 - HPC environments are built only inside a Slurm allocation, never under `$SCRATCH`.
 
 ## Git and SSH conventions

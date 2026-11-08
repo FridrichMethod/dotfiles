@@ -1,4 +1,4 @@
-"""Native provisioning uses verified tools without the legacy parser runtime."""
+"""Provisioning installs a verified chezmoi and leaves configuration to a person."""
 
 import os
 import hashlib
@@ -18,9 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @unittest.skipIf(os.name == "nt", "Unix provisioning entrypoints")
-class NativeProvisionTests(unittest.TestCase):
+class ProvisionTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="dotfiles-native-provision-")
+        self.tmp = tempfile.TemporaryDirectory(prefix="dotfiles-provision-")
         self.addCleanup(self.tmp.cleanup)
         self.base = Path(self.tmp.name)
         self.home = self.base / "home"
@@ -41,7 +41,7 @@ class NativeProvisionTests(unittest.TestCase):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("S4-chezmoi", result.stdout)
-        self.assertIn("H7-native", result.stdout)
+        self.assertIn("H7-deploy", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_unconfigured_home_needs_host(self):
@@ -53,7 +53,7 @@ class NativeProvisionTests(unittest.TestCase):
                 self.assertIn(text, result.stderr)
                 self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_sherlock_plan_uses_static_binary_for_legacy_glibc(self):
+    def test_sherlock_plan_uses_static_binary_for_old_glibc(self):
         # The real host has glibc 2.17; the generic v2.74 binary requires 2.34.
         for host, platform in (("sherlock", "linux-musl"), ("marlowe", "linux"),
                                ("lab-ubuntu", "linux"), ("wsl-ubuntu", "linux")):
@@ -79,10 +79,10 @@ step_S4_chezmoi_plan
         self.assertEqual(result.returncode, 0, result.stderr)
         ids = {line.split("\t")[0] for line in result.stdout.splitlines()}
         self.assertIn("chezmoi", ids)
-        self.assertIn("native-config", ids)
+        self.assertIn("chezmoi-config", ids)
         self.assertEqual(list(self.home.iterdir()), [])
 
-    def test_native_handoff_only_prints_reviewed_procedure(self):
+    def test_deploy_step_only_prints_reviewed_procedure(self):
         result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--print-manual")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("# Follow Fresh home by hand in docs/bootstrap.md from this checkout.", result.stdout)
@@ -100,10 +100,10 @@ step_S4_chezmoi_plan
         return sorted((str(path.relative_to(self.home)), path.lstat().st_mtime_ns)
                       for path in self.home.rglob("*"))
 
-    def test_native_role_selects_host_without_receipt_or_environment(self):
+    def test_config_role_selects_host_without_environment(self):
         self.write_config("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
-        for script, step in (("doctor.sh", "native-config"), ("setup-host.sh", "H7-native")):
+        for script, step in (("doctor.sh", "chezmoi-config"), ("setup-host.sh", "H7-deploy")):
             with self.subTest(script=script):
                 explicit = self.run_script(script, "--host", "lab-ubuntu", "--list")
                 other = self.run_script(script, "--host", "sherlock", "--list")
@@ -114,22 +114,22 @@ step_S4_chezmoi_plan
                 self.assertEqual(resolved.stdout, explicit.stdout)
         self.assertEqual(self.home_snapshot(), before)
 
-    def test_native_common_only_role_is_common_only(self):
+    def test_generic_role_selects_no_host_overlay(self):
         os_release = self.base / "os-release"
         os_release.write_text("ID=ubuntu\n")
         self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
-        self.write_config("[data]", 'host = "common-only"')
+        self.write_config("[data]", 'host = "generic"')
         doctor = self.run_script("doctor.sh", "--list")
         self.assertEqual(doctor.returncode, 0, doctor.stderr)
-        self.assertIn("selects [data].host common-only (no host overlay): checking as --platform debian",
+        self.assertIn("selects [data].host generic (no host overlay): checking as --platform debian",
                       doctor.stderr)
         setup = self.run_script("setup-host.sh", "--list")
         self.assertEqual(setup.returncode, 2, setup.stderr)
-        self.assertIn("selects [data].host common-only (no host overlay)", setup.stderr)
+        self.assertIn("selects [data].host generic (no host overlay)", setup.stderr)
         self.assertIn("pass --host HOST", setup.stderr)
         self.assertEqual(self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list").returncode, 0)
 
-    def test_native_home_without_one_role_requires_host(self):
+    def test_configured_home_without_one_role_requires_host(self):
         for lines in (("[git]", "autoAdd = false"), ("[data]", "host = 'fedora'"),
                       ("[data]", "host = 'mac'", "host = 'lab-ubuntu'")):
             with self.subTest(lines=lines):
@@ -141,33 +141,33 @@ step_S4_chezmoi_plan
                 self.assertEqual(setup.returncode, 2, setup.stderr)
                 self.assertIn("selects no single known [data].host; pass --host HOST", setup.stderr)
 
-    def check_h7_native(self):
+    def check_h7_deploy(self):
         # --check refuses a machine that is not the host: pin Ubuntu (macOS CI).
         os_release = self.base / "os-release"
         os_release.write_text("ID=ubuntu\n")
         self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
-        return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-native")
+        return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-deploy")
 
-    def test_configured_home_reports_h7_native_done(self):
+    def test_configured_home_reports_h7_deploy_done(self):
         self.write_config("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
-        result = self.check_h7_native()
+        result = self.check_h7_deploy()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertRegex(result.stdout, r"(?m)^H7-native done ")
+        self.assertRegex(result.stdout, r"(?m)^H7-deploy done ")
         self.assertEqual(self.home_snapshot(), before)
         other = self.base / "other-checkout"
         other.mkdir()
         (other / ".chezmoiroot").write_text("home\n")
         self.write_config("[data]", "host = 'lab-ubuntu'", source=other.resolve())
-        result = self.check_h7_native()
+        result = self.check_h7_deploy()
         self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
-        self.assertRegex(result.stdout, r"(?m)^H7-native human ")
+        self.assertRegex(result.stdout, r"(?m)^H7-deploy human ")
 
-    def test_native_role_reader_accepts_chezmoi_init_output(self):
+    def test_role_reader_accepts_chezmoi_init_output(self):
         # The doctor's text reader and the login updater's source lookup
         # against the real init rendering (toToml), also from a seed with a
         # case variant of sourceDir (the template folds it) and mode symlink.
-        roles = ("common-only", "mac" if sys.platform == "darwin" else "lab-ubuntu")
+        roles = ("generic", "mac" if sys.platform == "darwin" else "lab-ubuntu")
         guard = '. "$1/lib/chezmoi-guard.sh"; dotfiles_chezmoi_source "$2"'
         for role in roles:
             for seed in ("", 'SOURCEDIR = "/elsewhere"\nmode = "symlink"\n'):
@@ -181,7 +181,7 @@ step_S4_chezmoi_plan
                     (self.home / ".config/chezmoi").mkdir(parents=True, exist_ok=True)
                     (self.home / ".config/chezmoi/chezmoi.toml").write_bytes(rendered)
                     reader = subprocess.run(
-                        [shutil.which("bash"), "-c", '. "$1/lib/bootstrap/platform.sh"; bootstrap_native_host', "_",
+                        [shutil.which("bash"), "-c", '. "$1/lib/bootstrap/platform.sh"; bootstrap_config_host', "_",
                          str(ROOT)], env=self.env, text=True, capture_output=True, stdin=subprocess.DEVNULL,
                         check=False)
                     self.assertEqual(reader.returncode, 0, reader.stderr)
@@ -236,7 +236,7 @@ step_S4_chezmoi_check
 '''], env=self.env, text=True, capture_output=True, stdin=subprocess.DEVNULL, check=False,
         )
 
-    def test_install_verified_archive_without_parser_or_config_apply(self):
+    def test_install_verified_archive_without_config_apply(self):
         _repo, executable = self.archive_fixture()
         result = self.run_install()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -268,7 +268,7 @@ step_S4_chezmoi_check
         self.assertEqual(outside.read_text(), "foreign binary")
         self.assertTrue(destination.is_symlink())
 
-    def test_native_doctor_real_version_probe_is_write_free(self):
+    def test_doctor_real_version_probe_is_write_free(self):
         binary = os.environ.get("DOTFILES_TEST_CHEZMOI")
         if not binary or not Path(binary).is_file():
             self.skipTest("DOTFILES_TEST_CHEZMOI is required for the real binary no-write probe")
@@ -280,7 +280,7 @@ step_S4_chezmoi_check
         shutil.copy2(ROOT / "doctor.sh", repo / "doctor.sh")
         (repo / "config/bootstrap/tools.tsv").write_text(
             "id\ttier\thosts\tprobe\tversion_flag\tfloor\tabsent\tdoc\n"
-            "chezmoi\tcore\tall\tchezmoi\t--version\t2.74.0\tmissing native tool\tS4-chezmoi\n"
+            "chezmoi\tcore\tall\tchezmoi\t--version\t2.74.0\tchezmoi is missing\tS4-chezmoi\n"
         )
         local = self.home / ".local/bin"
         local.mkdir(parents=True)

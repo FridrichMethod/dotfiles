@@ -7,7 +7,7 @@
 # Sourced after common.sh; same portability rules. The policy follows
 # docs/bootstrap.md "HUMAN blocks" and "Running it with an agent": the
 # harness stands in for the person who approves the sudo and inspect blocks
-# and who does the H7-native handover with the agent, and it can neither
+# and who does the H7-deploy step with the agent, and it can neither
 # sign in, answer a dialog, change a login shell nor take a Slurm
 # allocation.
 
@@ -20,8 +20,8 @@
 # printf %q word (steps_quote): the characters %q leaves alone, and a
 # backslash before any other printable one or a space; the $'...' form %q
 # uses for control characters, and anything unescaped that the shell would
-# act on, is refused. The H7-native block holds notes only: the handover runs
-# the documented procedure (steps.sh e2e_step_native_handover), never a
+# act on, is refused. The H7-deploy block holds notes only: the deploy step runs
+# the documented procedure (steps.sh e2e_step_home_deploy), never a
 # block line.
 E2E_GATE_RE='^printf '\''%s  %s\\n'\'' [0-9a-f]{64} .+ \| (sha256sum|shasum -a 256) -c --status - && bash '
 E2E_QWORD_RE='([A-Za-z0-9_./+=:@%,-]|\\[^A-Za-z0-9_/[:space:]]|\\ )+'
@@ -119,9 +119,9 @@ e2e_failure_detail() {
 # e2e_block_policy ID KIND: the harness action for a block. run-all: every
 # command line, in order (the sudo blocks a person approves as a whole).
 # run-gate: only the digest-gated line (the person read the script; the
-# harness runs it as printed). handover: the H7-native block, whose lines
+# harness runs it as printed). deploy: the H7-deploy block, whose lines
 # are notes and are never run line by line; once it alone is pending and a
-# run applied nothing, the loop ends and the native-handover step runs the
+# run applied nothing, the loop ends and the home-deploy step runs the
 # documented Fresh home by hand procedure. alloc: never run; E2E_ALLOC_ENV
 # stands in for the allocation. skip: a reminder for the person (sign-in,
 # chsh, a dialog, a choice the harness must not make). fail: a block the
@@ -132,7 +132,7 @@ e2e_block_policy() {
     case $1:$2 in
         H1-apt-core:sudo | H1-locale:sudo | H1-linuxbrew:sudo | H1-homebrew:sudo) printf 'run-all\n' ;;
         S5-claude:inspect) printf 'run-gate\n' ;;
-        H7-native:judgment) printf 'handover\n' ;;
+        H7-deploy:judgment) printf 'deploy\n' ;;
         H2-alloc:alloc) printf 'alloc\n' ;;
         S2-modules:judgment | H7-payloads:judgment | H7-doctor:judgment | H7-auth:auth | \
             H1-fcitx5:gui | H7-chsh:chsh) printf 'skip\n' ;;
@@ -143,7 +143,7 @@ e2e_block_policy() {
 # e2e_block_lines ACTION HOST FILE: the command lines of block FILE that
 # ACTION lets the harness run, one per line, in order. A "# " line is a note
 # and never counts. run-gate wants exactly one gated line (e2e_gate_line)
-# and nothing but notes besides it; every other action (a handover, a
+# and nothing but notes besides it; every other action (a deploy, a
 # skip) selects no line, even from a block of notes only. HOST names the
 # host the block was printed for. Returns 1 with the reason in
 # E2E_BLOCK_ERROR and printed, since the caller captures the output with
@@ -193,9 +193,9 @@ e2e_block_lines() {
 # of its "HUMAN steps pending:" line, whether a printed block gives the
 # harness something to do (1) and whether a step applied (1). blocks: exit
 # 3 with such a block; rerun: exit 3, nothing to do but a step applied;
-# done: exit 3, nothing to do, nothing applied and H7-native alone pending,
-# the handover's turn; stuck: any other exit 3; early: exit 0, which a fresh
-# home cannot reach before its handover; error: exit 1 or 2; timeout:
+# done: exit 3, nothing to do, nothing applied and H7-deploy alone pending,
+# the deploy step's turn; stuck: any other exit 3; early: exit 0, which a fresh
+# home cannot reach before its first apply; error: exit 1 or 2; timeout:
 # anything else (124 after the limit).
 e2e_loop_next() {
     case $1 in
@@ -204,7 +204,7 @@ e2e_loop_next() {
                 printf 'blocks\n'
             elif [ "$4" = 1 ]; then
                 printf 'rerun\n'
-            elif [ "$2" = H7-native ]; then
+            elif [ "$2" = H7-deploy ]; then
                 printf 'done\n'
             else
                 printf 'stuck\n'

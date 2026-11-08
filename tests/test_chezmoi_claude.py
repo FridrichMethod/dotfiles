@@ -1,4 +1,4 @@
-"""Real native Claude transforms with isolated homes and no child tools."""
+"""Real chezmoi Claude settings transforms with isolated homes and no child tools."""
 
 from decimal import Decimal
 import json
@@ -25,9 +25,9 @@ def metadata(st):
             st.st_nlink, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
-class ClaudeNativeTests(unittest.TestCase):
+class ClaudeSettingsTests(unittest.TestCase):
     def fixture(self):
-        return SourceFixture("win" if os.name == "nt" else "common-only")
+        return SourceFixture("win" if os.name == "nt" else "generic")
 
     def prepare(self, fixture, live=None, portable=None):
         self.assertIn(TARGET, expected_entries(fixture.host))
@@ -96,7 +96,7 @@ class ClaudeNativeTests(unittest.TestCase):
             self.assertEqual(snapshot(fixture.source), before)
 
     def test_stale_host_settings_render_the_portable_policy(self):
-        # A stale live host file, rendered natively:
+        # A stale live host file, rendered by the modify template:
         # policy keys come from the portable file, plugin-copied hooks clear,
         # and machine-local keys stay.
         copied = [{"hooks": [{"type": "command", "command": "old-plugin-copy"}]}]
@@ -210,7 +210,7 @@ class ClaudeNativeTests(unittest.TestCase):
             target = self.prepare(fixture, portable=b'')
             self.assert_rejected(fixture, target)
 
-    def test_duplicate_keys_use_native_last_value_in_both_documents(self):
+    def test_duplicate_keys_use_the_last_value_in_both_documents(self):
         with self.fixture() as fixture:
             target = self.prepare(
                 fixture, b'{"local":1,"local":2,"nested":{"keep":false,"keep":true}}',
@@ -311,7 +311,7 @@ class ClaudeNativeTests(unittest.TestCase):
                 self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
             self.assertEqual(target.read_bytes(), duplicated)
 
-    def test_native_typed_equality_ignores_object_order_but_not_types_or_tokens(self):
+    def test_typed_equality_ignores_object_order_but_not_types_or_tokens(self):
         cases = (('{"a":1,"b":[true,null,{}]}', '{"b":[true,null,{}],"a":1}', "true"),
                  ('{"a":"\\u00e9"}', '{"a":"é"}', "true"),
                  ('{"a":1}', '{"a":"1"}', "false"), ('{"a":true}', '{"a":"true"}', "false"),

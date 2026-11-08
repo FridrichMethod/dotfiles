@@ -1,8 +1,8 @@
 #Requires -Version 7.0
-# Native login update. Dot-sourcing defines the callable worker for fixtures.
+# Login update. Dot-sourcing defines the callable function for fixtures.
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/chezmoi-guard.ps1')
 
-function Invoke-DotfilesNativeProcess {
+function Invoke-DotfilesUpdateProcess {
     param([string]$Program, [string[]]$Arguments, [object]$Paths)
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $Program
@@ -42,17 +42,18 @@ function Invoke-DotfilesNativeProcess {
         $stderr = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit(60000)) {
             $process.Kill($true)
-            throw 'Native update timed out.'
+            throw 'Update timed out.'
         }
-        # Native stderr/diff can contain secrets. Only the caller sees stdout,
-        # which it consumes as a scoped Boolean or a clean-tree status.
+        # chezmoi and git stderr or diff output can contain secrets. Only the
+        # caller sees stdout, which it consumes as a scoped Boolean or a
+        # clean-tree status.
         [void]$stderr.GetAwaiter().GetResult()
         return [pscustomobject]@{ Code = $process.ExitCode; Output = $stdout.GetAwaiter().GetResult() }
     }
     finally { $process.Dispose() }
 }
 
-function Invoke-DotfilesNativeUpdate {
+function Invoke-DotfilesChezmoiUpdate {
     param([string]$HomePath = $HOME)
     if ($env:_DOTFILES_CHECKED -or $env:DOTFILES_AUTO_UPDATE -eq '0') { return }
     $chezmoi = $null
@@ -61,27 +62,27 @@ function Invoke-DotfilesNativeUpdate {
         $env:_DOTFILES_CHECKED = '1'
         $paths = Get-DotfilesChezmoiPaths $HomePath
         if (-not [IO.File]::Exists($paths.State) -or ([IO.FileInfo]$paths.State).Length -eq 0) {
-            [Console]::Error.WriteLine('[dotfiles] Native state is missing or empty; inspected recovery is required before automatic update.')
+            [Console]::Error.WriteLine('[dotfiles] Update skipped: the chezmoi state is missing or empty; inspected recovery is required before automatic update.')
             return
         }
         if ($paths.Source -match '(?i)OneDrive') {
-            [Console]::Error.WriteLine('[dotfiles] Native update skipped: use the documented independent-clone procedure for OneDrive.')
+            [Console]::Error.WriteLine('[dotfiles] Update skipped: use the documented independent-clone procedure for OneDrive.')
             return
         }
         # Only the provisioned executable, verified and held open until both
         # chezmoi runs have exited (finally below); never a PATH match.
-        $chezmoi = Open-DotfilesNativeChezmoi $paths.Destination
+        $chezmoi = Open-DotfilesChezmoi $paths.Destination
         if ($null -eq $chezmoi) {
-            [Console]::Error.WriteLine('[dotfiles] Native update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators (docs/bootstrap.md W1-chezmoi).')
+            [Console]::Error.WriteLine('[dotfiles] Update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators (docs/bootstrap.md W1-chezmoi).')
             return
         }
         $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
-        $root = Invoke-DotfilesNativeProcess $git.Source @('-C', $paths.Source, 'rev-parse', '--show-toplevel') $paths
+        $root = Invoke-DotfilesUpdateProcess $git.Source @('-C', $paths.Source, 'rev-parse', '--show-toplevel') $paths
         if ($root.Code -ne 0 -or -not $root.Output.Trim() -or
             -not (Resolve-DotfilesDirectory $root.Output.Trim()).Equals($paths.Source, [StringComparison]::OrdinalIgnoreCase)) {
             throw 'Git working tree differs from the configured sourceDir.'
         }
-        $clean = Invoke-DotfilesNativeProcess $git.Source @('-C', $paths.Source, 'status', '--porcelain=v1', '--untracked-files=all') $paths
+        $clean = Invoke-DotfilesUpdateProcess $git.Source @('-C', $paths.Source, 'status', '--porcelain=v1', '--untracked-files=all') $paths
         if ($clean.Code -ne 0 -or $clean.Output) { throw 'Source is not clean.' }
         $arguments = @('--source', $paths.Source, '--working-tree', $paths.Source, '--destination', $paths.Destination,
             '--config', $paths.Config, '--cache', $paths.Cache, '--persistent-state', $paths.State,
@@ -91,17 +92,17 @@ function Invoke-DotfilesNativeUpdate {
             '(eq (toJson .chezmoi.config.update.args) (toJson (list "-c" "rebase.autoStash=false" "-c" "merge.autoStash=false" "pull" "--ff-only" "--no-rebase" "--no-autostash" "--no-recurse-submodules"))) ' +
             '(not .chezmoi.config.update.recurseSubmodules) .chezmoi.config.update.apply ' +
             '(not .chezmoi.config.git.autoadd) (not .chezmoi.config.git.autocommit) (not .chezmoi.config.git.autopush) }}'
-        $config = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('execute-template', $safeConfig)) $paths
-        if ($config.Code -ne 0 -or $config.Output.Trim() -cne 'true') { throw 'Native update configuration is unsafe.' }
-        $updated = Invoke-DotfilesNativeProcess $chezmoi.Name ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $paths
-        if ($updated.Code -ne 0) { throw 'Native update failed.' }
+        $config = Invoke-DotfilesUpdateProcess $chezmoi.Name ($arguments + @('execute-template', $safeConfig)) $paths
+        if ($config.Code -ne 0 -or $config.Output.Trim() -cne 'true') { throw 'Update configuration is unsafe.' }
+        $updated = Invoke-DotfilesUpdateProcess $chezmoi.Name ($arguments + @('update', '--apply', '--exclude=dirs', '--recurse-submodules=false')) $paths
+        if ($updated.Code -ne 0) { throw 'Update failed.' }
     }
     catch {
-        [Console]::Error.WriteLine('[dotfiles] Native update skipped or failed; review the source, configuration and destination privately.')
+        [Console]::Error.WriteLine('[dotfiles] Update skipped or failed; review the source, configuration and destination privately.')
     }
     finally { if ($null -ne $chezmoi) { $chezmoi.Dispose() } }
 }
 
 if ($MyInvocation.InvocationName -ne '.' -and -not [Console]::IsOutputRedirected) {
-    Invoke-DotfilesNativeUpdate
+    Invoke-DotfilesChezmoiUpdate
 }

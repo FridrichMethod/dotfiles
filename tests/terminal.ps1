@@ -92,20 +92,20 @@ try {
         $outputText = Invoke-LogChild $emit @{ DOTFILES_COLOR = 'always'; NO_COLOR = '' }
         Assert-True ($outputText.Contains("$([char]27)[1;36m")) 'Empty NO_COLOR disabled forced color.'
     }
-    Test-Case 'worker-style all-stream redirection captures all badges as plain text' {
+    Test-Case 'all-stream redirection to a log captures all badges as plain text' {
         $outputText = Invoke-LogChild @'
 $ErrorActionPreference = 'Stop'
 . (Join-Path $env:DOTFILES_TEST_ROOT 'lib/terminal.ps1')
-$log = Join-Path $env:DOTFILES_TEST_TEMP 'worker.log'
+$log = Join-Path $env:DOTFILES_TEST_TEMP 'task.log'
 & {
-    foreach ($level in @('step', 'ok', 'warn', 'error', 'info')) { Write-DotfilesLog $level 'worker message' }
+    foreach ($level in @('step', 'ok', 'warn', 'error', 'info')) { Write-DotfilesLog $level 'task message' }
     Write-Output 'native-style output'
 } *> $log
 [Console]::Out.Write([IO.File]::ReadAllText($log))
 '@
         Assert-True (-not $outputText.Contains([string][char]27)) 'Task log contains ANSI.'
         foreach ($level in @('step', 'ok', 'warn', 'error', 'info')) {
-            Assert-True ($outputText.Contains("[dotfiles] [$level] worker message")) "Task log lost $level."
+            Assert-True ($outputText.Contains("[dotfiles] [$level] task message")) "Task log lost $level."
         }
         Assert-True ($outputText.Contains('native-style output')) 'Task log lost non-logger output.'
     }

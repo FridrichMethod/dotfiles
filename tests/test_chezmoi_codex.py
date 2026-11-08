@@ -1,4 +1,4 @@
-"""Native Codex ownership and TOML safety, using only disposable native homes."""
+"""Codex config ownership and TOML safety, using only disposable homes."""
 
 import json
 import os
@@ -39,7 +39,7 @@ TYPE_CHECKS = {
 }
 PORTABLE = ROOT / "home/.policy/codex-config.toml"
 MANIFEST = ROOT / "home/.chezmoidata/codex-policy.json"
-HOST = "win" if os.name == "nt" else "common-only"
+HOST = "win" if os.name == "nt" else "generic"
 
 
 def at_path(document, path):
@@ -49,7 +49,7 @@ def at_path(document, path):
 
 
 def policy_text(changes=None, missing=None):
-    """Synthetic policy with independently addressable required native paths."""
+    """Synthetic policy with independently addressable required owned paths."""
     portable = tomllib.loads(PORTABLE.read_text(encoding="utf-8"))
     changes = {} if changes is None else changes
     lines = []
@@ -71,7 +71,7 @@ def leaves(table, prefix=()):
 
 class CodexPolicyMetadataTests(unittest.TestCase):
     def test_metadata_matches_the_frozen_paths_and_types_without_values(self):
-        self.assertTrue(MANIFEST.is_file(), "native Codex ownership manifest is missing")
+        self.assertTrue(MANIFEST.is_file(), "Codex ownership manifest is missing")
         expected = {"codexPolicy": {
             "owned": [{"path": list(path), "type": kind} for path, kind in POLICY],
         }}
@@ -88,7 +88,7 @@ class CodexPolicyMetadataTests(unittest.TestCase):
                 self.assertTrue(TYPE_CHECKS[kind](actual[path]), f"{path} is not {kind}")
 
 
-class CodexNativeTests(unittest.TestCase):
+class CodexConfigTests(unittest.TestCase):
     def prepare(self, fixture, live=None, portable=None):
         target = fixture.destination / ".codex/config.toml"
         self.assertIn(".codex/config.toml", expected_entries(HOST))
@@ -114,7 +114,7 @@ class CodexNativeTests(unittest.TestCase):
         self.assertEqual(snapshot(fixture.source), source_before)
         return result
 
-    def test_native_round_trip_retains_unknown_types_and_exact_ownership(self):
+    def test_round_trip_retains_unknown_types_and_exact_ownership(self):
         initial = '''# Canonical output intentionally replaces comments.
 model = "old"
 local_mode = "old"
@@ -218,7 +218,7 @@ local_model = 4
                     self.assertEqual(metadata(target.stat()), metadata(before))
                 self.assertEqual(snapshot(fixture.source), source_before)
 
-    def test_native_semantic_equality_distinguishes_integer_float_and_nan(self):
+    def test_semantic_equality_distinguishes_integer_float_and_nan(self):
         with SourceFixture(HOST) as fixture:
             for left, right, expected in (("value = 1", "value = 1.0", "false"),
                                           ("value = nan", "value = nan", "false"),

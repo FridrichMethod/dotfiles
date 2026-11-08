@@ -1,13 +1,13 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # E2E_BROKEN is read by common.sh and steps.sh
 # The other-Linux flow of tests/e2e/inside.sh (Fedora, no overlay): the
-# native docs/bootstrap.md X-other-linux route done as the person does it:
+# docs/bootstrap.md X-other-linux route done as the person does it:
 # the distribution's packages, the fetch_pinned and clone_listed helpers
 # taken from the clone's own docs, the clone loop, the bat theme, the vim
-# dirs, the by-hand S4-chezmoi line, then the common-only role deployed by
-# hand (native_handover common-only, Fresh home by hand), the login shell,
-# the payload repos, the native convergence check, the doctor, the
-# common-only negatives, the isolated native fixtures and the audits.
+# dirs, the by-hand S4-chezmoi line, then the generic role deployed by
+# hand (home_deploy generic, Fresh home by hand), the login shell,
+# the payload repos, the convergence check, the doctor, the
+# generic negatives, the isolated chezmoi fixtures and the audits.
 # Sourced after steps.sh; same portability rules.
 
 E2E_HELPERS='' # the helper functions extracted from docs/bootstrap.md
@@ -110,8 +110,8 @@ e2e_step_chezmoi() {
     e2e_by_hand chezmoi "$E2E_CHEZMOI_LINE" e2e_chezmoi_version
 }
 
-# e2e_step_handover_common_only: the native handover of the common-only role.
-e2e_step_handover_common_only() { e2e_step_native_handover common-only; }
+# e2e_step_deploy_generic: the first apply of the generic role.
+e2e_step_deploy_generic() { e2e_step_home_deploy generic; }
 
 # e2e_flow_other: the whole sequence for a Linux without an overlay.
 e2e_flow_other() {
@@ -123,13 +123,13 @@ e2e_flow_other() {
     e2e_or_skip bat-theme e2e_step_bat_theme
     e2e_or_skip dirs e2e_step_dirs
     e2e_or_skip chezmoi e2e_step_chezmoi
-    e2e_or_skip native-handover e2e_step_handover_common_only
+    e2e_or_skip home-deploy e2e_step_deploy_generic
     e2e_or_skip login-shell e2e_step_login_shell
     e2e_or_skip payloads e2e_step_payloads
-    e2e_or_skip native-converged e2e_step_native_converged
+    e2e_or_skip home-converged e2e_step_home_converged
     e2e_or_skip doctor-final e2e_step_doctor_final
     e2e_or_skip doctor-smoke e2e_step_doctor_smoke
     e2e_negatives
-    e2e_or_skip native-fixtures e2e_step_native_fixtures
+    e2e_or_skip chezmoi-fixtures e2e_step_chezmoi_fixtures
     e2e_audits
 }

@@ -644,7 +644,7 @@ Write-Output '--- payload commands follow the home chezmoi config'
 # checkout at ~\dotfiles or its guard) and pass its exit status through; a
 # home without a config and a config the guard refuses run no hook;
 # maintenance surfaces the configured hook's own refusal.
-$syncRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-sync-test-" + [guid]::NewGuid().ToString('N'))
+$syncRoot = Join-Path ([IO.Path]::GetTempPath()) ("dotfiles-payload-commands-test-" + [guid]::NewGuid().ToString('N'))
 try {
     $syncHome = Join-Path $syncRoot 'home'
     $configured = Join-Path $syncRoot 'configured source'

@@ -107,15 +107,15 @@ class FoundationTests(unittest.TestCase):
                 expression += f" {json.dumps(name)} (env {json.dumps(name)})"
             expression += " | toJson }}"
             child = json.loads(self.successful(fixture, "execute-template", expression).stdout)
-            native_paths = {
+            explicit_paths = {
                 "CHEZMOI_SOURCE_DIR": fixture.source,
                 "CHEZMOI_DEST_DIR": fixture.destination,
                 "CHEZMOI_CACHE_DIR": fixture.cache,
             }
             for name in inherited:
-                if name in native_paths:
-                    # Native chezmoi exports its selected directories itself.
-                    self.assertEqual(Path(child[name]), native_paths[name])
+                if name in explicit_paths:
+                    # chezmoi exports its selected directories itself.
+                    self.assertEqual(Path(child[name]), explicit_paths[name])
                 elif name.startswith(("CHEZMOI", "GIT_")) or name in (
                     "SSH_AUTH_SOCK", "HTTPS_PROXY", "AWS_SECRET_ACCESS_KEY", "OP_SESSION_synthetic",
                 ):
@@ -161,7 +161,7 @@ class FoundationTests(unittest.TestCase):
 
 
 class FixturePrerequisiteTests(unittest.TestCase):
-    def test_native_child_stdin_is_closed_unless_input_is_explicit(self):
+    def test_child_stdin_is_closed_unless_input_is_explicit(self):
         with ChezmoiFixture() as fixture:
             environment = dict(fixture.env, DOTFILES_TEST_CHEZMOI=str(fixture.binary))
             script = (

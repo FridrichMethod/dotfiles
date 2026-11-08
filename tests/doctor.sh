@@ -216,7 +216,7 @@ row() {
 
 # --- fixture checkout and home -------------------------------------------
 
-# A checkout without submodules, as dotfiles is, with two native sources.
+# A minimal checkout, without submodules as dotfiles is, with two source files.
 mkdir -p "$FIXTURE/home"
 for name in dot_zshrc dot_gitconfig; do
     printf '# fixture %s\n' "$name" >"$FIXTURE/home/$name"
@@ -230,7 +230,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 mkdir -p "$TEST_HOME/.oh-my-zsh/custom/plugins/demo/src" \
     "$TEST_HOME/.config/bat/themes" "$TEST_HOME/.local/bin"
-# The rc files a native apply deploys: regular files in $HOME.
+# The rc files chezmoi apply deploys: regular files in $HOME.
 for name in .zshrc .profile .gitconfig; do
     printf '# fixture %s\n' "$name" >"$TEST_HOME/$name"
 done
@@ -398,7 +398,7 @@ printf 'ID=ubuntu\nID_LIKE=debian\n' >"$OS_UBUNTU"
 # --- a home whose chezmoi config names the fixture checkout ---------------
 
 # The local config names this home and the fixture checkout in the top-level
-# lines chezmoi init writes, and selects the role, so native-config is ok
+# lines chezmoi init writes, and selects the role, so chezmoi-config is ok
 # from here on.
 MAINTENANCE_DIR=$TEST_HOME/.config/dotfiles
 CHEZMOI_CONFIG=$TEST_HOME/.config/chezmoi/chezmoi.toml
@@ -426,10 +426,10 @@ assert_tsv_shape
 [ ! -s "$OUT/$CASE.err" ] ||
     case_fail "--tsv wrote to stderr"
 for id in git fzf zsh alt brew-only oh-my-zsh demo-plugin bat-theme gh tldr claude codex \
-    locale native-config path-order rc-pollution omz-order nvm-homebrew payloads; do
+    locale chezmoi-config path-order rc-pollution omz-order nvm-homebrew payloads; do
     assert_row "$id" ok '' -
 done
-assert_row native-config ok '~/.config/chezmoi/chezmoi.toml names this home and this checkout' -
+assert_row chezmoi-config ok '~/.config/chezmoi/chezmoi.toml names this home and this checkout' -
 assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
 assert_row alt ok "1.2.3 >= 1.0 at $FAKE_BIN/doctor-alt"
 assert_row brew-only ok "at $BREW_BIN/doctor-brew-only"
@@ -797,7 +797,7 @@ cp "$TEST_HOME/.local/bin/kitty" "$TEST_HOME/.local/bin/doctor-local" "$TEST_TMP
 run_doctor path-shadow "PATH=$TEST_TMP/miniforge3/bin:$BASE_PATH" -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row path-order warn "1 command(s) in ~/.local/bin are shadowed by an earlier PATH entry: $TEST_TMP/miniforge3/bin/kitty;" \
-    'docs/bootstrap.md H7-native'
+    'docs/bootstrap.md H7-deploy'
 rm "$TEST_TMP/miniforge3/bin/doctor-local"
 # The same file under another name for its directory is no shadow.
 ln -s "$TEST_HOME/.local/bin" "$TEST_TMP/local-alias"
@@ -809,10 +809,10 @@ run_doctor path-own-prepend "HOMEBREW_PREFIX=$TEST_TMP/brew" -- --host lab-ubunt
 assert_row path-order ok
 assert_row brew-only ok
 run_doctor path-no-local-bin "PATH=$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --tsv
-assert_row path-order warn 'PATH lacks ~/.local/bin; the dotfiles ~/.profile prepends it' 'docs/bootstrap.md H7-native'
+assert_row path-order warn 'PATH lacks ~/.local/bin; the dotfiles ~/.profile prepends it' 'docs/bootstrap.md H7-deploy'
 # ~/.local/bin joins this process's PATH, ahead of Homebrew's bin as in the
 # dotfiles shells, so what setup-host linked there is found before the
-# handover; path-order above still judges the caller's PATH.
+# dotfiles are applied; path-order above still judges the caller's PATH.
 assert_rc 0
 assert_row local-tool ok "2.0 at $TEST_HOME/.local/bin/doctor-local"
 write_fake "$TEST_HOME/.local/bin/doctor-brew-only" <<'SH'
@@ -871,7 +871,7 @@ assert_row rc-pollution human '~/.bashrc has an nvm installer loader'
 restore_rc
 
 # The doctor reads only the home rc files: checkout changes are setup-host's
-# guard and the native updater's clean-tree refusal (D-14).
+# guard and the login updater's clean-tree refusal.
 printf '# local edit\n' >>"$FIXTURE/home/dot_gitconfig"
 printf 'new\n' >"$FIXTURE/new-file"
 run_doctor rc-checkout-dirty -- --host lab-ubuntu --tsv
@@ -1007,7 +1007,7 @@ assert_quiet_events '--list probed tools with the real manifest on --platform ot
 # index, the login updater's fetch, a parallel session) may write there at
 # any time, and the read-only fixture cases below already cover the doctor's
 # own git, whose find includes the fixture's .git. The exit code depends on
-# what this machine has installed: 0 or 1, never 2. Its native-config row is
+# what this machine has installed: 0 or 1, never 2. Its chezmoi-config row is
 # human in the empty home.
 REAL_HOME="$TEST_TMP/real-home"
 REAL_TMP="$TEST_TMP/real-tmp"
@@ -1016,7 +1016,7 @@ REAL_MARKER="$TEST_TMP/real.marker"
 mkdir "$REAL_HOME" "$REAL_TMP"
 DOC_STEPS=$(sed -n 's/^### \([A-Za-z0-9-]*\):.*/\1/p' "$REPO_ROOT/docs/bootstrap.md")
 real_doctor_case() {
-    local fix changed required='git locale native-config rc-pollution'
+    local fix changed required='git locale chezmoi-config rc-pollution'
     CASE=$1
     shift
     touch -t 200001010000 "$REAL_HOME" "$REAL_TMP" "$REAL_REF"
@@ -1054,8 +1054,8 @@ real_doctor_case() {
     changed=$(find "$REPO_ROOT" -name .git -prune -o -newer "$REAL_MARKER" -print)
     [ -z "$changed" ] || case_fail "the real doctor wrote into the checkout: $changed"
 }
-real_doctor_case real-native-debian --platform debian --tsv
-real_doctor_case real-native-other --platform other --tsv
+real_doctor_case real-platform-debian --platform debian --tsv
+real_doctor_case real-platform-other --platform other --tsv
 
 # --- read-only and offline -----------------------------------------------------
 
@@ -1124,36 +1124,36 @@ assert_rc 2
 
 # --- chezmoi config causes and host resolution ------------------------------
 
-run_doctor native-list -- --host lab-ubuntu --list
+run_doctor list-configured -- --host lab-ubuntu --list
 assert_rc 0
-assert_out "$(printf 'native-config\tcore\tcheck\t-\tH7-native')"
-assert_out "$(printf 'path-order\tcore\tcheck\t-\tH7-native')"
-assert_quiet_events 'native --list probed tools'
+assert_out "$(printf 'chezmoi-config\tcore\tcheck\t-\tH7-deploy')"
+assert_out "$(printf 'path-order\tcore\tcheck\t-\tH7-deploy')"
+assert_quiet_events 'configured --list probed tools'
 
-# native-config names its cause, and writes nothing. Only a config naming
+# chezmoi-config names its cause, and writes nothing. Only a config naming
 # another checkout (a worktree or second clone runs this doctor) warns; the
 # rest is for a person.
-NATIVE_REF=$TEST_TMP/native.ref
-: >"$NATIVE_REF"
-run_doctor native-config-ok -- --host lab-ubuntu --tsv
+WRITE_REF=$TEST_TMP/write.ref
+: >"$WRITE_REF"
+run_doctor chezmoi-config-ok -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row native-config ok '~/.config/chezmoi/chezmoi.toml names this home and this checkout; use a scoped diff to review configuration' -
-CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$NATIVE_REF" -print)
+assert_row chezmoi-config ok '~/.config/chezmoi/chezmoi.toml names this home and this checkout; use a scoped diff to review configuration' -
+CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$WRITE_REF" -print)
 [ -z "$CHANGED" ] || case_fail "doctor wrote into the fixture or home: $CHANGED"
 ELSEWHERE="$TEST_TMP/source elsewhere"
 mkdir -p "$ELSEWHERE"
 printf 'home\n' >"$ELSEWHERE/.chezmoiroot"
 set_source "$ELSEWHERE"
-run_doctor native-config-elsewhere -- --host lab-ubuntu --tsv
+run_doctor chezmoi-config-elsewhere -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row native-config warn "~/.config/chezmoi/chezmoi.toml names the checkout $ELSEWHERE, not this checkout $FIXTURE; run $ELSEWHERE/doctor.sh for its state" \
-    'docs/bootstrap.md H7-native'
+assert_row chezmoi-config warn "~/.config/chezmoi/chezmoi.toml names the checkout $ELSEWHERE, not this checkout $FIXTURE; run $ELSEWHERE/doctor.sh for its state" \
+    'docs/bootstrap.md H7-deploy'
 # With a config that resolves, the payloads advice is sync-payloads and the
 # shell-quoted hook of the source the config names, which sync-payloads runs,
 # never this checkout's. Wherever sync-payloads refuses (no config, a config
 # the guard refuses, maintenance), it is this checkout's --now line alone.
 mv "$TEST_HOME/.pymolrc.py" "$TEST_TMP/pymolrc.hidden"
-run_doctor native-payloads-elsewhere DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+run_doctor payloads-source-elsewhere DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
 [ "$(tsv_field payloads 4)" = "not installed: pymol: run sync-payloads ITEM (sh $TEST_TMP/source\\ elsewhere/scripts/payload-update.sh --now ITEM)" ] ||
@@ -1163,12 +1163,16 @@ run_doctor payloads-source-here DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubunt
 [ "$(tsv_field payloads 4)" = "not installed: pymol: run sync-payloads ITEM (sh $FIXTURE/scripts/payload-update.sh --now ITEM)" ] ||
     case_fail "payloads detail [$(tsv_field payloads 4)]"
 for unresolved in maintenance invalid unconfigured; do
+    case_name=payloads-source-$unresolved
     case $unresolved in
         maintenance) : >"$MAINTENANCE_DIR/maintenance" ;;
         invalid) set_source fixture ;;
-        unconfigured) rm "$CHEZMOI_CONFIG" ;;
+        unconfigured)
+            rm "$CHEZMOI_CONFIG"
+            case_name=payloads-unconfigured
+            ;;
     esac
-    run_doctor "native-payloads-$unresolved" DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
+    run_doctor "$case_name" DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
     [ "$(tsv_field payloads 4)" = "not installed: pymol: run sh $FIXTURE/scripts/payload-update.sh --now ITEM" ] ||
         case_fail "payloads detail [$(tsv_field payloads 4)]"
     rm -f "$MAINTENANCE_DIR/maintenance"
@@ -1176,9 +1180,9 @@ for unresolved in maintenance invalid unconfigured; do
 done
 mv "$TEST_TMP/pymolrc.hidden" "$TEST_HOME/.pymolrc.py"
 : >"$MAINTENANCE_DIR/maintenance"
-run_doctor native-config-maintenance -- --host lab-ubuntu --tsv
+run_doctor chezmoi-config-maintenance -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' 'docs/bootstrap.md H7-native'
+assert_row chezmoi-config human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' 'docs/bootstrap.md H7-deploy'
 rm "$MAINTENANCE_DIR/maintenance"
 # Each config the guard refuses is invalid: a relative or noncanonical
 # sourceDir, another home, a second sourceDir line, a workingTree key, CRLF.
@@ -1191,112 +1195,112 @@ for invalid in relative noncanonical home twice working-tree crlf; do
         working-tree) printf '%s\nworkingTree = "%s"\n%s\n' "$(config_top)" "$FIXTURE" "$CONFIG_TABLES" >"$CHEZMOI_CONFIG" ;;
         crlf) printf 'destDir = "%s"\r\nsourceDir = "%s"\r\n%s\n' "$TEST_HOME" "$CONFIG_SOURCE" "$CONFIG_TABLES" >"$CHEZMOI_CONFIG" ;;
     esac
-    run_doctor "native-config-invalid-$invalid" -- --host lab-ubuntu --tsv
+    run_doctor "chezmoi-config-invalid-$invalid" -- --host lab-ubuntu --tsv
     assert_rc 1
-    assert_row native-config human '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-native'
+    assert_row chezmoi-config human '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-deploy'
     set_source "$FIXTURE"
 done
 rm "$CHEZMOI_CONFIG"
-run_doctor native-config-absent -- --host lab-ubuntu --tsv
+run_doctor chezmoi-config-absent -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh home by hand in docs/bootstrap.md' 'docs/bootstrap.md H7-native'
+assert_row chezmoi-config human 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh home by hand in docs/bootstrap.md' 'docs/bootstrap.md H7-deploy'
 mkdir "$CHEZMOI_CONFIG"
-run_doctor native-config-directory -- --host lab-ubuntu --tsv
+run_doctor chezmoi-config-directory -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human '~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-native'
+assert_row chezmoi-config human '~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-deploy'
 rmdir "$CHEZMOI_CONFIG"
 set_source "$FIXTURE"
 mv "$CHEZMOI_CONFIG" "$TEST_TMP/chezmoi.toml"
 ln -s "$TEST_TMP/chezmoi.toml" "$CHEZMOI_CONFIG"
-run_doctor native-config-link -- --host lab-ubuntu --tsv
+run_doctor chezmoi-config-link -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human '~/.config/chezmoi/chezmoi.toml is a link; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-native'
+assert_row chezmoi-config human '~/.config/chezmoi/chezmoi.toml is a link; inspect it and never overwrite it blindly' 'docs/bootstrap.md H7-deploy'
 rm "$CHEZMOI_CONFIG"
 mv "$TEST_TMP/chezmoi.toml" "$CHEZMOI_CONFIG"
 mv "$FIXTURE/lib/chezmoi-guard.sh" "$TEST_TMP/guard.hidden"
-run_doctor native-config-guard -- --host lab-ubuntu --tsv
+run_doctor chezmoi-config-guard -- --host lab-ubuntu --tsv
 assert_rc 1
-assert_row native-config human "$FIXTURE/lib/chezmoi-guard.sh is unreadable, so the chezmoi config cannot be checked" \
-    'docs/bootstrap.md H7-native'
+assert_row chezmoi-config human "$FIXTURE/lib/chezmoi-guard.sh is unreadable, so the chezmoi config cannot be checked" \
+    'docs/bootstrap.md H7-deploy'
 mv "$TEST_TMP/guard.hidden" "$FIXTURE/lib/chezmoi-guard.sh"
 
 # Without --host or --platform, a configured home's role is the one
 # [data].host of its chezmoi config, read as text; an unclear role is a usage
 # error, never a guess.
-run_doctor native-host-config -- --tsv
+run_doctor config-host-recorded -- --tsv
 assert_rc 0
 assert_row host-tool warn
 assert_no_row login-tool
-run_doctor native-host-explicit -- --host sherlock --tsv
+run_doctor config-host-explicit -- --host sherlock --tsv
 assert_row lmod warn
 assert_no_row host-tool
-run_doctor native-host-platform -- --platform other --tsv
+run_doctor config-host-platform -- --platform other --tsv
 assert_rc 0
 assert_no_row host-tool
 write_config "sourceDir = '/x'" '[data]' '  host = "sherlock"  # role' '[data.extra]' "host = 'mac'" \
     '[git]' 'autoAdd = false'
-run_doctor native-host-format -- --tsv
+run_doctor config-host-format -- --tsv
 assert_row lmod warn
 assert_no_row host-tool
 # Line ends after the first table are the host reader's alone.
 printf '%s\n[data]\r\nhost = "lab-ubuntu"\r\n' "$(config_top)" >"$CHEZMOI_CONFIG"
-run_doctor native-host-crlf -- --tsv
+run_doctor config-host-crlf -- --tsv
 assert_rc 0
 assert_row host-tool warn
 printf '%s\n[data]\nhost="lab-ubuntu"' "$(config_top)" >"$CHEZMOI_CONFIG"
-run_doctor native-host-no-newline -- --tsv
+run_doctor config-host-no-newline -- --tsv
 assert_rc 0
 assert_row host-tool warn
-# expect_native_host_error CASE CONFIG_LINE...: that config selects no role.
-expect_native_host_error() {
+# expect_config_host_error CASE CONFIG_LINE...: that config selects no role.
+expect_config_host_error() {
     local name=$1
     shift
     write_config "$@"
     expect_usage_error "$name" 'none recorded for this home: its ~/.config/chezmoi/chezmoi.toml selects no single known [data].host; pass --host HOST' --
 }
-expect_native_host_error native-host-none '[git]' 'autoAdd = false'
-expect_native_host_error native-host-twice '[data]' "host = 'lab-ubuntu'" "host = 'mac'"
-expect_native_host_error native-host-unknown '[data]' "host = 'fedora'"
-expect_native_host_error native-host-empty '[data]' "host = ''"
-expect_native_host_error native-host-other-key '[data]' "hostname = 'mac'"
-expect_native_host_error native-host-other-table '[data.extra]' "host = 'mac'"
-expect_native_host_error native-host-unquoted '[data]' 'host = mac'
-expect_native_host_error native-host-trailing '[data]' "host = 'mac' x"
-expect_native_host_error native-host-unterminated '[data]' "host = 'mac"
-expect_native_host_error native-host-multiline '[data]' 'host = """mac"""'
+expect_config_host_error config-host-none '[git]' 'autoAdd = false'
+expect_config_host_error config-host-twice '[data]' "host = 'lab-ubuntu'" "host = 'mac'"
+expect_config_host_error config-host-unknown '[data]' "host = 'fedora'"
+expect_config_host_error config-host-empty '[data]' "host = ''"
+expect_config_host_error config-host-other-key '[data]' "hostname = 'mac'"
+expect_config_host_error config-host-other-table '[data.extra]' "host = 'mac'"
+expect_config_host_error config-host-unquoted '[data]' 'host = mac'
+expect_config_host_error config-host-trailing '[data]' "host = 'mac' x"
+expect_config_host_error config-host-unterminated '[data]' "host = 'mac"
+expect_config_host_error config-host-multiline '[data]' 'host = """mac"""'
 write_config '[data]' "host = 'lab-ubuntu'"
 mv "$CHEZMOI_CONFIG" "$TEST_TMP/chezmoi.toml"
 ln -s "$TEST_TMP/chezmoi.toml" "$CHEZMOI_CONFIG"
-expect_usage_error native-host-link 'selects no single known [data].host' --
+expect_usage_error config-host-link 'selects no single known [data].host' --
 rm "$CHEZMOI_CONFIG"
 # A home without a config records no host at all.
-expect_usage_error native-host-absent 'none recorded for this home; pass --host HOST' --
+expect_usage_error config-host-absent 'none recorded for this home; pass --host HOST' --
 mv "$TEST_TMP/chezmoi.toml" "$CHEZMOI_CONFIG"
-# A config the guard refuses still selects its [data].host: native-config
+# A config the guard refuses still selects its [data].host: chezmoi-config
 # explains the config, and nothing else is a fallback.
 set_source fixture
-run_doctor native-host-invalid-config -- --tsv
+run_doctor config-host-invalid-config -- --tsv
 assert_rc 1
 assert_row host-tool warn
-assert_row native-config human '~/.config/chezmoi/chezmoi.toml does not name this home' 'docs/bootstrap.md H7-native'
+assert_row chezmoi-config human '~/.config/chezmoi/chezmoi.toml does not name this home' 'docs/bootstrap.md H7-deploy'
 set_source "$FIXTURE"
 write_config '[data]' "host = 'win'"
-expect_usage_error native-host-win 'pwsh -File doctor.ps1 -Host win' --
-# common-only as the role means the detected platform without an overlay.
-write_config '[data]' "host = 'common-only'"
-run_doctor native-host-common-only BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
+expect_usage_error config-host-win 'pwsh -File doctor.ps1 -Host win' --
+# generic as the role means the detected platform without an overlay.
+write_config '[data]' "host = 'generic'"
+run_doctor config-host-generic BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv
 assert_rc 0
 assert_tsv_shape
-assert_err 'the native config of this home selects [data].host common-only (no host overlay): checking as --platform debian; pass --host HOST for an overlay'
+assert_err "this home's ~/.config/chezmoi/chezmoi.toml selects [data].host generic (no host overlay): checking as --platform debian; pass --host HOST for an overlay"
 assert_no_row login-tool
 assert_no_row host-tool
-run_doctor native-host-common-only-host -- --host lab-ubuntu --tsv
+run_doctor config-host-generic-host -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row host-tool warn
-assert_not_in "$OUT/$CASE.err" 'common-only'
+assert_not_in "$OUT/$CASE.err" '[data].host generic'
 # The role needs no git, so a Mac whose git is the CLT stub resolves it.
 write_config '[data]' "host = 'mac'"
-run_doctor native-host-no-git BOOTSTRAP_UNAME_S=Darwin "BOOTSTRAP_CLT_SHIMS=$FAKE_BIN/git:/usr/bin/git" -- --list
+run_doctor config-host-no-git BOOTSTRAP_UNAME_S=Darwin "BOOTSTRAP_CLT_SHIMS=$FAKE_BIN/git:/usr/bin/git" -- --list
 assert_rc 0
 assert_out "$(printf 'mac-clt\tcore\t')"
 write_config '[data]' "host = 'lab-ubuntu'"
@@ -1304,17 +1308,17 @@ write_config '[data]' "host = 'lab-ubuntu'"
 # The read-only, offline and no-TMPDIR cases above ran with --host; these
 # resolve the role from the chezmoi config.
 : >"$MARKER"
-run_doctor native-ro-resolve -- --tsv
+run_doctor ro-resolve -- --tsv
 assert_rc 0
 assert_row host-tool warn
 CHANGED=$(find "$TEST_HOME" "$FIXTURE" -newer "$MARKER" -print)
-[ -z "$CHANGED" ] || fail "native doctor wrote into the fixture or home: $CHANGED"
+[ -z "$CHANGED" ] || fail "doctor wrote into the fixture or home: $CHANGED"
 chmod -R a-w "$TEST_HOME" "$FIXTURE"
-run_doctor native-read-only-resolve -- --tsv
+run_doctor read-only-resolve -- --tsv
 assert_rc 0
 ! grep -Eqi 'permission denied|read-only' "$OUT/$CASE.err" || case_fail "doctor tried to write into a read-only home or checkout"
 chmod -R u+w "$TEST_HOME" "$FIXTURE"
-no_tmp_case native-no-tmp-resolve TMPDIR="$NO_TMP" -- --tsv
+no_tmp_case no-tmp-resolve TMPDIR="$NO_TMP" -- --tsv
 assert_rc 0
 rm -r "$MAINTENANCE_DIR" "${CHEZMOI_CONFIG%/*}" "$ELSEWHERE"
 

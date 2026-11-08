@@ -4,7 +4,7 @@
 # bootstraps a fresh machine from docs/bootstrap.md: clones the read-only
 # source checkout at E2E_REV into $HOME/dotfiles, runs the doctor and
 # setup-host, runs the HUMAN blocks the policy in lib/blocks.sh allows,
-# hands the home to native chezmoi through docs/bootstrap.md "Fresh home by
+# deploys the home with chezmoi through docs/bootstrap.md "Fresh home by
 # hand", starts a login shell, and audits that sudo and chsh were only ever
 # called inside those blocks. tests/e2e/run.sh starts it; it never runs
 # against a workstation's own home: it refuses unless it is in a container

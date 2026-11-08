@@ -13,7 +13,7 @@ set -euo pipefail
 # --smoke (an interactive zsh) asks for it.
 # On a home with ~/.config/chezmoi/chezmoi.toml the host defaults to the
 # [data].host of that config, read as text; nothing else selects one, and it
-# is never guessed. common-only as
+# is never guessed. generic as
 # that [data].host means the detected platform, as --platform. The win host
 # is checked by doctor.ps1.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
@@ -72,7 +72,7 @@ usage() {
         'Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [options]' \
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
-        'and of the structural setup (locale, native-config, path-order, rc-pollution,' \
+        'and of the structural setup (locale, chezmoi-config, path-order, rc-pollution,' \
         'omz-order, nvm-homebrew, payloads).' \
         '' \
         'Host selection (default: on a home with ~/.config/chezmoi/chezmoi.toml the' \
@@ -81,7 +81,7 @@ usage() {
         '                      (win: pwsh -File doctor.ps1 -Host win)' \
         '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
         '                      without a host overlay' \
-        'common-only as that [data].host means the detected platform without an' \
+        'generic as that [data].host means the detected platform without an' \
         'overlay.' \
         '' \
         'Options:' \
@@ -195,12 +195,12 @@ fi
 
 # Host and profile. --platform runs without an overlay: only all/unix rows.
 # Only a home with ~/.config/chezmoi/chezmoi.toml records a role, in that
-# config, which needs no git; nothing else selects a host. Its common-only role, without --host
+# config, which needs no git; nothing else selects a host. Its generic role, without --host
 # or --platform, means the platform the doctor detects, without an overlay,
 # and the doctor says so.
-if [[ -z "$PLATFORM" && $HOST_SET == 0 ]] && bootstrap_recorded_common_only; then
+if [[ -z "$PLATFORM" && $HOST_SET == 0 ]] && bootstrap_recorded_generic; then
     PLATFORM=$(bootstrap_detect_platform)
-    dotfiles_log warn "the native config of this home selects [data].host common-only (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
+    dotfiles_log warn "this home's ~/.config/chezmoi/chezmoi.toml selects [data].host generic (no host overlay): checking as --platform $PLATFORM; pass --host HOST for an overlay"
 fi
 if [[ -n "$PLATFORM" ]]; then
     case $PLATFORM in

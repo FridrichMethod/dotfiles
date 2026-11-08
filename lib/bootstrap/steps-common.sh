@@ -383,7 +383,7 @@ step_P0_preflight_check() {
         dotfiles_log warn "git status fails in $STEPS_ROOT, so the rc-pollution guard cannot see installer edits"
         detail="$detail; git status failed"
     elif [ -n "$dirty" ]; then
-        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
+        dotfiles_log warn "uncommitted changes in $STEPS_ROOT: $dirty; review them first, since the login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
         detail="$detail; checkout has uncommitted changes"
     fi
     STEP_DETAIL=$detail

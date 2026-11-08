@@ -179,7 +179,7 @@ checkout.
 The config uses tmux 3.4 popup, menu and style features without version
 checks; `config/bootstrap/tools.tsv` holds the floor, and older tmux is
 unsupported. TPM statically scans ordinary `@plugin` declarations regardless of
-conditionals; the supported legacy `@tpm_plugins` option registers extrakto and
+conditionals; TPM's `@tpm_plugins` option registers extrakto and
 CPU/RAM, the probed battery and desktop-yank plugins, then which-key,
 Catppuccin and FloaX, and is rebuilt on each reload.
 

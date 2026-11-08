@@ -1,6 +1,6 @@
 """Portable AI policy and agent-instruction invariants, read from the sources.
 
-Standard library only: no chezmoi or network. The native modify
+Standard library only: no chezmoi or network. The modify
 templates carry these portable values onto every host (test_chezmoi_claude.py,
 test_chezmoi_codex.py); this suite pins the values themselves. Each check is a
 pure function, and the mutation cases prove it rejects the drift it names.
@@ -16,7 +16,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# The portable sources in the native tree; the policy files live in home/.policy/ (D-3).
+# The portable sources; the policy files live in home/.policy/.
 CLAUDE_SETTINGS = ROOT / "home/.policy/claude-settings.json"
 CLAUDE_GUIDE = ROOT / "home/dot_claude/CLAUDE.md"
 CODEX_GUIDE = ROOT / "home/dot_codex/AGENTS.md"
@@ -77,10 +77,10 @@ EXPECTED_DENY = [
 ]
 # Ordinary rm, git clean and npx stay out of the arrays so auto mode classifies them.
 UNSAFE_ALLOW_FRAGMENTS = ("rm ", "git clean", "sudo", "npx")
-# Older clients read only the legacy plugin ID; native AGENTS.md loading needs both.
+# Claude Code before 2.1.285 reads only agents-md@builtin; newer clients accept either.
 PLUGIN_IDS = ("agents-md@builtin", "cc-plugin-agents-md@builtin")
 INSTRUCTION_FILES = {"options": {"instructionFiles": "claude-md-and-agents-md"}}
-# Present and empty, so the native merge clears plugin-copied hooks on a live file.
+# Present and empty, so the modify template's merge clears plugin-copied hooks on a live file.
 CLEARED_HOOKS = ("SessionStart", "Stop", "SessionEnd")
 
 CLAUDE_ONLY_BULLET = "- Before destructive or difficult-to-reverse actions"
@@ -300,8 +300,8 @@ class PolicyMutationTests(unittest.TestCase):
             "cleared hook missing": lambda s: s["hooks"].pop("SessionStart"),
             "cleared hook filled": lambda s: s["hooks"]["Stop"].append({"hooks": []}),
             "attribution": lambda s: s["attribution"].__setitem__("commit", "Generated with an agent"),
-            "legacy plugin ID": lambda s: s["pluginConfigs"].pop("agents-md@builtin"),
-            "new plugin ID": lambda s: s["pluginConfigs"]["cc-plugin-agents-md@builtin"]["options"]
+            "agents-md@builtin plugin ID": lambda s: s["pluginConfigs"].pop("agents-md@builtin"),
+            "cc-plugin-agents-md@builtin plugin ID": lambda s: s["pluginConfigs"]["cc-plugin-agents-md@builtin"]["options"]
                 .__setitem__("instructionFiles", "claude-md"),
             "portable model": lambda s: s.__setitem__("model", None),
         }
@@ -373,7 +373,7 @@ class AutoModeProseTests(unittest.TestCase):
     def portable_auto_mode(self):
         return json.loads(read_text(CLAUDE_SETTINGS))["autoMode"]
 
-    def test_auto_mode_prose_keeps_defaults_and_native_protections(self):
+    def test_auto_mode_prose_keeps_defaults_and_protections(self):
         self.assertEqual(auto_mode_problems(self.portable_auto_mode()), [])
 
     def test_auto_mode_check_rejects_loosened_or_malformed_prose(self):

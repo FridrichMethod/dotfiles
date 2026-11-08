@@ -21,7 +21,7 @@ for argument in "$@"; do
         --check-prerequisites) prerequisites_only=1 ;;
         --help)
             printf 'Usage: %s [--ci] [--check-prerequisites]\n' "$0"
-            printf 'CI mode requires chezmoi for the native fixtures; local optional skips are reported.\n'
+            printf 'CI mode requires chezmoi for the chezmoi fixtures; local optional skips are reported.\n'
             exit 0
             ;;
         *)
@@ -51,10 +51,10 @@ if [[ ${DOTFILES_TEST_CHEZMOI+x} == x ]]; then
     fi
 elif ! command -v chezmoi >/dev/null 2>&1; then
     if [[ "$require_ci" == 1 || ${DOTFILES_TEST_REQUIRE_CHEZMOI:-0} == 1 ]]; then
-        printf 'ERROR: CI requires chezmoi for native fixture tests.\n' >&2
+        printf 'ERROR: CI requires chezmoi for the chezmoi fixture tests.\n' >&2
         missing=1
     else
-        printf 'SKIP: native chezmoi fixtures (install the selected release or set DOTFILES_TEST_CHEZMOI).\n'
+        printf 'SKIP: chezmoi fixtures (install the selected release or set DOTFILES_TEST_CHEZMOI).\n'
     fi
 fi
 if [[ "$require_ci" == 1 ]]; then

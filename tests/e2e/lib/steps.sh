@@ -1,10 +1,10 @@
 # shellcheck shell=bash
-# shellcheck disable=SC2034 # E2E_HANDOVER_KEPT and E2E_HANDOVER_DETAIL are read by tests/e2e-harness.sh
+# shellcheck disable=SC2034 # E2E_DEPLOY_KEPT and E2E_DEPLOY_DETAIL are read by tests/e2e-harness.sh
 # The steps both flows of tests/e2e/inside.sh share: the clone, the initial
-# read-only doctor run, the native handover through the documented Fresh
+# read-only doctor run, the first apply through the documented Fresh
 # home by hand procedure and its convergence check, the login-shell check,
 # the payload repos' install, the final doctor runs from the login
-# environment, the negatives, the isolated native fixtures and the closing
+# environment, the negatives, the isolated chezmoi fixtures and the closing
 # audits. Each step function opens its step, runs, and closes it with a
 # verdict; a step the rest depends on sets E2E_BROKEN when it fails, and the
 # flows then skip what cannot run. Sourced after assert.sh; same portability
@@ -13,11 +13,11 @@
 E2E_UPSTREAM=https://github.com/FridrichMethod/dotfiles.git
 # The first apply run, which the alloc-first negative judges afterwards.
 E2E_APPLY1_OUT='' E2E_APPLY1_RC=''
-# The Fresh home by hand functions native-handover extracted from the
-# clone's docs/bootstrap.md (native-converged reuses them), and the H7-native
-# block of the last apply run, which the handover step stands in for.
-E2E_HANDOVER='' E2E_HANDOVER_BLOCK=''
-E2E_HANDOVER_KEPT=0 E2E_HANDOVER_DETAIL=''
+# The Fresh home by hand functions home-deploy extracted from the
+# clone's docs/bootstrap.md (home-converged reuses them), and the H7-deploy
+# block of the last apply run, which the home-deploy step stands in for.
+E2E_DEPLOY_SCRIPT='' E2E_DEPLOY_BLOCK=''
+E2E_DEPLOY_KEPT=0 E2E_DEPLOY_DETAIL=''
 
 # e2e_step_clone: the clone a person makes, from the read-only source
 # checkout at E2E_REV, its origin pointed at GitHub as a real clone has it.
@@ -115,7 +115,7 @@ e2e_step_payloads() {
     esac
 }
 
-# --- the native handover -----------------------------------------------------
+# --- the first apply ---------------------------------------------------------
 
 # e2e_extract_fence DOC HEADING OUT NAME...: the first fenced sh block after
 # the line "#... HEADING" of DOC, written to OUT, taken from the clone instead
@@ -181,8 +181,8 @@ e2e_extract_fence() {
     fi
 }
 
-# e2e_handover_problems ROLE: the end state Fresh home by hand promises,
-# checked after native_handover ROLE: (a) the clone's lib/chezmoi-guard.sh
+# e2e_deploy_problems ROLE: the end state Fresh home by hand promises,
+# checked after home_deploy ROLE: (a) the clone's lib/chezmoi-guard.sh
 # accepts the local config ~/.config/chezmoi/chezmoi.toml as naming this
 # home and the physical clone; (b) that config's [data] host is ROLE; (c) no
 # maintenance marker; (d) the state database
@@ -190,12 +190,12 @@ e2e_extract_fence() {
 # ~/.zshrc is a regular file, not a link; (f) every rc file of E2E_RC_FILES
 # that existed when the step began (its E2E_RC_BEFORE digest) has a
 # byte-identical copy in ~/.local/state/dotfiles-fresh-backup. Sets
-# E2E_HANDOVER_DETAIL to the problems ("; "-separated, empty when none) and
-# E2E_HANDOVER_KEPT to the number of copies found; returns 1 on a problem.
-e2e_handover_problems() {
+# E2E_DEPLOY_DETAIL to the problems ("; "-separated, empty when none) and
+# E2E_DEPLOY_KEPT to the number of copies found; returns 1 on a problem.
+e2e_deploy_problems() {
     local role=$1 config=$HOME/.config/chezmoi/chezmoi.toml
     local keep=$HOME/.local/state/dotfiles-fresh-backup source name before out=''
-    E2E_HANDOVER_KEPT=0
+    E2E_DEPLOY_KEPT=0
     if [ ! -f "$config" ] || [ -L "$config" ]; then
         out="$out${out:+; }~/.config/chezmoi/chezmoi.toml is missing, a link or not a regular file"
     else
@@ -218,57 +218,57 @@ e2e_handover_problems() {
         before=$(e2e_rc_pick "$E2E_RC_BEFORE" "$name")
         [ "$before" != missing ] || continue
         if [ -f "$keep/$name" ] && [ ! -L "$keep/$name" ] && [ "$(e2e_sha256 "$keep/$name")" = "$before" ]; then
-            E2E_HANDOVER_KEPT=$((E2E_HANDOVER_KEPT + 1))
+            E2E_DEPLOY_KEPT=$((E2E_DEPLOY_KEPT + 1))
         else
             out="$out${out:+; }no byte-identical copy of ~/$name in ~/.local/state/dotfiles-fresh-backup"
         fi
     done
-    E2E_HANDOVER_DETAIL=$out
+    E2E_DEPLOY_DETAIL=$out
     [ -z "$out" ]
 }
 
-# e2e_step_native_handover ROLE: H7-native done the way a person does it on
+# e2e_step_home_deploy ROLE: H7-deploy done the way a person does it on
 # a fresh home: the clone's docs/bootstrap.md "Fresh home by hand" fence
-# (native_cz and native_handover), extracted strictly, then `native_handover
+# (home_cz and home_deploy), extracted strictly, then `home_deploy
 # ROLE` from the clone in one bash, ROLE being E2E_SETUP_HOST or
-# common-only. It runs in human:H7-native, the phase whose rc-file changes
-# the guard records as a note, and the step log starts with the H7-native
+# generic. It runs in human:H7-deploy, the phase whose rc-file changes
+# the guard records as a note, and the step log starts with the H7-deploy
 # block it stands in for. It passes when that exits 0 and the end state is
-# the documented one (e2e_handover_problems).
-e2e_step_native_handover() {
+# the documented one (e2e_deploy_problems).
+e2e_step_home_deploy() {
     local role=$1 rc=0 reason phys
-    e2e_step_begin native-handover human:H7-native
-    if [ -n "$E2E_HANDOVER_BLOCK" ] && [ -f "$E2E_HANDOVER_BLOCK" ]; then
+    e2e_step_begin home-deploy human:H7-deploy
+    if [ -n "$E2E_DEPLOY_BLOCK" ] && [ -f "$E2E_DEPLOY_BLOCK" ]; then
         {
             printf -- '--- block\n'
-            cat "$E2E_HANDOVER_BLOCK"
+            cat "$E2E_DEPLOY_BLOCK"
         } >>"$E2E_STEP_LOG"
     fi
-    E2E_HANDOVER=${E2E_STEP_LOG%.log}.sh
+    E2E_DEPLOY_SCRIPT=${E2E_STEP_LOG%.log}.sh
     # On failure the function prints its reason; stderr goes to the log.
-    if ! reason=$(e2e_extract_fence "$E2E_CLONE/docs/bootstrap.md" 'Fresh home by hand' "$E2E_HANDOVER" \
-        native_cz native_handover 2>>"$E2E_STEP_LOG"); then
-        E2E_BROKEN=native-handover
+    if ! reason=$(e2e_extract_fence "$E2E_CLONE/docs/bootstrap.md" 'Fresh home by hand' "$E2E_DEPLOY_SCRIPT" \
+        home_cz home_deploy 2>>"$E2E_STEP_LOG"); then
+        E2E_BROKEN=home-deploy
         e2e_step_end fail "docs/bootstrap.md: $reason"
         return 1
     fi
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-        bash -c ". $(e2e_quote "$E2E_HANDOVER") && native_handover $(e2e_quote "$role")" || rc=$?
+        bash -c ". $(e2e_quote "$E2E_DEPLOY_SCRIPT") && home_deploy $(e2e_quote "$role")" || rc=$?
     if [ "$rc" != 0 ]; then
-        E2E_BROKEN=native-handover
-        e2e_step_end fail "native_handover $role exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
+        E2E_BROKEN=home-deploy
+        e2e_step_end fail "home_deploy $role exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
         return 1
     fi
-    if ! e2e_handover_problems "$role"; then
-        E2E_BROKEN=native-handover
-        e2e_step_end fail "native_handover $role exit 0, but $E2E_HANDOVER_DETAIL"
+    if ! e2e_deploy_problems "$role"; then
+        E2E_BROKEN=home-deploy
+        e2e_step_end fail "home_deploy $role exit 0, but $E2E_DEPLOY_DETAIL"
         return 1
     fi
     phys=$(cd -P -- "$E2E_CLONE" && pwd -P)
-    e2e_step_end pass "native_handover $role exit 0; $E2E_HANDOVER_KEPT earlier file(s) kept byte for byte; the config names $phys"
+    e2e_step_end pass "home_deploy $role exit 0; $E2E_DEPLOY_KEPT earlier file(s) kept byte for byte; the config names $phys"
 }
 
-# e2e_step_check_done: after the handover, ./setup-host.sh --host H --check
+# e2e_step_check_done: after the first apply, ./setup-host.sh --host H --check
 # has nothing left: exit 0, no todo line, and no write in TMPDIR or HOME.
 e2e_step_check_done() {
     local rc=0 problems todo
@@ -279,7 +279,7 @@ e2e_step_check_done() {
     problems=$(e2e_nowrite_end check-done)
     todo=$(grep -E '^[A-Za-z0-9-]+ todo ' "$E2E_STEP_OUT" 2>/dev/null) || true
     if [ "$rc" != 0 ]; then
-        e2e_step_end fail "exit $rc, expected 0 after the handover (pending: $(e2e_pending_ids "$E2E_STEP_ERR")): $(e2e_failure_detail "$E2E_STEP_OUT" "$E2E_STEP_ERR")${problems:+; $problems}"
+        e2e_step_end fail "exit $rc, expected 0 after the first apply (pending: $(e2e_pending_ids "$E2E_STEP_ERR")): $(e2e_failure_detail "$E2E_STEP_OUT" "$E2E_STEP_ERR")${problems:+; $problems}"
     elif [ -n "$todo" ]; then
         e2e_step_end fail "exit 0 with steps still to apply: $(e2e_one_line "$todo" 300)"
     elif [ -n "$problems" ]; then
@@ -289,34 +289,34 @@ e2e_step_check_done() {
     fi
 }
 
-# e2e_step_native_converged: with the functions native-handover extracted,
-# `native_cz diff --exclude=dirs` from the clone exits 0 and prints nothing
+# e2e_step_home_converged: with the functions home-deploy extracted,
+# `home_cz diff --exclude=dirs` from the clone exits 0 and prints nothing
 # (after the payload repos ran, so an installer that edits a managed target
-# shows here), and every `native_cz managed --include=files,symlinks` target
+# shows here), and every `home_cz managed --include=files,symlinks` target
 # is a regular file in HOME.
-e2e_step_native_converged() {
+e2e_step_home_converged() {
     local rc=0 rel count=0 bad='' headers
-    e2e_step_begin native-converged check:native-converged
-    if [ -z "$E2E_HANDOVER" ] || [ ! -f "$E2E_HANDOVER" ]; then
-        e2e_step_end fail 'no extracted Fresh home by hand functions (native-handover did not run)'
+    e2e_step_begin home-converged check:home-converged
+    if [ -z "$E2E_DEPLOY_SCRIPT" ] || [ ! -f "$E2E_DEPLOY_SCRIPT" ]; then
+        e2e_step_end fail 'no extracted Fresh home by hand functions (home-deploy did not run)'
         return 0
     fi
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        bash -c ". $(e2e_quote "$E2E_HANDOVER") && native_cz diff --exclude=dirs" || rc=$?
+        bash -c ". $(e2e_quote "$E2E_DEPLOY_SCRIPT") && home_cz diff --exclude=dirs" || rc=$?
     if [ "$rc" != 0 ]; then
-        e2e_step_end fail "native_cz diff --exclude=dirs exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end fail "home_cz diff --exclude=dirs exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
         return 0
     fi
     if [ -s "$E2E_STEP_OUT" ]; then
         headers=$(grep -E '^diff ' "$E2E_STEP_OUT" 2>/dev/null | sed -n 1,5p)
         [ -n "$headers" ] || headers=$(sed -n 1,3p "$E2E_STEP_OUT")
-        e2e_step_end fail "native_cz diff --exclude=dirs is not empty: $(e2e_one_line "$headers" 400)"
+        e2e_step_end fail "home_cz diff --exclude=dirs is not empty: $(e2e_one_line "$headers" 400)"
         return 0
     fi
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        bash -c ". $(e2e_quote "$E2E_HANDOVER") && native_cz managed --include=files,symlinks" || rc=$?
+        bash -c ". $(e2e_quote "$E2E_DEPLOY_SCRIPT") && home_cz managed --include=files,symlinks" || rc=$?
     if [ "$rc" != 0 ]; then
-        e2e_step_end fail "native_cz managed --include=files,symlinks exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end fail "home_cz managed --include=files,symlinks exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
         return 0
     fi
     while IFS= read -r rel || [ -n "$rel" ]; do
@@ -329,27 +329,27 @@ e2e_step_native_converged() {
     if [ -n "$bad" ]; then
         e2e_step_end fail "managed targets that are not regular files: $(e2e_one_line "$bad" 300)"
     elif [ "$count" = 0 ]; then
-        e2e_step_end fail 'native_cz managed --include=files,symlinks listed no target'
+        e2e_step_end fail 'home_cz managed --include=files,symlinks listed no target'
     else
         e2e_step_end pass "empty diff; $count managed file(s), all regular"
     fi
 }
 
-# e2e_step_native_fixtures: tests/chezmoi.sh from the login environment, with
+# e2e_step_chezmoi_fixtures: tests/chezmoi.sh from the login environment, with
 # the provisioned chezmoi required: ~/.local/bin/chezmoi (S4-chezmoi, or the
-# by-hand line of the other flow), else the chezmoi on PATH. The native
+# by-hand line of the other flow), else the chezmoi on PATH. The chezmoi
 # suite owns separate temporary source/destination/config/cache/state paths
 # and never touches this home.
-e2e_step_native_fixtures() {
+e2e_step_chezmoi_fixtures() {
     local binary='' rc=0
-    e2e_step_begin native-fixtures check:native-fixtures
+    e2e_step_begin chezmoi-fixtures check:chezmoi-fixtures
     if [ -x "$HOME/.local/bin/chezmoi" ]; then
         binary=$HOME/.local/bin/chezmoi
     else
         binary=$(command -v chezmoi 2>/dev/null) || binary=''
     fi
     if [ -z "$binary" ]; then
-        E2E_BROKEN=native-fixtures
+        E2E_BROKEN=chezmoi-fixtures
         e2e_step_end fail 'no provisioned chezmoi (~/.local/bin/chezmoi or PATH)'
         return 0
     fi
@@ -359,10 +359,10 @@ e2e_step_native_fixtures() {
         "cd $(e2e_quote "$E2E_CLONE") && env DOTFILES_TEST_CHEZMOI=$(e2e_quote "$binary") DOTFILES_TEST_REQUIRE_CHEZMOI=1 bash tests/chezmoi.sh" \
         "$E2E_TIMEOUT_APPLY" || rc=$?
     if [ "$rc" != 0 ]; then
-        E2E_BROKEN=native-fixtures
-        e2e_step_end fail "isolated native suite exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
+        E2E_BROKEN=chezmoi-fixtures
+        e2e_step_end fail "isolated chezmoi suite exit $rc: $(e2e_last_line "$E2E_STEP_ERR")"
     else
-        e2e_step_end pass 'isolated native source/config/takeover/recovery fixtures passed'
+        e2e_step_end pass 'isolated chezmoi fixtures passed'
     fi
 }
 
@@ -383,28 +383,28 @@ e2e_negative_refusal() {
     fi
 }
 
-# e2e_negative_common_only: after the common-only handover, ./doctor.sh with
-# no arguments exits 0 and warns about the common-only role; ./setup-host.sh
+# e2e_negative_generic: after the generic deployment, ./doctor.sh with
+# no arguments exits 0 and warns about the generic role; ./setup-host.sh
 # without --host exits 2 for the same reason.
-e2e_negative_common_only() {
+e2e_negative_generic() {
     local rc=0
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" ./doctor.sh || rc=$?
     if [ "$rc" != 0 ]; then
         e2e_step_end fail "./doctor.sh exited $rc, expected 0: $(e2e_problem_lines "$E2E_STEP_OUT")"
         return 0
     fi
-    if ! grep -F 'common-only' "$E2E_STEP_ERR" >/dev/null 2>&1; then
-        e2e_step_end fail './doctor.sh exited 0 without the common-only warning'
+    if ! grep -F '[data].host generic' "$E2E_STEP_ERR" >/dev/null 2>&1; then
+        e2e_step_end fail './doctor.sh exited 0 without the generic warning'
         return 0
     fi
     rc=0
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" ./setup-host.sh --check || rc=$?
     if [ "$rc" != 2 ]; then
         e2e_step_end fail "./setup-host.sh --check without --host exited $rc, expected 2: $(e2e_last_line "$E2E_STEP_ERR")"
-    elif ! grep -F 'common-only' "$E2E_STEP_ERR" >/dev/null 2>&1; then
-        e2e_step_end fail "./setup-host.sh --check exited 2 without naming the common-only role: $(e2e_last_line "$E2E_STEP_ERR")"
+    elif ! grep -F '[data].host generic' "$E2E_STEP_ERR" >/dev/null 2>&1; then
+        e2e_step_end fail "./setup-host.sh --check exited 2 without naming the generic role: $(e2e_last_line "$E2E_STEP_ERR")"
     else
-        e2e_step_end pass "./doctor.sh exit 0 with the common-only warning; ./setup-host.sh --check exit 2: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end pass "./doctor.sh exit 0 with the generic warning; ./setup-host.sh --check exit 2: $(e2e_last_line "$E2E_STEP_ERR")"
     fi
 }
 
@@ -440,7 +440,7 @@ e2e_negatives() {
                     e2e_step_end fail "the first apply exited ${E2E_APPLY1_RC:-?} (expected 3 with an H2-alloc alloc block)"
                 fi
                 ;;
-            common-only) e2e_negative_common_only ;;
+            generic) e2e_negative_generic ;;
             *) e2e_step_end fail "unknown E2E_NEGATIVE token $token" ;;
         esac
     done

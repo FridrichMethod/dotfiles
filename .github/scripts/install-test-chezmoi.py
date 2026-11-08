@@ -1,4 +1,4 @@
-"""Provision the pinned CI-only native fixture binary, outside behavioral tests."""
+"""Provision the pinned CI-only chezmoi test binary, outside behavioral tests."""
 
 import hashlib
 import io

@@ -1,4 +1,4 @@
-"""Small real-chezmoi fixture shared by isolated native behavior tests."""
+"""Small real-chezmoi fixture shared by isolated chezmoi behavior tests."""
 
 import os
 from pathlib import Path
@@ -9,7 +9,7 @@ import unittest
 
 
 class ChezmoiFixture:
-    """Keep native source, destination and all user state in one temporary root."""
+    """Keep the source, destination and all user state in one temporary root."""
 
     def __init__(self):
         explicit = os.environ.get("DOTFILES_TEST_CHEZMOI")

@@ -4,7 +4,7 @@
     Day-zero installer for the win host - the thin Windows twin of setup-host.sh.
 
 .DESCRIPTION
-    Provisions the native chezmoi configuration tools for the win host.
+    Provisions the chezmoi configuration tools for the win host.
 
     Runs the selected steps in order, each checked first and applied only when it is
     todo, then prints the person-only steps as HUMAN blocks:
@@ -37,7 +37,7 @@
     a preexisting file with different bytes is left untouched and fails apply.
 
     HUMAN blocks follow the shared grammar (HUMAN-BEGIN <step-id> <kind>,
-    command lines, HUMAN-END) for HW-clone, HW-native, HW-execution-policy,
+    command lines, HUMAN-END) for HW-clone, HW-deploy, HW-execution-policy,
     HW-ssh-agent, HW-wsl and HW-auth. This script never elevates itself,
     never initializes or applies configuration and never edits a profile or
     rc file; elevated steps are left to a person.
@@ -45,7 +45,7 @@
     Exit codes: 0 done (non-blocking HUMAN blocks may still be printed);
     1 a step failed; 2 usage error, invalid manifest, or refusal (a
     non-interactive run without -Yes, or a declined prompt); 3 work remains:
-    a blocking HUMAN step is pending (HW-clone or HW-native), or, under
+    a blocking HUMAN step is pending (HW-clone or HW-deploy), or, under
     -Check, a step is still to apply. As in setup-host.sh, the other HUMAN
     steps (HW-execution-policy, HW-ssh-agent, HW-wsl and HW-auth) are
     printed while pending but leave the exit code alone;
@@ -100,9 +100,9 @@ try {
 } catch { } # Plain diagnostics remain usable in a partial checkout.
 
 $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')
-$HumanSteps = @('HW-clone', 'HW-native', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
+$HumanSteps = @('HW-clone', 'HW-deploy', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
 # A pending blocking step makes the run exit 3 (setup-host.sh's "blocking").
-$BlockingHumanSteps = @('HW-clone', 'HW-native')
+$BlockingHumanSteps = @('HW-clone', 'HW-deploy')
 
 function New-SetupState {
     param([string]$Id, [ValidateSet('done', 'todo', 'human', 'skip')][string]$Status, [string]$Detail)
@@ -284,11 +284,11 @@ function Get-SetupStepState {
             if ($rows.Count -ne 1) { throw [IO.InvalidDataException]::new('tools.tsv needs one chezmoi row for win') }
             $state = Get-BootstrapToolStatus $rows[0]
             if ($state.Status -cne 'ok') {
-                return New-SetupState $Id todo 'install pinned, SHA256-verified chezmoi into ~/.local/bin; configuration handover is separate'
+                return New-SetupState $Id todo 'install pinned, SHA256-verified chezmoi into ~/.local/bin; deploying the home is the separate HW-deploy step'
             }
             # On Windows the login updater runs only a private, regular
             # ~/.local/bin/chezmoi.exe, never a PATH match (Unix runs PATH's).
-            if ($IsWindows -and -not (Test-BootstrapNativeChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
+            if ($IsWindows -and -not (Test-BootstrapTrustedChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
                 return New-SetupState $Id todo ("chezmoi $($state.Probe.Version) at $($state.Probe.Path) works, but the login updater runs only a private, " +
                     'regular ~/.local/bin/chezmoi.exe, never a link or a PATH chezmoi: install the pinned, SHA256-verified copy there (a link stops the install)')
             }
@@ -334,7 +334,7 @@ function Test-SetupHumanDone {
         # login updater can pull it. No tracked file is a symlink, so Git
         # needs neither core.symlinks nor Developer Mode.
         'HW-clone' { return Test-Path -LiteralPath (Join-Path $RepoRoot '.git') }
-        'HW-native' { return Test-BootstrapChezmoiReady -RepoRoot $RepoRoot }
+        'HW-deploy' { return Test-BootstrapChezmoiReady -RepoRoot $RepoRoot }
         'HW-execution-policy' {
             if (-not $IsWindows) { return $false }
             return Test-SetupExecutionPolicy
@@ -369,13 +369,13 @@ function Get-SetupHumanBlock {
                     'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
                 ) }
         }
-        'HW-native' {
+        'HW-deploy' {
             return @{ Kind = 'judgment'; Lines = @(
                     '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.'
                     '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.'
                     '# Discover both actual CurrentUserAllHosts paths as the ordinary user.'
                     '# Snapshot exact targets and initialize with all paths explicit.'
-                    '# Native regular-file updates need no elevation or scheduled task.'
+                    '# Updates write regular files and need no elevation or scheduled task.'
                 ) }
         }
         'HW-execution-policy' {
@@ -396,7 +396,7 @@ function Get-SetupHumanBlock {
         'HW-wsl' {
             return @{ Kind = 'judgment'; Lines = @(
                     '# Optional, elevated PowerShell. Windows Terminal and WezTerm profiles need the distro named exactly Ubuntu.'
-                    '# The native handover (HW-native) deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
+                    '# HW-deploy deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home. ~\.wslconfig sizes WSL memory and processors for one machine: review it, then wsl --shutdown.'
                     '# ~\wsl.conf applies only when copied to /etc/wsl.conf inside the distro; the tracked one runs /usr/local/bin/mount-data.sh, which this repository does not ship, and hardcodes a default user.'
                     '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.'
                     'wsl --install -d Ubuntu'

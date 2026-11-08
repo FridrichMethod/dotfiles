@@ -45,7 +45,7 @@ if ! (
     fail_run local 'tests/run.sh --check-prerequisites failed with only optional tools missing.'
 fi
 for skipped in 'optional Unix PowerShell checks' 'optional installed-Codex exec-policy checks' \
-    'native chezmoi fixtures'; do
+    'chezmoi fixtures'; do
     grep -Fq "SKIP: $skipped" "$TEST_TMP/local.stdout" ||
         fail_run local "tests/run.sh --check-prerequisites did not skip the $skipped."
 done
@@ -170,30 +170,30 @@ need = {
                          'tests/fixtures/chezmoi/targets.tsv', '.github/workflows/ci.yml'],
     'markdown-links': ['README.md', 'AGENTS.md', 'docs/bootstrap.md',
                        'tests/test_markdown_links.py', 'tests/markdown-links.sh'],
-    'chezmoi-native': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
-                       'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
-                       'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
-                       'scripts/payload-update.sh', '.gitignore',
-                       'home/.chezmoidata/codex-policy.json',
-                       'home/.policy/claude-settings.json', 'home/.policy/codex-config.toml',
-                       'home/dot_claude/modify_private_settings.json',
-                       'home/dot_codex/modify_private_config.toml',
-                       'tests/test_chezmoi_claude.py', 'tests/test_chezmoi_codex.py',
-                       'tests/test_chezmoi_integration.py',
-                       '.chezmoiroot', '.chezmoiversion', 'home/.chezmoiignore', '.gitattributes',
-                       'home/dot_zshrc', 'home/dot_local/bin/executable_my-fzf-preview.sh',
-                       'home/dot_config/aria2/aria2.conf', 'home/dot_wezterm.lua', 'home/dot_p10k.zsh',
-                       'home/dot_config/sh/dot_profile.tmpl', 'home/.hosts/mac/.config/sh/.profile',
-                       'tests/chezmoi_source_support.py', 'tests/test_chezmoi_source_state.py',
-                       'tests/test_chezmoi_rendered.py', 'tests/fixtures/chezmoi/targets.tsv',
-                       'home/dot_profile', 'home/dot_wslconfig',
-                       'tests/test_chezmoi_native_config.py', 'tests/test_chezmoi_secrets.py',
-                       'tests/fixtures/chezmoi/native-config/modify_private_settings.json',
-                       'tests/fixtures/chezmoi/secrets/README.md', 'tests/chezmoi.sh',
-                       'tests/chezmoi.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1',
-                       '.github/scripts/install-test-chezmoi.py', 'lib/bootstrap/platform.sh',
-                       'lib/bootstrap/checks.sh', 'lib/bootstrap/steps-human.sh',
-                       'doctor.sh', 'setup-host.sh'],
+    'chezmoi': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
+                'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
+                'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
+                'scripts/payload-update.sh', '.gitignore',
+                'home/.chezmoidata/codex-policy.json',
+                'home/.policy/claude-settings.json', 'home/.policy/codex-config.toml',
+                'home/dot_claude/modify_private_settings.json',
+                'home/dot_codex/modify_private_config.toml',
+                'tests/test_chezmoi_claude.py', 'tests/test_chezmoi_codex.py',
+                'tests/test_chezmoi_integration.py',
+                '.chezmoiroot', '.chezmoiversion', 'home/.chezmoiignore', '.gitattributes',
+                'home/dot_zshrc', 'home/dot_local/bin/executable_my-fzf-preview.sh',
+                'home/dot_config/aria2/aria2.conf', 'home/dot_wezterm.lua', 'home/dot_p10k.zsh',
+                'home/dot_config/sh/dot_profile.tmpl', 'home/.hosts/mac/.config/sh/.profile',
+                'tests/chezmoi_source_support.py', 'tests/test_chezmoi_source_state.py',
+                'tests/test_chezmoi_rendered.py', 'tests/fixtures/chezmoi/targets.tsv',
+                'home/dot_profile', 'home/dot_wslconfig',
+                'tests/test_chezmoi_modify.py', 'tests/test_chezmoi_secrets.py',
+                'tests/fixtures/chezmoi/modify/modify_private_settings.json',
+                'tests/fixtures/chezmoi/secrets/README.md', 'tests/chezmoi.sh',
+                'tests/chezmoi.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1',
+                '.github/scripts/install-test-chezmoi.py', 'lib/bootstrap/platform.sh',
+                'lib/bootstrap/checks.sh', 'lib/bootstrap/steps-human.sh',
+                'doctor.sh', 'setup-host.sh'],
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh',
                     'tests/e2e/lib/steps.sh', 'docs/bootstrap.md', 'config/bootstrap/installers.tsv',
                     '.chezmoiversion', 'lib/bootstrap/steps-common.sh'],
@@ -223,19 +223,19 @@ need = {
 missed = []
 for name, excluded, checked in (
     ('check-json', ['home/dot_claude/modify_private_settings.json',
-                    'tests/fixtures/chezmoi/native-config/modify_private_settings.json'],
+                    'tests/fixtures/chezmoi/modify/modify_private_settings.json'],
                    ['home/.policy/claude-settings.json', 'home/.chezmoidata/codex-policy.json',
                     'home/dot_claude/ordinary.json',
                     'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json',
                     'home/dot_codex/pets/tom/pet.json', 'home/dot_config/oh-my-posh/prompt.omp.json']),
     ('check-toml', ['home/dot_codex/modify_private_config.toml',
-                    'tests/fixtures/chezmoi/native-config/modify_private_config.toml'],
+                    'tests/fixtures/chezmoi/modify/modify_private_config.toml'],
                    ['home/.policy/codex-config.toml', 'home/dot_codex/ordinary.toml']),
 ):
     exclude = hooks[name][0].get('exclude')
     for path in excluded:
         if not exclude or not exclude.search(path):
-            missed.append(f'{name} attempts to parse native template {path}')
+            missed.append(f'{name} attempts to parse modify template {path}')
     for path in checked:
         if exclude and exclude.search(path):
             missed.append(f'{name} excludes ordinary policy/data {path}')
@@ -246,7 +246,7 @@ for name, paths in need.items():
     for path in paths:
         if (files and not files.search(path)) or any(e and e.search(path) for e in (exclude, top_exclude)):
             missed.append(f'{name} does not run on {path}')
-# Shell sources the target table names stay linted under their native
+# Shell sources the target table names stay linted under their source
 # names; upstream and app-written bytes never reach a fixing hook.
 TERMINAL = 'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
 UPSTREAM = {'.p10k.zsh': 'home/dot_p10k.zsh', '.local/bin/my-fzf-preview.sh': 'home/dot_local/bin/executable_my-fzf-preview.sh'}
@@ -268,7 +268,7 @@ for name in ('shellcheck', 'shfmt'):
             missed.append(f'{name} variant {number} does not set types: [file]')
 def lints(variant, path):
     return variant.get('types') == ['file'] and selects(variant, path)
-ROLES = ('common-only', 'mac', 'wsl-ubuntu', 'lab-ubuntu', 'sherlock', 'marlowe', 'win')
+ROLES = ('generic', 'mac', 'wsl-ubuntu', 'lab-ubuntu', 'sherlock', 'marlowe', 'win')
 rows = [line.split('\t') for line in open(sys.argv[3], encoding='ascii').read().splitlines() if line and not line.startswith('#')][1:]
 for target, hosts, source, _mode, shell in rows:
     if shell == '-' or target in RENDERED_ONLY:

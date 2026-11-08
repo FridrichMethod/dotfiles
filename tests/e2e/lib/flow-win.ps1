@@ -1,19 +1,19 @@
 #Requires -Version 7.0
 # The flow of tests/e2e/run.ps1: the setup-host.ps1 -Host win -Yes loop with
-# its HUMAN blocks up to the HW-native handover, and the whole sequence:
+# its HUMAN blocks up to the HW-deploy step, and the whole sequence:
 # clone, winget, doctor-initial, the no-write -Check, the apply loop, the
-# handover through docs/bootstrap.md "Fresh Windows home by hand", the second
+# first apply through docs/bootstrap.md "Fresh Windows home by hand", the second
 # apply, the no-write -Check that finds nothing left, the profile load, the
-# payload repos, the native convergence check, the final doctor, the isolated
-# native fixtures and the task audit: the native Windows bootstrap, driven the
+# payload repos, the convergence check, the final doctor, the isolated
+# chezmoi fixtures and the task audit: the native Windows bootstrap, driven the
 # way "Running it with an agent" says an agent drives it. Dot-source only,
 # after steps.ps1.
 
 function Invoke-E2EBlocks {
     # Act on an exit-3 run's blocks in printed order; $false once a block is
     # refused (Broken is set). A block the harness must not act on refuses
-    # the whole run first, wherever it was printed. The HW-native block is the
-    # native-handover step's, after the loop; each reminder is recorded once
+    # the whole run first, wherever it was printed. The HW-deploy block is the
+    # home-deploy step's, after the loop; each reminder is recorded once
     # as a skip, across runs.
     param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Blocks)
     foreach ($block in $Blocks) {
@@ -25,7 +25,7 @@ function Invoke-E2EBlocks {
     }
     foreach ($block in $Blocks) {
         $action = Get-E2EBlockPolicy -Id $block.Id -Kind $block.Kind
-        if ($action -ceq 'handover') { continue }
+        if ($action -ceq 'deploy') { continue }
         if ($action -ceq 'skip') {
             if ($E2E['SkippedBlocks'] -notcontains $block.Id) {
                 $E2E['SkippedBlocks'] = @($E2E['SkippedBlocks']) + @($block.Id)
@@ -41,17 +41,17 @@ function Invoke-E2EBlocks {
 }
 
 function Invoke-E2EApplyLoop {
-    # setup-host.ps1 -Host win -Yes until only the HW-native handover is
+    # setup-host.ps1 -Host win -Yes until only the HW-deploy block is
     # left, at most eight runs, each with the PATH a new terminal would read;
     # Get-E2ELoopNext decides on each run, as e2e_loop_next does in
     # inside.sh. blocks: a block the harness must act on (no Windows block
     # line runs, so a refused one), handed to Invoke-E2EBlocks. rerun:
     # nothing to act on, but a step applied (a line of E2EAppliedRe). done:
-    # nothing to act on, nothing applied, HW-native alone pending and its
-    # block printed; the reminders are recorded and HandoverBlock keeps that
-    # block for the native-handover step. stuck: any other exit 3 fails as
+    # nothing to act on, nothing applied, HW-deploy alone pending and its
+    # block printed; the reminders are recorded and DeployBlock keeps that
+    # block for the home-deploy step. stuck: any other exit 3 fails as
     # "no progress". early: exit 0 fails, since a fresh home cannot have
-    # HW-native done. Exit 1 or 2 fails with what setup-host reported;
+    # HW-deploy done. Exit 1 or 2 fails with what setup-host reported;
     # anything else is the timeout. Returns one bool.
     for ($n = 1; $n -le 8; $n++) {
         $name = "apply-$n"
@@ -80,21 +80,21 @@ function Invoke-E2EApplyLoop {
             Complete-E2EStep pass "exit 3; applied $($stepped.Count) step(s); pending: $pending"
             continue
         }
-        $handover = @($blocks | Where-Object { $_.Id -ceq 'HW-native' }) | Select-Object -First 1
-        if ($verdict -ceq 'done' -and $null -ne $handover) {
-            $E2E['HandoverBlock'] = $handover
-            Complete-E2EStep pass "exit 3 after $n run(s); only HW-native pending; blocks: $summary"
+        $deploy = @($blocks | Where-Object { $_.Id -ceq 'HW-deploy' }) | Select-Object -First 1
+        if ($verdict -ceq 'done' -and $null -ne $deploy) {
+            $E2E['DeployBlock'] = $deploy
+            Complete-E2EStep pass "exit 3 after $n run(s); only HW-deploy pending; blocks: $summary"
             return (Invoke-E2EBlocks -Blocks $blocks)
         }
         $E2E['Broken'] = $name
         if ($verdict -ceq 'done') {
-            Complete-E2EStep fail "exit 3 with only HW-native pending, but no HW-native block (blocks: $summary)"
+            Complete-E2EStep fail "exit 3 with only HW-deploy pending, but no HW-deploy block (blocks: $summary)"
         }
         elseif ($verdict -ceq 'stuck') {
             Complete-E2EStep fail "no progress: exit 3 with no block the harness may run and nothing applied (pending: $pending; blocks: $summary)"
         }
         elseif ($verdict -ceq 'early') {
-            Complete-E2EStep fail 'exit 0 before the handover: HW-native was already done on a fresh home'
+            Complete-E2EStep fail 'exit 0 before the first apply: HW-deploy was already done on a fresh home'
         }
         elseif ($verdict -ceq 'error') {
             Complete-E2EStep fail "exit ${code}: $(Get-E2EFailureDetail $output $stderr)"
@@ -105,7 +105,7 @@ function Invoke-E2EApplyLoop {
         return $false
     }
     $E2E['Broken'] = 'apply-loop'
-    Write-E2EFailure apply-loop 'eight apply runs without reaching the handover'
+    Write-E2EFailure apply-loop 'eight apply runs without reaching the first apply'
     return $false
 }
 
@@ -123,13 +123,13 @@ function Invoke-E2EFlowWin {
         [void](Invoke-E2EApplyLoop)
         $E2E['TasksAfterLoop'] = Get-E2EScheduledTaskNames
     }
-    Invoke-E2EOrSkip native-handover { Invoke-E2EStepNativeHandover }
+    Invoke-E2EOrSkip home-deploy { Invoke-E2EStepHomeDeploy }
     Invoke-E2EOrSkip second-apply { Invoke-E2EStepSecondApply }
     Invoke-E2EOrSkip check-done { Invoke-E2EStepCheckDone }
     Invoke-E2EOrSkip login-shell { Invoke-E2EStepLoginShell }
     Invoke-E2EOrSkip payloads { Invoke-E2EStepPayloads }
-    Invoke-E2EOrSkip native-converged { Invoke-E2EStepNativeConverged }
+    Invoke-E2EOrSkip home-converged { Invoke-E2EStepHomeConverged }
     Invoke-E2EOrSkip doctor-final { Invoke-E2EStepDoctorFinal }
-    Invoke-E2EOrSkip native-fixtures { Invoke-E2EStepNativeFixtures }
+    Invoke-E2EOrSkip chezmoi-fixtures { Invoke-E2EStepChezmoiFixtures }
     Invoke-E2EAuditTasks
 }

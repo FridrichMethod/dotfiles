@@ -97,10 +97,10 @@ config then uses that database, while the updater's explicit
 and setup-host from `[data].host` alone, reads chezmoi init's real rendering of
 it (also from a seed with a case variant of `sourceDir` and `mode = "symlink"`),
 requires that `lib/chezmoi-guard.sh` accepts that rendering, and reports
-H7-native done on a home whose config names this checkout and pending on one
+H7-deploy done on a home whose config names this checkout and pending on one
 whose config names another.
 
-On native Windows, `test_chezmoi_takeover_windows.py` also pins the login
+On native Windows, `test_chezmoi_update_windows.py` also pins the login
 updater to `~/.local/bin/chezmoi.exe`: a `chezmoi.com` or `chezmoi.cmd`
 earlier on PATH or beside it never runs, a valid exe runs with no chezmoi on
 PATH, and a missing exe, a foreign owner, a foreign Modify grant, a symlinked
@@ -163,7 +163,7 @@ suites just to establish environment isolation.
 The entrypoint test also checks pre-commit's files/exclude selection, the inputs
 each named hook must run on (among them the payload scripts,
 `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`, `checks.sh` and
-`steps-human.sh` (the H7-native verdict), `doctor.sh` and `setup-host.sh`; the
+`steps-human.sh` (the H7-deploy verdict), `doctor.sh` and `setup-host.sh`; the
 markdown-links hook runs on every path), and coverage of the complete
 shell-suite list. The e2e-harness and e2e-harness-windows hooks cover harness
 unit/fixture tests; these hooks do not run Docker or install into the real home.
@@ -308,12 +308,12 @@ fixture home's chezmoi config for the fixture checkout once the cases without
 a config have run. The
 setup-host fixture serves a pinned chezmoi archive whose executable answers only
 `--version` (any other command is a tripwire), so S4-chezmoi installs it and a
-full apply ends at H7-native. The doctor reads a configured home's role from
+full apply ends at H7-deploy. The doctor reads a configured home's role from
 the one quoted `host` line of the `[data]` table of its local config, also
 when the guard refuses the config, exits 2 for a missing, repeated, unknown or
 malformed one and for a home without a config and without `--host` or
-`--platform`, treats `common-only` as common only, names the cause in its
-`native-config` row (absent, a link, a directory, each invalid form, an
+`--platform`, treats `generic` as no host overlay, names the cause in its
+`chezmoi-config` row (absent, a link, a directory, each invalid form, an
 unreadable guard; only a config naming another checkout merely warns), gives
 the shell-quoted `--now` line wherever `sync-payloads` would refuse, and keeps
 the offline, write-free and no-`TMPDIR` promises. The setup-host cases
@@ -334,14 +334,14 @@ runs `tests/bootstrap.ps1`, the Windows twins against shims, wherever pwsh
 exists and prints a `SKIP:` line otherwise; the Windows job runs that suite and
 the validator from `tests/run.ps1`. Its cases run the native mode too and mirror
 the Unix ones (a healthy configured host with gh telemetry off and no writes,
-the `native-config` causes, the quoted `-Now` payload advice wherever
+the `chezmoi-config` causes, the quoted `-Now` payload advice wherever
 `sync-payloads` refuses, a checkout reached through a junction or symlink
 counting as the configured one). The healthy fixture puts a chezmoi shim on PATH and,
 on Windows, gives the fixture home a private copy of the real chezmoi
 (`DOTFILES_TEST_CHEZMOI`, else PATH's) as `~/.local/bin/chezmoi.exe`, so
-W1-chezmoi is done and an apply ends at HW-native; a Windows run without a real
+W1-chezmoi is done and an apply ends at HW-deploy; a Windows run without a real
 chezmoi skips those cases (CI requires one). There a PATH-only chezmoi, a copy
-other users may modify and a junctioned `~/.local/bin` each make `native-config`
+other users may modify and a junctioned `~/.local/bin` each make `chezmoi-config`
 `human` and W1-chezmoi todo, with no writes. W1-chezmoi stops before downloading
 under a linked `.local` or `.local/bin`. Its other W1-chezmoi case swaps the
 archive right after the by-path hash check and requires a sha256 mismatch with
@@ -485,18 +485,18 @@ Native Windows ACL, reparse-point and held-handle checks run only in the Windows
 `tests/e2e/` runs the day-zero bootstrap for real, from a fresh home, on every
 host overlay, the way [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 drives it natively, and checks the acceptance criteria below. The setup-host
-loop runs until the H7-native handover (HW-native on Windows) is the only step
-left; `native-handover` then runs the documented
+loop runs until H7-deploy (HW-deploy on Windows) is the only step
+left; `home-deploy` then runs the documented
 [Fresh home by hand](bootstrap.md#fresh-home-by-hand) procedure
 ([Fresh Windows home by hand](bootstrap.md#fresh-windows-home-by-hand)),
 extracted from the clone's own `docs/bootstrap.md`, in the sandbox home;
 `second-apply` must apply nothing, `check-done` (`--check`, `-Check`) must
-exit 0 with nothing left, `native-converged` must find an empty
-`native_cz diff --exclude=dirs` (`Invoke-NativeCz` on Windows) with every
-managed target a regular file, and `native-fixtures` runs `tests/chezmoi.sh`
+exit 0 with nothing left, `home-converged` must find an empty
+`home_cz diff --exclude=dirs` (`Invoke-HomeCz` on Windows) with every
+managed target a regular file, and `chezmoi-fixtures` runs `tests/chezmoi.sh`
 or `tests/chezmoi.ps1` with the provisioned chezmoi required. The `other`
 host has no overlay: it installs chezmoi with the by-hand line of S4-chezmoi
-and deploys the `common-only` role by hand (`native_handover common-only`).
+and deploys the `generic` role by hand (`home_deploy generic`).
 It is opt-in: `./tests/run.sh` never runs it (only the fast unit
 tests `tests/e2e-harness.sh` and, wherever pwsh exists,
 `tests/e2e-harness.ps1`, which drive the harness and its Windows twin against
@@ -546,28 +546,28 @@ natively on Darwin with `E2E_NATIVE=1`, and `win` only through
 
 | Host | Image or runner | User and home | Flow |
 | --- | --- | --- | --- |
-| `lab-ubuntu` | `ubuntu:24.04` | `fridrichmethod`, `/home/fridrichmethod` | setup-host loop, `--host lab-ubuntu`, then the fresh-home handover |
-| `wsl-ubuntu` | `ubuntu:24.04` with `WSL_DISTRO_NAME=Ubuntu` | the same | setup-host loop, `--host wsl-ubuntu`, then the fresh-home handover |
-| `other` | `fedora:44` | the same | X-other-linux by hand, `native_handover common-only`, `--platform other` |
-| `sherlock` | `rockylinux:9` plus EPEL Lmod, `linux/amd64` | `zyli2002`, `/home/users/zyli2002` | setup-host loop, `--host sherlock`, then the fresh-home handover |
-| `marlowe` | `ubuntu:24.04` plus apt `lmod`, `linux/amd64` | `zyli2002`, `/users/zyli2002` | setup-host loop, `--host marlowe`, then the fresh-home handover |
-| `mac` | the `macos-15` runner, natively | `runner`, `/Users/runner` | setup-host loop, `--host mac`, then the fresh-home handover |
+| `lab-ubuntu` | `ubuntu:24.04` | `fridrichmethod`, `/home/fridrichmethod` | setup-host loop, `--host lab-ubuntu`, then the fresh-home deployment |
+| `wsl-ubuntu` | `ubuntu:24.04` with `WSL_DISTRO_NAME=Ubuntu` | the same | setup-host loop, `--host wsl-ubuntu`, then the fresh-home deployment |
+| `other` | `fedora:44` | the same | X-other-linux by hand, `home_deploy generic`, `--platform other` |
+| `sherlock` | `rockylinux:9` plus EPEL Lmod, `linux/amd64` | `zyli2002`, `/home/users/zyli2002` | setup-host loop, `--host sherlock`, then the fresh-home deployment |
+| `marlowe` | `ubuntu:24.04` plus apt `lmod`, `linux/amd64` | `zyli2002`, `/users/zyli2002` | setup-host loop, `--host marlowe`, then the fresh-home deployment |
+| `mac` | the `macos-15` runner, natively | `runner`, `/Users/runner` | setup-host loop, `--host mac`, then the fresh-home deployment |
 | `win` | the `windows-2025` runner, natively | the runner user | `run.ps1`: the PowerShell twins, then Fresh Windows home by hand (elevated) |
 
 Each image has only what a fresh install of that kind has (Ubuntu and Fedora:
 `git`, `curl`, `sudo` and certificates; the clusters: Lmod, `git`, `curl` and
 the OS utilities), never what the bootstrap installs, and a home made by
-`useradd -m`, so the `/etc/skel` rc files are there for the handover to keep
+`useradd -m`, so the `/etc/skel` rc files are there for the deployment to keep
 copies of. The setup-host loop is `./setup-host.sh --host H --yes` after
 `./doctor.sh --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 prescribes; the `other` flow installs the distribution packages with `dnf`,
 takes `fetch_pinned` and `clone_listed` from the fenced block of
 [Downloads and clones by hand](bootstrap.md#downloads-and-clones-by-hand) and
-`native_cz` and `native_handover` from the one of
+`home_cz` and `home_deploy` from the one of
 [Fresh home by hand](bootstrap.md#fresh-home-by-hand), both in the clone
-itself, then follows the native
+itself, then follows the
 [X-other-linux](bootstrap.md#x-other-linux-other-linux-distributions) sequence
-to `native_handover common-only`. What is faked, and what is only an
+to `home_deploy generic`. What is faked, and what is only an
 approximation:
 
 - `sudo` and `chsh` are wrappers in `/usr/local/bin` that append every
@@ -601,7 +601,7 @@ approximation:
   block has been printed; `SCRATCH` points at a writable directory in the
   image once it is set: on `sherlock` the fake site profile exports it (with
   the group paths) from the first login shell, on `marlowe` nothing sets it
-  before the handover deploys the overlay, as on the real cluster, and the
+  before the deployment installs the overlay, as on the real cluster, and the
   overlay then exports
   `/scratch/m000191`, which the image creates writable, so `E2E_ALLOC_ENV`
   names that path literally; the `S2-modules` block (`ml nodejs/24.13.0`, the
@@ -634,14 +634,14 @@ approximation:
   installer's scope to that token (`winget.json` pins none), and `oh-my-posh
   font install` puts fonts where an elevated oh-my-posh puts them. Fresh
   Windows home by hand warns when it runs elevated, and the run records a
-  `handover-token` note; the ordinary-token check of the login updater stays
+  `deploy-token` note; the ordinary-token check of the login updater stays
   in per-host acceptance. A winget that needs `Repair-WinGetPackageManager`
   first is recorded as a deviation. `run.ps1` asserts criteria 1 (without
   `--smoke`, which `doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
   doctor, the no-write `-Tsv` and `-Check` runs, a second `-Yes` that applies
   nothing and a `-Check` with nothing left, a clean clone after every step, a
   silent load of the deployed profile, the payload repos, the documented
-  handover and an empty native diff), plus `audit-scheduled-tasks` (the task
+  deployment and an empty diff), plus `audit-scheduled-tasks` (the task
   identities unchanged after the apply loop, the tasks the loop added listed in
   a note). There are no negatives and no wrapper, sudo or rc audits there, since
   there are no wrappers and no sudo log. The home snapshots note, rather than
@@ -669,7 +669,7 @@ with the person's approvals scripted, keyed on the block's step id and kind.
 | --- | --- |
 | `H1-apt-core`, `H1-locale`, `H1-linuxbrew`, `H1-homebrew` (`sudo`) | every command line, in order |
 | `S5-claude` (`inspect`) | only the digest-gate line, `printf '%s  %s\n' <sha256> <path> \| sha256sum -c --status - && bash <path>` |
-| `H7-native` (`judgment`) | handover: never run line by line (its lines are notes); once it alone is pending and a run applied nothing, the loop ends and `native-handover` runs the documented procedure under `human:H7-native` |
+| `H7-deploy` (`judgment`) | deploy: never run line by line (its lines are notes); once it alone is pending and a run applied nothing, the loop ends and `home-deploy` runs the documented procedure under `human:H7-deploy` |
 | `H2-alloc` (`alloc`) | never run: recorded, and the fake allocation variables are exported for the rest of the run |
 | `S2-modules`, `H7-payloads`, `H7-doctor` (`judgment`); `H7-auth` (`auth`); `H1-fcitx5` (`gui`); `H7-chsh` (`chsh`) | skipped and recorded as `skip`: non-blocking, and a person's to do |
 | `H1-xcode-clt`; any `S2-brew-bundle` block (the conflict judgment or the shared-prefix `sudo`); `S4-nvm`; `X-recovery`; any other id or kind | **fail**, with the block's text in the detail |
@@ -678,26 +678,26 @@ A blocking block the harness refuses is a finding, not something to work
 around: a fresh machine should never print it. The loop reruns setup-host after
 each block, at most eight times. Exit 3 with a block to act on hands it over;
 exit 3 with nothing to act on reruns when the run applied a step (a
-`<id> done applied:` line) and ends the loop when H7-native alone is pending
+`<id> done applied:` line) and ends the loop when H7-deploy alone is pending
 and nothing was applied; any other exit 3 fails as "no progress". Exit 0
-before the handover fails, since a fresh home cannot have H7-native done, and
+before the deployment fails, since a fresh home cannot have H7-deploy done, and
 exit 1 or 2 fails naming the step.
 
 On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -Host win
--Yes` (again at most eight runs, with the same verdicts and HW-native as the
-handover), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the same
+-Yes` (again at most eight runs, with the same verdicts and HW-deploy as the
+deployment), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the same
 `<id>:<kind>`:
 
 | Block | Action |
 | --- | --- |
-| `HW-native` (`judgment`) | handover: never run line by line; once it alone is pending and a run applied nothing, the loop ends and `native-handover` runs Fresh Windows home by hand (`Invoke-NativeHandover -Role win` in a child `pwsh -NoProfile -NonInteractive` from the clone) under `human:HW-native` |
+| `HW-deploy` (`judgment`) | deploy: never run line by line; once it alone is pending and a run applied nothing, the loop ends and `home-deploy` runs Fresh Windows home by hand (`Invoke-HomeDeploy -Role win` in a child `pwsh -NoProfile -NonInteractive` from the clone) under `human:HW-deploy` |
 | `HW-clone` (any kind) | **fail**: it blocks the flow, and the harness made and checked the clone itself, so a pending HW-clone means setup-host has not accepted it |
 | `HW-execution-policy`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, installs WSL, starts a service nor signs in |
 | any other id or kind | **fail**, with the block's text in the detail |
 
 The Windows login-shell step then loads the deployed profile in a child `pwsh`
 started without `-NoProfile`, which must exit 0 and print nothing, with the
-profile a regular file the handover wrote, the payloads step runs
+profile a regular file the deployment wrote, the payloads step runs
 `scripts\payload-update.ps1 -Now` (criterion 7), and
 `E2E_SNAPSHOT_PRUNE` is `;`-separated there, since Windows paths hold drive
 letters and colons.
@@ -711,11 +711,11 @@ step in `summary.tsv`:
    -c ...'`), `./doctor.sh --host H` exits 0 for the default tiers, then
    `--smoke` exits 0 (`--platform other` on `other`).
 2. **The read-only modes write nothing.** Around `./doctor.sh --tsv`,
-   `./setup-host.sh --host H --check` and the `--check` after the handover,
+   `./setup-host.sh --host H --check` and the `--check` after the deployment,
    `TMPDIR` is a fresh empty directory that must stay empty with its mtime
    unchanged, and `find "$HOME" -newer <marker>` (pruning `~/dotfiles/.git`)
    must print nothing, with the entry count unchanged.
-3. **A second apply is a no-op.** After the handover, `./setup-host.sh --host
+3. **A second apply is a no-op.** After the deployment, `./setup-host.sh --host
    H --yes` exits 0, prints no `<id> done applied:` line, and the home
    snapshot shows nothing newer; `./setup-host.sh --host H --check` then exits
    0 with no `todo` line.
@@ -734,7 +734,7 @@ step in `summary.tsv`:
    start and the end, and the sha256 of `~/.bashrc`, `~/.profile`,
    `~/.bash_profile`, `~/.zshrc`, `~/.zshenv` and `~/.zprofile` (those that
    exist) does not change across any non-human step; a change during a `human:*`
-   step, the handover's included, is recorded as a note.
+   step, the deployment's included, is recorded as a note.
 6. **A login shell starts clean.** Under `env -i` with the system PATH,
    `bash -lc 'exec <zsh> -il -c exit'` (the login env's zsh on hpc) exits 0
    with empty stdout and empty stderr, apart from what is not a message: on
@@ -758,16 +758,16 @@ step in `summary.tsv`:
    (`--tsv`) must then be `ok` and name what it found installed. On Unix it
    is a setup phase, so criterion 5 covers it: an installer that runs sudo,
    links into the clone or changes an rc file fails the audits.
-8. **The handover is the documented one and converges.** `native-handover`
+8. **The deployment is the documented one and converges.** `home-deploy`
    runs the clone's Fresh home by hand functions, which must define exactly
-   `native_cz` and `native_handover` and nothing else at the top level, and
-   `native_handover H` (or `common-only`) must exit 0 and leave a regular
+   `home_cz` and `home_deploy` and nothing else at the top level, and
+   `home_deploy H` (or `generic`) must exit 0 and leave a regular
    local config that the clone's guard accepts as naming the physical home and
    the physical clone and that selects the role, no maintenance marker,
    a non-empty state database, a regular `~/.zshrc` and a byte-identical
    copy of every rc file that existed before in
    `~/.local/state/dotfiles-fresh-backup`. After the payloads,
-   `native-converged` requires an empty `native_cz diff --exclude=dirs` and
+   `home-converged` requires an empty `home_cz diff --exclude=dirs` and
    every managed target a regular file.
 
 Each host also runs its negative cases as separate steps
@@ -776,8 +776,8 @@ the lab container and the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster
 (Lmod's profile.d exports `BASH_ENV`, which every bash script sources on start
 and which re-exports `LMOD_DIR`), `sudo -n ./setup-host.sh` as root, each exit
 2), `alloc-first` (the first hpc apply exits 3 and prints the `H2-alloc`
-block) and `common-only` (after the common-only handover, `./doctor.sh` exits
-0 and warns common-only, and `./setup-host.sh --check` without `--host` exits
+block) and `generic` (after the generic deployment, `./doctor.sh` exits
+0 and warns generic, and `./setup-host.sh --check` without `--host` exits
 2).
 
 ### Harness code rules
@@ -829,7 +829,7 @@ Sherlock and Marlowe cannot run the containers (no Docker on a login node, and
 `E2E_NATIVE` is honoured only on macOS), so the owner runs the native bootstrap
 by hand once per cluster, on a fresh account home, and checks the criteria
 above the same way. Log in without the RemoteCommand (`ssh sherlock-plain`,
-`ssh marlowe-plain`), paste `native_cz` and `native_handover` from
+`ssh marlowe-plain`), paste `home_cz` and `home_deploy` from
 [Fresh home by hand](bootstrap.md#fresh-home-by-hand) into the shell, then:
 
 ```sh
@@ -843,23 +843,23 @@ find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # m
 ./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
-echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the handover
+echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the deployment
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
 # Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet
-./setup-host.sh --host sherlock                             # builds the login env; exit 3 with only H7-native left
+./setup-host.sh --host sherlock                             # builds the login env; exit 3 with only H7-deploy left
 exit                                                        # back to the login node
-cd ~/dotfiles && native_handover sherlock                   # H7-native: Fresh home by hand
+cd ~/dotfiles && home_deploy sherlock                       # H7-deploy: Fresh home by hand
 ./setup-host.sh --host sherlock                             # exits 0 and prints no "done applied:" line
 git -C ~/dotfiles status --porcelain                        # empty, here and after every step above
 exec "$HOME/micromamba/envs/login/bin/zsh" -l               # starts without an error line
 sh ~/dotfiles/scripts/payload-update.sh --now               # H7-payloads (criterion 7; no login runs it): exits 0
-cd ~/dotfiles && native_cz diff --exclude=dirs              # paste the functions again in this shell; prints nothing
+cd ~/dotfiles && home_cz diff --exclude=dirs                # paste the functions again in this shell; prints nothing
 ./doctor.sh --host sherlock && ./doctor.sh --host sherlock --smoke
 ```
 
-Nothing but the HUMAN blocks and the handover changed the home when
+Nothing but the HUMAN blocks and the deployment changed the home when
 `~/.config/chezmoi/chezmoi.toml` and the deployed regular files (`~/.zshrc`
-among them) appear only after the `native_handover` line, the backup
+among them) appear only after the `home_deploy` line, the backup
 directory `~/.local/state/dotfiles-fresh-backup` holds the earlier rc files
 byte for byte, and `getent passwd "$USER"` still names the same login shell
 at the end. Then fill

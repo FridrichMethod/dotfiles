@@ -30,14 +30,14 @@ STEP_IDS = (
     "P0-preflight", "H1-xcode-clt", "H1-homebrew", "H1-apt-core", "H1-locale", "H1-linuxbrew",
     "H1-fcitx5", "S2-brew-bundle", "S2-micromamba", "H2-alloc", "S2-login-env", "S2-modules",
     "S3-clones", "S3-bat-theme", "S3-dirs", "S4-nvm", "S4-chezmoi", "S5-claude", "S5-codex",
-    "S6-nerd-font", "S6-kitty", "H7-native", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
-    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-chezmoi", "HW-native", "HW-clone",
+    "S6-nerd-font", "S6-kitty", "H7-deploy", "H7-chsh", "H7-auth", "H7-payloads", "H7-doctor",
+    "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-chezmoi", "HW-deploy", "HW-clone",
     "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
     "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
 # Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
 # checks and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "path-order", "rc-pollution", "omz-order", "nvm-homebrew", "payloads",
-                "gh-auth", "claude-auth", "codex-auth", "zsh-smoke", "native-config")
+                "gh-auth", "claude-auth", "codex-auth", "zsh-smoke", "chezmoi-config")
 TOOLS_COLUMNS = ("id", "tier", "hosts", "probe", "version_flag", "floor", "absent", "doc")
 CLONES_COLUMNS = ("id", "dest", "url", "ref", "hosts")
 INSTALLERS_COLUMNS = ("id", "kind", "url", "sha256", "dest", "hosts", "arch", "tier", "human")
@@ -791,9 +791,9 @@ class RejectionTests(unittest.TestCase):
              lambda: self.replace(steps, doctor_row, "\nH7-doctor judgment - no macos,debian,hpc" + doctor_row)),
             ("step-lists", "registry not found", lambda: self.replace(steps, "STEPS_REGISTRY='", 'STEPS_REGISTRY="')),
             ("step-lists", "unknown windows id",
-             lambda: self.replace(setup, "'HW-clone', 'HW-native', ", "'HW-clone', 'HW-natve', ")),
+             lambda: self.replace(setup, "'HW-clone', 'HW-deploy', ", "'HW-clone', 'HW-deplyo', ")),
             ("step-lists", "blocking not human",
-             lambda: self.replace(setup, "$BlockingHumanSteps = @('HW-clone', 'HW-native')",
+             lambda: self.replace(setup, "$BlockingHumanSteps = @('HW-clone', 'HW-deploy')",
                                   "$BlockingHumanSteps = @('HW-clone', 'W1-chezmoi')")),
             ("step-lists", "list missing",
              lambda: self.replace(setup, "$AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', "

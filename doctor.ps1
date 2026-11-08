@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
-    the structural checks native-config and payloads, prints one line per
+    the structural checks chezmoi-config and payloads, prints one line per
     check and then a summary:
 
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
@@ -17,7 +17,7 @@
     Microsoft Store alias that prints no version does not count);
     PowerShell modules by a directory in a PSModulePath entry; the Nerd Font
     by a file name in the system or per-user Windows font directory.
-    native-config checks this home's chezmoi config, named by cause: a
+    chezmoi-config checks this home's chezmoi config, named by cause: a
     config naming another checkout only warns, and on Windows a configured
     home whose ~/.local/bin/chezmoi.exe the login updater refuses is human.
 
@@ -96,7 +96,7 @@ $FailingStatuses = @('missing', 'outdated', 'human')
 # checks, the -Online and --smoke rows); tools.tsv never uses them
 # (tests/test_bootstrap_manifest.py RESERVED_IDS).
 $ReservedIds = @('locale', 'path-order', 'rc-pollution', 'omz-order', 'nvm-homebrew', 'payloads',
-    'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'native-config')
+    'gh-auth', 'claude-auth', 'codex-auth', 'zsh-smoke', 'chezmoi-config')
 
 function Limit-DoctorResult {
     # Missing, outdated and human rows outside the selected tiers only warn.
@@ -139,43 +139,43 @@ function Get-DoctorToolResult {
     return Limit-DoctorResult $result $Selection
 }
 
-function Get-DoctorNativeConfigResult {
-    # doctor.sh's bootstrap_check_native_config: this home's chezmoi config,
+function Get-DoctorChezmoiConfigResult {
+    # doctor.sh's bootstrap_check_chezmoi_config: this home's chezmoi config,
     # named by cause. A config naming another checkout only warns. On Windows
     # a configured home also needs the one chezmoi.exe the login updater runs
     # (a read-only check); Unix updaters use the PATH chezmoi.
-    $native = Get-BootstrapChezmoiState -RepoRoot $RepoRoot
+    $homeState = Get-BootstrapChezmoiState -RepoRoot $RepoRoot
     $config = Join-Path $HOME '.config/chezmoi/chezmoi.toml'
-    switch -CaseSensitive ($native.State) {
+    switch -CaseSensitive ($homeState.State) {
         'ok' {
-            if ($IsWindows -and -not (Test-BootstrapNativeChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
-                return New-DoctorResult human native-config core ('~/.config/chezmoi/chezmoi.toml names this home and this checkout, but the login updater refuses ~/.local/bin/chezmoi.exe ' +
+            if ($IsWindows -and -not (Test-BootstrapTrustedChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
+                return New-DoctorResult human chezmoi-config core ('~/.config/chezmoi/chezmoi.toml names this home and this checkout, but the login updater refuses ~/.local/bin/chezmoi.exe ' +
                     '(missing, a link, under a linked directory, or not private to you, SYSTEM and Administrators) and never uses a PATH chezmoi, ' +
                     'so login updates do not run; let setup-host.ps1 W1-chezmoi install a private copy') W1-chezmoi
             }
-            return New-DoctorResult ok native-config core '~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff' HW-native
+            return New-DoctorResult ok chezmoi-config core '~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff' HW-deploy
         }
         'elsewhere' {
-            return New-DoctorResult warn native-config core "~/.config/chezmoi/chezmoi.toml names the checkout $($native.Source), not this checkout $($native.Checkout); run $(Join-Path $native.Source 'doctor.ps1') for its state" HW-native
+            return New-DoctorResult warn chezmoi-config core "~/.config/chezmoi/chezmoi.toml names the checkout $($homeState.Source), not this checkout $($homeState.Checkout); run $(Join-Path $homeState.Source 'doctor.ps1') for its state" HW-deploy
         }
-        'maintenance' { return New-DoctorResult human native-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' HW-native }
+        'maintenance' { return New-DoctorResult human chezmoi-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/update-contract.md' HW-deploy }
         'config' {
-            if (-not $native.Exists) {
-                return New-DoctorResult human native-config core 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh Windows home by hand in docs/bootstrap.md' HW-native
+            if (-not $homeState.Exists) {
+                return New-DoctorResult human chezmoi-config core 'there is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh Windows home by hand in docs/bootstrap.md' HW-deploy
             }
             $item = Get-Item -LiteralPath $config -Force -ErrorAction SilentlyContinue
             if (-not $item -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                return New-DoctorResult human native-config core '~/.config/chezmoi/chezmoi.toml is a link; inspect it and never overwrite it blindly' HW-native
+                return New-DoctorResult human chezmoi-config core '~/.config/chezmoi/chezmoi.toml is a link; inspect it and never overwrite it blindly' HW-deploy
             }
-            return New-DoctorResult human native-config core '~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly' HW-native
+            return New-DoctorResult human chezmoi-config core '~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly' HW-deploy
         }
-        'invalid' { return New-DoctorResult human native-config core '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly' HW-native }
+        'invalid' { return New-DoctorResult human chezmoi-config core '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly' HW-deploy }
     }
-    return New-DoctorResult human native-config core "$(Join-Path $RepoRoot 'lib/chezmoi-guard.ps1') is unreadable, so the chezmoi config cannot be checked; use a complete checkout" HW-native
+    return New-DoctorResult human chezmoi-config core "$(Join-Path $RepoRoot 'lib/chezmoi-guard.ps1') is unreadable, so the chezmoi config cannot be checked; use a complete checkout" HW-deploy
 }
 
 function Get-DoctorStructuralResults {
-    Get-DoctorNativeConfigResult
+    Get-DoctorChezmoiConfigResult
     Get-DoctorPayloadResult
 }
 

@@ -11,23 +11,23 @@
     bootstrapped through Microsoft.WinGet.Client and recorded as a
     deviation), runs doctor.ps1 -Host win -Tsv and setup-host.ps1 -Host win
     -Check and requires that neither wrote in HOME or TEMP, then loops
-    setup-host.ps1 -Host win -Yes (at most eight runs) until HW-native is the
+    setup-host.ps1 -Host win -Yes (at most eight runs) until HW-deploy is the
     only step left, leaving every non-blocking HW block to the person and
     refusing a pending HW-clone (the clone is the harness's own, so that
-    block means setup-host.ps1 did not accept it). It then hands the home to
-    native chezmoi with docs/bootstrap.md "Fresh Windows home by hand"
-    (Invoke-NativeHandover -Role win from the clone) and checks the local
+    block means setup-host.ps1 did not accept it). It then deploys the home
+    with chezmoi through docs/bootstrap.md "Fresh Windows home by hand"
+    (Invoke-HomeDeploy -Role win from the clone) and checks the local
     config (sourceDir, destDir, host), the state database and the private
     copies it promises, requires a second -Yes to exit 0 applying nothing, a
     -Check to exit 0 with nothing left, the deployed profile (a regular
     file) to load silently, the payload repos to install, an empty
-    Invoke-NativeCz diff with every managed target a regular file,
+    Invoke-HomeCz diff with every managed target a regular file,
     doctor.ps1 -Host win to exit 0, tests/chezmoi.ps1 to pass with the provisioned
     ~\.local\bin\chezmoi.exe, no task change after the apply loop, and the
     clone to stay clean after every step. Between steps PATH is rebuilt
     from the registry, as a new terminal reads it. tests/e2e/inside.sh is
     the Unix twin. Every step runs under the runner's elevated token, which
-    the windows-2025 runner alone offers; the handover warns about it and
+    the windows-2025 runner alone offers; the first apply warns about it and
     the run records it in a note.
 
     It refuses to run anywhere but a GitHub Actions runner (GITHUB_ACTIONS is
@@ -46,7 +46,7 @@
     skip|note>\t<seconds>\t<detail>"), steps/NN-<step>.{log,out,err} plus
     NN-apply-N.blocks/ for the HUMAN blocks, env.txt, log/timeline,
     snapshots/<step>.diff, tmp/<step> (the TEMP of each no-write run) and
-    handover/ (the scripts the native-handover and native-converged steps
+    deploy/ (the scripts the home-deploy and home-converged steps
     ran).
 
     Exit codes: 0 every step passed (skip and note rows are fine); 1 a step

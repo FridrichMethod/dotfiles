@@ -428,14 +428,14 @@ doc_case S4-nvm hpc S2-modules
 doc_case S5-claude hpc S2-modules
 doc_case S5-codex hpc S2-modules
 doc_case S3-clones hpc S3-clones
-doc_case H7-native hpc H7-native
+doc_case H7-deploy hpc H7-deploy
 for step in H1-apt-core S2-brew-bundle S4-nvm S5-claude S5-codex; do
     doc_case "$step" windows W1-winget
 done
 doc_case S3-bat-theme windows W1-bat-theme
 doc_case S6-nerd-font windows W1-font
 doc_case S4-chezmoi windows W1-chezmoi
-doc_case H7-native windows HW-native
+doc_case H7-deploy windows HW-deploy
 doc_case H7-auth windows HW-auth
 doc_case P0-preflight windows HW-clone
 # No apt outside debian, and no sudo locale-gen on a cluster.
@@ -445,10 +445,10 @@ doc_case H1-apt-core macos S2-brew-bundle
 for step in H1-apt-core H1-locale H1-homebrew H1-linuxbrew S2-brew-bundle S4-nvm S5-claude S5-codex; do
     doc_case "$step" other X-other-linux
 done
-for step in S3-clones S3-bat-theme S4-chezmoi H7-native P0-preflight; do
+for step in S3-clones S3-bat-theme S4-chezmoi H7-deploy P0-preflight; do
     doc_case "$step" other "$step"
 done
-for step in S2-brew-bundle S4-nvm S5-claude S3-bat-theme H7-native; do
+for step in S2-brew-bundle S4-nvm S5-claude S3-bat-theme H7-deploy; do
     doc_case "$step" debian "$step"
     doc_case "$step" macos "$step"
 done
@@ -531,23 +531,23 @@ assert_eq "$(cd "$TEST_TMP" && BOOTSTRAP_UNAME_S=Linux BOOTSTRAP_OS_RELEASE="$OS
 # --------------------------------------------------------- host resolution
 echo '==> host resolution'
 # Only a home's chezmoi config selects a host: a home without one resolves
-# none and is never common only.
+# none and is never generic.
 resolve() {
     bash -c 'set -eu; . "$1"; bootstrap_resolve_host' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
-common_only() {
-    bash -c 'set -eu; . "$1"; bootstrap_recorded_common_only' _ "$FIXTURE/lib/bootstrap/platform.sh"
+recorded_generic() {
+    bash -c 'set -eu; . "$1"; bootstrap_recorded_generic' _ "$FIXTURE/lib/bootstrap/platform.sh"
 }
 [ ! -e "$TEST_HOME/.config" ] || fail 'the host resolution cases need a home without ~/.config'
 assert_status 1 'a home without a config' resolve
-assert_status 1 'a home without a config is not common only' common_only
+assert_status 1 'a home without a config is not generic' recorded_generic
 mkdir -p "$TEST_HOME/.config/chezmoi"
 printf '[data]\nhost = "sherlock"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
 assert_eq "$(resolve)" sherlock 'config role'
-assert_status 1 'a config role is not common only' common_only
-printf '[data]\nhost = "common-only"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
-assert_status 1 'config common-only resolves no host' resolve
-assert_status 0 'config common-only' common_only
+assert_status 1 'a config role is not generic' recorded_generic
+printf '[data]\nhost = "generic"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
+assert_status 1 'config generic resolves no host' resolve
+assert_status 0 'config generic' recorded_generic
 printf '[data]\nhost = "ubuntu"\n' >"$TEST_HOME/.config/chezmoi/chezmoi.toml"
 assert_status 1 'unknown config role' resolve
 # The sections below expect a home without a config.

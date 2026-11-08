@@ -375,7 +375,7 @@ step_H7_payloads_plan() {
         '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them' \
         "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)"
     if ! hook=$(bootstrap_payload_hook "$STEPS_ROOT"); then
-        printf '%s\n' "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's native-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+        printf '%s\n' "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
         steps_block_end
         return 0
     fi
@@ -424,9 +424,9 @@ step_H7_doctor_plan() {
     steps_block_end
 }
 
-# --- H7-native (operator-owned configuration handover) ---------------------
+# --- H7-deploy (operator-owned first apply) --------------------------------
 # shellcheck disable=SC2088 # a literal ~ for the reader, never expanded
-step_H7_native_check() {
+step_H7_deploy_check() {
     if bootstrap_chezmoi_ready "$STEPS_ROOT"; then
         STEP_DETAIL='~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
         return 0
@@ -435,11 +435,11 @@ step_H7_native_check() {
     return 1
 }
 
-step_H7_native_plan() {
-    steps_block_begin H7-native judgment
+step_H7_deploy_plan() {
+    steps_block_begin H7-deploy judgment
     printf '%s\n' \
         '# Follow Fresh home by hand in docs/bootstrap.md from this checkout.' \
         "# Select local [data].host = $STEPS_HOST explicitly; setup-host never initializes or applies configuration." \
-        '# Review exact targets and private backups, then initialize with all native paths explicit; never use blanket force.'
+        '# Review exact targets and private backups, then initialize with all paths explicit; never use blanket force.'
     steps_block_end
 }

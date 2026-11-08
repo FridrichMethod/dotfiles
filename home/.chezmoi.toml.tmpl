@@ -2,7 +2,7 @@
 {{- define "config-validate-temporals" -}}
   {{- if typeIs "time.Time" . -}}
     {{- if has .Location.String (list "date-local" "time-local" "datetime-local") -}}
-      {{- fail "native init does not support local date/time/datetime; config is unchanged" -}}
+      {{- fail "chezmoi init does not support local date/time/datetime; config is unchanged" -}}
     {{- end -}}
   {{- else if or (kindIs "map" .) (kindIs "slice" .) (kindIs "array" .) -}}
     {{- range . -}}{{- template "config-validate-temporals" . -}}{{- end -}}
@@ -11,12 +11,12 @@
 {{- /* Preserve local backend/data settings; only the update contract is owned. */ -}}
 {{- $config := fromToml (replace "\r\n" "\n" (include .chezmoi.configFile)) -}}
 {{- template "config-validate-temporals" $config -}}
-{{- /* Native config keys are case-insensitive; do not leave duplicate aliases. */ -}}
+{{- /* chezmoi config keys are case-insensitive; do not leave duplicate aliases. */ -}}
 {{- range $canonical := list "sourceDir" "destDir" "persistentState" "mode" "git" "update" "data" -}}
   {{- $found := false -}}
   {{- range $key, $value := $config -}}
     {{- if eq (lower $key) (lower $canonical) -}}
-      {{- if $found -}}{{- fail "duplicate case-insensitive native config key" -}}{{- end -}}
+      {{- if $found -}}{{- fail "duplicate case-insensitive chezmoi config key" -}}{{- end -}}
       {{- $found = true -}}
       {{- if ne $key $canonical -}}
         {{- $config = deleteValueAtPath $key $config -}}
@@ -27,7 +27,7 @@
 {{- end -}}
 {{- $config = setValueAtPath (list "sourceDir") .chezmoi.workingTree $config -}}
 {{- $config = setValueAtPath (list "destDir") .chezmoi.destDir $config -}}
-{{- /* Plain native commands share the login updater's state database. */ -}}
+{{- /* Plain chezmoi commands share the login updater's state database. */ -}}
 {{- $config = setValueAtPath (list "persistentState") (printf "%s/.local/state/chezmoi/chezmoi.boltdb" .chezmoi.destDir) $config -}}
 {{- $config = setValueAtPath (list "mode") "file" $config -}}
 {{- $owned := dict "git" (dict "autoAdd" false "autoCommit" false "autoPush" false)

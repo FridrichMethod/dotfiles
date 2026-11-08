@@ -73,7 +73,7 @@ e2e_guard_before() {
 
 # e2e_guard_after STEP PHASE: compare with the before-images. The rc files
 # may change during a human:* phase only (recorded as a note: the
-# native-handover step, in human:H7-native, replaces the /etc/skel files
+# home-deploy step, in human:H7-deploy, replaces the /etc/skel files
 # with the deployed ones after keeping a copy of each).
 e2e_guard_after() {
     local step=$1 phase=$2 after changed

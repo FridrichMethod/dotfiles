@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Native test entrypoint. Every assigned suite is mandatory; no profile is loaded.
+# Windows test entrypoint. Every assigned suite is mandatory; no profile is loaded.
 [CmdletBinding()]
 param([switch]$CI, [switch]$CheckPrerequisites)
 
@@ -31,9 +31,9 @@ if (Test-Path Env:DOTFILES_TEST_CHEZMOI) {
 }
 elseif (-not (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue)) {
     if ($CI -or $env:DOTFILES_TEST_REQUIRE_CHEZMOI -eq '1') {
-        throw 'CI requires chezmoi for native fixture tests.'
+        throw 'CI requires chezmoi for the chezmoi fixture tests.'
     }
-    Write-Output 'SKIP: native chezmoi fixtures (install the selected release or set DOTFILES_TEST_CHEZMOI).'
+    Write-Output 'SKIP: chezmoi fixtures (install the selected release or set DOTFILES_TEST_CHEZMOI).'
 }
 if ($CI) { $env:DOTFILES_TEST_REQUIRE_CHEZMOI = '1' }
 if ($CheckPrerequisites) {
@@ -43,7 +43,7 @@ if ($CheckPrerequisites) {
 
 Write-Output '==> chezmoi.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'chezmoi.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'Native chezmoi fixture tests failed.' }
+if ($LASTEXITCODE -ne 0) { throw 'chezmoi fixture tests failed.' }
 
 Write-Output '==> test_environment.py'
 & python -I -B -m unittest discover -s $PSScriptRoot -p 'test_environment.py' -v

@@ -1,7 +1,7 @@
 # Fresh Ubuntu 24.04 for the lab-ubuntu and wsl-ubuntu e2e hosts: what a new
 # workstation or WSL distribution has before the bootstrap runs (the quick
 # start's ca-certificates, git, curl and sudo), one passwordless-sudo user
-# whose home holds /etc/skel's .bashrc and .profile (the native handover
+# whose home holds /etc/skel's .bashrc and .profile (the first apply
 # keeps a private copy of each before it replaces it), and the e2e wrappers
 # in /usr/local/bin, ahead of the real tools on the default PATH. DEBIAN_FRONTEND stays unset in the
 # image on purpose: an apt that hangs without a TTY is a finding (the build

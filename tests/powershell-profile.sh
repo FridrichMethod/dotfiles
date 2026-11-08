@@ -126,8 +126,8 @@ fi
 # Parse the PowerShell entry points and libraries that no Unix suite runs in
 # full, so a syntax error fails here before the native Windows job. One pwsh
 # process reads the list from the environment, because -Command does not
-# populate $args (which once let a null path escape this check). This is the
-# pwsh 7 parser: Windows PowerShell 5.1 compatibility needs the Windows job.
+# populate $args. This is the pwsh 7 parser: Windows PowerShell 5.1
+# compatibility needs the Windows job.
 ps_files=(
     doctor.ps1
     setup-host.ps1

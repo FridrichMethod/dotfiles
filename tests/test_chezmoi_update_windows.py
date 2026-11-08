@@ -1,4 +1,4 @@
-"""Windows writer handover and native updater behavior in disposable homes."""
+"""Windows login updater and exact-exe trust behavior in disposable homes."""
 
 import base64
 import functools
@@ -30,10 +30,10 @@ def current_user_sid():
     return output.strip().rsplit(",", 1)[1].strip('"')
 
 
-@unittest.skipUnless(os.name == "nt", "native Windows takeover requires Windows")
-class WindowsTakeoverTests(unittest.TestCase):
-    def test_regular_file_mode_overrides_stale_local_symlink_configuration(self):
-        self.setup_native()
+@unittest.skipUnless(os.name == "nt", "the Windows login updater requires Windows")
+class WindowsUpdateTests(unittest.TestCase):
+    def test_regular_file_mode_overrides_a_local_symlink_mode(self):
+        self.setup_home()
         self.config.write_text('mode="symlink"\n' + self.config.read_text(), newline="\n")
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -98,7 +98,7 @@ class WindowsTakeoverTests(unittest.TestCase):
                               stdin=subprocess.DEVNULL, capture_output=True, text=True,
                               check=True, timeout=30).stdout.strip()
 
-    def setup_native(self):
+    def setup_home(self):
         (self.repo / "home").mkdir()
         (self.repo / ".chezmoiroot").write_text("home\n")
         (self.repo / "home/dot_sample").write_text("initial\n")
@@ -154,7 +154,7 @@ class WindowsTakeoverTests(unittest.TestCase):
     def assert_backend_refused(self, result):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
-        self.assertIn("[dotfiles] Native update skipped", output)
+        self.assertIn("[dotfiles] Update skipped", output)
         self.assertIn("chezmoi.exe", output)
         self.assertIn("docs/bootstrap.md W1-chezmoi", output)
         self.assertEqual(output.count("[dotfiles]"), 1, output)
@@ -163,7 +163,7 @@ class WindowsTakeoverTests(unittest.TestCase):
 
     def update(self, before="", after=""):
         return self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") + ";" + before +
-                       "Invoke-DotfilesNativeUpdate -HomePath " + ps_string(self.home) + ";" + after)
+                       "Invoke-DotfilesChezmoiUpdate -HomePath " + ps_string(self.home) + ";" + after)
 
     def paths(self, home=None):
         return self.guard("Get-DotfilesChezmoiPaths -HomePath " + ps_string(home or self.home) +
@@ -249,7 +249,7 @@ class WindowsTakeoverTests(unittest.TestCase):
                 self.assertNotEqual(self.paths().returncode, 0)
 
     def test_update_excludes_directories_and_applies_files_in_existing_parent(self):
-        self.setup_native()
+        self.setup_home()
         parent = self.home / ".managed"
         parent.mkdir()
         acl_before = self.ps("(Get-Acl -LiteralPath " + ps_string(parent) + ").Sddl")
@@ -260,12 +260,12 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-qm", "file in prepared parent")
         self.git("push", "origin", "main")
-        trace = self.f.root / "native update arguments.json"
-        before = "$script:nativeProcess=(Get-Item Function:Invoke-DotfilesNativeProcess).ScriptBlock;" + \
-            "function Invoke-DotfilesNativeProcess {param($Program,$Arguments,$Paths);" + \
+        trace = self.f.root / "update arguments.json"
+        before = "$script:updateProcess=(Get-Item Function:Invoke-DotfilesUpdateProcess).ScriptBlock;" + \
+            "function Invoke-DotfilesUpdateProcess {param($Program,$Arguments,$Paths);" + \
             "if($Arguments -contains 'update'){ConvertTo-Json -InputObject @($Arguments) -Compress | " + \
             "Set-Content -LiteralPath " + ps_string(trace) + "};" + \
-            "& $script:nativeProcess $Program $Arguments $Paths};"
+            "& $script:updateProcess $Program $Arguments $Paths};"
         result = self.update(before)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
@@ -277,7 +277,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(acl_after.stdout, acl_before.stdout)
 
     def test_update_keeps_explicit_protected_dacl_while_content_updates(self):
-        self.setup_native()
+        self.setup_home()
         target = self.home / ".sample"
         # Replace inherited entries with one explicit owner entry; native Windows
         # writes in place, so a routine update must not reset this private DACL.
@@ -304,7 +304,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(acl_after.stdout, acl_before.stdout)
 
     def test_update_refuses_new_file_when_managed_parent_is_absent(self):
-        self.setup_native()
+        self.setup_home()
         sender = self.f.root / "new directory sender"
         self.git("clone", str(self.remote), str(sender))
         source_parent = sender / "home/dot_missing"
@@ -320,8 +320,8 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertTrue((self.repo / "home/dot_missing/settings").is_file())
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
-    def test_dirty_tracked_and_untracked_source_prevents_native_write(self):
-        self.setup_native()
+    def test_dirty_tracked_and_untracked_source_prevents_write(self):
+        self.setup_home()
         for path in (self.repo / "home/dot_sample", self.repo / "untracked"):
             original = path.read_bytes() if path.exists() else None
             path.write_text("local edit\n")
@@ -335,8 +335,8 @@ class WindowsTakeoverTests(unittest.TestCase):
             else:
                 path.write_bytes(original)
 
-    def test_unsafe_old_update_configuration_refuses(self):
-        self.setup_native()
+    def test_unsafe_update_configuration_refuses(self):
+        self.setup_home()
         self.configure("[update]\ncommand='git'\nargs=['pull','--rebase','--autostash']\n")
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -344,7 +344,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
     def test_optout_maintenance_and_session_guard_skip_update(self):
-        self.setup_native()
+        self.setup_home()
         for before in ("$env:DOTFILES_AUTO_UPDATE='0';", "$env:_DOTFILES_CHECKED='1';"):
             result = self.update(before)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -355,7 +355,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
     def test_missing_backend_and_conflict_are_nonsecret_warnings(self):
-        self.setup_native()
+        self.setup_home()
         missing = self.update("$env:PATH='';")
         self.assertEqual(missing.returncode, 0, missing.stderr)
         self.assertIn("[dotfiles]", missing.stdout + missing.stderr)
@@ -372,8 +372,8 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertNotIn("private conflict canary", result.stdout + result.stderr)
         self.assertEqual((self.home / ".sample").read_text(), "private conflict canary\n")
 
-    def test_lost_native_state_refuses_to_replace_a_new_foreign_link(self):
-        self.setup_native()
+    def test_lost_state_refuses_to_replace_a_new_foreign_link(self):
+        self.setup_home()
         self.f.state.unlink()
         target = self.home / ".sample"
         target.unlink()
@@ -387,7 +387,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(foreign.read_text(), "foreign bytes\n")
 
     def test_fast_forward_and_divergence_never_stash_or_rebase(self):
-        self.setup_native()
+        self.setup_home()
         sender = self.f.root / "sender"
         self.git("clone", str(self.remote), str(sender))
         (sender / "home/dot_sample").write_text("upstream\n")
@@ -533,7 +533,7 @@ class WindowsTakeoverTests(unittest.TestCase):
             body = (guard + "$p=Get-DotfilesChezmoiPaths -HomePath " + ps_string(fixture.destination) +
                     ";if($p.Source -ne " + ps_string(fixture.source) + "){throw ('source '+$p.Source)}" +
                     ";if(-not(Test-DotfilesConfigExists " + ps_string(fixture.destination) + ")){throw 'config absent'}" +
-                    ";foreach($f in 'Test-DotfilesNativeChezmoiPath','Test-DotfilesTrustedFileSecurity','Open-DotfilesNativeChezmoi')" +
+                    ";foreach($f in 'Test-DotfilesChezmoiPath','Test-DotfilesTrustedFileSecurity','Open-DotfilesChezmoi')" +
                     "{if(-not(Get-Command $f -CommandType Function -ErrorAction SilentlyContinue)){throw ($f+' missing')}}" +
                     ";[IO.File]::WriteAllText(" + ps_string(target) + ",[IO.File]::ReadAllText(" + ps_string(target) +
                     ").Replace(\"`n\",\"`r`n\"))" +
@@ -552,7 +552,7 @@ class WindowsTakeoverTests(unittest.TestCase):
                     self.assertEqual(target.read_bytes(), rendered)
 
     def test_config_rejects_repository_subdirectory_as_source(self):
-        self.setup_native()
+        self.setup_home()
         tables = self.config.read_bytes().decode().split("\n", 2)[2]
         self.configure(tables, source=self.repo / "home")
         result = self.guard("Get-DotfilesChezmoiPaths " + ps_string(self.home))
@@ -560,7 +560,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
     def test_unattended_git_disables_local_hooks_and_fsmonitor(self):
-        self.setup_native()
+        self.setup_home()
         hooks = self.f.root / "hooks"
         hooks.mkdir()
         trace = self.f.root / "hook invoked"
@@ -574,7 +574,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertFalse(trace.exists(), "unattended update executed a local Git callback")
         probe = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") +
                         ";$paths=Get-DotfilesChezmoiPaths " + ps_string(self.home) +
-                        ";$r=Invoke-DotfilesNativeProcess " + ps_string(self.git_exe) +
+                        ";$r=Invoke-DotfilesUpdateProcess " + ps_string(self.git_exe) +
                         " @('config','--get-regexp','^(core.hooksPath|core.fsmonitor|maintenance.auto|gc.auto)$') $paths;" +
                         "$r.Output")
         self.assertEqual(probe.returncode, 0, probe.stderr)
@@ -584,13 +584,13 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertIn("core.fsmonitor false", lines)
 
     def test_config_rejects_non_dotfiles_repository_root(self):
-        self.setup_native()
+        self.setup_home()
         (self.repo / ".chezmoiroot").unlink()
         result = self.guard("Get-DotfilesChezmoiPaths " + ps_string(self.home))
         self.assertNotEqual(result.returncode, 0)
 
     def test_local_chezmoi_defaults_cannot_force_conflict_or_switch_git_tree(self):
-        self.setup_native()
+        self.setup_home()
         alternative = self.f.root / "other repository"
         self.git("clone", str(self.remote), str(alternative))
         text = self.config.read_bytes()
@@ -620,7 +620,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=alternative), previous)
 
     def test_git_worktree_redirect_cannot_escape_the_configured_source(self):
-        self.setup_native()
+        self.setup_home()
         alternative = self.f.root / "redirected source"
         alternative.mkdir()
         shutil.copytree(self.repo / "home", alternative / "home")
@@ -638,8 +638,8 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual((alternative / "home/dot_sample").read_text(), "initial\n")
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
-    def test_native_backend_uses_provisioned_binary_when_path_omits_it(self):
-        self.setup_native()
+    def test_backend_uses_provisioned_binary_when_path_omits_it(self):
+        self.setup_home()
         self.env["PATH"] = os.pathsep.join((str(Path(self.git_exe).parent), str(Path(self.pwsh).parent),
                                             os.environ["SYSTEMROOT"] + "\\System32"))
         (self.repo / "home/dot_sample").write_text("installed backend\n")
@@ -652,7 +652,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(self.git("stash", "list"), "")
 
     def test_path_shadows_never_replace_the_provisioned_binary(self):
-        self.setup_native()
+        self.setup_home()
         local_bin = self.home / ".local/bin"
         earlier = self.f.root / "earlier path entry"
         earlier.mkdir()
@@ -670,13 +670,13 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual((self.home / ".sample").read_text(), "provisioned backend\n")
 
     def test_missing_provisioned_binary_warns_without_path_fallback(self):
-        self.setup_native()
+        self.setup_home()
         (self.home / ".local/bin/chezmoi.exe").unlink()
         self.publish_sample("path fallback must not apply\n")
         self.assert_backend_refused(self.update())
 
     def test_foreign_owner_or_writer_refuses_the_provisioned_binary(self):
-        self.setup_native()
+        self.setup_home()
         installed = self.home / ".local/bin/chezmoi.exe"
         self.publish_sample("untrusted backend must not run\n")
         # BUILTIN\Users stands for any other account, such as an app sandbox group.
@@ -687,7 +687,7 @@ class WindowsTakeoverTests(unittest.TestCase):
             self.assert_backend_refused(self.update())
 
     def test_linked_binary_or_parent_directory_is_refused(self):
-        self.setup_native()
+        self.setup_home()
         local = self.home / ".local"
         installed = local / "bin/chezmoi.exe"
         elsewhere = self.install_backend(self.f.root / "trusted elsewhere/chezmoi.exe")
@@ -707,7 +707,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assert_backend_refused(self.update())
 
     def test_trust_decision_reads_owner_and_dacl_from_the_held_handle(self):
-        self.setup_native()
+        self.setup_home()
         installed = self.home / ".local/bin/chezmoi.exe"
         # Each step runs directly, so a refusal names its cause. Foreign read and
         # deny entries and OWNER RIGHTS (hosted runners add it) stay acceptable;
@@ -718,7 +718,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         # applies like a plain allow entry, and only the entry-type check
         # refuses), a compound ACE and an unknown (custom) ACE type.
         result = self.guard("$p=" + ps_string(installed) +
-                            ";if(-not(Test-DotfilesNativeChezmoiPath $p)){throw 'path refused'}" +
+                            ";if(-not(Test-DotfilesChezmoiPath $p)){throw 'path refused'}" +
                             ";$s=[IO.FileStream]::new($p,'Open','Read','Read')" +
                             ";try{$sd=[IO.FileSystemAclExtensions]::GetAccessControl($s)}finally{$s.Dispose()}" +
                             ";if(-not(Test-DotfilesTrustedFileSecurity $sd)){throw ('trusted copy refused: '+" +
@@ -757,7 +757,7 @@ class WindowsTakeoverTests(unittest.TestCase):
     def test_held_binary_handle_blocks_renaming_its_parent_directories(self):
         # Records the NTFS behavior the updater relies on: while its read-only
         # handle is open, .local\bin and .local cannot be renamed away and replaced.
-        self.setup_native()
+        self.setup_home()
         local = self.home / ".local"
         moves = [(local / "bin", self.f.root / "bin moved"), (local, self.f.root / "local moved")]
         attempts = ";".join("try{[IO.Directory]::Move(" + ps_string(source) + "," + ps_string(target) +
@@ -765,7 +765,7 @@ class WindowsTakeoverTests(unittest.TestCase):
         release = ("[IO.Directory]::Move(" + ps_string(moves[0][0]) + "," + ps_string(moves[0][1]) + ");" +
                    "[IO.Directory]::Move(" + ps_string(moves[0][1]) + "," + ps_string(moves[0][0]) + ");'released'")
         result = self.ps(". " + ps_string(ROOT / "scripts/chezmoi-update.ps1") +
-                         ";$held=Open-DotfilesNativeChezmoi -Destination " + ps_string(self.home) +
+                         ";$held=Open-DotfilesChezmoi -Destination " + ps_string(self.home) +
                          ";if(-not $held){throw 'provisioned binary refused'};try{" + attempts +
                          "}finally{$held.Dispose()};" + release)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -776,14 +776,14 @@ class WindowsTakeoverTests(unittest.TestCase):
         if upstream:
             source = self.f.root / "new target sender"
             self.git("clone", str(self.remote), str(source))
-        (source / "home/dot_native_new").write_text("new portable target\n")
+        (source / "home/dot_sample_new").write_text("new portable target\n")
         self.git("add", ".", cwd=source)
         self.git("commit", "-qm", "new managed target", cwd=source)
         self.git("push", "origin", "main", cwd=source)
 
     def test_new_upstream_existing_regular_target_is_preserved(self):
-        self.setup_native()
-        target = self.home / ".native_new"
+        self.setup_home()
+        target = self.home / ".sample_new"
         target.write_text("private preexisting target\n")
         self.publish_new_target()
         result = self.update()
@@ -791,11 +791,11 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertIn("[dotfiles]", result.stdout + result.stderr)
         self.assertNotIn("private preexisting", result.stdout + result.stderr)
         self.assertEqual(target.read_text(), "private preexisting target\n")
-        self.assertTrue((self.repo / "home/dot_native_new").exists())
+        self.assertTrue((self.repo / "home/dot_sample_new").exists())
 
     def test_new_upstream_equal_content_foreign_link_is_preserved(self):
-        self.setup_native()
-        target = self.home / ".native_new"
+        self.setup_home()
+        target = self.home / ".sample_new"
         foreign = self.f.root / "same-content foreign"
         foreign.write_text("new portable target\n")
         target.symlink_to(foreign)
@@ -807,8 +807,8 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(foreign.read_text(), "new portable target\n")
 
     def test_already_added_source_preserves_unapproved_existing_target(self):
-        self.setup_native()
-        target = self.home / ".native_new"
+        self.setup_home()
+        target = self.home / ".sample_new"
         target.write_text("unapproved local target\n")
         self.publish_new_target(upstream=False)
         result = self.update()
@@ -817,15 +817,15 @@ class WindowsTakeoverTests(unittest.TestCase):
         self.assertEqual(target.read_text(), "unapproved local target\n")
 
     def test_new_absent_upstream_target_is_applied(self):
-        self.setup_native()
+        self.setup_home()
         self.publish_new_target()
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.home / ".native_new").read_text(), "new portable target\n")
+        self.assertEqual((self.home / ".sample_new").read_text(), "new portable target\n")
         self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
 
-    def test_empty_native_state_preserves_existing_edit(self):
-        self.setup_native()
+    def test_empty_state_preserves_existing_edit(self):
+        self.setup_home()
         self.f.state.write_bytes(b"")
         (self.home / ".sample").write_text("private new local edit\n")
         result = self.update()

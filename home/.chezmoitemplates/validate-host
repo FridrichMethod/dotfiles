@@ -3,10 +3,10 @@
 {{- if not (kindIs "string" $host) -}}
 {{- fail "Set an explicit [data].host string in the local chezmoi config" -}}
 {{- end -}}
-{{- if not (has $host (list "common-only" "mac" "wsl-ubuntu" "lab-ubuntu" "sherlock" "marlowe" "win")) -}}
-{{- fail "Select [data].host: common-only, mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, or win" -}}
+{{- if not (has $host (list "generic" "mac" "wsl-ubuntu" "lab-ubuntu" "sherlock" "marlowe" "win")) -}}
+{{- fail "Select [data].host: generic, mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, or win" -}}
 {{- end -}}
 {{- $os := .chezmoi.os -}}
-{{- if or (and (eq $host "mac") (ne $os "darwin")) (and (eq $host "win") (ne $os "windows")) (and (has $host (list "wsl-ubuntu" "lab-ubuntu" "sherlock" "marlowe")) (ne $os "linux")) (and (eq $host "common-only") (not (has $os (list "linux" "darwin" "freebsd" "openbsd" "netbsd" "dragonfly" "illumos" "solaris")))) -}}
+{{- if or (and (eq $host "mac") (ne $os "darwin")) (and (eq $host "win") (ne $os "windows")) (and (has $host (list "wsl-ubuntu" "lab-ubuntu" "sherlock" "marlowe")) (ne $os "linux")) (and (eq $host "generic") (not (has $os (list "linux" "darwin" "freebsd" "openbsd" "netbsd" "dragonfly" "illumos" "solaris")))) -}}
 {{- fail (printf "[data].host %q is incompatible with OS %q" $host $os) -}}
 {{- end -}}

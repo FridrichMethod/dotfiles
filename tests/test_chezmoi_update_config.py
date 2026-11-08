@@ -1,4 +1,4 @@
-"""Init must replace native update's default autostash/rebase contract."""
+"""Init must replace chezmoi update's default autostash/rebase contract."""
 
 import json
 import os
@@ -15,7 +15,7 @@ STATE = ".local/state/chezmoi/chezmoi.boltdb"
 
 class UpdateConfigTests(unittest.TestCase):
     def test_repeat_init_preserves_age_and_unknown_local_configuration(self):
-        role = "win" if os.name == "nt" else "common-only"
+        role = "win" if os.name == "nt" else "generic"
         with SourceFixture(role) as fixture:
             fixture.config.write_text(
                 'mode = "symlink"\nencryption = "age"\numask = 0o077\n[age]\nidentity = "synthetic-identity"\n'
@@ -45,7 +45,7 @@ class UpdateConfigTests(unittest.TestCase):
                 first = fixture.config.read_bytes()
 
     def test_init_overrides_case_insensitive_owned_settings(self):
-        role = "win" if os.name == "nt" else "common-only"
+        role = "win" if os.name == "nt" else "generic"
         with SourceFixture(role) as fixture:
             fixture.config.write_text(f'[data]\nhost="{role}"\n[Git]\nAUTOCOMMIT=true\n'
                                       'autoPush=true\n[Update]\nCOMMAND="unsafe"\n')
@@ -57,7 +57,7 @@ class UpdateConfigTests(unittest.TestCase):
             self.assertEqual(result.stdout, "false false git")
 
     def test_state_aliases_collapse_to_the_owned_key(self):
-        role = "win" if os.name == "nt" else "common-only"
+        role = "win" if os.name == "nt" else "generic"
         for alias in ("persistentstate", "PersistentState", "PERSISTENTSTATE"):
             with self.subTest(alias=alias), SourceFixture(role) as fixture:
                 foreign = (fixture.root / "foreign state.boltdb").as_posix()
@@ -77,11 +77,11 @@ class UpdateConfigTests(unittest.TestCase):
             before = fixture.config.read_bytes()
             result = fixture.run("init")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("duplicate case-insensitive native config key", result.stderr)
+            self.assertIn("duplicate case-insensitive chezmoi config key", result.stderr)
             self.assertEqual(fixture.config.read_bytes(), before)
 
     def test_template_derives_state_from_unix_and_windows_destinations(self):
-        role = "win" if os.name == "nt" else "common-only"
+        role = "win" if os.name == "nt" else "generic"
         with SourceFixture(role) as fixture:
             template = fixture.source / "home/.chezmoi.toml.tmpl"
             for destination in ("/home/synthetic user", "C:/Users/synthetic user"):
@@ -93,12 +93,12 @@ class UpdateConfigTests(unittest.TestCase):
                     self.assertEqual(config["destDir"], destination)
                     self.assertEqual(config["persistentState"], f"{destination}/{STATE}")
 
-    def test_plain_native_command_shares_the_bound_state_database(self):
-        role = "win" if os.name == "nt" else "common-only"
+    def test_plain_command_shares_the_configured_state_database(self):
+        role = "win" if os.name == "nt" else "generic"
         with SourceFixture(role) as fixture:
             result = fixture.run("init")
             self.assertEqual(result.returncode, 0, result.stderr)
-            bound = fixture.destination / STATE
+            configured = fixture.destination / STATE
             # chezmoi's default state path beside the config.
             default = fixture.config.parent / "chezmoistate.boltdb"
             target = str(fixture.destination / ".gitconfig")
@@ -106,7 +106,7 @@ class UpdateConfigTests(unittest.TestCase):
             result = fixture.run("apply", "--exclude=dirs", "--force=false", target)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertGreater(fixture.state.stat().st_size, 0)
-            self.assertFalse(os.path.lexists(bound))
+            self.assertFalse(os.path.lexists(configured))
             # A plain command names only the config, as a host finds it by default.
             result = subprocess.run(
                 [str(fixture.binary), "--config", str(fixture.config), "--no-tty",
@@ -114,11 +114,11 @@ class UpdateConfigTests(unittest.TestCase):
                 text=True, encoding="utf-8", capture_output=True, stdin=subprocess.DEVNULL,
                 cwd=fixture.root, env=fixture.env, timeout=30, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertGreater(bound.stat().st_size, 0)
+            self.assertGreater(configured.stat().st_size, 0)
             self.assertFalse(os.path.lexists(default))
 
     def test_local_temporals_refuse_init_without_config_rewrite(self):
-        role = "win" if os.name == "nt" else "common-only"
+        role = "win" if os.name == "nt" else "generic"
         for value in ("1979-05-27", "07:32:00", "1979-05-27T07:32:00"):
             with self.subTest(value=value), SourceFixture(role) as fixture:
                 fixture.config.write_text(f'[data]\nhost = "{role}"\nlocal = {value}\n')
@@ -128,7 +128,7 @@ class UpdateConfigTests(unittest.TestCase):
                 self.assertEqual(fixture.config.read_bytes(), before)
 
     def test_init_pins_safe_update_and_preserves_explicit_role(self):
-        role = "win" if os.name == "nt" else "common-only"
+        role = "win" if os.name == "nt" else "generic"
         with SourceFixture(role) as fixture:
             result = fixture.run("init")
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -143,7 +143,7 @@ class UpdateConfigTests(unittest.TestCase):
             self.assertEqual(config["data"]["host"], role)
             self.assertEqual(Path(config["sourceDir"]), fixture.source)
             self.assertEqual(Path(config["destDir"]), fixture.destination)
-            # Plain native commands share the updater's state, in slash form on Windows too.
+            # Plain chezmoi commands share the updater's state, in slash form on Windows too.
             self.assertEqual(Path(config["persistentState"]), fixture.destination / STATE)
             self.assertNotIn("\\", config["persistentState"])
             # Init never opens the configured database.

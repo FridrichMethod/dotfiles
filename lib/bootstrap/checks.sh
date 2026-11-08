@@ -27,8 +27,8 @@
 # tools.tsv never uses them.
 # shellcheck disable=SC2034 # read by doctor.sh
 BOOTSTRAP_STRUCTURAL_CHECKS='locale core H1-locale
-native-config core H7-native
-path-order core H7-native
+chezmoi-config core H7-deploy
+path-order core H7-deploy
 rc-pollution core X-rc-protection
 omz-order core X-recovery
 nvm-homebrew ai S4-nvm
@@ -62,16 +62,16 @@ bootstrap_chezmoi_state() (
 )
 
 # bootstrap_chezmoi_ready ROOT: 0 when this home's chezmoi config names this
-# home and ROOT (setup-host's H7-native).
+# home and ROOT (setup-host's H7-deploy).
 bootstrap_chezmoi_ready() {
     [ "$(bootstrap_chezmoi_state "$1")" = ok ]
 }
 
-# bootstrap_check_native_config ROOT: this home's chezmoi config, named by
+# bootstrap_check_chezmoi_config ROOT: this home's chezmoi config, named by
 # cause. A config naming another checkout (this doctor runs from a worktree
 # or second clone) only warns.
 # shellcheck disable=SC2088 # a literal ~ for the reader, never expanded
-bootstrap_check_native_config() {
+bootstrap_check_chezmoi_config() {
     local state
     state=$(bootstrap_chezmoi_state "$1")
     case $state in
@@ -625,8 +625,8 @@ bootstrap_check_rc_pollution() {
 }
 
 # bootstrap_check_omz_order: ~/.oh-my-zsh exists without oh-my-zsh.sh, the
-# state applying the dotfiles (the native directory preparation) leaves when
-# it runs before the oh-my-zsh clone.
+# state applying the dotfiles (the directory-only apply that prepares missing
+# parents) leaves when it runs before the oh-my-zsh clone.
 bootstrap_check_omz_order() {
     local omz=$HOME/.oh-my-zsh
     if [ -d "$omz" ] && [ ! -f "$omz/oh-my-zsh.sh" ]; then
@@ -662,7 +662,7 @@ bootstrap_check_nvm_homebrew() {
 bootstrap_check_structural() {
     case $1 in
         locale) bootstrap_check_locale "$3" ;;
-        native-config) bootstrap_check_native_config "$2" ;;
+        chezmoi-config) bootstrap_check_chezmoi_config "$2" ;;
         path-order) bootstrap_check_path_order "$4" "$3" ;;
         rc-pollution) bootstrap_check_rc_pollution ;;
         omz-order) bootstrap_check_omz_order ;;

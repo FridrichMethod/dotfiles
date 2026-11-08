@@ -1,4 +1,4 @@
-# Expected native targets (D-13): one row per HOME-relative target.
+# Expected targets: one row per HOME-relative target.
 # hosts: all, unix (every role but win) or a comma list of roles; a {host}
 # source is resolved per listed role. mode: regular, executable or private.
 # shell: the rendered-lint dialect (-, sh, bash, zsh).

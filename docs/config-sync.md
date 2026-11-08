@@ -1,6 +1,6 @@
 # Native AI configuration contract
 
-## Native configuration
+## Modify templates
 
 The native source has `home/dot_claude/modify_private_settings.json` and
 `home/dot_codex/modify_private_config.toml`. They use the native

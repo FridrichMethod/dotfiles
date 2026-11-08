@@ -1,4 +1,4 @@
-"""Black-box evidence for native mutable JSON/TOML; no legacy merge runtime."""
+"""Black-box evidence for the JSON/TOML modify templates."""
 
 import json
 import os
@@ -10,10 +10,10 @@ import unittest
 from chezmoi_support import ChezmoiFixture
 
 
-FIXTURES = Path(__file__).parent / "fixtures" / "chezmoi" / "native-config"
+FIXTURES = Path(__file__).parent / "fixtures" / "chezmoi" / "modify"
 
 
-class NativeConfigTests(unittest.TestCase):
+class ModifyTemplateTests(unittest.TestCase):
     def prepare(self, fixture, kind):
         empty_bin = fixture.root / "empty-bin"
         empty_bin.mkdir(exist_ok=True)
@@ -74,7 +74,7 @@ class NativeConfigTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(target.read_bytes(), before)
 
-    def test_builtin_jq_returns_result_list_and_native_json_limits(self):
+    def test_builtin_jq_returns_result_list_and_json_limits(self):
         with ChezmoiFixture() as fixture:
             self.prepare(fixture, "json")
             cases = (
@@ -90,7 +90,7 @@ class NativeConfigTests(unittest.TestCase):
                     self.assert_success(result)
                     self.assertEqual(json.loads(result.stdout), expected)
 
-    def test_toml_preserves_native_types_literal_paths_and_converges(self):
+    def test_toml_preserves_types_literal_paths_and_converges(self):
         with ChezmoiFixture() as fixture:
             fixture.env["TZ"] = "UTC"
             target = self.prepare(fixture, "toml")
@@ -98,7 +98,7 @@ class NativeConfigTests(unittest.TestCase):
             target.write_text(initial, encoding="utf-8", newline="\n")
             expected = tomllib.loads(initial)
             expected["features"].update({"*": False, "literal.dot": True, "owned": True})
-            del expected["retired"]["setting"]
+            del expected["removed"]["setting"]
             source = fixture.source / "modify_private_config.toml"
             source_before = source.read_bytes()
             self.assert_success(fixture.run("apply"))
@@ -112,9 +112,9 @@ class NativeConfigTests(unittest.TestCase):
             self.assert_success(diff)
             self.assertEqual(diff.stdout, "")
 
-    def test_native_toml_crlf_boundary_and_lf_normalization(self):
+    def test_toml_crlf_boundary_and_lf_normalization(self):
         # TOML permits parser-specific multiline newline normalization. Keep this
-        # difference visible and prove a native LF choice without changing escapes.
+        # difference visible and prove the LF choice without changing escapes.
         initial = 'value = """first\r\nsecond"""\r\nescaped = "first\\r\\nsecond"\r\n'
         for normalize in (False, True):
             with self.subTest(normalize=normalize), ChezmoiFixture() as fixture:
@@ -147,8 +147,8 @@ class NativeConfigTests(unittest.TestCase):
                 self.assertNotEqual(fixture.run("apply").returncode, 0)
                 self.assertEqual(target.read_bytes(), before)
 
-    @unittest.skipIf(os.name == "nt", "Windows TZ environment handling is separate native evidence")
-    def test_native_toml_local_time_timezone_boundary(self):
+    @unittest.skipIf(os.name == "nt", "Windows TZ environment handling is separate evidence")
+    def test_toml_local_time_timezone_boundary(self):
         # Characterize an upstream limitation, not an accepted value-loss contract.
         initial = (
             "day = 2026-11-01\nclock = 12:34:56\n"

@@ -77,7 +77,7 @@ mount.vbs
 wsl.conf
 .config/oh-my-posh
 {{ end }}
-{{ if eq .host "common-only" }}
+{{ if eq .host "generic" }}
 .config/bash/.bashrc
 .config/sh
 .config/zsh

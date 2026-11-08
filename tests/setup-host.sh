@@ -792,9 +792,9 @@ expect_line check-missing 'H1-apt-core human missing apt packages: zsh git'
 expect_text check-missing out 'H1-linuxbrew human blocked by H1-apt-core'
 expect_text check-missing out 'S3-clones todo blocked by H1-apt-core'
 expect_text check-missing out 'S4-chezmoi todo blocked by H1-apt-core'
-expect_text check-missing out 'H7-native human blocked by S3-clones'
+expect_text check-missing out 'H7-deploy human blocked by S3-clones'
 expect_no_text check-missing out 'HUMAN-BEGIN H1-linuxbrew'
-expect_no_text check-missing out 'HUMAN-BEGIN H7-native'
+expect_no_text check-missing out 'HUMAN-BEGIN H7-deploy'
 # chsh -s /usr/bin/zsh fails before the apt block installed zsh.
 expect_text check-missing out 'H7-chsh human blocked by H1-apt-core'
 expect_no_text check-missing out 'HUMAN-BEGIN H7-chsh'
@@ -845,7 +845,7 @@ expect_no_text check-fresh out '(or sync-payloads'
 PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
 expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
-expect_text check-fresh out 'H7-native human blocked by S3-clones'
+expect_text check-fresh out 'H7-deploy human blocked by S3-clones'
 expect_no_events check-fresh
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
@@ -892,7 +892,7 @@ expect_no_text payloads-source-elsewhere out "$FIXTURE/scripts/payload-update.sh
 write_case_config "$TEST_TMP/source elsewhere/"
 run_case payloads-config-invalid -- --host lab-ubuntu --check --only H7-payloads
 expect_line payloads-config-invalid 'HUMAN-BEGIN H7-payloads judgment'
-expect_line payloads-config-invalid "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's native-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+expect_line payloads-config-invalid "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
 # The block names no hook; the check line names this checkout's --now line,
 # since sync-payloads refuses such a config.
 ! grep -Eq 'payload-update\.sh --now$' "$TEST_TMP/payloads-config-invalid.out" ||
@@ -905,7 +905,7 @@ write_case_config "$FIXTURE"
 mkdir -p "$CASE_HOME/.config/dotfiles"
 : >"$CASE_HOME/.config/dotfiles/maintenance"
 run_case payloads-maintenance -- --host lab-ubuntu --check --only H7-payloads
-expect_line payloads-maintenance "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's native-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+expect_line payloads-maintenance "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
 expect_no_text payloads-maintenance out '# rerun the line below'
 rm "$CASE_HOME/.config/dotfiles/maintenance"
 # A config naming this checkout runs this checkout's hook.
@@ -943,8 +943,8 @@ expect_line apply 'HUMAN-BEGIN S5-claude inspect'
 expect_line apply "# sha256 $SHA_CLAUDE, $(wc -c <"$FIXTURES/artifacts/claude-install" | tr -d ' ') bytes; delete the file for a fresh copy"
 expect_line apply "printf '%s  %s\\n' $SHA_CLAUDE $CASE_HOME/$CLAUDE_SCRATCH_REL | sha256sum -c --status - && bash $CASE_HOME/$CLAUDE_SCRATCH_REL"
 expect_text apply out "S4-chezmoi done applied: verify and extract only chezmoi from ${URL_CHEZMOI##*/} to $CASE_HOME/.local/bin/chezmoi"
-expect_line apply 'HUMAN-BEGIN H7-native judgment'
-expect_text apply err 'HUMAN steps pending: S5-claude H7-native'
+expect_line apply 'HUMAN-BEGIN H7-deploy judgment'
+expect_text apply err 'HUMAN steps pending: S5-claude H7-deploy'
 [ -x "$CASE_HOME/.local/bin/chezmoi" ] || fail 'S4-chezmoi did not install chezmoi'
 [ ! -e "$CASE_HOME/.config/chezmoi" ] ||
     fail 'apply initialized the home'
@@ -1009,7 +1009,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 fi
 cp "$FIXTURES/artifacts/claude-install" "$CLAUDE_SCRATCH"
 
-# A second apply installs nothing, and H7-native still waits for a person.
+# A second apply installs nothing, and H7-deploy still waits for a person.
 printf '#!/bin/sh\necho "2.0.0 (Claude Code)"\n' >"$CASE_HOME/.local/bin/claude"
 chmod 755 "$CASE_HOME/.local/bin/claude"
 run_case reapply -- --host lab-ubuntu --yes --tier all
@@ -1019,30 +1019,30 @@ expect_event 'brew-check:core.Brewfile'
 expect_text reapply out 'S5-claude done claude at'
 expect_text reapply out 'S2-brew-bundle done Brewfiles satisfied: core cli'
 expect_text reapply out "S4-chezmoi done chezmoi 2.74.0 at $CASE_HOME/.local/bin/chezmoi"
-expect_line reapply 'HUMAN-BEGIN H7-native judgment'
+expect_line reapply 'HUMAN-BEGIN H7-deploy judgment'
 
-# Once the home's chezmoi config names this home and this checkout, H7-native
+# Once the home's chezmoi config names this home and this checkout, H7-deploy
 # is done and nothing blocks; --host still wins over [data].host.
 write_case_config "$FIXTURE"
-run_case native-done -- --host lab-ubuntu --yes --tier all
-expect_rc native-done 0
-expect_no_installs native-done
-expect_text native-done out 'H7-native done ~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
-expect_no_text native-done out 'HUMAN-BEGIN H7-native'
-expect_line native-done 'HUMAN-BEGIN H7-auth auth'
-expect_line native-done "# this home's config names the checkout $FIXTURE: the line below runs its hook, as sync-payloads does"
-expect_text native-done out 'nothing blocking remains for lab-ubuntu'
-run_case native-check-done -- --host lab-ubuntu --check --tier all
-expect_rc native-check-done 0
-expect_no_events native-check-done
-expect_text native-check-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate"
-run_case native-host-config -- --list
-expect_rc native-host-config 0
-expect_line native-host-config "H1-fcitx5${TAB}gui${TAB}-${TAB}no"
-run_case native-host-explicit -- --host sherlock --list
-expect_rc native-host-explicit 0
-expect_line native-host-explicit "S2-micromamba${TAB}auto${TAB}core${TAB}-"
-expect_no_text native-host-explicit out 'H1-fcitx5'
+run_case deploy-done -- --host lab-ubuntu --yes --tier all
+expect_rc deploy-done 0
+expect_no_installs deploy-done
+expect_text deploy-done out 'H7-deploy done ~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
+expect_no_text deploy-done out 'HUMAN-BEGIN H7-deploy'
+expect_line deploy-done 'HUMAN-BEGIN H7-auth auth'
+expect_line deploy-done "# this home's config names the checkout $FIXTURE: the line below runs its hook, as sync-payloads does"
+expect_text deploy-done out 'nothing blocking remains for lab-ubuntu'
+run_case deploy-check-done -- --host lab-ubuntu --check --tier all
+expect_rc deploy-check-done 0
+expect_no_events deploy-check-done
+expect_text deploy-check-done out "S2-brew-bundle done Brewfiles satisfied: core cli (offline estimate"
+run_case config-host-list -- --list
+expect_rc config-host-list 0
+expect_line config-host-list "H1-fcitx5${TAB}gui${TAB}-${TAB}no"
+run_case config-host-explicit -- --host sherlock --list
+expect_rc config-host-explicit 0
+expect_line config-host-explicit "S2-micromamba${TAB}auto${TAB}core${TAB}-"
+expect_no_text config-host-explicit out 'H1-fcitx5'
 
 # Exit 0 means done: an auto step still to apply makes a --check exit 3.
 rm -rf "$CASE_HOME/.vim"
@@ -1157,8 +1157,8 @@ rm -rf "$FZF_TAB_DIR" "$CONDA_DIR"
 mv "$TEST_TMP/fzf-tab.saved" "$FZF_TAB_DIR"
 mv "$TEST_TMP/conda.saved" "$CONDA_DIR"
 
-# A clone ref names a branch: a commit, as the old pinned manifests had, is
-# an invalid manifest, refused before any step runs.
+# A clone ref names a branch: a commit is an invalid manifest, refused before
+# any step runs.
 cp "$FIXTURE/config/bootstrap/git-clones.tsv" "$TEST_TMP/git-clones.saved"
 awk -F '\t' -v OFS='\t' -v sha="$FZF_TAB_HEAD" '$1 == "fzf-tab" { $4 = sha } { print }' \
     "$TEST_TMP/git-clones.saved" >"$FIXTURE/config/bootstrap/git-clones.tsv"
@@ -1169,7 +1169,7 @@ expect_no_text clone-commit-ref out 'S3-clones'
 expect_no_events clone-commit-ref
 cp "$TEST_TMP/git-clones.saved" "$FIXTURE/config/bootstrap/git-clones.tsv"
 
-# A --check never hands out the native handover while an auto prerequisite
+# A --check never hands out the H7-deploy block while an auto prerequisite
 # is todo.
 new_home cloned-only
 run_case cloned-only -- --host lab-ubuntu --yes --only S3-clones
@@ -1177,8 +1177,8 @@ expect_rc cloned-only 0
 run_case check-cloned -- --host lab-ubuntu --check
 expect_rc check-cloned 3
 expect_text check-cloned out 'S3-clones done 4 clones present, left as they are'
-expect_text check-cloned out 'H7-native human blocked by S2-brew-bundle'
-expect_no_text check-cloned out 'HUMAN-BEGIN H7-native'
+expect_text check-cloned out 'H7-deploy human blocked by S2-brew-bundle'
+expect_no_text check-cloned out 'HUMAN-BEGIN H7-deploy'
 expect_no_events check-cloned
 
 # --- S6-nerd-font: a font the doctor finds is installed ----------------------
@@ -1905,14 +1905,14 @@ expect_no_events recovery
 [ ! -e "$CASE_HOME/.oh-my-zsh/custom/themes" ] || fail 'recovery case cloned plugins'
 
 # The same recovery under --check.
-new_home native-recovery
+new_home omz-recovery
 mkdir -p "$CASE_HOME/.oh-my-zsh/custom"
 printf '# deployed\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
-run_case native-recovery -- --host lab-ubuntu --check --only S3-clones
-expect_rc native-recovery 3
-expect_line native-recovery 'HUMAN-BEGIN X-recovery judgment'
-expect_line native-recovery '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
-expect_no_events native-recovery
+run_case omz-recovery -- --host lab-ubuntu --check --only S3-clones
+expect_rc omz-recovery 3
+expect_line omz-recovery 'HUMAN-BEGIN X-recovery judgment'
+expect_line omz-recovery '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
+expect_no_events omz-recovery
 
 # --- rc-pollution guard ------------------------------------------------------
 
@@ -1931,13 +1931,13 @@ new_home pollution-dirty
 run_case pollution-dirty BREW_POLLUTE="$FIXTURE/home/dot_zshrc" -- --host lab-ubuntu --yes --only S2-brew-bundle
 expect_rc pollution-dirty 1
 expect_text pollution-dirty err "uncommitted changes in $FIXTURE: home/dot_zshrc;"
-expect_text pollution-dirty err 'review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)'
+expect_text pollution-dirty err 'review them first, since the login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)'
 expect_text pollution-dirty err "S2-brew-bundle failed: changed files in $FIXTURE: home/dot_zshrc"
-# The native updater does not run from a dirty checkout; P0 says so there.
-new_home native-dirty
-run_case native-dirty -- --host lab-ubuntu --check --only S3-dirs
-expect_rc native-dirty 3
-expect_text native-dirty err "uncommitted changes in $FIXTURE: home/dot_zshrc; review them first, since the native login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
+# The login updater does not run from a dirty checkout; P0 says so there.
+new_home dirty-checkout
+run_case dirty-checkout -- --host lab-ubuntu --check --only S3-dirs
+expect_rc dirty-checkout 3
+expect_text dirty-checkout err "uncommitted changes in $FIXTURE: home/dot_zshrc; review them first, since the login update does not run from a checkout with uncommitted changes (docs/bootstrap.md X-rc-protection)"
 "$REAL_GIT" -C "$FIXTURE" checkout -q -- home/dot_zshrc
 
 mkdir -p "$FIXTURE/home/extra"
@@ -1961,7 +1961,7 @@ expect_rc only 0
 expect_no_events only
 [ -d "$CASE_HOME/.vim/undo" ] || fail '--only S3-dirs did not run it'
 expect_text only out 'S3-clones skip not selected by --only'
-expect_text only out 'H7-native skip not selected by --only'
+expect_text only out 'H7-deploy skip not selected by --only'
 
 new_home skip
 run_case skip -- --host lab-ubuntu --yes --only S3-dirs --skip S3-dirs
@@ -1969,25 +1969,25 @@ expect_rc skip 0
 expect_text skip out 'S3-dirs skip skipped by --skip'
 [ ! -e "$CASE_HOME/.vim" ] || fail '--skip S3-dirs ran it'
 
-# A prerequisite left undone by --skip or a declined prompt holds H7-native:
-# the native handover block is never handed out before its prerequisites ran.
+# A prerequisite left undone by --skip or a declined prompt holds H7-deploy:
+# the H7-deploy block is never handed out before its prerequisites ran.
 new_home skipped
 mkdir -p "$CASE_HOME/.oh-my-zsh"
 : >"$CASE_HOME/.oh-my-zsh/oh-my-zsh.sh"
-run_case skipped -- --host lab-ubuntu --yes --only S2-brew-bundle --only H7-native --skip S2-brew-bundle
+run_case skipped -- --host lab-ubuntu --yes --only S2-brew-bundle --only H7-deploy --skip S2-brew-bundle
 expect_rc skipped 3
 expect_text skipped out 'S2-brew-bundle skip skipped by --skip'
-expect_text skipped out 'H7-native human blocked by S2-brew-bundle (skipped)'
-expect_no_text skipped out 'HUMAN-BEGIN H7-native'
+expect_text skipped out 'H7-deploy human blocked by S2-brew-bundle (skipped)'
+expect_no_text skipped out 'HUMAN-BEGIN H7-deploy'
 expect_no_events skipped
 
 if [ "$HAVE_PTY" = 1 ]; then
-    run_tty_case declined n -- --host lab-ubuntu --only S2-brew-bundle --only H7-native
+    run_tty_case declined n -- --host lab-ubuntu --only S2-brew-bundle --only H7-deploy
     expect_rc declined 3
     expect_text declined out 'Apply S2-brew-bundle? [y/N]'
     expect_text declined out 'S2-brew-bundle skip declined: brew bundle'
-    expect_text declined out 'H7-native human blocked by S2-brew-bundle (declined)'
-    expect_no_text declined out 'HUMAN-BEGIN H7-native'
+    expect_text declined out 'H7-deploy human blocked by S2-brew-bundle (declined)'
+    expect_no_text declined out 'HUMAN-BEGIN H7-deploy'
     expect_text declined out 'steps not applied: S2-brew-bundle; after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu'
     expect_no_text declined out 'nothing blocking remains'
     expect_no_installs declined
@@ -2035,7 +2035,7 @@ expect_line hpc-login 'sh_dev -t 1:00:00'
 # Inside the allocation, the rerun stays in the person's mode.
 expect_line hpc-login "$FIXTURE/setup-host.sh --host sherlock"
 expect_text hpc-login out 'S2-login-env todo blocked by H2-alloc'
-expect_text hpc-login out 'H7-native human blocked by S2-login-env'
+expect_text hpc-login out 'H7-deploy human blocked by S2-login-env'
 expect_line hpc-login 'HUMAN-BEGIN S2-modules judgment'
 # No site module provides claude or codex here, so H7-auth does not name them.
 expect_line hpc-login 'HUMAN-BEGIN H7-auth auth'
@@ -2048,7 +2048,7 @@ expect_no_text hpc-login out '# Claude Code signs in'
 run_case hpc-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- --host sherlock --yes
 expect_rc hpc-alloc 3
 expect_event "micromamba:create -y -r $CASE_HOME/micromamba -n login -f $FIXTURE/config/bootstrap/hpc-login-env.yml"
-expect_line hpc-alloc 'HUMAN-BEGIN H7-native judgment'
+expect_line hpc-alloc 'HUMAN-BEGIN H7-deploy judgment'
 expect_text hpc-alloc out "S4-chezmoi done chezmoi 2.74.0 at $CASE_HOME/.local/bin/chezmoi"
 expect_no_text hpc-alloc out 'HUMAN-BEGIN H2-alloc'
 expect_no_event TRIPWIRE
@@ -2060,37 +2060,37 @@ expect_rc hpc-scratch 1
 expect_text hpc-scratch err 'refusing to build the login env under $SCRATCH'
 expect_no_event 'micromamba:create'
 
-# --- native hpc: the login env alone satisfies H2-alloc ---------------------
+# --- hpc: an existing login env satisfies H2-alloc ---------------------------
 
 # An existing login env is enough: no allocation is needed.
-new_home native-hpc
+new_home hpc-env
 mkdir -p "$CASE_HOME/micromamba/envs/login/bin"
 printf '#!/bin/sh\nexit 0\n' >"$CASE_HOME/micromamba/envs/login/bin/zsh"
 chmod 755 "$CASE_HOME/micromamba/envs/login/bin/zsh"
 snapshot >"$TEST_TMP/before"
-run_case native-hpc-login-env "${HPC_ENV[@]}" -- --host sherlock --check
-expect_rc native-hpc-login-env 3
-expect_line native-hpc-login-env 'H2-alloc done the login env exists; no allocation is needed'
-expect_text native-hpc-login-env out "S2-login-env done login env at $CASE_HOME/micromamba/envs/login"
-expect_no_text native-hpc-login-env out 'HUMAN-BEGIN H2-alloc'
-expect_no_events native-hpc-login-env
+run_case hpc-env-login "${HPC_ENV[@]}" -- --host sherlock --check
+expect_rc hpc-env-login 3
+expect_line hpc-env-login 'H2-alloc done the login env exists; no allocation is needed'
+expect_text hpc-env-login out "S2-login-env done login env at $CASE_HOME/micromamba/envs/login"
+expect_no_text hpc-env-login out 'HUMAN-BEGIN H2-alloc'
+expect_no_events hpc-env-login
 snapshot >"$TEST_TMP/after"
-cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'native hpc --check wrote files'
+cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'hpc --check wrote files'
 
-# Without a login env, the native allocation gate holds as before.
-new_home native-hpc-fresh
-run_case native-hpc-fresh "${HPC_ENV[@]}" -- --host sherlock --check
-expect_rc native-hpc-fresh 3
-expect_text native-hpc-fresh out 'H2-alloc human S2-login-env builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
-expect_line native-hpc-fresh 'HUMAN-BEGIN H2-alloc alloc'
-expect_line native-hpc-fresh 'sh_dev -t 1:00:00'
-expect_line native-hpc-fresh "$FIXTURE/setup-host.sh --host sherlock"
-expect_text native-hpc-fresh out 'S2-login-env todo blocked by H2-alloc'
-expect_no_events native-hpc-fresh
-run_case native-hpc-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- \
+# Without a login env, the allocation gate holds.
+new_home hpc-env-fresh
+run_case hpc-env-fresh "${HPC_ENV[@]}" -- --host sherlock --check
+expect_rc hpc-env-fresh 3
+expect_text hpc-env-fresh out 'H2-alloc human S2-login-env builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
+expect_line hpc-env-fresh 'HUMAN-BEGIN H2-alloc alloc'
+expect_line hpc-env-fresh 'sh_dev -t 1:00:00'
+expect_line hpc-env-fresh "$FIXTURE/setup-host.sh --host sherlock"
+expect_text hpc-env-fresh out 'S2-login-env todo blocked by H2-alloc'
+expect_no_events hpc-env-fresh
+run_case hpc-env-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- \
     --host sherlock --check
-expect_text native-hpc-alloc out 'H2-alloc done inside Slurm job 1'
-expect_no_events native-hpc-alloc
+expect_text hpc-env-alloc out 'H2-alloc done inside Slurm job 1'
+expect_no_events hpc-env-alloc
 
 # --- digest mismatch ---------------------------------------------------------
 
@@ -2117,7 +2117,7 @@ expect_line mac-check "$MAC_GATE"
 expect_no_text mac-check out 'stop unless'
 expect_text mac-check out 'S2-brew-bundle todo blocked by H1-homebrew'
 expect_text mac-check out "S4-chezmoi todo chezmoi >= 2.74.0 is missing; install the verified release into $CASE_HOME/.local/bin/chezmoi"
-expect_text mac-check out 'H7-native human blocked by S3-clones'
+expect_text mac-check out 'H7-deploy human blocked by S3-clones'
 expect_no_events mac-check
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail 'mac --check wrote files'
@@ -2188,26 +2188,26 @@ expect_line list "id${TAB}kind${TAB}tier${TAB}blocking"
 expect_line list "H1-apt-core${TAB}sudo${TAB}-${TAB}yes"
 expect_line list "S6-kitty${TAB}auto${TAB}desktop${TAB}-"
 expect_line list "S4-chezmoi${TAB}auto${TAB}core${TAB}-"
-expect_line list "H7-native${TAB}judgment${TAB}-${TAB}yes"
+expect_line list "H7-deploy${TAB}judgment${TAB}-${TAB}yes"
 expect_no_text list out 'S2-micromamba'
 
-# Each host's native steps, exactly and in phase order.
+# Each host's steps, exactly and in phase order.
 for spec in \
-    'mac P0-preflight H1-xcode-clt H1-homebrew S2-brew-bundle S3-clones S3-bat-theme S3-dirs S4-nvm S4-chezmoi H7-native H7-chsh H7-auth H7-payloads H7-doctor' \
-    'wsl-ubuntu P0-preflight H1-apt-core H1-locale H1-linuxbrew S2-brew-bundle S3-clones S3-bat-theme S3-dirs S4-nvm S4-chezmoi S5-claude S5-codex H7-native H7-chsh H7-auth H7-payloads H7-doctor' \
-    'lab-ubuntu P0-preflight H1-apt-core H1-locale H1-linuxbrew H1-fcitx5 S2-brew-bundle S3-clones S3-bat-theme S3-dirs S4-nvm S4-chezmoi S5-claude S5-codex S6-nerd-font S6-kitty H7-native H7-chsh H7-auth H7-payloads H7-doctor' \
-    'sherlock P0-preflight S2-micromamba H2-alloc S2-login-env S2-modules S3-clones S3-bat-theme S3-dirs S4-chezmoi H7-native H7-auth H7-payloads H7-doctor' \
-    'marlowe P0-preflight S2-micromamba H2-alloc S2-login-env S2-modules S3-clones S3-bat-theme S3-dirs S4-chezmoi H7-native H7-auth H7-payloads H7-doctor'; do
+    'mac P0-preflight H1-xcode-clt H1-homebrew S2-brew-bundle S3-clones S3-bat-theme S3-dirs S4-nvm S4-chezmoi H7-deploy H7-chsh H7-auth H7-payloads H7-doctor' \
+    'wsl-ubuntu P0-preflight H1-apt-core H1-locale H1-linuxbrew S2-brew-bundle S3-clones S3-bat-theme S3-dirs S4-nvm S4-chezmoi S5-claude S5-codex H7-deploy H7-chsh H7-auth H7-payloads H7-doctor' \
+    'lab-ubuntu P0-preflight H1-apt-core H1-locale H1-linuxbrew H1-fcitx5 S2-brew-bundle S3-clones S3-bat-theme S3-dirs S4-nvm S4-chezmoi S5-claude S5-codex S6-nerd-font S6-kitty H7-deploy H7-chsh H7-auth H7-payloads H7-doctor' \
+    'sherlock P0-preflight S2-micromamba H2-alloc S2-login-env S2-modules S3-clones S3-bat-theme S3-dirs S4-chezmoi H7-deploy H7-auth H7-payloads H7-doctor' \
+    'marlowe P0-preflight S2-micromamba H2-alloc S2-login-env S2-modules S3-clones S3-bat-theme S3-dirs S4-chezmoi H7-deploy H7-auth H7-payloads H7-doctor'; do
     host=${spec%% *}
     expected=${spec#* }
     if [ "$host" = mac ]; then
-        run_case "native-list-$host" "${MAC_ENV[@]}" -- --host "$host" --list
+        run_case "list-steps-$host" "${MAC_ENV[@]}" -- --host "$host" --list
     else
-        run_case "native-list-$host" -- --host "$host" --list
+        run_case "list-steps-$host" -- --host "$host" --list
     fi
-    expect_rc "native-list-$host" 0
-    ids=$(awk -F '\t' 'NR > 1 { printf "%s%s", sep, $1; sep = " " }' "$TEST_TMP/native-list-$host.out")
-    [ "$ids" = "$expected" ] || fail "native-list-$host: steps [$ids], expected [$expected]"
+    expect_rc "list-steps-$host" 0
+    ids=$(awk -F '\t' 'NR > 1 { printf "%s%s", sep, $1; sep = " " }' "$TEST_TMP/list-steps-$host.out")
+    [ "$ids" = "$expected" ] || fail "list-steps-$host: steps [$ids], expected [$expected]"
 done
 
 snapshot >"$TEST_TMP/before"
@@ -2221,7 +2221,7 @@ expect_line manual 'HUMAN-BEGIN S2-brew-bundle judgment'
 expect_line manual 'HUMAN-BEGIN S4-nvm judgment'
 expect_line manual "$CASE_BREW/bin/brew uninstall --formula tldr"
 expect_line manual "$CASE_BREW/bin/brew uninstall --formula tealdeer"
-expect_line manual 'HUMAN-BEGIN H7-native judgment'
+expect_line manual 'HUMAN-BEGIN H7-deploy judgment'
 expect_line manual '# Select local [data].host = lab-ubuntu explicitly; setup-host never initializes or applies configuration.'
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
 expect_line manual "$FIXTURE/doctor.sh --host lab-ubuntu"
@@ -2236,25 +2236,25 @@ expect_no_events manual
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || fail '--print-manual wrote files'
 
-# Every host's --print-manual has the H7-native block.
+# Every host's --print-manual has the H7-deploy block.
 for host in lab-ubuntu wsl-ubuntu sherlock marlowe mac; do
     if [ "$host" = mac ]; then
-        run_case "native-manual-$host" "${MAC_ENV[@]}" -- --host "$host" --print-manual
+        run_case "print-manual-$host" "${MAC_ENV[@]}" -- --host "$host" --print-manual
     else
-        run_case "native-manual-$host" -- --host "$host" --print-manual
+        run_case "print-manual-$host" -- --host "$host" --print-manual
     fi
-    expect_rc "native-manual-$host" 0
-    expect_line "native-manual-$host" 'HUMAN-BEGIN H7-native judgment'
+    expect_rc "print-manual-$host" 0
+    expect_line "print-manual-$host" 'HUMAN-BEGIN H7-deploy judgment'
 done
-expect_line native-manual-lab-ubuntu '# do not run gh auth setup-git: it rewrites ~/.gitconfig, which the dotfiles manage; .gitconfig_local sets the helper'
-expect_line native-manual-lab-ubuntu "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones."
-expect_text native-manual-lab-ubuntu out '# ./setup-host.sh --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)'
-expect_text native-manual-lab-ubuntu out "# ./setup-host.sh --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
-expect_line native-manual-mac '# finish the installer dialog, then run ./setup-host.sh --host mac again'
-expect_text native-manual-mac out "# ./setup-host.sh --host mac (without --check) downloads $URL_HOMEBREW"
-expect_line native-manual-sherlock "$FIXTURE/setup-host.sh --host sherlock"
+expect_line print-manual-lab-ubuntu '# do not run gh auth setup-git: it rewrites ~/.gitconfig, which the dotfiles manage; .gitconfig_local sets the helper'
+expect_line print-manual-lab-ubuntu "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones."
+expect_text print-manual-lab-ubuntu out '# ./setup-host.sh --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)'
+expect_text print-manual-lab-ubuntu out "# ./setup-host.sh --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
+expect_line print-manual-mac '# finish the installer dialog, then run ./setup-host.sh --host mac again'
+expect_text print-manual-mac out "# ./setup-host.sh --host mac (without --check) downloads $URL_HOMEBREW"
+expect_line print-manual-sherlock "$FIXTURE/setup-host.sh --host sherlock"
 
-# --- PATH before the handover ------------------------------------------------
+# --- PATH before the first apply ---------------------------------------------
 
 # path_case PROFILE: this process's PATH after steps_extend_path, starting
 # from /usr/bin:/bin, with Homebrew, ~/.local/bin and the login env present.
@@ -2271,10 +2271,10 @@ mkdir -p "$CASE_BREW/sbin" "$CASE_HOME/.local/bin" "$CASE_HOME/micromamba/envs/l
 # env before both.
 PATH_DEBIAN=$(path_case debian)
 [ "$PATH_DEBIAN" = "$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
-    fail "debian PATH before the handover: $PATH_DEBIAN"
+    fail "debian PATH before the first apply: $PATH_DEBIAN"
 PATH_HPC=$(path_case hpc)
 [ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
-    fail "hpc PATH before the handover: $PATH_HPC"
+    fail "hpc PATH before the first apply: $PATH_HPC"
 
 # --- HUMAN block lines stand alone -------------------------------------------
 
@@ -2348,8 +2348,8 @@ run_case manual-mac "${MAC_ENV[@]}" -- --host mac --print-manual
 expect_line manual-mac '# finish the installer dialog, then run ./setup-host.sh --host mac again'
 expect_text manual-mac out "# ./setup-host.sh --host mac (without --check) downloads $URL_HOMEBREW"
 for name in manual manual-mac \
-    native-manual-lab-ubuntu native-manual-wsl-ubuntu native-manual-sherlock native-manual-marlowe native-manual-mac \
-    native-hpc-login-env native-hpc-fresh native-recovery native-done \
+    print-manual-lab-ubuntu print-manual-wsl-ubuntu print-manual-sherlock print-manual-marlowe print-manual-mac \
+    hpc-env-login hpc-env-fresh omz-recovery deploy-done \
     check-missing check-fresh apply recovery hpc-login hpc-alloc mac-check mac-brew linuxbrew \
     brew-conflict-check brew-conflict-cellar nvm-foreign-check nvm-plain nvm-dirty $SHARED_CASES; do
     grep -q '^HUMAN-BEGIN ' "$TEST_TMP/$name.out" || fail "$name printed no HUMAN block to scan"

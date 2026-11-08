@@ -25,9 +25,9 @@ Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 setup-host installs tools and prints HUMAN blocks for commands it does not run,
 including sudo, authentication, allocations and login-shell changes. It
 provisions verified chezmoi 2.74.0+ and needs no Python environment. Follow the HUMAN
-blocks; H7-native points to the native install, which a new home follows by
+blocks; H7-deploy points to the first deployment, which a new home follows by
 [Fresh home by hand](docs/bootstrap.md#fresh-home-by-hand)
-([bootstrap playbook](docs/bootstrap.md#h7-native-reviewed-native-configuration-handover)).
+([bootstrap playbook](docs/bootstrap.md#h7-deploy-first-apply)).
 Converting an existing home follows the
 [takeover procedure](docs/chezmoi-migration/takeover.md) and requires ownership
 review and private backups before first apply.
@@ -42,7 +42,7 @@ revision, within the
 [support boundary](docs/chezmoi-migration/support-boundary.md#one-time-operator-upgrade-and-cutoff-deliverable),
 never by updating it to current `main`.
 
-On other Linux, set `[data].host = "common-only"` in the local chezmoi config,
+On other Linux, set `[data].host = "generic"` in the local chezmoi config,
 check with `./doctor.sh --platform other` and follow the
 [other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions).
 setup-host requires a supported explicit host. Do not build HPC environments
@@ -61,7 +61,7 @@ cd $HOME\dotfiles
 .\setup-host.ps1 -Host win
 ```
 
-Follow the HW-* HUMAN blocks; HW-native points to the native install, which a new
+Follow the HW-* HUMAN blocks; HW-deploy points to the first deployment, which a new
 home follows by
 [Fresh Windows home by hand](docs/bootstrap.md#fresh-windows-home-by-hand).
 Regular-file native updates run unelevated, without a scheduled task or UAC prompt. Both
@@ -86,7 +86,7 @@ For a session outside the clone, use the
 | [home](home/) | Native chezmoi source (`.chezmoiroot`): one file per target under its chezmoi source name (`dot_`, `executable_`, `private_`, `empty_`) |
 | `home/.hosts/<role>/` | Role variants of `~/.config/{sh,bash,zsh}` rc files, `~/.gitconfig_local` and `~/.ssh/config.d/legacy.conf`, read raw by one-line role-keyed templates |
 | `home/.policy/` | Portable Claude and Codex policy, read raw by the two modify templates |
-| `home/.chezmoiignore` | The targets of each role: `common-only`, `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock`, `marlowe`, `win` |
+| `home/.chezmoiignore` | The targets of each role: `generic`, `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock`, `marlowe`, `win` |
 
 chezmoi never deploys a source dot-directory, so `.hosts/` and `.policy/` stay
 inputs. Git overrides use `~/.gitconfig_local`; SSH delegates to
@@ -231,7 +231,7 @@ optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 
 The [chezmoi migration record](docs/chezmoi-migration/status.md) holds the
 staged history, gates and per-host outcomes. The
-[native contract](docs/config-sync.md#native-configuration) documents
+[native contract](docs/config-sync.md#modify-templates) documents
 serialization, preserved Claude/Codex input, exact ownership and refusal of
 unsupported inputs. CI requires verified v2.74.0; local native probes skip if
 chezmoi is absent, while an invalid explicit path fails. Converting an existing

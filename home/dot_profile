@@ -157,7 +157,7 @@ _dotfiles_login_updates() {
         # shellcheck source=/dev/null
         . "$_df_update"
     else
-        printf '%s\n' '[dotfiles] [warn] Native updater is unavailable; inspect the source checkout.' >&2
+        printf '%s\n' '[dotfiles] [warn] The login updater is unavailable; inspect the source checkout.' >&2
     fi
     # The payload repos install only when a person runs sync-payloads.
     unset _df_hook_root _df_update _df_line

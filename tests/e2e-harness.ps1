@@ -5,7 +5,7 @@
 # reach the machine is replaced by stubs defined in a case's own scope, where
 # the driver resolves them: each setup-host.ps1 run (realistic -Yes output
 # with winget's blank progress lines and CRLF endings), each child pwsh the
-# native-handover and native-converged steps start (the stub writes the
+# home-deploy and home-converged steps start (the stub writes the
 # config, state database and private copies Fresh Windows home by hand
 # leaves, or the diff and managed list of the convergence check), the
 # elevation probe, the scheduled task list, the registry PATH rebuild and the
@@ -174,7 +174,7 @@ function Get-WingetLines {
     # The applied steps of a first -Yes run: winget import's spinner frames
     # (carriage returns inside one line), a progress bar and the blank lines
     # its progress leaves, as a redirected winget writes them, then the
-    # native binary.
+    # chezmoi binary.
     $bar = [string]::new([char]0x2588, 30)
     return @(
         '[dotfiles] [step] W1-winget: winget import config\bootstrap\winget.json (24 tools missing)'
@@ -214,12 +214,12 @@ function Get-BlockLines {
             'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix',
             'git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles'
         }
-        'HW-native' {
+        'HW-deploy' {
             'judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.',
             '# Select local [data].host = win explicitly; setup-host never initializes or applies configuration.',
             '# Discover both actual CurrentUserAllHosts paths as the ordinary user.',
             '# Snapshot exact targets and initialize with all paths explicit.',
-            '# Native regular-file updates need no elevation or scheduled task.'
+            '# Updates write regular files and need no elevation or scheduled task.'
         }
         'HW-execution-policy' {
             'judgment', '# Lets the PowerShell profiles and these scripts run. PowerShell 7 and Windows PowerShell 5.1 keep separate settings.',
@@ -245,7 +245,7 @@ function Get-BlockLines {
 
 function Get-ApplyOutput {
     # The stdout of a setup-host.ps1 -Host win -Yes run for a clone at Clone:
-    # the applied steps (winget's progress and the native binary, or the
+    # the applied steps (winget's progress and the chezmoi binary, or the
     # -Done lines of a run with nothing to apply), the HUMAN blocks of Blocks
     # in order, then the pending line naming Pending, or the closing line of
     # an exit 0.
@@ -297,21 +297,21 @@ function New-DryRun {
     return $clone
 }
 
-function New-HandoverClone {
+function New-DeployClone {
     # New-DryRun's clone, also holding (committed, so it stays clean) what
-    # the native steps read from it: this checkout's docs/bootstrap.md and
+    # the steps read from it: this checkout's docs/bootstrap.md and
     # lib/chezmoi-guard.ps1, and a .chezmoiroot. Returns the clone.
     $clone = New-DryRun
     New-File (Join-Path $clone 'docs/bootstrap.md') ([IO.File]::ReadAllText((Join-Path $sourceRoot 'docs/bootstrap.md')))
     New-File (Join-Path $clone 'lib/chezmoi-guard.ps1') ([IO.File]::ReadAllText((Join-Path $sourceRoot 'lib/chezmoi-guard.ps1')))
     New-File (Join-Path $clone '.chezmoiroot') "home`n"
     Invoke-Git $clone @('add', '--', 'docs', 'lib', '.chezmoiroot')
-    Invoke-Git $clone @('-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid', 'commit', '-q', '-m', 'native fixture')
+    Invoke-Git $clone @('-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid', 'commit', '-q', '-m', 'fixture')
     return $clone
 }
 
-function Write-HandoverState {
-    # What Invoke-NativeHandover -Role win leaves in Home, with the config's
+function Write-DeployState {
+    # What Invoke-HomeDeploy -Role win leaves in Home, with the config's
     # top-level destDir and sourceDir in the form chezmoi init writes (on
     # Windows forward slashes and an upper-case drive) from the paths the
     # clone's own lib/chezmoi-guard.ps1 resolves, as Variant says: clean,
@@ -343,8 +343,8 @@ function Write-HandoverState {
     New-File (Join-Path $userHome '.config/chezmoi/chezmoi.toml') ("destDir = `"$(& $form $configHome)`"`nsourceDir = `"$(& $form $source)`"`n" +
         "`n[data]`n  host = `"win`"`n")
     New-File (Join-Path $userHome '.local/state/chezmoi/chezmoi.boltdb') $(if ($Variant -ceq 'no-state') { '' } else { 'db' })
-    New-File (Join-Path $userHome '.gitconfig') "[user]`n`tname = native`n"
-    New-File (Join-Path $userHome 'Documents/PowerShell/profile.ps1') "# native profile`n"
+    New-File (Join-Path $userHome '.gitconfig') "[user]`n`tname = deployed`n"
+    New-File (Join-Path $userHome 'Documents/PowerShell/profile.ps1') "# deployed profile`n"
     if ($Variant -ceq 'maintenance') { New-File (Join-Path $userHome '.config/dotfiles/maintenance') '' }
 }
 
@@ -366,7 +366,7 @@ function Use-DryRun {
     # this scope: no registry PATH rebuild; the elevation probe answers
     # $script:Elevated and the task list $script:TaskNames; each
     # setup-host.ps1 run takes the next of $script:Runs; each child process
-    # plays the next mode of $script:ProcessModes (a handover variant, or the
+    # plays the next mode of $script:ProcessModes (a deploy variant, or the
     # convergence check's converged, diff or exit-1 with $script:Managed as
     # the managed list); each HOME snapshot takes the next of
     # $script:Snapshots.
@@ -406,16 +406,16 @@ function Use-DryRun {
         $code = 0
         switch -CaseSensitive ($mode) {
             { $_ -cin @('clean', 'bad-config', 'maintenance', 'no-copy', 'no-state') } {
-                Write-HandoverState $mode
-                $out.Add('Invoke-NativeHandover: win deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup')
+                Write-DeployState $mode
+                $out.Add('Invoke-HomeDeploy: win deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup')
             }
             'refused' {
-                $err.Add('Invoke-NativeHandover: ~\.gitconfig is a link or not the expected kind of entry; follow docs/chezmoi-migration/takeover.md')
+                $err.Add('Invoke-HomeDeploy: ~\.gitconfig is a link or not the expected kind of entry; inspect it and move it aside first')
                 $code = 1
             }
             'converged' { $out.Add('--- managed'); $out.AddRange([string[]]$script:Managed) }
             'diff' { $out.Add('diff --git a/.gitconfig b/.gitconfig'); $out.Add('-[user]'); $code = 4 }
-            'exit-1' { $err.Add('Invoke-NativeCz: chezmoi diff --exclude=dirs exited 1'); $code = 1 }
+            'exit-1' { $err.Add('Invoke-HomeCz: chezmoi diff --exclude=dirs exited 1'); $code = 1 }
             default { throw "unknown process mode $mode" }
         }
         [IO.File]::WriteAllText($OutFile, (ConvertTo-StepText $out.ToArray()), $Utf8)
@@ -486,21 +486,21 @@ try {
         $case = Reset-RunState
         $clone = Join-Path $case 'home/dotfiles'
         # As Get-E2ELines reads a step's .out: CRLF split, a trailing ''.
-        $text = ConvertTo-StepText (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native')
+        $text = ConvertTo-StepText (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy')
         $output = @($text -split '\r?\n')
         Assert-True (@($output | Where-Object { $_ -eq '' }).Count -ge 4) 'the fixture output lost its blank lines'
         $directory = Join-Path $case 'out/steps/01-apply-1.blocks'
         $blocks = @(ConvertFrom-E2EBlocks -Output $output -Directory $directory)
-        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-native(judgment) $ReminderSummary" 'blocks in printed order'
-        $native = @(Get-BlockLines 'HW-native' $clone | Select-Object -Skip 1 | Select-Object -SkipLast 1)
-        Assert-Lines $blocks[0].Lines $native 'HW-native: its notes'
+        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-deploy(judgment) $ReminderSummary" 'blocks in printed order'
+        $notes = @(Get-BlockLines 'HW-deploy' $clone | Select-Object -Skip 1 | Select-Object -SkipLast 1)
+        Assert-Lines $blocks[0].Lines $notes 'HW-deploy: its notes'
         Assert-Equal $blocks[2].Lines.Count 4 'HW-ssh-agent keeps its two notes and two commands'
         foreach ($block in $blocks) {
             Assert-True (-not @($block.Lines | Where-Object { $_.StartsWith('[dotfiles]') -or $_.StartsWith('HUMAN-') -or $_ -eq '' }).Count) "$($block.Id) holds a line from outside it"
         }
-        Assert-Equal (Read-Utf8 (Join-Path $directory 'index')) ("1`tHW-native`tjudgment`n2`tHW-execution-policy`tjudgment`n" +
+        Assert-Equal (Read-Utf8 (Join-Path $directory 'index')) ("1`tHW-deploy`tjudgment`n2`tHW-execution-policy`tjudgment`n" +
             "3`tHW-ssh-agent`tsudo`n4`tHW-wsl`tjudgment`n5`tHW-auth`tauth`n") 'the index file'
-        Assert-Equal (Read-Utf8 (Join-Path $directory '1.block')) (($native -join "`n") + "`n") '1.block'
+        Assert-Equal (Read-Utf8 (Join-Path $directory '1.block')) (($notes -join "`n") + "`n") '1.block'
         Assert-Equal @(Get-ChildItem -LiteralPath $directory -Filter '*.block').Count 5 'one <n>.block per block'
 
         $blank = @(ConvertFrom-E2EBlocks -Output @('', 'HUMAN-BEGIN HW-wsl judgment', '', 'wsl --install -d Ubuntu', '   ', 'HUMAN-END', '') -Directory (Join-Path $case 'blank'))
@@ -509,12 +509,12 @@ try {
 
         $partialDirectory = Join-Path $case 'partial'
         $partial = @(ConvertFrom-E2EBlocks -Directory $partialDirectory -Output @(
-                'HUMAN-END', 'HUMAN-BEGIN HW-native judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.', 'HUMAN-END',
+                'HUMAN-END', 'HUMAN-BEGIN HW-deploy judgment', '# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.', 'HUMAN-END',
                 'HUMAN-BEGIN HW-wsl Judgment', 'wsl --install -d Ubuntu', 'HUMAN-END',
                 'HUMAN-BEGIN HW-auth auth extra', 'codex login', 'HUMAN-END',
                 'HUMAN-BEGIN HW-auth auth', 'gh auth login --git-protocol ssh'))
-        Assert-Equal (Get-E2EBlocksSummary $partial) 'HW-native(judgment)' 'a stray HUMAN-END, malformed HUMAN-BEGIN lines and an unclosed block make no block'
-        Assert-Equal (Read-Utf8 (Join-Path $partialDirectory 'index')) "1`tHW-native`tjudgment`n" 'the index lists closed blocks only'
+        Assert-Equal (Get-E2EBlocksSummary $partial) 'HW-deploy(judgment)' 'a stray HUMAN-END, malformed HUMAN-BEGIN lines and an unclosed block make no block'
+        Assert-Equal (Read-Utf8 (Join-Path $partialDirectory 'index')) "1`tHW-deploy`tjudgment`n" 'the index lists closed blocks only'
         Assert-True (-not [IO.File]::Exists((Join-Path $partialDirectory '2.block'))) 'the unclosed block was saved'
 
         $none = @(ConvertFrom-E2EBlocks -Output @() -Directory (Join-Path $case 'none'))
@@ -522,18 +522,18 @@ try {
         Assert-Equal (Read-Utf8 (Join-Path $case 'none/index')) "`n" 'an empty index'
     }
 
-    Test-Case 'Get-E2EBlockPolicy: HW-native is the handover, the four reminders skip, HW-clone and every other (id, kind) fail (bug 2)' {
+    Test-Case 'Get-E2EBlockPolicy: HW-deploy is the deploy step, the four reminders skip, HW-clone and every other (id, kind) fail (bug 2)' {
         $rows = @(
-            'HW-native judgment handover'
+            'HW-deploy judgment deploy'
             'HW-execution-policy judgment skip', 'HW-ssh-agent sudo skip', 'HW-wsl judgment skip', 'HW-auth auth skip'
             'HW-clone gui fail', 'HW-clone judgment fail'
             # A known id with another kind.
-            'HW-native sudo fail', 'HW-native inspect fail', 'HW-native gui fail', 'HW-ssh-agent judgment fail'
+            'HW-deploy sudo fail', 'HW-deploy inspect fail', 'HW-deploy gui fail', 'HW-ssh-agent judgment fail'
             'HW-auth judgment fail', 'HW-wsl gui fail', 'HW-execution-policy sudo fail', 'HW-auth sudo fail'
             # Case matters.
-            'hw-native judgment fail', 'HW-native Judgment fail', 'HW-AUTH auth fail'
+            'hw-deploy judgment fail', 'HW-deploy Judgment fail', 'HW-AUTH auth fail'
             # Unknown ids and kinds.
-            'H7-native judgment fail', 'W1-winget judgment fail', 'HW-recovery judgment fail', 'HW-native alloc fail', 'HW-wsl chsh fail'
+            'H7-deploy judgment fail', 'W1-winget judgment fail', 'HW-recovery judgment fail', 'HW-deploy alloc fail', 'HW-wsl chsh fail'
         )
         foreach ($row in $rows) {
             $id, $kind, $action = $row.Split(' ')
@@ -541,11 +541,11 @@ try {
         }
     }
 
-    Test-Case 'Get-E2ELoopNext: the verdict table of inside.sh, with HW-native as the handover' {
+    Test-Case 'Get-E2ELoopNext: the verdict table of inside.sh, with HW-deploy as the deploy step' {
         $rows = @(
-            '3|HW-native|0|0|done', '3|HW-native|0|1|rerun', '3|HW-native|1|0|blocks', '3|HW-native|1|1|blocks'
-            '3|HW-clone HW-native|1|0|blocks', '3|HW-clone HW-native|0|0|stuck', '3|HW-clone HW-native|0|1|rerun'
-            '3|H7-native|0|0|stuck', '3||0|0|stuck', '0||0|0|early', '0|HW-native|0|1|early'
+            '3|HW-deploy|0|0|done', '3|HW-deploy|0|1|rerun', '3|HW-deploy|1|0|blocks', '3|HW-deploy|1|1|blocks'
+            '3|HW-clone HW-deploy|1|0|blocks', '3|HW-clone HW-deploy|0|0|stuck', '3|HW-clone HW-deploy|0|1|rerun'
+            '3|H7-deploy|0|0|stuck', '3||0|0|stuck', '0||0|0|early', '0|HW-deploy|0|1|early'
             '1|x|0|0|error', '2|x|0|0|error', '124|x|0|0|timeout', '137|x|0|0|timeout'
         )
         foreach ($row in $rows) {
@@ -555,52 +555,52 @@ try {
         }
     }
 
-    Test-Case 'Get-E2EHandoverScript takes exactly the two Fresh Windows home by hand functions from docs/bootstrap.md and refuses anything else' {
+    Test-Case 'Get-E2EDeployScript takes exactly the two Fresh Windows home by hand functions from docs/bootstrap.md and refuses anything else' {
         $case = Reset-RunState
-        $handover = Get-E2EHandoverScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
-        Assert-Equal $handover['Error'] '' 'the real fence was refused'
+        $deploy = Get-E2EDeployScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
+        Assert-Equal $deploy['Error'] '' 'the real fence was refused'
         $tokens = $null
         $parseErrors = $null
-        $ast = [Management.Automation.Language.Parser]::ParseInput($handover['Text'], [ref]$tokens, [ref]$parseErrors)
+        $ast = [Management.Automation.Language.Parser]::ParseInput($deploy['Text'], [ref]$tokens, [ref]$parseErrors)
         Assert-Equal @($parseErrors).Count 0 'the fence parses'
         Assert-Lines @($ast.EndBlock.Statements | ForEach-Object { "$($_.GetType().Name) $($_.Name)" }) @(
-            'FunctionDefinitionAst Invoke-NativeCz', 'FunctionDefinitionAst Invoke-NativeHandover') 'two definitions and nothing else'
-        Assert-True ($handover['Text'].EndsWith("}`n")) 'the text ends with the last definition'
-        $outside = 'a statement outside the Invoke-NativeCz and Invoke-NativeHandover definitions in the fenced powershell block: '
+            'FunctionDefinitionAst Invoke-HomeCz', 'FunctionDefinitionAst Invoke-HomeDeploy') 'two definitions and nothing else'
+        Assert-True ($deploy['Text'].EndsWith("}`n")) 'the text ends with the last definition'
+        $outside = 'a statement outside the Invoke-HomeCz and Invoke-HomeDeploy definitions in the fenced powershell block: '
         foreach ($refusal in @(
-                @{ Text = 'Invoke-NativeHandover -Role win'; AtStart = $false; Error = "${outside}Invoke-NativeHandover -Role win" }
+                @{ Text = 'Invoke-HomeDeploy -Role win'; AtStart = $false; Error = "${outside}Invoke-HomeDeploy -Role win" }
                 @{ Text = 'function Invoke-Third { }'; AtStart = $false; Error = "${outside}function Invoke-Third { }" }
-                @{ Text = 'function Invoke-NativeCz { }'; AtStart = $false; Error = "${outside}function Invoke-NativeCz { }" }
+                @{ Text = 'function Invoke-HomeCz { }'; AtStart = $false; Error = "${outside}function Invoke-HomeCz { }" }
                 @{ Text = '$env:CHEZMOI_SOURCE_DIR = ''C:\evil'''; AtStart = $false; Error = "$outside`$env:CHEZMOI_SOURCE_DIR = 'C:\evil'" }
                 @{ Text = 'param()'; AtStart = $true; Error = "${outside}param()" })) {
             $directory = Join-Path $case ('planted-' + [Guid]::NewGuid().ToString('N'))
             $document = New-PlantedDocument -Directory $directory -Text $refusal['Text'] -AtStart:$refusal['AtStart']
-            $planted = Get-E2EHandoverScript -Document $document
+            $planted = Get-E2EDeployScript -Document $document
             Assert-Equal $planted['Error'] $refusal['Error'] "the planted [$($refusal['Text'])]"
             Assert-Equal $planted['Text'] '' "a refused fence still returned text for [$($refusal['Text'])]"
         }
-        $broken = Get-E2EHandoverScript -Document (New-PlantedDocument -Directory (Join-Path $case 'broken') -Text 'function Broken {')
+        $broken = Get-E2EDeployScript -Document (New-PlantedDocument -Directory (Join-Path $case 'broken') -Text 'function Broken {')
         Assert-True $broken['Error'].StartsWith('the fenced powershell block does not parse: ') "a parse error: $($broken['Error'])"
-        $moved = Get-E2EHandoverScript -Document (New-PlantedDocument -Directory (Join-Path $case 'moved') -MoveHeading)
+        $moved = Get-E2EDeployScript -Document (New-PlantedDocument -Directory (Join-Path $case 'moved') -MoveHeading)
         Assert-Equal $moved['Error'] 'no fenced powershell block after "Fresh Windows home by hand"' 'a moved heading'
     }
 
-    Test-Case 'setup-host.ps1 -PrintManual: the native blocks meet their policy rows, and HW-native holds notes only' {
+    Test-Case 'setup-host.ps1 -PrintManual: the blocks meet their policy rows, and HW-deploy holds notes only' {
         $case = Reset-RunState
         Start-E2EStep print-manual check:print-manual
         $code = Invoke-Child -Arguments @('-NoProfile', '-NonInteractive', '-File', (Join-Path $sourceRoot 'setup-host.ps1'), '-Host', 'win', '-PrintManual') `
             -WorkingDirectory $case
         Assert-Equal $code 0 "setup-host.ps1 -PrintManual exit code: $([IO.File]::ReadAllText($E2E['StepErr']))"
         $blocks = @(ConvertFrom-E2EBlocks -Output @(Get-E2ELines $E2E['StepOut']) -Directory (Join-Path $case 'manual.blocks'))
-        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-clone(judgment) HW-native(judgment) $ReminderSummary" 'the blocks setup-host.ps1 prints'
-        Assert-Equal (@($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind }) -join ' ') 'fail handover skip skip skip skip' 'their policies'
-        Assert-Equal @($blocks[1].Lines | Where-Object { $_ -and -not $_.StartsWith('# ') }).Count 0 'HW-native holds a command line'
+        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-clone(judgment) HW-deploy(judgment) $ReminderSummary" 'the blocks setup-host.ps1 prints'
+        Assert-Equal (@($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind }) -join ' ') 'fail deploy skip skip skip skip' 'their policies'
+        Assert-Equal @($blocks[1].Lines | Where-Object { $_ -and -not $_.StartsWith('# ') }).Count 0 'HW-deploy holds a command line'
     }
 
     Test-Case 'Get-E2EPendingIds, Get-E2EFailureDetail, Get-E2EBlocksSummary and Get-E2EBlockText on setup-host output' {
-        $pending = '[dotfiles] [warn] HUMAN steps pending: HW-clone HW-native; run the HUMAN blocks above, then rerun .\setup-host.ps1'
-        Assert-Equal (Get-E2EPendingIds (@(Get-WingetLines) + @($pending, ''))) 'HW-clone HW-native' 'the pending ids'
-        Assert-Equal (Get-E2EPendingIds (@(Get-WingetLines) + @('') + @($pending.Replace('HW-clone ', '')))) 'HW-native' 'pending on the stderr half of the lines'
+        $pending = '[dotfiles] [warn] HUMAN steps pending: HW-clone HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1'
+        Assert-Equal (Get-E2EPendingIds (@(Get-WingetLines) + @($pending, ''))) 'HW-clone HW-deploy' 'the pending ids'
+        Assert-Equal (Get-E2EPendingIds (@(Get-WingetLines) + @('') + @($pending.Replace('HW-clone ', '')))) 'HW-deploy' 'pending on the stderr half of the lines'
         Assert-Equal (Get-E2EPendingIds @(Get-WingetLines)) '' 'nothing pending'
         Assert-Equal (Get-E2EPendingIds @()) '' 'no lines'
 
@@ -612,9 +612,9 @@ try {
         Assert-Equal (Get-E2EFailureDetail -Output @('') -Errors @()) 'no output' 'nothing to report'
         Assert-Equal (Get-E2EFailureDetail -Output @('[error] ' + ('e' * 500))) ('[error] ' + ('e' * 392) + '...') 'a detail is cut at 400 characters'
 
-        $blocks = @([pscustomobject]@{ Id = 'HW-native'; Kind = 'judgment'; Lines = @('# note', '# another') }
+        $blocks = @([pscustomobject]@{ Id = 'HW-deploy'; Kind = 'judgment'; Lines = @('# note', '# another') }
             [pscustomobject]@{ Id = 'HW-auth'; Kind = 'auth'; Lines = @('gh auth login --git-protocol ssh') })
-        Assert-Equal (Get-E2EBlocksSummary $blocks) 'HW-native(judgment) HW-auth(auth)' 'id(kind) per block'
+        Assert-Equal (Get-E2EBlocksSummary $blocks) 'HW-deploy(judgment) HW-auth(auth)' 'id(kind) per block'
         Assert-Equal (Get-E2EBlocksSummary @()) '' 'no block'
         Assert-Equal (Get-E2EBlockText $blocks[0]) '# note | # another' 'a block as one detail line'
     }
@@ -868,7 +868,7 @@ try {
         Assert-Equal (Get-E2ETsvCounts $tsv) 'ok=1 missing=2 warn=1 ' 'status counts of a -Tsv report'
         $log = Join-Path $case 'doctor.out'
         [IO.File]::WriteAllText($log, ((@('[dotfiles] [ok] git 2.51.0') + @(1..6 | ForEach-Object { "[dotfiles] [warn] tool $_ below its floor" }) +
-                    @('[dotfiles] [error] native-config: there is no ~/.config/chezmoi/chezmoi.toml')) -join "`r`n"))
+                    @('[dotfiles] [error] chezmoi-config: there is no ~/.config/chezmoi/chezmoi.toml')) -join "`r`n"))
         Assert-Equal (Get-E2EProblemLines $log) (@(1..5 | ForEach-Object { "[dotfiles] [warn] tool $_ below its floor" }) -join ' | ') 'the first five problem lines'
     }
 
@@ -919,32 +919,32 @@ try {
         Assert-Equal @(Get-ChildItem -LiteralPath $case -Force | Where-Object { $_.Name -ne 'out' }).Count 0 'run.ps1 wrote beside its working directory'
     }
 
-    Test-Case 'apply loop dry run: a run that applies the winget steps and chezmoi, then a run with only HW-native left ends the loop' {
+    Test-Case 'apply loop dry run: a run that applies the winget steps and chezmoi, then a run with only HW-deploy left ends the loop' {
         $clone = New-DryRun
-        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native')
-        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native' -Done)
+        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy')
+        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy' -Done)
         Assert-True (Invoke-ApplyLoop) "the apply loop failed:`n$(Get-SummaryText)"
         $rows = @(Get-SummaryRows)
         Assert-Equal (Get-RowShape $rows) 'apply-1:pass apply-2:pass HW-execution-policy:skip HW-ssh-agent:skip HW-wsl:skip HW-auth:skip' 'the rows'
-        Assert-Equal $rows[0].Detail 'exit 3; applied 3 step(s); pending: HW-native' 'apply-1 reruns'
-        Assert-Equal $rows[1].Detail "exit 3 after 2 run(s); only HW-native pending; blocks: HW-native(judgment) $ReminderSummary" 'apply-2 ends the loop'
+        Assert-Equal $rows[0].Detail 'exit 3; applied 3 step(s); pending: HW-deploy' 'apply-1 reruns'
+        Assert-Equal $rows[1].Detail "exit 3 after 2 run(s); only HW-deploy pending; blocks: HW-deploy(judgment) $ReminderSummary" 'apply-2 ends the loop'
         Assert-Equal $rows[3].Detail ('sudo block left to the person: # Elevated PowerShell (Run as administrator): | Set-Service -Name ssh-agent ' +
             '-StartupType Automatic | Start-Service -Name ssh-agent | # Then, as yourself, once HW-auth has created the key: ssh-add $HOME\.ssh\id_ed25519') 'a reminder'
         Assert-Equal "$($E2E['Passes']) $($E2E['Fails']) $($E2E['Skips']) [$($E2E['Broken'])]" '2 0 4 []' 'counters and Broken'
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
             'setup-host.ps1 -Host win -Yes 3600; setup-host.ps1 -Host win -Yes 3600' 'the setup-host.ps1 runs, without a mode flag'
         Assert-Equal $script:ProcessCalls.Count 0 'no block line runs'
-        Assert-Equal "$($E2E['HandoverBlock'].Id) $($E2E['HandoverBlock'].Kind)" 'HW-native judgment' 'the handover block is kept'
-        Assert-Lines @($E2E['HandoverBlock'].Lines) @(Get-BlockLines 'HW-native' $clone | Select-Object -Skip 1 | Select-Object -SkipLast 1) 'its notes'
+        Assert-Equal "$($E2E['DeployBlock'].Id) $($E2E['DeployBlock'].Kind)" 'HW-deploy judgment' 'the deploy block is kept'
+        Assert-Lines @($E2E['DeployBlock'].Lines) @(Get-BlockLines 'HW-deploy' $clone | Select-Object -Skip 1 | Select-Object -SkipLast 1) 'its notes'
         $blocks = Join-Path $E2E['Out'] 'steps/02-apply-2.blocks'
-        Assert-Equal (Read-Utf8 (Join-Path $blocks 'index')).Split("`n")[0] "1`tHW-native`tjudgment" 'apply-2''s blocks were saved'
+        Assert-Equal (Read-Utf8 (Join-Path $blocks 'index')).Split("`n")[0] "1`tHW-deploy`tjudgment" 'apply-2''s blocks were saved'
         $phases = @(Get-E2ELines (Join-Path $E2E['Out'] 'log/timeline') | Where-Object { $_ } | ForEach-Object { $_.Split("`t", 2)[1].Replace("`t", ' ') })
         Assert-Equal ($phases -join ', ') 'begin setup:apply-1, end setup:apply-1, begin setup:apply-2, end setup:apply-2' 'the timeline'
     }
 
-    Test-Case 'Invoke-E2EBlocks records each reminder once across runs and leaves the handover alone' {
+    Test-Case 'Invoke-E2EBlocks records each reminder once across runs and leaves the deploy block alone' {
         $clone = New-DryRun
-        $blocks = @(ConvertFrom-E2EBlocks -Output (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders)) -Directory (Join-Path $E2E['Out'] 'reminders'))
+        $blocks = @(ConvertFrom-E2EBlocks -Output (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders)) -Directory (Join-Path $E2E['Out'] 'reminders'))
         Assert-True (Invoke-E2EBlocks -Blocks $blocks) 'the first run of reminders'
         Assert-True (Invoke-E2EBlocks -Blocks $blocks) 'the second run of reminders'
         Assert-Equal (Get-RowShape @(Get-SummaryRows)) 'HW-execution-policy:skip HW-ssh-agent:skip HW-wsl:skip HW-auth:skip' 'one skip row each'
@@ -952,25 +952,25 @@ try {
         Assert-Equal "$($E2E['Broken']) $($script:ProcessCalls.Count)" ' 0' 'nothing broke and nothing ran'
     }
 
-    Test-Case 'apply loop dry run: exit 0 before the handover fails, since a fresh home cannot have HW-native done' {
+    Test-Case 'apply loop dry run: exit 0 before the first apply fails, since a fresh home cannot have HW-deploy done' {
         $clone = New-DryRun
         Add-Run 0 (Get-ApplyOutput -Clone $clone -Blocks $Reminders -Done)
-        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native' -Done)
+        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy' -Done)
         Assert-True (-not (Invoke-ApplyLoop)) 'an exit 0 passed'
         Assert-Equal (Get-RowShape @(Get-SummaryRows)) 'apply-1:fail' 'the rows'
-        Assert-Equal @(Get-SummaryRows)[0].Detail 'exit 0 before the handover: HW-native was already done on a fresh home' 'the verdict'
+        Assert-Equal @(Get-SummaryRows)[0].Detail 'exit 0 before the first apply: HW-deploy was already done on a fresh home' 'the verdict'
         Assert-Equal "$($E2E['Broken']) $($script:Runs.Count)" 'apply-1 1' 'Broken and runs left'
     }
 
     Test-Case 'apply loop dry run: a pending HW-clone fails the run before anything else, wherever it is printed (bug 2)' {
-        foreach ($order in @(@('HW-clone', 'HW-native'), @('HW-native', 'HW-clone'))) {
+        foreach ($order in @(@('HW-clone', 'HW-deploy'), @('HW-deploy', 'HW-clone'))) {
             $clone = New-DryRun
-            Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@($order) + $Reminders) -Pending 'HW-clone HW-native')
-            Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native' -Done)
+            Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@($order) + $Reminders) -Pending 'HW-clone HW-deploy')
+            Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy' -Done)
             Assert-True (-not (Invoke-ApplyLoop)) "$($order -join ', '): the apply loop passed"
             $rows = @(Get-SummaryRows)
             Assert-Equal (Get-RowShape $rows) 'apply-1:pass HW-clone:fail' "$($order -join ', '): the rows"
-            Assert-Equal $rows[0].Detail "exit 3; blocks: $($order[0])(judgment) $($order[1])(judgment) $ReminderSummary; pending: HW-clone HW-native" `
+            Assert-Equal $rows[0].Detail "exit 3; blocks: $($order[0])(judgment) $($order[1])(judgment) $ReminderSummary; pending: HW-clone HW-deploy" `
                 "$($order -join ', '): apply-1"
             Assert-True $rows[1].Detail.StartsWith('judgment block the harness must not run: # This checkout has no .git') `
                 "$($order -join ', '): $($rows[1].Detail)"
@@ -978,18 +978,18 @@ try {
         }
     }
 
-    Test-Case 'apply loop dry run: no progress, a missing HW-native block, exit 1, exit 2 and a timeout fail with what setup-host reported' {
+    Test-Case 'apply loop dry run: no progress, a missing HW-deploy block, exit 1, exit 2 and a timeout fail with what setup-host reported' {
         $clone = New-DryRun
-        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-clone HW-native' -Done)
+        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-clone HW-deploy' -Done)
         Assert-True (-not (Invoke-ApplyLoop)) 'exit 3 with nothing to do and nothing applied passed'
         Assert-Equal (Get-SummaryText) ("1`tapply-1`tfail`t$(@(Get-SummaryRows)[0].Seconds)`tno progress: exit 3 with no block the harness may run " +
-            "and nothing applied (pending: HW-clone HW-native; blocks: HW-native(judgment) $ReminderSummary)`n") 'no progress, no skip rows'
+            "and nothing applied (pending: HW-clone HW-deploy; blocks: HW-deploy(judgment) $ReminderSummary)`n") 'no progress, no skip rows'
         Assert-Equal "$($E2E['Broken']) $($script:ProcessCalls.Count)" 'apply-1 0' 'Broken and child processes'
 
         $clone = New-DryRun
-        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks $Reminders -Pending 'HW-native' -Done)
-        Assert-True (-not (Invoke-ApplyLoop)) 'only HW-native pending without its block passed'
-        Assert-Equal @(Get-SummaryRows)[0].Detail "exit 3 with only HW-native pending, but no HW-native block (blocks: $ReminderSummary)" 'the missing block'
+        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks $Reminders -Pending 'HW-deploy' -Done)
+        Assert-True (-not (Invoke-ApplyLoop)) 'only HW-deploy pending without its block passed'
+        Assert-Equal @(Get-SummaryRows)[0].Detail "exit 3 with only HW-deploy pending, but no HW-deploy block (blocks: $ReminderSummary)" 'the missing block'
         Assert-Equal $E2E['Broken'] 'apply-1' 'Broken'
 
         $winget = '[dotfiles] [error] W1-winget: winget exited 0x8A150046 (source agreements were not accepted) (docs/bootstrap.md W1-winget)'
@@ -1009,14 +1009,14 @@ try {
         }
     }
 
-    Test-Case 'apply loop dry run: eight runs that keep applying without reaching the handover fail as apply-loop' {
+    Test-Case 'apply loop dry run: eight runs that keep applying without reaching the first apply fail as apply-loop' {
         $clone = New-DryRun
-        foreach ($n in 1..8) { Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native') }
-        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-native') + $Reminders) -Pending 'HW-native' -Done)
+        foreach ($n in 1..8) { Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy') }
+        Add-Run 3 (Get-ApplyOutput -Clone $clone -Blocks (@('HW-deploy') + $Reminders) -Pending 'HW-deploy' -Done)
         Assert-True (-not (Invoke-ApplyLoop)) 'eight applying runs passed'
         $rows = @(Get-SummaryRows)
         Assert-Equal $rows.Count 9 'eight apply rows and the verdict'
-        Assert-Equal "$($rows[-1].Step) $($rows[-1].Status) $($rows[-1].Detail)" 'apply-loop fail eight apply runs without reaching the handover' 'the verdict'
+        Assert-Equal "$($rows[-1].Step) $($rows[-1].Status) $($rows[-1].Detail)" 'apply-loop fail eight apply runs without reaching the first apply' 'the verdict'
         Assert-Equal "$($E2E['Broken']) $($script:PwshCalls.Count) $($script:ProcessCalls.Count) $($script:Runs.Count)" 'apply-loop 8 0 1' 'Broken, runs, child processes, runs left'
     }
 
@@ -1029,7 +1029,7 @@ try {
         $plan = @('W1-winget todo winget import of 24 missing tools', 'W1-psresources todo Install-PSResource PSFzf -Scope CurrentUser',
             'W1-font todo oh-my-posh font install CascadiaMono, once W1-winget installs oh-my-posh', 'W1-bat-theme done present',
             'W1-chezmoi todo install the verified chezmoi 2.74.0 archive', 'HW-clone done already done',
-            'HW-native human judgment step for a person; blocks completion') + @($Reminders | ForEach-Object { "$_ human step for a person; does not block" })
+            'HW-deploy human judgment step for a person; blocks completion') + @($Reminders | ForEach-Object { "$_ human step for a person; does not block" })
 
         $clone = New-DryRun
         Add-Run 3 $plan
@@ -1086,9 +1086,9 @@ try {
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'fail TEMP not empty: CascadiaMono.zip' 'a TEMP leftover'
     }
 
-    Test-Case 'check-done dry runs: after the handover -Check exits 0 with nothing left and writes nothing' {
+    Test-Case 'check-done dry runs: after the first apply -Check exits 0 with nothing left and writes nothing' {
         $before = New-FakeSnapshot @{ ([IO.Path]::Combine($HOME, '.gitconfig')) = '338|1' }
-        $done = @('W1-winget done 24 winget tools on PATH', 'W1-chezmoi done chezmoi 2.74.0', 'HW-clone done already done', 'HW-native done already done') +
+        $done = @('W1-winget done 24 winget tools on PATH', 'W1-chezmoi done chezmoi 2.74.0', 'HW-clone done already done', 'HW-deploy done already done') +
             @($Reminders | ForEach-Object { "$_ human step for a person; does not block" })
         [void](New-DryRun)
         Add-Run 0 $done
@@ -1098,12 +1098,12 @@ try {
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'pass exit 0; nothing left to apply; no writes' 'nothing left'
 
         [void](New-DryRun)
-        Add-Run 3 (@($done | Where-Object { $_ -notlike 'HW-native *' }) + @('HW-native human judgment step for a person; blocks completion',
-                '[dotfiles] [warn] HUMAN steps pending: HW-native; run the HUMAN blocks above, then rerun .\setup-host.ps1'))
+        Add-Run 3 (@($done | Where-Object { $_ -notlike 'HW-deploy *' }) + @('HW-deploy human judgment step for a person; blocks completion',
+                '[dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1'))
         $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($before)
         Use-DryRun { Invoke-E2EStepCheckDone }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
-            'fail exit 3, expected 0 after the handover: [dotfiles] [warn] HUMAN steps pending: HW-native; run the HUMAN blocks above, then rerun .\setup-host.ps1' 'exit 3'
+            'fail exit 3, expected 0 after the first apply: [dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1' 'exit 3'
 
         [void](New-DryRun)
         Add-Run 0 (@($done) + @('W1-font todo oh-my-posh font install CascadiaMono'))
@@ -1158,34 +1158,34 @@ try {
             'fail exit 1 (124 is the 2700s timeout): [dotfiles] [error] payload-update: skills failed (exit 1)' 'a failed -Now'
     }
 
-    Test-Case 'native-handover runs the documented Fresh Windows home by hand functions and requires the end state they promise' {
-        $clone = New-HandoverClone
+    Test-Case 'home-deploy runs the documented Fresh Windows home by hand functions and requires the end state they promise' {
+        $clone = New-DeployClone
         New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n`tname = runner`n"
-        $E2E['HandoverBlock'] = [pscustomobject]@{ Id = 'HW-native'; Kind = 'judgment'; Lines = @('# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.') }
+        $E2E['DeployBlock'] = [pscustomobject]@{ Id = 'HW-deploy'; Kind = 'judgment'; Lines = @('# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.') }
         $script:ProcessModes.Enqueue('clean')
         $script:Elevated = $true
-        Use-DryRun { Invoke-E2EStepNativeHandover }
+        Use-DryRun { Invoke-E2EStepHomeDeploy }
         . (Join-Path $clone 'lib/chezmoi-guard.ps1')
         $source = Resolve-DotfilesDirectory $clone
         $rows = @(Get-SummaryRows)
-        Assert-Equal (Get-RowShape $rows) 'native-handover:pass handover-token:note' "the rows:`n$(Get-SummaryText)"
-        Assert-Equal $rows[0].Detail "Invoke-NativeHandover -Role win exit 0; 1 earlier file(s) kept byte for byte; the config names $source" 'the verdict'
+        Assert-Equal (Get-RowShape $rows) 'home-deploy:pass deploy-token:note' "the rows:`n$(Get-SummaryText)"
+        Assert-Equal $rows[0].Detail "Invoke-HomeDeploy -Role win exit 0; 1 earlier file(s) kept byte for byte; the config names $source" 'the verdict'
         Assert-Equal $rows[1].Detail 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance' 'the token note'
-        $runner = Join-Path (Join-Path $E2E['Out'] 'handover') 'run.ps1'
+        $runner = Join-Path (Join-Path $E2E['Out'] 'deploy') 'run.ps1'
         $call = $script:ProcessCalls[0]
         Assert-Equal "$($call.FilePath) $($call.Arguments)" "$($E2E['PowerShell']) -NoProfile -NonInteractive -File $runner" 'the child'
         Assert-Equal "$($call.WorkingDirectory) $($call.Timeout)" "$clone 3600" 'from the clone under the apply limit'
-        $handover = Get-E2EHandoverScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
-        Assert-Equal (Read-Utf8 $runner) ($handover['Text'] + "`nInvoke-NativeHandover -Role win`n") 'the runner: the fence and its one call'
-        Assert-True ([IO.File]::ReadAllText($E2E['StepLog']).StartsWith("--- block`n# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.`n")) 'the step log starts with the HW-native block'
+        $deploy = Get-E2EDeployScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
+        Assert-Equal (Read-Utf8 $runner) ($deploy['Text'] + "`nInvoke-HomeDeploy -Role win`n") 'the runner: the fence and its one call'
+        Assert-True ([IO.File]::ReadAllText($E2E['StepLog']).StartsWith("--- block`n# Follow Fresh Windows home by hand in docs/bootstrap.md from this checkout.`n")) 'the step log starts with the HW-deploy block'
         Assert-Equal "$($E2E['Broken']) $($E2E['Phase'])" ' ' 'Broken and the phase after the step'
         $timeline = @(Get-E2ELines (Join-Path $E2E['Out'] 'log/timeline') | Where-Object { $_ } | ForEach-Object { $_.Split("`t", 2)[1].Replace("`t", ' ') })
-        Assert-Equal ($timeline -join ', ') 'begin human:HW-native, end human:HW-native' 'the phase'
+        Assert-Equal ($timeline -join ', ') 'begin human:HW-deploy, end human:HW-deploy' 'the phase'
 
-        [void](New-HandoverClone)
+        [void](New-DeployClone)
         $script:ProcessModes.Enqueue('clean')
-        Use-DryRun { Invoke-E2EStepNativeHandover }
-        Assert-Equal (Get-RowShape @(Get-SummaryRows)) 'native-handover:pass' 'no note on an ordinary token'
+        Use-DryRun { Invoke-E2EStepHomeDeploy }
+        Assert-Equal (Get-RowShape @(Get-SummaryRows)) 'home-deploy:pass' 'no note on an ordinary token'
         Assert-True (@(Get-SummaryRows)[0].Detail.Contains('exit 0; 0 earlier file(s) kept byte for byte')) 'nothing to keep in an empty home'
 
         foreach ($failure in @(
@@ -1193,59 +1193,59 @@ try {
                 @{ Mode = 'maintenance'; Text = '~\.config\dotfiles\maintenance exists' }
                 @{ Mode = 'no-copy'; Text = 'no same-hash copy of ~\.gitconfig in ~\.local\state\dotfiles-fresh-backup' }
                 @{ Mode = 'no-state'; Text = '~\.local\state\chezmoi\chezmoi.boltdb is missing or empty' }
-                @{ Mode = 'refused'; Text = 'Invoke-NativeHandover -Role win exit 1: Invoke-NativeHandover: ~\.gitconfig is a link or not the expected kind of entry' })) {
-            [void](New-HandoverClone)
+                @{ Mode = 'refused'; Text = 'Invoke-HomeDeploy -Role win exit 1: Invoke-HomeDeploy: ~\.gitconfig is a link or not the expected kind of entry' })) {
+            [void](New-DeployClone)
             New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n`tname = runner`n"
             $script:ProcessModes.Enqueue($failure['Mode'])
-            Use-DryRun { Invoke-E2EStepNativeHandover }
+            Use-DryRun { Invoke-E2EStepHomeDeploy }
             $row = @(Get-SummaryRows)[0]
-            Assert-Equal "$($row.Step) $($row.Status)" 'native-handover fail' "$($failure['Mode']): the row"
+            Assert-Equal "$($row.Step) $($row.Status)" 'home-deploy fail' "$($failure['Mode']): the row"
             Assert-True $row.Detail.Contains($failure['Text']) "$($failure['Mode']): $($row.Detail)"
-            Assert-Equal $E2E['Broken'] 'native-handover' "$($failure['Mode']): Broken"
+            Assert-Equal $E2E['Broken'] 'home-deploy' "$($failure['Mode']): Broken"
         }
 
         # A fence that holds anything but the two definitions never runs.
-        $clone = New-HandoverClone
-        $planted = New-PlantedDocument -Directory (Join-Path $E2E['Out'] 'plant') -Text 'Invoke-NativeHandover -Role win'
+        $clone = New-DeployClone
+        $planted = New-PlantedDocument -Directory (Join-Path $E2E['Out'] 'plant') -Text 'Invoke-HomeDeploy -Role win'
         New-File (Join-Path $clone 'docs/bootstrap.md') ([IO.File]::ReadAllText($planted))
         Invoke-Git $clone @('-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid', 'commit', '-q', '-a', '-m', 'planted')
-        Use-DryRun { Invoke-E2EStepNativeHandover }
-        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" ('fail docs/bootstrap.md: a statement outside the Invoke-NativeCz and ' +
-            'Invoke-NativeHandover definitions in the fenced powershell block: Invoke-NativeHandover -Role win') 'a planted call'
-        Assert-Equal "$($E2E['Broken']) $($script:ProcessCalls.Count)" 'native-handover 0' 'Broken and nothing ran'
+        Use-DryRun { Invoke-E2EStepHomeDeploy }
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" ('fail docs/bootstrap.md: a statement outside the Invoke-HomeCz and ' +
+            'Invoke-HomeDeploy definitions in the fenced powershell block: Invoke-HomeDeploy -Role win') 'a planted call'
+        Assert-Equal "$($E2E['Broken']) $($script:ProcessCalls.Count)" 'home-deploy 0' 'Broken and nothing ran'
     }
 
-    Test-Case 'native-converged: an empty Invoke-NativeCz diff and regular managed files pass; a diff, another entry or a failure fail' {
-        $clone = New-HandoverClone
+    Test-Case 'home-converged: an empty Invoke-HomeCz diff and regular managed files pass; a diff, another entry or a failure fail' {
+        $clone = New-DeployClone
         New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n"
-        New-File (Join-Path $E2E['Home'] 'Documents/PowerShell/profile.ps1') "# native profile`n"
+        New-File (Join-Path $E2E['Home'] 'Documents/PowerShell/profile.ps1') "# deployed profile`n"
         $script:Managed = @('.gitconfig', 'Documents/PowerShell/profile.ps1')
         $script:ProcessModes.Enqueue('converged')
-        Use-DryRun { Invoke-E2EStepNativeConverged }
+        Use-DryRun { Invoke-E2EStepHomeConverged }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'pass empty diff; 2 managed file(s), all regular' 'converged'
-        $runner = Join-Path (Join-Path $E2E['Out'] 'handover') 'converged.ps1'
+        $runner = Join-Path (Join-Path $E2E['Out'] 'deploy') 'converged.ps1'
         Assert-Equal "$($script:ProcessCalls[0].Arguments) $($script:ProcessCalls[0].WorkingDirectory) $($script:ProcessCalls[0].Timeout)" `
             "-NoProfile -NonInteractive -File $runner $clone 900" 'the child'
         $text = Read-Utf8 $runner
-        $handover = Get-E2EHandoverScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
-        Assert-True $text.StartsWith($handover['Text']) 'the check runs after the documented functions'
-        Assert-True ($text.Contains("Invoke-NativeCz @('diff', '--exclude=dirs')") -and $text.Contains("Invoke-NativeCz @('managed', '--include=files,symlinks')")) "the check: $text"
+        $deploy = Get-E2EDeployScript -Document (Join-Path $sourceRoot 'docs/bootstrap.md')
+        Assert-True $text.StartsWith($deploy['Text']) 'the check runs after the documented functions'
+        Assert-True ($text.Contains("Invoke-HomeCz @('diff', '--exclude=dirs')") -and $text.Contains("Invoke-HomeCz @('managed', '--include=files,symlinks')")) "the check: $text"
         $tokens = $null
         $parseErrors = $null
         [void][Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$parseErrors)
         Assert-Equal @($parseErrors).Count 0 'the check script parses'
 
         foreach ($failure in @(
-                @{ Mode = 'diff'; Managed = @('.gitconfig'); Text = 'fail Invoke-NativeCz diff --exclude=dirs is not empty: diff --git a/.gitconfig b/.gitconfig' }
+                @{ Mode = 'diff'; Managed = @('.gitconfig'); Text = 'fail Invoke-HomeCz diff --exclude=dirs is not empty: diff --git a/.gitconfig b/.gitconfig' }
                 @{ Mode = 'converged'; Managed = @('.gitconfig', 'Documents/PowerShell'); Text = 'fail managed targets that are not regular files: Documents/PowerShell' }
-                @{ Mode = 'converged'; Managed = @(); Text = 'fail Invoke-NativeCz managed --include=files,symlinks listed no target' }
-                @{ Mode = 'exit-1'; Managed = @(); Text = 'fail the convergence check exited 1: Invoke-NativeCz: chezmoi diff --exclude=dirs exited 1' })) {
-            [void](New-HandoverClone)
+                @{ Mode = 'converged'; Managed = @(); Text = 'fail Invoke-HomeCz managed --include=files,symlinks listed no target' }
+                @{ Mode = 'exit-1'; Managed = @(); Text = 'fail the convergence check exited 1: Invoke-HomeCz: chezmoi diff --exclude=dirs exited 1' })) {
+            [void](New-DeployClone)
             New-File (Join-Path $E2E['Home'] '.gitconfig') "[user]`n"
-            New-File (Join-Path $E2E['Home'] 'Documents/PowerShell/profile.ps1') "# native profile`n"
+            New-File (Join-Path $E2E['Home'] 'Documents/PowerShell/profile.ps1') "# deployed profile`n"
             $script:Managed = $failure['Managed']
             $script:ProcessModes.Enqueue($failure['Mode'])
-            Use-DryRun { Invoke-E2EStepNativeConverged }
+            Use-DryRun { Invoke-E2EStepHomeConverged }
             Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" $failure['Text'] "$($failure['Mode']) with [$($failure['Managed'] -join ', ')]"
         }
     }
@@ -1276,18 +1276,18 @@ try {
         Assert-Equal @(Get-SummaryRows)[1].Detail 'the apply loop added 1 task(s): \B' 'the note'
     }
 
-    Test-Case 'native fixtures require the provisioned binary and propagate failure' {
+    Test-Case 'chezmoi fixtures require the provisioned binary and propagate failure' {
         foreach ($code in @(0, 1)) {
             [void](New-DryRun)
             Add-Run $code
-            Use-DryRun { Invoke-E2EStepNativeFixtures }
+            Use-DryRun { Invoke-E2EStepChezmoiFixtures }
             $call = $script:PwshCalls[0]
-            Assert-Equal $call.Script tests/chezmoi.ps1 'native aggregate entrypoint'
-            Assert-Equal $call.Environment['DOTFILES_TEST_CHEZMOI'] (Join-Path $E2E['Home'] '.local/bin/chezmoi.exe') 'native binary selection'
-            Assert-Equal $call.Environment['DOTFILES_TEST_REQUIRE_CHEZMOI'] 1 'native prerequisite cannot skip'
+            Assert-Equal $call.Script tests/chezmoi.ps1 'chezmoi aggregate entrypoint'
+            Assert-Equal $call.Environment['DOTFILES_TEST_CHEZMOI'] (Join-Path $E2E['Home'] '.local/bin/chezmoi.exe') 'chezmoi binary selection'
+            Assert-Equal $call.Environment['DOTFILES_TEST_REQUIRE_CHEZMOI'] 1 'chezmoi prerequisite cannot skip'
             $want = if ($code) { 'fail' } else { 'pass' }
-            Assert-Equal (@(Get-SummaryRows)[0].Status) $want 'native fixture status'
-            if (-not $code) { Assert-Equal @(Get-SummaryRows)[0].Detail 'isolated native source/config/takeover/recovery fixtures passed' 'the pass text' }
+            Assert-Equal (@(Get-SummaryRows)[0].Status) $want 'chezmoi fixture status'
+            if (-not $code) { Assert-Equal @(Get-SummaryRows)[0].Detail 'isolated chezmoi fixtures passed' 'the pass text' }
         }
     }
 
@@ -1306,20 +1306,20 @@ try {
         function Invoke-E2EStepDoctorInitial { Complete-FlowStub doctor-initial }
         function Invoke-E2EStepCheckNoWrite { Complete-FlowStub check-nowrite }
         function Invoke-E2EApplyLoop { Complete-FlowStub apply-1; return ($script:BreakAt -cne 'apply-1') }
-        function Invoke-E2EStepNativeHandover { Complete-FlowStub native-handover }
+        function Invoke-E2EStepHomeDeploy { Complete-FlowStub home-deploy }
         function Invoke-E2EStepSecondApply { Complete-FlowStub second-apply }
         function Invoke-E2EStepCheckDone { Complete-FlowStub check-done }
         function Invoke-E2EStepLoginShell { Complete-FlowStub login-shell }
         function Invoke-E2EStepPayloads { Complete-FlowStub payloads }
-        function Invoke-E2EStepNativeConverged { Complete-FlowStub native-converged }
+        function Invoke-E2EStepHomeConverged { Complete-FlowStub home-converged }
         function Invoke-E2EStepDoctorFinal { Complete-FlowStub doctor-final }
-        function Invoke-E2EStepNativeFixtures { Complete-FlowStub native-fixtures }
+        function Invoke-E2EStepChezmoiFixtures { Complete-FlowStub chezmoi-fixtures }
         function Invoke-E2EAuditTasks { $script:FlowCalls.Add('audit-scheduled-tasks') }
-        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'native-handover', 'second-apply', 'check-done',
-            'login-shell', 'payloads', 'native-converged', 'doctor-final', 'native-fixtures')
+        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'home-deploy', 'second-apply', 'check-done',
+            'login-shell', 'payloads', 'home-converged', 'doctor-final', 'chezmoi-fixtures')
         $audits = @('audit-scheduled-tasks')
         Assert-Equal ($steps.Count + $audits.Count) 14 'fourteen steps'
-        foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1', 'native-handover', 'check-done', 'native-converged')) {
+        foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1', 'home-deploy', 'check-done', 'home-converged')) {
             [void](Reset-RunState)
             $script:FlowCalls.Clear()
             $script:BreakAt = $breakAt

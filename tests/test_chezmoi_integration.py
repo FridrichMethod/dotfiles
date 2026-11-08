@@ -1,4 +1,4 @@
-"""Boundary checks for the complete native source, using synthetic homes only."""
+"""Boundary checks for the complete chezmoi source, using synthetic homes only."""
 
 import json
 import os
@@ -9,7 +9,7 @@ import unittest
 from chezmoi_source_support import AI_MUTABLE, SourceFixture, expected_entries, snapshot
 
 
-HOST = "win" if os.name == "nt" else "common-only"
+HOST = "win" if os.name == "nt" else "generic"
 LIVE = {
     ".claude/settings.json": b'{"model":"fixture-local","fixture_live":{"keep":false}}\n',
     ".codex/config.toml": b'model = "fixture-local"\n[fixture_live]\nkeep = false\n',
@@ -25,7 +25,7 @@ POISONS = ("python3", "python", "jq", "node", "sh", "bash", "pwsh")
 
 def poison_interpreters(directory, calls):
     # Each poison records its name in CALLS (an absolute path that may contain
-    # spaces) and fails, so any interpreter a native transform starts is seen.
+    # spaces) and fails, so any interpreter a modify template starts is seen.
     for name in POISONS:
         if os.name == "nt":
             (directory / f"{name}.cmd").write_text(
@@ -37,7 +37,7 @@ def poison_interpreters(directory, calls):
             poison.chmod(0o755)
 
 
-class NativeIntegrationTests(unittest.TestCase):
+class IntegrationTests(unittest.TestCase):
     def assert_success(self, result):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -54,7 +54,7 @@ class NativeIntegrationTests(unittest.TestCase):
         result = fixture.run("managed", "--include=files", "--nul-path-separator")
         self.assert_success(result)
         managed = {path.replace("\\", "/") for path in result.stdout.split("\0") if path}
-        self.assertTrue(AI_MUTABLE <= managed, f"missing native targets: {AI_MUTABLE - managed}")
+        self.assertTrue(AI_MUTABLE <= managed, f"missing mutable targets: {AI_MUTABLE - managed}")
 
     def assert_target_refused(self, fixture, name):
         # Apply only the affected target: this is not an all-home transaction.
@@ -70,7 +70,7 @@ class NativeIntegrationTests(unittest.TestCase):
         self.assertEqual(snapshot(fixture.source), source)
 
     def test_complete_apply_without_external_merge_dependencies(self):
-        # Native transforms never shell out: every interpreter on the child PATH is a poison.
+        # The modify templates never shell out: every interpreter on the child PATH is a poison.
         with SourceFixture(HOST) as fixture:
             self.seed_live(fixture)
             self.assertEqual(list(Path(fixture.env["PATH"]).iterdir()), [])
@@ -82,7 +82,7 @@ class NativeIntegrationTests(unittest.TestCase):
             for name in AI_MUTABLE:
                 with self.subTest(target=name):
                     target = fixture.destination / name
-                    self.assertTrue(target.is_file(), f"native mutable target missing: {name}")
+                    self.assertTrue(target.is_file(), f"mutable target missing: {name}")
                     parse = json.loads if name.endswith(".json") else tomllib.loads
                     actual = parse(target.read_text(encoding="utf-8"))
                     portable = fixture.source / expected_entries(HOST)[name].source

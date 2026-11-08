@@ -1,4 +1,4 @@
-"""Unix takeover boundaries with disposable homes and actual local Git remotes."""
+"""Unix login updater boundaries with disposable homes and actual local Git remotes."""
 
 import json
 import os
@@ -25,7 +25,7 @@ class UpdateFixture(ChezmoiFixture):
             directory.mkdir(parents=True, exist_ok=True)
         # The top-level lines chezmoi init writes, which the login updater reads.
         self.top = f'destDir = "{self.destination}"\nsourceDir = "{self.source}"\n'
-        self.config.write_text(self.top + '[data]\nhost="common-only"\n[git]\nautoAdd=false\n'
+        self.config.write_text(self.top + '[data]\nhost="generic"\n[git]\nautoAdd=false\n'
                                'autoCommit=false\nautoPush=false\n[update]\ncommand="git"\n'
                                f'args={json.dumps(UPDATE_ARGS)}\nrecurseSubmodules=false\n',
                                encoding="utf-8")
@@ -35,7 +35,7 @@ class UpdateFixture(ChezmoiFixture):
         for name, executable in (("chezmoi", self.binary), ("git", shutil.which("git")),
                                  ("dirname", shutil.which("dirname")), ("false", shutil.which("false"))):
             if executable is None:
-                raise unittest.SkipTest(f"Unix takeover prerequisite: {name}")
+                raise unittest.SkipTest(f"Unix login-update prerequisite: {name}")
             (self.bin / name).symlink_to(executable)
         self.env["PATH"] = str(self.bin)
         (self.source / "home").mkdir()
@@ -56,7 +56,7 @@ class UpdateFixture(ChezmoiFixture):
         self.maintenance.parent.mkdir(mode=0o700)
         applied = self.run("apply")
         if applied.returncode:
-            raise AssertionError("initial inspected native fixture apply failed")
+            raise AssertionError("initial inspected fixture apply failed")
         return self
 
     def git(self, *args, cwd=None):
@@ -86,8 +86,8 @@ class UpdateFixture(ChezmoiFixture):
 
 
 @unittest.skipIf(os.name == "nt", "Unix shells and ownership fixtures")
-class UnixTakeoverTests(unittest.TestCase):
-    def test_regular_file_mode_overrides_stale_local_symlink_configuration(self):
+class UnixUpdateTests(unittest.TestCase):
+    def test_regular_file_mode_overrides_a_local_symlink_mode(self):
         with UpdateFixture() as f:
             f.config.write_text('mode="symlink"\n' + f.config.read_text())
             f.advance()
@@ -159,7 +159,7 @@ class UnixTakeoverTests(unittest.TestCase):
                 self.assertFalse(target.is_symlink())
                 self.assertEqual((f.destination / ".sample").read_text(), "before\n")
                 self.assertTrue(f.config.read_text().startswith(f.top))
-                # Native update may fast-forward before the apply refuses.
+                # chezmoi update may fast-forward before the apply refuses.
                 self.assertEqual(f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD", cwd=f.producer))
 
     def test_dirty_tracked_and_untracked_source_refuse_without_stash(self):
@@ -190,8 +190,8 @@ class UnixTakeoverTests(unittest.TestCase):
             self.assertFalse((f.source / ".git/rebase-merge").exists())
             self.assertFalse((f.source / ".git/MERGE_HEAD").exists())
 
-    def test_old_or_hostile_native_update_config_is_refused_before_git(self):
-        for text in ('[data]\nhost="common-only"\n',
+    def test_unsafe_or_hostile_update_config_is_refused_before_git(self):
+        for text in ('[data]\nhost="generic"\n',
                      '[update]\ncommand="git"\nargs=["pull", "--rebase", "--autostash"]\n'):
             with self.subTest(config=text), UpdateFixture() as f:
                 f.advance()
@@ -272,7 +272,7 @@ class UnixTakeoverTests(unittest.TestCase):
             self.assert_warning(f.hook())
             self.assertEqual(f.state.read_bytes(), state_before)
 
-    def test_lost_native_state_refuses_before_replacing_existing_symlink(self):
+    def test_lost_state_refuses_before_replacing_existing_symlink(self):
         with UpdateFixture() as f:
             target = f.destination / ".sample"
             foreign = f.root / "foreign-file"
@@ -314,12 +314,12 @@ class UnixTakeoverTests(unittest.TestCase):
                 self.assertNotIn(canary.strip(), result.stdout + result.stderr)
                 self.assertNotIn("newer live private value", result.stdout + result.stderr)
 
-    def test_failed_native_cli_has_closed_stdin_secret_free_warning_and_once_per_session(self):
+    def test_failed_chezmoi_has_closed_stdin_secret_free_warning_and_once_per_session(self):
         for silent in (False, True):
             with self.subTest(silent=silent), UpdateFixture() as f:
                 fake = f.bin / "chezmoi"
                 fake.unlink()
-                log = f.root / "native-calls"
+                log = f.root / "chezmoi-calls"
                 fake.write_text('#!/bin/sh\n'
                                 'for arg do printf "[%s]" "$arg"; done >>"$CALL_LOG"\n'
                                 'printf "\\n" >>"$CALL_LOG"\n'
@@ -416,7 +416,7 @@ class UnixTakeoverTests(unittest.TestCase):
             self.assertNotIn("[dotfiles] [warn]", result.stderr)
             self.assertEqual((f.destination / ".new-target").read_text(), "new upstream target\n")
 
-    def test_empty_native_state_refuses_before_git_or_target_writes(self):
+    def test_empty_state_refuses_before_git_or_target_writes(self):
         with UpdateFixture() as f:
             f.state.write_bytes(b"")
             f.advance()

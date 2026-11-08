@@ -241,7 +241,7 @@ step_S6_kitty_apply() {
     done
 }
 
-# --- S4-chezmoi (native configuration path) -------------------------------
+# --- S4-chezmoi (the pinned chezmoi release) -------------------------------
 step_S4_chezmoi_check() {
     local binary version floor
     if ! steps_installer_fields chezmoi; then

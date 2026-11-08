@@ -38,10 +38,10 @@ from this checkout, stop and say so.
    approves it in chat, as one visible top-level command, or leave it to them.
    `judgment`: the person decides.
 7. Exit 3 means work remains: a blocking HUMAN block is pending, or steps are
-   still to apply. Re-run step 5 after each block until H7-native is the only one
+   still to apply. Re-run step 5 after each block until H7-deploy is the only one
    left.
 8. Run the H7-payloads line only if the person wants the payload repos now;
-   no login installs them. Follow the H7-native block, Fresh home by hand in
+   no login installs them. Follow the H7-deploy block, Fresh home by hand in
    `docs/bootstrap.md`: explicit local host data, native paths, private
    backups and the local config init writes, which names this home and the
    checkout. Do not improvise `init --apply` or force a whole home.
@@ -53,7 +53,8 @@ from this checkout, stop and say so.
 
 On native Windows use the twins (`.\doctor.ps1 -Host win -Tsv`,
 `.\setup-host.ps1 -Host win -Check`, then `-Yes`), with the same exit codes;
-the handover is the HW-native block and the finish is `.\doctor.ps1 -Host win`.
+the first apply is the HW-deploy block and the finish is
+`.\doctor.ps1 -Host win`.
 `sudo` blocks and anything elevated belong to the person.
 Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 `micromamba shell init`, never edit rc files, and never commit.

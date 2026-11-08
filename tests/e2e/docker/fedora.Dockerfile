@@ -1,5 +1,5 @@
-# Fresh Fedora for the `other` e2e host (the native X-other-linux route: no
-# overlay, the setup steps and the common-only handover by hand): what a new
+# Fresh Fedora for the `other` e2e host (the X-other-linux route: no
+# overlay, the setup steps and the generic-role deployment by hand): what a new
 # install has before anything is done (git, curl, sudo), one passwordless-sudo
 # user whose home holds /etc/skel's .bashrc and .bash_profile, and the e2e
 # wrappers in /usr/local/bin, ahead of the real tools on the default PATH. The harness installs the distro

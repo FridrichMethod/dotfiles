@@ -1,4 +1,4 @@
-# Native serialization deliberately normalizes comments and layout.
+# chezmoi's toToml deliberately normalizes comments and layout.
 integer = 9007199254740993
 timestamp = 2026-11-01T12:34:56Z
 multiline = """first line
@@ -14,7 +14,7 @@ values = [1, 2, 3]
 [features]
 local = "keep"
 
-[retired]
+[removed]
 setting = "remove"
 keep = "stay"
 

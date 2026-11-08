@@ -11,7 +11,7 @@ import unittest
 from chezmoi_source_support import SourceFixture, expected_entries, snapshot
 
 
-class TakeoverRecoveryTests(unittest.TestCase):
+class MissingParentTests(unittest.TestCase):
     def missing_directories(self, fixture):
         # This is the bounded operator recipe, not an automatic directory writer.
         result = fixture.run("managed", "--include=dirs", "--nul-path-separator")
@@ -26,7 +26,7 @@ class TakeoverRecoveryTests(unittest.TestCase):
                 continue
             reparse = getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
             if not stat.S_ISDIR(metadata.st_mode) or reparse:
-                raise ValueError("foreign directory target: stop before native preparation")
+                raise ValueError("foreign directory target: stop before preparation")
         return missing
 
     def prepare_directories(self, fixture, missing):

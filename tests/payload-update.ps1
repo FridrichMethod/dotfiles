@@ -57,7 +57,7 @@ try {
     $config = $config.Replace('https://raw.githubusercontent.com/FridrichMethod/', $base).Replace('Join-Path $HOME ', 'Join-Path $env:DOTFILES_TEST_PAYLOAD_HOME ')
     Assert-True (-not ($config -match 'https?://')) 'config/payloads.tsv names a URL outside raw.githubusercontent.com/FridrichMethod'
     # A row only this fixture has, so the generic field keeps its coverage
-    # now that no Windows item of the real file uses it: an update command
+    # though no Windows item of the real file uses it: an update command
     # that runs an installed script (skills).
     $config = $config.TrimEnd() + "`n" +
         "skills`twindows-update`tInvoke-DotfilesPayloadScript (Join-Path `$env:LOCALAPPDATA 'awesome-skills/update.ps1') -Update`n"

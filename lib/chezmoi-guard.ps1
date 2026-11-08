@@ -112,10 +112,10 @@ function Get-DotfilesChezmoiPaths {
     }
 }
 
-# The native login updater's binary check (scripts/chezmoi-update.ps1), which
+# The login updater's binary check (scripts/chezmoi-update.ps1), which
 # doctor.ps1 and setup-host.ps1's W1-chezmoi apply too. Read-only and used on
 # Windows only; like everything above, it parses under Windows PowerShell 5.1.
-function Test-DotfilesNativeChezmoiPath {
+function Test-DotfilesChezmoiPath {
     # True when .local and .local\bin are real directories and chezmoi.exe a
     # regular file. GetAttributes reports a link itself, never its target.
     param([Parameter(Mandatory)][string]$Path)
@@ -152,7 +152,7 @@ function Test-DotfilesTrustedFileSecurity {
     return $true
 }
 
-function Open-DotfilesNativeChezmoi {
+function Open-DotfilesChezmoi {
     # The provisioned <destination>\.local\bin\chezmoi.exe, open for reading
     # with FileShare.Read (nobody may write, rename or delete it while held),
     # or $null when it is missing, a link, under a linked directory, or not
@@ -162,9 +162,9 @@ function Open-DotfilesNativeChezmoi {
     $path = Join-Path $Destination '.local\bin\chezmoi.exe'
     $stream = $null
     try {
-        if (-not (Test-DotfilesNativeChezmoiPath $path)) { return $null }
+        if (-not (Test-DotfilesChezmoiPath $path)) { return $null }
         $stream = [IO.FileStream]::new($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
-        if ((Test-DotfilesNativeChezmoiPath $path) -and
+        if ((Test-DotfilesChezmoiPath $path) -and
             (Test-DotfilesTrustedFileSecurity ([IO.FileSystemAclExtensions]::GetAccessControl($stream)))) {
             $held = $stream
             $stream = $null

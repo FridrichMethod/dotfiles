@@ -10,7 +10,7 @@
 # the first step (Home is the home the run bootstraps, which every new step
 # reads through this key); the counters feed the last line and the exit
 # code. Broken names the step after which the main flow cannot go on.
-# HandoverBlock is the HW-native block of the last apply run, and
+# DeployBlock is the HW-deploy block of the last apply run, and
 # TasksBefore and TasksAfterLoop the scheduled task identities around the
 # apply loop.
 $script:E2E = @{
@@ -21,7 +21,7 @@ $script:E2E = @{
     Broken = ''; Phase = ''
     SkippedBlocks = @()
     NoWriteTemp = ''; NoWriteHome = $null
-    HandoverBlock = $null; TasksBefore = ''; TasksAfterLoop = ''
+    DeployBlock = $null; TasksBefore = ''; TasksAfterLoop = ''
 }
 # Seconds allowed to one HUMAN block line (the contract's 45 minutes), one
 # setup-host apply run and one read-only run (doctor, -Check, a profile load).
@@ -75,7 +75,7 @@ function ConvertTo-E2EOneLine {
 }
 
 function Test-E2EElevated {
-    # True when this token holds the Administrators role (SeCreateSymbolicLink).
+    # True when this token holds the Administrators role.
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     try {
         return ([Security.Principal.WindowsPrincipal]$identity).IsInRole(

@@ -2,7 +2,7 @@
 {{- define "codex-validate-temporals" -}}
   {{- if typeIs "time.Time" . -}}
     {{- if has .Location.String (list "date-local" "time-local" "datetime-local") -}}
-      {{- fail "native Codex TOML does not support local date/time/datetime; affected target is unchanged" -}}
+      {{- fail "chezmoi's TOML parser does not support local date/time/datetime in the Codex config; affected target is unchanged" -}}
     {{- end -}}
   {{- else if or (kindIs "map" .) (kindIs "slice" .) (kindIs "array" .) -}}
     {{- range . -}}{{- template "codex-validate-temporals" . -}}{{- end -}}

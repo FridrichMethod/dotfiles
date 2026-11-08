@@ -299,7 +299,7 @@ lock: concurrent runs converge.
   block of a home without a config names only the line). On a home with a
   chezmoi config, under maintenance or while the config does not resolve
   from this checkout, the block prints no run line and points at the
-  doctor's `native-config` row.
+  doctor's `chezmoi-config` row.
 - `./setup-host.sh`, `setup-host.ps1` and the login update never run an
   installer of a payload repository.
 

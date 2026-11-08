@@ -6,8 +6,8 @@
 # the docs/bootstrap.md "Fresh Windows home by hand" functions. Dot-source
 # only, after common.ps1. The policy follows docs/bootstrap.md "HUMAN blocks",
 # "Running it with an agent" and "Native Windows": the harness stands in for
-# the person who does the HW-native handover with the agent (its block holds
-# notes only; the native-handover step runs the documented procedure) and
+# the person who does the HW-deploy step with the agent (its block holds
+# notes only; the home-deploy step runs the documented procedure) and
 # leaves every non-blocking Windows block to the person, since it can neither
 # decide a security setting, start a service, install WSL nor sign in.
 # HW-clone it performed and verified itself (the clone step), so that block
@@ -84,9 +84,9 @@ function Get-E2EFailureDetail {
 }
 
 function Get-E2EBlockPolicy {
-    # The harness action for a block. handover: HW-native, whose lines are
+    # The harness action for a block. deploy: HW-deploy, whose lines are
     # notes and are never run; once it alone is pending and a run applied
-    # nothing, the loop ends and the native-handover step runs Fresh Windows
+    # nothing, the loop ends and the home-deploy step runs Fresh Windows
     # home by hand. skip: a reminder for the person about a non-blocking step
     # (the execution policy, the ssh-agent service, WSL, sign-in). fail:
     # HW-clone, the blocking step the clone step performed and verified
@@ -95,7 +95,7 @@ function Get-E2EBlockPolicy {
     # included.
     param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Kind)
     switch -CaseSensitive ("${Id}:$Kind") {
-        'HW-native:judgment' { return 'handover' }
+        'HW-deploy:judgment' { return 'deploy' }
         { $_ -cin @('HW-execution-policy:judgment', 'HW-ssh-agent:sudo', 'HW-wsl:judgment', 'HW-auth:auth') } { return 'skip' }
     }
     return 'fail'
@@ -103,17 +103,17 @@ function Get-E2EBlockPolicy {
 
 function Get-E2ELoopNext {
     # The apply loop's verdict on one setup-host.ps1 -Yes run, the table of
-    # e2e_loop_next in blocks.sh with HW-native as the handover: blocks (exit
+    # e2e_loop_next in blocks.sh with HW-deploy as the deploy step: blocks (exit
     # 3 with a block to act on), rerun (exit 3, nothing to act on, a step
-    # applied), done (exit 3, nothing to act on, nothing applied, HW-native
+    # applied), done (exit 3, nothing to act on, nothing applied, HW-deploy
     # alone pending), stuck (any other exit 3), early (exit 0, which a fresh
-    # home cannot reach before its handover), error (exit 1 or 2) or timeout.
+    # home cannot reach before its first apply), error (exit 1 or 2) or timeout.
     param([Parameter(Mandatory)][int]$Code, [AllowEmptyString()][string]$Pending = '',
         [Parameter(Mandatory)][bool]$Actionable, [Parameter(Mandatory)][bool]$Applied)
     if ($Code -eq 3) {
         if ($Actionable) { return 'blocks' }
         if ($Applied) { return 'rerun' }
-        if ($Pending -ceq 'HW-native') { return 'done' }
+        if ($Pending -ceq 'HW-deploy') { return 'done' }
         return 'stuck'
     }
     if ($Code -eq 0) { return 'early' }
@@ -121,19 +121,19 @@ function Get-E2ELoopNext {
     return 'timeout'
 }
 
-function Get-E2EHandoverScript {
+function Get-E2EDeployScript {
     # The Fresh Windows home by hand functions of Document (the clone's
     # docs/bootstrap.md): the first ```powershell fence after a heading line
     # "#... Fresh Windows home by hand", taken from the clone instead of
     # copied here, so the test runs what the playbook prints. It must parse,
     # with no param, begin, process or clean block, and its top-level
-    # statements must be exactly the definitions of Invoke-NativeCz and
-    # Invoke-NativeHandover, once each, since the handover runs it before
+    # statements must be exactly the definitions of Invoke-HomeCz and
+    # Invoke-HomeDeploy, once each, since the deploy step runs it before
     # its one call. Returns @{ Text; Error }: the fence text, or '' and the
     # reason.
     param([Parameter(Mandatory)][string]$Document)
     $heading = 'Fresh Windows home by hand'
-    $names = @('Invoke-NativeCz', 'Invoke-NativeHandover')
+    $names = @('Invoke-HomeCz', 'Invoke-HomeDeploy')
     $seen = $false
     $inside = $false
     $fence = [Collections.Generic.List[string]]::new()

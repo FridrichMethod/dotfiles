@@ -30,12 +30,12 @@ playbook links those files instead of repeating their pins and branches.
 one `### <step-id>:` heading per step, and checks that
 [dependencies.md](dependencies.md#day-zero-tools) lists every tool.
 
-## Native provisioning
+## Deploying with chezmoi
 
 New installations use native chezmoi. Both setup-host entrypoints install its
 pinned, SHA256-verified release explicitly and create no virtual environment.
 They do not initialize or apply configuration. The blocking
-H7-native / HW-native step points to [Fresh home by hand](#fresh-home-by-hand)
+H7-deploy / HW-deploy step points to [Fresh home by hand](#fresh-home-by-hand)
 ([Fresh Windows home by hand](#fresh-windows-home-by-hand) on Windows):
 explicit local host selection, private copies of the files a first apply
 replaces, and the local config `chezmoi init` writes, whose top-level
@@ -45,7 +45,7 @@ transforms.
 An active maintenance marker pauses login updates and payload installs until
 a person removes it ([update contract](update-contract.md)).
 
-### S4-chezmoi: Native chezmoi binary
+### S4-chezmoi: chezmoi binary
 
 Install the release archive selected by host and architecture from
 `config/bootstrap/installers.tsv` into `~/.local/bin/chezmoi`, extracting only
@@ -70,7 +70,7 @@ and the clusters run `./setup-host.sh` instead:
 f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"
 ```
 
-### H7-native: Reviewed native configuration handover
+### H7-deploy: First apply
 
 Follow [Fresh home by hand](#fresh-home-by-hand). Provisioning does not own this
 operation and prints no blanket apply command. A regular local config whose
@@ -78,9 +78,9 @@ operation and prints no blanket apply command. A regular local config whose
 naming this checkout and this home, with maintenance absent, satisfies the
 bootstrap handoff check; it does not substitute for the procedure's native diff,
 second apply or application checks. Run from another checkout (a worktree or a
-second clone), setup-host keeps H7-native pending.
+second clone), setup-host keeps H7-deploy pending.
 
-The doctor's `native-config` row names the cause. `ok`: the handoff state above.
+The doctor's `chezmoi-config` row names the cause. `ok`: the handoff state above.
 `warn`, which does not fail the run: the config names another checkout, whose
 doctor it names. `human`: active maintenance, no local config (a new home gets
 it from [Fresh home by hand](#fresh-home-by-hand)), a config that is a link or
@@ -89,7 +89,7 @@ not a regular file, a config the guard refuses (not exactly one top-level
 [the update contract](update-contract.md#selection) describes), or no
 readable `lib/chezmoi-guard.sh` in this checkout; on Windows
 also a `~/.local/bin/chezmoi.exe` the login updater refuses
-([HW-native](#hw-native-windows-native-handover)).
+([HW-deploy](#hw-deploy-first-apply-on-windows)).
 
 #### Fresh home by hand
 
@@ -99,92 +99,92 @@ needs neither the quiescence nor the maintenance marker of
 [takeover.md](chezmoi-migration/takeover.md), and it runs that procedure's
 commands with the same explicit arguments. Anything else, or a function below
 that stops, goes back to takeover.md. Paste both functions into the shell you
-are working in, then run `native_handover ROLE` from the clone, where ROLE is
-the `--host` value, or `common-only` on a Linux without an overlay
+are working in, then run `home_deploy ROLE` from the clone, where ROLE is
+the `--host` value, or `generic` on a Linux without an overlay
 ([X-other-linux](#x-other-linux-other-linux-distributions)):
 
 ```sh
-# native_cz ARGS...: this home's native chezmoi, run from the clone with every
-# native path explicit (takeover.md) and stdin closed; ~/.local/bin/chezmoi
-# (S4-chezmoi) comes first, then a chezmoi on PATH.
-native_cz() {
-    _nc_src=$(pwd -P) && _nc_home=$(cd -P -- "$HOME" && pwd -P) || return 1
-    [ -f "$_nc_src/.chezmoiroot" ] || { printf '%s\n' 'native_cz: run it from the dotfiles clone' >&2; return 1; }
-    _nc_bin=$_nc_home/.local/bin/chezmoi
-    [ -x "$_nc_bin" ] || _nc_bin=$(command -v chezmoi) ||
-        { printf '%s\n' 'native_cz: no chezmoi; run S4-chezmoi first' >&2; return 1; }
-    "$_nc_bin" --source "$_nc_src" --working-tree "$_nc_src" --destination "$_nc_home" \
-        --config "$_nc_home/.config/chezmoi/chezmoi.toml" --cache "$_nc_home/.cache/chezmoi" \
-        --persistent-state "$_nc_home/.local/state/chezmoi/chezmoi.boltdb" \
+# home_cz ARGS...: this home's chezmoi, run from the clone with every path
+# explicit and stdin closed; ~/.local/bin/chezmoi (S4-chezmoi) comes first,
+# then a chezmoi on PATH.
+home_cz() {
+    _hc_src=$(pwd -P) && _hc_home=$(cd -P -- "$HOME" && pwd -P) || return 1
+    [ -f "$_hc_src/.chezmoiroot" ] || { printf '%s\n' 'home_cz: run it from the dotfiles clone' >&2; return 1; }
+    _hc_bin=$_hc_home/.local/bin/chezmoi
+    [ -x "$_hc_bin" ] || _hc_bin=$(command -v chezmoi) ||
+        { printf '%s\n' 'home_cz: no chezmoi; run S4-chezmoi first' >&2; return 1; }
+    "$_hc_bin" --source "$_hc_src" --working-tree "$_hc_src" --destination "$_hc_home" \
+        --config "$_hc_home/.config/chezmoi/chezmoi.toml" --cache "$_hc_home/.cache/chezmoi" \
+        --persistent-state "$_hc_home/.local/state/chezmoi/chezmoi.boltdb" \
         --mode=file --no-tty --error-on-conflict --force=false --no-pager --use-builtin-diff "$@" </dev/null
 }
 
-# native_handover ROLE: the first native deployment of a fresh home, run from
-# the clone; ROLE is this machine's --host, or common-only (X-other-linux).
-native_handover() {
-    _nh_role=${1:-}
-    case $_nh_role in
-        common-only | mac | wsl-ubuntu | lab-ubuntu | sherlock | marlowe) ;;
+# home_deploy ROLE: the first deployment of a fresh home, run from
+# the clone; ROLE is this machine's --host, or generic (X-other-linux).
+home_deploy() {
+    _hd_role=${1:-}
+    case $_hd_role in
+        generic | mac | wsl-ubuntu | lab-ubuntu | sherlock | marlowe) ;;
         *)
-            printf '%s\n' 'native_handover: name the role: common-only, mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' >&2
+            printf '%s\n' 'home_deploy: name the role: generic, mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' >&2
             return 1
             ;;
     esac
-    _nh_src=$(pwd -P) && _nh_home=$(cd -P -- "$HOME" && pwd -P) || return 1
-    [ -f "$_nh_src/.chezmoiroot" ] || { printf '%s\n' 'native_handover: run it from the dotfiles clone' >&2; return 1; }
-    _nh_keep=$_nh_home/.local/state/dotfiles-fresh-backup
-    for _nh_rel in .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
+    _hd_src=$(pwd -P) && _hd_home=$(cd -P -- "$HOME" && pwd -P) || return 1
+    [ -f "$_hd_src/.chezmoiroot" ] || { printf '%s\n' 'home_deploy: run it from the dotfiles clone' >&2; return 1; }
+    _hd_keep=$_hd_home/.local/state/dotfiles-fresh-backup
+    for _hd_rel in .config/dotfiles/maintenance .config/chezmoi/chezmoi.toml \
         .local/state/chezmoi/chezmoi.boltdb .local/state/dotfiles-fresh-backup; do
-        if [ -e "$_nh_home/$_nh_rel" ] || [ -L "$_nh_home/$_nh_rel" ]; then
-            printf 'native_handover: ~/%s exists, so this is no fresh home; follow docs/chezmoi-migration/takeover.md\n' "$_nh_rel" >&2
+        if [ -e "$_hd_home/$_hd_rel" ] || [ -L "$_hd_home/$_hd_rel" ]; then
+            printf 'home_deploy: ~/%s exists, so this is no fresh home; inspect it and move it aside first\n' "$_hd_rel" >&2
             return 1
         fi
     done
     # The local config: the role, and a private umask for what apply writes.
-    (umask 077 && mkdir -p "$_nh_home/.config/chezmoi" "$_nh_keep" &&
-        printf 'umask = 0o077\n\n[data]\nhost = "%s"\n' "$_nh_role" >"$_nh_home/.config/chezmoi/chezmoi.toml") || return 1
-    native_cz init || return 1
+    (umask 077 && mkdir -p "$_hd_home/.config/chezmoi" "$_hd_keep" &&
+        printf 'umask = 0o077\n\n[data]\nhost = "%s"\n' "$_hd_role" >"$_hd_home/.config/chezmoi/chezmoi.toml") || return 1
+    home_cz init || return 1
     # The config init wrote must name this home and the clone, as the login
     # updater requires; checked before the first change to a target.
-    if ! (. "$_nh_src/lib/chezmoi-guard.sh" && [ "$(dotfiles_chezmoi_source "$_nh_home")" = "$_nh_src" ]); then
-        printf '%s\n' 'native_handover: ~/.config/chezmoi/chezmoi.toml does not name this home and this clone; inspect it privately' >&2
+    if ! (. "$_hd_src/lib/chezmoi-guard.sh" && [ "$(dotfiles_chezmoi_source "$_hd_home")" = "$_hd_src" ]); then
+        printf '%s\n' 'home_deploy: ~/.config/chezmoi/chezmoi.toml does not name this home and this clone; inspect it privately' >&2
         return 1
     fi
-    native_cz managed --include=dirs >"$_nh_keep/dirs" || return 1
-    native_cz managed --include=files,symlinks >"$_nh_keep/files" || return 1
+    home_cz managed --include=dirs >"$_hd_keep/dirs" || return 1
+    home_cz managed --include=files,symlinks >"$_hd_keep/files" || return 1
     # Only a real directory may stand where a directory goes, and only a
     # regular file where a file goes; that file is copied first, since with no
-    # native state the first apply replaces it without asking.
-    while IFS= read -r _nh_rel; do
-        if [ -L "$_nh_home/$_nh_rel" ] || { [ -e "$_nh_home/$_nh_rel" ] && [ ! -d "$_nh_home/$_nh_rel" ]; }; then
-            printf 'native_handover: ~/%s is not a directory; follow docs/chezmoi-migration/takeover.md\n' "$_nh_rel" >&2
+    # chezmoi state the first apply replaces it without asking.
+    while IFS= read -r _hd_rel; do
+        if [ -L "$_hd_home/$_hd_rel" ] || { [ -e "$_hd_home/$_hd_rel" ] && [ ! -d "$_hd_home/$_hd_rel" ]; }; then
+            printf 'home_deploy: ~/%s is not a directory; inspect it and move it aside first\n' "$_hd_rel" >&2
             return 1
         fi
-    done <"$_nh_keep/dirs"
-    while IFS= read -r _nh_rel; do
-        if [ -L "$_nh_home/$_nh_rel" ] || { [ -e "$_nh_home/$_nh_rel" ] && [ ! -f "$_nh_home/$_nh_rel" ]; }; then
-            printf 'native_handover: ~/%s is a link or not a regular file; follow docs/chezmoi-migration/takeover.md\n' "$_nh_rel" >&2
+    done <"$_hd_keep/dirs"
+    while IFS= read -r _hd_rel; do
+        if [ -L "$_hd_home/$_hd_rel" ] || { [ -e "$_hd_home/$_hd_rel" ] && [ ! -f "$_hd_home/$_hd_rel" ]; }; then
+            printf 'home_deploy: ~/%s is a link or not a regular file; inspect it and move it aside first\n' "$_hd_rel" >&2
             return 1
         fi
-        [ ! -f "$_nh_home/$_nh_rel" ] ||
-            (umask 077 && mkdir -p "$(dirname -- "$_nh_keep/$_nh_rel")" && cp "$_nh_home/$_nh_rel" "$_nh_keep/$_nh_rel") ||
+        [ ! -f "$_hd_home/$_hd_rel" ] ||
+            (umask 077 && mkdir -p "$(dirname -- "$_hd_keep/$_hd_rel")" && cp "$_hd_home/$_hd_rel" "$_hd_keep/$_hd_rel") ||
             return 1
-    done <"$_nh_keep/files"
+    done <"$_hd_keep/files"
     # Exactly the absent directories, one at a time, parents first.
-    while IFS= read -r _nh_rel; do
-        [ -e "$_nh_home/$_nh_rel" ] || native_cz apply --include=dirs --recursive=false "$_nh_home/$_nh_rel" || return 1
-    done <"$_nh_keep/dirs"
-    native_cz apply --exclude=dirs && native_cz apply --exclude=dirs || return 1
-    _nh_diff=$(native_cz diff --exclude=dirs) || return 1
-    if [ -n "$_nh_diff" ]; then
-        printf '%s\n' 'native_handover: targets still differ after two applies; review native_cz diff --exclude=dirs privately' >&2
+    while IFS= read -r _hd_rel; do
+        [ -e "$_hd_home/$_hd_rel" ] || home_cz apply --include=dirs --recursive=false "$_hd_home/$_hd_rel" || return 1
+    done <"$_hd_keep/dirs"
+    home_cz apply --exclude=dirs && home_cz apply --exclude=dirs || return 1
+    _hd_diff=$(home_cz diff --exclude=dirs) || return 1
+    if [ -n "$_hd_diff" ]; then
+        printf '%s\n' 'home_deploy: targets still differ after two applies; review home_cz diff --exclude=dirs privately' >&2
         return 1
     fi
-    printf 'native_handover: %s deployed; copies of the files it replaced are in ~/.local/state/dotfiles-fresh-backup\n' "$_nh_role"
+    printf 'home_deploy: %s deployed; copies of the files it replaced are in ~/.local/state/dotfiles-fresh-backup\n' "$_hd_role"
 }
 ```
 
-`native_handover` seeds the local config with only the role plus
+`home_deploy` seeds the local config with only the role plus
 `umask = 0o077`, the umask the five Unix hosts selected (files 0600,
 executables 0700). It stops on a link, or an entry of the wrong kind, at any
 managed path. It copies each regular file it is about to replace into
@@ -198,18 +198,18 @@ the first apply deploys `~/.profile` and `~/.zshrc`, an interactive login in
 another shell runs the login updater (keep `DOTFILES_AUTO_UPDATE=0` there, as
 [Quick start](#quick-start) says). It creates only the absent managed
 directories, one at a time, parents first, applies twice and requires an empty
-`native_cz diff --exclude=dirs`. It never forces and never creates
+`home_cz diff --exclude=dirs`. It never forces and never creates
 maintenance. The managed paths come from this repository's own source, so the
 lists are read one path per line (takeover.md's `--nul-path-separator` guards
 names a pasted shell function cannot split portably). Afterwards
 `./setup-host.sh --host H` exits 0, the next interactive login runs the native
 updater, and `./doctor.sh --host H --smoke` is the gate. Delete the backup
-directory once nothing in it is needed. Run any later manual native command as
-`native_cz ARGS...` from the clone, which passes every native path explicitly,
+directory once nothing in it is needed. Run any later manual chezmoi command as
+`home_cz ARGS...` from the clone, which passes every path explicitly,
 as the login updater does; a plain `chezmoi` command uses the configured
 source, destination and state database.
 
-### W1-chezmoi: Windows native chezmoi binary
+### W1-chezmoi: chezmoi binary on Windows
 
 The Windows equivalent of S4-chezmoi verifies the pinned ZIP and extracts only
 `chezmoi.exe` to `~/.local/bin`. It hashes and extracts through one read-only
@@ -245,24 +245,24 @@ W1-chezmoi is done only when a chezmoi at or above the floor works and the
 updater would run `~/.local/bin/chezmoi.exe`, by the same read-only check. A
 chezmoi only elsewhere on PATH (winget, scoop), which the updater never runs,
 or a copy that is linked or not private leaves it todo, and on a configured
-home `doctor.ps1`'s `native-config` row reports `human` naming this section. If the
+home `doctor.ps1`'s `chezmoi-config` row reports `human` naming this section. If the
 updater warns, inspect `~/.local/bin/chezmoi.exe`; remove a link there, and
 make a linked `.local` or `.local\bin` a real directory; then rerun
 `setup-host.ps1` so W1-chezmoi installs a private copy over a regular file.
 Another chezmoi on PATH may stay: neither the updater nor the manual commands
 of [takeover.md](chezmoi-migration/takeover.md) use it.
 
-### HW-native: Windows native handover
+### HW-deploy: First apply on Windows
 
 Follow [Fresh Windows home by hand](#fresh-windows-home-by-hand) as the
 ordinary, unelevated user; it checks the actual CurrentUserAllHosts path in
 both shells. Native regular-file updates need no elevation or scheduled task.
-`doctor.ps1`'s `native-config` row gives the verdicts of
-[H7-native](#h7-native-reviewed-native-configuration-handover), with
+`doctor.ps1`'s `chezmoi-config` row gives the verdicts of
+[H7-deploy](#h7-deploy-first-apply), with
 `lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the
 checkout the config names counts as that checkout. One verdict is Windows
 only: with the config otherwise `ok`, the row is `human`, citing
-[W1-chezmoi](#w1-chezmoi-windows-native-chezmoi-binary), when the login updater
+[W1-chezmoi](#w1-chezmoi-chezmoi-binary-on-windows), when the login updater
 would refuse `~/.local/bin/chezmoi.exe`. That check only opens the file for
 reading.
 
@@ -270,7 +270,7 @@ reading.
 
 The Windows twin of [Fresh home by hand](#fresh-home-by-hand), for the same
 fresh home. Run it in an ordinary, unelevated PowerShell 7 in the clone, after
-W1-chezmoi: paste both functions, then `Invoke-NativeHandover -Role win`. It
+W1-chezmoi: paste both functions, then `Invoke-HomeDeploy -Role win`. It
 requires both PowerShell editions to load `~\Documents\PowerShell\profile.ps1`
 and `~\Documents\WindowsPowerShell\profile.ps1`; a Documents folder
 redirected to OneDrive is a takeover.md case. `~\.local\bin\chezmoi.exe`
@@ -282,15 +282,14 @@ stdin closed; the copies, the config check after init (with the clone's
 diff are as on Unix.
 
 ```powershell
-function Invoke-NativeCz {
-    # This home's native chezmoi, ~\.local\bin\chezmoi.exe by its full path,
-    # run from the clone: every native path explicit (takeover.md), the
-    # arguments as an array, stdin closed. Returns its output; throws when it
-    # exits nonzero.
+function Invoke-HomeCz {
+    # This home's chezmoi, ~\.local\bin\chezmoi.exe by its full path, run
+    # from the clone: every path explicit, the arguments as an array, stdin
+    # closed. Returns its output; throws when it exits nonzero.
     param([Parameter(Mandatory)][string[]]$Arguments)
     $ErrorActionPreference = 'Stop'
     $clone = $PWD.ProviderPath
-    if (-not [IO.File]::Exists((Join-Path $clone '.chezmoiroot'))) { throw 'Invoke-NativeCz: run it from the dotfiles clone' }
+    if (-not [IO.File]::Exists((Join-Path $clone '.chezmoiroot'))) { throw 'Invoke-HomeCz: run it from the dotfiles clone' }
     . (Join-Path $clone 'lib\chezmoi-guard.ps1')
     $source = Resolve-DotfilesDirectory $clone
     $destination = Resolve-DotfilesDirectory $HOME
@@ -310,19 +309,19 @@ function Invoke-NativeCz {
         $process.StandardInput.Close()
         $output = $process.StandardOutput.ReadToEnd()
         $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw "Invoke-NativeCz: chezmoi $($Arguments -join ' ') exited $($process.ExitCode)" }
+        if ($process.ExitCode -ne 0) { throw "Invoke-HomeCz: chezmoi $($Arguments -join ' ') exited $($process.ExitCode)" }
         return $output
     }
     finally { $process.Dispose() }
 }
 
-function Invoke-NativeHandover {
-    # The first native deployment of a fresh Windows home, run from the clone
+function Invoke-HomeDeploy {
+    # The first deployment of a fresh Windows home, run from the clone
     # in an ordinary (unelevated) PowerShell 7 after W1-chezmoi.
     param([Parameter(Mandatory)][ValidateSet('win')][string]$Role)
     $ErrorActionPreference = 'Stop'
     $clone = $PWD.ProviderPath
-    if (-not [IO.File]::Exists((Join-Path $clone '.chezmoiroot'))) { throw 'Invoke-NativeHandover: run it from the dotfiles clone' }
+    if (-not [IO.File]::Exists((Join-Path $clone '.chezmoiroot'))) { throw 'Invoke-HomeDeploy: run it from the dotfiles clone' }
     . (Join-Path $clone 'lib\chezmoi-guard.ps1')
     $source = Resolve-DotfilesDirectory $clone
     $destination = Resolve-DotfilesDirectory $HOME
@@ -330,21 +329,21 @@ function Invoke-NativeHandover {
     foreach ($relative in @('.config\dotfiles\maintenance', '.config\chezmoi\chezmoi.toml',
             '.local\state\chezmoi\chezmoi.boltdb', '.local\state\dotfiles-fresh-backup')) {
         if (Test-DotfilesMarkerObject (Join-Path $destination $relative)) {
-            throw "Invoke-NativeHandover: ~\$relative exists, so this is no fresh home; follow docs/chezmoi-migration/takeover.md"
+            throw "Invoke-HomeDeploy: ~\$relative exists, so this is no fresh home; inspect it and move it aside first"
         }
     }
-    if (-not (Test-DotfilesNativeChezmoiPath (Join-Path $destination '.local\bin\chezmoi.exe'))) {
-        throw 'Invoke-NativeHandover: ~\.local\bin\chezmoi.exe is missing or linked; follow W1-chezmoi'
+    if (-not (Test-DotfilesChezmoiPath (Join-Path $destination '.local\bin\chezmoi.exe'))) {
+        throw 'Invoke-HomeDeploy: ~\.local\bin\chezmoi.exe is missing or linked; follow W1-chezmoi'
     }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     try {
         if (([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-            Write-Warning 'Invoke-NativeHandover: this PowerShell is elevated; the handover needs no elevation'
+            Write-Warning 'Invoke-HomeDeploy: this PowerShell is elevated; the deployment needs no elevation'
         }
     }
     finally { $identity.Dispose() }
-    # Both PowerShell editions must load the profiles this home deploys; a
-    # Documents folder redirected elsewhere (OneDrive) is a takeover.md case.
+    # Both PowerShell editions must load the profiles this home deploys from
+    # the default Documents folder, not one redirected elsewhere (OneDrive).
     $profiles = @{ 'Documents\PowerShell\profile.ps1' = [string]$PROFILE.CurrentUserAllHosts }
     $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     if ([IO.File]::Exists($windowsPowerShell)) {
@@ -352,33 +351,33 @@ function Invoke-NativeHandover {
     }
     foreach ($relative in $profiles.Keys) {
         if (-not [IO.Path]::GetFullPath($profiles[$relative]).Equals((Join-Path $destination $relative), [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Invoke-NativeHandover: PowerShell loads $($profiles[$relative]), not ~\$relative; follow docs/chezmoi-migration/takeover.md"
+            throw "Invoke-HomeDeploy: PowerShell loads $($profiles[$relative]), not ~\$relative; Fresh Windows home by hand needs the default Documents folder"
         }
     }
     $utf8 = [Text.UTF8Encoding]::new($false)
     [void][IO.Directory]::CreateDirectory((Join-Path $destination '.config\chezmoi'))
     [void][IO.Directory]::CreateDirectory($keep)
     [IO.File]::WriteAllText((Join-Path $destination '.config\chezmoi\chezmoi.toml'), "[data]`nhost = `"$Role`"`n", $utf8)
-    [void](Invoke-NativeCz @('init'))
+    [void](Invoke-HomeCz @('init'))
     # The config init wrote must name this home and the clone, as the login
     # updater requires; checked before the first change to a target.
     $paths = $null
     try { $paths = Get-DotfilesChezmoiPaths -HomePath $destination } catch { }
     if (-not $paths -or -not $paths.Source.Equals($source, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Invoke-NativeHandover: ~\.config\chezmoi\chezmoi.toml does not name this home and this clone; inspect it privately'
+        throw 'Invoke-HomeDeploy: ~\.config\chezmoi\chezmoi.toml does not name this home and this clone; inspect it privately'
     }
-    $directories = @((Invoke-NativeCz @('managed', '--include=dirs')) -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_.Replace('/', '\') })
-    $files = @((Invoke-NativeCz @('managed', '--include=files,symlinks')) -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_.Replace('/', '\') })
+    $directories = @((Invoke-HomeCz @('managed', '--include=dirs')) -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_.Replace('/', '\') })
+    $files = @((Invoke-HomeCz @('managed', '--include=files,symlinks')) -split '\r?\n' | Where-Object { $_ } | ForEach-Object { $_.Replace('/', '\') })
     # Only a real directory may stand where a directory goes, and only a
     # regular file where a file goes; that file is copied first, since with no
-    # native state the first apply replaces it without asking.
+    # chezmoi state the first apply replaces it without asking.
     foreach ($relative in @($directories) + @($files)) {
         $path = Join-Path $destination $relative
         if (-not (Test-DotfilesMarkerObject $path)) { continue }
         $attributes = [IO.File]::GetAttributes($path)
         $isDirectory = ($attributes -band [IO.FileAttributes]::Directory) -ne 0
         if (($attributes -band [IO.FileAttributes]::ReparsePoint) -or ($isDirectory -ne ($directories -contains $relative))) {
-            throw "Invoke-NativeHandover: ~\$relative is a link or not the expected kind of entry; follow docs/chezmoi-migration/takeover.md"
+            throw "Invoke-HomeDeploy: ~\$relative is a link or not the expected kind of entry; inspect it and move it aside first"
         }
         if (-not $isDirectory) {
             $copy = Join-Path $keep $relative
@@ -389,14 +388,14 @@ function Invoke-NativeHandover {
     # Exactly the absent directories, one at a time, parents first.
     foreach ($relative in $directories) {
         $path = Join-Path $destination $relative
-        if (-not (Test-DotfilesMarkerObject $path)) { [void](Invoke-NativeCz @('apply', '--include=dirs', '--recursive=false', $path)) }
+        if (-not (Test-DotfilesMarkerObject $path)) { [void](Invoke-HomeCz @('apply', '--include=dirs', '--recursive=false', $path)) }
     }
-    [void](Invoke-NativeCz @('apply', '--exclude=dirs'))
-    [void](Invoke-NativeCz @('apply', '--exclude=dirs'))
-    if ((Invoke-NativeCz @('diff', '--exclude=dirs')).Trim()) {
-        throw 'Invoke-NativeHandover: targets still differ after two applies; review Invoke-NativeCz @(''diff'', ''--exclude=dirs'') privately'
+    [void](Invoke-HomeCz @('apply', '--exclude=dirs'))
+    [void](Invoke-HomeCz @('apply', '--exclude=dirs'))
+    if ((Invoke-HomeCz @('diff', '--exclude=dirs')).Trim()) {
+        throw 'Invoke-HomeDeploy: targets still differ after two applies; review Invoke-HomeCz @(''diff'', ''--exclude=dirs'') privately'
     }
-    Write-Output "Invoke-NativeHandover: $Role deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup"
+    Write-Output "Invoke-HomeDeploy: $Role deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup"
 }
 ```
 
@@ -414,8 +413,8 @@ nothing guesses it.
 > oh-my-zsh can no longer be cloned into `~/.oh-my-zsh`, so zsh aborts where
 > `.zshrc` sources `oh-my-zsh.sh`. `./setup-host.sh` clones it in
 > [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones), before
-> [H7-native](#h7-native-reviewed-native-configuration-handover). If the
-> handover ran first, use the first recipe in
+> [H7-deploy](#h7-deploy-first-apply). If
+> H7-deploy ran first, use the first recipe in
 > [X-recovery](#x-recovery-recovery-recipes).
 
 Keep the login update hook quiet while provisioning, in every shell you use for
@@ -426,9 +425,9 @@ installs the payload repos: they install only when you run the
 
 `./setup-host.sh` exits 3 while work remains: a blocking HUMAN step is pending,
 or automatic steps are still to apply.
-[H7-native](#h7-native-reviewed-native-configuration-handover) (HW-native on
-Windows) blocks, so re-run it after each block until H7-native is the only one
-still blocking, run the fresh-home procedure of H7-native
+[H7-deploy](#h7-deploy-first-apply) (HW-deploy on
+Windows) blocks, so re-run it after each block until H7-deploy is the only one
+still blocking, run the fresh-home procedure of H7-deploy
 ([Fresh home by hand](#fresh-home-by-hand)), and run it once more; then it
 exits 0 and reprints only the non-blocking blocks (login shell, sign-in, the
 payload repos, the final doctor run). `--check` exits 3 whenever a step is
@@ -444,8 +443,8 @@ export DOTFILES_AUTO_UPDATE=0
 ./doctor.sh --host mac
 ./setup-host.sh --host mac --check
 ./setup-host.sh --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
-./setup-host.sh --host mac      # again after each block, until only H7-native still blocks
-# H7-native: the fresh-home procedure in H7-native
+./setup-host.sh --host mac      # again after each block, until only H7-deploy still blocks
+# H7-deploy: the fresh-home procedure in H7-deploy
 ./setup-host.sh --host mac      # exits 0 now
 # H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
@@ -474,8 +473,8 @@ export DOTFILES_AUTO_UPDATE=0
 ./setup-host.sh --host wsl-ubuntu --check
 ./setup-host.sh --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
 ./setup-host.sh --host wsl-ubuntu             # again after each block (later the S5-claude inspect block),
-                                              # until only H7-native still blocks
-# H7-native: the fresh-home procedure in H7-native
+                                              # until only H7-deploy still blocks
+# H7-deploy: the fresh-home procedure in H7-deploy
 ./setup-host.sh --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
 # H7-payloads (optional, any time): sh scripts/payload-update.sh --now
@@ -508,9 +507,9 @@ export DOTFILES_AUTO_UPDATE=0
 sh_dev -t 1:00:00                                  # H2-alloc; Marlowe: an interactive Slurm job
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
-./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-native
+./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-deploy
 exit                                               # back to the login node
-# H7-native: the fresh-home procedure in H7-native
+# H7-deploy: the fresh-home procedure in H7-deploy
 ./setup-host.sh --host sherlock                    # exits 0 now
 # H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec "$HOME/micromamba/envs/login/bin/zsh" -l
@@ -537,8 +536,8 @@ cd $HOME\dotfiles
 $env:DOTFILES_AUTO_UPDATE = '0'
 .\doctor.ps1 -Host win
 .\setup-host.ps1 -Host win -Check
-.\setup-host.ps1 -Host win      # exit 3 until HW-native is done
-# HW-native: the fresh-home procedure in HW-native, unelevated
+.\setup-host.ps1 -Host win      # exit 3 until HW-deploy is done
+# HW-deploy: the fresh-home procedure in HW-deploy, unelevated
 # open a new terminal, then from $HOME\dotfiles:
 .\setup-host.ps1 -Host win      # exits 0 now; prints the non-blocking HW blocks
 # H7-payloads (optional, any time, unelevated): .\scripts\payload-update.ps1 -Now
@@ -553,11 +552,11 @@ prints them all). An agent CLI first, if wanted:
 ### Other Linux
 
 There is no Fedora, Arch or generic Ubuntu overlay, and `./setup-host.sh` takes
-only `--host`. Select native `common-only`, install packages yourself, and do
+only `--host`. Select the `generic` role, install packages yourself, and do
 the platform-neutral setup steps by hand
 ([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_listed`
 and `fetch_pinned` from [Downloads and clones by hand](#downloads-and-clones-by-hand),
-and `native_cz` and `native_handover` from [Fresh home by hand](#fresh-home-by-hand),
+and `home_cz` and `home_deploy` from [Fresh home by hand](#fresh-home-by-hand),
 into your shell first.
 
 ```sh
@@ -574,7 +573,7 @@ f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &
     cp "$f" "$d/Catppuccin Mocha.tmTheme" && bat cache --build    # S3-bat-theme
 mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"
-native_handover common-only    # H7-native, Fresh home by hand
+home_deploy generic    # H7-deploy, Fresh home by hand
 # H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --platform other --smoke
@@ -597,14 +596,14 @@ as text, without chezmoi or git. A
 missing, repeated, unknown or otherwise spelled role, or a linked or absent
 config, exits 2 asking for `--host`. Any other home needs `--host` or
 `--platform` and exits 2 otherwise (for example in a fresh clone or a linked
-worktree); no environment variable selects one. `common-only` as that
+worktree); no environment variable selects one. `generic` as that
 `[data].host` means the doctor checks the platform it detects (`macos`,
 `debian`, `hpc` or `other`) without an overlay, exactly as `--platform` would,
 and warns that it did.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a home with `~/.config/chezmoi/chezmoi.toml` its `[data].host` (`common-only` there: the detected platform without an overlay); elsewhere none, exit 2. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a home with `~/.config/chezmoi/chezmoi.toml` its `[data].host` (`generic` there: the detected platform without an overlay); elsewhere none, exit 2. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
@@ -618,10 +617,10 @@ for example `[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md S2-
 `ok` and `skip` rows end at the detail. Without `--tsv`, a summary line with
 the count of each status closes the report.
 Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides the
-`tools.tsv` rows the doctor runs structural checks: `locale`, `native-config`,
+`tools.tsv` rows the doctor runs structural checks: `locale`, `chezmoi-config`,
 `path-order`, `rc-pollution`, `omz-order`, `nvm-homebrew` and `payloads`.
-`native-config` names the state of this home's chezmoi config by cause
-([H7-native](#h7-native-reviewed-native-configuration-handover)). `payloads`
+`chezmoi-config` names the state of this home's chezmoi config by cause
+([H7-deploy](#h7-deploy-first-apply)). `payloads`
 warns, never fails, while an item of
 `DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
 installed kit lacks a Claude helper, and names what to run: `sync-payloads
@@ -654,7 +653,7 @@ at HW-clone).
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (the `[data].host` of the home's `~/.config/chezmoi/chezmoi.toml`); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and `common-only` as that `[data].host` exits 2 asking for `--host` |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (the `[data].host` of the home's `~/.config/chezmoi/chezmoi.toml`); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and `generic` as that `[data].host` exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |
@@ -711,11 +710,11 @@ conflicting Homebrew formula or cask in S2-brew-bundle, an `nvm.sh` S4-nvm will 
 source). S2-brew-bundle on a Homebrew prefix you cannot write (a shared
 Linuxbrew) likewise shows as `human`, not `todo`, and prints a blocking `sudo`
 block for the prefix's owner instead of running brew. A prerequisite you `--skip` or decline at the prompt holds back its HUMAN
-dependents too (`H7-native human blocked by S2-brew-bundle (skipped)`); one that
+dependents too (`H7-deploy human blocked by S2-brew-bundle (skipped)`); one that
 `--tier` or `--only` leaves out does not. Non-blocking blocks (locale, fcitx5,
 site modules, `chsh`, sign-in, the payload repos, the final doctor run) are printed
-but leave the exit code alone. Since H7-native blocks, every run before the
-handover exits 3.
+but leave the exit code alone. Since H7-deploy blocks, every run before it
+exits 3.
 
 Printed lines that run setup-host or the doctor again (in the H1-xcode-clt,
 H1-homebrew, H1-linuxbrew, H2-alloc, S4-nvm, S5-claude, X-recovery and
@@ -729,10 +728,10 @@ The Windows twins take the same ideas as PowerShell parameters:
 (`-Host` defaults to `win`). Both need PowerShell 7
 and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
-an invalid manifest; its structural checks are `native-config` and
+an invalid manifest; its structural checks are `chezmoi-config` and
 `payloads`, and `-Online` reports a signed-out
 tool as `warn`, as on Unix (its auth probes, too, may write the tools' own
-state). `.\setup-host.ps1` exits 3 while HW-clone or HW-native is pending;
+state). `.\setup-host.ps1` exits 3 while HW-clone or HW-deploy is pending;
 the other HW blocks are printed but leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
 ending in `blocks completion` or `does not block`) and, like the Unix
@@ -950,16 +949,16 @@ short and send the agent here. The rules they follow:
   `bash <path>` line only after the person approves it in chat, as one visible
   top-level command, or leaves it to the person. **`judgment`** blocks: the
   agent explains the choice and lets the person make it.
-- **Handover.** Natively, the agent follows the H7-native block and
+- **Handover.** Natively, the agent follows the H7-deploy block and
   [takeover.md](chezmoi-migration/takeover.md) with the person; it never
   improvises `chezmoi init --apply` or forces a whole home. On a fresh home
   (no earlier install) that is [Fresh home by hand](#fresh-home-by-hand)
   ([Fresh Windows home by hand](#fresh-windows-home-by-hand) on win), with the
   person.
 - **Exit 3** means work remains: a blocking HUMAN step is pending, or automatic
-  steps are still to apply, and H7-native blocks. The agent re-runs setup-host
+  steps are still to apply, and H7-deploy blocks. The agent re-runs setup-host
   after each block until that step is the only one left, then does the
-  handover, then runs setup-host once more, which exits 0. A `--check` that
+  first apply, then runs setup-host once more, which exits 0. A `--check` that
   exits 0 has nothing left to do.
 - **Never** `git lfs install`, `gh auth setup-git`, `conda init`,
   `micromamba shell init`, the upstream oh-my-zsh installer, rc-file edits,
@@ -983,8 +982,8 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
 3. Ask me which host this is: mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win,
    or another Linux (then follow X-other-linux). Never guess. On win, use the
    PowerShell twins in every step below: .\doctor.ps1 -Host win -Tsv,
-   .\setup-host.ps1 -Host win -Check, then -Yes; the handover is the HW-native
-   block, and the finish is .\doctor.ps1 -Host win.
+   .\setup-host.ps1 -Host win -Check, then -Yes; the first apply is the
+   HW-deploy block, and the finish is .\doctor.ps1 -Host win.
 4. Run every command with DOTFILES_AUTO_UPDATE=0.
 5. Run ./doctor.sh --host H --tsv and ./setup-host.sh --host H --check and show me the plan.
 6. After I agree, run ./setup-host.sh --host H --yes. For each HUMAN block
@@ -999,10 +998,10 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    digest-gated line only after I approve it, or leave it to me;
    judgment: explain the choice and let me decide.
 7. Exit 3 means work remains (a blocking HUMAN step, or steps still to apply).
-   Re-run setup-host after each block until H7-native (HW-native on win) is the
-   only one left. Ask me about H7-payloads. Then go through the H7-native block
+   Re-run setup-host after each block until H7-deploy (HW-deploy on win) is the
+   only one left. Ask me about H7-payloads. Then go through the H7-deploy block
    and docs/chezmoi-migration/takeover.md with me (on a fresh home: the "Fresh
-   home by hand" procedure under H7-native in docs/bootstrap.md); never improvise
+   home by hand" procedure under H7-deploy in docs/bootstrap.md); never improvise
    chezmoi init --apply or force a whole home. Re-run setup-host; it should
    exit 0.
 8. Finish with ./doctor.sh --host H --smoke, then report what changed, what is
@@ -1172,7 +1171,7 @@ maintains it and from everyone else who uses it.
 ### H1-fcitx5: fcitx5 input method
 
 Applies to `lab-ubuntu`. The fcitx5 packages arrive with H1-apt-core; the
-native handover (H7-native) deploys `~/.config/fcitx5/profile` (pinyin and
+first apply (H7-deploy) deploys `~/.config/fcitx5/profile` (pinyin and
 mozc) as a regular file.
 
 - **Check:** `command -v fcitx5 && grep -s fcitx5 ~/.xinputrc`
@@ -1518,8 +1517,8 @@ cluster; vendor binaries and conda-forge builds each need a minimum glibc.
 
 ### S3-clones: oh-my-zsh, theme and plugin clones
 
-Applies to every Unix host, **before** the dotfiles are applied (the native
-handover). Rows in
+Applies to every Unix host, **before** the dotfiles are applied (H7-deploy).
+Rows in
 [`git-clones.tsv`](../config/bootstrap/git-clones.tsv) own repository names,
 destinations and branches. Clone oh-my-zsh first; ZSH_CUSTOM defaults to
 ~/.oh-my-zsh/custom for the theme and zsh plugins; tmux plugins live under
@@ -2087,7 +2086,7 @@ and WSL quick start with host `wsl-ubuntu`.
 - **Human:** yes (judgment: optional; it needs an elevated shell and maybe a
   reboot, and the tracked `wsl.conf` needs review, below)
 
-The judgment part: the native handover (HW-native) deploys `home/dot_wslconfig`,
+The judgment part: the first apply (HW-deploy) deploys `home/dot_wslconfig`,
 `home/wsl.conf` and `home/mount.vbs` as `.wslconfig`, `wsl.conf` and
 `mount.vbs` into your Windows home. `.wslconfig`
 sizes memory and processors for one machine; review it. `wsl.conf` takes
@@ -2145,7 +2144,7 @@ environments; the local binaries are for manual runs.
 ### X-other-linux: Other Linux distributions
 
 There are only six overlay roles; no `fedora` or `ubuntu` role exists. On any
-other Linux, deploy the `common-only` role (the shared targets without a role
+other Linux, deploy the `generic` role (the shared targets without a role
 variant) and install the packages yourself. An Ubuntu or Debian machine that is neither WSL nor the
 lab desktop can use `--platform debian` for the doctor's rows.
 `./setup-host.sh` needs a host overlay, so its four platform-neutral steps are
@@ -2167,8 +2166,8 @@ Other Linux quick start repeats it).
   [Downloads and clones by hand](#downloads-and-clones-by-hand): `clone_listed ID` for
   every `git-clones.tsv` row, oh-my-zsh first (S3-clones); the by-hand recipe of
   S3-bat-theme; `mkdir -p ~/.vim/undo ~/.vim/tmp` (S3-dirs); the by-hand line
-  of [S4-chezmoi](#s4-chezmoi-native-chezmoi-binary). Finally, from the clone,
-  `native_handover common-only` ([Fresh home by hand](#fresh-home-by-hand)).
+  of [S4-chezmoi](#s4-chezmoi-chezmoi-binary). Finally, from the clone,
+  `home_deploy generic` ([Fresh home by hand](#fresh-home-by-hand)).
 - **Install, `ai` tier:** the default tiers also check `node` (at the floor in
   `tools.tsv`, for the Claude Code hooks and status line): the by-hand recipe
   of [S4-nvm](#s4-nvm-nvm-and-nodejs), or the distribution's Node.js if it
@@ -2180,8 +2179,8 @@ Other Linux quick start repeats it).
 - **Human:** yes (sudo: distribution packages)
 
 The native route as one sequence, with `clone_listed` and `fetch_pinned`
-([Downloads and clones by hand](#downloads-and-clones-by-hand)) and `native_cz`
-and `native_handover` ([Fresh home by hand](#fresh-home-by-hand)) pasted first:
+([Downloads and clones by hand](#downloads-and-clones-by-hand)) and `home_cz`
+and `home_deploy` ([Fresh home by hand](#fresh-home-by-hand)) pasted first:
 
 ```sh
 # with your package manager: git zsh curl rsync tar file man ssh, tmux >= 3.4, python3 >= 3.11,
@@ -2197,7 +2196,7 @@ f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &
     cp "$f" "$d/Catppuccin Mocha.tmTheme" && bat cache --build    # S3-bat-theme
 mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"
-native_handover common-only    # H7-native, Fresh home by hand
+home_deploy generic    # H7-deploy, Fresh home by hand
 # H7-payloads (optional, any time): sh scripts/payload-update.sh --now
 exec zsh -l
 ./doctor.sh --platform other --smoke

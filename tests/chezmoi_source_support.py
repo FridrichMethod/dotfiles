@@ -1,4 +1,4 @@
-"""Expected native targets (tests/fixtures/chezmoi/targets.tsv), independent of source templates."""
+"""Expected targets (tests/fixtures/chezmoi/targets.tsv), independent of source templates."""
 
 import json
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ from chezmoi_support import ChezmoiFixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROLES = ("common-only", "mac", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe", "win")
+ROLES = ("generic", "mac", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe", "win")
 COUNTS = dict(zip(ROLES, (49, 56, 55, 59, 54, 54, 26)))
 AI_MUTABLE = {".claude/settings.json", ".codex/config.toml"}
 TARGETS = ROOT / "tests/fixtures/chezmoi/targets.tsv"
@@ -100,7 +100,7 @@ def target_problems(rows, tracked):
     readers = {}
     for destination, hosts, source, _mode, _shell in rows:
         variant = "{host}" in source
-        if variant != source.startswith("home/.hosts/{host}/") or (variant and "common-only" in hosts):
+        if variant != source.startswith("home/.hosts/{host}/") or (variant and "generic" in hosts):
             problems.append(f"{destination}: only an overlay role list may read home/.hosts/{{host}}/")
         for role in sorted(hosts):
             resolved = source.replace("{host}", role)
@@ -137,12 +137,12 @@ def snapshot(directory):
 
 
 class SourceFixture(ChezmoiFixture):
-    """Complete candidate fixture; native_os overrides are supplemental evidence."""
+    """Complete candidate fixture; OS overrides are supplemental evidence."""
 
-    def __init__(self, host, native_os=None):
+    def __init__(self, host, os_override=None):
         super().__init__()
         self.host = host
-        self.os_override = native_os
+        self.os_override = os_override
 
     def __enter__(self):
         super().__enter__()

@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# Every tmux target and its native source (tests/fixtures/chezmoi/targets.tsv).
+# Every tmux target and its chezmoi source (tests/fixtures/chezmoi/targets.tsv).
 TMUX_FILES = {
     ".tmux.conf": ROOT / "home/dot_tmux.conf",
     ".config/tmux/floax.conf": ROOT / "home/dot_config/tmux/floax.conf",
@@ -107,7 +107,7 @@ class PluginProvisioning(unittest.TestCase):
 
 
 class VersionFloor(unittest.TestCase):
-    def test_manifest_floor_replaces_runtime_version_gates(self):
+    def test_manifest_floor_instead_of_runtime_version_gates(self):
         # The config uses tmux 3.4 menu styles, popups and display-menu without
         # checks; hpc-login-env.yml mirrors this floor (test_bootstrap_manifest).
         for path in sorted(TMUX_FILES.values()):

@@ -37,7 +37,7 @@ update; the manual commands, takeover and recovery live in
   `workingTree` key, any other spelling of the three keys, a line starting
   with a quote and a multi-line string before the first table are refused. A
   hand edit that leaves this form disables updates with a warning. A re-init
-  from the clone (`native_cz init`, `Invoke-NativeCz @('init')` on Windows,
+  from the clone (`home_cz init`, `Invoke-HomeCz @('init')` on Windows,
   the helpers of [Fresh home by hand](bootstrap.md#fresh-home-by-hand)),
   after keeping a private copy of the config, resets every value the
   template owns (`sourceDir`, `destDir`, `persistentState`, `mode`, the
@@ -67,7 +67,7 @@ The updater stops, with a warning and without touching the destination, when:
 - on Windows, `~/.local/bin/chezmoi.exe` is missing, a link, or owned or
   writable by an account other than you, SYSTEM and Administrators. Only that
   file runs, never a PATH match
-  ([W1-chezmoi](bootstrap.md#w1-chezmoi-windows-native-chezmoi-binary)).
+  ([W1-chezmoi](bootstrap.md#w1-chezmoi-chezmoi-binary-on-windows)).
 
 ## Invocation
 
@@ -126,8 +126,8 @@ update runs.
 
 ## Coverage
 
-- `tests/test_chezmoi_takeover_unix.py`, `tests/test_chezmoi_takeover_windows.py`
-  and `tests/test_chezmoi_takeover_recovery.py`: the updaters against real
+- `tests/test_chezmoi_update_unix.py`, `tests/test_chezmoi_update_windows.py`
+  and `tests/test_chezmoi_missing_parents.py`: the updaters against real
   local remotes and disposable homes, refusals, divergence, conflicts and the
   PowerShell profile tail.
 - `tests/test_chezmoi_update_config.py`: the safe update configuration.

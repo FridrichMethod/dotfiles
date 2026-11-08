@@ -10,5 +10,5 @@
 home/dot_wslconfig -text
 home/mount.vbs -text
 
-# Native encrypted source is opaque; preserve the verified ciphertext bytes.
+# Encrypted source is opaque; preserve the verified ciphertext bytes.
 home/private_dot_secrets/*.age -text
