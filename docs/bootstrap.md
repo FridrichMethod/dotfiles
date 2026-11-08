@@ -1031,13 +1031,7 @@ have a minimum), the overlay the person chose, and a complete checkout.
   OS, architecture, glibc and detected platform, and warns about uncommitted
   changes in the checkout: the native login update does not run from a
   checkout with uncommitted changes
-  ([X-rc-protection](#x-rc-protection-rc-file-protection)). On an older clone
-  `git -C ~/dotfiles status --porcelain --ignored -- common` lists the retired
-  submodule checkouts a pull left behind (`common/codex/coding-agent-kit`,
-  `common/coding-agent-kit/coding-agent-kit`, `common/pymol/PyMOLScripts`,
-  `common/sherlock-kit/sherlock-kit`): they are harmless, nothing reports or
-  removes them, and once one holds no work of yours you can delete it by hand
-  ([leftover checkouts](payloads.md#leftover-checkouts)).
+  ([X-rc-protection](#x-rc-protection-rc-file-protection)).
 - **Human:** yes (judgment: the person names the host overlay; setup-host
   prints no block for this step)
 
@@ -1960,10 +1954,7 @@ extracted archive.
   ships only the MSIX package; 7.6 is the LTS release. Once 7.7 is the newest
   release, add `--version` with the newest 7.6 one
   (`winget show --id Microsoft.PowerShell -e --versions` lists them).
-  Clone onto NTFS, never into a WSL distribution. An older clone made with
-  `core.symlinks` and `--recurse-submodules` needs nothing: its leftover
-  submodule checkouts are harmless
-  ([leftover checkouts](payloads.md#leftover-checkouts)).
+  Clone onto NTFS, never into a WSL distribution.
 - **Verify:** `Test-Path` prints `True` and the status is empty.
 - **Human:** yes (judgment: the person installs Git and PowerShell 7 and
   clones before `setup-host.ps1` can run from the clone; it blocks on this

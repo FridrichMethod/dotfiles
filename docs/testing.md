@@ -86,7 +86,12 @@ cross-platform safety assertions.
 Source and state guards: `test_chezmoi_source_state.py` fails on a
 `.chezmoiexternal.*` file or `.chezmoiexternals` directory under `home/`
 (externals download whenever the source state is read) and on a `.gitmodules` or
-a tracked gitlink. `test_chezmoi_update_config.py` requires the template, and so
+a tracked gitlink, and requires that the checkout's own `.gitignore` (not a
+personal exclude: `core.excludesFile` is disabled and the match must come from
+`.gitignore`) hides Claude Code's machine-local `.claude/settings.local.json`
+at the root while `.claude/settings.json` stays tracked (the login updater
+refuses an untracked file).
+`test_chezmoi_update_config.py` requires the template, and so
 init, to write `persistentState` as
 `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash form (Unix and Windows
 destinations) and to fold its case variants into that key (a config holding two

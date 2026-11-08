@@ -149,7 +149,7 @@ repos:
         entry: tests/payload-update.sh
         language: script
         pass_filenames: false
-        files: ^(scripts/payload-update\.(sh|ps1)|config/payloads\.tsv|lib/(terminal\.(sh|ps1)|chezmoi-guard\.sh)|home/dot_(profile|aliases|zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(scripts/payload-update\.(sh|ps1)|config/payloads\.tsv|lib/(terminal\.(sh|ps1)|chezmoi-guard\.(sh|ps1))|home/dot_(profile|aliases|zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
       - id: powershell-profile
         name: PowerShell profile contract, prompt theme, parse gate and Terminal settings
         entry: tests/powershell-profile.sh
@@ -192,7 +192,7 @@ repos:
         entry: tests/e2e-harness.sh
         language: script
         pass_filenames: false
-        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.sh|lib/bootstrap/.*|config/bootstrap/installers\.tsv|\.chezmoiversion)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.sh|lib/bootstrap/.*|lib/chezmoi-guard\.sh|config/bootstrap/installers\.tsv|\.chezmoiversion)$|^tests/lib/environment\.(sh|ps1)$
       - id: e2e-harness-windows
         name: PowerShell end-to-end harness fixtures
         entry: tests/e2e-harness-windows.sh

@@ -16,29 +16,31 @@ keywords = ["sk-ant-"]
 
 # claude-as reads its tokens from ~/.secrets; no file under a .secrets
 # directory belongs in this public repository, whatever it contains. The
-# native source encodes that directory as [attribute_]dot_secrets/; only the
+# chezmoi source encodes that directory as [attribute_]dot_secrets/; only the
 # eight age ciphertexts of the approved static scope may live there.
 [[rules]]
 id = "secrets-directory"
-description = "File under a .secrets directory or its native source encoding"
+description = "File under a .secrets directory or its chezmoi source encoding"
 path = '''(^|/)(\.secrets|((remove|external|exact|private|readonly)_)*dot_secrets)/'''
 
 [[rules.allowlists]]
-description = "Approved native age ciphertexts"
+description = "Approved age ciphertexts"
 paths = ['''^home/private_dot_secrets/encrypted_private_claude-[a-z0-9]+\.age$''']
 
-# Exact values the defaults flag that are not secrets: the public GitHub CLI
-# apt signing-key fingerprints quoted in the bootstrap pins and docs, and the
-# fake bearer tokens of the PowerShell history-filter test (the second only
-# in older commits, so a full-history scan stays clean too).
+# Exact values the defaults flag that are not secrets. The first fake bearer
+# token is a fixture of the PowerShell history-filter test; the public GitHub
+# CLI apt signing-key fingerprints, the second fake bearer token and a
+# nonsecret SHA256 appear only in older commits, and stay so a full-history
+# scan stays clean.
 [[allowlists]]
-description = "Public key fingerprints, test fixtures and verified receipt digest"
+description = "Public key fingerprints, test fixtures and a nonsecret digest"
 regexTarget = "match"
 regexes = [
     '''2C6106201985B60E6C7AC87323F3D4EA75716059''',
     '''7F38BBB59D064DBCB3D84D725612B36462313325''',
     '''Bearer abc123def456ghi''',
     '''Bearer abcdefghijkl''',
-    # SHA256 of the nonsecret Stage 4 Lab fresh-access receipt, not an API key.
+    # A nonsecret SHA256 in older commits that the generic-api-key rule
+    # flags, so a full-history scan stays clean.
     '''682a12583c07afc99638afa289b50b0801ab8db726e0f4c1107c2f3db6522b5b''',
 ]

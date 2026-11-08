@@ -190,16 +190,25 @@ class SourceContractTests(unittest.TestCase):
             self.assertEqual({path.replace("\\", "/") for path in managed.stdout.split("\0") if path},
                              set(expected_entries("lab-ubuntu")))
 
-    def test_gitignore_keeps_the_host_residue_guards(self):
-        # Without these lines the native updater's untracked-file check refuses
-        # every login on a host that still holds the residue (D-8, Risk 2).
-        # Phase C removes the lines and this test together.
-        lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-        for pattern in ("/.venv-sync/", "/common/codex/coding-agent-kit/",
-                        "/common/coding-agent-kit/coding-agent-kit/", "/common/pymol/PyMOLScripts/",
-                        "/common/sherlock-kit/sherlock-kit/"):
-            with self.subTest(pattern=pattern):
-                self.assertIn(pattern, lines)
+    def test_gitignore_hides_only_the_machine_local_claude_settings(self):
+        # Claude Code writes its machine-local permission answers to
+        # .claude/settings.local.json, and the login updater refuses an
+        # untracked file, so the checkout's own .gitignore must hide it (not a
+        # personal exclude: core.excludesFile is disabled and the match must
+        # come from .gitignore); the shared .claude/settings.json stays tracked.
+        paths = (".claude/settings.local.json", ".claude/settings.json")
+        result = subprocess.run(["git", "-C", str(ROOT), "-c", f"core.excludesFile={os.devnull}", "check-ignore",
+                                 "--no-index", "--verbose", "--non-matching", "-z", "--stdin"],
+                                input=b"".join(p.encode() + b"\0" for p in paths),
+                                capture_output=True, timeout=30, env=fixture_git_env())
+        fields = [field.decode() for field in result.stdout.split(b"\0")[:-1]]
+        # Each path yields source, line number, pattern and path.
+        records = {fields[i + 3]: (fields[i], fields[i + 2]) for i in range(0, len(fields), 4)}
+        self.assertEqual(records, {".claude/settings.local.json": (".gitignore", "/.claude/settings.local.json"),
+                                   ".claude/settings.json": ("", "")}, result.stderr)
+        tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", ".claude/settings.json"],
+                                 check=True, capture_output=True, timeout=30, env=fixture_git_env()).stdout
+        self.assertEqual(tracked, b".claude/settings.json\0")
 
     def test_unselected_invalid_and_incompatible_hosts_fail_before_writing(self):
         compatible = {

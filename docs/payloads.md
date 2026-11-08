@@ -377,23 +377,17 @@ passes too early makes the hook update an item that was never installed.
 | `common/sherlock-kit/sherlock-kit` ([Sherlock residue](chezmoi-migration/support-boundary.md#historical-sherlock-delivery-residue-manual)) | `.git/modules/common/sherlock-kit/sherlock-kit` |
 
 A pull across a submodule's removal leaves its checkout on every host where it
-was checked out. They are harmless:
-
-- `.gitignore` names each of them, so `git status` stays clean; without those
-  lines the native login update would refuse the untracked source on every
-  login.
-- Nothing in dotfiles reports or removes them or their repositories under
-  `.git/modules`. `git -C <path> status` and
-  `git -C <path> log --branches --not --remotes` show whether one holds work
-  of yours.
-
-`git -C ~/dotfiles status --porcelain --ignored -- common` lists each leftover
-as an ignored (`!!`) path. Once a checkout holds nothing you want, remove it
-with `rm -rf <path>` (`Remove-Item -LiteralPath <path> -Recurse -Force` on
+was checked out, and the login update refuses that untracked source until the
+checkout is gone.
+`git -C ~/dotfiles status --porcelain --untracked-files=all -- common` lists
+each leftover as an untracked (`??`) path; `git -C <path> status` and
+`git -C <path> log --branches --not --remotes` show whether one holds work of
+yours. Nothing in dotfiles removes them or their repositories under
+`.git/modules`. Once a checkout holds nothing you want, remove it with
+`rm -rf <path>` (`Remove-Item -LiteralPath <path> -Recurse -Force` on
 Windows). Its repository under `.git/modules` can go the same way once no
 other leftover uses it: both kit leftovers share one, so remove it only after
-both checkouts are gone. Keep the `.gitignore` lines until no host has a
-leftover; they go only once every host is verified clean.
+both checkouts are gone.
 
 ## The kit on a dotfiles host
 

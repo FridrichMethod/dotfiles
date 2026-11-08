@@ -2,7 +2,7 @@
 # home/.chezmoiignore repeats every unanchored pattern that does not start
 # with a dot, and chezmoi skips dot-named sources, so nothing listed here
 # deploys from home/ (a test pins it). A leftover in home/.chezmoidata/ is
-# read as data instead and stops every native run until it is removed.
+# read as data instead and stops every chezmoi run until it is removed.
 
 # OS metadata
 .DS_Store
@@ -54,9 +54,6 @@ __pycache__/
 .ruff_cache/
 .tox/
 .venv/
-# A host's leftover of the retired configuration-parser environment; keep
-# until every host copy is removed.
-/.venv-sync/
 .cache/
 
 # Package/dependency directories
@@ -72,19 +69,8 @@ coverage.xml
 # Cursor (local-only AI assistant config)
 .cursor/
 
+# Machine-local Claude Code permission answers
+/.claude/settings.local.json
+
 # End-to-end bootstrap runs (tests/e2e/run.sh)
 /tests/e2e/out/
-
-# Retired submodule checkouts that a fast-forward leaves on a host where they
-# were checked out (git cannot remove a submodule checkout that holds files):
-# coding-agent-kit from before its move to its own package, then both
-# submodules from before the payload repos became installed ones. Keep these
-# lines until every host is verified clean: without them the native
-# login update refuses the untracked source on every login. Inspect and remove
-# a leftover by hand (docs/payloads.md, Leftover checkouts).
-/common/codex/coding-agent-kit/
-/common/coding-agent-kit/coding-agent-kit/
-/common/pymol/PyMOLScripts/
-
-# Retired submodule checkout retained on existing hosts.
-/common/sherlock-kit/sherlock-kit/

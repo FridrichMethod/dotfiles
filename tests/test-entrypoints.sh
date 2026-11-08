@@ -124,10 +124,11 @@ python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_environment.py' -v
 
 # Each hook named below runs its suite when a file the suite depends on
 # changes: the payload hook suite on the hook, its config, the rc files that
-# source it and the logger, and this test on itself, the entry points it
-# reads and the hook configuration. Files are selected as pre-commit
-# selects them: re.search of the hook's files, then of its exclude and the
-# top-level one; a shell linter must also declare its types.
+# source it, the logger and both lib/chezmoi-guard twins, and this test on
+# itself, the entry points it reads and the hook configuration. Files are
+# selected as pre-commit selects them: re.search of the hook's files, then
+# of its exclude and the top-level one; a shell linter must also declare its
+# types.
 python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" "$TEST_DIR/fixtures/chezmoi/targets.tsv" \
     "$REPO_ROOT/.github/workflows/ci.yml" <<'PY'
 import re
@@ -163,8 +164,8 @@ need = {
                   'home/dot_codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
                   'tests/lib/environment.sh'],
     'payload-update': ['scripts/payload-update.sh', 'config/payloads.tsv', 'home/dot_aliases', 'home/dot_profile',
-                       'home/dot_zshrc', 'lib/terminal.sh', 'lib/chezmoi-guard.sh', 'tests/payload-update.sh',
-                       'tests/test_payload_download.py'],
+                       'home/dot_zshrc', 'lib/terminal.sh', 'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
+                       'tests/payload-update.sh', 'tests/test_payload_download.py'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
                          'tests/lib/environment.sh', 'tests/lib/environment.ps1', 'tests/test_environment.py',
                          'tests/fixtures/chezmoi/targets.tsv', '.github/workflows/ci.yml'],
@@ -196,7 +197,7 @@ need = {
                 'doctor.sh', 'setup-host.sh'],
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh',
                     'tests/e2e/lib/steps.sh', 'docs/bootstrap.md', 'config/bootstrap/installers.tsv',
-                    '.chezmoiversion', 'lib/bootstrap/steps-common.sh'],
+                    '.chezmoiversion', 'lib/bootstrap/steps-common.sh', 'lib/chezmoi-guard.sh'],
     'shell-profile': ['home/dot_profile', 'home/dot_aliases', 'home/dot_zshrc', 'home/dot_oh-my-zsh/custom/nvm.zsh',
                       'home/dot_oh-my-zsh/custom/fzf-tab.zsh', 'lib/chezmoi-guard.sh'],
     'terminal-output': ['lib/terminal.sh', 'lib/terminal.ps1', 'tests/terminal.ps1', 'doctor.ps1', 'setup-host.ps1'],

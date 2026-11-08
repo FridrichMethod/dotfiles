@@ -60,9 +60,6 @@ missing parents require that preparation before retry; a failure is not
 transactional. Review local umask and existing private-parent modes before
 install/enrollment. Old-layout homes are unsupported; recovery and conversion
 start only from `bf99958` ([support boundary](docs/chezmoi-migration/support-boundary.md)).
-Keep the `.gitignore` residue lines (retired parser environment and submodule
-checkouts) until every host is verified clean: the updater refuses untracked
-files.
 
 `tests/test_markdown_links.py` keeps every relative Markdown link and `#anchor`
 in files outside `docs/chezmoi-migration/` resolving.
@@ -170,4 +167,4 @@ in files outside `docs/chezmoi-migration/` resolving.
   - basic hygiene hooks
 - If CI behavior affects contributors, update `README.md` in the same change.
 
-- Sherlock toolkit installation and project integration belong to its standalone repository and each consumer project. Dotfiles ships only version-free global guidance. Keep the retired Sherlock checkout ignored; never delete a checkout or its module store automatically. Old Sherlock links and generated overrides are retired by hand under the support boundary; foreign files and links stay untouched.
+- Sherlock toolkit installation and project integration belong to its standalone repository and each consumer project. Dotfiles ships only version-free global guidance.
