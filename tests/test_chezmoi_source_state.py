@@ -129,7 +129,7 @@ class SourceContractTests(unittest.TestCase):
     def test_source_declares_no_externals(self):
         # Externals download while the source state is read, even with
         # --exclude=externals, through an HTTP client without a timeout; the
-        # login updater must stay configuration-only (stage-5-ecosystem.md).
+        # login updater must stay configuration-only.
         found = []
         for directory, dirnames, filenames in os.walk(ROOT / "home"):
             found += [name for name in dirnames if name == ".chezmoiexternals"]
@@ -137,8 +137,8 @@ class SourceContractTests(unittest.TestCase):
         self.assertEqual(found, [])
 
     def test_repository_tracks_only_regular_files(self):
-        # The doctor no longer diagnoses retired submodule checkouts (D9); the
-        # native updater passes --recurse-submodules=false. A tracked symlink
+        # The login updater passes --recurse-submodules=false and the source
+        # has no submodules (AGENTS.md forbids them). A tracked symlink
         # becomes a text file holding its target on a Windows clone without
         # core.symlinks, and chezmoi would deploy that text, so the checkout
         # holds regular files only. Under home/ the executable bit sits
@@ -232,7 +232,7 @@ class SourceContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_target_table_matches_tracked_inputs_roles_and_counts(self):
-        # tests/fixtures/chezmoi/targets.tsv is the authority (D-13): every row's
+        # tests/fixtures/chezmoi/targets.tsv is the authority: every row's
         # per-role source is tracked and every hidden input feeds one target.
         self.assertEqual(target_problems(target_rows(), tracked_home()), [])
         for hosts in ("", "mac,mac", "guess", "unix,win"):

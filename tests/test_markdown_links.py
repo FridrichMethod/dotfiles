@@ -1,8 +1,7 @@
 """Every relative link and #anchor in a tracked Markdown file resolves.
 
 Relative targets must be tracked files or directories, and #anchors GitHub
-heading slugs. Files under docs/chezmoi-migration/ are not checked as link
-sources; links that point into them are.
+heading slugs.
 """
 from pathlib import Path, PurePosixPath
 import re
@@ -11,7 +10,6 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-RECORDS = "docs/chezmoi-migration/"
 
 
 def tracked(root, *paths):
@@ -72,7 +70,7 @@ def broken_links(root, files):
     files = set(files)
     dirs = {str(p) for f in files for p in PurePosixPath(f).parents}
     slugs, problems = {}, []
-    for source in sorted(f for f in files if f.endswith(".md") and not f.startswith(RECORDS)):
+    for source in sorted(f for f in files if f.endswith(".md")):
         if not (root / source).is_file():
             problems.append(f"{source}: tracked but missing from the work tree")
             continue
@@ -113,16 +111,18 @@ class MarkdownLinkTests(unittest.TestCase):
             problems = broken_links(root, ["a.md", "gone.md"])
         self.assertEqual(problems, ["a.md:2: no heading for gone.md#x", "gone.md: tracked but missing from the work tree"])
 
-    def test_records_are_link_targets_but_not_sources(self):
+    def test_nested_markdown_is_a_link_source_and_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / RECORDS).mkdir(parents=True)
-            (root / RECORDS / "r.md").write_text("# Kept\n[gone](../gone.md)\n[part](r.md#nowhere)\n",
-                                                 encoding="utf-8")
-            (root / "a.md").write_text(f"[ok]({RECORDS}r.md#kept)\n[bad]({RECORDS}r.md#nowhere)\n",
+            (root / "docs").mkdir()
+            (root / "docs/r.md").write_text("# Kept\n[gone](../gone.md)\n[part](r.md#nowhere)\n",
+                                            encoding="utf-8")
+            (root / "a.md").write_text("[ok](docs/r.md#kept)\n[bad](docs/r.md#nowhere)\n",
                                        encoding="utf-8")
-            problems = broken_links(root, ["a.md", RECORDS + "r.md"])
-        self.assertEqual(problems, [f"a.md:2: no heading for {RECORDS}r.md#nowhere"])
+            problems = broken_links(root, ["a.md", "docs/r.md"])
+        self.assertEqual(problems, ["a.md:2: no heading for docs/r.md#nowhere",
+                                    "docs/r.md:2: no tracked target ../gone.md",
+                                    "docs/r.md:3: no heading for r.md#nowhere"])
 
     def test_tracked_markdown_links_and_anchors_resolve(self):
         problems = broken_links(ROOT, tracked(ROOT))

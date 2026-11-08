@@ -63,7 +63,7 @@ transactional. Review local umask and existing private-parent modes before
 install/enrollment.
 
 `tests/test_markdown_links.py` keeps every relative Markdown link and `#anchor`
-in files outside `docs/chezmoi-migration/` resolving.
+in tracked Markdown resolving.
 
 ## Shell conventions
 

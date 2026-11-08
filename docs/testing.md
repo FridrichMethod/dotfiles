@@ -144,8 +144,7 @@ their own independent hooks.
 `tests/markdown-links.sh` runs `tests/test_markdown_links.py` on every commit
 (its hook has `always_run`, since any deletion or rename can break a link):
 every relative link in tracked Markdown resolves to a tracked file or directory
-and every `#anchor` matches a GitHub heading slug. Files under
-`docs/chezmoi-migration/` are not checked as link sources; links into them are.
+and every `#anchor` matches a GitHub heading slug.
 
 Test entrypoints load `tests/lib/environment.sh` or `.ps1` to clear inherited
 DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and
