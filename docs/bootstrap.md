@@ -72,12 +72,12 @@ f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -x
 Follow [Fresh home by hand](#fresh-home-by-hand). Provisioning does not own this
 operation and prints no blanket apply command. A regular local config whose
 `sourceDir` and `destDir` this checkout's `lib/chezmoi-guard.sh` accepts as
-naming this checkout and this home, with maintenance absent, satisfies the
-bootstrap handoff check; it does not substitute for the procedure's diff,
-second apply or application checks. Run from another checkout (a worktree or a
-second clone), setup-host keeps H7-deploy pending.
+naming this checkout and this home, with maintenance absent, satisfies
+setup-host's H7-deploy done check; it does not substitute for the procedure's
+diff, second apply or application checks. Run from another checkout (a
+worktree or a second clone), setup-host keeps H7-deploy pending.
 
-The doctor's `chezmoi-config` row names the cause. `ok`: the handoff state above.
+The doctor's `chezmoi-config` row names the cause. `ok`: the accepted config above.
 `warn`, which does not fail the run: the config names another checkout, whose
 doctor it names. `human`: active maintenance, no local config (a new home gets
 it from [Fresh home by hand](#fresh-home-by-hand)), a config that is a link or

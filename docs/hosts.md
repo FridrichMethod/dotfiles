@@ -47,6 +47,17 @@ or one that needs more than the update:
    `chezmoi cat` of their targets (record only equal or not equal), no doctor
    row is worse than before, the shell probes pass and no maintenance marker
    is left.
+5. Once every host is accepted and the landing's `ci/**` and `e2e-ci/**`
+   branches are deleted ([AGENTS.md](../AGENTS.md#workflows-and-checks)),
+   prune each host's checkout as step 5 of
+   [Rolling out a breaking change](updates.md#rolling-out-a-breaking-change)
+   says: `git -C ~/dotfiles fetch --prune origin` on Unix. The login
+   updater's pull never prunes, so a host that fetched while those branches
+   existed keeps their `origin/ci/*` and `origin/e2e-ci/*` refs otherwise.
+   The fetch moves no local branch. On win run
+   `git -C (Join-Path $HOME dotfiles) fetch --prune origin` in a limited-token
+   task: it writes Git metadata, and the administrator session is for
+   read-only metadata ([win](#win)).
 
 Before a change to rendered `~/.codex/config.toml`, ask the user to quit the
 Codex desktop apps that connect to the hosts

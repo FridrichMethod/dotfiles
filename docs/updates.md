@@ -267,10 +267,26 @@ maintenance:
    config template changed. Check that HEAD is the new `main` and
    `home_cz status --exclude=dirs` is empty.
 4. Remove the marker and prove the deployed hook and the new updater from a
-   fresh interactive shell, as the host's probe method says
-   ([hosts](hosts.md#probe-methods)): exit 0, no `[dotfiles]` line on stderr,
-   HEAD at `main` and a clean status. On failure, restore the marker and
-   finish by explicit commands.
+   fresh interactive shell (on win, only the user's own session runs the
+   hook), as the host's probe method says ([hosts](hosts.md#probe-methods)):
+   exit 0, no `[dotfiles]` line on stderr, HEAD at `main` and a clean status.
+   On failure, restore the marker and finish by explicit commands.
+5. Once every host is accepted (step 4 of
+   [Rolling out a landed change](hosts.md#rolling-out-a-landed-change)) and
+   the landing's `ci/**` and `e2e-ci/**` branches are deleted
+   ([AGENTS.md](../AGENTS.md#workflows-and-checks)), prune each host's
+   checkout:
+
+   ```sh
+   git -C ~/dotfiles fetch --prune origin
+   ```
+
+   On Windows run `git -C (Join-Path $HOME dotfiles) fetch --prune origin` in
+   a limited-token task, since it writes Git metadata
+   ([hosts](hosts.md#win)). The login updater's pull fetches every branch
+   and never prunes, so a host that fetched while those branches existed
+   keeps their `origin/ci/*` and `origin/e2e-ci/*` refs until this fetch
+   removes them. It moves no local branch.
 
 ### Re-init after a config-template change
 
