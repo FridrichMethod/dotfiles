@@ -585,7 +585,7 @@ if (Get-Module PSReadLine) {
         }, $true) | Select-Object -First 1
     $handler = $handlerAst.ScriptBlock.GetScriptBlock()
     # Token-shaped strings are assembled at run time so no scanner flags them.
-    foreach ($line in @(
+    $memoryOnly = @(
             'curl -H "Authorization: Bearer abc123def456ghi" https://example.org',
             ('echo ghp_' + ('a' * 24)),
             ('gh auth login --with-token github_pat_' + ('A1b' * 8)),
@@ -607,10 +607,14 @@ if (Get-Module PSReadLine) {
             '$env:HF_TOKEN = "abc"',
             '$env:AWS_SECRET_ACCESS_KEY = "abc"',
             '$env:GH_PAT = "abc"',
-            ' echo kept in memory only')) {
-        Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly) "history keeps out of the file: $line"
-    }
-    foreach ($line in @(
+            ' echo kept in memory only',
+            # ASCII I/i differs under Turkish and Azerbaijani cultures.
+            ('echo GITHUB_PAT_' + ('A1b' * 8)),
+            ('echo akia' + ('abcd2345' * 2)),
+            ('echo "-----begin rsa ' + 'private key-----"'),
+            '$ENV:BUILD_API_KEY = "fixture"',
+            ('echo SK-admin-' + ('aB3-' * 12)))
+    $memoryAndFile = @(
             'git push',
             '$env:CUDA_PATH = "C:\cuda\v12.4"',
             '$env:LD_LIBRARY_PATH = "/opt/lib"',
@@ -622,8 +626,53 @@ if (Get-Module PSReadLine) {
             # Too short for an admin key; a key's None prefix is capitalized.
             'git checkout -b sk-admin-tools',
             'git checkout -b sk-admin-dashboard-cleanup-v2',
-            'git switch sk-none-fix-for-flaky-tests')) {
-        Assert-True ((& $handler $line) -eq [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile) "history file keeps: $line"
+            'git switch sk-none-fix-for-flaky-tests',
+            '$env:API_KEYBOARD = "fixture"',
+            '$env:MYAPI_KEY = "fixture"',
+            ('echo mygithub_pat_' + ('A1b' * 8)),
+            ('echo xakia' + ('abcd2345' * 2)),
+            ('echo github_pat_' + ('a' * 19)))
+    # Vendor subpatterns are intentionally case-sensitive; use hyphenated
+    # bodies so the independent unbroken-key rule cannot hide a regression.
+    foreach ($vendor in 'ant', 'proj', 'svcacct', 'admin', 'None', 'or-v1') {
+        $memoryOnly += 'echo sk-' + $vendor + '-' + ('aB3-' * 12)
+    }
+    foreach ($vendor in 'ANT', 'PROJ', 'SVCACCT', 'admIn', 'none', 'OR-V1') {
+        $memoryAndFile += 'echo sk-' + $vendor + '-' + ('aB3-' * 12)
+    }
+    # -match caches compiled regexes without including culture in its key.
+    # A fresh child per culture ensures the first match uses that culture.
+    $historyHome = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-history-' + [guid]::NewGuid().ToString('N'))
+    [void](New-Item -ItemType Directory -Path $historyHome)
+    $lines = @($memoryOnly) + @($memoryAndFile)
+    $linesJson = ConvertTo-Json -InputObject $lines -Compress
+    try {
+        foreach ($cultureName in 'en-US', 'tr-TR', 'az-Latn-AZ') {
+            $probe = '$ErrorActionPreference = ''Stop''' + "`n" +
+                '$culture = [Globalization.CultureInfo]::GetCultureInfo(''' + $cultureName + ''')' + "`n" +
+                '[Threading.Thread]::CurrentThread.CurrentCulture = $culture' + "`n" +
+                '[Threading.Thread]::CurrentThread.CurrentUICulture = $culture' + "`n" +
+                'Import-Module PSReadLine -ErrorAction Stop' + "`n" +
+                '$handler = [scriptblock]::Create(''' + $handler.ToString().Replace("'", "''") + ''')' + "`n" +
+                '$lines = ConvertFrom-Json -InputObject ''' + $linesJson.Replace("'", "''") + "'`n" +
+                '[Threading.Thread]::CurrentThread.CurrentCulture.Name' + "`n" +
+                'foreach ($line in $lines) { [string](& $handler $line) }'
+            $result = Invoke-Child -FilePath $powerShell -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand',
+                [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))) -Environment @{
+                HOME = $historyHome; USERPROFILE = $historyHome
+                XDG_CONFIG_HOME = $historyHome; XDG_DATA_HOME = $historyHome; XDG_CACHE_HOME = $historyHome
+            }
+            Assert-True (-not $result.TimedOut -and $result.ExitCode -eq 0 -and -not $result.Err) "history ($cultureName) isolated child succeeds: $($result.Err)"
+            $verdicts = @($result.Out -split '\r?\n')
+            Assert-True ($verdicts.Count -eq $lines.Count + 1 -and $verdicts[0] -ceq $cultureName) "history child sets $cultureName and returns every verdict"
+            for ($index = 0; $index -lt $lines.Count; $index++) {
+                $expected = if ($index -lt $memoryOnly.Count) { 'MemoryOnly' } else { 'MemoryAndFile' }
+                Assert-True ($verdicts[$index + 1] -ceq $expected) "history ($cultureName) $expected`: $($lines[$index])"
+            }
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $historyHome -Recurse -Force -ErrorAction SilentlyContinue
     }
     # The handler runs on Enter. With an unbounded gap before the T3BlbkFJ
     # marker, one run of many sk- starts backtracked quadratically: this line

@@ -2,11 +2,14 @@
 
 import base64
 import functools
+import itertools
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+import tempfile
 import unittest
 
 from chezmoi_source_support import SourceFixture
@@ -28,6 +31,111 @@ def current_user_sid():
     output = subprocess.run([system32("whoami.exe"), "/user", "/fo", "csv", "/nh"], stdin=subprocess.DEVNULL,
                             capture_output=True, text=True, check=True, timeout=30).stdout
     return output.strip().rsplit(",", 1)[1].strip('"')
+
+
+@unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 unavailable")
+class PowerShellUpdateCultureTests(unittest.TestCase):
+    """Updater decisions before native Windows trust checks, using fake homes."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.pwsh = shutil.which("pwsh")
+        essentials = {"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "SYSTEMDRIVE", "PATH",
+                      "LANG", "LANGUAGE", "TZ"}
+        self.env = {key: value for key, value in os.environ.items()
+                    if key.upper() in essentials or key.upper().startswith("LC_")}
+        self.env.update(HOME=str(self.root), USERPROFILE=str(self.root),
+                        POWERSHELL_TELEMETRY_OPTOUT="1", POWERSHELL_UPDATECHECK="Off",
+                        XDG_CACHE_HOME=str(self.root / "cache"), XDG_CONFIG_HOME=str(self.root / "config"),
+                        XDG_DATA_HOME=str(self.root / "data"), XDG_STATE_HOME=str(self.root / "state"))
+        for key in ("APPDATA", "LOCALAPPDATA", "TMP", "TEMP", "TMPDIR"):
+            directory = self.root / key.lower()
+            directory.mkdir()
+            self.env[key] = str(directory)
+
+    def run_culture(self, culture, body):
+        script = ("$ErrorActionPreference='Stop'\n"
+                  f"$culture = [Globalization.CultureInfo]::GetCultureInfo('{culture}')\n"
+                  "[Threading.Thread]::CurrentThread.CurrentCulture = $culture\n"
+                  "[Threading.Thread]::CurrentThread.CurrentUICulture = $culture\n"
+                  f". {ps_string(ROOT / 'scripts/chezmoi-update.ps1')}\n"
+                  "[Threading.Thread]::CurrentThread.CurrentCulture.Name\n" + body)
+        result = subprocess.run([self.pwsh, "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                                 base64.b64encode(script.encode("utf-16le")).decode()],
+                                cwd=self.root, env=self.env, stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, timeout=90)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stderr, "")
+        output = result.stdout.splitlines()
+        self.assertEqual(output[0], culture)
+        return json.loads("\n".join(output[1:]))
+
+    def test_onedrive_case_variants_refuse_before_backend_in_every_culture(self):
+        # Enumerate all 256 ASCII case spellings. Windows shares the source
+        # directory across spellings, but each config preserves its own text.
+        names = ["".join(chars) for chars in itertools.product(*[(c.lower(), c.upper()) for c in "onedrive"])]
+        names += ["prefixOneDriveSuffix", "OneDrive-backup", "ordinary", "One-Drive"]
+        for index, name in enumerate(names):
+            source = self.root / name
+            (source / ".git").mkdir(parents=True, exist_ok=True)
+            (source / ".chezmoiroot").write_text("home\n")
+            home = self.root / f"home {index}"
+            config = home / ".config/chezmoi/chezmoi.toml"
+            config.parent.mkdir(parents=True)
+            config.write_bytes((f'destDir = "{home.as_posix()}"\n'
+                                f'sourceDir = "{source.as_posix()}"\n').encode())
+            state = home / ".local/state/chezmoi/chezmoi.boltdb"
+            state.parent.mkdir(parents=True)
+            state.write_bytes(b"fixture state: no backend may open it")
+        body = (f"$results = @(foreach ($index in 0..{len(names) - 1}) {{\n"
+                f"$homePath = Join-Path {ps_string(self.root)} ('home ' + $index)\n")
+        body += """
+            Remove-Item Env:_DOTFILES_CHECKED -ErrorAction SilentlyContinue
+            $errors = [IO.StringWriter]::new()
+            $originalError = [Console]::Error
+            try {
+                [Console]::SetError($errors)
+                Invoke-DotfilesChezmoiUpdate -HomePath $homePath
+            }
+            finally { [Console]::SetError($originalError) }
+            $errors.ToString().Trim()
+            $errors.Dispose()
+        })
+        ConvertTo-Json -InputObject $results -Compress
+"""
+        for culture in ("en-US", "tr-TR", "az-Latn-AZ"):
+            with self.subTest(culture=culture):
+                output = self.run_culture(culture, body)
+                self.assertEqual(len(output), len(names))
+                for name, warning in zip(names, output):
+                    with self.subTest(source=name):
+                        self.assertEqual(warning.count("[dotfiles]"), 1, warning)
+                        if name in ("ordinary", "One-Drive"):
+                            self.assertIn("W1-chezmoi", warning)
+                            self.assertNotIn("independent-clone", warning)
+                        else:
+                            self.assertIn("independent-clone", warning)
+
+    def test_inherited_environment_prefix_cleanup_is_culture_independent(self):
+        removed = ("GIT_DOTFILES_UPPER", "git_dotfiles_lower", "GiT_Dotfiles_Mixed",
+                   "CHEZMOI_DOTFILES_UPPER", "chezmoi_dotfiles_lower", "ChEzMoI_Dotfiles_Mixed")
+        retained = ("GIT", "CHEZMOI", "GITLIKE_DOTFILES", "CHEZMOILOG_DOTFILES", "NOT_GIT_DOTFILES")
+        names = removed + retained
+        self.env.update({name: "synthetic-fixture" for name in names})
+        # A real child reports only our synthetic names. No environment dump
+        # or Git/chezmoi invocation can expose credentials or use host state.
+        child = ("import json,os; names=" + repr(names) + "; "
+                 "print(json.dumps([name for name in names if name in os.environ]))")
+        body = (f"$paths = [pscustomobject]@{{ Source = {ps_string(self.root)}; Destination = {ps_string(self.root)} }}\n"
+                f"$result = Invoke-DotfilesUpdateProcess {ps_string(sys.executable)} "
+                f"@('-I', '-B', '-c', {ps_string(child)}) $paths\n"
+                "if ($result.Code -ne 0) { throw 'environment probe failed' }\n"
+                "$result.Output\n")
+        for culture in ("en-US", "tr-TR", "az-Latn-AZ"):
+            with self.subTest(culture=culture):
+                self.assertEqual(self.run_culture(culture, body), list(retained))
 
 
 @unittest.skipUnless(os.name == "nt", "the Windows login updater requires Windows")
