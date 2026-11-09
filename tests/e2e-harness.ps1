@@ -1118,7 +1118,25 @@ try {
         Assert-Equal @(Get-SummaryRows)[0].Status 'fail' 'a HOME write'
     }
 
-    Test-Case 'Invoke-E2EStepPayloads: payload-update.ps1 -Now, then the payloads row of doctor.ps1 -Tsv decides' {
+    Test-Case 'Invoke-E2EStepPayloads: doctor failures retain their exit code even after an installed payloads row' {
+        $header = "status`tid`ttier`tdetail`tfix"
+        foreach ($doctorCode in @(124, 1, 2)) {
+            foreach ($payloadLine in @("ok`tpayloads`tai`tinstalled: pymol, skills`t-", '')) {
+                [void](New-DryRun)
+                Add-Run 0 @('[dotfiles] [ok] skills: install done')
+                $output = @($header)
+                if ($payloadLine) { $output += $payloadLine }
+                Add-Run $doctorCode $output @('earlier doctor message', 'fixture doctor failure')
+                Use-DryRun { Invoke-E2EStepPayloads }
+                $rows = @(Get-SummaryRows)
+                Assert-Equal (Get-RowShape $rows) 'payloads:fail' "doctor exit $doctorCode with row [$payloadLine] must fail"
+                Assert-Equal $rows[0].Detail "doctor exit $doctorCode (124 is the 900s timeout): fixture doctor failure" 'the doctor exit code and error survive'
+                Assert-Equal "$($script:PwshCalls[1].Script) $($script:PwshCalls[1].Timeout)" 'doctor.ps1 900' 'the doctor timeout stays unchanged'
+            }
+        }
+    }
+
+    Test-Case 'Invoke-E2EStepPayloads: payload-update.ps1 -Now, then a successful doctor and its payloads row decide' {
         $header = "status`tid`ttier`tdetail`tfix"
         [void](New-DryRun)
         Add-Run 0 @('[dotfiles] [ok] pymol: install done', '[dotfiles] [ok] skills: install done')
@@ -1131,10 +1149,17 @@ try {
 
         [void](New-DryRun)
         Add-Run 0 @()
-        Add-Run 1 @($header, "warn`tpayloads`tai`tnot installed: skills`tdocs/bootstrap.md H7-payloads")
+        Add-Run 0 @($header, "warn`tpayloads`tai`tnot installed: skills`tdocs/bootstrap.md H7-payloads")
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             "fail exit 0, but the doctor's payloads row is warn: not installed: skills" 'a payload still missing'
+
+        [void](New-DryRun)
+        Add-Run 0 @()
+        Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-")
+        Use-DryRun { Invoke-E2EStepPayloads }
+        Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
+            "fail exit 0, but the doctor's payloads row is missing" 'a successful doctor without its payloads row'
 
         # An ok row that names nothing installed (no item selected) passes nothing.
         [void](New-DryRun)
