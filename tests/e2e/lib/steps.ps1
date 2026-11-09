@@ -46,7 +46,7 @@ function Invoke-E2EStepHomeDeploy {
     # the clone, that config selects win, no maintenance, a non-empty state
     # database, and a same-hash private copy of each of
     # .gitconfig and the two profile.ps1 files that existed before. The
-    # runner token is elevated (it has no ordinary one), which the procedure
+    # default runner account's token is elevated, which the procedure
     # warns about and a note records; the ordinary-token login-updater check
     # stays in per-host acceptance.
     Start-E2EStep home-deploy human:HW-deploy
@@ -111,7 +111,7 @@ function Invoke-E2EStepHomeDeploy {
     }
     Complete-E2EStep pass "Invoke-HomeDeploy -Role win exit 0; $kept earlier file(s) kept byte for byte; the config names $source"
     if (Test-E2EElevated) {
-        Write-E2ENote deploy-token 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance'
+        Write-E2ENote deploy-token 'elevated: this harness uses the default runner account; the ordinary-token login-updater check stays in per-host acceptance'
     }
 }
 

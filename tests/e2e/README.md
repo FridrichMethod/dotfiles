@@ -49,9 +49,26 @@ the network and takes from ten minutes to an hour per host.
 | `mac` | none: the `macos-15` runner | `runner`, `/Users/runner` |
 | `win` | none: the `windows-2025` runner, `run.ps1` | the runner user |
 
+Windows uses the default elevated runner account. On a disposable hosted
+runner only, the harness pauses the current user's OMP package updates for
+two hours, before the first doctor if OMP already exists and after setup
+installs it. An absent package is left to setup and doctor. Existing pauses
+or system policy are refused. Package identity, executable hash and other
+update settings must stay unchanged. The original bootstrap checks and
+900-second doctor limits remain in force. The driver's `finally` resumes
+updates; an independent `always()` workflow step retries unfinished
+restoration. The 95-minute job reserves cleanup time after the original
+90-minute run budget. These runs cover package activation with update
+scheduling adapted, not App Installer's unattended update interaction or
+ordinary-user console acceptance.
+
 ## Outputs
 
 `tests/e2e/out/<host>-<UTC timestamp>/` (git-ignored):
+
+The Windows workflow fixes `E2E_OUT` to `tests/e2e/out/win/` so its independent
+cleanup step can locate the same durable pause receipt after interruption.
+Manual runs retain the timestamped default unless `E2E_OUT` is set.
 
 - `summary.tsv`: one tab-separated row per step, `<n> <step> <pass|fail|skip|note> <seconds> <detail>`
 - `steps/NN-<step>.log`: stdout and stderr of each step

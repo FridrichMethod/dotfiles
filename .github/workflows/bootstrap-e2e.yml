@@ -158,14 +158,22 @@ jobs:
     needs: plan
     if: needs.plan.outputs.win == 'true'
     runs-on: windows-2025
-    timeout-minutes: 90
+    # Keep the original 90-minute execution budget and reserve cleanup time.
+    timeout-minutes: 95
+    env:
+      E2E_OUT: ${{ github.workspace }}/tests/e2e/out/win
     defaults:
       run:
         shell: pwsh -NoProfile -NonInteractive -Command ". '{0}'"
     steps:
       - uses: actions/checkout@v6
       - name: Run the bootstrap natively as the runner user
+        timeout-minutes: 90
         run: ./tests/e2e/run.ps1
+      - name: Restore the hosted package update pause
+        if: always()
+        timeout-minutes: 3
+        run: ./tests/e2e/restore-appinstaller.ps1
       - uses: actions/upload-artifact@v7
         if: always()
         with:

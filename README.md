@@ -235,6 +235,13 @@ behavior. The
 optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.
 
+The hosted Windows bootstrap E2E temporarily pauses only the installed OMP
+package's App Installer updates, then verifies restoration. This avoids a
+confirmed unattended update-interaction wait while preserving the real
+package, doctor assertions and timeouts. It does not validate App Installer
+update scheduling or ordinary-user interactive behavior; see the
+[runner qualifications](docs/testing.md#host-matrix-and-fidelity).
+
 The [AI configuration](docs/ai-config.md#modify-templates) documents
 serialization, preserved Claude/Codex input, exact ownership and refusal of
 unsupported inputs. CI requires verified v2.74.0; local chezmoi probes skip if

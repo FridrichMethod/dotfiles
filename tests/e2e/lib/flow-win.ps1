@@ -115,6 +115,7 @@ function Invoke-E2EFlowWin {
     # broke the flow before it.
     Invoke-E2EStepClone
     Invoke-E2EOrSkip winget { Invoke-E2EStepWinget }
+    Invoke-E2EOrSkip appinstaller-initial { Invoke-E2EAppInstallerPrepare 'appinstaller-initial' }
     Invoke-E2EOrSkip doctor-initial { Invoke-E2EStepDoctorInitial }
     Invoke-E2EOrSkip check-nowrite { Invoke-E2EStepCheckNoWrite }
     if ($E2E['Broken']) { Skip-E2EStep apply-1 "after $($E2E['Broken']) failed" }
@@ -123,6 +124,7 @@ function Invoke-E2EFlowWin {
         [void](Invoke-E2EApplyLoop)
         $E2E['TasksAfterLoop'] = Get-E2EScheduledTaskNames
     }
+    Invoke-E2EOrSkip appinstaller-installed { Invoke-E2EAppInstallerPrepare 'appinstaller-installed' }
     Invoke-E2EOrSkip home-deploy { Invoke-E2EStepHomeDeploy }
     Invoke-E2EOrSkip second-apply { Invoke-E2EStepSecondApply }
     Invoke-E2EOrSkip check-done { Invoke-E2EStepCheckDone }

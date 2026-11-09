@@ -104,7 +104,8 @@ $e2eLibs = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'e2e/lib') -Fil
         Sort-Object -Property Name | ForEach-Object { $_.FullName })
 if ($e2eLibs.Count -eq 0) { throw 'No tests/e2e/lib/*.ps1 found to parse.' }
 $e2eParseIssues = [Collections.Generic.List[string]]::new()
-foreach ($e2eFile in (@($e2eRun) + $e2eLibs)) {
+$e2eWorkers = @('appinstaller-policy.ps1', 'restore-appinstaller.ps1') | ForEach-Object { Join-Path $PSScriptRoot "e2e/$_" }
+foreach ($e2eFile in (@($e2eRun) + $e2eLibs + $e2eWorkers)) {
     $e2eErrors = $null
     [void][Management.Automation.Language.Parser]::ParseFile($e2eFile, [ref]$null, [ref]$e2eErrors)
     foreach ($issue in @($e2eErrors)) {
@@ -113,6 +114,14 @@ foreach ($e2eFile in (@($e2eRun) + $e2eLibs)) {
     Write-Output "parsed $e2eFile"
 }
 if ($e2eParseIssues.Count -gt 0) { throw "Windows e2e driver parse errors:`n$($e2eParseIssues -join "`n")" }
+if ($IsWindows) {
+    $legacy = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    $legacyWorker = (Join-Path $PSScriptRoot 'e2e/appinstaller-policy.ps1').Replace("'", "''")
+    $legacyParse = "`$issues = `$null; [void][Management.Automation.Language.Parser]::ParseFile('$legacyWorker', [ref]`$null, [ref]`$issues); if (`$issues.Count) { throw 'Legacy App Installer worker parse failed.' }"
+    & $legacy -NoProfile -NonInteractive -Command $legacyParse
+    if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 App Installer worker parse failed.' }
+}
+else { Write-Output 'SKIP: native Windows PowerShell 5.1 App Installer worker parse (not Windows).' }
 
 Write-Output '==> e2e-harness.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'e2e-harness.ps1')

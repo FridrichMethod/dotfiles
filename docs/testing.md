@@ -687,15 +687,34 @@ approximation:
   TERM then KILL, exit 124); `env.txt` records which one ran. A hang thus
   fails its step with a `summary.tsv` row instead of running into the job's
   90-minute `timeout-minutes`, as the first CI run's did.
-- `win` runs every step under the runner's elevated token, because the
-  `windows-2025` runner offers no ordinary one: `winget import` leaves each
+- `win` runs every step under the default runner account's elevated token:
+  `winget import` leaves each
   installer's scope to that token (`winget.json` pins none), and `oh-my-posh
   font install` puts fonts where an elevated oh-my-posh puts them. Fresh
   Windows home by hand warns when it runs elevated, and the run records a
   `deploy-token` note; the ordinary-token check of the login updater stays
   in per-host acceptance, including the separate
   [real-console procedure](hosts.md#powershell-7-console-acceptance) for the
-  normal profile hook and rendered predictions. A winget that needs
+  normal profile hook and rendered predictions. On disposable hosted Windows
+  only, the harness pauses the current user's OMP App Installer updates for
+  two hours. Preparation runs before the first doctor when OMP is already
+  installed and again after canonical setup; absence is a no-op, and the
+  doctor retains its verdict. It refuses system policy or an existing pause,
+  records ownership before the setter, and preserves the installed package,
+  executable hash and other settings. The driver's `finally` explicitly
+  resumes updates and verifies those fields; an independent `always()` step
+  retries restoration after interruption. No account, service, UAC or
+  signature policy is changed. The original 900-second doctor checks,
+  failures and real packaged executable/alias remain unchanged.
+
+  This qualification follows [the paired hosted control](https://github.com/FridrichMethod/dotfiles/actions/runs/42715785035):
+  OMP 31.9.1 package/alias launched in 0.048/0.037 seconds while paused,
+  but package activation again waited in App Installer's update-interaction
+  path after resume. Original policy and bytes were verified restored.
+  Thus hosted E2E does not cover unattended App Installer update scheduling;
+  a one-time launch preparation is insufficient. A green hosted run does
+  not establish unattended activation with default, unpaused Windows Server
+  App Installer settings. A winget that needs
   `Repair-WinGetPackageManager` first is recorded as a deviation. `run.ps1`
   asserts criteria 1 (without
   `--smoke`, which `doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
@@ -876,11 +895,21 @@ Sunday at 06:00 UTC, and on a push to an `e2e-ci/**` branch; it is not part of
 containers on `ubuntu-24.04` with `fail-fast: false` and 90 minutes each,
 `mac` natively on `macos-15` (`E2E_NATIVE=1 ./tests/e2e/run.sh mac`) and `win`
 on `windows-2025` (`./tests/e2e/run.ps1`), the only places those two run;
-`tests/run.ps1` parses `tests/e2e/run.ps1` and `tests/e2e/lib/*.ps1` on every
+Windows retains a 90-minute run limit inside a 95-minute job, reserving time
+for the independent three-minute App Installer restoration and upload.
+Each policy worker has a 45-second execution limit; the existing process
+wrapper can additionally spend 30 seconds terminating and 30 draining it.
+Restoration invokes one such worker, within the independent cleanup budget.
+`tests/run.ps1` parses the E2E entry scripts and `tests/e2e/lib/*.ps1` on every
 run and then runs `tests/e2e-harness.ps1`, which drives them against stubs
 (also from `tests/run.sh` through `tests/e2e-harness-windows.sh`), so the three
 `ci.yml` jobs catch a syntax error or a policy regression there before this
-workflow does; winget and the real bootstrap run only here. Each
+workflow does. The App Installer policy worker is also parsed by native
+Windows PowerShell 5.1. Fixtures cover both preparation checkpoints,
+foreign-policy refusal, ownership persisted before a partial setter failure,
+idempotent restoration, retained doctor exit 124, restoration drift and
+the real driver's `finally` block after an escaped exception. Winget and
+the real bootstrap run only here. Each
 job uploads `tests/e2e/out/**` as the artifact `bootstrap-e2e-<host>`, pass or
 fail; one run per ref at a time, without cancelling one in progress. The
 `cache` input mounts a scratch directory under the runner's temp, which no

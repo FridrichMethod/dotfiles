@@ -26,9 +26,10 @@
     ~\.local\bin\chezmoi.exe, no task change after the apply loop, and the
     clone to stay clean after every step. Between steps PATH is rebuilt
     from the registry, as a new terminal reads it. tests/e2e/inside.sh is
-    the Unix twin. Every step runs under the runner's elevated token, which
-    the windows-2025 runner alone offers; the first apply warns about it and
-    the run records it in a note.
+    the Unix twin. Every step uses the runner account's default elevated
+    token; the first apply warns about it and the run records it in a note.
+    Hosted runs pause only OMP's App Installer updates during acceptance
+    and verify restoration afterwards; ordinary-user acceptance is separate.
 
     It refuses to run anywhere but a GitHub Actions runner (GITHUB_ACTIONS is
     true) or a session that sets E2E_NATIVE=1, and only when $HOME\dotfiles
@@ -65,6 +66,7 @@ $E2EDir = $PSScriptRoot
 . (Join-Path $E2EDir 'lib/snapshot.ps1')
 . (Join-Path $E2EDir 'lib/blocks.ps1')
 . (Join-Path $E2EDir 'lib/steps.ps1')
+. (Join-Path $E2EDir 'lib/appinstaller.ps1')
 . (Join-Path $E2EDir 'lib/flow-win.ps1')
 
 # --- refusals (exit 2) -------------------------------------------------------
@@ -78,7 +80,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -and $env:E2E_NATIVE -ne '1') {
         'runner (GITHUB_ACTIONS=true) or with E2E_NATIVE=1 on a disposable machine')
 }
 if (-not (Test-E2EElevated)) {
-    Exit-E2EUsage ('run.ps1 needs an elevated session: the windows-2025 runner offers only an elevated token, the winget repair ' +
+    Exit-E2EUsage ('run.ps1 uses the default elevated runner account: the winget repair ' +
         'needs it, and every run is recorded as elevated; it never elevates itself')
 }
 $clone = Join-Path $HOME 'dotfiles'
@@ -136,6 +138,7 @@ catch {
     if ($E2E['Phase']) { Stop-E2EPhase }
     Write-E2EFailure harness "unhandled error: $($_.Exception.Message) | $($_.ScriptStackTrace)"
 }
+finally { Invoke-E2EAppInstallerRestore }
 Write-E2EEnvironment $mode
 $status = if ($E2E['Fails'] -gt 0) { 1 } else { 0 }
 Write-E2ELog "win: $($E2E['Passes']) passed, $($E2E['Fails']) failed, $($E2E['Skips']) skipped; $out\summary.tsv"

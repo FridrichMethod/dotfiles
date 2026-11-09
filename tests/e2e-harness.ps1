@@ -97,7 +97,7 @@ function ConvertTo-Quoted([string]$Text) { return "'" + $Text.Replace("'", "''")
 function Get-Path([string]$Base, [string]$Child) { return [IO.Path]::GetFullPath((Join-Path $Base $Child)) }
 
 $e2eLib = Join-Path $PSScriptRoot 'e2e/lib'
-foreach ($name in @('common', 'snapshot', 'blocks', 'steps', 'flow-win')) { . (Join-Path $e2eLib "$name.ps1") }
+foreach ($name in @('common', 'snapshot', 'blocks', 'steps', 'appinstaller', 'flow-win')) { . (Join-Path $e2eLib "$name.ps1") }
 $InitialRunState = $E2E.Clone()
 
 # The driver's console lines, kept for assertions instead of printed.
@@ -1195,7 +1195,7 @@ try {
         $rows = @(Get-SummaryRows)
         Assert-Equal (Get-RowShape $rows) 'home-deploy:pass deploy-token:note' "the rows:`n$(Get-SummaryText)"
         Assert-Equal $rows[0].Detail "Invoke-HomeDeploy -Role win exit 0; 1 earlier file(s) kept byte for byte; the config names $source" 'the verdict'
-        Assert-Equal $rows[1].Detail 'elevated: the hosted runner has no ordinary token; the ordinary-token login-updater check stays in per-host acceptance' 'the token note'
+        Assert-Equal $rows[1].Detail 'elevated: this harness uses the default runner account; the ordinary-token login-updater check stays in per-host acceptance' 'the token note'
         $runner = Join-Path (Join-Path $E2E['Out'] 'deploy') 'run.ps1'
         $call = $script:ProcessCalls[0]
         Assert-Equal "$($call.FilePath) $($call.Arguments)" "$($E2E['PowerShell']) -NoProfile -NonInteractive -File $runner" 'the child'
@@ -1316,6 +1316,122 @@ try {
         }
     }
 
+    Test-Case 'hosted App Installer preparation leaves non-hosted sessions and absent packages alone' {
+        [void](Reset-RunState)
+        function Test-E2EHostedRunner { return $false }
+        function Invoke-E2EAppInstallerCommand { throw 'A non-hosted session must not reach Appx.' }
+        Invoke-E2EAppInstallerPrepare 'appinstaller-initial'
+        Assert-Equal @(Get-SummaryRows)[0].Status skip 'native sessions retain their update settings'
+        [void](Reset-RunState)
+        function Test-E2EHostedRunner { return $true }
+        function Invoke-E2EAppInstallerCommand([string]$Action) {
+            Assert-Equal $Action Capture 'absence needs only one read'
+            return [pscustomobject]@{ present = $false }
+        }
+        Invoke-E2EAppInstallerPrepare 'appinstaller-initial'
+        Assert-Equal $E2E['Fails'] 0 'an absent package remains the doctor or setup responsibility'
+        Assert-True (-not [IO.File]::Exists((Join-Path $E2E['Out'] 'appinstaller-state.json'))) 'absence owns no pause'
+    }
+
+    Test-Case 'hosted App Installer preparation owns one pause, persists before mutation and restores idempotently' {
+        [void](Reset-RunState)
+        function Test-E2EHostedRunner { return $true }
+        $script:Policy = @{ present = $true; package = 'synthetic-package'; hash = 'a' * 64;
+            policy_fingerprint = 'b' * 64; policy_source = 'Default'; paused_until = ''; active_pause = $false }
+        $script:PolicyCalls = [Collections.Generic.List[string]]::new()
+        function Invoke-E2EAppInstallerCommand([string]$Action) {
+            $script:PolicyCalls.Add($Action)
+            if ($Action -ceq 'Preflight') { return [pscustomobject]@{ ready = $true } }
+            if ($Action -ceq 'Pause') {
+                $saved = [IO.File]::ReadAllText((Join-Path $E2E['Out'] 'appinstaller-state.json')) | ConvertFrom-Json
+                Assert-True $saved.attempted 'attempt ownership must precede even a partially failing setter'
+                Assert-Equal $saved.baseline.hash ('a' * 64) 'baseline bytes are already durable'
+                $script:Policy.active_pause = $true
+                $script:Policy.paused_until = [DateTimeOffset]::UtcNow.AddHours(2).ToString('o')
+            }
+            if ($Action -ceq 'Resume') { $script:Policy.active_pause = $false; $script:Policy.paused_until = '' }
+            return [pscustomobject]$script:Policy.Clone()
+        }
+        Invoke-E2EAppInstallerPrepare 'appinstaller-initial'
+        Invoke-E2EAppInstallerPrepare 'appinstaller-installed'
+        Assert-Equal $E2E['Fails'] 0 'the owned pause is reused without replacing its baseline'
+        Invoke-E2EAppInstallerRestore
+        Invoke-E2EAppInstallerRestore
+        Assert-Equal @($script:PolicyCalls | Where-Object { $_ -ceq 'Pause' }).Count 1 'one pause setter'
+        Assert-Equal @($script:PolicyCalls | Where-Object { $_ -ceq 'Resume' }).Count 1 'one resume setter'
+        $saved = [IO.File]::ReadAllText((Join-Path $E2E['Out'] 'appinstaller-state.json')) | ConvertFrom-Json
+        Assert-True $saved.restored 'restoration is verified and durable'
+    }
+
+    Test-Case 'hosted App Installer refuses foreign policy and existing pauses before mutation' {
+        function Test-E2EHostedRunner { return $true }
+        foreach ($mode in @('system-policy', 'existing-pause')) {
+            [void](Reset-RunState)
+            $script:PolicyMode = $mode
+            function Invoke-E2EAppInstallerCommand([string]$Action) {
+                Assert-Equal $Action Capture 'foreign settings must never reach a setter'
+                return [pscustomobject]@{ present = $true; package = 'synthetic-package'; hash = 'a' * 64;
+                    policy_fingerprint = 'b' * 64; policy_source = $(if ($script:PolicyMode -ceq 'system-policy') { 'System' } else { 'Default' });
+                    paused_until = $(if ($script:PolicyMode -ceq 'existing-pause') { '2099-01-01T00:00:00Z' } else { '' });
+                    active_pause = $script:PolicyMode -ceq 'existing-pause' }
+            }
+            Invoke-E2EAppInstallerPrepare 'appinstaller-initial'
+            Assert-Equal $E2E['Fails'] 1 'foreign settings fail preparation'
+            Assert-True (-not [IO.File]::Exists((Join-Path $E2E['Out'] 'appinstaller-state.json'))) 'no owned mutation was recorded'
+        }
+    }
+
+    Test-Case 'hosted App Installer cleanup preserves setter and doctor failures and rejects restoration drift' {
+        function Test-E2EHostedRunner { return $true }
+        foreach ($mode in @('partial-setter', 'doctor-124', 'restore-drift')) {
+            [void](Reset-RunState)
+            $script:PolicyMode = $mode
+            $script:Policy = @{ present = $true; package = 'synthetic-package'; hash = 'a' * 64;
+                policy_fingerprint = 'b' * 64; policy_source = 'Default'; paused_until = ''; active_pause = $false }
+            $script:Resumed = $false
+            function Invoke-E2EAppInstallerCommand([string]$Action) {
+                if ($Action -ceq 'Preflight') { return [pscustomobject]@{ ready = $true } }
+                if ($Action -ceq 'Pause') {
+                    $script:Policy.active_pause = $true
+                    $script:Policy.paused_until = [DateTimeOffset]::UtcNow.AddHours(2).ToString('o')
+                    if ($script:PolicyMode -ceq 'partial-setter') { throw 'Synthetic partial setter failure.' }
+                }
+                if ($Action -ceq 'Resume') {
+                    $script:Resumed = $true
+                    $script:Policy.active_pause = $false
+                    $script:Policy.paused_until = ''
+                    if ($script:PolicyMode -ceq 'restore-drift') { $script:Policy.hash = 'c' * 64 }
+                }
+                return [pscustomobject]$script:Policy.Clone()
+            }
+            Invoke-E2EAppInstallerPrepare 'appinstaller-initial'
+            if ($mode -ceq 'doctor-124') { Write-E2EFailure doctor-final 'exit 124: original doctor timeout' }
+            Invoke-E2EAppInstallerRestore
+            Assert-True $script:Resumed 'cleanup runs after success or a partially applied pause'
+            Assert-Equal $E2E['Fails'] 1 'cleanup cannot erase a setter/doctor failure, and drift itself fails'
+            $saved = [IO.File]::ReadAllText((Join-Path $E2E['Out'] 'appinstaller-state.json')) | ConvertFrom-Json
+            Assert-Equal $saved.restored ($mode -cne 'restore-drift') 'only verified restoration is marked complete'
+            if ($mode -ceq 'doctor-124') { Assert-True ((Get-SummaryText).Contains('exit 124')) 'doctor timeout remains visible' }
+        }
+    }
+
+    Test-Case 'the actual driver finally restores App Installer after an escaped exception' {
+        $tokens = $null; $errors = $null
+        $tree = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'e2e/run.ps1'), [ref]$tokens, [ref]$errors)
+        Assert-Equal $errors.Count 0 'driver parses before extracting its cleanup boundary'
+        $guard = $tree.Find({ param($node)
+                $node -is [Management.Automation.Language.TryStatementAst] -and
+                $node.Body.Extent.Text.Contains('Invoke-E2EFlowWin') }, $false)
+        Assert-True ($null -ne $guard -and $null -ne $guard.Finally) 'the actual driver flow owns a finally block'
+        $script:RestoredAfterEscape = $false
+        function Invoke-E2EAppInstallerRestore { $script:RestoredAfterEscape = $true }
+        $probe = [scriptblock]::Create("try { throw 'synthetic escaped flow failure' } finally " + $guard.Finally.Extent.Text)
+        $caught = $false
+        try { & $probe } catch { $caught = $true }
+        Assert-True $caught 'the original exception remains a failure'
+        Assert-True $script:RestoredAfterEscape 'the real finally block invokes restoration'
+    }
+
     Test-Case 'Invoke-E2EFlowWin runs the steps in order and, once one breaks the flow, skips what depends on it; the audit always runs' {
         $script:FlowCalls = [Collections.Generic.List[string]]::new()
         $script:BreakAt = ''
@@ -1328,6 +1444,7 @@ try {
         function Get-E2EScheduledTaskNames { $script:FlowCalls.Add('tasks'); return '' }
         function Invoke-E2EStepClone { Complete-FlowStub clone }
         function Invoke-E2EStepWinget { Complete-FlowStub winget }
+        function Invoke-E2EAppInstallerPrepare([string]$Name) { Complete-FlowStub $Name }
         function Invoke-E2EStepDoctorInitial { Complete-FlowStub doctor-initial }
         function Invoke-E2EStepCheckNoWrite { Complete-FlowStub check-nowrite }
         function Invoke-E2EApplyLoop { Complete-FlowStub apply-1; return ($script:BreakAt -cne 'apply-1') }
@@ -1340,11 +1457,11 @@ try {
         function Invoke-E2EStepDoctorFinal { Complete-FlowStub doctor-final }
         function Invoke-E2EStepChezmoiFixtures { Complete-FlowStub chezmoi-fixtures }
         function Invoke-E2EAuditTasks { $script:FlowCalls.Add('audit-scheduled-tasks') }
-        $steps = @('clone', 'winget', 'doctor-initial', 'check-nowrite', 'apply-1', 'home-deploy', 'second-apply', 'check-done',
+        $steps = @('clone', 'winget', 'appinstaller-initial', 'doctor-initial', 'check-nowrite', 'apply-1', 'appinstaller-installed', 'home-deploy', 'second-apply', 'check-done',
             'login-shell', 'payloads', 'home-converged', 'doctor-final', 'chezmoi-fixtures')
         $audits = @('audit-scheduled-tasks')
-        Assert-Equal ($steps.Count + $audits.Count) 14 'fourteen steps'
-        foreach ($breakAt in @('', 'clone', 'check-nowrite', 'apply-1', 'home-deploy', 'check-done', 'home-converged')) {
+        Assert-Equal ($steps.Count + $audits.Count) 16 'sixteen steps including both hosted preparation checkpoints'
+        foreach ($breakAt in @('', 'clone', 'appinstaller-initial', 'check-nowrite', 'apply-1', 'appinstaller-installed', 'home-deploy', 'check-done', 'home-converged')) {
             [void](Reset-RunState)
             $script:FlowCalls.Clear()
             $script:BreakAt = $breakAt
