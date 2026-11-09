@@ -142,7 +142,10 @@ if ($IsInteractive -and -not $IsAgentSession) {
             '|-----BEGIN [A-Z ]*PRIVATE KEY-----' +
             '|\$env:(?=\w*?(?<![a-z0-9])(token|secret|passw(or)?d|api_?key|pat)(?![a-z0-9]))\w*\s*=' +
             '|://[^/\s:@]+:[^/\s@]+@'
-        if ($line -match $secret) { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
+        # Invariant folding preserves the vendor group's explicit case rule.
+        if ([regex]::IsMatch($line, $secret, [Text.RegularExpressions.RegexOptions]::CultureInvariant)) {
+            return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly
+        }
         [Microsoft.PowerShell.PSConsoleReadLine]::GetDefaultAddToHistoryOption($line)
     }
     # Tab cycles completions again. A suggestion is accepted with RightArrow at

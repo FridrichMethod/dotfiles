@@ -14,8 +14,10 @@ function Invoke-DotfilesUpdateProcess {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     # Ignore inherited repository/config overrides; retain normal user SSH trust.
+    # Protocol prefixes must fold ASCII I/i the same way in every culture.
     foreach ($key in @($start.Environment.Keys)) {
-        if ($key -like 'GIT_*' -or $key -like 'CHEZMOI_*') { [void]$start.Environment.Remove($key) }
+        if ($key.StartsWith('GIT_', [StringComparison]::OrdinalIgnoreCase) -or
+            $key.StartsWith('CHEZMOI_', [StringComparison]::OrdinalIgnoreCase)) { [void]$start.Environment.Remove($key) }
     }
     $start.Environment['HOME'] = $Paths.Destination
     $start.Environment['USERPROFILE'] = $Paths.Destination
@@ -65,7 +67,7 @@ function Invoke-DotfilesChezmoiUpdate {
             [Console]::Error.WriteLine('[dotfiles] Update skipped: the chezmoi state is missing or empty; inspected recovery is required before automatic update.')
             return
         }
-        if ($paths.Source -match '(?i)OneDrive') {
+        if ($paths.Source.IndexOf('OneDrive', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             [Console]::Error.WriteLine('[dotfiles] Update skipped: use the documented independent-clone procedure for OneDrive.')
             return
         }
