@@ -503,7 +503,11 @@ config; and the retry lines, which name `sync-payloads` only where the
 config names this checkout and the hook's own quoted `--now` line elsewhere. `tests/test_payload_download.py`
 adds loopback deadlines for curl, wget (behind `timeout` or `gtimeout`;
 without either it fails before any request) and PowerShell, and the
-failed-download latch, with no staging or state left behind.
+failed-download latch, with no staging or state left behind. The fixture
+completes a direct HTTP readiness exchange before starting a downloader's
+deadline; a delayed-server regression keeps fixture startup outside the
+one-second download budget. Body deadlines and failed-download assertions
+remain unchanged.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
 call without `-Now` (none, a bare item or an unknown argument) prints one

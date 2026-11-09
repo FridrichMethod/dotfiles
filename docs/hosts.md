@@ -74,8 +74,13 @@ differing encrypted target is reviewed privately, never in captured output
 ([secrets](secrets.md#output-and-failure)). Other probes: the offline doctor
 (`./doctor.sh --host H --tsv`; on win `.\doctor.ps1 -Tsv`), `git status` and
 `git rev-parse`, `codex-as --version` for the kit on Unix, and
-`DOTFILES_AUTO_UPDATE=0 bash -ic true` and `DOTFILES_AUTO_UPDATE=0 zsh -ic
-true` for the shells. Every interactive shell a probe starts on a remote host
+`DOTFILES_AUTO_UPDATE=0 bash -ic true` and
+`DOTFILES_AUTO_UPDATE=0 POWERLEVEL9K_INSTANT_PROMPT=off zsh -ic true` for
+the shells, with stdout captured rather than attached to a terminal. Set
+`POWERLEVEL9K_INSTANT_PROMPT=off` for doctor `--smoke` too. This combination
+keeps Oh My Zsh's independent updater from running during probes; the legacy
+`DISABLE_AUTO_UPDATE` variable alone is ineffective because the shared rc
+explicitly selects `:omz:update` mode `auto`. Every interactive shell a probe starts on a remote host
 sets `DOTFILES_AUTO_UPDATE=0`: a remote shell does not inherit
 `_DOTFILES_CHECKED`, so it would otherwise run the real login update.
 Conversely, shells an agent starts on lab-ubuntu inherit
@@ -241,6 +246,14 @@ nonsecret cleanup receipt is retained at
   S4-chezmoi selects.
 - An interactive zsh on a login node starts no ssh-agent: only the
   lab-ubuntu and wsl-ubuntu plugin lists load it.
+- The site's `~/.cache` symlink is intentional. The skills installer rejects
+  symlink ancestors, so use its supported legacy cache-path option for manual skills
+  updates inside an allocation:
+  `SKILLS_CACHE_DIR="$SCRATCH/.cache/awesome-skills" sync-payloads skills`.
+  This option selects the old snapshot cleanup path, not the active library
+  clone. The installed payload and login environment stay in the home. The
+  option is per invocation and is not persisted by the installer. Preserve
+  the cache symlink and the installer's path guards.
 
 ## Marlowe
 
@@ -273,26 +286,29 @@ the [five cases](bootstrap.md#acceptance-checklist) remain not run and are not
 follow-up blockers. Existing-host provisioning and its allocation requirements
 remain separate. Tool provisioning used the existing setup-host entry point after
 its scoped `--check`; payload installation used its canonical update command.
-Existing clones and package versions were left alone. No
-running user tmux server was reloaded.
+Scoped installers left existing clones alone. One later Marlowe PTY smoke
+probe triggered the existing Oh My Zsh auto-updater, which fast-forwarded its
+clean checkout from `400591e` to `6010fb6`. That unexpected update is retained,
+not reset; subsequent probes use the update controls above. Package changes
+are listed per host below. No running user tmux server was reloaded.
 
 | Host | Changes and result | Remaining classification |
 | --- | --- | --- |
 | lab-ubuntu | No installation needed; offline doctor passes. | None in the selected tiers. |
 | wsl-ubuntu | S3-clones installed the 11 missing tmux plugins; doctor and smoke pass, and the scoped second plan is done. | None in the selected tiers. |
 | mac | S3-clones installed zsh-completions and the 11 tmux plugins; S3-dirs created the two missing Vim state directories. Doctor, smoke and the full setup check pass. | Optional kitty, StyLua and Schrodinger warnings remain; these unselected tiers were not installed. |
-| sherlock | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), chafa, zsh-completions, 11 tmux plugins and the bat theme. The skills payload is missing. Contributor pre-commit, shfmt and StyLua remain optional. |
-| marlowe | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), aria2, uv, zsh-completions, 11 tmux plugins and the bat theme. Node on the login node is policy-blocked, not an installation target. Contributor tools and the separate Miniconda installation remain optional. |
-| win | The approved ordinary-token task passed both culture tests and the full PowerShell profile suite. The canonical skills payload install passed, followed by two setup `-Yes` runs, `-Check` and all 33 doctor rows; see [candidate checks](#ordinary-token-candidate-checks). Codex and oh-my-posh 31.9.1 are present; the earlier administrator-SSH Codex absence was a PATH difference. | None in the selected tiers; the payloads row reports `installed: pymol, skills`. Source and deployed dotfiles remain at `360a269`; fresh-machine acceptance remains separate. |
+| sherlock | In Slurm jobs 51696517 and 51698421, added git-lfs, git-delta, tealdeer and Chafa with their dependencies: 87 package records became 132. Only libxml2 and libxml2-16 changed existing builds, both staying at 2.15.4 for ICU compatibility; all other existing versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. Native Chafa, the second scoped setup and full setup check passed; compute doctor/smoke reported 60/61 ok with three optional warnings. | The skills installer completed 233 Claude copies but refused Codex because its existing unowned skills already exceed the upstream 1,990-entry limit. Codex stayed unchanged; the canonical hook exited 1 (upstream person-needed exit 3). This is partial payload installation, even if doctor finds the new library. Contributor pre-commit, shfmt and StyLua remain optional. |
+| marlowe | In Slurm job 564410, added git-lfs, git-delta, tealdeer, aria2 and uv with three dependencies; all 61 existing package versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. The second scoped setup installed nothing; full check, doctor and smoke passed. | Login doctor: 57 ok and six warnings. Node is policy-blocked; pre-commit, shfmt, shellcheck, StyLua and the separate Miniconda installation remain optional. Compute-node smoke had 59 ok and only those five optional warnings. |
+| win | The approved ordinary-token task passed both culture tests and the full PowerShell profile suite. The canonical skills payload install passed, followed by two setup `-Yes` runs, `-Check` and all 33 doctor rows; see [candidate checks](#ordinary-token-candidate-checks). Codex and oh-my-posh 31.9.1 are present; the earlier administrator-SSH Codex absence was a PATH difference. | None in the selected tiers; the payloads row reports `installed: pymol, skills`. This pre-rollout acceptance used source and deployed dotfiles at `360a269`; fresh-machine acceptance remains separate. |
 
-For the two clusters, S3-dirs also reports missing Vim state directories.
 An existing login env makes setup-host report S2-login-env done; that alone
-does not prove every tool in its specification is present. Resume in an
-authorized allocation, check modules first on Sherlock, review a selective
-package plan that preserves existing packages, and use the documented
-S3-clones, S3-bat-theme, S3-dirs and payload commands for the other missing
-items. Keep environments off SCRATCH, obey Marlowe's `block-node` restriction,
-and do not run a global package upgrade to clear the doctor.
+does not prove every tool in its specification is present. These repairs
+reviewed modules and selective package plans inside authorized allocations,
+then used S3-clones, S3-bat-theme, S3-dirs and the payload's own installer.
+Environments stayed off SCRATCH. Neither Marlowe's `block-node` restriction
+nor the skills installer's ownership and capacity guards were bypassed.
+The interrupted first allocations ended during the controller account switch;
+Sherlock's remaining work resumed in the second allocation.
 
 ## Known limits
 
@@ -307,8 +323,10 @@ and do not run a global package upgrade to clear the doctor.
   with tmux 3.8 on 2026-11-09. All 16 tmux tests pass there and with Linux
   tmux 3.4, including six hostile-directory/action subtests. The macOS CI
   job installs no tmux; its green result alone is still not tmux evidence.
-- sherlock, marlowe: the required provisioning items above remain blocked
-  on an allocation. Compare rollout doctor rows with those recorded baselines;
-  an unchanged failure is not a completed provisioning gate.
+- sherlock: the Codex skills payload remains blocked by the existing
+  over-capacity, unowned skills root. A person must first review which existing
+  skills may be removed or moved before the upstream installer can proceed;
+  no existing skill was removed or adopted during this task. A successful
+  doctor presence check does not close this installer refusal.
 - Container and hosted-runner runs are not fresh-machine acceptance
   ([Acceptance checklist](bootstrap.md#acceptance-checklist)).
