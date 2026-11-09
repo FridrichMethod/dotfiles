@@ -253,6 +253,16 @@ and renders the primary, transient and secondary prompts with any inherited
 oh-my-posh session removed and a temporary cache, failing on rendered template
 errors (unknown segment types are not detectable in oh-my-posh 31.6).
 
+On 2026-11-09, the existing Windows home ran both updater culture tests
+without skips and the complete `tests/powershell-profile.ps1` suite from a
+hash-recorded public-file bundle of candidate `c19a83f`. All passed in a
+one-off Limited-token task recording PowerShell 7.6.9, SessionId 1 and
+`Elevated=false`; the suite also rendered the prompts with oh-my-posh
+31.9.1. The host checkout remained clean at `360a269`. The ordinary-token
+offline doctor and setup `-Check` both exited 0; retained evidence and the
+separate provisioning result are described in
+[Ordinary-token candidate checks](hosts.md#ordinary-token-candidate-checks).
+
 These fixtures do not show predictions rendered in an ordinary user's real
 console or prove that console's normal profile update hook. The separate
 [PowerShell 7 console acceptance](hosts.md#powershell-7-console-acceptance)

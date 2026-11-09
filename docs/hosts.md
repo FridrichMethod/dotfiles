@@ -184,6 +184,41 @@ are retained on lab-ubuntu under
 existing home's console behavior; fresh-machine acceptance remains the
 separate [bootstrap gate](bootstrap.md#acceptance-checklist).
 
+### Ordinary-token candidate checks
+
+On 2026-11-09, a user-approved one-off Limited-token task tested a
+hash-recorded bundle of 13 public files from candidate `c19a83f`. The task
+recorded PowerShell 7.6.9, SessionId 1 and `Elevated=false`. Both updater
+culture tests executed without skips and passed; the complete
+`tests/powershell-profile.ps1` suite passed, including history cases under all
+three cultures and oh-my-posh prompt rendering. The existing home's offline
+doctor and setup `-Check` both exited 0. Codex was present on the ordinary
+user's PATH, resolving the earlier administrator-SSH absence as a PATH
+difference; oh-my-posh 31.9.1 also passed there.
+
+The host source remained clean at `360a269` before and after these checks;
+the candidate files were tested in a separate temporary directory. This
+did not deploy the candidate, rerun the separate interactive-console proof
+or close a fresh-machine acceptance gate. Nonsecret results, logs and the
+bundle manifest are retained on lab-ubuntu in the checkout's
+`.git/followup-20261109/approved-native2-*` evidence files.
+
+The skills payload was genuinely absent; its own dry-run required an initial
+library clone. The approved ordinary-token
+`scripts/payload-update.ps1 -Now skills` run then exited 0. Its installer
+copied 2,346 skills per client, removed none, and selected one visible skill
+with 2,345 hidden. Two subsequent setup `-Yes` runs, setup `-Check` and the
+offline doctor all exited 0; all 33 doctor rows were `ok`, including
+`payloads` with `installed: pymol, skills`. HUMAN blocks were printed only.
+Source remained clean at `360a269`, chezmoi status was empty, managed counts
+were 26 files and 43 total entries, both AI configs matched their rendered
+targets, and maintenance was absent. The install evidence is retained beside
+the candidate checks as `approved-skills-install-*`.
+The five created tasks were unregistered, and ordinary-token cleanup removed
+their temporary files and directories; no validation process remained. A
+nonsecret cleanup receipt is retained at
+`~/.config/dotfiles-validation/20261109-approved-cleanup.json`.
+
 ## Sherlock
 
 - Before any Sherlock work, and again after a summary or compaction, read
@@ -233,8 +268,9 @@ separate [bootstrap gate](bootstrap.md#acceptance-checklist).
 
 The 2026-11-09 inventory used the existing homes, not fresh-machine fixtures.
 The user confirmed that new acceptance environments and allocations are not
-available. Installation used the existing setup-host entry point after its
-scoped `--check`; existing clones and package versions were left alone. No
+available. Tool provisioning used the existing setup-host entry point after
+its scoped `--check`; payload installation used its canonical update command.
+Existing clones and package versions were left alone. No
 running user tmux server was reloaded.
 
 | Host | Changes and result | Remaining classification |
@@ -244,7 +280,7 @@ running user tmux server was reloaded.
 | mac | S3-clones installed zsh-completions and the 11 tmux plugins; S3-dirs created the two missing Vim state directories. Doctor, smoke and the full setup check pass. | Optional kitty, StyLua and Schrodinger warnings remain; these unselected tiers were not installed. |
 | sherlock | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), chafa, zsh-completions, 11 tmux plugins and the bat theme. The skills payload is missing. Contributor pre-commit, shfmt and StyLua remain optional. |
 | marlowe | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), aria2, uv, zsh-completions, 11 tmux plugins and the bat theme. Node on the login node is policy-blocked, not an installation target. Contributor tools and the separate Miniconda installation remain optional. |
-| win | Supplemental offline doctor and setup `-Check` through administrator SSH only; no writes or installation. | That session reports Codex unavailable and the skills payload missing. Recheck under the ordinary token before installing: SSH service PATH and user-task PATH can differ. This metadata run is not ordinary-token acceptance. |
+| win | The approved ordinary-token task passed both culture tests and the full PowerShell profile suite. The canonical skills payload install passed, followed by two setup `-Yes` runs, `-Check` and all 33 doctor rows; see [candidate checks](#ordinary-token-candidate-checks). Codex and oh-my-posh 31.9.1 are present; the earlier administrator-SSH Codex absence was a PATH difference. | None in the selected tiers; the payloads row reports `installed: pymol, skills`. Source and deployed dotfiles remain at `360a269`; fresh-machine acceptance remains separate. |
 
 For the two clusters, S3-dirs also reports missing Vim state directories.
 An existing login env makes setup-host report S2-login-env done; that alone
