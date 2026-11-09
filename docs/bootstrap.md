@@ -2517,11 +2517,18 @@ platform, and passes when all of these hold:
 
 | Run | Date | Result | Notes |
 | --- | --- | --- | --- |
-| Fresh macOS VM (Apple Silicon), host `mac` | | not yet run | |
-| Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | | not yet run | |
-| Sherlock inside `sh_dev`, host `sherlock` | | not yet run | |
-| Marlowe inside an interactive Slurm job, host `marlowe` | | not yet run | |
-| Native Windows 11, host `win` | | not yet run | |
+| Fresh macOS VM (Apple Silicon), host `mac` | 2026-11-09 inventory | blocked; not run | No fresh VM available. Provide a new Apple Silicon macOS VM with ordinary-user access and complete the HUMAN GUI/privileged steps. |
+| Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | 2026-11-09 inventory | blocked; not run | Only the configured distribution is available. Provide a separate fresh Windows/WSL environment with the distribution named `Ubuntu`; do not unregister the existing one. |
+| Sherlock inside `sh_dev`, host `sherlock` | 2026-11-09 inventory | blocked; not run | No fresh account home or acceptance allocation available. Provide an approved fresh provisioning environment and an allocation; preserve the production login environment. |
+| Marlowe inside an interactive Slurm job, host `marlowe` | 2026-11-09 inventory | blocked; not run | No fresh account home or acceptance allocation available. Provide an approved fresh provisioning environment and allocation with its account/partition; preserve the production login environment. |
+| Native Windows 11, host `win` | 2026-11-09 inventory | blocked; not run | Only the configured Windows 11 home is available. Provide a fresh Windows 11 environment with an ordinary logged-on user and person-run HUMAN steps. |
+
+The user confirmed on 2026-11-09 that these new environments are unavailable.
+The date above records the resource inventory, not an acceptance run. None of
+the six checks above has been established for any of these five fresh-machine
+rows. Existing-host doctor, plugin installation, interactive-console checks
+and hosted CI remain separate evidence. Do not reset an existing home or
+substitute a temporary HOME, container or hosted runner to close these gates.
 
 Keep new acceptance records with their reproducible run artifacts: revision,
 platform, tool versions, options, failures and limitations. The

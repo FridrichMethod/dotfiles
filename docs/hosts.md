@@ -94,8 +94,10 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
 - lab-ubuntu, wsl-ubuntu: as above.
 - mac: a non-login SSH command first runs `. /etc/profile; . ~/.profile`, so
   PATH matches a login shell (`path_helper`).
-- sherlock: through `sherlock-plain`, from the login env's interactive zsh,
-  with that outer shell's own updater off.
+- sherlock: through `sherlock-plain`, first use a login Bash (`bash -lc`)
+  to initialize the site's Lmod environment, then the login env's interactive
+  zsh, with those outer shells' own updaters off. A bare non-login SSH command
+  can omit Lmod and falsely report the site-provided Node and AI tools missing.
 - marlowe: inside the micromamba login env, from its interactive login zsh
   (`$HOME/micromamba/envs/login/bin/zsh -il`, reached through `marlowe-plain`
   or `ssh -o RemoteCommand=none marlowe`), with that outer shell's updater
@@ -227,6 +229,31 @@ separate [bootstrap gate](bootstrap.md#acceptance-checklist).
   `sh -c "$script" probe` sees `$0` as `probe`.
 - Changes to the login env run in a Slurm job, never on a login node.
 
+## Provisioning follow-up
+
+The 2026-11-09 inventory used the existing homes, not fresh-machine fixtures.
+The user confirmed that new acceptance environments and allocations are not
+available. Installation used the existing setup-host entry point after its
+scoped `--check`; existing clones and package versions were left alone. No
+running user tmux server was reloaded.
+
+| Host | Changes and result | Remaining classification |
+| --- | --- | --- |
+| lab-ubuntu | No installation needed; offline doctor passes. | None in the selected tiers. |
+| wsl-ubuntu | S3-clones installed the 11 missing tmux plugins; doctor and smoke pass, and the scoped second plan is done. | None in the selected tiers. |
+| mac | S3-clones installed zsh-completions and the 11 tmux plugins; S3-dirs created the two missing Vim state directories. Doctor, smoke and the full setup check pass. | Optional kitty, StyLua and Schrodinger warnings remain; these unselected tiers were not installed. |
+| sherlock | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), chafa, zsh-completions, 11 tmux plugins and the bat theme. The skills payload is missing. Contributor pre-commit, shfmt and StyLua remain optional. |
+| marlowe | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), aria2, uv, zsh-completions, 11 tmux plugins and the bat theme. Node on the login node is policy-blocked, not an installation target. Contributor tools and the separate Miniconda installation remain optional. |
+
+For the two clusters, S3-dirs also reports missing Vim state directories.
+An existing login env makes setup-host report S2-login-env done; that alone
+does not prove every tool in its specification is present. Resume in an
+authorized allocation, check modules first on Sherlock, review a selective
+package plan that preserves existing packages, and use the documented
+S3-clones, S3-bat-theme, S3-dirs and payload commands for the other missing
+items. Keep environments off SCRATCH, obey Marlowe's `block-node` restriction,
+and do not run a global package upgrade to clear the doctor.
+
 ## Known limits
 
 - win: OpenSSH's default shell there is PowerShell 7 with no
@@ -236,14 +263,12 @@ separate [bootstrap gate](bootstrap.md#acceptance-checklist).
   ordinary user's noninteractive profile load and updater; the normal hook
   and rendered predictions require its separate ordinary-user console
   ([PowerShell 7 console acceptance](#powershell-7-console-acceptance)).
-- mac: under tmux 3.8, three quoted-directory subtests of
-  `test_menu_actions_preserve_quoted_directory_without_executing_its_text` in
-  `tests/test_tmux.py` fail, while the other test methods pass; this is the
-  recorded baseline, not a pass. The macOS CI job installs no tmux; Linux
-  CI runs the tmux tests with tmux 3.4.
-- sherlock, marlowe: the doctor reports rows the login env does not provide
-  and missing tmux plugin clones; wsl-ubuntu and mac report missing tmux
-  plugin clones too. They are no regression of a rollout: compare with the
-  host's previous doctor run.
+- mac: the quoted-directory failure was reproduced and fixed on real macOS
+  with tmux 3.8 on 2026-11-09. All 16 tmux tests pass there and with Linux
+  tmux 3.4, including six hostile-directory/action subtests. The macOS CI
+  job installs no tmux; its green result alone is still not tmux evidence.
+- sherlock, marlowe: the required provisioning items above remain blocked
+  on an allocation. Compare rollout doctor rows with those recorded baselines;
+  an unchanged failure is not a completed provisioning gate.
 - Container and hosted-runner runs are not fresh-machine acceptance
   ([Acceptance checklist](bootstrap.md#acceptance-checklist)).

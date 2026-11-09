@@ -103,3 +103,11 @@ or real-cluster acceptance.
 Interactive presentation helpers and network-transfer aliases remain outside
 this automation matrix. Add a focused test when promoting one to a supported
 automation contract. No line-coverage percentage substitutes for these checks.
+
+Real-host evidence is separate: the ordinary-user PowerShell 7 console,
+predictions, color and update-hook acceptance on 2026-11-08 is recorded in
+[hosts](../docs/hosts.md#powershell-7-console-acceptance). On 2026-11-09 all
+16 tmux tests passed on Linux tmux 3.4 and actual macOS tmux 3.8, including
+six quoted-directory/action cases. Those tests verify the fixture's physical
+starting directory and preserve quotes, backticks and literal tmux formats
+without command injection. Neither result closes a fresh-machine gate.

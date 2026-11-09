@@ -12,6 +12,10 @@ Clone once per home/platform. Role selection uses explicit local
 `[data].host`; the checkout is the source chezmoi reads and stays available for updates.
 The six hosts, their access rules and their known limits are in
 [hosts](docs/hosts.md).
+The [host acceptance record](docs/hosts.md#powershell-7-console-acceptance)
+distinguishes a real ordinary-user PowerShell console from a noninteractive
+task. [Fresh-machine gates](docs/bootstrap.md#acceptance-checklist) remain
+open until their required new environments are available.
 
 ```sh
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
@@ -100,6 +104,8 @@ a floating scratch terminal and a custom which-key menu; older tmux is unsupport
 Plugins are provisioned through setup-host's S3-clones step; startup installs
 nothing. Recovery restores layouts and directories without restarting programs
 or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
+The which-key new-window and split actions preserve quoted paths and literal
+tmux formats; regression checks run against tmux 3.4 and real macOS tmux 3.8.
 
 ## Auto-update Hooks
 

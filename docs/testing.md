@@ -385,6 +385,13 @@ rules; these local shell tests do not establish cluster policy.
 rows to Unix installation and probes and require the `tools.tsv` floor 3.4
 with no `#{version}` or `tmux -V` gate in `home/dot_tmux.conf` or
 `home/dot_config/tmux/`, and that their file map names every tmux source.
+The menu regression first verifies its actual physical working directory,
+then checks all three new-window/split actions with quotes, spaces, shell
+metacharacters and literal tmux formats in the path. Menu actions defer the
+path format to native `-c`, so the path is neither parsed as command text nor
+expanded twice. The original three failing cases were reproduced on real
+macOS tmux 3.8; the expanded six-case regression and all 16 test methods
+passed there and on Linux tmux 3.4 on 2026-11-09.
 With a real tmux on PATH, the `TmuxConfiguration` class sources the config on
 a private socket with a temporary `HOME` (one case with a fake TPM). Among other
 things it loads offline, registers which-key, Catppuccin and FloaX and sets
