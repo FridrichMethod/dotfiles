@@ -798,7 +798,10 @@ step in `summary.tsv`:
    repo's own installer, the kit at the newest patch of the channel
    `config/payloads.tsv` declares, within the
    45-minute block limit. It must exit 0, and the doctor's `payloads` row
-   (`--tsv`) must then be `ok` and name what it found installed. On Unix it
+   (`--tsv`) must then be `ok` and name what it found installed. On Windows,
+   both the installer and doctor must exit 0 before an `ok` payloads row
+   naming installed items can pass; doctor failures report their own exit
+   code and the existing 900-second check limit. On Unix it
    is a setup phase, so criterion 5 covers it: an installer that runs sudo,
    links into the clone or changes an rc file fails the audits.
 8. **The deployment is the documented one and converges.** `home-deploy`

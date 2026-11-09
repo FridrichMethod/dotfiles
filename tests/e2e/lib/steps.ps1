@@ -404,8 +404,8 @@ function Invoke-E2EStepPayloads {
     # (PyMOLScripts and awesome-skills; coding-agent-kit installs nothing on
     # native Windows) installs from the network through its own install.ps1,
     # under the block limit, since the installs run in a row. It passes when
-    # that exits 0 and the payloads row of doctor.ps1 -Host win -Tsv is then
-    # ok and names what it found installed.
+    # the installer and doctor.ps1 -Host win -Tsv both exit 0, and the
+    # doctor's payloads row is ok and names what it found installed.
     Update-E2EPath
     Start-E2EStep payloads setup:payloads
     $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Block']
@@ -417,7 +417,11 @@ function Invoke-E2EStepPayloads {
         Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Block'])s timeout): $detail"
         return
     }
-    [void](Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check'])
+    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check']
+    if ($code -ne 0) {
+        Complete-E2EStep fail "doctor exit $code (124 is the $($E2ETimeout['Check'])s timeout): $(Get-E2ELastLine $E2E['StepErr'])"
+        return
+    }
     $row = $null
     foreach ($line in @(Get-E2ELines $E2E['StepOut'])) {
         $cells = $line.Split("`t")
