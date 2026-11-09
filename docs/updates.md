@@ -267,8 +267,10 @@ maintenance:
    config template changed. Check that HEAD is the new `main` and
    `home_cz status --exclude=dirs` is empty.
 4. Remove the marker and prove the deployed hook and the new updater from a
-   fresh interactive shell (on win, only the user's own session runs the
-   hook), as the host's probe method says ([hosts](hosts.md#probe-methods)):
+   fresh interactive shell, as the host's probe method says
+   ([hosts](hosts.md#probe-methods)). On win, a limited-token task can launch
+   a separate ordinary-user console for this proof
+   ([PowerShell 7 console acceptance](hosts.md#powershell-7-console-acceptance)):
    exit 0, no `[dotfiles]` line on stderr, HEAD at `main` and a clean status.
    On failure, restore the marker and finish by explicit commands.
 5. Once every host is accepted (step 4 of

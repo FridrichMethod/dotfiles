@@ -240,6 +240,17 @@ and renders the primary, transient and secondary prompts with any inherited
 oh-my-posh session removed and a temporary cache, failing on rendered template
 errors (unknown segment types are not detectable in oh-my-posh 31.6).
 
+These fixtures do not show predictions rendered in an ordinary user's real
+console or prove that console's normal profile update hook. The separate
+[PowerShell 7 console acceptance](hosts.md#powershell-7-console-acceptance)
+passed on the existing Windows home on 2026-11-08: a one-off Interactive-logon,
+Limited-token task launched a new `pwsh -NoLogo -NoExit` console, whose child
+proved it was unelevated with neither stdin nor stdout redirected. The
+created console showed history and Completion plugin suggestions in ListView,
+the configured directory style, and a clean startup/update result; the probe
+left no task, process or temporary directory. That host evidence is separate
+from both the fixtures and [fresh-machine acceptance](bootstrap.md#acceptance-checklist).
+
 `tests/shell-profile.sh` also resolves nvm's `default` alias forms against a
 fake `NVM_DIR` under sh, dash, Bash and Zsh (including bash `failglob`), checks
 that `custom/nvm.zsh` loads nvm with `--no-use`, and runs `home/dot_zshrc`
@@ -644,8 +655,11 @@ approximation:
   font install` puts fonts where an elevated oh-my-posh puts them. Fresh
   Windows home by hand warns when it runs elevated, and the run records a
   `deploy-token` note; the ordinary-token check of the login updater stays
-  in per-host acceptance. A winget that needs `Repair-WinGetPackageManager`
-  first is recorded as a deviation. `run.ps1` asserts criteria 1 (without
+  in per-host acceptance, including the separate
+  [real-console procedure](hosts.md#powershell-7-console-acceptance) for the
+  normal profile hook and rendered predictions. A winget that needs
+  `Repair-WinGetPackageManager` first is recorded as a deviation. `run.ps1`
+  asserts criteria 1 (without
   `--smoke`, which `doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
   doctor, the no-write `-Tsv` and `-Check` runs, a second `-Yes` that applies
   nothing and a `-Check` with nothing left, a clean clone after every step, a

@@ -38,10 +38,12 @@ or one that needs more than the update:
    in the hook proof below), or run from the checkout the update the login
    updater runs, with its mode flags (step 3 of
    [Rolling out a breaking change](updates.md#rolling-out-a-breaking-change)
-   gives the command). On win always run that update, in a limited-token
-   task: a task opens no interactive session, so the profile's update hook
-   does not run there. A change that needs a re-init, a directory preparation
-   or the pre-pull updater out of the way follows that procedure as a whole.
+   gives the command). On win run that update in a limited-token task. An
+   ordinary noninteractive task does not run the profile's update hook; the
+   separate console procedure below proves the hook itself
+   ([PowerShell 7 console acceptance](#powershell-7-console-acceptance)). A
+   change that needs a re-init, a directory preparation or the pre-pull
+   updater out of the way follows that procedure as a whole.
 4. Accept the host: HEAD is `main`, full-argument `status --exclude=dirs` is
    empty, the managed count is the expected one, both AI configs equal
    `chezmoi cat` of their targets (record only equal or not equal), no doctor
@@ -99,11 +101,14 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
   or `ssh -o RemoteCommand=none marlowe`), with that outer shell's updater
   off; a bare `marlowe-plain` command sees the system tools.
 - win: a one-off limited-token task ([win](#win)) checks that the PowerShell
-  7 and Windows PowerShell 5.1 profiles parse and load, then runs what the
-  profile's update hook runs: the source's `lib/chezmoi-guard.ps1` and its
-  `scripts/chezmoi-update.ps1`. The hook itself runs only in an interactive
-  console, which a task does not have, so the user checks it in a session of
-  their own.
+  7 and Windows PowerShell 5.1 profiles parse and load. For a noninteractive
+  updater check, dot-source the configured source's `lib/chezmoi-guard.ps1`
+  and `scripts/chezmoi-update.ps1`, then call
+  `Invoke-DotfilesChezmoiUpdate`, with `DOTFILES_AUTO_UPDATE` and
+  `_DOTFILES_CHECKED` absent. Invoking the script with `&` alone does nothing
+  when output is redirected. Prove the normal profile's hook in a separate
+  ordinary-user console by
+  [PowerShell 7 console acceptance](#powershell-7-console-acceptance).
 
 ## win
 
@@ -118,14 +123,64 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
   `Start-ScheduledTask` and is unregistered after the run. Its script is a
   hash-checked copy, refuses an elevated token and logs only nonsecret lines.
   It needs the user logged on. Never register an elevated or recurring task.
+  Capture its output on that run; never rerun a task driver merely to read
+  the result, since that re-executes the task and replaces its log.
 - Codex's sandbox can grant `CodexSandboxUsers` Modify on `~/.local`; inherited
   by `chezmoi.exe`, that grant makes the login updater refuse the binary. After
   confirming that plain `icacls` lists no such entry,
   `icacls "$HOME\.local\bin\chezmoi.exe" /inheritance:d` turns the inherited
   entries into explicit ones, so a later propagation cannot add it. For the
   same reason keep private records under `~/.config`, not `~/.local`.
-- A task cannot open an interactive console: checks that need one are the
-  user's ([Known limits](#known-limits)).
+- A task's noninteractive process does not run the profile's interactive
+  setup or login hook. An Interactive-logon, Limited-token task can launch a
+  separate real console under that same ordinary user, as below.
+- The user-approved deletion of five exact administrator-owned TEMP
+  directories on 2026-11-08 was a one-time exception for those paths. It
+  grants no general administrator cleanup or privilege-escalation authority.
+
+### PowerShell 7 console acceptance
+
+Use a one-off task with the identity and lifetime above to launch a separate
+`pwsh -NoLogo -NoExit` in a new console in the logged-on desktop session.
+The child loads the normal profile. For a hook proof, remove
+`DOTFILES_AUTO_UPDATE` and `_DOTFILES_CHECKED` from its inherited environment
+and require maintenance to be absent; then verify the hook was attempted.
+Keep these checks confined to the console created for this run:
+
+1. Record the child's PID and session ID, and require `Elevated=false`,
+   `InputRedirected=false` and `OutputRedirected=false`. Task settings alone
+   do not establish these properties of the child.
+2. Attach the controller only to that child's console. Never attach to an
+   existing user console or capture the user's history. Use benign synthetic
+   input with per-process `HistorySaveStyle=SaveNothing`; seed a history
+   suggestion only after the first `ReadLine` has initialized history. A
+   built-in completion such as `Get-Date -Format` tests CompletionPredictor
+   without relying on an ad-hoc function reaching its separate runspace.
+3. Inspect the created console's screen buffer for both history and plugin
+   suggestions in `HistoryAndPlugin` / `ListView`. Check that the directory
+   style equals `Bold+Blue` and a synthetic directory marker renders with
+   foreground attribute 9. Record only these nonsecret results.
+4. Require no `[dotfiles]` startup warning, an attempted profile update
+   hook, empty full-argument `chezmoi status --exclude=dirs`, a clean Git
+   checkout at the expected revision and no maintenance marker.
+5. Exit the child, unregister every task the probe created, and confirm its
+   processes are gone. Remove only its exact temporary files and empty
+   directory under the ordinary token, retaining nonsecret results and script
+   hashes. Confirm no probe task, process or temporary directory remains.
+
+This passed on 2026-11-08 at `360a269`: PowerShell 7.6.9, PSReadLine 2.4.5,
+`HistoryAndPlugin` / `ListView`, a rendered seeded history suggestion and a
+rendered Completion plugin `Get-Date -Format` suggestion. The directory
+style matched `Bold+Blue` and its marker had foreground attribute 9.
+CompletionPredictor and Microsoft.WinGet.CommandNotFound loaded through the
+normal idle hook. The profile update hook was attempted without a
+`[dotfiles]` startup warning; chezmoi status and Git were clean and maintenance
+was absent. The child exited and all probe tasks, processes and temporary
+files were removed. Nonsecret `result.json`, `cleanup.json` and script hashes
+are retained on lab-ubuntu under
+`~/.local/state/dotfiles-validation/20261108-ps7/`. This establishes the
+existing home's console behavior; fresh-machine acceptance remains the
+separate [bootstrap gate](bootstrap.md#acceptance-checklist).
 
 ## Sherlock
 
@@ -174,15 +229,13 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
 
 ## Known limits
 
-- win: whether an interactive PowerShell 7 session shows history and plugin
-  predictions in the list view and directories in bold blue is checked by the
-  user in a session of their own; a scheduled task cannot open one.
 - win: OpenSSH's default shell there is PowerShell 7 with no
   DefaultShellCommandOption, so every SSH command loads the PowerShell 7
   CurrentUserAllHosts profile under the administrator token, non-interactively
   (no setup block, no update hook). Only a limited-token task proves the
-  ordinary user's profile load and updater; the update hook runs only in the
-  user's own interactive session.
+  ordinary user's noninteractive profile load and updater; the normal hook
+  and rendered predictions require its separate ordinary-user console
+  ([PowerShell 7 console acceptance](#powershell-7-console-acceptance)).
 - mac: under tmux 3.8, three quoted-directory subtests of
   `test_menu_actions_preserve_quoted_directory_without_executing_its_text` in
   `tests/test_tmux.py` fail, while the other test methods pass; this is the
