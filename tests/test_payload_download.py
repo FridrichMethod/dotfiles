@@ -1,6 +1,7 @@
 """Loopback download deadlines, the failed-download latch and private staging cleanup."""
 
 import contextlib
+import http.client
 import http.server
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +24,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path == "/ready":
+            # Fixture setup is separate from the downloads under test.
+            self.send_response(204)
+            self.end_headers()
+            return
         self.server.requests.append(self.path)
         body = b"" if self.path == "/empty" else BODY
         self.send_response(200)
@@ -55,12 +62,46 @@ def server():
     worker = threading.Thread(target=httpd.serve_forever, daemon=True)
     worker.start()
     try:
+        # Binding/listening does not mean the worker can handle a request yet.
+        # Complete a direct loopback exchange before starting the 1s download
+        # deadline; stdlib HTTPConnection does not consult proxy settings.
+        with contextlib.closing(http.client.HTTPConnection("127.0.0.1", httpd.server_port,
+                                                          timeout=5)) as client:
+            client.request("GET", "/ready")
+            response = client.getresponse()
+            if response.status != 204 or response.read():
+                raise RuntimeError("loopback server readiness check failed")
         yield httpd
     finally:
         httpd.stop.set()
         httpd.shutdown()
         httpd.server_close()
         worker.join(5)
+
+
+class ServerReadiness(unittest.TestCase):
+    def test_server_startup_is_outside_request_deadline(self):
+        serve_forever = http.server.ThreadingHTTPServer.serve_forever
+
+        def delayed_start(httpd):
+            # Longer than the request deadline: setup must wait for service,
+            # rather than spend the downloader's budget starting the fixture.
+            time.sleep(1.2)
+            serve_forever(httpd)
+
+        with mock.patch.object(http.server.ThreadingHTTPServer, "serve_forever", delayed_start):
+            with server() as httpd:
+                with contextlib.closing(http.client.HTTPConnection("127.0.0.1", httpd.server_port,
+                                                                  timeout=1)) as client:
+                    try:
+                        client.request("GET", "/ok")
+                        response = client.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.read(), BODY)
+                    except TimeoutError:
+                        self.fail("loopback server startup consumed the request deadline")
+                self.assertEqual(httpd.requests, ["/ok"])
+                self.assertEqual(len(httpd.headers_sent), 1)
 
 
 class PayloadDownload(unittest.TestCase):
@@ -148,13 +189,15 @@ class PayloadDownload(unittest.TestCase):
             base = f"http://127.0.0.1:{httpd.server_port}"
             self.configure(kind, base + path, base + "/second")
             result, _ = self.run_hook(kind, both=True)
-            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            diagnostics = f"hook exit {result.returncode}\n{result.stdout}{result.stderr}"
+            self.assertEqual(result.returncode, 1, diagnostics)
             # Cold pwsh startup is outside the download's deadline. Measure
             # from real headers, while run_hook retains an overall hang cap.
+            self.assertTrue(httpd.headers_sent, f"no subject HTTP response headers\n{diagnostics}")
             elapsed = time.monotonic() - httpd.headers_sent[0]
-            self.assertLess(elapsed, 4, f"body exceeded the 1s deadline: {elapsed:.2f}s")
-            self.assertEqual(httpd.requests, [path], result.stdout + result.stderr)
-            self.assertIn("already failed", result.stdout + result.stderr)
+            self.assertLess(elapsed, 4, f"body exceeded the 1s deadline: {elapsed:.2f}s\n{diagnostics}")
+            self.assertEqual(httpd.requests, [path], diagnostics)
+            self.assertIn("already failed", result.stdout + result.stderr, diagnostics)
             self.assert_no_state()
             self.assertFalse(list(self.root.glob("dotfiles-payload.*")))
             self.assertFalse(list(self.root.glob("dotfiles-payload-*")))
