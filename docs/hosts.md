@@ -244,6 +244,7 @@ running user tmux server was reloaded.
 | mac | S3-clones installed zsh-completions and the 11 tmux plugins; S3-dirs created the two missing Vim state directories. Doctor, smoke and the full setup check pass. | Optional kitty, StyLua and Schrodinger warnings remain; these unselected tiers were not installed. |
 | sherlock | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), chafa, zsh-completions, 11 tmux plugins and the bat theme. The skills payload is missing. Contributor pre-commit, shfmt and StyLua remain optional. |
 | marlowe | Read-only inventory; no environment changes without an allocation. | Required: git-lfs, git-delta, tealdeer (tldr), aria2, uv, zsh-completions, 11 tmux plugins and the bat theme. Node on the login node is policy-blocked, not an installation target. Contributor tools and the separate Miniconda installation remain optional. |
+| win | Supplemental offline doctor and setup `-Check` through administrator SSH only; no writes or installation. | That session reports Codex unavailable and the skills payload missing. Recheck under the ordinary token before installing: SSH service PATH and user-task PATH can differ. This metadata run is not ordinary-token acceptance. |
 
 For the two clusters, S3-dirs also reports missing Vim state directories.
 An existing login env makes setup-host report S2-login-env done; that alone

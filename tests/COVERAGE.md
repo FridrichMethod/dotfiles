@@ -48,6 +48,14 @@ also refuses a null DACL and object, compound and custom ACEs in in-memory
 descriptors) and record that NTFS refuses renaming its parents while the
 updater's handle is open.
 
+Portable PowerShell 7 cases in that same file also test all 256 ASCII
+OneDrive spellings, substring boundaries and a real child's inherited
+`GIT_`/`CHEZMOI_` prefix cleanup under `en-US`, `tr-TR` and `az-Latn-AZ`.
+`powershell-profile.ps1` repeats synthetic secret, case-sensitive vendor and
+benign-boundary history decisions in a fresh process per culture, avoiding
+PowerShell's culture-blind `-match` cache. These are separate from Windows
+ACL and interactive-console acceptance.
+
 `./tests/run.sh` is the Unix entry point; `./tests/run.ps1` is the PowerShell
 entry point. CI requires `--ci` on Unix and `-CI` on native Windows. The
 pre-commit hooks run the same focused Unix tests when their production sources

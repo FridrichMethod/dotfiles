@@ -128,6 +128,10 @@ Windows Terminal needs a restart to load settings changes.
 Set opt-outs before shell startup. Do not run a manual apply while a login
 update runs. [Shell startup](docs/shell.md) covers nvm, conda, PATH ordering,
 PowerShell key bindings, encoding and prompts.
+PowerShell checks OneDrive paths and inherited Git/chezmoi environment
+prefixes with ordinal case-insensitive comparisons. Its history secret filter
+uses culture-invariant matching, including under Turkish and Azerbaijani
+cultures, while vendor-specific case-sensitive patterns retain their behavior.
 
 ## AI Assistant Configuration
 

@@ -132,6 +132,14 @@ a writer of `~/.local` that swaps a junction in before the open and a
 prepared directory back before the re-check can still get another
 `chezmoi.exe` started, so these tests do not show the path tamper-proof.
 
+The portable PowerShell 7 culture cases in the same file start a fresh process
+for each of `en-US`, `tr-TR` and `az-Latn-AZ`. They check all 256 ASCII
+OneDrive case spellings, substring matches and near misses before a backend
+can run. A real child process proves that every tested case variant of the
+`GIT_` and `CHEZMOI_` prefixes is removed while similarly named variables
+remain. These cases do not require Windows ACLs; native Windows trust tests
+remain separate.
+
 The `english-documentation` hook uses pre-commit's `pygrep` language, configured entirely in
 `.pre-commit-config.yaml`, to check selected Markdown, reStructuredText,
 plain-text documentation and README-style files in this repository. It checks
@@ -232,7 +240,12 @@ statements set the other options everywhere without an error and the
 predictions only where both versions allow them. `tests/powershell-profile.sh`
 scans both profiles for the same guards before it hands over to pwsh, so the
 rule holds where pwsh is missing too.
-It unit-tests the history filter in both directions, the eza glob expansion
+It unit-tests the history filter in both directions in fresh processes under
+`en-US`, `tr-TR` and `az-Latn-AZ`, preserving case-sensitive vendor patterns,
+benign prefix/length boundaries and ordinary commands. All credential-shaped
+inputs are synthetic. Separate processes matter because PowerShell's `-match`
+regex cache can otherwise reuse a pattern compiled under another culture.
+It also tests the eza glob expansion
 and the `$LASTEXITCODE` prompt wrapper,
 parses and completes conda under Windows PowerShell 5.1, dot-sources the
 PowerShell 7 profile in a redirected child with a fake home and a 60 s timeout,
