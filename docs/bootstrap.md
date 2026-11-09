@@ -2491,18 +2491,21 @@ Deferred on purpose; each is a separate change.
   ([docs/testing.md](testing.md#end-to-end-bootstrap-opt-in)) has run the
   bootstrap for real in Linux containers and on GitHub's `macos-15` and
   `windows-2025` runners (the [acceptance checklist](#acceptance-checklist)
-  below). Those runners are not fresh machines, and no real-machine row
-  exists yet: a fresh macOS VM, a fresh WSL distribution, Sherlock, Marlowe
-  and Windows 11 remain.
+  below). Those runners are not fresh machines. The five genuine
+  fresh-machine cases below remain not run; the user waived those runs for
+  this follow-up.
 
 ## Acceptance checklist
 
-Fresh-machine acceptance is pending for the platforms below: each row is an
-open gate until a real run fills it. Container
-and hosted-runner tests approximate portions of setup; they do not prove site
-policy, real credentials, fresh Windows 11 or untouched macOS behavior.
-Each run starts from a fresh machine, follows the quick start for its
-platform, and passes when all of these hold:
+The user explicitly waived the five genuine fresh-machine runs below for the
+2026-11-09 follow-up. They are not required or blockers for this follow-up and
+remain not run, not passed. This scope decision does not cancel the general
+checklist or change the separate existing-host provisioning and CI/E2E checks.
+Container and hosted-runner tests approximate portions of setup; they do not
+prove site policy, real credentials, fresh Windows 11 or untouched macOS
+behavior. When genuine fresh-machine acceptance is requested, each run starts
+from a fresh machine, follows the quick start for its platform, and passes
+when all of these hold:
 
 - `./doctor.sh --host H` (Windows `.\doctor.ps1 -Host win`) exits 0 for the
   default tiers, and `--smoke` exits 0 on Unix.
@@ -2517,18 +2520,20 @@ platform, and passes when all of these hold:
 
 | Run | Date | Result | Notes |
 | --- | --- | --- | --- |
-| Fresh macOS VM (Apple Silicon), host `mac` | 2026-11-09 inventory | blocked; not run | No fresh VM available. Provide a new Apple Silicon macOS VM with ordinary-user access and complete the HUMAN GUI/privileged steps. |
-| Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | 2026-11-09 inventory | blocked; not run | Only the configured distribution is available. Provide a separate fresh Windows/WSL environment with the distribution named `Ubuntu`; do not unregister the existing one. |
-| Sherlock inside `sh_dev`, host `sherlock` | 2026-11-09 inventory | blocked; not run | No fresh account home or acceptance allocation available. Provide an approved fresh provisioning environment and an allocation; preserve the production login environment. |
-| Marlowe inside an interactive Slurm job, host `marlowe` | 2026-11-09 inventory | blocked; not run | No fresh account home or acceptance allocation available. Provide an approved fresh provisioning environment and allocation with its account/partition; preserve the production login environment. |
-| Native Windows 11, host `win` | 2026-11-09 inventory | blocked; not run | Only the configured Windows 11 home is available. Provide a fresh Windows 11 environment with an ordinary logged-on user and person-run HUMAN steps. |
+| Fresh macOS VM (Apple Silicon), host `mac` | 2026-11-09 inventory | not run; waived for this follow-up | No fresh VM was available. A future acceptance run needs a new Apple Silicon macOS VM with ordinary-user access and HUMAN GUI/privileged steps. |
+| Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | 2026-11-09 inventory | not run; waived for this follow-up | Only the configured distribution was available. A future acceptance run needs a separate fresh Windows/WSL environment with the distribution named `Ubuntu`; preserve the existing distribution. |
+| Sherlock inside `sh_dev`, host `sherlock` | 2026-11-09 inventory | not run; waived for this follow-up | No fresh account home or acceptance allocation was available. A future acceptance run needs an approved fresh provisioning environment and an allocation; preserve the production login environment. |
+| Marlowe inside an interactive Slurm job, host `marlowe` | 2026-11-09 inventory | not run; waived for this follow-up | No fresh account home or acceptance allocation was available. A future acceptance run needs an approved fresh provisioning environment and allocation with its account/partition; preserve the production login environment. |
+| Native Windows 11, host `win` | 2026-11-09 inventory | not run; waived for this follow-up | Only the configured Windows 11 home was available. A future acceptance run needs a fresh Windows 11 environment with an ordinary logged-on user and person-run HUMAN steps. |
 
-The user confirmed on 2026-11-09 that these new environments are unavailable.
+The user confirmed on 2026-11-09 that these new environments were unavailable,
+then removed genuine fresh-machine acceptance from this follow-up's scope.
 The date above records the resource inventory, not an acceptance run. None of
 the six checks above has been established for any of these five fresh-machine
 rows. Existing-host doctor, plugin installation, interactive-console checks
 and hosted CI remain separate evidence. Do not reset an existing home or
-substitute a temporary HOME, container or hosted runner to close these gates.
+substitute a temporary HOME, container or hosted runner to claim genuine
+fresh-machine acceptance.
 
 Keep new acceptance records with their reproducible run artifacts: revision,
 platform, tool versions, options, failures and limitations. The

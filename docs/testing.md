@@ -390,9 +390,13 @@ archive right after the by-path hash check and requires a sha256 mismatch with
 nothing installed, then a clean install that leaves only `chezmoi.exe`, whose
 DACL on Windows must be protected and grant exactly the user, SYSTEM and
 Administrators full control (a `SKIP:` elsewhere). None of them downloads
-anything or touches the runner's home. Fresh-machine runs are the opt-in
+anything or touches the runner's home. Real installer runs use the opt-in
 [end-to-end suite](#end-to-end-bootstrap-opt-in) below, which checks the
-[acceptance checklist](bootstrap.md#acceptance-checklist) for real.
+[automated acceptance criteria](#acceptance-criteria) in containers and hosted
+runners. The user waived the five separate genuine fresh-machine runs for
+the 2026-11-09 follow-up; they remain not run, as recorded in the
+[acceptance checklist](bootstrap.md#acceptance-checklist). That scope decision
+does not waive the automated suite or change its assertions.
 
 `tests/host-overlays.sh` checks missing, non-executable and fake Linuxbrew
 under isolated Bash and zsh. Its standard-library `test_portable_shell.py`
@@ -882,9 +886,10 @@ leave it off.
 ### Real clusters
 
 Sherlock and Marlowe cannot run the containers (no Docker on a login node, and
-`E2E_NATIVE` is honoured only on macOS), so the owner runs the bootstrap
-by hand once per cluster, on a fresh account home, and checks the criteria
-above the same way. Log in without the RemoteCommand (`ssh sherlock-plain`,
+`E2E_NATIVE` is honoured only on macOS). For a separately requested genuine
+fresh-cluster acceptance run, the owner runs the bootstrap by hand on a fresh
+account home and checks the criteria above the same way. Log in without the
+RemoteCommand (`ssh sherlock-plain`,
 `ssh marlowe-plain`), paste `home_cz` and `home_deploy` from
 [Fresh home by hand](bootstrap.md#fresh-home-by-hand) into the shell, then:
 

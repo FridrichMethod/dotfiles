@@ -118,4 +118,8 @@ predictions, color and update-hook acceptance on 2026-11-08 is recorded in
 16 tmux tests passed on Linux tmux 3.4 and actual macOS tmux 3.8, including
 six quoted-directory/action cases. Those tests verify the fixture's physical
 starting directory and preserve quotes, backticks and literal tmux formats
-without command injection. Neither result closes a fresh-machine gate.
+without command injection. Neither result establishes genuine fresh-machine
+acceptance. The user waived the five genuine fresh-machine runs for the
+2026-11-09 follow-up; they remain not run in the
+[acceptance checklist](../docs/bootstrap.md#acceptance-checklist). This scope
+decision changes no automated coverage claim.

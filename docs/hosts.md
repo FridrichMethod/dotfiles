@@ -267,8 +267,11 @@ nonsecret cleanup receipt is retained at
 ## Provisioning follow-up
 
 The 2026-11-09 inventory used the existing homes, not fresh-machine fixtures.
-The user confirmed that new acceptance environments and allocations are not
-available. Tool provisioning used the existing setup-host entry point after
+New acceptance environments and allocations were unavailable at that inventory.
+The user later waived genuine fresh-machine acceptance for this follow-up;
+the [five cases](bootstrap.md#acceptance-checklist) remain not run and are not
+follow-up blockers. Existing-host provisioning and its allocation requirements
+remain separate. Tool provisioning used the existing setup-host entry point after
 its scoped `--check`; payload installation used its canonical update command.
 Existing clones and package versions were left alone. No
 running user tmux server was reloaded.
