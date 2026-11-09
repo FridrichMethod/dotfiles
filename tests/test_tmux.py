@@ -312,28 +312,38 @@ class TmuxConfiguration(unittest.TestCase):
 
     def test_menu_actions_preserve_quoted_directory_without_executing_its_text(self):
         self.source()
-        directory = self.root / 'space \\"; set -g @cwd-injected yes; #'
-        directory.mkdir()
-        origin = self.tmux("new-window", "-P", "-F", "#{pane_id}",
-                           "-c", str(directory), "/bin/sh")
-        for menu, label in (("windows", "New here"),
-                            ("panes", "Split side by side"),
-                            ("panes", "Split top / bottom")):
-            with self.subTest(action=label):
-                items = shlex.split(self.tmux("display-message", "-p", f"#{{@wk_menu_{menu}}}"))
-                action = items[items.index(label) + 2]
-                # display-menu expands the action's formats before parsing it.
-                expanded = self.tmux("display-message", "-p", "-t", origin, action)
-                command = self.root / "menu-action.conf"
-                command.write_text(expanded + "\n")
-                before = set(self.tmux("list-panes", "-a", "-F", "#{pane_id}").splitlines())
-                self.tmux("source-file", str(command))
-                after = set(self.tmux("list-panes", "-a", "-F", "#{pane_id}").splitlines())
-                self.assertEqual(len(after - before), 1)
-                pane = (after - before).pop()
-                self.assertEqual(self.tmux("display-message", "-p", "-t", pane,
-                                           "#{pane_current_path}"), str(directory))
-                self.assertEqual(self.option("@cwd-injected"), "")
+        for name in ('space \\"; set -g @cwd-injected yes; #',
+                     "single 'quote' `false` #{pane_id} #S"):
+            directory = self.root.resolve() / name
+            directory.mkdir()
+            # -c is a tmux format: escape literal hashes even when using argv.
+            # Resolve /tmp as well: macOS reports its physical /private/tmp path.
+            origin = self.tmux("new-window", "-P", "-F", "#{pane_id}",
+                               "-c", str(directory).replace("#", "##"), "/bin/sh")
+            self.assertEqual(self.tmux("display-message", "-p", "-t", origin,
+                                       "#{pane_current_path}"), str(directory))
+            for menu, label in (("windows", "New here"),
+                                ("panes", "Split side by side"),
+                                ("panes", "Split top / bottom")):
+                with self.subTest(directory=name, action=label):
+                    self.tmux("select-pane", "-t", origin)
+                    items = shlex.split(self.tmux("display-message", "-p", f"#{{@wk_menu_{menu}}}"))
+                    action = items[items.index(label) + 2]
+                    # display-menu expands the action's formats before parsing it.
+                    expanded = self.tmux("display-message", "-p", "-t", origin, action)
+                    command = self.root / "menu-action.conf"
+                    command.write_text(expanded + "\n")
+                    before = set(self.tmux("list-panes", "-a", "-F", "#{pane_id}").splitlines())
+                    self.tmux("source-file", str(command))
+                    after = set(self.tmux("list-panes", "-a", "-F", "#{pane_id}").splitlines())
+                    self.assertEqual(len(after - before), 1)
+                    pane = (after - before).pop()
+                    try:
+                        self.assertEqual(self.tmux("display-message", "-p", "-t", pane,
+                                                   "#{pane_current_path}"), str(directory))
+                        self.assertEqual(self.option("@cwd-injected"), "")
+                    finally:
+                        self.tmux("kill-pane", "-t", pane)
 
     def test_recovery_policy_uses_a_concrete_host_directory(self):
         self.source()
