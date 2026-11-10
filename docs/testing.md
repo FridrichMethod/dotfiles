@@ -259,7 +259,7 @@ hash-recorded public-file bundle of candidate `c19a83f`. All passed in a
 one-off Limited-token task recording PowerShell 7.6.9, SessionId 1 and
 `Elevated=false`; the suite also rendered the prompts with oh-my-posh
 31.9.1. The host checkout remained clean at `360a269`. The ordinary-token
-offline doctor and setup `-Check` both exited 0; retained evidence and the
+offline doctor and setup `-Check` both exited 0; the acceptance record and the
 separate provisioning result are described in
 [Ordinary-token candidate checks](hosts.md#ordinary-token-candidate-checks).
 
