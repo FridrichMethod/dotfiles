@@ -308,7 +308,7 @@ library checkouts remain part of the installation.
 | lab-ubuntu | No installation needed; offline doctor passes. | None in the selected tiers. |
 | wsl-ubuntu | S3-clones installed the 11 missing tmux plugins; doctor and smoke pass, and the scoped second plan is done. | None in the selected tiers. |
 | mac | S3-clones installed zsh-completions and the 11 tmux plugins; S3-dirs created the two missing Vim state directories. Doctor, smoke and the full setup check pass. | Optional kitty, StyLua and Schrodinger warnings remain; these unselected tiers were not installed. |
-| sherlock | In Slurm jobs 51696517 and 51698421, added git-lfs, git-delta, tealdeer and Chafa with their dependencies: 87 package records became 132. Only libxml2 and libxml2-16 changed existing builds, both staying at 2.15.4 for ICU compatibility; all other existing versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. Native Chafa, the second scoped setup and full setup check passed; compute doctor/smoke reported 60/61 ok with three optional warnings. On 2026-11-10, verified legacy skills were reconciled and the canonical payload install exited 0 for both clients. | The Codex capacity refusal is resolved. Forty-six differing entries per client remain preserved outside installer ownership; see the reconciliation below. Contributor pre-commit, shfmt and StyLua remain optional. |
+| sherlock | In Slurm jobs 51696517 and 51698421, added git-lfs, git-delta, tealdeer and Chafa with their dependencies: 87 package records became 132. Only libxml2 and libxml2-16 changed existing builds, both staying at 2.15.4 for ICU compatibility; all other existing versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. Native Chafa, the second scoped setup and full setup check passed; compute doctor/smoke reported 60/61 ok with three optional warnings. On 2026-11-10, verified legacy skills were reconciled and the canonical payload install exited 0 for both clients. | The Codex capacity refusal is resolved. The remaining historical copies were traced to public upstream files and removed with user approval; see the reconciliation below. Contributor pre-commit, shfmt and StyLua remain optional. |
 | marlowe | In Slurm job 564410, added git-lfs, git-delta, tealdeer, aria2 and uv with three dependencies; all 61 existing package versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. The second scoped setup installed nothing; full check, doctor and smoke passed. | Login doctor: 57 ok and six warnings. Node is policy-blocked; pre-commit, shfmt, shellcheck, StyLua and the separate Miniconda installation remain optional. Compute-node smoke had 59 ok and only those five optional warnings. |
 | win | The approved ordinary-token task passed both culture tests and the full PowerShell profile suite. The canonical skills payload install passed, followed by two setup `-Yes` runs, `-Check` and all 33 doctor rows; see [candidate checks](#ordinary-token-candidate-checks). Codex and oh-my-posh 31.9.1 are present; the earlier administrator-SSH Codex absence was a PATH difference. | None in the selected tiers; the payloads row reports `installed: pymol, skills`. This pre-rollout acceptance used source and deployed dotfiles at `360a269`; fresh-machine acceptance remains separate. |
 
@@ -326,11 +326,12 @@ identified 2,071 directories per client matching the public 2026-10-04 library r
 [`abbbdf3`](https://github.com/FridrichMethod/awesome-skills/commit/abbbdf3764d2dda82b95a694c289a8ae112ac225)
 by their complete trees. Those legacy copies were removed before the canonical
 installer ran; 46 differing directories per client matched none of 17 public
-revisions and were preserved, along with Codex's `.system`. The old copies
-had no installer ownership records, so the normal update had preserved them.
+revisions as complete trees and were initially preserved, along with Codex's
+`.system`. The old copies had no installer ownership records, so the normal
+update had preserved them.
 
-Both new client manifests use `selection=@library` and `manual=@all`.
-Claude owns 2,301 entries (one visible and 2,300 hidden); Codex owns 2,292
+That run used `selection=@library` and `manual=@all` for both clients.
+Claude owned 2,301 entries (one visible and 2,300 hidden); Codex owned 2,292
 (one visible and 2,291 hidden), split as 1,132 and 1,160 across its two
 roots. The canonical install exited 0 without changing the capacity limit,
 adding symlinks or changing `CODEX_HOME`. A second canonical run exited 0
@@ -345,6 +346,27 @@ entries, both AI configurations matched, and maintenance was absent. The job
 completed with exit `0:0`; no installer process or payload temporary directory
 remained.
 
+A subsequent per-file comparison across 27 public commits accounted for all
+919 files in each client's 46 differing directories: 760 matched the
+2026-10-04 revision and 159 were additional historical upstream files. Paths,
+blob contents and executable bits matched; the whole-tree differences came
+from accumulated upstream files. With the user's approval, Slurm job 51828083
+removed those 92 old directories while preserving `.system`.
+
+The canonical payload install then exited 0 with 2,346 managed entries per
+client: one visible and 2,345 hidden. Codex's entries are split as 1,166 and
+1,180 across its two roots. The second run exited 0 and reported already
+current. All 4,692 managed fingerprints passed; the prior 4,593 managed entries
+and `.system` were unchanged, with no legacy or unmanaged ordinary directories
+remaining. Doctor with smoke reported 61 ok and the same three optional
+warnings. Git and chezmoi were clean, AI configurations matched, and maintenance
+was absent.
+
+The job completed with exit `0:0`. Across all six hosts, the reviewed completed
+installer backups, obsolete caches and tool metadata were removed; active
+libraries, ownership manifests and lock files were preserved. No task process,
+payload temporary directory or new diagnostic archive remained.
+
 ## Known limits
 
 - win: OpenSSH's default shell there is PowerShell 7 with no
@@ -358,10 +380,5 @@ remained.
   with tmux 3.8 on 2026-11-09. All 16 tmux tests pass there and with Linux
   tmux 3.4, including six hostile-directory/action subtests. The macOS CI
   job installs no tmux; its green result alone is still not tmux evidence.
-- sherlock: 46 differing skill directories per client remain preserved because
-  their complete trees matched none of the 17 checked public library
-  revisions. They remain outside the installer's ownership manifest and were
-  kept intact during the update. The former Codex capacity refusal was
-  resolved by the verified reconciliation above.
 - Container and hosted-runner runs are not fresh-machine acceptance
   ([Acceptance checklist](bootstrap.md#acceptance-checklist)).
