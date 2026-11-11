@@ -92,7 +92,7 @@ function Invoke-DotfilesChezmoiUpdate {
             '--use-builtin-git=false', '--force=false')
         $safeConfig = '{{ and (eq .chezmoi.config.update.command "git") ' +
             '(eq (toJson .chezmoi.config.update.args) (toJson (list "-c" "rebase.autoStash=false" "-c" "merge.autoStash=false" "pull" "--ff-only" "--no-rebase" "--no-autostash" "--no-recurse-submodules"))) ' +
-            '(not .chezmoi.config.update.recurseSubmodules) .chezmoi.config.update.apply ' +
+            '(not .chezmoi.config.update.recurseSubmodules) ' +
             '(not .chezmoi.config.git.autoadd) (not .chezmoi.config.git.autocommit) (not .chezmoi.config.git.autopush) }}'
         $config = Invoke-DotfilesUpdateProcess $chezmoi.Name ($arguments + @('execute-template', $safeConfig)) $paths
         if ($config.Code -ne 0 -or $config.Output.Trim() -cne 'true') { throw 'Update configuration is unsafe.' }

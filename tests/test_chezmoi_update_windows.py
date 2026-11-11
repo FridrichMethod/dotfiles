@@ -451,6 +451,17 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertIn("[dotfiles]", result.stdout + result.stderr)
         self.assertEqual((self.home / ".sample").read_text(), "initial\n")
 
+    def test_local_update_apply_false_does_not_skip_update(self):
+        # Both twins pass update --apply, so the local update.apply value is
+        # not part of the contract, as in scripts/chezmoi-update.sh.
+        self.setup_home()
+        self.config.write_bytes(self.config.read_bytes() + b"apply=false\n")
+        self.publish_sample("applied despite update.apply=false\n")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
+        self.assertEqual((self.home / ".sample").read_text(), "applied despite update.apply=false\n")
+
     def test_optout_maintenance_and_session_guard_skip_update(self):
         self.setup_home()
         for before in ("$env:DOTFILES_AUTO_UPDATE='0';", "$env:_DOTFILES_CHECKED='1';"):
