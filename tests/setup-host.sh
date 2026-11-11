@@ -1687,6 +1687,13 @@ if [ "$(id -u)" != 0 ]; then
     run_case provided-shared-manual-opt "$SHARED_PATH" -- --host lab-ubuntu --tier core,cli,contributor --print-manual
     expect_line provided-shared-manual-opt "$(owner_line 'install --formula jq tlrc' HOMEBREW_NO_INSTALL_UPGRADE=1)"
     rm -rf "${CASE_BREW:?}/opt"
+    # The manual block probes each entry as --check does, so it runs under
+    # the same GH_TELEMETRY=0 and TLDR_AUTO_UPDATE_DISABLED=1: PROVIDED_ALL's
+    # stale C client tldr would otherwise refresh ~/.tldrc.
+    run_case provided-shared-manual-tldr "PATH=$FAKE_BIN:$PROVIDED_ALL:$SYS_BIN" -- \
+        --host lab-ubuntu --tier core,cli,contributor --print-manual
+    expect_rc provided-shared-manual-tldr 0
+    [ ! -e "$CASE_HOME/.tldrc" ] || fail '--print-manual probed tldr without TLDR_AUTO_UPDATE_DISABLED=1'
     # A C client keg whose tldr the doctor accepts is no conflict here either:
     # no judgment block that would uninstall it for every account.
     chmod 755 "$CASE_BREW/Cellar"

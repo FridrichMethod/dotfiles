@@ -276,6 +276,24 @@ while [[ -n "$lines" ]]; do
     steps_has "$id" || usage_error "unknown step for $HOST: '$id' (see ./setup-host.sh --host $HOST --list)"
 done
 
+# Provisioning never triggers the login updaters, git prompts or Homebrew
+# auto-update, hints and cleanup. Older brew bundle wrote Brewfile.lock.json
+# next to the Brewfile, inside this checkout. --check never runs brew.
+# S2-brew-bundle probes each Brewfile tool as the doctor does, running the
+# version flag of its tools.tsv row (gh --version, tldr --version), and a
+# tool a step starts may run them too: recent gh releases answer any
+# command, --version included, by writing ~/.local/state/gh/device-id unless
+# GH_TELEMETRY=0, and the tldr C client (the tldr formula Homebrew removed in
+# 2026-10, still on hosts that installed it), once its page cache is two
+# weeks old, answers any command but --update by downloading the tldr-pages
+# archive into ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set.
+# --print-manual probes too (the S2-brew-bundle shared-prefix block), so
+# this comes before any mode runs.
+export DOTFILES_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
+    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+    HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1
+steps_extend_path
+
 if [[ "$MODE" == list ]]; then
     steps_list
     exit 0
@@ -298,22 +316,6 @@ if [[ "$MODE" == apply && "$YES" != 1 && ! -t 0 ]]; then
     dotfiles_log error 'refusing to apply without a terminal: pass --yes, or --check for a read-only plan'
     exit 2
 fi
-
-# Provisioning never triggers the login updaters, git prompts or Homebrew
-# auto-update, hints and cleanup. Older brew bundle wrote Brewfile.lock.json
-# next to the Brewfile, inside this checkout. --check never runs brew.
-# S2-brew-bundle probes each Brewfile tool as the doctor does, running the
-# version flag of its tools.tsv row (gh --version, tldr --version), and a
-# tool a step starts may run them too: recent gh releases answer any
-# command, --version included, by writing ~/.local/state/gh/device-id unless
-# GH_TELEMETRY=0, and the tldr C client (the tldr formula Homebrew removed in
-# 2026-10, still on hosts that installed it), once its page cache is two
-# weeks old, answers any command but --update by downloading the tldr-pages
-# archive into ~/.tldrc unless TLDR_AUTO_UPDATE_DISABLED is set.
-export DOTFILES_AUTO_UPDATE=0 GIT_TERMINAL_PROMPT=0 NONINTERACTIVE=1 \
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
-    HOMEBREW_BUNDLE_NO_LOCK=1 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPDATE_DISABLED=1
-steps_extend_path
 
 if [[ "$MODE" == check ]]; then
     dotfiles_log step "Plan for $HOST ($PROFILE, tiers $TIERS); --check writes nothing"

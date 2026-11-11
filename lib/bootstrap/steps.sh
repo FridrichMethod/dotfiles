@@ -446,8 +446,9 @@ steps_list() {
     done
 }
 
-# steps_print_manual: every HUMAN block of STEPS_HOST, pending or not. Reads
-# manifests only (no probes, downloads or writes).
+# steps_print_manual: every HUMAN block of STEPS_HOST, pending or not. No
+# downloads or writes; the S2-brew-bundle shared-prefix block runs the
+# doctor's read-only tool probes, under the environment setup-host.sh exports.
 steps_print_manual() {
     local IFS=' ' id fn
     STEPS_MODE=manual
