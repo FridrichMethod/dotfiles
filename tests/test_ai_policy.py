@@ -109,6 +109,7 @@ REVIEWED_COMMANDS = (
     "git reset --hard HEAD~1",
     "git clean -fd",
     "rm -rf build",
+    "rm -Rf build",
     "rm -f -r build",
     "Remove-Item -Recurse build",
     "rd /s build",
