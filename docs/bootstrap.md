@@ -780,7 +780,8 @@ and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check
 an invalid manifest; its structural checks are `chezmoi-config` and
 `payloads`, and `-Online` reports a signed-out
 tool as `warn`, as on Unix (its auth probes, too, may write the tools' own
-state). `.\setup-host.ps1` exits 3 while HW-clone or HW-deploy is pending;
+state). `.\setup-host.ps1` exits 3 while HW-clone or HW-deploy is pending,
+or when `-WhatIf` or a No at a `-Confirm` prompt left a step unapplied;
 the other HW blocks are printed but leave the exit code alone. Its `-Check` prints only
 plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
 ending in `blocks completion` or `does not block`) and, like the Unix

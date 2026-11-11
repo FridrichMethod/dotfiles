@@ -1505,6 +1505,21 @@ exit $LASTEXITCODE
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'what-if wrote files'
     }
 
+    Test-Case 'setup-host -WhatIf on a configured home still exits 3 while a step is todo' {
+        if (Test-RealChezmoiMissing) { return }
+        # No blocking HUMAN step is pending here, so only the unapplied
+        # W1-winget (jq missing) keeps the run from exiting 0.
+        $fixture = New-Fixture
+        Set-FixtureHealthy $fixture -Except @('jq')
+        Set-FixtureConfigured $fixture
+        New-ToolShim $fixture.Packages 'jq'
+        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; WhatIf = $true }
+        Assert-Exit $run 3 'what-if on a configured home'
+        Assert-Equal @(Get-InstallEvents $fixture).Count 0 'what-if installed'
+        Assert-True (@($run.Lines -cmatch '^\[dotfiles\] \[warn\] Steps not applied: (\S+ )*W1-winget( |;)').Count -eq 1) "no not-applied summary: $($run.Stdout)"
+        Assert-True (-not ($run.Lines -contains '[dotfiles] [ok] setup-host: nothing blocking remains for win')) "what-if claimed completion: $($run.Stdout)"
+    }
+
     Test-Case 'setup-host W1-winget imports only the packages whose tools the doctor does not report ok' {
         if (Test-RealChezmoiMissing) { return }
         # jq is missing and fzf is below its floor; claude and codex come from

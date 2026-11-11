@@ -45,8 +45,9 @@
     Exit codes: 0 done (non-blocking HUMAN blocks may still be printed);
     1 a step failed; 2 usage error, invalid manifest, or refusal (a
     non-interactive run without -Yes, or a declined prompt); 3 work remains:
-    a blocking HUMAN step is pending (HW-clone or HW-deploy), or, under
-    -Check, a step is still to apply. As in setup-host.sh, the other HUMAN
+    a blocking HUMAN step is pending (HW-clone or HW-deploy), -WhatIf or a
+    No at a -Confirm prompt left a step unapplied, or, under -Check, a step
+    is still to apply. As in setup-host.sh, the other HUMAN
     steps (HW-execution-policy, HW-ssh-agent, HW-wsl and HW-auth) are
     printed while pending but leave the exit code alone;
     .\doctor.ps1 -Online then shows whether sign-in is done.
@@ -497,7 +498,9 @@ function Get-SetupPlan {
 }
 
 function Invoke-SetupApply {
-    # Apply todo steps in order and stop at the first failure.
+    # Apply todo steps in order and stop at the first failure. A step that
+    # -WhatIf or a No at a -Confirm prompt leaves unapplied is recorded.
+    $script:SetupNotApplied = [Collections.Generic.List[string]]::new()
     foreach ($id in $AutomatedSteps) {
         $state = Get-SetupStepState -Id $id
         if ($state.Status -cne 'todo') {
@@ -505,7 +508,10 @@ function Invoke-SetupApply {
             Write-DotfilesLog $level "${id}: $($state.Status): $($state.Detail)"
             continue
         }
-        if (-not $PSCmdlet.ShouldProcess($id, $state.Detail)) { continue }
+        if (-not $PSCmdlet.ShouldProcess($id, $state.Detail)) {
+            $script:SetupNotApplied.Add($id)
+            continue
+        }
         Write-DotfilesLog step "${id}: $($state.Detail)"
         $result = Invoke-SetupStep -Id $id
         if (-not $result.Success) {
@@ -608,8 +614,16 @@ function Invoke-BootstrapSetup {
     $pending = @($HumanSteps | Where-Object { -not (Test-SetupHumanDone $_) })
     foreach ($id in $pending) { Write-SetupHumanBlock $id }
     $held = @($pending | Where-Object { $_ -cin $BlockingHumanSteps })
+    $notApplied = @($script:SetupNotApplied)
+    if ($notApplied.Count) {
+        Write-DotfilesLog warn "Steps not applied: $($notApplied -join ' '); rerun .\setup-host.ps1 to apply them"
+    }
     if ($held.Count) {
         Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1"
+        $script:SetupStatus = 3
+        return
+    }
+    if ($notApplied.Count) {
         $script:SetupStatus = 3
         return
     }
