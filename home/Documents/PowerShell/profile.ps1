@@ -348,6 +348,8 @@ Remove-Variable IsAgentSession
 if ($IsInteractive) {
     & {
         try {
+            # The opt-out also silences the warning about a config the guard refuses.
+            if ($env:DOTFILES_AUTO_UPDATE -eq '0') { return }
             # The source can be an independent clone. Read only its sourceDir
             # line here, so that checkout's guard validates the whole config.
             $DotfilesMaintenance = $null

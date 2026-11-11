@@ -119,6 +119,8 @@ fi
 # without it runs nothing and prints nothing.
 _dotfiles_login_updates() {
     case $- in *i*) ;; *) return 0 ;; esac
+    # The opt-out also silences the warning about a config the guard refuses.
+    [ "${DOTFILES_AUTO_UPDATE:-1}" != 0 ] || return 0
     if [ -e "$HOME/.config/dotfiles/maintenance" ] || [ -L "$HOME/.config/dotfiles/maintenance" ]; then
         return 0
     fi

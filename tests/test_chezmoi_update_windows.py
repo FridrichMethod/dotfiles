@@ -599,6 +599,11 @@ class WindowsUpdateTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((result.stdout + result.stderr).count("[dotfiles]"), 1, result.stderr)
             self.assertFalse(trace.exists())
+            # The opt-out silences that warning too.
+            result = self.ps("$env:DOTFILES_AUTO_UPDATE='0';" + body)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
+            self.assertFalse(trace.exists())
         self.config.unlink()
         for config_kind in ("directory", "dangling-link"):
             if config_kind == "directory":

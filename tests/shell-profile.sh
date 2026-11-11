@@ -444,6 +444,7 @@ done
 # tail (zsh): a home without a chezmoi config runs no updater, not even one
 # of a checkout at ~/dotfiles, and prints nothing; a config the guard refuses
 # warns once and runs nothing; a valid config runs only its source's updater.
+# DOTFILES_AUTO_UPDATE=0 runs nothing and prints nothing for either config.
 # No helper variable is left behind.
 login_failures=0 login_home=$TEST_TMP/login-home
 login_warning='[dotfiles] [warn] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.'
@@ -471,9 +472,13 @@ for test_shell in sh dash bash zsh; do
         zsh) login_args=(-d -i -c "$login_leaks") ;;
         *) login_args=(-i -c ". \"\$HOME/.profile\"; $login_leaks") ;;
     esac
-    for state in unconfigured invalid configured; do
+    for state in unconfigured invalid configured optout-invalid optout-configured; do
         rm -f "$TEST_TMP/login-trace" "$login_home/.config/chezmoi/chezmoi.toml"
+        login_auto=1
         case $state in
+            optout-*) login_auto=0 ;;
+        esac
+        case ${state#optout-} in
             invalid) printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$TEST_TMP" && pwd -P)" "$login_source" \
                 >"$login_home/.config/chezmoi/chezmoi.toml" ;;
             configured) printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$login_home" && pwd -P)" "$login_source" \
@@ -481,7 +486,7 @@ for test_shell in sh dash bash zsh; do
         esac
         login_rc=0
         out=$(env -i HOME="$login_home" PATH=/usr/bin:/bin TERM=dumb LOGIN_TRACE="$TEST_TMP/login-trace" \
-            "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
+            DOTFILES_AUTO_UPDATE="$login_auto" "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
         warnings=$(grep -c -F -x -e "$login_warning" "$TEST_TMP/login-err" || :)
         noise=$(grep -v -F -x -e "$login_warning" "$TEST_TMP/login-err" |
             grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' || :)
@@ -490,6 +495,7 @@ for test_shell in sh dash bash zsh; do
             unconfigured) expected_warnings=0 expected_trace='' ;;
             invalid) expected_warnings=1 expected_trace='' ;;
             configured) expected_warnings=0 expected_trace='source chezmoi-update' ;;
+            optout-*) expected_warnings=0 expected_trace='' ;;
         esac
         if [ "$login_rc" != 0 ] || [ "$out" != 0 ] || [ "$warnings" != "$expected_warnings" ] || [ -n "$noise" ] ||
             [ "$trace" != "$expected_trace" ]; then

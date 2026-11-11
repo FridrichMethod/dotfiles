@@ -126,7 +126,7 @@ $tailAt = $text7.IndexOf($tailMarker)
 Assert-True ($tailAt -gt 0) 'the update hook block is present'
 $tail = $text7.Substring([Math]::Max($tailAt, 0))
 Assert-True ($tail.Contains('scripts/chezmoi-update.ps1')) 'the update hook runs the configured source''s scripts/chezmoi-update.ps1'
-Assert-True ($tail -notmatch '(?i)\$env:') 'the update hook reads no environment variable'
+Assert-True (($tail -replace '\$env:DOTFILES_AUTO_UPDATE\b', '') -notmatch '(?i)\$env:') 'the update hook reads no environment variable but the DOTFILES_AUTO_UPDATE opt-out'
 Assert-True ($tail -notmatch 'Import-Module|oh-my-posh|Set-PSReadLine|zoxide') 'nothing interactive runs after the update hook'
 
 function Get-Assignments($Ast, [string]$Left) {
