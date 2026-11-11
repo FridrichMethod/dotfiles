@@ -554,7 +554,7 @@ export DOTFILES_AUTO_UPDATE=0
 ./setup-host.sh --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                  # H2-alloc; Marlowe: an interactive Slurm job
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
-export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "$SCRATCH/.cache/conda/pkgs/$USER"
+export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "/scratch/m000191/.cache/conda/pkgs/$USER"
 ./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-deploy
 exit                                               # back to the login node
 # H7-deploy: the fresh-home procedure in H7-deploy
@@ -1471,8 +1471,8 @@ building. An existing login env satisfies this step.
 - **Check:** `echo "${SLURM_JOB_ID:-none}"`
 - **Install:** Sherlock: `sh_dev -t 1:00:00`. Marlowe: an interactive job with
   an explicit walltime, for example `srun -t 1:00:00 --pty bash -l` (check the
-  partition and account Marlowe requires). Then, inside the job, export the two
-  `*_AUTO_UPDATE=0` variables and `CONDA_PKGS_DIRS`
+  partition and account Marlowe requires). Then, inside the job, export
+  `DOTFILES_AUTO_UPDATE=0` and `CONDA_PKGS_DIRS`
   ([S2-login-env](#s2-login-env-hpc-login-environment)) and re-run setup-host;
   the block prints it with the clone's full path, so it runs from any
   directory.
@@ -1498,10 +1498,10 @@ execs `$HOME/micromamba/envs/login/bin/zsh`.
   export the overlay's value in the job first; otherwise the cache lands in
   `~/micromamba/pkgs`, inside your home quota (`sh_quota` on Sherlock) and with
   heavy `$HOME` I/O. Sherlock:
-  `export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"`; Marlowe:
-  `export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs/$USER"`. Check
-  `echo "$SCRATCH"` first: before H7-deploy only the site sets it, and the
-  Marlowe overlay exports its own value.
+  `export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"` (the site sets
+  `SCRATCH`; check `echo "$SCRATCH"` first); Marlowe, whose site sets no
+  `SCRATCH` before H7-deploy deploys the overlay, takes the overlay's literal
+  value: `export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"`.
 - **Verify:** `./doctor.sh --host sherlock` shows `login-env` and the tool rows `ok`.
 - **Human:** no (after H2-alloc)
 
