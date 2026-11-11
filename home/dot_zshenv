@@ -1,2 +1,11 @@
 #!/bin/zsh
 skip_global_compinit=1
+
+# macOS: /etc/zprofile runs path_helper in every login shell, and tmux panes
+# and editor terminals start login shells. path_helper moves /etc/paths ahead
+# of the order a parent shell already set up (Homebrew, nvm, ~/bin), so keep
+# that order here, before /etc/zprofile; ~/.zprofile restores it. Only a PATH
+# that ~/.profile already ordered (its ~/bin:~/.local/bin pair) counts.
+if [[ $OSTYPE == darwin* && -o login && :$PATH: == *:$HOME/bin:$HOME/.local/bin:* ]]; then
+    _dotfiles_login_path=("${path[@]}")
+fi

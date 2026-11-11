@@ -1,1 +1,8 @@
 #!/bin/zsh
+
+# The order ~/.zshenv kept from the parent shell comes first again; what
+# path_helper added (/etc/paths and /etc/paths.d entries) follows it.
+if (($+_dotfiles_login_path)); then
+    path=("${_dotfiles_login_path[@]}" "${(@)path:|_dotfiles_login_path}")
+    unset _dotfiles_login_path
+fi

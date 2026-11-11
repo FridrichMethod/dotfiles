@@ -506,6 +506,41 @@ for test_shell in sh dash bash zsh; do
     done
 done
 
+# home/dot_zshenv and home/dot_zprofile undo macOS path_helper, which
+# /etc/zprofile runs between them in every login zsh. Neither file can make
+# zsh read a fake /etc/zprofile, so each case sources both in a login zsh
+# without startup files (zsh -f -l), with OSTYPE set and path_helper's
+# reordering simulated in between: /etc/paths first, then a /etc/paths.d
+# entry, then the old PATH. Only a macOS login shell whose PATH ~/.profile
+# already ordered gets that order back, followed by what path_helper added.
+path_failures=0
+if zsh_path=$(command -v zsh); then
+    path_home=$TEST_TMP/path-home
+    mkdir -p "$path_home"
+    cp "$REPO_ROOT/home/dot_zshenv" "$path_home/.zshenv"
+    cp "$REPO_ROOT/home/dot_zprofile" "$path_home/.zprofile"
+    path_parent="$path_home/bin:$path_home/.local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+    path_helper='/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/paths.d'
+    # shellcheck disable=SC2016
+    path_body='. "$HOME/.zshenv"; PATH=$PATH_HELPER:$PATH; . "$HOME/.zprofile"; print -r -- "$PATH ${+_dotfiles_login_path}"'
+    for path_case in nested fresh non-login linux; do
+        path_start=$path_parent path_ostype=darwin23.0 path_login=-l
+        path_expected="$path_parent:/usr/local/bin:/usr/sbin:/sbin:/paths.d 0"
+        case $path_case in
+            fresh) path_start=/usr/bin:/bin ;;
+            non-login) path_login=+l ;;
+            linux) path_ostype=linux-gnu ;;
+        esac
+        [ "$path_case" = nested ] || path_expected="$path_helper:$path_start 0"
+        out=$(env -i HOME="$path_home" PATH="$path_start" PATH_HELPER="$path_helper" \
+            "$zsh_path" -f "$path_login" -c "OSTYPE=$path_ostype; $path_body" 2>&1) || out="exit $?: $out"
+        if [ "$out" != "$path_expected" ]; then
+            printf 'FAIL path_helper restore (%s): got [%s], expected [%s]\n' "$path_case" "$out" "$path_expected" >&2
+            path_failures=$((path_failures + 1))
+        fi
+    done
+fi
+
 [ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] && [ "$sync_failures" = 0 ] &&
-    [ "$login_failures" = 0 ] || exit 1
+    [ "$login_failures" = 0 ] && [ "$path_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

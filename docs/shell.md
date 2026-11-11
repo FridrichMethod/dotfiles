@@ -28,6 +28,15 @@ may repair the brew plugin ordering afterwards. Do not add a post-plugin
 command-hash rebuild. Plugin options must be set before their
 plugins load; ssh-agent settings are pre-sourced for this reason.
 
+On macOS, `/etc/zprofile` runs `path_helper` in every login zsh, including
+tmux panes and editor terminals, and moves the `/etc/paths` directories ahead
+of Homebrew, nvm and `~/bin`. When a login zsh inherits a PATH that
+`~/.profile` already ordered (its `~/bin:~/.local/bin` pair), `~/.zshenv`
+keeps that order and `~/.zprofile` puts it back first, followed by whatever
+`path_helper` added. A fresh window's PATH from launchd has no such pair and
+keeps `path_helper`'s order. A nested Bash login shell is not covered: Bash
+reads `/etc/profile` before any user file.
+
 The mac profile initializes an existing /opt/homebrew or /usr/local brew for
 fresh Bash sessions, retaining nvm priority and repeated-source stability.
 Ubuntu rc files use selected brew on PATH, then the shared Linuxbrew prefix,
