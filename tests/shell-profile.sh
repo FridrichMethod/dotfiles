@@ -538,7 +538,8 @@ fi
 # home/dot_zshrc resets terminal input modes before each prompt, which a TUI
 # killed by a dropped ssh session leaves on. Under a pseudo terminal
 # (util-linux script) the registered precmd hooks write the mouse, focus and
-# cursor resets, plus kitty's keyboard stack pop only under TERM=xterm-kitty.
+# cursor resets, plus, only under TERM=xterm-kitty, the alternate screen exit
+# between keyboard stack pops for both screens.
 # TERM=dumb, a stdout that is no terminal (Powerlevel10k's capture file at
 # the first prompt) and an agent session get nothing; sourcing ~/.zshrc
 # again registers no second hook.
@@ -557,7 +558,7 @@ if mode_zsh=$(command -v zsh) && script --version 2>/dev/null | grep -q util-lin
     for mode_case in xterm kitty dumb redirected agent resourced; do
         mode_term=xterm-256color mode_agent='' mode_cmd=$mode_hooks mode_expected=$mode_reset
         case $mode_case in
-            kitty) mode_term=xterm-kitty mode_expected="$mode_reset^[[<99u" ;;
+            kitty) mode_term=xterm-kitty mode_expected="$mode_reset^[[<99u^[[?1049l^[[<99u" ;;
             dumb) mode_term=dumb mode_expected='' ;;
             redirected) mode_cmd="$mode_hooks >\$MODE_FILE" mode_expected='' ;;
             agent) mode_agent=1 mode_expected='' ;;
@@ -577,6 +578,23 @@ if mode_zsh=$(command -v zsh) && script --version 2>/dev/null | grep -q util-lin
             mode_failures=$((mode_failures + 1))
         fi
     done
+    # The tty is frozen: a raw-mode program killed by a signal leaves
+    # -opost -isig behind (set TCSANOW, so the rest of the input stays
+    # queued), and the next prompt is back to the settings ~/.zshrc made,
+    # -ixon included.
+    mode_input=$TEST_TMP/mode-input
+    # shellcheck disable=SC2016
+    printf '%s\n' \
+        "python3 -I -c 'import os, signal, termios, tty; tty.setraw(0, termios.TCSANOW); os.kill(os.getpid(), signal.SIGKILL)'" \
+        'stty -a | tr " " "\n" | grep -cxE -- "opost|isig|-ixon" | sed "s/^/modes=/"' exit >"$mode_input"
+    # shellcheck disable=SC2016
+    out=$(env -i HOME="$mode_home" PATH=/usr/bin:/bin TERM=dumb MODE_ZSH="$mode_zsh" \
+        script -qec '"$MODE_ZSH" -d -i' /dev/null <"$mode_input" 2>&1 | tr -d '\r' |
+        grep -ao 'modes=[0-9][0-9]*' || :)
+    if [ "$out" != modes=3 ]; then
+        printf 'FAIL frozen tty after a killed raw-mode program: got [%s], expected [modes=3]\n' "$out" >&2
+        mode_failures=$((mode_failures + 1))
+    fi
 fi
 
 # home/dot_zshenv and home/dot_zprofile undo macOS path_helper, which

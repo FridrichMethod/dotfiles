@@ -30,16 +30,27 @@ plugins load; ssh-agent settings are pre-sourced for this reason.
 
 Before each prompt an interactive zsh turns off the terminal input modes a TUI
 may have left on: mouse tracking (1000, 1002, 1003 with encodings 1006 and
-1015), focus reports (1004) and a hidden cursor, and under TERM=xterm-kitty
-it pops the kitty keyboard protocol stack. A program such as Claude Code,
-Codex or tmux that dies with a dropped ssh session cannot undo them, and ssh
-restores only the tty settings, so mouse moves would otherwise type SGR
-reports such as `35;97;7M` at the local prompt and keys could arrive as CSI u
-(`13u`). The hook writes only to a terminal stdout, never under TERM=dumb or
-in an agent session. It does not leave a stuck alternate screen: `reset`, or
-kitty's `opt+cmd+r` (`clear_terminal reset`), does. The PowerShell 7 prompt
-wrapper writes the same mouse, focus and cursor resets
+1015), focus reports (1004) and a hidden cursor. Under TERM=xterm-kitty it
+also leaves a stuck alternate screen (kitty ignores that reset on the main
+screen) and pops the kitty keyboard protocol stack of both screens. A program
+such as Claude Code, Codex or tmux that dies with a dropped ssh session
+cannot undo them, and ssh restores only the tty settings, so mouse moves
+would otherwise type SGR reports such as `35;97;7M` at the local prompt, keys
+could arrive as CSI u (`13u`), and on a stuck alternate screen the prompt
+would overwrite the dead program's last frame while the wheel sent Up/Down
+(zsh history). The hook writes only to a terminal stdout, never under
+TERM=dumb or in an agent session. Other terminals keep a stuck alternate
+screen, since tmux restores a stale cursor on that reset even on its main
+screen: `reset` leaves it. The PowerShell 7 prompt wrapper writes the same
+mouse, focus and cursor resets
 ([PowerShell profile and prompt](#powershell-profile-and-prompt)).
+
+zsh also freezes the tty settings (`ttyctl -f`, after `stty -ixon`). A
+program killed by a signal, such as `kill -9` of a hung ssh, cannot undo its
+raw mode, and zsh would otherwise keep `-opost -isig`: output steps down
+without carriage returns, Ctrl-C stops working and the next ssh hands those
+modes to the remote pty. An `stty` change typed at the prompt therefore lasts
+only for that command line; `ttyctl -u` first keeps it.
 
 On macOS, `/etc/zprofile` runs `path_helper` in every login zsh, including
 tmux panes and editor terminals, and moves the `/etc/paths` directories ahead

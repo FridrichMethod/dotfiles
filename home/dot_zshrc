@@ -26,6 +26,15 @@ esac
 # Should be set at the very top of interactive session settings
 stty -ixon
 
+# Freeze the tty settings, -ixon included. A program killed by a signal
+# (kill -9 of a hung ssh, the OOM killer) cannot undo the raw mode it set,
+# and zsh would keep its -opost -isig: output steps down without carriage
+# returns, Ctrl-C stops working and the next ssh hands those modes to the
+# remote pty. Frozen, zsh restores the settings at each prompt, so an stty
+# change typed at the prompt lasts only for that command line (run ttyctl -u
+# first to keep it). The window size still follows the terminal.
+ttyctl -f
+
 # Detect AI coding agent sessions that conflict with heavy prompt themes
 _is_agent_session() {
     [[ -n "$CURSOR_AGENT" || -n "$GEMINI_CLI" ]]
@@ -263,16 +272,21 @@ fi
 # settings: every mouse move then types SGR reports such as 35;97;7M at this
 # prompt. Before each prompt, when no program owns the terminal, turn off
 # mouse tracking (1000, 1002, 1003; encodings 1006, 1015) and focus reports
-# (1004) and show the cursor. Under kitty also pop the keyboard protocol
-# stack (a pop past its bottom resets the flags), or keys arrive as CSI u
-# (13u for Enter). Only on a terminal: at the first prompt under
-# Powerlevel10k's instant prompt stdout is still its capture file. The
-# alternate screen is left alone; `reset` or kitty's opt+cmd+r leaves it.
+# (1004) and show the cursor. Under kitty also leave the alternate screen
+# that Claude Code's fullscreen mode and Codex draw on, which kitty ignores
+# on the main screen: on a stuck alternate screen the prompt overwrites the
+# dead TUI's last frame and the wheel sends Up/Down, which zsh takes as
+# history. tmux restores a stale cursor on that reset even on its main
+# screen and other terminals are unverified, so only kitty gets it. Pop the
+# keyboard protocol stack of both screens (kitty keeps one each; a pop past
+# its bottom resets the flags), or keys arrive as CSI u (13u for Enter).
+# Only on a terminal: at the first prompt under Powerlevel10k's instant
+# prompt stdout is still its capture file.
 _dotfiles_reset_term_modes() {
     [[ -t 1 && ${TERM:-dumb} != dumb ]] || return 0
     print -rn -- $'\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?1015l\e[?1004l\e[?25h'
     if [[ $TERM == xterm-kitty ]]; then
-        print -rn -- $'\e[<99u'
+        print -rn -- $'\e[<99u\e[?1049l\e[<99u'
     fi
 }
 if ! _is_agent_session; then
