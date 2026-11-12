@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/v31.6.0/themes/schema.json",
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/v32.0.0/themes/schema.json",
   "version": 4,
   "final_space": true,
   "shell_integration": true,
