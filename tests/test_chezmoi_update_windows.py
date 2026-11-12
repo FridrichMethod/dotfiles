@@ -445,7 +445,13 @@ class WindowsUpdateTests(unittest.TestCase):
 
     def test_unsafe_update_configuration_refuses(self):
         self.setup_home()
-        self.configure("[update]\ncommand='git'\nargs=['pull','--rebase','--autostash']\n")
+        # The fixture's safe config except for its args, so only the args check
+        # can refuse it, and a change the source holds that a refused update
+        # must not apply.
+        self.configure("[git]\nautoAdd=false\nautoCommit=false\nautoPush=false\n"
+                       "[update]\ncommand='git'\nargs=['pull','--rebase','--autostash']\n"
+                       "recurseSubmodules=false\n")
+        self.publish_sample("must not apply\n")
         result = self.update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("[dotfiles]", result.stdout + result.stderr)
@@ -464,9 +470,12 @@ class WindowsUpdateTests(unittest.TestCase):
 
     def test_optout_maintenance_and_session_guard_skip_update(self):
         self.setup_home()
+        # The source holds a change, so a missing guard would apply it.
+        self.publish_sample("must not apply\n")
         for before in ("$env:DOTFILES_AUTO_UPDATE='0';", "$env:_DOTFILES_CHECKED='1';"):
             result = self.update(before)
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
             self.assertEqual((self.home / ".sample").read_text(), "initial\n")
         self.maintenance.touch()
         result = self.update()

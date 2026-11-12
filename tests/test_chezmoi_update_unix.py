@@ -191,8 +191,11 @@ class UnixUpdateTests(unittest.TestCase):
             self.assertFalse((f.source / ".git/MERGE_HEAD").exists())
 
     def test_unsafe_or_hostile_update_config_is_refused_before_git(self):
+        # The second config is the fixture's safe one except for its args, so
+        # only the args check can refuse it (chezmoi's defaults alone would).
         for text in ('[data]\nhost="generic"\n',
-                     '[update]\ncommand="git"\nargs=["pull", "--rebase", "--autostash"]\n'):
+                     '[data]\nhost="generic"\n[git]\nautoAdd=false\nautoCommit=false\nautoPush=false\n'
+                     '[update]\ncommand="git"\nargs=["pull", "--rebase", "--autostash"]\nrecurseSubmodules=false\n'):
             with self.subTest(config=text), UpdateFixture() as f:
                 f.advance()
                 f.config.write_text(f.top + text)
