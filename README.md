@@ -42,9 +42,10 @@ parent permissions. Prepare only inspected missing directories through the
 [directory-only procedure](docs/bootstrap.md#preparing-missing-parents); plain
 apply can change existing parent modes.
 
-On other Linux, set `[data].host = "generic"` in the local chezmoi config,
-check with `./doctor.sh --platform other` and follow the
-[other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions).
+On other Linux, check with `./doctor.sh --platform other` and follow the
+[other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions);
+its `home_deploy generic` writes `[data].host = "generic"` into the local
+chezmoi config.
 setup-host requires a supported explicit host. Do not build HPC environments
 outside a Slurm allocation or under scratch.
 

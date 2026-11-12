@@ -159,7 +159,7 @@ in tracked Markdown resolving.
 ## Workflows and checks
 
 - Keep workflow definitions in `.github/workflows/*.yml`.
-- `ci.yml` runs on pull requests, on pushes to `main` and on pushes to `ci/**` branches. Land a change by pushing it to a `ci/**` branch (and an `e2e-ci/**` branch when bootstrap or e2e behavior changes), then fast-forwarding `main` to that exact green commit and deleting the branches; every host pulls `main` at login, so it only ever receives commits CI passed on all three systems.
+- `ci.yml` runs on pull requests, on pushes to `main` and on pushes to `ci/**` branches. Land a change by pushing it to a `ci/**` branch (and an `e2e-ci/**` branch when bootstrap or e2e behavior changes), then fast-forwarding `main` to that exact green commit and deleting the branches. Each host's deployed checkout stays on a clean `main` tracking `origin/main` (work happens in worktrees or clones), and the login update applies whatever that checkout's branch holds, so a host only ever receives commits CI passed on all three systems.
 - Agents land their own changes this way without a pull request and without asking before each push, merge or kit release, once the local checks (`tests/run.sh --ci`, `pre-commit run --all-files`) and every job of that `ci.yml` run are green. They still ask before anything this guide forbids or that cannot be undone: moving or deleting a tag, rewriting `main`, or deleting someone else's work.
 - Agents may roll landed changes out to the six hosts by [docs/hosts.md](docs/hosts.md).
 - Pin action versions and avoid unnecessary matrix complexity.
