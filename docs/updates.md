@@ -101,7 +101,8 @@ The updater stops, with a warning and without touching the destination, when:
   `lib/terminal.sh`, so they follow `DOTFILES_COLOR`, `NO_COLOR` and `TERM`.
   Under Powerlevel10k's instant prompt, whose capture file stands in for
   stderr during zsh startup, `~/.zshrc` colors them when the stderr p10k
-  saved is a terminal. The PowerShell hook's warnings stay plain.
+  saved is a terminal. On Windows they go through `lib/terminal.ps1`'s
+  `Write-DotfilesWarning`, on stderr with the same rules.
 - The shell stays usable, the PowerShell profile keeps the caller's
   preferences, and the next session retries.
 - A source fast-forward can succeed before apply refuses a target. The update

@@ -14,7 +14,8 @@ function Assert-True {
     if (-not $Condition) { throw $Message }
 }
 function Invoke-LogChild {
-    param([string]$Command, [hashtable]$Environment = @{}, [int]$ExpectedExit = 0)
+    # -ErrorStream returns the child's stderr instead and requires empty stdout.
+    param([string]$Command, [hashtable]$Environment = @{}, [int]$ExpectedExit = 0, [switch]$ErrorStream)
     $start = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
@@ -41,6 +42,10 @@ function Invoke-LogChild {
         $outputText = $stdout.GetAwaiter().GetResult()
         $errorText = $stderr.GetAwaiter().GetResult()
         Assert-True ($child.ExitCode -eq $ExpectedExit) "Child exit $($child.ExitCode), expected ${ExpectedExit}: $outputText $errorText"
+        if ($ErrorStream) {
+            Assert-True ($outputText -eq '') "The stderr warning also wrote to stdout: $outputText"
+            return $errorText
+        }
         Assert-True ($errorText -eq '') "Logging unexpectedly wrote PowerShell errors: $errorText"
         return $outputText
     }
@@ -91,6 +96,24 @@ try {
     Test-Case 'empty NO_COLOR does not disable an explicit color request' {
         $outputText = Invoke-LogChild $emit @{ DOTFILES_COLOR = 'always'; NO_COLOR = '' }
         Assert-True ($outputText.Contains("$([char]27)[1;36m")) 'Empty NO_COLOR disabled forced color.'
+    }
+    Test-Case 'stderr warnings follow the same color rules and leave the pipeline alone' {
+        $warn = @'
+$ErrorActionPreference = 'Stop'
+. (Join-Path $env:DOTFILES_TEST_ROOT 'lib/terminal.ps1')
+$LASTEXITCODE = 19
+$output = @(Write-DotfilesWarning 'literal 100% %s {0}')
+if ($output.Count) { throw 'Warning polluted the success pipeline.' }
+if ($LASTEXITCODE -ne 19) { throw 'Warning changed native exit status.' }
+'@
+        $line = '[dotfiles] [warn] literal 100% %s {0}'
+        $errorText = Invoke-LogChild $warn @{ DOTFILES_COLOR = 'always' } -ErrorStream
+        Assert-True ($errorText.TrimEnd() -ceq "$([char]27)[33m$line$([char]27)[0m") "Forced warning color differs: $errorText"
+        foreach ($environment in @(@{}, @{ DOTFILES_COLOR = 'auto' }, @{ DOTFILES_COLOR = 'never' },
+                @{ DOTFILES_COLOR = 'always'; NO_COLOR = '1' }, @{ DOTFILES_COLOR = 'always'; TERM = 'dumb' })) {
+            $errorText = Invoke-LogChild $warn $environment -ErrorStream
+            Assert-True ($errorText.TrimEnd() -ceq $line) "Unexpected warning for $($environment | ConvertTo-Json -Compress): $errorText"
+        }
     }
     Test-Case 'all-stream redirection to a log captures all badges as plain text' {
         $outputText = Invoke-LogChild @'

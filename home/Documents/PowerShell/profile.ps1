@@ -347,6 +347,7 @@ Remove-Variable IsAgentSession
 # runs sync-payloads.
 if ($IsInteractive) {
     & {
+        $DotfilesDir = $null
         try {
             # The opt-out also silences the warning about a config the guard refuses.
             if ($env:DOTFILES_AUTO_UPDATE -eq '0') { return }
@@ -380,7 +381,23 @@ if ($IsInteractive) {
             $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
             if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
         }
-        catch { [Console]::Error.WriteLine('[dotfiles] Profile hooks skipped: review ~/.config/chezmoi/chezmoi.toml and its source checkout privately.') }
+        catch {
+            # Through the configured checkout's lib/terminal.ps1 when it loads.
+            $DotfilesWarning = 'Profile hooks skipped: review ~/.config/chezmoi/chezmoi.toml and its source checkout privately.'
+            $DotfilesWarned = $false
+            try {
+                if ($DotfilesDir -and [IO.Path]::IsPathFullyQualified($DotfilesDir)) {
+                    $DotfilesTerminal = Join-Path $DotfilesDir 'lib/terminal.ps1'
+                    if (Test-Path -LiteralPath $DotfilesTerminal -PathType Leaf) {
+                        . $DotfilesTerminal
+                        Write-DotfilesWarning $DotfilesWarning
+                        $DotfilesWarned = $true
+                    }
+                }
+            }
+            catch { }
+            if (-not $DotfilesWarned) { [Console]::Error.WriteLine("[dotfiles] [warn] $DotfilesWarning") }
+        }
     }
 }
 Remove-Variable IsInteractive

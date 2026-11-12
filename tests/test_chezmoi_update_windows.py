@@ -262,7 +262,7 @@ class WindowsUpdateTests(unittest.TestCase):
     def assert_backend_refused(self, result):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
-        self.assertIn("[dotfiles] Update skipped", output)
+        self.assertIn("[dotfiles] [warn] Update skipped", output)
         self.assertIn("chezmoi.exe", output)
         self.assertIn("docs/bootstrap.md W1-chezmoi", output)
         self.assertEqual(output.count("[dotfiles]"), 1, output)
@@ -609,7 +609,7 @@ class WindowsUpdateTests(unittest.TestCase):
         result = self.ps(body + ";if($ErrorActionPreference -ne 'Stop'){throw 'caller preference changed'};'profile continued'")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("profile continued", result.stdout)
-        self.assertIn("[dotfiles] Profile hooks skipped", result.stderr)
+        self.assertIn("[dotfiles] [warn] Profile hooks skipped", result.stderr)
         updater.write_bytes(saved)
         # A config the guard refuses never falls back to another checkout.
         for malformed in (self.top(source=independent_source).split("\n", 1)[0] + "\n[data]\n",
@@ -956,6 +956,22 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.home / ".sample_new").read_text(), "new portable target\n")
         self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
+
+    def test_refusal_warning_follows_the_color_rules(self):
+        # Warnings go to stderr through lib/terminal.ps1: colored on request,
+        # plain when color is off (and when auto finds stderr redirected).
+        self.setup_home()
+        self.f.state.write_bytes(b"")
+        warning = "[dotfiles] [warn] Update skipped: the chezmoi state is missing or empty"
+        colored = self.update("$env:DOTFILES_COLOR='always';$env:TERM='xterm-256color';"
+                              "Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue;")
+        self.assertEqual(colored.returncode, 0, colored.stderr)
+        self.assertIn("\x1b[33m" + warning, colored.stderr)
+        for before in ("$env:DOTFILES_COLOR='never';", "$env:DOTFILES_COLOR='auto';"):
+            plain = self.update(before)
+            self.assertEqual(plain.returncode, 0, plain.stderr)
+            self.assertIn(warning, plain.stderr)
+            self.assertNotIn("\x1b[", plain.stderr)
 
     def test_empty_state_preserves_existing_edit(self):
         self.setup_home()

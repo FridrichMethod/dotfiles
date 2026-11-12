@@ -53,3 +53,21 @@ function Write-DotfilesLog {
     }
     else { Write-Host $line }
 }
+
+# One "[dotfiles] [warn] MESSAGE" line on stderr, for the login hooks: their
+# callers and tests read warnings from stderr, which the Information stream
+# Write-DotfilesLog uses is not. The color rules are Write-DotfilesLog's:
+# NO_COLOR (nonempty), TERM=dumb and DOTFILES_COLOR=never win, always colors
+# even redirected stderr, and auto colors a console stderr on a host that
+# supports virtual terminal sequences.
+function Write-DotfilesWarning {
+    param([AllowEmptyString()][string]$Message)
+    $line = "[dotfiles] [warn] $Message"
+    $color = $false
+    if (-not $env:NO_COLOR -and $env:TERM -ne 'dumb' -and $env:DOTFILES_COLOR -ne 'never') {
+        $color = $env:DOTFILES_COLOR -eq 'always' -or
+            (-not [Console]::IsErrorRedirected -and $Host.UI.SupportsVirtualTerminal)
+    }
+    if ($color) { $line = "$([char]27)[33m$line$([char]27)[0m" }
+    [Console]::Error.WriteLine($line)
+}

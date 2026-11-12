@@ -1,6 +1,21 @@
 #Requires -Version 7.0
 # Login update. Dot-sourcing defines the callable function for fixtures.
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/chezmoi-guard.ps1')
+# Warnings go through lib/terminal.ps1 when it loads; plain lines otherwise.
+try {
+    $DotfilesTerminal = Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/terminal.ps1'
+    if (Test-Path -LiteralPath $DotfilesTerminal -PathType Leaf) { . $DotfilesTerminal }
+}
+catch { }
+finally { Remove-Variable DotfilesTerminal -ErrorAction SilentlyContinue }
+
+function Write-DotfilesUpdateWarning {
+    param([string]$Message)
+    if (Get-Command Write-DotfilesWarning -CommandType Function -ErrorAction SilentlyContinue) {
+        Write-DotfilesWarning $Message
+    }
+    else { [Console]::Error.WriteLine("[dotfiles] [warn] $Message") }
+}
 
 function Invoke-DotfilesUpdateProcess {
     param([string]$Program, [string[]]$Arguments, [object]$Paths)
@@ -64,18 +79,18 @@ function Invoke-DotfilesChezmoiUpdate {
         $env:_DOTFILES_CHECKED = '1'
         $paths = Get-DotfilesChezmoiPaths $HomePath
         if (-not [IO.File]::Exists($paths.State) -or ([IO.FileInfo]$paths.State).Length -eq 0) {
-            [Console]::Error.WriteLine('[dotfiles] Update skipped: the chezmoi state is missing or empty; inspected recovery is required before automatic update.')
+            Write-DotfilesUpdateWarning 'Update skipped: the chezmoi state is missing or empty; inspected recovery is required before automatic update.'
             return
         }
         if ($paths.Source.IndexOf('OneDrive', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-            [Console]::Error.WriteLine('[dotfiles] Update skipped: use the documented independent-clone procedure for OneDrive.')
+            Write-DotfilesUpdateWarning 'Update skipped: use the documented independent-clone procedure for OneDrive.'
             return
         }
         # Only the provisioned executable, verified and held open until both
         # chezmoi runs have exited (finally below); never a PATH match.
         $chezmoi = Open-DotfilesChezmoi $paths.Destination
         if ($null -eq $chezmoi) {
-            [Console]::Error.WriteLine('[dotfiles] Update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators (docs/bootstrap.md W1-chezmoi).')
+            Write-DotfilesUpdateWarning 'Update skipped: ~/.local/bin/chezmoi.exe is missing, a link or not private to you, SYSTEM and Administrators (docs/bootstrap.md W1-chezmoi).'
             return
         }
         $git = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -100,7 +115,7 @@ function Invoke-DotfilesChezmoiUpdate {
         if ($updated.Code -ne 0) { throw 'Update failed.' }
     }
     catch {
-        [Console]::Error.WriteLine('[dotfiles] Update skipped or failed; review the source, configuration and destination privately.')
+        Write-DotfilesUpdateWarning 'Update skipped or failed; review the source, configuration and destination privately.'
     }
     finally { if ($null -ne $chezmoi) { $chezmoi.Dispose() } }
 }
