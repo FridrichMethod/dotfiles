@@ -367,11 +367,14 @@ class TmuxConfiguration(unittest.TestCase):
             '#!/bin/sh\n'
             'printf "%s\\n" "$TMUX_PLUGIN_MANAGER_PATH" >> "$HOME/tpm-loaded"\n'
             f'{shlex.quote(TMUX)} set-option -g @test-tpm-loaded yes\n'
+            f'{shlex.quote(TMUX)} bind-key -T prefix M-u display-message tpm-clean\n'
         )
         tpm.chmod(0o755)
         self.source()
         self.source()
         self.assertEqual(self.option("@test-tpm-loaded"), "yes")
+        # TPM's clean key would delete the host-gated clones setup-host owns.
+        self.assertNotIn("tpm-clean", self.tmux("list-keys", "-T", "prefix"))
         self.assertEqual((self.home / "tpm-loaded").read_text().splitlines(),
                          [str(self.home / ".tmux/plugins") + "/"] * 2)
         self.assertEqual(self.tmux("list-sessions", "-F", "#{session_name}"), "fixture")

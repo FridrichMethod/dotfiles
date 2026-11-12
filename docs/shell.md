@@ -159,7 +159,6 @@ Press `Ctrl-b`, release it, then use:
 | `y` / `Y` | Copy the command line / working directory with desktop yank |
 | `I` | Install plugins added to the config |
 | `U` | Explicitly update plugins through TPM |
-| `Alt-u` | Remove plugins no longer declared in the config |
 
 The prefix remains Ctrl-b. `p` still selects the previous window, `F` still
 opens fzf, and `?` still displays the native key reference. Copy mode uses
