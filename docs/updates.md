@@ -97,8 +97,10 @@ The updater stops, with a warning and without touching the destination, when:
 
 - A failure prints one generic warning; chezmoi's and Git's output, which can
   carry secrets, is never printed.
-- On Unix the login warnings go through the configured checkout's
-  `lib/terminal.sh`, so they follow `DOTFILES_COLOR`, `NO_COLOR` and `TERM`.
+- On Unix the login warnings go through `lib/terminal.sh` of the checkout
+  the guard accepted, so they follow `DOTFILES_COLOR`, `NO_COLOR` and `TERM`;
+  a refused config's warning is a plain line, since no code runs from a
+  checkout the guard refused.
   Under Powerlevel10k's instant prompt, whose capture file stands in for
   stderr during zsh startup, `~/.zshrc` colors them when the stderr p10k
   saved is a terminal. On Windows they go through `lib/terminal.ps1`'s

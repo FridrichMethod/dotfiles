@@ -348,6 +348,7 @@ Remove-Variable IsAgentSession
 if ($IsInteractive) {
     & {
         $DotfilesDir = $null
+        $DotfilesTrusted = $null
         try {
             # The opt-out also silences the warning about a config the guard refuses.
             if ($env:DOTFILES_AUTO_UPDATE -eq '0') { return }
@@ -378,16 +379,19 @@ if ($IsInteractive) {
             . $DotfilesGuard
             if (Test-DotfilesMaintenance -HomePath $HOME) { return }
             $DotfilesDir = (Get-DotfilesChezmoiPaths -HomePath $HOME).Source
+            # Only a checkout the guard accepted may supply the warning colors.
+            $DotfilesTrusted = $DotfilesDir
             $DotfilesUpdate = Join-Path $DotfilesDir 'scripts/chezmoi-update.ps1'
             if (Test-Path -LiteralPath $DotfilesUpdate) { & $DotfilesUpdate }
         }
         catch {
-            # Through the configured checkout's lib/terminal.ps1 when it loads.
+            # Through lib/terminal.ps1 of a checkout the guard accepted, when it
+            # loads; a refused config's warning stays a plain line.
             $DotfilesWarning = 'Profile hooks skipped: review ~/.config/chezmoi/chezmoi.toml and its source checkout privately.'
             $DotfilesWarned = $false
             try {
-                if ($DotfilesDir -and [IO.Path]::IsPathFullyQualified($DotfilesDir)) {
-                    $DotfilesTerminal = Join-Path $DotfilesDir 'lib/terminal.ps1'
+                if ($DotfilesTrusted) {
+                    $DotfilesTerminal = Join-Path $DotfilesTrusted 'lib/terminal.ps1'
                     if (Test-Path -LiteralPath $DotfilesTerminal -PathType Leaf) {
                         . $DotfilesTerminal
                         Write-DotfilesWarning $DotfilesWarning

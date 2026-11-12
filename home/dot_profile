@@ -117,9 +117,10 @@ fi
 # ssh-agent/env setup; bash/sh calls it here. Maintenance survives unrelated
 # future logins. Only a home with ~/.config/chezmoi/chezmoi.toml updates; one
 # without it runs nothing and prints nothing.
-# _dotfiles_login_warn MESSAGE: one warning on stderr, through the configured
-# checkout's lib/terminal.sh when it has one (_df_terminal), so it follows
-# DOTFILES_COLOR, NO_COLOR and TERM like every other dotfiles message.
+# _dotfiles_login_warn MESSAGE: one warning on stderr, through lib/terminal.sh
+# of the checkout the guard accepted (_df_terminal), so it follows
+# DOTFILES_COLOR, NO_COLOR and TERM like every other dotfiles message; a
+# refused config's warning stays a plain line.
 _dotfiles_login_warn() {
     if [ -n "${_df_terminal-}" ]; then
         # shellcheck source=/dev/null
@@ -156,9 +157,6 @@ _dotfiles_login_updates() {
         done <"$HOME/.config/chezmoi/chezmoi.toml"
     fi
     _df_terminal=''
-    if [ -n "$_df_hook_root" ] && [ -r "$_df_hook_root/lib/terminal.sh" ]; then
-        _df_terminal=$_df_hook_root/lib/terminal.sh
-    fi
     if ! _df_hook_root=$(
         [ -n "$_df_hook_root" ] && [ -r "$_df_hook_root/lib/chezmoi-guard.sh" ] || exit 1
         # shellcheck source=/dev/null
@@ -169,6 +167,9 @@ _dotfiles_login_updates() {
         _dotfiles_login_warn '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.'
         unset _df_hook_root _df_line _df_terminal
         return 0
+    fi
+    if [ -r "$_df_hook_root/lib/terminal.sh" ]; then
+        _df_terminal=$_df_hook_root/lib/terminal.sh
     fi
     _df_update=$_df_hook_root/scripts/chezmoi-update.sh
     if [ -r "$_df_update" ]; then

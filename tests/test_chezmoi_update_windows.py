@@ -611,7 +611,11 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertIn("profile continued", result.stdout)
         self.assertIn("[dotfiles] [warn] Profile hooks skipped", result.stderr)
         updater.write_bytes(saved)
-        # A config the guard refuses never falls back to another checkout.
+        # A config the guard refuses never falls back to another checkout, and
+        # no code from the refused checkout colors its warning.
+        refused_terminal = independent_source / "lib/terminal.ps1"
+        refused_terminal.write_text(
+            "Add-Content -LiteralPath " + ps_string(trace) + " -Value 'refused-terminal'\n")
         for malformed in (self.top(source=independent_source).split("\n", 1)[0] + "\n[data]\n",
                           self.top(home=self.f.root, source=independent_source)):
             self.config.write_bytes(malformed.encode())
@@ -624,6 +628,7 @@ class WindowsUpdateTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn("[dotfiles]", result.stdout + result.stderr)
             self.assertFalse(trace.exists())
+        refused_terminal.unlink()
         self.config.unlink()
         for config_kind in ("directory", "dangling-link"):
             if config_kind == "directory":
