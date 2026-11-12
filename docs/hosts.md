@@ -149,7 +149,9 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
 ### PowerShell 7 console acceptance
 
 Use a one-off task with the identity and lifetime above to launch a separate
-`pwsh -NoLogo -NoExit` in a new console in the logged-on desktop session.
+`pwsh -NoLogo -NoExit` in a new console in the logged-on desktop session,
+through `conhost.exe`: win's default terminal is Windows Terminal, and the
+checks below read a classic console's screen buffer.
 The child loads the normal profile. For a hook proof, remove
 `DOTFILES_AUTO_UPDATE` and `_DOTFILES_CHECKED` from its inherited environment
 and require maintenance to be absent; then verify the hook was attempted.
@@ -160,10 +162,18 @@ Keep these checks confined to the console created for this run:
    do not establish these properties of the child.
 2. Attach the controller only to that child's console. Never attach to an
    existing user console or capture the user's history. Use benign synthetic
-   input with per-process `HistorySaveStyle=SaveNothing`; seed a history
-   suggestion only after the first `ReadLine` has initialized history. A
-   built-in completion such as `Get-Date -Format` tests CompletionPredictor
-   without relying on an ad-hoc function reaching its separate runspace.
+   input with per-process `HistorySaveStyle=SaveNothing`: start each typed
+   line with a space, which the profile keeps out of the history file, and
+   let the first one set it. Seed a history suggestion only after the first
+   `ReadLine` has initialized history, and record only list rows of the
+   probe's own seed or of the plugin, since other rows can come from the
+   user's history. A built-in completion such as `Get-Date -Form` tests
+   CompletionPredictor without relying on an ad-hoc function reaching its
+   separate runspace.
+   Type that input one key at a time: keys written to the input buffer in
+   one batch reach PSReadLine without a plugin suggestion appearing. In the
+   list view, the first Escape closes the list and a second one reverts the
+   line.
 3. Inspect the created console's screen buffer for both history and plugin
    suggestions in `HistoryAndPlugin` / `ListView`. Check that the directory
    style equals `Bold+Blue` and a synthetic directory marker renders with
@@ -178,12 +188,11 @@ Keep these checks confined to the console created for this run:
    hashes and copied artifacts. Confirm no probe task, process or temporary
    directory remains.
 
-The procedure has passed on win for an earlier revision of the PowerShell 7
-profile, with PowerShell 7.6.9 and PSReadLine 2.4.5: every check above held,
-and CompletionPredictor and Microsoft.WinGet.CommandNotFound loaded through
-the normal idle hook. The current profile has not been through it, so its
-changes have fixture and CI evidence only; rerun the procedure after a change
-to that profile or to the update hook it runs. The procedure is evidence for
+The procedure passes on win with PowerShell 7.6.9, PSReadLine 2.4.5 and
+oh-my-posh 32.0.0: every check above holds, and CompletionPredictor and
+Microsoft.WinGet.CommandNotFound load through the normal idle hook. Rerun it
+after a change to that profile or to the update hook it runs; until then the
+change has fixture and CI evidence only. The procedure is evidence for
 the existing home's console, not fresh-machine acceptance, which is the
 separate [bootstrap gate](bootstrap.md#acceptance-checklist).
 
@@ -199,13 +208,12 @@ check is run by hand, deploys nothing, does not replace the console
 procedure above and is not fresh-machine acceptance. A run covers only the
 files of the candidate it tested.
 
-This check has passed for an earlier candidate, with PowerShell 7.6.9 and
-oh-my-posh 31.9.1: both updater culture tests ran without skips and passed,
-and the complete `tests/powershell-profile.ps1` suite passed, including the
-history cases under all three cultures and the oh-my-posh prompt rendering.
-The current `tests/powershell-profile.ps1` and
-`tests/test_chezmoi_update_windows.py`, and the profile and updater they
-test, have not been run this way.
+The check passes with PowerShell 7.6.9, Python 3.12 and oh-my-posh 32.0.0:
+both updater culture tests of `tests/test_chezmoi_update_windows.py` run
+without skips and pass, and the complete `tests/powershell-profile.ps1`
+suite passes without skips, including the history cases under all three
+cultures and the oh-my-posh prompt rendering. Rerun it after a change to
+those tests or to the profile and updater they test.
 
 ## Sherlock
 
@@ -318,9 +326,8 @@ not diagnostics to clean up.
 - mac: the macOS CI job installs no tmux, so `tests/tmux.sh`'s real-tmux
   `TmuxConfiguration` cases skip there and its green result alone is not tmux
   evidence. Linux CI runs the suite with tmux 3.4. On the real mac host with
-  tmux 3.8 the suite, including its six quoted-directory/action menu cases,
-  has passed for an earlier revision of the tmux config and tests; the
-  current revision has not been run there. A change to the tmux config or to
+  tmux 3.8 all 16 tests pass without skips, including the six
+  quoted-directory/action menu cases. A change to the tmux config or to
   `tests/test_tmux.py` is verified on macOS only by rerunning `tests/tmux.sh`
   on the mac host.
 - Container and hosted-runner runs are not fresh-machine acceptance
