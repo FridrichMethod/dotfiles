@@ -445,13 +445,15 @@ done
 # of a checkout at ~/dotfiles, and prints nothing; a config the guard refuses
 # warns once and runs nothing; a valid config runs only its source's updater.
 # DOTFILES_AUTO_UPDATE=0 runs nothing and prints nothing for either config.
-# No helper variable is left behind.
+# The warning goes through the checkout's lib/terminal.sh, colored when
+# DOTFILES_COLOR=always. No helper variable is left behind.
 login_failures=0 login_home=$TEST_TMP/login-home
 login_warning='[dotfiles] [warn] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.'
 mkdir -p "$login_home/dotfiles/scripts" "$login_home/.oh-my-zsh" "$login_home/.config/chezmoi" \
     "$TEST_TMP/login-source/scripts" "$TEST_TMP/login-source/lib"
 printf 'home\n' >"$TEST_TMP/login-source/.chezmoiroot"
-cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/login-source/lib/"
+cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$REPO_ROOT/lib/terminal.sh" "$TEST_TMP/login-source/lib/"
+login_color_warning=$(printf '\033[33m[dotfiles] [warn]\033[0m %s' "${login_warning#'[dotfiles] [warn] '}")
 for hook in chezmoi-update payload-update; do
     # shellcheck disable=SC2016
     printf 'printf "%%s\\n" %s >>"$LOGIN_TRACE"\n' "$hook" >"$login_home/dotfiles/scripts/$hook.sh"
@@ -472,28 +474,30 @@ for test_shell in sh dash bash zsh; do
         zsh) login_args=(-d -i -c "$login_leaks") ;;
         *) login_args=(-i -c ". \"\$HOME/.profile\"; $login_leaks") ;;
     esac
-    for state in unconfigured invalid configured optout-invalid optout-configured; do
+    for state in unconfigured invalid configured optout-invalid optout-configured color-invalid; do
         rm -f "$TEST_TMP/login-trace" "$login_home/.config/chezmoi/chezmoi.toml"
-        login_auto=1
+        login_auto=1 login_color=auto login_term=dumb login_expected=$login_warning
         case $state in
             optout-*) login_auto=0 ;;
+            color-*) login_color=always login_term=xterm-256color login_expected=$login_color_warning ;;
         esac
-        case ${state#optout-} in
+        case ${state#*-} in
             invalid) printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$TEST_TMP" && pwd -P)" "$login_source" \
                 >"$login_home/.config/chezmoi/chezmoi.toml" ;;
             configured) printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$login_home" && pwd -P)" "$login_source" \
                 >"$login_home/.config/chezmoi/chezmoi.toml" ;;
         esac
         login_rc=0
-        out=$(env -i HOME="$login_home" PATH=/usr/bin:/bin TERM=dumb LOGIN_TRACE="$TEST_TMP/login-trace" \
-            DOTFILES_AUTO_UPDATE="$login_auto" "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
-        warnings=$(grep -c -F -x -e "$login_warning" "$TEST_TMP/login-err" || :)
-        noise=$(grep -v -F -x -e "$login_warning" "$TEST_TMP/login-err" |
+        out=$(env -i HOME="$login_home" PATH=/usr/bin:/bin TERM="$login_term" LOGIN_TRACE="$TEST_TMP/login-trace" \
+            DOTFILES_AUTO_UPDATE="$login_auto" DOTFILES_COLOR="$login_color" \
+            "$test_shell_path" "${login_args[@]}" </dev/null 2>"$TEST_TMP/login-err") || login_rc=$?
+        warnings=$(grep -c -F -x -e "$login_expected" "$TEST_TMP/login-err" || :)
+        noise=$(grep -v -F -x -e "$login_expected" "$TEST_TMP/login-err" |
             grep -v -e 'job control' -e 'terminal process group' -e "access tty" -e '^stty: ' || :)
         trace=$(cat "$TEST_TMP/login-trace" 2>/dev/null || :)
         case $state in
             unconfigured) expected_warnings=0 expected_trace='' ;;
-            invalid) expected_warnings=1 expected_trace='' ;;
+            invalid | color-invalid) expected_warnings=1 expected_trace='' ;;
             configured) expected_warnings=0 expected_trace='source chezmoi-update' ;;
             optout-*) expected_warnings=0 expected_trace='' ;;
         esac
@@ -505,6 +509,22 @@ for test_shell in sh dash bash zsh; do
         fi
     done
 done
+# zsh under Powerlevel10k's instant prompt: stderr is p10k's capture file, so
+# the warning takes its color from the terminal p10k saved in __p9k_fd_2
+# (here fd 3, the pseudo terminal util-linux script provides).
+if login_zsh=$(command -v zsh) && script --version 2>/dev/null | grep -q util-linux; then
+    printf 'destDir = "%s"\nsourceDir = "%s"\n' "$(cd -P "$TEST_TMP" && pwd -P)" "$login_source" \
+        >"$login_home/.config/chezmoi/chezmoi.toml"
+    : >"$TEST_TMP/login-p10k-err"
+    # shellcheck disable=SC2016
+    env -i HOME="$login_home" PATH=/usr/bin:/bin TERM=xterm-256color LOGIN_TRACE="$TEST_TMP/login-trace" \
+        __p9k_instant_prompt_active=1 __p9k_fd_2=3 LOGIN_ZSH="$login_zsh" LOGIN_ERR="$TEST_TMP/login-p10k-err" \
+        script -qec '"$LOGIN_ZSH" -d -i -c true 3>&2 2>"$LOGIN_ERR"' /dev/null </dev/null >/dev/null 2>&1 || :
+    if [ "$(grep -c -F -x -e "$login_color_warning" "$TEST_TMP/login-p10k-err" || :)" != 1 ]; then
+        printf 'FAIL p10k instant prompt login warning: [%s]\n' "$(cat -v "$TEST_TMP/login-p10k-err")" >&2
+        login_failures=$((login_failures + 1))
+    fi
+fi
 
 # home/dot_zshenv and home/dot_zprofile undo macOS path_helper, which
 # /etc/zprofile runs between them in every login zsh. Neither file can make

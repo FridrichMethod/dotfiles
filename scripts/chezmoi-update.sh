@@ -8,6 +8,16 @@ case $- in
 esac
 [ -z "${_DOTFILES_CHECKED:-}" ] || return 0 2>/dev/null || exit 0
 
+# _dotfiles_update_warn MESSAGE: through ~/.profile's _dotfiles_login_warn
+# (lib/terminal.sh colors) when the login dispatch sourced this file.
+_dotfiles_update_warn() {
+    if command -v _dotfiles_login_warn >/dev/null 2>&1; then
+        _dotfiles_login_warn "$1"
+    else
+        printf '[dotfiles] [warn] %s\n' "$1" >&2
+    fi
+}
+
 _dotfiles_chezmoi_update() (
     [ "${DOTFILES_AUTO_UPDATE:-1}" != 0 ] || return 0
     # Fixed paths also work before a source checkout/library can be located.
@@ -39,7 +49,7 @@ _dotfiles_chezmoi_update() (
         [ -s "$_df_home/.local/state/chezmoi/chezmoi.boltdb" ] || return 1
     case $_df_source in
         *OneDrive*)
-            printf '%s\n' '[dotfiles] [warn] Automatic update skipped for OneDrive; use the documented independent-clone procedure.' >&2
+            _dotfiles_update_warn 'Automatic update skipped for OneDrive; use the documented independent-clone procedure.'
             return 0
             ;;
     esac
@@ -91,7 +101,7 @@ _dotfiles_chezmoi_update() (
 )
 
 if ! _dotfiles_chezmoi_update; then
-    printf '%s\n' '[dotfiles] [warn] Update did not complete; inspect the config, source, backend and destination privately before retrying.' >&2
+    _dotfiles_update_warn 'Update did not complete; inspect the config, source, backend and destination privately before retrying.'
 fi
 export _DOTFILES_CHECKED=1
-unset -f _dotfiles_chezmoi_update
+unset -f _dotfiles_chezmoi_update _dotfiles_update_warn

@@ -117,6 +117,17 @@ fi
 # ssh-agent/env setup; bash/sh calls it here. Maintenance survives unrelated
 # future logins. Only a home with ~/.config/chezmoi/chezmoi.toml updates; one
 # without it runs nothing and prints nothing.
+# _dotfiles_login_warn MESSAGE: one warning on stderr, through the configured
+# checkout's lib/terminal.sh when it has one (_df_terminal), so it follows
+# DOTFILES_COLOR, NO_COLOR and TERM like every other dotfiles message.
+_dotfiles_login_warn() {
+    if [ -n "${_df_terminal-}" ]; then
+        # shellcheck source=/dev/null
+        (. "$_df_terminal" && dotfiles_log warn "$1")
+    else
+        printf '[dotfiles] [warn] %s\n' "$1" >&2
+    fi
+}
 _dotfiles_login_updates() {
     case $- in *i*) ;; *) return 0 ;; esac
     # The opt-out also silences the warning about a config the guard refuses.
@@ -144,14 +155,19 @@ _dotfiles_login_updates() {
             esac
         done <"$HOME/.config/chezmoi/chezmoi.toml"
     fi
+    _df_terminal=''
+    if [ -n "$_df_hook_root" ] && [ -r "$_df_hook_root/lib/terminal.sh" ]; then
+        _df_terminal=$_df_hook_root/lib/terminal.sh
+    fi
     if ! _df_hook_root=$(
         [ -n "$_df_hook_root" ] && [ -r "$_df_hook_root/lib/chezmoi-guard.sh" ] || exit 1
         # shellcheck source=/dev/null
         . "$_df_hook_root/lib/chezmoi-guard.sh"
         dotfiles_chezmoi_source "$HOME"
     ); then
-        printf '%s\n' '[dotfiles] [warn] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.' >&2
-        unset _df_hook_root _df_line
+        # shellcheck disable=SC2088 # the message names the path literally
+        _dotfiles_login_warn '~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; automatic updates skipped.'
+        unset _df_hook_root _df_line _df_terminal
         return 0
     fi
     _df_update=$_df_hook_root/scripts/chezmoi-update.sh
@@ -159,12 +175,12 @@ _dotfiles_login_updates() {
         # shellcheck source=/dev/null
         . "$_df_update"
     else
-        printf '%s\n' '[dotfiles] [warn] The login updater is unavailable; inspect the source checkout.' >&2
+        _dotfiles_login_warn 'The login updater is unavailable; inspect the source checkout.'
     fi
     # The payload repos install only when a person runs sync-payloads.
-    unset _df_hook_root _df_update _df_line
+    unset _df_hook_root _df_update _df_line _df_terminal
 }
 if [ -z "${ZSH_VERSION:-}" ]; then
     _dotfiles_login_updates
-    unset -f _dotfiles_login_updates
+    unset -f _dotfiles_login_updates _dotfiles_login_warn
 fi

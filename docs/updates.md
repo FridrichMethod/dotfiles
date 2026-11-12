@@ -97,6 +97,11 @@ The updater stops, with a warning and without touching the destination, when:
 
 - A failure prints one generic warning; chezmoi's and Git's output, which can
   carry secrets, is never printed.
+- On Unix the login warnings go through the configured checkout's
+  `lib/terminal.sh`, so they follow `DOTFILES_COLOR`, `NO_COLOR` and `TERM`.
+  Under Powerlevel10k's instant prompt, whose capture file stands in for
+  stderr during zsh startup, `~/.zshrc` colors them when the stderr p10k
+  saved is a terminal. The PowerShell hook's warnings stay plain.
 - The shell stays usable, the PowerShell profile keeps the caller's
   preferences, and the next session retries.
 - A source fast-forward can succeed before apply refuses a target. The update

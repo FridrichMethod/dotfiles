@@ -242,7 +242,11 @@ if [[ -n ${GMXBIN:-} && -r $GMXBIN/gmx-completion.bash ]]; then
 fi
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-! _is_agent_session && [[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+# An if, not a `! ... &&` list: under zsh -n (the rendered-syntax test) such a
+# list leaves status 1 that would otherwise reach the end of this file.
+if ! _is_agent_session && [[ -f ~/.p10k.zsh ]]; then
+    source ~/.p10k.zsh
+fi
 
 # WezTerm and Windows Terminal: emit OSC 133 prompt and command marks (jump
 # between prompts, select a command's output, WT scrollbar marks). Set here,
@@ -255,5 +259,15 @@ if ! _is_agent_session && [[ ${TERM_PROGRAM:-} == WezTerm || (-n ${WT_SESSION:-}
 fi
 
 # Shared login update dispatch (~/.profile), after ssh-agent/env is ready.
-(($+functions[_dotfiles_login_updates])) && _dotfiles_login_updates
-unset -f _dotfiles_login_updates
+# Powerlevel10k's instant prompt sends startup output to a capture file that
+# it replays on the terminal, so stderr is no terminal here; color by the
+# stderr p10k saved (as the wsl-ubuntu overlay does for stdout).
+if (($+functions[_dotfiles_login_updates])); then
+    if [[ ${DOTFILES_COLOR:-auto} == auto && -n ${__p9k_instant_prompt_active:-} &&
+        ${__p9k_fd_2:-x} != *[!0-9]* ]] && [[ -t $__p9k_fd_2 ]]; then
+        DOTFILES_COLOR=always _dotfiles_login_updates
+    else
+        _dotfiles_login_updates
+    fi
+fi
+unset -f _dotfiles_login_updates _dotfiles_login_warn
