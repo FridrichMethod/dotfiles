@@ -43,6 +43,9 @@ Ubuntu rc files use selected brew on PATH, then the shared Linuxbrew prefix,
 then ~/.linuxbrew. They run native shellenv only for an available executable.
 Marlowe preserves explicit CARGO_HOME or Cargo's durable HOME default; it does
 not relocate Cargo config, credentials and installed binaries into scratch.
+HF_HOME is on project scratch there, so HF_TOKEN_PATH (unless already set)
+keeps the Hugging Face token, and stored_tokens beside it, in
+`~/.config/huggingface/`.
 Sherlock's remaining cache placement requires current site-rule review before
 changes. No configuration change migrates or deletes existing Cargo contents.
 

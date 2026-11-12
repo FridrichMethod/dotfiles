@@ -18,6 +18,9 @@ if [ -n "$SCRATCH" ]; then
     export HF_DATASETS_CACHE="$SCRATCH/.cache/huggingface/datasets/$USER"
     export HF_HOME="$SCRATCH/.cache/huggingface/$USER"
     export HF_HUB_CACHE="$SCRATCH/.cache/huggingface/hub/$USER"
+    # The token is a credential: keep it (and stored_tokens, beside it) out of
+    # project scratch, in the durable default config directory under HOME.
+    export HF_TOKEN_PATH="${HF_TOKEN_PATH:-$HOME/.config/huggingface/token}"
     export PIP_CACHE_DIR="$SCRATCH/.cache/pip/$USER"
     export TORCHINDUCTOR_CACHE_DIR="$SCRATCH/.cache/torchinductor/$USER"
     export TORCH_EXTENSIONS_DIR="$SCRATCH/.cache/torch_extensions/$USER"

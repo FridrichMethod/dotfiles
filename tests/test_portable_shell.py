@@ -96,6 +96,15 @@ class PortableShellTests(unittest.TestCase):
             self.assertFalse((scratch / ".cargo").exists(), "shell startup created scratch Cargo home")
             self.assertFalse((self.home / "cargo").exists(), "shell startup created explicit Cargo home")
 
+    def test_marlowe_hf_token_stays_out_of_scratch(self):
+        scratch = Path(self.temp.name) / "scratch"
+        source = (ROOT / "home/.hosts/marlowe/.config/sh/.profile").read_text()
+        source = source.replace("/scratch/$PROJECT_ID", str(scratch))
+        explicit = str(self.home / "elsewhere/token")
+        for extra, want in [({}, str(self.home / ".config/huggingface/token")), ({"HF_TOKEN_PATH": explicit}, explicit)]:
+            self.assertEqual(self.run_shell(source, 'printf "%s" "$HF_TOKEN_PATH"', extra=extra), want)
+        self.assertFalse((self.home / ".config/huggingface").exists(), "shell startup created the token directory")
+
     def test_linuxbrew_home_and_path_discovery(self):
         prefix = self.home / ".linuxbrew"
         brew = prefix / "bin/brew"
