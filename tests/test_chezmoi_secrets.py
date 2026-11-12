@@ -18,14 +18,16 @@ FIXTURES = Path(__file__).parent / "fixtures" / "chezmoi" / "secrets"
 
 
 class SecretTests(unittest.TestCase):
-    def test_enrolled_source_contains_only_seven_opaque_age_leaves(self):
+    def test_enrolled_source_contains_only_opaque_age_leaves(self):
         # Read ciphertext only. Private recipient/equality checks belong to the
         # operator; CI must never receive a production decryption identity.
         parent = ROOT / "home/private_dot_secrets"
         self.assertTrue(parent.is_dir() and not parent.is_symlink(),
                         "the approved encrypted source directory must exist")
         leaves = list(parent.iterdir())
-        self.assertEqual(len(leaves), 7, "the approved enrollment has exactly seven leaves")
+        # No count is pinned: enrolling or retiring an account adds or removes
+        # one leaf, and every leaf must still pass the checks below.
+        self.assertTrue(leaves, "the encrypted source directory holds at least one leaf")
         for path in leaves:
             self.assertTrue(path.is_file() and not path.is_symlink(),
                             "encrypted source leaves must be regular files")

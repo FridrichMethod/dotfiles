@@ -40,9 +40,10 @@ decrypt it.
 
 Every ciphertext is encrypted to the public recipient of each enrolled host
 plus one recovery recipient, R, and to nobody else; R alone can recover every
-file. `tests/test_chezmoi_secrets.py` pins the set: exactly the enrolled
-ciphertexts, each with one X25519 stanza per recipient (six today: five hosts
-and R).
+file. `tests/test_chezmoi_secrets.py` checks every leaf there: an
+`encrypted_private_claude-NAME.age` file in age armor with one X25519 stanza
+per recipient (six today: five hosts and R). It pins no count, so enrolling
+or retiring an account changes only that one file.
 
 Each enrolled host has its own age identity, generated on that host and kept
 outside Git:
@@ -104,17 +105,15 @@ the new ciphertext lands. Instead:
    same bytes, without printing them.
 4. Add or replace `home/private_dot_secrets/encrypted_private_claude-NAME.age`
    (an `encrypted_private_` leaf, never an `exact_` directory or a `create_`
-   seed; a new file also updates the count `tests/test_chezmoi_secrets.py`
-   pins) and land it through CI. Each enrolled host's login update deploys it;
+   seed) and land it through CI. Each enrolled host's login update deploys it;
    then remove the temporary token file and any `TEMPNAME` kit metadata, and
    revoke the superseded token at its issuer. Git history keeps the old
    ciphertext, so revocation, not deletion, ends it.
 
 ## Retiring a secret
 
-Remove `home/private_dot_secrets/encrypted_private_claude-NAME.age`, lower
-the count `tests/test_chezmoi_secrets.py` pins and land it through CI; only
-then delete each host's `~/.secrets/claude-NAME` and its kit metadata, and
+Remove `home/private_dot_secrets/encrypted_private_claude-NAME.age` and land
+it through CI; only then delete each host's `~/.secrets/claude-NAME` and its kit metadata, and
 revoke the token at its issuer. Once the source no longer has the file,
 chezmoi stops managing that target and never deletes it. Deleting the live
 file first makes every nonforce login update stop at it (`DA` in `status`:
