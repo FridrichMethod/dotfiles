@@ -59,6 +59,11 @@ fi
 unknown_fields=$(awk -F '\t' '!/^#/ && NF && $2 !~ /^(channel|(unix|windows)-(probe|install|update)|person-status)$/ { print NR ": " $1 " " $2 }' \
     "$REPO_ROOT/config/payloads.tsv")
 [[ -z "$unknown_fields" ]] || fail "config/payloads.tsv has a field no hook reads: $unknown_fields"
+# Each item names each field once: the readers take the first row, so a
+# second one would be silently ignored.
+repeated_fields=$(awk -F '\t' '!/^#/ && NF { if (seen[$1 FS $2]++) print NR ": " $1 " " $2 }' \
+    "$REPO_ROOT/config/payloads.tsv")
+[[ -z "$repeated_fields" ]] || fail "config/payloads.tsv repeats a field: $repeated_fields"
 
 cat >"$TEST_TMP/bin/curl" <<'SH'
 #!/bin/sh

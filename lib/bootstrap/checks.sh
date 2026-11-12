@@ -502,7 +502,11 @@ bootstrap_check_payloads() {
         probe=''
         while IFS= read -r line || [ -n "$line" ]; do
             case $line in
-                "$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"*) probe=${line#"$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"} ;;
+                "$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"*)
+                    # The first row wins, as for every other reader of the file.
+                    probe=${line#"$item${BOOTSTRAP_TAB}unix-probe$BOOTSTRAP_TAB"}
+                    break
+                    ;;
             esac
         done <"$config"
         if [ -z "$probe" ]; then
