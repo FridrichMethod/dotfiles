@@ -535,6 +535,50 @@ if login_zsh=$(command -v zsh) && script --version 2>/dev/null | grep -q util-li
     fi
 fi
 
+# home/dot_zshrc resets terminal input modes before each prompt, which a TUI
+# killed by a dropped ssh session leaves on. Under a pseudo terminal
+# (util-linux script) the registered precmd hooks write the mouse, focus and
+# cursor resets, plus kitty's keyboard stack pop only under TERM=xterm-kitty.
+# TERM=dumb, a stdout that is no terminal (Powerlevel10k's capture file at
+# the first prompt) and an agent session get nothing; sourcing ~/.zshrc
+# again registers no second hook.
+mode_failures=0
+if mode_zsh=$(command -v zsh) && script --version 2>/dev/null | grep -q util-linux; then
+    mode_home=$TEST_TMP/mode-home mode_file=$TEST_TMP/mode-file
+    mkdir -p "$mode_home/.oh-my-zsh"
+    ln -s "$REPO_ROOT/home/dot_profile" "$mode_home/.profile"
+    ln -s "$REPO_ROOT/home/dot_zshrc" "$mode_home/.zshrc"
+    : >"$mode_home/.oh-my-zsh/oh-my-zsh.sh"
+    mode_reset='^[[?1000l^[[?1002l^[[?1003l^[[?1006l^[[?1015l^[[?1004l^[[?25h'
+    # shellcheck disable=SC2016
+    mode_hooks='for f in $precmd_functions; do $f; done'
+    # shellcheck disable=SC2016
+    mode_count='source ~/.zshrc; print -r -- ${#${(M)precmd_functions:#_dotfiles_reset_term_modes}}'
+    for mode_case in xterm kitty dumb redirected agent resourced; do
+        mode_term=xterm-256color mode_agent='' mode_cmd=$mode_hooks mode_expected=$mode_reset
+        case $mode_case in
+            kitty) mode_term=xterm-kitty mode_expected="$mode_reset^[[<99u" ;;
+            dumb) mode_term=dumb mode_expected='' ;;
+            redirected) mode_cmd="$mode_hooks >\$MODE_FILE" mode_expected='' ;;
+            agent) mode_agent=1 mode_expected='' ;;
+            resourced) mode_cmd=$mode_count mode_expected=1 ;;
+        esac
+        printf 'unwritten' >"$mode_file"
+        # shellcheck disable=SC2016
+        out=$(env -i HOME="$mode_home" PATH=/usr/bin:/bin TERM="$mode_term" CURSOR_AGENT="$mode_agent" \
+            MODE_ZSH="$mode_zsh" MODE_CMD="$mode_cmd" MODE_FILE="$mode_file" \
+            script -qec '"$MODE_ZSH" -d -i -c "$MODE_CMD"' /dev/null </dev/null 2>&1 | tr -d '\r' | cat -v) ||
+            out="exit $?: $out"
+        mode_written=$(cat "$mode_file")
+        if [ "$out" != "$mode_expected" ] ||
+            { [ "$mode_case" = redirected ] && [ -n "$mode_written" ]; }; then
+            printf 'FAIL terminal mode reset (%s): got [%s], expected [%s], file [%s]\n' "$mode_case" "$out" \
+                "$mode_expected" "$(printf '%s' "$mode_written" | cat -v)" >&2
+            mode_failures=$((mode_failures + 1))
+        fi
+    done
+fi
+
 # home/dot_zshenv and home/dot_zprofile undo macOS path_helper, which
 # /etc/zprofile runs between them in every login zsh. Neither file can make
 # zsh read a fake /etc/zprofile, so each case sources both in a login zsh
@@ -571,5 +615,5 @@ if zsh_path=$(command -v zsh); then
 fi
 
 [ "$nvm_failures" = 0 ] && [ "$preview_failures" = 0 ] && [ "$sync_failures" = 0 ] &&
-    [ "$login_failures" = 0 ] && [ "$path_failures" = 0 ] || exit 1
+    [ "$login_failures" = 0 ] && [ "$mode_failures" = 0 ] && [ "$path_failures" = 0 ] || exit 1
 echo "shell-profile=PASS"

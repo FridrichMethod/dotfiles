@@ -28,6 +28,17 @@ may repair the brew plugin ordering afterwards. Do not add a post-plugin
 command-hash rebuild. Plugin options must be set before their
 plugins load; ssh-agent settings are pre-sourced for this reason.
 
+Before each prompt an interactive zsh turns off the terminal input modes a TUI
+may have left on: mouse tracking (1000, 1002, 1003 with encodings 1006 and
+1015), focus reports (1004) and a hidden cursor, and under TERM=xterm-kitty
+it pops the kitty keyboard protocol stack. A program such as Claude Code,
+Codex or tmux that dies with a dropped ssh session cannot undo them, and ssh
+restores only the tty settings, so mouse moves would otherwise type SGR
+reports such as `35;97;7M` at the local prompt and keys could arrive as CSI u
+(`13u`). The hook writes only to a terminal stdout, never under TERM=dumb or
+in an agent session. It does not leave a stuck alternate screen: `reset`, or
+kitty's `opt+cmd+r` (`clear_terminal reset`), does.
+
 On macOS, `/etc/zprofile` runs `path_helper` in every login zsh, including
 tmux panes and editor terminals, and moves the `/etc/paths` directories ahead
 of Homebrew, nvm and `~/bin`. When a login zsh inherits a PATH that

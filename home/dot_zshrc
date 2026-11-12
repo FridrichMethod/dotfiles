@@ -258,6 +258,28 @@ if ! _is_agent_session && [[ ${TERM_PROGRAM:-} == WezTerm || (-n ${WT_SESSION:-}
     typeset -g POWERLEVEL9K_TERM_SHELL_INTEGRATION=true
 fi
 
+# A TUI (Claude Code, Codex, tmux) killed by a dropped ssh session never
+# turns off the terminal modes it set, and ssh restores only the tty
+# settings: every mouse move then types SGR reports such as 35;97;7M at this
+# prompt. Before each prompt, when no program owns the terminal, turn off
+# mouse tracking (1000, 1002, 1003; encodings 1006, 1015) and focus reports
+# (1004) and show the cursor. Under kitty also pop the keyboard protocol
+# stack (a pop past its bottom resets the flags), or keys arrive as CSI u
+# (13u for Enter). Only on a terminal: at the first prompt under
+# Powerlevel10k's instant prompt stdout is still its capture file. The
+# alternate screen is left alone; `reset` or kitty's opt+cmd+r leaves it.
+_dotfiles_reset_term_modes() {
+    [[ -t 1 && ${TERM:-dumb} != dumb ]] || return 0
+    print -rn -- $'\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?1015l\e[?1004l\e[?25h'
+    if [[ $TERM == xterm-kitty ]]; then
+        print -rn -- $'\e[<99u'
+    fi
+}
+if ! _is_agent_session; then
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd _dotfiles_reset_term_modes
+fi
+
 # Shared login update dispatch (~/.profile), after ssh-agent/env is ready.
 # Powerlevel10k's instant prompt sends startup output to a capture file that
 # it replays on the terminal, so stderr is no terminal here; color by the
