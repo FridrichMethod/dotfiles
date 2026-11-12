@@ -1,0 +1,211 @@
+#!/bin/sh
+# Checkout-local frontend. Installed launchers select their source separately.
+
+cli_error() {
+    printf 'dotfiles: %s\n' "$1" >&2
+    exit 2
+}
+
+fail() {
+    printf 'dotfiles: %s\n' "$1" >&2
+    exit 1
+}
+
+usage() {
+    case $1 in
+        '')
+            printf '%s\n' \
+                'Usage: dotfiles COMMAND [OPTIONS]' \
+                '' \
+                'Commands:' \
+                '  doctor          Check this host (offline and write-free by default)' \
+                '  setup           Install host tools; --check plans without writes' \
+                '  payloads sync   Install or update selected payload repos' \
+                '  dev test        Run repository tests' \
+                '  dev check       Run pre-commit checks from this checkout' \
+                '  help [COMMAND]  Show help without running a backend' \
+                '' \
+                'Run dotfiles help COMMAND for command options.'
+            ;;
+        doctor)
+            printf '%s\n' \
+                'Usage: dotfiles doctor [OPTIONS]' \
+                '  --host HOST       Select a host; otherwise use the home chezmoi config' \
+                '  --platform NAME   Check a platform without a host overlay (Unix only)' \
+                '  --tier LIST|all   Select comma-separated tool tiers' \
+                '  --tsv             Emit machine-readable rows' \
+                '  --quiet           Suppress passing rows' \
+                '  --online          Run authentication probes' \
+                '  --smoke           Run smoke checks (Unix only)' \
+                '  --list            List selected tools (Unix only)' \
+                '  -h, --help        Show this help'
+            ;;
+        setup)
+            printf '%s\n' \
+                'Usage: dotfiles setup [OPTIONS]' \
+                '  --host HOST       Select a host; otherwise use the home chezmoi config' \
+                '  --tier LIST|all   Select comma-separated tool tiers' \
+                '  --check           Plan offline without writes; exit 3 if work remains' \
+                '  --yes             Confirm supported installer prompts' \
+                '  --print-manual    Print manual steps' \
+                '  --only ID         Select a step (repeatable, Unix only)' \
+                '  --skip ID         Skip a step (repeatable, Unix only)' \
+                '  --keep-going      Continue after step failures (Unix only)' \
+                '  --list            List steps (Unix only)' \
+                '  -h, --help        Show this help'
+            ;;
+        payloads)
+            printf '%s\n' 'Usage: dotfiles payloads sync [ITEM...]' \
+                '  sync              Install or update payload repos in the foreground' \
+                '  -h, --help        Show this help'
+            ;;
+        'payloads sync')
+            printf '%s\n' 'Usage: dotfiles payloads sync [ITEM...]' \
+                'Omit ITEM to use backend defaults. Maintenance blocks execution.' \
+                '  -h, --help        Show this help'
+            ;;
+        dev)
+            printf '%s\n' 'Usage: dotfiles dev COMMAND' \
+                '  test              Run repository tests' \
+                '  check             Run pre-commit run --all-files in this checkout' \
+                '  -h, --help        Show this help'
+            ;;
+        'dev test')
+            printf '%s\n' 'Usage: dotfiles dev test [OPTIONS]' \
+                '  --ci                     Require CI prerequisites' \
+                '  --check-prerequisites    Check prerequisites without running suites' \
+                '  -h, --help               Show this help'
+            ;;
+        'dev check')
+            printf '%s\n' 'Usage: dotfiles dev check' \
+                'Run pre-commit run --all-files in this checkout; formatters may edit files.' \
+                '  -h, --help        Show this help'
+            ;;
+    esac
+}
+
+# Resolve help paths without looking for backends or optional tools.
+help_path() {
+    case $# in
+        0) usage '' ;;
+        1)
+            case $1 in
+                doctor | setup | payloads | dev) usage "$1" ;;
+                *) cli_error "unknown help command: $1" ;;
+            esac
+            ;;
+        2)
+            case "$1 $2" in
+                'payloads sync' | 'dev test' | 'dev check') usage "$1 $2" ;;
+                *) cli_error "unknown help command: $1 $2" ;;
+            esac
+            ;;
+        *) cli_error 'unknown help command path' ;;
+    esac
+}
+
+# Validate in a function's positional parameters, leaving the original argv
+# untouched for exec. Backends retain host, tier and step semantic validation.
+validate_options() {
+    show_help=0
+    while [ "$#" -gt 0 ]; do
+        case $1 in
+            --help | -h)
+                show_help=1
+                shift
+                continue
+                ;;
+        esac
+        case "$command:$1" in
+            doctor:--host | doctor:--tier | doctor:--platform | \
+                setup:--host | setup:--tier | setup:--only | setup:--skip)
+                [ "$#" -ge 2 ] && [ -n "$2" ] || cli_error "$1 needs a value"
+                case $2 in -*) cli_error "$1 needs a value" ;; esac
+                shift
+                ;;
+            doctor:--host=* | doctor:--tier=* | doctor:--platform=* | \
+                setup:--host=* | setup:--tier=* | setup:--only=* | setup:--skip=*)
+                [ -n "${1#*=}" ] || cli_error "${1%%=*} needs a value"
+                ;;
+            doctor:--tsv | doctor:--quiet | doctor:--online | doctor:--smoke | doctor:--list | \
+                setup:--check | setup:--yes | setup:--print-manual | setup:--keep-going | setup:--list | \
+                'dev test:--ci' | 'dev test:--check-prerequisites') ;;
+            'payloads sync:'*)
+                case $1 in -*) cli_error "unknown option for $command: $1" ;; esac
+                ;;
+            *) cli_error "unknown argument for $command: $1" ;;
+        esac
+        shift
+    done
+}
+
+[ "$#" -gt 0 ] || {
+    usage ''
+    exit 0
+}
+command=$1
+shift
+case $command in
+    help)
+        help_path "$@"
+        exit 0
+        ;;
+    --help | -h)
+        [ "$#" -eq 0 ] || cli_error 'help takes no trailing arguments; use dotfiles help COMMAND'
+        usage ''
+        exit 0
+        ;;
+    doctor | setup) ;;
+    payloads | dev)
+        case ${1-} in
+            '')
+                [ "$#" -eq 0 ] || cli_error "unknown command for $command"
+                usage "$command"
+                exit 0
+                ;;
+            --help | -h)
+                [ "$#" -eq 1 ] || cli_error "unexpected argument after $command help"
+                usage "$command"
+                exit 0
+                ;;
+        esac
+        case "$command $1" in
+            'payloads sync' | 'dev test' | 'dev check') command="$command $1" ;;
+            *) cli_error "unknown command: $command $1" ;;
+        esac
+        shift
+        ;;
+    *) cli_error "unknown command: $command" ;;
+esac
+
+validate_options "$@"
+if [ "$show_help" -eq 1 ]; then
+    usage "$command"
+    exit 0
+fi
+
+# Use shell builtins so root help and bootstrap require no new runtime.
+case $0 in
+    */*) entry=$0 ;;
+    *) entry=$(command -v "$0") || fail 'cannot locate checkout entrypoint dotfiles' ;;
+esac
+repo=$(CDPATH='' cd -P -- "${entry%/*}" 2>/dev/null && pwd -P) || fail 'cannot locate dotfiles checkout'
+
+case $command in
+    doctor) tool=bash backend=$repo/doctor.sh ;;
+    setup) tool=bash backend=$repo/setup-host.sh ;;
+    'payloads sync')
+        tool=sh backend=$repo/scripts/payload-update.sh
+        set -- --now "$@"
+        ;;
+    'dev test') tool=bash backend=$repo/tests/run.sh ;;
+    'dev check')
+        command -v pre-commit >/dev/null 2>&1 || fail 'required tool not found: pre-commit'
+        cd -- "$repo" 2>/dev/null || fail 'cannot enter dotfiles checkout'
+        exec pre-commit run --all-files
+        ;;
+esac
+
+[ -f "$backend" ] && [ -r "$backend" ] || fail "missing backend: $backend"
+command -v "$tool" >/dev/null 2>&1 || fail "required tool not found: $tool"
+exec "$tool" "$backend" "$@"
