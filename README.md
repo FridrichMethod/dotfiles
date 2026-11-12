@@ -12,10 +12,10 @@ Clone once per home/platform. Role selection uses explicit local
 `[data].host`; the checkout is the source chezmoi reads and stays available for updates.
 The six hosts, their access rules and their known limits are in
 [hosts](docs/hosts.md).
-The [host acceptance record](docs/hosts.md#powershell-7-console-acceptance)
+The [PowerShell 7 console procedure](docs/hosts.md#powershell-7-console-acceptance)
 distinguishes a real ordinary-user PowerShell console from a noninteractive
-task. [Fresh-machine gates](docs/bootstrap.md#acceptance-checklist) remain
-open until their required new environments are available.
+task. Genuine [fresh-machine acceptance](docs/bootstrap.md#acceptance-checklist)
+is a separate check with its own status.
 
 ```sh
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
@@ -106,7 +106,8 @@ Plugins are provisioned through setup-host's S3-clones step; startup installs
 nothing. Recovery restores layouts and directories without restarting programs
 or saving pane contents. See [tmux setup, keys and limits](docs/shell.md#tmux).
 The which-key new-window and split actions preserve quoted paths and literal
-tmux formats; regression checks run against tmux 3.4 and real macOS tmux 3.8.
+tmux formats; regression checks run in Linux CI against tmux 3.4, and their
+real-macOS tmux 3.8 coverage is in [hosts](docs/hosts.md#known-limits).
 
 ## Auto-update Hooks
 
@@ -237,9 +238,10 @@ optional real-kit fixtures and opt-in bootstrap e2e tests. See the
 [coverage matrix](tests/COVERAGE.md) for source-to-test mapping.
 
 The hosted Windows bootstrap E2E temporarily pauses only the installed OMP
-package's App Installer updates, then verifies restoration. This avoids a
-confirmed unattended update-interaction wait while preserving the real
-package, doctor assertions and timeouts. It does not validate App Installer
+package's App Installer updates, then verifies restoration. This keeps the
+run out of App Installer's unattended update-interaction path, where package
+activation can wait after updates resume, while preserving the real package,
+doctor assertions and timeouts. It does not validate App Installer
 update scheduling or ordinary-user interactive behavior; see the
 [runner qualifications](docs/testing.md#host-matrix-and-fidelity).
 

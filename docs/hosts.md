@@ -65,6 +65,10 @@ Before a change to rendered `~/.codex/config.toml`, ask the user to quit the
 Codex desktop apps that connect to the hosts
 ([Reconciling an owned key](ai-config.md#reconciling-an-owned-key)).
 
+A rollout reloads no running tmux server: a change to the tmux config reaches
+one only through `tmux source-file ~/.tmux.conf`, while a new server loads it
+itself ([tmux](shell.md#tmux)).
+
 ## Probe methods
 
 Probes are read-only: chezmoi `status --exclude=dirs` (names only),
@@ -141,9 +145,6 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
 - A task's noninteractive process does not run the profile's interactive
   setup or login hook. An Interactive-logon, Limited-token task can launch a
   separate real console under that same ordinary user, as below.
-- The user-approved deletion of five exact administrator-owned TEMP
-  directories on 2026-11-08 was a one-time exception for those paths. It
-  grants no general administrator cleanup or privilege-escalation authority.
 
 ### PowerShell 7 console acceptance
 
@@ -172,58 +173,39 @@ Keep these checks confined to the console created for this run:
    checkout at the expected revision and no maintenance marker.
 5. Exit the child, unregister every task the probe created, and confirm its
    processes are gone. Remove only its exact temporary files and empty
-   directory under the ordinary token. Record the nonsecret acceptance
-   conclusions here, then remove the completed probe's local logs, hashes and
-   copied artifacts. Confirm no probe task, process or temporary directory
-   remains.
+   directory under the ordinary token. Record the nonsecret conclusions here
+   as current-state statements, then remove the completed probe's local logs,
+   hashes and copied artifacts. Confirm no probe task, process or temporary
+   directory remains.
 
-This passed on 2026-11-08 at `360a269`: PowerShell 7.6.9, PSReadLine 2.4.5,
-`HistoryAndPlugin` / `ListView`, a rendered seeded history suggestion and a
-rendered Completion plugin `Get-Date -Format` suggestion. The directory
-style matched `Bold+Blue` and its marker had foreground attribute 9.
-CompletionPredictor and Microsoft.WinGet.CommandNotFound loaded through the
-normal idle hook. The profile update hook was attempted without a
-`[dotfiles]` startup warning; chezmoi status and Git were clean and maintenance
-was absent. The child exited and all probe tasks, processes and temporary
-files were removed. The completed local result/hash files were subsequently
-removed during cleanup on 2026-11-10; this paragraph records the acceptance.
-This establishes the existing home's console behavior; fresh-machine
-acceptance remains the separate
-[bootstrap gate](bootstrap.md#acceptance-checklist).
+The procedure has passed on win for an earlier revision of the PowerShell 7
+profile, with PowerShell 7.6.9 and PSReadLine 2.4.5: every check above held,
+and CompletionPredictor and Microsoft.WinGet.CommandNotFound loaded through
+the normal idle hook. The current profile has not been through it, so its
+changes have fixture and CI evidence only; rerun the procedure after a change
+to that profile or to the update hook it runs. The procedure is evidence for
+the existing home's console, not fresh-machine acceptance, which is the
+separate [bootstrap gate](bootstrap.md#acceptance-checklist).
 
 ### Ordinary-token candidate checks
 
-On 2026-11-09, a user-approved one-off Limited-token task tested a
-hash-recorded bundle of 13 public files from candidate `c19a83f`. The task
-recorded PowerShell 7.6.9, SessionId 1 and `Elevated=false`. Both updater
-culture tests executed without skips and passed; the complete
-`tests/powershell-profile.ps1` suite passed, including history cases under all
-three cultures and oh-my-posh prompt rendering. The existing home's offline
-doctor and setup `-Check` both exited 0. Codex was present on the ordinary
-user's PATH, resolving the earlier administrator-SSH absence as a PATH
-difference; oh-my-posh 31.9.1 also passed there.
+To test a candidate (the commit pushed to a `ci/**` branch before it lands,
+[AGENTS.md](../AGENTS.md#workflows-and-checks)) under the ordinary token, use
+a one-off task with the identity and lifetime above. Its script runs a
+hash-recorded bundle of the candidate's public files from a separate
+temporary directory and records the PowerShell version, the session ID and
+`Elevated=false`; the host's source checkout stays clean and unchanged. The
+check is run by hand, deploys nothing, does not replace the console
+procedure above and is not fresh-machine acceptance. A run covers only the
+files of the candidate it tested.
 
-The host source remained clean at `360a269` before and after these checks;
-the candidate files were tested in a separate temporary directory. This
-did not deploy the candidate, rerun the separate interactive-console proof
-or close a fresh-machine acceptance gate. The completed local diagnostic
-archive was removed during cleanup on 2026-11-10; the outcome is recorded here.
-
-The skills payload was genuinely absent; its own dry-run required an initial
-library clone. The approved ordinary-token
-`scripts/payload-update.ps1 -Now skills` run then exited 0. Its installer
-copied 2,346 skills per client, removed none, and selected one visible skill
-with 2,345 hidden. Two subsequent setup `-Yes` runs, setup `-Check` and the
-offline doctor all exited 0; all 33 doctor rows were `ok`, including
-`payloads` with `installed: pymol, skills`. HUMAN blocks were printed only.
-Source remained clean at `360a269`, chezmoi status was empty, managed counts
-were 26 files and 43 total entries, both AI configs matched their rendered
-targets, and maintenance was absent.
-The five created tasks were unregistered, and ordinary-token cleanup removed
-their temporary files and directories; no validation process remained. The
-six remaining validation receipts were deleted under the ordinary token on
-2026-11-10. That cleanup task and its staging were removed without writing a
-new receipt.
+This check has passed for an earlier candidate, with PowerShell 7.6.9 and
+oh-my-posh 31.9.1: both updater culture tests ran without skips and passed,
+and the complete `tests/powershell-profile.ps1` suite passed, including the
+history cases under all three cultures and the oh-my-posh prompt rendering.
+The current `tests/powershell-profile.ps1` and
+`tests/test_chezmoi_update_windows.py`, and the profile and updater they
+test, have not been run this way.
 
 ## Sherlock
 
@@ -237,12 +219,11 @@ new receipt.
   only inside a Slurm allocation, never under `$SCRATCH`.
 - The controller for jobs, status and transfers is
   `~/.local/share/chezmoi-sherlock-kit-provisioning` on lab-ubuntu: a plain uv
-  project, not a Git repository, that pins sherlock-kit v0.6.0, which its
-  `uv.lock` resolves to sherlock-kit commit `09a37281`. Call its absolute
-  `.venv/bin/shk`, never `uv run`, with that directory as the working
-  directory, and read `shk rules workstation` before using it; `shk doctor`
-  checks the existing master. Dotfiles pins no sherlock-kit and installs no
-  `shk`, rules or skill.
+  project, not a Git repository, whose `pyproject.toml` and `uv.lock` pin the
+  sherlock-kit v0.6.0 release tag. Call its absolute `.venv/bin/shk`, never `uv run`, with
+  that directory as the working directory, and read `shk rules workstation`
+  before using it; `shk doctor` checks the existing master. Dotfiles pins no
+  sherlock-kit and installs no `shk`, rules or skill.
 - Sherlock's glibc 2.17 runs only the official static musl chezmoi, which
   S4-chezmoi selects.
 - An interactive zsh on a login node starts no ssh-agent: only the
@@ -278,94 +259,52 @@ new receipt.
   `sh -c "$script" probe` sees `$0` as `probe`.
 - Changes to the login env run in a Slurm job, never on a login node.
 
-## Provisioning follow-up
+## Provisioning state
 
-The 2026-11-09 inventory used the existing homes, not fresh-machine fixtures.
-New acceptance environments and allocations were unavailable at that inventory.
-The user later waived genuine fresh-machine acceptance for this follow-up;
-the [five cases](bootstrap.md#acceptance-checklist) remain not run and are not
-follow-up blockers. Existing-host provisioning and its allocation requirements
-remain separate. Tool provisioning used the existing setup-host entry point after
-its scoped `--check`; payload installation used its canonical update command.
-Scoped installers left existing clones alone. One later Marlowe PTY smoke
-probe triggered the existing Oh My Zsh auto-updater, which fast-forwarded its
-clean checkout from `400591e` to `6010fb6`. That unexpected update is retained,
-not reset; subsequent probes use the update controls above. Package changes
-are listed per host below. No running user tmux server was reloaded.
+The six existing homes are provisioned through setup-host, after its
+`--check` plan, and through the canonical payload command (`sync-payloads`,
+or `scripts/payload-update.* --now`); S3-clones clones only missing
+repositories and leaves existing clones alone. On sherlock and marlowe,
+packages missing from an existing login env are added as described below the
+table. This is existing-host provisioning, separate from
+[fresh-machine acceptance](bootstrap.md#acceptance-checklist).
 
-Release `29cedd2` passed [candidate CI](https://github.com/FridrichMethod/dotfiles/actions/runs/42719330970),
-[full hosted E2E](https://github.com/FridrichMethod/dotfiles/actions/runs/42720661943)
-and [main CI](https://github.com/FridrichMethod/dotfiles/actions/runs/42722469167).
-All six existing homes accepted that revision with clean Git and chezmoi
-status, unchanged managed counts, matching AI configurations and no doctor
-regression. The real-console and tmux observations have their own platform
-checks described above and below. Completed local diagnostic archives and
-bundles were removed on 2026-11-10. Active payload ownership manifests and
-library checkouts remain part of the installation.
+The rows record each host's provisioning checks; they are not rerun at every
+landing. A host's current state is what its probes report
+([Probe methods](#probe-methods)), and step 4 of
+[Rolling out a landed change](#rolling-out-a-landed-change) accepts a rollout
+only when no doctor row is worse than before.
 
-| Host | Changes and result | Remaining classification |
+| Host | Default tiers (`core,cli,ai`) | Warnings and exceptions |
 | --- | --- | --- |
-| lab-ubuntu | No installation needed; offline doctor passes. | None in the selected tiers. |
-| wsl-ubuntu | S3-clones installed the 11 missing tmux plugins; doctor and smoke pass, and the scoped second plan is done. | None in the selected tiers. |
-| mac | S3-clones installed zsh-completions and the 11 tmux plugins; S3-dirs created the two missing Vim state directories. Doctor, smoke and the full setup check pass. | Optional kitty, StyLua and Schrodinger warnings remain; these unselected tiers were not installed. |
-| sherlock | In Slurm jobs 51696517 and 51698421, added git-lfs, git-delta, tealdeer and Chafa with their dependencies: 87 package records became 132. Only libxml2 and libxml2-16 changed existing builds, both staying at 2.15.4 for ICU compatibility; all other existing versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. Native Chafa, the second scoped setup and full setup check passed; compute doctor/smoke reported 60/61 ok with three optional warnings. On 2026-11-10, verified legacy skills were reconciled and the canonical payload install exited 0 for both clients. | The Codex capacity refusal is resolved. The remaining historical copies were traced to public upstream files and removed with user approval; see the reconciliation below. Contributor pre-commit, shfmt and StyLua remain optional. |
-| marlowe | In Slurm job 564410, added git-lfs, git-delta, tealdeer, aria2 and uv with three dependencies; all 61 existing package versions/builds stayed unchanged. Canonical S3 steps installed zsh-completions, 11 tmux plugins, the bat theme and Vim state directories. The second scoped setup installed nothing; full check, doctor and smoke passed. | Login doctor: 57 ok and six warnings. Node is policy-blocked; pre-commit, shfmt, shellcheck, StyLua and the separate Miniconda installation remain optional. Compute-node smoke had 59 ok and only those five optional warnings. |
-| win | The approved ordinary-token task passed both culture tests and the full PowerShell profile suite. The canonical skills payload install passed, followed by two setup `-Yes` runs, `-Check` and all 33 doctor rows; see [candidate checks](#ordinary-token-candidate-checks). Codex and oh-my-posh 31.9.1 are present; the earlier administrator-SSH Codex absence was a PATH difference. | None in the selected tiers; the payloads row reports `installed: pymol, skills`. This pre-rollout acceptance used source and deployed dotfiles at `360a269`; fresh-machine acceptance remains separate. |
+| lab-ubuntu | Complete; setup-host has nothing to install; the offline doctor passes. | None. |
+| wsl-ubuntu | Complete, with the tmux plugin clones from S3-clones; the doctor and `--smoke` pass and a repeated scoped `--check` has nothing left. | None. |
+| mac | Complete, with zsh-completions and the tmux plugin clones from S3-clones and both Vim state directories from S3-dirs; the doctor, `--smoke` and the full setup check pass. | kitty (`desktop`), StyLua (`contributor`) and Schrodinger (`host`) warn; those tiers are not installed there. |
+| sherlock | Complete. The existing login env includes git-lfs, git-delta, tealdeer and Chafa, with libxml2 and libxml2-16 held at 2.15.4 for ICU compatibility; zsh-completions, the tmux plugin clones, the bat theme and the Vim state directories come from S3-clones, S3-bat-theme and S3-dirs. The full setup check passes, and on a compute node the doctor with `--smoke` passes with three warnings. awesome-skills manages every skill directory under both clients' roots except Codex's own `.system`. | The three warnings are the optional `contributor` pre-commit, shfmt and StyLua; the login env lacks the yml's pre-commit and go-shfmt. |
+| marlowe | Complete except `node` (`ai`), which the login env provides but `block-node` denies on login nodes ([Marlowe](#marlowe)). The existing login env includes git-lfs, git-delta, tealdeer, aria2 and uv; zsh-completions, the tmux plugin clones, the bat theme and the Vim state directories come from S3-clones, S3-bat-theme and S3-dirs. A repeated scoped setup installs nothing; the full check, the doctor and `--smoke` pass. | On a login node the doctor warns for `node` and five optional rows: the `contributor` pre-commit, shfmt, shellcheck and StyLua and the separate Miniconda (`host`); a compute node warns only for the five. The login env lacks the yml's pre-commit, go-shfmt and shellcheck. |
+| win | Complete under the ordinary token: the offline doctor reports every row `ok`, the `payloads` row with `installed: pymol, skills`; setup `-Check` and a repeated setup `-Yes` exit 0, printing HUMAN blocks only. Codex and oh-my-posh are on the ordinary user's PATH. | None. |
 
-An existing login env makes setup-host report S2-login-env done; that alone
-does not prove every tool in its specification is present. These repairs
-reviewed modules and selective package plans inside authorized allocations,
-then used S3-clones, S3-bat-theme, S3-dirs and the payload's own installer.
-Environments stayed off SCRATCH. Neither Marlowe's `block-node` restriction
-nor the skills installer's ownership and capacity guards were bypassed.
-The interrupted first allocations ended during the controller account switch;
-Sherlock's remaining work resumed in the second allocation.
+On win the administrator SSH session's PATH lacks Codex, so a Codex `missing`
+row from a doctor run there does not mean the ordinary user lacks it.
 
-On 2026-11-10, Sherlock's skills reconciliation in Slurm job 51812416
-identified 2,071 directories per client matching the public 2026-10-04 library revision
-[`abbbdf3`](https://github.com/FridrichMethod/awesome-skills/commit/abbbdf3764d2dda82b95a694c289a8ae112ac225)
-by their complete trees. Those legacy copies were removed before the canonical
-installer ran; 46 differing directories per client matched none of 17 public
-revisions as complete trees and were initially preserved, along with Codex's
-`.system`. The old copies had no installer ownership records, so the normal
-update had preserved them.
+On sherlock and marlowe an existing login env makes setup-host report
+S2-login-env done, which does not show that every package of
+`config/bootstrap/hpc-login-env.yml` is present
+([S2-login-env](bootstrap.md#s2-login-env-hpc-login-environment)). A missing
+package is added to the existing env inside a Slurm allocation, never under
+`$SCRATCH`, from a reviewed selective package plan instead of the whole-yml
+`install`: the plan leaves every existing package's version and build
+unchanged unless a reviewed dependency requires a change, as with sherlock's
+libxml2 builds. S3-clones, S3-bat-theme, S3-dirs and the payload's own
+installer supply the rest. Provisioning bypasses neither Marlowe's
+`block-node` restriction nor the skills installer's ownership, capacity and
+path guards.
 
-That run used `selection=@library` and `manual=@all` for both clients.
-Claude owned 2,301 entries (one visible and 2,300 hidden); Codex owned 2,292
-(one visible and 2,291 hidden), split as 1,132 and 1,160 across its two
-roots. The canonical install exited 0 without changing the capacity limit,
-adding symlinks or changing `CODEX_HOME`. A second canonical run exited 0
-with `Already current; selection preserved.` and installed nothing. All 4,593
-managed fingerprints matched. Preservation checks passed for the 46 differing
-entries per client, `.system` and the 233 previously managed Claude copies.
-Doctor `--smoke` exited 0 with 61 `ok` rows and the same three optional
-warnings. Active manifests and the library continue to manage these copies.
-The completed installer backups were removed after verification. Git and
-chezmoi status stayed clean, the managed count remained 62 files and 83 total
-entries, both AI configurations matched, and maintenance was absent. The job
-completed with exit `0:0`; no installer process or payload temporary directory
-remained.
-
-A subsequent per-file comparison across 27 public commits accounted for all
-919 files in each client's 46 differing directories: 760 matched the
-2026-10-04 revision and 159 were additional historical upstream files. Paths,
-blob contents and executable bits matched; the whole-tree differences came
-from accumulated upstream files. With the user's approval, Slurm job 51828083
-removed those 92 old directories while preserving `.system`.
-
-The canonical payload install then exited 0 with 2,346 managed entries per
-client: one visible and 2,345 hidden. Codex's entries are split as 1,166 and
-1,180 across its two roots. The second run exited 0 and reported already
-current. All 4,692 managed fingerprints passed; the prior 4,593 managed entries
-and `.system` were unchanged, with no legacy or unmanaged ordinary directories
-remaining. Doctor with smoke reported 61 ok and the same three optional
-warnings. Git and chezmoi were clean, AI configurations matched, and maintenance
-was absent.
-
-The job completed with exit `0:0`. Across all six hosts, the reviewed completed
-installer backups, obsolete caches and tool metadata were removed; active
-libraries, ownership manifests and lock files were preserved. No task process,
-payload temporary directory or new diagnostic archive remained.
+awesome-skills' installer manages only the skill directories its ownership
+manifests record and preserves any other, so a copy installed without a
+record stays until a person removes it. Each host's payload ownership
+manifests, library checkouts and lock files are part of the installation,
+not diagnostics to clean up.
 
 ## Known limits
 
@@ -376,9 +315,13 @@ payload temporary directory or new diagnostic archive remained.
   ordinary user's noninteractive profile load and updater; the normal hook
   and rendered predictions require its separate ordinary-user console
   ([PowerShell 7 console acceptance](#powershell-7-console-acceptance)).
-- mac: the quoted-directory failure was reproduced and fixed on real macOS
-  with tmux 3.8 on 2026-11-09. All 16 tmux tests pass there and with Linux
-  tmux 3.4, including six hostile-directory/action subtests. The macOS CI
-  job installs no tmux; its green result alone is still not tmux evidence.
+- mac: the macOS CI job installs no tmux, so `tests/tmux.sh`'s real-tmux
+  `TmuxConfiguration` cases skip there and its green result alone is not tmux
+  evidence. Linux CI runs the suite with tmux 3.4. On the real mac host with
+  tmux 3.8 the suite, including its six quoted-directory/action menu cases,
+  has passed for an earlier revision of the tmux config and tests; the
+  current revision has not been run there. A change to the tmux config or to
+  `tests/test_tmux.py` is verified on macOS only by rerunning `tests/tmux.sh`
+  on the mac host.
 - Container and hosted-runner runs are not fresh-machine acceptance
   ([Acceptance checklist](bootstrap.md#acceptance-checklist)).

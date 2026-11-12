@@ -54,13 +54,13 @@ runner only, the harness pauses the current user's OMP package updates for
 two hours, before the first doctor if OMP already exists and after setup
 installs it. An absent package is left to setup and doctor. Existing pauses
 or system policy are refused. Package identity, executable hash and other
-update settings must stay unchanged. The original bootstrap checks and
-900-second doctor limits remain in force. The driver's `finally` resumes
+update settings must stay unchanged. The pause leaves the bootstrap checks
+and the 900-second doctor limits in force. The driver's `finally` resumes
 updates; an independent `always()` workflow step retries unfinished
-restoration. The 95-minute job reserves cleanup time after the original
-90-minute run budget. These runs cover package activation with update
-scheduling adapted, not App Installer's unattended update interaction or
-ordinary-user console acceptance.
+restoration. The 95-minute job holds the 90-minute run step plus time for
+that restoration and the artifact upload. These runs cover package
+activation with update scheduling adapted, not App Installer's unattended
+update interaction or ordinary-user console acceptance.
 
 ## Outputs
 

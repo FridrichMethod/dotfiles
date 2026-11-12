@@ -117,9 +117,8 @@ it through CI; only then delete each host's `~/.secrets/claude-NAME` and its kit
 revoke the token at its issuer. Once the source no longer has the file,
 chezmoi stops managing that target and never deletes it. Deleting the live
 file first makes every nonforce login update stop at it (`DA` in `status`:
-it changed since chezmoi last wrote it) until the removal lands, as happened
-when `claude-swchen` was retired. Git history keeps the ciphertext, so
-revocation, not deletion, ends it.
+it changed since chezmoi last wrote it) until the removal lands. Git history
+keeps the ciphertext, so revocation, not deletion, ends it.
 
 ## Output and failure
 

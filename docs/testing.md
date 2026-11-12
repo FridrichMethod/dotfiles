@@ -123,14 +123,14 @@ updater and warns once for a config the guard refuses. A unit case,
 loading only `lib/chezmoi-guard.ps1` (which also loads under Windows
 PowerShell 5.1), accepts foreign read and deny entries and OWNER RIGHTS but
 not a foreign owner or append right, a null DACL, or an object, compound or
-custom ACE (even for you), which .NET's access rules would skip. A fixture
-records that NTFS refuses renaming
-`.local\bin` and `.local` while the updater's read handle on the exe is open
-and allows renaming `.local\bin` after release (observed on the elevated
-hosted `windows-2025` runner). That narrows the swap window, not closes it:
-a writer of `~/.local` that swaps a junction in before the open and a
-prepared directory back before the re-check can still get another
-`chezmoi.exe` started, so these tests do not show the path tamper-proof.
+custom ACE (even for you), which .NET's access rules would skip. A fixture,
+run on the elevated hosted `windows-2025` runner of `ci.yml`, checks that
+NTFS refuses renaming `.local\bin` and `.local` while the updater's read
+handle on the exe is open and allows renaming `.local\bin` after release.
+That narrows the swap window, not closes it: a writer of `~/.local` that
+swaps a junction in before the open and a prepared directory back before the
+re-check can still get another `chezmoi.exe` started, so these tests do not
+show the path tamper-proof.
 
 The portable PowerShell 7 culture cases in the same file start a fresh process
 for each of `en-US`, `tr-TR` and `az-Latn-AZ`. They check all 256 ASCII
@@ -253,26 +253,21 @@ and renders the primary, transient and secondary prompts with any inherited
 oh-my-posh session removed and a temporary cache, failing on rendered template
 errors (unknown segment types are not detectable in oh-my-posh 31.6).
 
-On 2026-11-09, the existing Windows home ran both updater culture tests
-without skips and the complete `tests/powershell-profile.ps1` suite from a
-hash-recorded public-file bundle of candidate `c19a83f`. All passed in a
-one-off Limited-token task recording PowerShell 7.6.9, SessionId 1 and
-`Elevated=false`; the suite also rendered the prompts with oh-my-posh
-31.9.1. The host checkout remained clean at `360a269`. The ordinary-token
-offline doctor and setup `-Check` both exited 0; the acceptance record and the
-separate provisioning result are described in
-[Ordinary-token candidate checks](hosts.md#ordinary-token-candidate-checks).
+The updater culture tests and `tests/powershell-profile.ps1` can also be run
+by hand under the ordinary token on the existing Windows home
+([Ordinary-token candidate checks](hosts.md#ordinary-token-candidate-checks));
+nothing runs them there automatically.
 
 These fixtures do not show predictions rendered in an ordinary user's real
 console or prove that console's normal profile update hook. The separate
 [PowerShell 7 console acceptance](hosts.md#powershell-7-console-acceptance)
-passed on the existing Windows home on 2026-11-08: a one-off Interactive-logon,
-Limited-token task launched a new `pwsh -NoLogo -NoExit` console, whose child
-proved it was unelevated with neither stdin nor stdout redirected. The
-created console showed history and Completion plugin suggestions in ListView,
-the configured directory style, and a clean startup/update result; the probe
-left no task, process or temporary directory. That host evidence is separate
-from both the fixtures and [fresh-machine acceptance](bootstrap.md#acceptance-checklist).
+covers both on the existing Windows home: a one-off Interactive-logon,
+Limited-token task launches a new `pwsh -NoLogo -NoExit` console whose child
+must be unelevated with neither stdin nor stdout redirected, and the created
+console's history and Completion plugin suggestions in ListView, directory
+style and startup/update result are checked there. That host evidence is
+separate from both the fixtures and
+[fresh-machine acceptance](bootstrap.md#acceptance-checklist).
 
 `tests/shell-profile.sh` also resolves nvm's `default` alias forms against a
 fake `NVM_DIR` under sh, dash, Bash and Zsh (including bash `failglob`), checks
@@ -282,8 +277,8 @@ and INFOPATH stay identical, nvm stays ahead in a fresh shell, a parent's order
 (activated env or brew first) is kept, a conda-style activate and deactivate
 keeps an entry already on PATH, and nothing assigns PATH after oh-my-zsh.
 It also evaluates the fzf-tab tldr previews of `custom/fzf-tab.zsh`, as
-fzf-tab does, with a fake C client (the `tldr` formula Homebrew removed in
-2026-10, still on hosts that installed it, which takes only `-C`) and a fake
+fzf-tab does, with a fake C client (tldr-c-client, which takes only `-C`;
+its `tldr` keg stays on a host that installed it) and a fake
 tlrc (only `--color always`): both must show the colored page, a
 client's missing-page error must never reach the preview, and the C client
 must never run without `TLDR_AUTO_UPDATE_DISABLED`, without which the real one
@@ -393,10 +388,9 @@ Administrators full control (a `SKIP:` elsewhere). None of them downloads
 anything or touches the runner's home. Real installer runs use the opt-in
 [end-to-end suite](#end-to-end-bootstrap-opt-in) below, which checks the
 [automated acceptance criteria](#acceptance-criteria) in containers and hosted
-runners. The user waived the five separate genuine fresh-machine runs for
-the 2026-11-09 follow-up; they remain not run, as recorded in the
-[acceptance checklist](bootstrap.md#acceptance-checklist). That scope decision
-does not waive the automated suite or change its assertions.
+runners. Neither these fixtures, the end-to-end suite, hosted CI nor
+existing-host checks substitute for the genuine fresh-machine runs of the
+[acceptance checklist](bootstrap.md#acceptance-checklist).
 
 `tests/host-overlays.sh` checks missing, non-executable and fake Linuxbrew
 under isolated Bash and zsh. Its standard-library `test_portable_shell.py`
@@ -416,9 +410,9 @@ The menu regression first verifies its actual physical working directory,
 then checks all three new-window/split actions with quotes, spaces, shell
 metacharacters and literal tmux formats in the path. Menu actions defer the
 path format to native `-c`, so the path is neither parsed as command text nor
-expanded twice. The original three failing cases were reproduced on real
-macOS tmux 3.8; the expanded six-case regression and all 16 test methods
-passed there and on Linux tmux 3.4 on 2026-11-09.
+expanded twice. The six-case regression runs in Linux CI with tmux 3.4; the
+macOS job installs no tmux, and the regression's real-mac tmux 3.8 coverage
+is in [hosts](hosts.md#known-limits).
 With a real tmux on PATH, the `TmuxConfiguration` class sources the config on
 a private socket with a temporary `HOME` (one case with a fake TPM). Among other
 things it loads offline, registers which-key, Catppuccin and FloaX and sets
@@ -677,7 +671,7 @@ approximation:
   snapshot that watched it would fail every no-write step), the
   preinstalled `$HOME/hostedtoolcache` and the media folders `$HOME/Movies`,
   `$HOME/Music` and `$HOME/Pictures`, whose libraries Apple's media daemons
-  update on their own (a run saw the TV app's library written during the
+  update on their own (the TV app's library can be written during the
   second apply); `env.txt` records the expanded list,
   so a reader of the artifact sees what the no-write checks did not watch.
   The runner ships no `timeout` or `gtimeout`, so the per-command limits of
@@ -686,7 +680,7 @@ approximation:
   `timeout`'s contract with the runner's perl (a process group of its own,
   TERM then KILL, exit 124); `env.txt` records which one ran. A hang thus
   fails its step with a `summary.tsv` row instead of running into the job's
-  90-minute `timeout-minutes`, as the first CI run's did.
+  90-minute `timeout-minutes`.
 - `win` runs every step under the default runner account's elevated token:
   `winget import` leaves each
   installer's scope to that token (`winget.json` pins none), and `oh-my-posh
@@ -704,19 +698,19 @@ approximation:
   executable hash and other settings. The driver's `finally` explicitly
   resumes updates and verifies those fields; an independent `always()` step
   retries restoration after interruption. No account, service, UAC or
-  signature policy is changed. The original 900-second doctor checks,
-  failures and real packaged executable/alias remain unchanged.
+  signature policy is changed. The pause relaxes none of the doctor's
+  checks: its 900-second limit and failure conditions stay, and it runs the
+  real packaged executable and alias.
 
-  This qualification follows [the paired hosted control](https://github.com/FridrichMethod/dotfiles/actions/runs/42715785035):
-  OMP 31.9.1 package/alias launched in 0.048/0.037 seconds while paused,
-  but package activation again waited in App Installer's update-interaction
-  path after resume. Original policy and bytes were verified restored.
-  Thus hosted E2E does not cover unattended App Installer update scheduling;
-  a one-time launch preparation is insufficient. A green hosted run does
-  not establish unattended activation with default, unpaused Windows Server
-  App Installer settings. A winget that needs
-  `Repair-WinGetPackageManager` first is recorded as a deviation. `run.ps1`
-  asserts criteria 1 (without
+  This qualification rests on a paired hosted control run with OMP 31.9.1:
+  the package and alias launch promptly while updates are paused, but after
+  updates resume, package activation waits in App Installer's
+  update-interaction path, so a one-time launch preparation is insufficient.
+  Hosted E2E therefore does not cover unattended App Installer update
+  scheduling: a green hosted run does not establish unattended activation
+  with default, unpaused Windows Server App Installer settings. A winget
+  that needs `Repair-WinGetPackageManager` first is recorded as a deviation.
+  `run.ps1` asserts criteria 1 (without
   `--smoke`, which `doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
   doctor, the no-write `-Tsv` and `-Check` runs, a second `-Yes` that applies
   nothing and a `-Check` with nothing left, a clean clone after every step, a
@@ -727,11 +721,11 @@ approximation:
   there are no wrappers and no sudo log. The home snapshots note, rather than
   fail, a change under `AppData\LocalLow\Microsoft\CryptnetUrlCache`: Windows'
   per-user CRL and OCSP cache, which every process of the runner account
-  writes, the Actions agent's own HTTPS traffic included (the first CI run
-  saw an entry appear during `-Check`, whose probes are all local). The same
-  holds for `AppData\Local\Microsoft\TokenBroker\Cache`, the Web Account
-  Manager's token cache, which Windows' token broker refreshes on its own (a
-  run saw a `.tbres` entry change during `-Check`). `snapshots\<step>.diff`
+  writes, the Actions agent's own HTTPS traffic included, so an entry can
+  appear even during `-Check`, whose probes are all local. The same holds for
+  `AppData\Local\Microsoft\TokenBroker\Cache`, the Web Account Manager's
+  token cache, which Windows' token broker refreshes on its own (a `.tbres`
+  entry can change during `-Check`). `snapshots\<step>.diff`
   keeps both as `noted ...`. `pwsh` is absent from the development machines,
   so the Windows driver, and the Fresh Windows home by hand functions it
   runs, are exercised first in CI.
@@ -956,7 +950,6 @@ Nothing but the HUMAN blocks and the deployment changed the home when
 among them) appear only after the `home_deploy` line, the backup
 directory `~/.local/state/dotfiles-fresh-backup` holds the earlier rc files
 byte for byte, and `getent passwd "$USER"` still names the same login shell
-at the end. Then fill
-the run's row of the [acceptance table](bootstrap.md#acceptance-checklist):
-the date, the OS and glibc from the first line, the result and any notes,
-adding a row for Marlowe.
+at the end. Then record the result in the Status cell of that cluster's row
+in the [acceptance table](bootstrap.md#acceptance-checklist), with the OS and
+glibc from the first line and any limitation.

@@ -275,13 +275,14 @@ owner change right (OWNER RIGHTS counts only for such an owner); owner and DACL
 are read from the held handle's raw descriptor. Otherwise, also when the file
 is missing, it prints one warning naming this section and skips the update.
 This narrows the gap between check and start but does not close it:
-on a `windows-2025` hosted runner (elevated), NTFS refused to rename `.local`
-or `.local\bin` while the handle was held, and the fixture's rename of
-`.local\bin` succeeded after release. This protects only once the real file
-is held at its real path. A writer of `~/.local` that wins two sub-millisecond
-races (swapping `.local\bin` for a junction before the open, then a prepared
-directory back before the re-check) can still get a different `chezmoi.exe`
-started; the check does not make the path tamper-proof.
+on the `windows-2025` hosted runner of `ci.yml` (elevated), a fixture checks
+that NTFS refuses to rename `.local` or `.local\bin` while the handle is held
+and that the rename of `.local\bin` succeeds after release. This protects
+only once the real file is held at its real path. A writer of `~/.local`
+that wins two sub-millisecond races (swapping `.local\bin` for a junction
+before the open, then a prepared directory back before the re-check) can
+still get a different `chezmoi.exe` started; the check does not make the
+path tamper-proof.
 
 W1-chezmoi is done only when a chezmoi at or above the floor works and the
 updater would run `~/.local/bin/chezmoi.exe`, by the same read-only check. A
@@ -852,9 +853,9 @@ service) is the person's to run, whatever its kind.
   them around each probe and restore yours): recent gh releases otherwise write
   `~/.local/state/gh/device-id` on any command, even `gh --version` (and may
   send telemetry for other commands). They also export
-  `TLDR_AUTO_UPDATE_DISABLED=1`: the tldr C client (the `tldr` formula
-  Homebrew removed in 2026-10, still on hosts that installed it) checks its
-  page cache before it handles `--version`, and once `~/.tldrc/date` is two
+  `TLDR_AUTO_UPDATE_DISABLED=1`: the tldr C client (a `tldr` keg with no
+  Homebrew formula, which stays on a host that installed it) checks its page
+  cache before it handles `--version`, and once `~/.tldrc/date` is two
   weeks old it otherwise downloads the tldr-pages archive into `~/.tldrc`
   first (tlrc, which the cli Brewfile and winget install, and tealdeer ignore
   the variable and never update on `--version`). Not even a temporary file:
@@ -1313,8 +1314,8 @@ pinned, in `# conflicts: FORMULA OTHER...` lines and, for casks,
 `# conflicts: cask TOKEN OTHER...` lines (validated by
 `tests/bootstrap-manifest.sh`). Today they are `core`'s `fd fdclone` (both
 install `fd`), `cli`'s `tlrc tldr tealdeer` (all three install `tldr`: tlrc
-`conflicts_with` tealdeer, and `tldr` is the C client, whose formula Homebrew
-removed in 2026-10 but whose keg stays on a host that installed it), and the
+`conflicts_with` tealdeer, and `tldr` is the C client, which has no Homebrew
+formula but whose keg stays on a host that installed it), and the
 macOS casks `claude-code` (`ai`, against `claude-code@latest`), `kitty` and
 `wezterm` (`desktop`, each against its `@nightly` cask). Before it runs brew at
 all, in `--check` and apply alike, S2-brew-bundle looks for each OTHER that is
@@ -1326,8 +1327,8 @@ this platform (the casks are `if OS.mac?`) is never judged, and neither is
 one whose entry is satisfied another way (above), even by OTHER itself: a
 linked C client or tealdeer puts a `tldr` in the prefix's `bin` that the
 doctor accepts, so brew bundle never gets the `tlrc` entry, nothing
-conflicts, and OTHER stays. A host that installed the C client before
-Homebrew removed it is such a host: it bundles no tlrc and keeps its `tldr`.
+conflicts, and OTHER stays. A host with a linked keg of the C client is such
+a host: it bundles no tlrc and keeps its `tldr`.
 What remains is OTHER installed while the doctor does not accept the entry's
 tool, as with an unlinked keg. When it finds one,
 the step is `human` and blocking (exit 3), and setup-host prints a judgment
@@ -1349,14 +1350,13 @@ conflicting formula or cask below as the owner; the next ./setup-host.sh run
 then prints the owner's lines that install the Brewfile one", since that run
 stops again at the owner's `sudo` block rather than bundling.
 
-A leftover keg of the C client prints the same block with `tldr` in place of
-`tealdeer` (its formula declared `conflicts_with` tlrc until Homebrew removed
-it); Homebrew still uninstalls, and links, a keg whose formula it removed.
-The `tldr` command comes back from the `tlrc` formula on the next run (a cask
-such as `wezterm@nightly` likewise gives way to `wezterm`).
-tlrc's `--color` takes a value; the C client (tldr-c-client), the `tldr`
-formula Homebrew removed in 2026-10 and still on hosts that installed it,
-takes a bare `-C`. The fzf-tab previews try `tldr --color always` (tlrc,
+A keg of the C client prints the same block with `tldr` in place of
+`tealdeer` (it installs the same `tldr` as tlrc); Homebrew uninstalls, and
+links, a keg that has no formula. The `tldr` command comes back from the
+`tlrc` formula on the next run (a cask such as `wezterm@nightly` likewise
+gives way to `wezterm`). tlrc's `--color` takes a value; the C client
+(tldr-c-client), whose `tldr` keg stays on a host that installed it, takes a
+bare `-C`. The fzf-tab previews try `tldr --color always` (tlrc,
 tealdeer) and then `tldr -C`, so they color with every client, and run both
 with `TLDR_AUTO_UPDATE_DISABLED=1`, so the C client answers from its local
 cache and never fetches a missing page or a stale archive while you
@@ -1364,24 +1364,23 @@ tab-complete. The conflict holds back the whole step, every selected
 Brewfile, so keeping the other package instead means making its tool the one
 the doctor finds (`brew link tealdeer`, or `brew link tldr` for the C client,
 as the prefix's owner on a shared one), which satisfies the entry, or leaving
-its tier out (for tlrc, `--tier core,ai`). The C client gets no fixes or
-rebuilds from Homebrew any more, so uninstalling its keg is the better fix.
-`--print-manual` prints the block for every declared pair that applies on
-this platform. A conflict Homebrew adds later is not judged until a Brewfile
-line names it ([Known limitations](#known-limitations)). See also
+its tier out (for tlrc, `--tier core,ai`). Without a formula, the C client
+gets no fixes or rebuilds from Homebrew, so uninstalling its keg is the better
+fix. `--print-manual` prints the block for every declared pair that applies
+on this platform. A conflict Homebrew adds later is not judged until a
+Brewfile line names it ([Known limitations](#known-limitations)). See also
 [X-recovery](#x-recovery-recovery-recipes).
 
 **Python on macOS only.** The core Brewfile's `brew "python" if OS.mac?`
 names Homebrew's `python` alias for its default `python@3.x`, the only formula
 that links an unversioned `python3`. `--no-upgrade` never upgrades an
 installed formula, but it resolves the alias each time: when Homebrew's
-default moves (it became `python@3.15` on 2026-10-09, after `python@3.14`),
-the next bundle installs the new `python@3.x` alongside the old one, which
-stays installed until you remove it. On Debian and Ubuntu, apt's `python3`
-from H1-apt-core already meets the 3.11 floor, and a
-Linuxbrew python would add a whole new formula at every such move and, on a
-shared prefix, relink `python3` for every account, so it is bundled on macOS
-only, where it is needed (the Command Line Tools' `python3` is 3.9). The
+default moves to a newer `python@3.x`, the next bundle installs that formula
+alongside the old one, which stays installed until you remove it. On Debian
+and Ubuntu, apt's `python3` from H1-apt-core already meets the 3.11 floor,
+and a Linuxbrew python would add a whole new formula at every such move and,
+on a shared prefix, relink `python3` for every account, so it is bundled on
+macOS only, where it is needed (the Command Line Tools' `python3` is 3.9). The
 manifest validator rejects a `python` or `python@3.x` Brewfile entry without
 `if OS.mac?`.
 
@@ -1489,7 +1488,10 @@ owns the doctor's version floors. Name traps are commented in the yml.
 Every workstation's `ssh sherlock` / `ssh marlowe` RemoteCommand
 execs `$HOME/micromamba/envs/login/bin/zsh`.
 
-- **Check:** `~/micromamba/envs/login/bin/zsh --version && ~/micromamba/envs/login/bin/python3 --version`
+- **Check:** `~/micromamba/envs/login/bin/zsh --version && ~/micromamba/envs/login/bin/python3 --version`.
+  setup-host's own check only requires `~/micromamba/envs/login/bin/zsh` to
+  exist, so it reports an existing env done without showing that every
+  package of the yml is present.
 - **Install:** automatic via setup-host.sh:
   `micromamba create -y -r "$HOME/micromamba" -n login -f config/bootstrap/hpc-login-env.yml`.
   After editing the yml, the same with `install` instead of `create`.
@@ -1529,8 +1531,9 @@ they are not on PATH, and H7-auth names them only once they are.
 
 **Node.js.** On `marlowe`, `node` comes from the login env
 ([S2-login-env](#s2-login-env-hpc-login-environment): conda-forge `nodejs`,
-`>=22.0` in the yml; the newest build on 2026-10-09 was 26.x). On `sherlock`,
-it comes from Lmod `ml nodejs/24.13.0`, which `home/.hosts/sherlock/.config/zsh/.zshrc`
+`>=22.0` in the yml, a floor without an upper bound, so the solver picks the
+newest `nodejs` compatible with the rest of the env when it is built). On
+`sherlock`, it comes from Lmod `ml nodejs/24.13.0`, which `home/.hosts/sherlock/.config/zsh/.zshrc`
 loads after putting the login env on PATH, so the module wins. There is no nvm
 on hpc.
 
@@ -1870,8 +1873,9 @@ them there, unpack the same tarball into your home on that host by hand.
 Applies to `mac`, `wsl-ubuntu` and `lab-ubuntu`. macOS has used `/bin/zsh` by
 default since Catalina. On hpc there is no `chsh`: zsh is reached through the
 workstation's `ssh sherlock` / `ssh marlowe` RemoteCommand, which execs
-`~/micromamba/envs/login/bin/zsh -il` (the native Windows ssh config still uses
-an older RemoteCommand; the Windows terminal profiles ssh from inside WSL).
+`~/micromamba/envs/login/bin/zsh -il` (the native Windows ssh config runs
+`/bin/bash -ilc 'exec zsh -l'` instead, a [known follow-up](#known-follow-ups);
+the Windows terminal profiles ssh from inside WSL).
 
 - **Check:** macOS `dscl . -read ~ UserShell`; Linux `getent passwd "$USER" | cut -d: -f7`
 - **Install:** `chsh -s "$(command -v zsh)"` (the shell must be listed in
@@ -2342,7 +2346,7 @@ dirty `~/dotfiles` checkout after an installer is
 
 **Conflicting Homebrew formula or cask.** S2-brew-bundle is `human` with "the
 installed tldr formula conflicts with tlrc (cli.Brewfile)" (a keg of the C
-client, whose formula Homebrew removed in 2026-10; or, on macOS, for example
+client, which has no Homebrew formula; or, on macOS, for example
 "the installed wezterm@nightly cask conflicts with wezterm
 (desktop.Brewfile)"), or `brew bundle` failed with "Cannot install tlrc
 because conflicting formulae are installed" or a cask conflict. Check with
@@ -2353,7 +2357,7 @@ same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
 `./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
 takes its place. To keep the other package instead, link it
 (`brew link tldr`): a `tldr` the doctor finds satisfies the entry, so the
-pair is no longer judged. If brew refuses because another formula depends on
+pair is not judged. If brew refuses because another formula depends on
 it, keep it and leave its tier out instead
 ([S2-brew-bundle](#s2-brew-bundle-brewfile-bundles)). A failure that names a
 conflict no Brewfile declares is the same fix by hand; add its
@@ -2428,8 +2432,8 @@ fail-closed behavior beyond what is stated.
 - **Only declared conflicts are judged.** The `# conflicts:` lines record the
   `conflicts_with` data that formulae.brew.sh listed for each Brewfile entry
   when its Brewfile was pinned (the `# pinned` date at its top), plus `cli`'s
-  `tldr`, the C client that Homebrew removed in 2026-10 and so no longer
-  lists, whose leftover keg installs the same `tldr` as tlrc. A conflict
+  `tldr`, the C client, which formulae.brew.sh does not list (Homebrew has no
+  formula for it) and whose keg installs the same `tldr` as tlrc. A conflict
   Homebrew adds later fails `brew bundle` with "brew bundle failed for <file>"
   until a Brewfile line names it ([X-recovery](#x-recovery-recovery-recipes)).
 - **A Homebrew prefix owned by another account.** H1-linuxbrew is `done` once
@@ -2473,7 +2477,7 @@ Deferred on purpose; each is a separate change.
 - **StyLua hook without Rust.** `.pre-commit-config.yaml` uses the StyLua
   hook id `stylua`, which builds StyLua with cargo, so a contributor needs
   Rust; switch to the `stylua-github` id, which downloads the release binary.
-- **Windows ssh RemoteCommand.** `home/.hosts/win/.ssh/config.d/legacy.conf` still
+- **Windows ssh RemoteCommand.** `home/.hosts/win/.ssh/config.d/legacy.conf`
   runs `/bin/bash -ilc 'exec zsh -l'` for sherlock and marlowe; align it with
   the login-env form the other overlays use
   (`exec "$HOME/micromamba/envs/login/bin/zsh" -il`).
@@ -2489,22 +2493,24 @@ Deferred on purpose; each is a separate change.
 - **Cross-OS runs.** The macOS (Bash 3.2, BSD tools) and native Windows jobs
   of `ci.yml` run the fixture suites, so the PowerShell twins run natively
   only against shims. The opt-in end-to-end suite
-  ([docs/testing.md](testing.md#end-to-end-bootstrap-opt-in)) has run the
+  ([docs/testing.md](testing.md#end-to-end-bootstrap-opt-in)) runs the
   bootstrap for real in Linux containers and on GitHub's `macos-15` and
-  `windows-2025` runners (the [acceptance checklist](#acceptance-checklist)
-  below). Those runners are not fresh machines. The five genuine
-  fresh-machine cases below remain not run; the user waived those runs for
-  this follow-up.
+  `windows-2025` runners. Those runners are not fresh machines; the deferred
+  part is the five genuine fresh-machine runs of the
+  [acceptance checklist](#acceptance-checklist) below.
 
 ## Acceptance checklist
 
-The user explicitly waived the five genuine fresh-machine runs below for the
-2026-11-09 follow-up. They are not required or blockers for this follow-up and
-remain not run, not passed. This scope decision does not cancel the general
-checklist or change the separate existing-host provisioning and CI/E2E checks.
-Container and hosted-runner tests approximate portions of setup; they do not
-prove site policy, real credentials, fresh Windows 11 or untouched macOS
-behavior. When genuine fresh-machine acceptance is requested, each run starts
+Genuine fresh-machine acceptance is the five runs in the table below, each
+made when that acceptance is requested. None of them has been run, so none
+has passed and none of the six conditions below is established for any of
+them. Only a fresh machine counts: a container, a hosted runner, a temporary
+HOME or a reset existing home never does, and no existing home is reset for
+a run. Existing-host provisioning checks (doctor, plugin installation,
+interactive consoles), hosted CI and the opt-in end-to-end suite are separate
+evidence and do not substitute for it: container and hosted-runner tests
+approximate portions of setup, but do not prove site policy, real
+credentials, fresh Windows 11 or untouched macOS behavior. Each run starts
 from a fresh machine, follows the quick start for its platform, and passes
 when all of these hold:
 
@@ -2519,25 +2525,21 @@ when all of these hold:
   Windows `scripts\payload-update.ps1 -Now`) exits 0, and the doctor's
   `payloads` row is then `ok`.
 
-| Run | Date | Result | Notes |
-| --- | --- | --- | --- |
-| Fresh macOS VM (Apple Silicon), host `mac` | 2026-11-09 inventory | not run; waived for this follow-up | No fresh VM was available. A future acceptance run needs a new Apple Silicon macOS VM with ordinary-user access and HUMAN GUI/privileged steps. |
-| Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | 2026-11-09 inventory | not run; waived for this follow-up | Only the configured distribution was available. A future acceptance run needs a separate fresh Windows/WSL environment with the distribution named `Ubuntu`; preserve the existing distribution. |
-| Sherlock inside `sh_dev`, host `sherlock` | 2026-11-09 inventory | not run; waived for this follow-up | No fresh account home or acceptance allocation was available. A future acceptance run needs an approved fresh provisioning environment and an allocation; preserve the production login environment. |
-| Marlowe inside an interactive Slurm job, host `marlowe` | 2026-11-09 inventory | not run; waived for this follow-up | No fresh account home or acceptance allocation was available. A future acceptance run needs an approved fresh provisioning environment and allocation with its account/partition; preserve the production login environment. |
-| Native Windows 11, host `win` | 2026-11-09 inventory | not run; waived for this follow-up | Only the configured Windows 11 home was available. A future acceptance run needs a fresh Windows 11 environment with an ordinary logged-on user and person-run HUMAN steps. |
+| Run | Status | Environment |
+| --- | --- | --- |
+| Fresh macOS VM (Apple Silicon), host `mac` | not run | A new Apple Silicon macOS VM with ordinary-user access and HUMAN GUI/privileged steps. |
+| Fresh WSL `Ubuntu` (24.04), host `wsl-ubuntu` | not run | A separate fresh Windows/WSL environment with the distribution named `Ubuntu`; preserve the existing distribution. |
+| Sherlock inside `sh_dev`, host `sherlock` | not run | An approved fresh provisioning environment and an allocation; preserve the production login environment. |
+| Marlowe inside an interactive Slurm job, host `marlowe` | not run | An approved fresh provisioning environment and allocation with its account/partition; preserve the production login environment. |
+| Native Windows 11, host `win` | not run | A fresh Windows 11 environment with an ordinary logged-on user and person-run HUMAN steps. |
 
-The user confirmed on 2026-11-09 that these new environments were unavailable,
-then removed genuine fresh-machine acceptance from this follow-up's scope.
-The date above records the resource inventory, not an acceptance run. None of
-the six checks above has been established for any of these five fresh-machine
-rows. Existing-host doctor, plugin installation, interactive-console checks
-and hosted CI remain separate evidence. Do not reset an existing home or
-substitute a temporary HOME, container or hosted runner to claim genuine
-fresh-machine acceptance.
-
-Keep new acceptance records with their reproducible run artifacts: revision,
-platform, tool versions, options, failures and limitations. The
+A run's result replaces `not run` in its Status cell: passed, or failed with
+each condition that failed, plus the platform, tool versions, options and
+limitations it holds for. The cell carries no date, commit or job ID; the
+commit message that records the result names the revision the run used, and
+a later bootstrap change has only CI and opt-in suite evidence until the run
+is repeated. The run's logs and other artifacts stay out of `.git/` and are
+removed after acceptance ([AGENTS.md](../AGENTS.md#scope-and-layout)). The
 [opt-in suite](testing.md#end-to-end-bootstrap-opt-in)
 implements the HUMAN-block policy and checks idempotence, no-write modes and
 quiet startup. Real-machine site and desktop acceptance is a separate check.

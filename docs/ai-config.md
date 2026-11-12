@@ -181,7 +181,7 @@ guide (automatic commit and push, an 80% coverage floor, agents started
 without being asked) and shadows slash commands such as `/code-review`. Use
 such a plugin through the plugin system, which loads no plugin-bundled rules;
 adopt a rule worth keeping into the global `CLAUDE.md` and Codex `AGENTS.md`
-after review, as the parallel-execution bullet was.
+after review.
 
 ## Permission policy rationale
 
@@ -206,7 +206,9 @@ Adding a shell allow pattern cannot fix a classifier false positive or grant
 permission to loosen live .claude settings. A person applies those changes.
 
 Broad allow patterns for network transfers, code loaders, package installers
-and remote-mutating Git/GitHub operations were reviewed and knowingly accepted.
-An automated review recommended narrower argument-anchored alternatives, such
-as host-limited curl and in-tree requirements-only pip installs. That remains a
-host threat-model decision, not authorization for unrelated policy changes.
+and remote-mutating Git/GitHub operations are a deliberate, reviewed part of
+the policy for the current host threat model. Narrower argument-anchored
+alternatives, such as host-limited curl and in-tree requirements-only pip
+installs, are the option to weigh if that threat model changes; adopting them
+is a host threat-model decision, not authorization for unrelated policy
+changes.
