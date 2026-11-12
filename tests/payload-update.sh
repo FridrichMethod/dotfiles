@@ -379,7 +379,7 @@ rm -r "$TEST_TMP/caller"
 # create TMPDIR/.git, and git looks for a repository by walking up from its
 # working directory, as the kit's installer's git ls-remote outside any
 # repository does. The plant has this user as owner here, which stands for a
-# host whose safe.directory is * (lab-ubuntu's .gitconfig_local).
+# host whose safe.directory is *.
 if PATH=/usr/bin:/bin git --version >/dev/null 2>&1; then
     new_home
     PATH=/usr/bin:/bin git -c init.defaultBranch=main init -q -- "$TEST_TMP/plant"

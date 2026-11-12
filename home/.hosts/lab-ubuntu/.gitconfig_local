@@ -14,4 +14,10 @@
 [credential "https://huggingface.co"]
 	provider = generic
 [safe]
-	directory = *
+	# Only the shared repositories another account owns here; a wildcard would
+	# also trust a .git planted in /tmp or the group-writable data trees.
+	# git 2.43 takes exact paths only (a trailing /* needs 2.46).
+	directory = /apps/AF_Cluster
+	directory = /apps/DynamicBind
+	directory = /apps/boltz
+	directory = /home/linuxbrew/.linuxbrew/Homebrew

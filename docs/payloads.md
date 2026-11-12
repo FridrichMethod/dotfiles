@@ -99,8 +99,9 @@ helper:
   directory, whose parent may be shared: git looks for a repository from
   its working directory upwards, so the kit's `git ls-remote`, run outside
   any repository, would read a `/tmp/.git` another user made wherever
-  `safe.directory = *` turns git's ownership check off (lab-ubuntu's
-  `.gitconfig_local` does). On Unix `/` ends that walk, since only root can
+  `safe.directory = *` turns git's ownership check off (no host sets the
+  wildcard; lab-ubuntu's `.gitconfig_local` lists its shared repositories
+  one by one). On Unix `/` ends that walk, since only root can
   create `/.git`. On Windows no directory does: from any path on `C:`,
   `$PSHOME` included, git reaches `C:\.git`, which any authenticated user
   can create (CVE-2022-24765), so there only git's own ownership check
