@@ -7,7 +7,7 @@ hosts ([hosts](docs/hosts.md)).
 
 - The chezmoi source is `home/` (`.chezmoiroot`); source names encode `$HOME` paths and attributes (`dot_`, `executable_`, `private_`, `empty_`), and `home/.chezmoiignore` selects each role's targets.
 - Keep persistent worktrees in `.worktrees/`. Follow the global guides for temporary work, preservation and post-integration cleanup.
-- Do not store task reports, logs, downloaded artifacts or diagnostic bundles in `.git/`. After acceptance, record concise conclusions in canonical docs and remove completed task artifacts. Preserve active payload ownership manifests and libraries, recovery credentials, and recovery state still needed for unfinished changes.
+- Do not store task reports, logs, downloaded artifacts or diagnostic bundles in `.git/`. After acceptance, record concise conclusions in canonical docs as statements of the current state (no dates, commit, job or run IDs, or run narrative) and remove completed task artifacts. Preserve active payload ownership manifests and libraries, recovery credentials, and recovery state still needed for unfinished changes.
 - Role variants live in `home/.hosts/<role>/<target path>`, read raw by one-line role-keyed templates; portable AI policy lives in `home/.policy/`. chezmoi never deploys a source dot-directory. Other Linux distributions use the `generic` role.
 - One source file per target: plain files stay plain (no `.tmpl`, even with `{{` inside), and `tests/fixtures/chezmoi/targets.tsv` lists every target.
 - Root scripts are person-facing setup/check entry points; `scripts/` contains login and person-run hooks, `lib/` sourced/imported code, and `config/` their data. Place files by their caller.

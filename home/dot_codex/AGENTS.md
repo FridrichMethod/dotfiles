@@ -108,6 +108,7 @@ test -z "$(git -C "$CLONE" log --oneline --branches --not main)" &&
 - Read the repository's own instruction files first; more specific project instructions override these global preferences.
 - Reuse the project's existing environment, package manager, style, abstractions, and test commands.
 - Prefer the smallest coherent change that solves the problem. Add or update tests when behavior changes.
+- Write documentation as a description of the current state, like a reference manual rather than a changelog: no dated accounts of what was done or checked, no commit, job or run IDs, and no "previously", "later" or "no longer" narrative. History belongs in the commit log and the changelog. Keep a date or version only when it is itself current data, such as a pinned release or the version of a source document a rule follows.
 - Validate in proportion to risk: run focused checks first, then broader tests when justified. Report what was run and any checks that could not be completed.
 - For reviews, prioritize correctness, security, scientific validity, regressions, numerical issues, concurrency, and missing tests over cosmetic style comments.
 - Run independent operations in parallel by default: issue independent tool calls together and launch independent subagents at the same time, not one after another. Delegate bounded subtasks with disjoint write ownership, and consolidate their evidence in the main task.
