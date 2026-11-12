@@ -305,7 +305,7 @@ exit $LASTEXITCODE
 '@ @{ DOTFILES_TEST_CLI_BEHAVIOR = 'read' } -InputText "fixture answer`n"
         $bound = @(Get-Events)[0].Bound
         Assert-True ($result.Out.Contains('answer:fixture answer') -and $result.Error -ceq '') 'Setup could not read inherited input.'
-        Assert-True ($bound.PSObject.Properties.Name -cnotcontains 'Yes') 'Dispatcher added Yes to setup.'
+        Assert-True ($null -eq $bound.PSObject.Properties['Yes']) 'Dispatcher added Yes to setup.'
     }
     Test-Case 'missing backend and terminating backend failure each produce one diagnostic' {
         $missing = Join-Path $temporaryRoot 'missing backend'
