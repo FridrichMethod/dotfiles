@@ -300,29 +300,54 @@ Write-Output '--- prompt wrapper'
 # zoxide's hook runs a native command after oh-my-posh restored
 # $LASTEXITCODE. Replay that with stand-ins: the oh-my-posh one reads $? first
 # and restores $LASTEXITCODE, the zoxide one wraps it and then clobbers it.
-$wrapper = $parsed7.Ast.Find({
-        param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
-        $n.Left.Extent.Text -eq '$function:global:prompt'
-    }, $true)
+# The one wrapper is a statement of the guard itself, not of the zoxide
+# branch, so it also runs without zoxide. After the inner prompt it writes
+# the terminal mode resets of ~/.zshrc (without kitty's keyboard pop) to the
+# console, captured here through [Console]::SetOut, and only where the host
+# supports VT output: the replay stands in for that test with $true and
+# $false.
+$wrappers = @($parsed7.Ast.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $n.Left.Extent.Text -eq '$function:global:prompt'
+        }, $true))
+$wrapper = if ($wrappers.Count -eq 1) { $wrappers[0] }
 Assert-True ($null -ne $wrapper -and $zoxide.Count -eq 1 -and $wrapper.Extent.StartOffset -gt $zoxide[0].Extent.StartOffset -and
-    $guardBody -and (Test-InsideNode $wrapper $guardBody)) 'a guarded prompt wrapper follows zoxide init'
-if ($wrapper) {
-    function global:prompt { $global:OmpSawStatus = $?; $code = $global:LASTEXITCODE; 'PS> '; $global:LASTEXITCODE = $code }
-    $global:__zoxide_prompt_old = $function:prompt
-    function global:prompt {
-        if ($null -ne $__zoxide_prompt_old) { & $__zoxide_prompt_old }
-        $global:LASTEXITCODE = 0
+    $guardBody -and [object]::ReferenceEquals($wrapper.Parent, $guardBody)) "one prompt wrapper, a statement of the interactive guard, follows zoxide init ($($wrappers.Count) wrappers)"
+$vtGate = '$Host.UI.SupportsVirtualTerminal'
+$zshReset = [regex]::Match([IO.File]::ReadAllText($zshrc), "print -rn -- \`$'((?:\\e\[\?[0-9]+[hl])+)'")
+$expectedReset = $zshReset.Groups[1].Value.Replace('\e', [string][char]27)
+Assert-True ($zshReset.Success -and $null -ne $wrapper -and
+    [regex]::Matches($wrapper.Extent.Text, [regex]::Escape($vtGate)).Count -eq 1) "the wrapper tests $vtGate once and ~/.zshrc lists its mode resets"
+if ($wrapper -and $zshReset.Success) {
+    $console = [Console]::Out
+    foreach ($vt in '$true', '$false') {
+        function global:prompt { $global:OmpSawStatus = $?; $code = $global:LASTEXITCODE; 'PS> '; $global:LASTEXITCODE = $code }
+        $global:__zoxide_prompt_old = $function:prompt
+        function global:prompt {
+            if ($null -ne $__zoxide_prompt_old) { & $__zoxide_prompt_old }
+            $global:LASTEXITCODE = 0
+        }
+        Invoke-Expression ($wrapper.Extent.Text.Replace($vtGate, $vt))
+        $written = [IO.StringWriter]::new()
+        [Console]::SetOut($written)
+        try {
+            $global:LASTEXITCODE = 3
+            Write-Error 'a failed command' -ErrorAction SilentlyContinue
+            $rendered = prompt
+        }
+        finally { [Console]::SetOut($console) }
+        Assert-True ($global:LASTEXITCODE -eq 3 -and $global:OmpSawStatus -eq $false -and $rendered -eq 'PS> ') "the prompt keeps `$LASTEXITCODE and the `$? oh-my-posh reads, VT $vt (LASTEXITCODE=$global:LASTEXITCODE, `$?=$global:OmpSawStatus)"
+        $wantReset = if ($vt -eq '$true') { $expectedReset } else { '' }
+        $shown = $written.ToString().Replace([string][char]27, '\e')
+        Assert-True ($written.ToString() -ceq $wantReset) "the prompt writes the mode resets of ~/.zshrc only with VT, VT $vt (wrote [$shown])"
     }
-    Invoke-Expression $wrapper.Extent.Text
-    $global:LASTEXITCODE = 3
-    Write-Error 'a failed command' -ErrorAction SilentlyContinue
-    $rendered = prompt
-    Assert-True ($global:LASTEXITCODE -eq 3 -and $global:OmpSawStatus -eq $false -and $rendered -eq 'PS> ') "the prompt keeps `$LASTEXITCODE and the `$? oh-my-posh reads (LASTEXITCODE=$global:LASTEXITCODE, `$?=$global:OmpSawStatus)"
     # Re-sourcing the profile wraps the wrapper; the inner prompt must come
     # from a closure, or the second wrapper calls itself until the stack ends.
     Invoke-Expression $wrapper.Extent.Text
     $global:LASTEXITCODE = 5
-    $rendered = try { prompt } catch { "threw: $($_.Exception.Message)" }
+    [Console]::SetOut([IO.StringWriter]::new())
+    try { $rendered = try { prompt } catch { "threw: $($_.Exception.Message)" } }
+    finally { [Console]::SetOut($console) }
     Assert-True ($global:LASTEXITCODE -eq 5 -and $rendered -eq 'PS> ') "a second wrap neither recurses nor loses `$LASTEXITCODE (LASTEXITCODE=$global:LASTEXITCODE, prompt=$rendered)"
     Remove-Item -LiteralPath Function:\prompt
     Remove-Variable -Name __zoxide_prompt_old, OmpSawStatus -Scope Global

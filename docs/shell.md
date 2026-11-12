@@ -37,7 +37,9 @@ restores only the tty settings, so mouse moves would otherwise type SGR
 reports such as `35;97;7M` at the local prompt and keys could arrive as CSI u
 (`13u`). The hook writes only to a terminal stdout, never under TERM=dumb or
 in an agent session. It does not leave a stuck alternate screen: `reset`, or
-kitty's `opt+cmd+r` (`clear_terminal reset`), does.
+kitty's `opt+cmd+r` (`clear_terminal reset`), does. The PowerShell 7 prompt
+wrapper writes the same mouse, focus and cursor resets
+([PowerShell profile and prompt](#powershell-profile-and-prompt)).
 
 On macOS, `/etc/zprofile` runs `path_helper` in every login zsh, including
 tmux panes and editor terminals, and moves the `/etc/paths` directories ahead
@@ -89,8 +91,13 @@ Directories list bold blue where `$PSStyle.FileInfo` colors listings
 profile skips the setting.
 
 oh-my-posh initializes after PSReadLine key handlers because it owns Enter and
-Ctrl+C; zoxide follows because it wraps the prompt. A final wrapper preserves
-LASTEXITCODE, which zoxide's directory tracking can reset. The tracked theme
+Ctrl+C; zoxide follows because it wraps the prompt. A final wrapper, installed
+with or without zoxide, preserves LASTEXITCODE, which zoxide's directory
+tracking can reset. After the inner prompt, where the host supports VT output,
+it also writes the terminal mode resets of the zsh prompt hook above (mouse
+tracking, focus reports, a hidden cursor; no kitty keyboard pop), so a TUI
+killed by a dropped ssh session in Windows Terminal or WezTerm leaves no
+mouse reports typed at the prompt. The tracked theme
 lives in home/dot_config/oh-my-posh, uses a release-tagged schema and ASCII
 glyph escapes, and supports shell integration/transient prompts. Re-render it
 after upgrades.

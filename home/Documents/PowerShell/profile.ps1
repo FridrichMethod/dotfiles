@@ -314,23 +314,35 @@ if ($IsInteractive -and -not $IsAgentSession) {
         # Code, Anaconda Prompt) in this process. A user or parent value wins.
         if ((Get-Module oh-my-posh-core) -and $null -eq $env:CONDA_CHANGEPS1) { $env:CONDA_CHANGEPS1 = 'false' }
     }
-    # zoxide wraps the prompt function, so it must run after oh-my-posh. Its
-    # hook runs `zoxide add` after oh-my-posh restored $LASTEXITCODE, which
-    # reset it to 0 after every cd, so the outer wrapper restores it again.
-    # The value is a parameter default because any statement ahead of the
-    # inner call would reset the $? that oh-my-posh reads, and the inner
-    # prompt lives in a closure, not a global, so re-sourcing this profile
-    # cannot make the wrapper call itself.
+    # zoxide wraps the prompt function, so it must run after oh-my-posh.
     if (& $HasExe zoxide) {
         Invoke-Expression (& { (zoxide init powershell | Out-String) })
-        $function:global:prompt = & {
-            $inner = $function:prompt
-            {
-                param($ExitCode = $global:LASTEXITCODE)
-                & $inner
-                $global:LASTEXITCODE = $ExitCode
-            }.GetNewClosure()
+    }
+    # The final prompt wrapper, with or without zoxide. zoxide's hook runs
+    # `zoxide add` after oh-my-posh restored $LASTEXITCODE, which reset it to
+    # 0 after every cd, so the wrapper restores it again. The value is a
+    # parameter default because any statement ahead of the inner call would
+    # reset the $? that oh-my-posh reads, and the inner prompt lives in a
+    # closure, not a global, so re-sourcing this profile cannot make the
+    # wrapper call itself.
+    # After the inner prompt it also turns off the terminal modes a TUI
+    # (Claude Code, Codex) killed by a dropped ssh session leaves on, as
+    # ~/.zshrc does before each prompt: mouse tracking (1000, 1002, 1003;
+    # encodings 1006, 1015), focus reports (1004) and a hidden cursor.
+    # Otherwise every mouse move types SGR reports such as [<35;97;7M into
+    # the prompt. These are the sequences such a TUI writes when it exits
+    # cleanly, and only where the host supports VT output.
+    $function:global:prompt = & {
+        $inner = $function:prompt
+        $reset = if ($Host.UI.SupportsVirtualTerminal) {
+            "`e[?1000l`e[?1002l`e[?1003l`e[?1006l`e[?1015l`e[?1004l`e[?25h"
         }
+        {
+            param($ExitCode = $global:LASTEXITCODE)
+            & $inner
+            if ($reset) { [Console]::Write($reset) }
+            $global:LASTEXITCODE = $ExitCode
+        }.GetNewClosure()
     }
     Remove-Variable HasExe
 }
