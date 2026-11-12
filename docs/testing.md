@@ -77,7 +77,7 @@ variant with `types: [file]`, since identify gives `dot_` names no shell tag.
 The AI suites cover actual portable Claude/Codex transforms, typed
 ownership parity, numeric/Unicode and TOML temporal refusal, CRLF multiline
 semantics, invalid input preservation and complete candidate applies.
-Compatible-role counts are 49/56/55/59/54/54/26 in role order, with exactly the
+Compatible-role counts are 49/56/55/58/54/54/26 in role order, with exactly the
 two AI targets added to the ordinary files. Shared auth/trust/payload siblings
 stay unmanaged. Local temporal refusal tests run on every OS; the Unix
 timezone characterization, which skips on Windows, stays separate from the

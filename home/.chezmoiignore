@@ -85,7 +85,6 @@ wsl.conf
 {{ if ne .host "lab-ubuntu" }}
 .config/fcitx5
 .xprofile
-.local/bin/claude-limited
 {{ end }}
 {{ if ne .host "sherlock" }}
 .terminfo

@@ -251,7 +251,7 @@ for name, paths in need.items():
 # names; upstream and app-written bytes never reach a fixing hook.
 TERMINAL = 'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json'
 UPSTREAM = {'.p10k.zsh': 'home/dot_p10k.zsh', '.local/bin/my-fzf-preview.sh': 'home/dot_local/bin/executable_my-fzf-preview.sh'}
-RENDERED_ONLY = set(UPSTREAM) | {'.local/bin/claude-limited', '.xprofile'}
+RENDERED_ONLY = set(UPSTREAM) | {'.xprofile'}
 def selects(variant, path):
     files, exclude = variant.get('files'), variant.get('exclude')
     return bool((files is None or files.search(path)) and not any(e and e.search(path) for e in (exclude, top_exclude)))
