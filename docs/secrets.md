@@ -110,6 +110,18 @@ the new ciphertext lands. Instead:
    revoke the superseded token at its issuer. Git history keeps the old
    ciphertext, so revocation, not deletion, ends it.
 
+## Retiring a secret
+
+Remove `home/private_dot_secrets/encrypted_private_claude-NAME.age`, lower
+the count `tests/test_chezmoi_secrets.py` pins and land it through CI; only
+then delete each host's `~/.secrets/claude-NAME` and its kit metadata, and
+revoke the token at its issuer. Once the source no longer has the file,
+chezmoi stops managing that target and never deletes it. Deleting the live
+file first makes every nonforce login update stop at it (`DA` in `status`:
+it changed since chezmoi last wrote it) until the removal lands, as happened
+when `claude-swchen` was retired. Git history keeps the ciphertext, so
+revocation, not deletion, ends it.
+
 ## Output and failure
 
 Ordinary diff output is not a redaction boundary: review real secret
