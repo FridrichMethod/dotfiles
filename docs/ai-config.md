@@ -167,6 +167,22 @@ Codex reads one global instructions file, `~/.codex/AGENTS.override.md` when it
 exists and `~/.codex/AGENTS.md` otherwise, with no include mechanism. Dotfiles
 deploys only `~/.codex/AGENTS.md`.
 
+## No third-party instructions under ~/.claude
+
+The global `CLAUDE.md` is the only reviewed cross-host instruction source for
+Claude. No host should hold `~/.claude/AGENTS.md` or third-party Markdown
+under `~/.claude/rules/`: Claude Code loads `~/.claude/rules/**/*.md` into
+sessions (a file with `paths:` frontmatter when a matching file is touched),
+and with `claude-md-and-agents-md` it also loads `~/.claude/AGENTS.md` next to
+the global `CLAUDE.md`. An installer that copies a plugin's rules, agents and
+commands into `~/.claude` itself, as everything-claude-code's own installer
+does, therefore injects unreviewed instructions that conflict with the global
+guide (automatic commit and push, an 80% coverage floor, agents started
+without being asked) and shadows slash commands such as `/code-review`. Use
+such a plugin through the plugin system, which loads no plugin-bundled rules;
+adopt a rule worth keeping into the global `CLAUDE.md` and Codex `AGENTS.md`
+after review, as the parallel-execution bullet was.
+
 ## Permission policy rationale
 
 The portable Claude arrays intentionally reserve ask for sudo and deny for the
