@@ -440,11 +440,12 @@ function Invoke-E2EStepPayloads {
 function Invoke-E2EStepDoctorFinal {
     # Bare dotfiles in a fresh -NoProfile child outside the clone exits 0.
     # Supply only process PATH; never mutate the machine or User PATH.
+    # Discovery or parse failures leave LASTEXITCODE untouched; seed failure.
     Update-E2EPath
     Start-E2EStep doctor-final check:doctor-final
     $childPath = (Join-Path $E2E['Home'] '.local/bin') + [IO.Path]::PathSeparator + $env:PATH
     $code = Invoke-E2EProcess -FilePath $E2E['PowerShell'] `
-        -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'dotfiles doctor --host win; exit $LASTEXITCODE') `
+        -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', '$LASTEXITCODE = 1; dotfiles doctor --host win; exit $LASTEXITCODE') `
         -WorkingDirectory $E2E['Home'] -OutFile $E2E['StepOut'] -ErrFile $E2E['StepErr'] `
         -TimeoutSeconds $E2ETimeout['Check'] -Environment @{ PATH = $childPath }
     if ($code -eq 0) { Complete-E2EStep pass 'exit 0 through the installed CLI with a controlled child PATH' }

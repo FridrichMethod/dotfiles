@@ -1132,10 +1132,48 @@ try {
         $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepDoctorFinal }
         $call = $script:ProcessCalls[0]
-        Assert-Equal $call.Arguments '-NoProfile -NonInteractive -Command dotfiles doctor --host win; exit $LASTEXITCODE' 'bare-name discovery in a fresh PowerShell'
+        Assert-Equal $call.Arguments '-NoProfile -NonInteractive -Command $LASTEXITCODE = 1; dotfiles doctor --host win; exit $LASTEXITCODE' 'bare-name discovery in a fresh PowerShell'
         Assert-Equal "$($call.WorkingDirectory) $($call.Timeout)" "$($E2E['Home']) 900" 'doctor outside the checkout under its check limit'
         Assert-True ($call.Environment['PATH'].StartsWith((Join-Path $E2E['Home'] '.local/bin') + [IO.Path]::PathSeparator, [StringComparison]::OrdinalIgnoreCase)) 'controlled child PATH contains the installed launcher first'
         Assert-Equal @(Get-SummaryRows)[0].Status 'pass' 'the installed doctor succeeded'
+    }
+
+    Test-Case 'doctor-final rejects missing and invalid launchers in real child processes' {
+        function Update-E2EPath { }
+        foreach ($launcherState in @('missing', 'invalid')) {
+            $case = Reset-RunState
+            $bin = Join-Path $E2E['Home'] '.local/bin'
+            [void][IO.Directory]::CreateDirectory($bin)
+            if ($launcherState -ceq 'invalid') { New-File (Join-Path $bin 'dotfiles.ps1') "param(`n" }
+            $environment = Get-ChildEnvironment
+            $environment['PATH'] = Join-Path $case 'empty-path'
+            [void][IO.Directory]::CreateDirectory($environment['PATH'])
+            Use-Environment $environment { Invoke-E2EStepDoctorFinal }
+            $row = @(Get-SummaryRows)[0]
+            Assert-Equal $row.Status 'fail' "$launcherState launcher must not pass without execution"
+            Assert-True ($row.Detail -match '^exit [1-9][0-9]*:') "$launcherState launcher needs a nonzero child status: $($row.Detail)"
+            Assert-True ([IO.File]::ReadAllText($E2E['StepErr']).Length -gt 0) "$launcherState invocation error must remain on stderr"
+        }
+    }
+
+    Test-Case 'doctor-final preserves launcher exit codes and streams in real child processes' {
+        function Update-E2EPath { }
+        foreach ($status in @(0, 37)) {
+            $case = Reset-RunState
+            $bin = Join-Path $E2E['Home'] '.local/bin'
+            New-File (Join-Path $bin 'dotfiles.ps1') ("[Console]::Out.WriteLine('fixture doctor output')`n" +
+                "[Console]::Error.WriteLine('fixture doctor diagnostic')`nexit $status`n")
+            $environment = Get-ChildEnvironment
+            $environment['PATH'] = Join-Path $case 'empty-path'
+            [void][IO.Directory]::CreateDirectory($environment['PATH'])
+            Use-Environment $environment { Invoke-E2EStepDoctorFinal }
+            $row = @(Get-SummaryRows)[0]
+            $expected = if ($status -eq 0) { 'pass' } else { 'fail' }
+            Assert-Equal $row.Status $expected "launcher exit $status decides the step"
+            Assert-True ([IO.File]::ReadAllText($E2E['StepLog']).Contains(", exit $status`n")) "launcher exit $status must reach the process log"
+            Assert-Lines @(Get-E2ELines $E2E['StepOut'] | Where-Object { $_ }) @('fixture doctor output') 'stdout survives discovery'
+            Assert-Lines @(Get-E2ELines $E2E['StepErr'] | Where-Object { $_ }) @('fixture doctor diagnostic') 'stderr survives discovery'
+        }
     }
 
     Test-Case 'Invoke-E2EStepPayloads: doctor failures retain their exit code even after an installed payloads row' {
