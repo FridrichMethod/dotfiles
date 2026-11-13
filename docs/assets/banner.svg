@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="banner-title banner-desc">
+  <title id="banner-title">dotfiles</title>
+  <desc id="banner-desc">A Catppuccin Mocha terminal window: the dotfiles name, its six host roles, the first two commands to run, and one source fanning out to six homes.</desc>
+  <defs>
+    <linearGradient id="name" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#cba6f7"/>
+      <stop offset="0.55" stop-color="#89b4fa"/>
+      <stop offset="1" stop-color="#94e2d5"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#cba6f7" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#cba6f7" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#11111b" flood-opacity="0.35"/>
+    </filter>
+    <clipPath id="window">
+      <rect x="40" y="20" width="1120" height="376" rx="18"/>
+    </clipPath>
+  </defs>
+
+  <rect x="40" y="20" width="1120" height="376" rx="18" fill="#1e1e2e" filter="url(#shadow)"/>
+  <g clip-path="url(#window)">
+    <rect x="40" y="20" width="1120" height="44" fill="#181825"/>
+    <circle cx="950" cy="214" r="190" fill="url(#halo)"/>
+
+    <rect x="40" y="356" width="1120" height="40" fill="#181825"/>
+    <rect x="56" y="363" width="112" height="26" rx="13" fill="#cba6f7"/>
+    <text x="112" y="381" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" font-weight="700" fill="#11111b">dotfiles</text>
+    <rect x="180" y="363" width="76" height="26" rx="13" fill="#89b4fa"/>
+    <text x="218" y="381" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" font-weight="700" fill="#11111b">1 zsh</text>
+    <text x="300" y="381" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" fill="#7f849c">2 tmux</text>
+    <text x="1140" y="381" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" fill="#7f849c">macOS &#183; Linux &#183; WSL &#183; Windows &#183; HPC</text>
+  </g>
+
+  <circle cx="72" cy="42" r="7" fill="#f38ba8"/>
+  <circle cx="96" cy="42" r="7" fill="#f9e2af"/>
+  <circle cx="120" cy="42" r="7" fill="#a6e3a1"/>
+  <text x="600" y="47" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15" fill="#7f849c">~/dotfiles</text>
+
+  <text x="94" y="156" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="80" font-weight="700" letter-spacing="-1" fill="url(#name)">dotfiles</text>
+  <text x="98" y="198" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" fill="#bac2de">One chezmoi source. Six homes. Plain files, updated at login.</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15" text-anchor="middle">
+    <rect x="98" y="224" width="66" height="30" rx="15" fill="#313244" stroke="#f5c2e7" stroke-opacity="0.55"/>
+    <text x="131" y="244" fill="#f5c2e7">mac</text>
+    <rect x="176" y="224" width="128" height="30" rx="15" fill="#313244" stroke="#fab387" stroke-opacity="0.55"/>
+    <text x="240" y="244" fill="#fab387">lab-ubuntu</text>
+    <rect x="316" y="224" width="128" height="30" rx="15" fill="#313244" stroke="#f9e2af" stroke-opacity="0.55"/>
+    <text x="380" y="244" fill="#f9e2af">wsl-ubuntu</text>
+    <rect x="456" y="224" width="110" height="30" rx="15" fill="#313244" stroke="#a6e3a1" stroke-opacity="0.55"/>
+    <text x="511" y="244" fill="#a6e3a1">sherlock</text>
+    <rect x="578" y="224" width="100" height="30" rx="15" fill="#313244" stroke="#74c7ec" stroke-opacity="0.55"/>
+    <text x="628" y="244" fill="#74c7ec">marlowe</text>
+    <rect x="690" y="224" width="66" height="30" rx="15" fill="#313244" stroke="#89b4fa" stroke-opacity="0.55"/>
+    <text x="723" y="244" fill="#89b4fa">win</text>
+  </g>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17">
+    <text y="298"><tspan x="98" fill="#a6e3a1">$</tspan><tspan x="120" fill="#cdd6f4">./dotfiles doctor --host mac</tspan><tspan x="500" fill="#6c7086"># offline, write-free</tspan></text>
+    <text y="328"><tspan x="98" fill="#a6e3a1">$</tspan><tspan x="120" fill="#cdd6f4">./dotfiles setup --host mac --check</tspan><tspan x="500" fill="#6c7086"># plan before installing</tspan></text>
+  </g>
+
+  <g fill="none" stroke-width="2" stroke-linecap="round" stroke-opacity="0.75">
+    <path d="M 952 214 C 1010 214, 1010 104, 1068 104" stroke="#f5c2e7"/>
+    <path d="M 952 214 C 1010 214, 1010 148, 1068 148" stroke="#fab387"/>
+    <path d="M 952 214 C 1010 214, 1010 192, 1068 192" stroke="#f9e2af"/>
+    <path d="M 952 214 C 1010 214, 1010 236, 1068 236" stroke="#a6e3a1"/>
+    <path d="M 952 214 C 1010 214, 1010 280, 1068 280" stroke="#74c7ec"/>
+    <path d="M 952 214 C 1010 214, 1010 324, 1068 324" stroke="#89b4fa"/>
+  </g>
+  <rect x="852" y="194" width="100" height="40" rx="10" fill="#313244" stroke="#cba6f7" stroke-width="2"/>
+  <text x="902" y="220" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="17" font-weight="700" fill="#cba6f7">home/</text>
+  <g>
+    <circle cx="1076" cy="104" r="8" fill="#f5c2e7"/>
+    <circle cx="1076" cy="148" r="8" fill="#fab387"/>
+    <circle cx="1076" cy="192" r="8" fill="#f9e2af"/>
+    <circle cx="1076" cy="236" r="8" fill="#a6e3a1"/>
+    <circle cx="1076" cy="280" r="8" fill="#74c7ec"/>
+    <circle cx="1076" cy="324" r="8" fill="#89b4fa"/>
+  </g>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" fill="#7f849c">
+    <text x="1092" y="109">~</text>
+    <text x="1092" y="153">~</text>
+    <text x="1092" y="197">~</text>
+    <text x="1092" y="241">~</text>
+    <text x="1092" y="285">~</text>
+    <text x="1092" y="329">~</text>
+  </g>
+</svg>
