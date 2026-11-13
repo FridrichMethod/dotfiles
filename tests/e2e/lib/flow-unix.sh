@@ -13,14 +13,14 @@
 E2E_SKIPPED_BLOCKS=' ' # block ids already recorded as skip
 E2E_ALLOC_DONE=0
 
-# e2e_step_check_nowrite: ./setup-host.sh --host H --check plans (exit 3
+# e2e_step_check_nowrite: ./dotfiles setup --host H --check plans (exit 3
 # while work remains, 0 when nothing is left) and writes nothing.
 e2e_step_check_nowrite() {
     local rc=0 problems
     e2e_step_begin check-nowrite check:check-nowrite
     e2e_nowrite_begin check-nowrite
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        env TMPDIR="$E2E_NW_TMP" ./setup-host.sh --host "$E2E_SETUP_HOST" --check || rc=$?
+        env TMPDIR="$E2E_NW_TMP" ./dotfiles setup --host "$E2E_SETUP_HOST" --check || rc=$?
     problems=$(e2e_nowrite_end check-nowrite)
     case $rc in
         0 | 3)
@@ -157,7 +157,7 @@ e2e_handle_blocks() {
     done
 }
 
-# e2e_apply_loop: ./setup-host.sh --host H --yes until only the H7-deploy
+# e2e_apply_loop: ./dotfiles setup --host H --yes until only the H7-deploy
 # block is left, at most eight runs; e2e_loop_next decides on each run.
 # blocks: exit 3 with a block to act on, handed to e2e_handle_blocks. rerun:
 # exit 3, nothing to act on, but a step applied ("<id> done applied: "). done:
@@ -175,7 +175,7 @@ e2e_apply_loop() {
         rc=0
         e2e_step_begin "$name" "setup:$name"
         e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-            ./setup-host.sh --host "$E2E_SETUP_HOST" --yes || rc=$?
+            ./dotfiles setup --host "$E2E_SETUP_HOST" --yes || rc=$?
         if [ "$n" = 1 ]; then
             E2E_APPLY1_OUT=$E2E_STEP_OUT E2E_APPLY1_RC=$rc
         fi
@@ -236,7 +236,7 @@ e2e_apply_loop() {
     return 1
 }
 
-# e2e_step_second_apply: after the first apply, one more ./setup-host.sh --host
+# e2e_step_second_apply: after the first apply, one more ./dotfiles setup --host
 # H --yes exits 0, applies nothing ("<id> done applied: ..." would be a step
 # that redid its work) and writes nothing in HOME.
 e2e_step_second_apply() {
@@ -244,7 +244,7 @@ e2e_step_second_apply() {
     e2e_step_begin second-apply setup:second-apply
     e2e_nowrite_begin second-apply
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_APPLY" "$E2E_CLONE" \
-        ./setup-host.sh --host "$E2E_SETUP_HOST" --yes || rc=$?
+        ./dotfiles setup --host "$E2E_SETUP_HOST" --yes || rc=$?
     applied=$(grep -E '^[A-Za-z0-9-]+ done applied: ' "$E2E_STEP_OUT" 2>/dev/null) || true
     problems=$(e2e_nowrite_end second-apply)
     if [ "$rc" != 0 ]; then

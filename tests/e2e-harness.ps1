@@ -397,7 +397,7 @@ function Use-DryRun {
         param([string]$FilePath, [string[]]$ArgumentList = @(), [string]$WorkingDirectory, [string]$OutFile,
             [string]$ErrFile, [int]$TimeoutSeconds, [hashtable]$Environment = @{})
         $script:ProcessCalls.Add([pscustomobject]@{
-                FilePath = $FilePath; Arguments = ($ArgumentList -join ' '); WorkingDirectory = $WorkingDirectory; Timeout = $TimeoutSeconds
+                FilePath = $FilePath; Arguments = ($ArgumentList -join ' '); WorkingDirectory = $WorkingDirectory; Timeout = $TimeoutSeconds; Environment = $Environment
             })
         if (-not $script:ProcessModes.Count) { throw "an unexpected child process $FilePath $($ArgumentList -join ' ')" }
         $mode = $script:ProcessModes.Dequeue()
@@ -405,6 +405,14 @@ function Use-DryRun {
         $err = [Collections.Generic.List[string]]::new()
         $code = 0
         switch -CaseSensitive ($mode) {
+            'backend' {
+                if (-not $script:Runs.Count) { throw 'an unexpected installed CLI backend run' }
+                $run = $script:Runs.Dequeue()
+                if ($null -ne $run['Action']) { & $run['Action'] }
+                [IO.File]::WriteAllText($OutFile, $run['Out'], $Utf8)
+                [IO.File]::WriteAllText($ErrFile, $run['Err'], $Utf8)
+                return $run['Code']
+            }
             { $_ -cin @('clean', 'bad-config', 'maintenance', 'no-copy', 'no-state') } {
                 Write-DeployState $mode
                 $out.Add('Invoke-HomeDeploy: win deployed; copies of the files it replaced are in ~\.local\state\dotfiles-fresh-backup')
@@ -932,7 +940,7 @@ try {
             '-StartupType Automatic | Start-Service -Name ssh-agent | # Then, as yourself, once HW-auth has created the key: ssh-add $HOME\.ssh\id_ed25519') 'a reminder'
         Assert-Equal "$($E2E['Passes']) $($E2E['Fails']) $($E2E['Skips']) [$($E2E['Broken'])]" '2 0 4 []' 'counters and Broken'
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
-            'setup-host.ps1 -Host win -Yes 3600; setup-host.ps1 -Host win -Yes 3600' 'the setup-host.ps1 runs, without a mode flag'
+            'dotfiles.ps1 setup --host win --yes 3600; dotfiles.ps1 setup --host win --yes 3600' 'the setup-host.ps1 runs, without a mode flag'
         Assert-Equal $script:ProcessCalls.Count 0 'no block line runs'
         Assert-Equal "$($E2E['DeployBlock'].Id) $($E2E['DeployBlock'].Kind)" 'HW-deploy judgment' 'the deploy block is kept'
         Assert-Lines @($E2E['DeployBlock'].Lines) @(Get-BlockLines 'HW-deploy' $clone | Select-Object -Skip 1 | Select-Object -SkipLast 1) 'its notes'
@@ -1037,7 +1045,7 @@ try {
         Use-DryRun { Invoke-E2EStepCheckNoWrite }
         $call = $script:PwshCalls[0]
         $temp = Join-Path $E2E['Out'] 'tmp/check-nowrite'
-        Assert-Equal "$($call.Script) $($call.Arguments) $($call.Timeout)" 'setup-host.ps1 -Host win -Check 900' 'the -Check run'
+        Assert-Equal "$($call.Script) $($call.Arguments) $($call.Timeout)" 'dotfiles.ps1 setup --host win --check 900' 'the -Check run'
         Assert-Equal "$($call.Environment['TEMP'])|$($call.Environment['TMP'])" "$temp|$temp" 'its TEMP and TMP'
         Assert-Equal @(Get-SummaryRows)[0].Detail 'exit 3; 4 todo, 5 human; no writes' 'a noted cache entry passes -Check'
         Assert-Equal (Read-Utf8 (Join-Path $E2E['Out'] 'snapshots/check-nowrite.diff')) "noted added $noted\Content\A1`n" 'the noted diff'
@@ -1069,7 +1077,7 @@ try {
         Add-Run 0 (Get-ApplyOutput -Clone $clone -Blocks $Reminders -Done)
         $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($cacheOnly)
         Use-DryRun { Invoke-E2EStepSecondApply }
-        Assert-Equal "$($script:PwshCalls[0].Arguments) $($script:PwshCalls[0].Timeout)" '-Host win -Yes 3600' 'the second -Yes'
+        Assert-Equal "$($script:PwshCalls[0].Arguments) $($script:PwshCalls[0].Timeout)" 'setup --host win --yes 3600' 'the second -Yes'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'pass exit 0, nothing applied, HOME untouched' 'a second apply with a noted cache entry'
 
         $clone = New-DryRun
@@ -1094,7 +1102,7 @@ try {
         Add-Run 0 $done
         $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($before)
         Use-DryRun { Invoke-E2EStepCheckDone }
-        Assert-Equal "$($script:PwshCalls[0].Script) $($script:PwshCalls[0].Arguments) $($script:PwshCalls[0].Timeout)" 'setup-host.ps1 -Host win -Check 900' 'the -Check run'
+        Assert-Equal "$($script:PwshCalls[0].Script) $($script:PwshCalls[0].Arguments) $($script:PwshCalls[0].Timeout)" 'dotfiles.ps1 setup --host win --check 900' 'the -Check run'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" 'pass exit 0; nothing left to apply; no writes' 'nothing left'
 
         [void](New-DryRun)
@@ -1118,6 +1126,18 @@ try {
         Assert-Equal @(Get-SummaryRows)[0].Status 'fail' 'a HOME write'
     }
 
+    Test-Case 'doctor-final discovers the installed CLI without a profile outside the checkout' {
+        [void](New-DryRun)
+        Add-Run 0 @()
+        $script:ProcessModes.Enqueue('backend')
+        Use-DryRun { Invoke-E2EStepDoctorFinal }
+        $call = $script:ProcessCalls[0]
+        Assert-Equal $call.Arguments '-NoProfile -NonInteractive -Command dotfiles doctor --host win; exit $LASTEXITCODE' 'bare-name discovery in a fresh PowerShell'
+        Assert-Equal "$($call.WorkingDirectory) $($call.Timeout)" "$($E2E['Home']) 900" 'doctor outside the checkout under its check limit'
+        Assert-True ($call.Environment['PATH'].StartsWith((Join-Path $E2E['Home'] '.local/bin') + [IO.Path]::PathSeparator, [StringComparison]::OrdinalIgnoreCase)) 'controlled child PATH contains the installed launcher first'
+        Assert-Equal @(Get-SummaryRows)[0].Status 'pass' 'the installed doctor succeeded'
+    }
+
     Test-Case 'Invoke-E2EStepPayloads: doctor failures retain their exit code even after an installed payloads row' {
         $header = "status`tid`ttier`tdetail`tfix"
         foreach ($doctorCode in @(124, 1, 2)) {
@@ -1127,11 +1147,12 @@ try {
                 $output = @($header)
                 if ($payloadLine) { $output += $payloadLine }
                 Add-Run $doctorCode $output @('earlier doctor message', 'fixture doctor failure')
+                $script:ProcessModes.Enqueue('backend')
                 Use-DryRun { Invoke-E2EStepPayloads }
                 $rows = @(Get-SummaryRows)
                 Assert-Equal (Get-RowShape $rows) 'payloads:fail' "doctor exit $doctorCode with row [$payloadLine] must fail"
                 Assert-Equal $rows[0].Detail "doctor exit $doctorCode (124 is the 900s timeout): fixture doctor failure" 'the doctor exit code and error survive'
-                Assert-Equal "$($script:PwshCalls[1].Script) $($script:PwshCalls[1].Timeout)" 'doctor.ps1 900' 'the doctor timeout stays unchanged'
+                Assert-Equal "$($script:PwshCalls[0].Script) $($script:PwshCalls[0].Timeout)" 'dotfiles.ps1 900' 'the doctor timeout stays unchanged'
             }
         }
     }
@@ -1141,15 +1162,20 @@ try {
         [void](New-DryRun)
         Add-Run 0 @('[dotfiles] [ok] pymol: install done', '[dotfiles] [ok] skills: install done')
         Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-", "ok`tpayloads`tai`tinstalled: pymol, skills`t-")
+        $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
-            'scripts/payload-update.ps1 -Now 2700; doctor.ps1 -Host win -Tsv 900' 'the -Now run, then the doctor'
+            'dotfiles.ps1 doctor --host win --tsv 900' 'the root CLI doctor follows installed payload sync'
+        $call = $script:ProcessCalls[0]
+        Assert-Equal $call.Arguments "-NoProfile -NonInteractive -File $(Join-Path $E2E['Home'] '.local/bin/dotfiles.ps1') payloads sync" 'explicit installed launcher in a fresh process'
+        Assert-Equal "$($call.WorkingDirectory) $($call.Timeout)" "$($E2E['Home']) 2700" 'installed payload sync outside the checkout, with its original timeout'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             'pass exit 0; doctor payloads ok: installed: pymol, skills' 'every payload installed'
 
         [void](New-DryRun)
         Add-Run 0 @()
         Add-Run 0 @($header, "warn`tpayloads`tai`tnot installed: skills`tdocs/bootstrap.md H7-payloads")
+        $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             "fail exit 0, but the doctor's payloads row is warn: not installed: skills" 'a payload still missing'
@@ -1157,6 +1183,7 @@ try {
         [void](New-DryRun)
         Add-Run 0 @()
         Add-Run 0 @($header, "ok`tgit`tcore`t2.51.0`t-")
+        $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             "fail exit 0, but the doctor's payloads row is missing" 'a successful doctor without its payloads row'
@@ -1165,20 +1192,23 @@ try {
         [void](New-DryRun)
         Add-Run 0 @()
         Add-Run 0 @($header, "ok`tpayloads`tai`tDOTFILES_PAYLOAD_ITEMS selects no payload`t-")
+        $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             "fail exit 0, but the doctor's payloads row is ok: DOTFILES_PAYLOAD_ITEMS selects no payload" 'an empty selection'
 
         [void](New-DryRun)
         Add-Run 1 @('[dotfiles] [step] skills: installing', '[dotfiles] [error] skills: install failed (exit 1)', 'the next item') @()
+        $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepPayloads }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             'fail exit 1 (124 is the 2700s timeout): [dotfiles] [error] skills: install failed (exit 1)' 'the error line from stdout'
 
         [void](New-DryRun)
         Add-Run 1 @() @('[dotfiles] [error] payload-update: skills failed (exit 1)')
+        $script:ProcessModes.Enqueue('backend')
         Use-DryRun { Invoke-E2EStepPayloads }
-        Assert-Equal $script:PwshCalls.Count 1 'no doctor run after a failed -Now'
+        Assert-Equal $script:PwshCalls.Count 0 'no doctor run after a failed payload sync'
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
             'fail exit 1 (124 is the 2700s timeout): [dotfiles] [error] payload-update: skills failed (exit 1)' 'a failed -Now'
     }

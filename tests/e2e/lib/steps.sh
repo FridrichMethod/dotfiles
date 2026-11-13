@@ -41,7 +41,7 @@ e2e_step_clone() {
     e2e_step_end pass "$(git -C "$E2E_CLONE" rev-parse --short HEAD) at $E2E_CLONE"
 }
 
-# e2e_step_doctor_initial: ./doctor.sh E2E_DOCTOR_ARGS --tsv on the fresh
+# e2e_step_doctor_initial: ./dotfiles doctor E2E_DOCTOR_ARGS --tsv on the fresh
 # home exits 1 (tools are missing) and writes nothing, in TMPDIR or HOME.
 e2e_step_doctor_initial() {
     local rc=0 problems
@@ -49,7 +49,7 @@ e2e_step_doctor_initial() {
     e2e_nowrite_begin doctor-initial
     # shellcheck disable=SC2086 # E2E_DOCTOR_ARGS is a list of words
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        env TMPDIR="$E2E_NW_TMP" ./doctor.sh $E2E_DOCTOR_ARGS --tsv || rc=$?
+        env TMPDIR="$E2E_NW_TMP" ./dotfiles doctor $E2E_DOCTOR_ARGS --tsv || rc=$?
     problems=$(e2e_nowrite_end doctor-initial)
     if [ "$rc" != 1 ]; then
         e2e_step_end fail "exit $rc, expected 1 on a fresh home${problems:+; $problems}"
@@ -71,12 +71,12 @@ e2e_step_login_shell() {
     fi
 }
 
-# e2e_step_doctor_final / e2e_step_doctor_smoke: ./doctor.sh E2E_DOCTOR_ARGS,
+# e2e_step_doctor_final / e2e_step_doctor_smoke: ./dotfiles doctor E2E_DOCTOR_ARGS,
 # then --smoke, from the deployed login environment, exit 0.
 e2e_doctor_from_login() {
     local name=$1 extra=$2 rc=0
     e2e_step_begin "$name" "check:$name"
-    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~/dotfiles && ./doctor.sh $E2E_DOCTOR_ARGS$extra" || rc=$?
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~ && \"$HOME/.local/bin/dotfiles\" doctor $E2E_DOCTOR_ARGS$extra" || rc=$?
     if [ "$rc" = 0 ]; then
         e2e_step_end pass "exit 0 from the login shell"
     else
@@ -87,8 +87,7 @@ e2e_doctor_from_login() {
 e2e_step_doctor_final() { e2e_doctor_from_login doctor-final ''; }
 e2e_step_doctor_smoke() { e2e_doctor_from_login doctor-smoke ' --smoke'; }
 
-# e2e_step_payloads: the run line of the H7-payloads block, `sh
-# ~/dotfiles/scripts/payload-update.sh --now`, from the deployed login
+# e2e_step_payloads: the public `dotfiles payloads sync` command, from the deployed login
 # environment, as a person runs it: every payload repo
 # of config/payloads.tsv installs from the network through its own
 # installer, under the block limit, since three installs run in a row. It
@@ -98,7 +97,7 @@ e2e_step_doctor_smoke() { e2e_doctor_from_login doctor-smoke ' --smoke'; }
 e2e_step_payloads() {
     local rc=0 row detail
     e2e_step_begin payloads setup:payloads
-    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" 'sh ~/dotfiles/scripts/payload-update.sh --now' \
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" 'cd ~ && "$HOME/.local/bin/dotfiles" payloads sync' \
         "$E2E_TIMEOUT_BLOCK" || rc=$?
     if [ "$rc" != 0 ]; then
         # The hook logs one [error] line per failed item and goes on.
@@ -107,7 +106,7 @@ e2e_step_payloads() {
         e2e_step_end fail "exit $rc (124 is the ${E2E_TIMEOUT_BLOCK}s timeout): $detail"
         return 0
     fi
-    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~/dotfiles && ./doctor.sh $E2E_DOCTOR_ARGS --tsv" || :
+    e2e_login_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "cd ~ && \"$HOME/.local/bin/dotfiles\" doctor $E2E_DOCTOR_ARGS --tsv" || :
     row=$(awk -F '\t' '$2 == "payloads" { print $1 ": " $4 }' "$E2E_STEP_OUT" 2>/dev/null | sed -n 1p)
     case $row in
         'ok: installed: '*) e2e_step_end pass "exit 0; doctor payloads $row" ;;
@@ -268,14 +267,14 @@ e2e_step_home_deploy() {
     e2e_step_end pass "home_deploy $role exit 0; $E2E_DEPLOY_KEPT earlier file(s) kept byte for byte; the config names $phys"
 }
 
-# e2e_step_check_done: after the first apply, ./setup-host.sh --host H --check
+# e2e_step_check_done: after the first apply, ./dotfiles setup --host H --check
 # has nothing left: exit 0, no todo line, and no write in TMPDIR or HOME.
 e2e_step_check_done() {
     local rc=0 problems todo
     e2e_step_begin check-done check:check-done
     e2e_nowrite_begin check-done
     e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" \
-        env TMPDIR="$E2E_NW_TMP" ./setup-host.sh --host "$E2E_SETUP_HOST" --check || rc=$?
+        env TMPDIR="$E2E_NW_TMP" ./dotfiles setup --host "$E2E_SETUP_HOST" --check || rc=$?
     problems=$(e2e_nowrite_end check-done)
     todo=$(grep -E '^[A-Za-z0-9-]+ todo ' "$E2E_STEP_OUT" 2>/dev/null) || true
     if [ "$rc" != 0 ]; then

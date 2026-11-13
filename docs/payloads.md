@@ -11,7 +11,8 @@ start-up configuration) and
 library of Claude Code and Codex). Each repository owns its installation,
 update, selection and locking, and documents one command that installs it and
 one that updates it. Dotfiles runs those commands only when a person asks:
-`sync-payloads` runs the payload hook, `scripts/payload-update.sh` (Unix) or
+`dotfiles payloads sync` (or the interactive `sync-payloads` shortcut) runs the
+payload hook, `scripts/payload-update.sh` (Unix) or
 `scripts/payload-update.ps1` (native Windows), and
 [`config/payloads.tsv`](../config/payloads.tsv) names them. No login, profile
 or schedule installs or refreshes them.
@@ -117,31 +118,32 @@ any other URL, so a test can never reach the network.
 
 ### Unix
 
-Only a person runs `scripts/payload-update.sh --now`, in the foreground: no
-login, profile or schedule installs or updates a payload repo (any other call
+Only a person runs `dotfiles payloads sync` (compatibility:
+`scripts/payload-update.sh --now`), in the foreground: no login, profile or schedule installs or updates a payload repo (any other call
 is a usage error, see below), and the script keeps no state of its own.
 
 ```sh
 sync-payloads [kit] [pymol] [skills]                      # home/dot_aliases; follows the chezmoi config
 sync-skills                                               # sync-payloads skills
-sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]   # default: DOTFILES_PAYLOAD_ITEMS
+dotfiles payloads sync [ITEM...]                         # default: DOTFILES_PAYLOAD_ITEMS
+~/dotfiles/dotfiles payloads sync [ITEM...]                # explicit checkout, before configuration
 ```
 
-`sync-payloads` and `sync-skills` are aliases of interactive shells. They run
-the hook of the checkout `~/.config/chezmoi/chezmoi.toml` names (its
-`sourceDir`), validated with that checkout's `lib/chezmoi-guard.sh` exactly as
-the login dispatch in `home/dot_profile` does; a config the guard refuses
-prints
-`[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; payload update refused.`
-and returns 1 without running any checkout's hook. A home without that config
-names no checkout: they print
-`[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.`
-and return 1 without running a hook; run that line from the checkout there.
-Otherwise they return the hook's status. The `--now` line runs the checkout
-its path names, without that check: on a home with a valid config use
-`sync-payloads`, or the path of the checkout the config names. Under persistent maintenance a
-`--now` run prints `dotfiles: payload update refused during maintenance.` and
-exits 1 before anything runs.
+`sync-payloads` and `sync-skills` are interactive aliases that call the
+installed `~/.local/bin/dotfiles` explicitly; `sync-skills` prepends `skills`
+to caller arguments. A missing launcher prints
+`dotfiles: missing ~/.local/bin/dotfiles; run CHECKOUT/dotfiles payloads sync explicitly to recover.`
+and returns 1. The installed launcher validates the home's regular
+`~/.config/chezmoi/chezmoi.toml` with the selected checkout's
+`lib/chezmoi-guard.sh`. A missing/invalid config or missing dispatcher prints
+`dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run CHECKOUT/dotfiles explicitly to recover.`
+and returns 1. It uses only the configured sourceDir, with no cwd fallback.
+Use `CHECKOUT/dotfiles payloads sync [ITEM...]` before deployment or when
+recovering configuration. This selects that explicit checkout; installed
+commands always use the configured checkout. The original
+`sh CHECKOUT/scripts/payload-update.sh --now [ITEM...]` interface remains
+supported. All these paths retain the backend's status and maintenance
+refusal: `dotfiles: payload update refused during maintenance.` and exit 1.
 
 A run takes the items it is given, else those of `DOTFILES_PAYLOAD_ITEMS`
 (unset: all three; set but empty: none), and exits 1 before anything runs
@@ -218,23 +220,25 @@ but warn first.
 ```powershell
 sync-payloads [pymol] [skills]   # profile functions, defined in interactive non-agent sessions
 sync-skills
-& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]
+& "$HOME/.local/bin/dotfiles.ps1" payloads sync [ITEM...]
+& $HOME\dotfiles\dotfiles.ps1 payloads sync [ITEM...] # explicit checkout, before configuration
 ```
 
-Like their Unix twins, the functions run the hook of the checkout
-`~/.config/chezmoi/chezmoi.toml` names, a config that must be a regular file,
-not a reparse point, validated by that checkout's `lib/chezmoi-guard.ps1`; a
-config the guard refuses prints
-`[dotfiles] Payload update refused: ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; review it privately.`
-and sets `$LASTEXITCODE` to 1 without running a hook. A home without that
-config names no checkout: they print
-`[dotfiles] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.`
-and set `$LASTEXITCODE` to 1 without running a hook. A configured checkout
-without `scripts/payload-update.ps1` prints
-`[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.`
-and sets `$LASTEXITCODE` to 1. The `-Now` line runs the
-checkout its path names, without that check: on a home with a valid config
-use the functions, or the path of the checkout the config names.
+The interactive functions call `~/.local/bin/dotfiles.ps1` explicitly;
+`sync-skills` invokes only `skills` and retains its fixed argument behavior.
+A missing launcher prints
+`dotfiles: missing ~/.local/bin/dotfiles.ps1; run & CHECKOUT\dotfiles.ps1 payloads sync explicitly to recover.`
+and sets `$LASTEXITCODE` to 1. Missing/invalid configuration or a missing
+dispatcher prints
+`dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run & CHECKOUT\dotfiles.ps1 explicitly to recover.`
+and exits 1. The config must be a regular file without a reparse point and
+pass the selected checkout's `lib/chezmoi-guard.ps1`. Installed routing uses
+only its validated sourceDir. Recover with an explicit checkout entrypoint;
+`& CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...]` remains supported.
+Bare `dotfiles payloads sync` works after the manual
+[User PATH procedure](bootstrap.md#windows-command-discovery), including in a
+fresh `-NoProfile` PowerShell 7; the functions keep their interactive placement.
+Never elevate payload installation.
 
 ## Knobs
 
@@ -273,7 +277,7 @@ lock: concurrent runs converge.
 - The doctor's `payloads` row (tier `ai`, step
   [H7-payloads](bootstrap.md#h7-payloads-payload-repos)) runs each selected
   item's probe and, once the kit's passes, checks that the three helpers are
-  in `~/.claude/coding-agent-kit/`; `.\doctor.ps1` checks only the items with
+  in `~/.claude/coding-agent-kit/`; `.\dotfiles.ps1 doctor` checks only the items with
   a `windows-install` row, so neither the kit nor its helpers, and names an
   item the file does not know. Missing items end with what to run: where the
   home's chezmoi config resolves, `run sync-payloads ITEM`, which on Unix
@@ -356,8 +360,8 @@ and their contract documentation together, in one reviewed change:
    row runs the documented update command, or is absent when the install
    command is also the update. Do the same for the `windows-*` rows.
 3. Run `bash tests/payload-update.sh`, then on a real host `sync-payloads` and
-   `./doctor.sh --host <host>` (the `payloads` row), and on Windows
-   `sync-payloads` and `.\doctor.ps1`.
+   `./dotfiles doctor --host <host>` (the `payloads` row), and on Windows
+   `sync-payloads` and `.\dotfiles.ps1 doctor`.
 
 A probe that never passes makes every run reinstall the item; a probe that
 passes too early makes the hook update an item that was never installed.
@@ -392,7 +396,7 @@ dotfiles adds:
 
 ```sh
 sync-payloads                                   # each item: install done or update done
-./doctor.sh --host <host>                       # payloads ok
+./dotfiles doctor --host <host>                       # payloads ok
 ls ~/.claude/coding-agent-kit/                  # check-git-hooks.cjs notify.cjs statusline.cjs
 readlink ~/.local/bin/codex-as                  # a path in the kit's managed root, .../current/bin/codex-as
 codex-as --version                              # coding-agent-kit X.Y.Z (managed vX.Y.Z, channel X.Y)
@@ -400,7 +404,7 @@ ls -l ~/.pymolrc ~/.pymolrc.py                  # regular files
 ```
 
 On Windows: `sync-payloads` (PyMOLScripts and awesome-skills) and
-`.\doctor.ps1`.
+`.\dotfiles.ps1 doctor`.
 
 Loopback download fixtures cover a server that stalls after headers and a
 trickling body, and empty HTTP 200 responses with the failed-download latch.

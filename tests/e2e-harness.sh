@@ -73,7 +73,7 @@ expect_no_text() {
 # only the full explicit argument set docs/bootstrap.md home_cz passes, in
 # that order, against the clone at ~/dotfiles (exit 2 otherwise), logs the
 # rest of each call to E2E_STUB_LOG when that is set, and plays a five-file
-# source: an init that writes the top-level keys home/.chezmoi.toml.tmpl
+# source (plus the executable CLI when its source exists): an init that writes the top-level keys home/.chezmoi.toml.tmpl
 # sets (destDir, mode, persistentState and sourceDir, sorted, before the seed
 # config's own lines, as toToml writes them; E2E_STUB_INIT=foreign names
 # another home), the two managed lists, a directory-only apply of one absent
@@ -110,6 +110,7 @@ shift 7
 shift 5
 [ -z "${E2E_STUB_LOG:-}" ] || printf '%s\n' "$*" >>"$E2E_STUB_LOG"
 files='.bashrc .profile .zshrc .config/sh/.profile .ssh/config'
+[ ! -f "$src/home/dot_local/bin/executable_dotfiles" ] || files="$files .local/bin/dotfiles"
 case $* in
     init)
         config=$home/.config/chezmoi/chezmoi.toml
@@ -157,13 +158,22 @@ case $* in
                 printf 'stub chezmoi: no directory for %s\n' "$f" >&2
                 exit 1
             }
-            printf '# deployed %s\n' "$f" >"$home/$f" || exit 1
+            if [ "$f" = .local/bin/dotfiles ]; then
+                cp "$src/home/dot_local/bin/executable_dotfiles" "$home/$f" && chmod 755 "$home/$f" || exit 1
+            else
+                printf '# deployed %s\n' "$f" >"$home/$f" || exit 1
+            fi
         done
         # PLANT-LINK
         mkdir -p "$home/.local/state/chezmoi" && printf 'db\n' >"$home/.local/state/chezmoi/chezmoi.boltdb" || exit 1
         ;;
     'diff --exclude=dirs')
         for f in $files; do
+            if [ "$f" = .local/bin/dotfiles ]; then
+                cmp "$src/home/dot_local/bin/executable_dotfiles" "$home/$f" >/dev/null 2>&1 && [ -x "$home/$f" ] ||
+                    printf 'diff --git a/%s b/%s\n' "$f" "$f"
+                continue
+            fi
             [ "$(cat "$home/$f" 2>/dev/null)" = "# deployed $f" ] || printf 'diff --git a/%s b/%s\n' "$f" "$f"
         done
         [ "${E2E_STUB_DIFF:-}" != 1 ] || printf 'diff --git a/.bashrc b/.bashrc\n'
@@ -1030,7 +1040,7 @@ printf 'ok: deploy end state and clone links\n'
 # chezmoi whose first file apply also links a home path into the clone.
 SRC="$TEST_TMP/src"
 TEST_BIN="$TEST_TMP/bin"
-mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/lib" "$SRC/scripts" "$SRC/tests" "$TEST_BIN"
+mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/lib" "$SRC/scripts" "$SRC/tests" "$SRC/home/dot_local/bin" "$TEST_BIN"
 cat >"$TEST_TMP/gitconfig" <<EOF
 [user]
 	name = Fixture
@@ -1041,6 +1051,8 @@ cat >"$TEST_TMP/gitconfig" <<EOF
 	detachedHead = false
 EOF
 export GIT_CONFIG_GLOBAL="$TEST_TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
+cp "$REPO_ROOT/dotfiles" "$SRC/dotfiles"
+cp "$REPO_ROOT/home/dot_local/bin/executable_dotfiles" "$SRC/home/dot_local/bin/executable_dotfiles"
 cp "$REPO_ROOT/docs/bootstrap.md" "$SRC/docs/bootstrap.md"
 cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$SRC/lib/chezmoi-guard.sh"
 printf 'home\n' >"$SRC/.chezmoiroot"
@@ -1400,6 +1412,16 @@ expected_timeout=$(PATH="$TEST_BIN:$PATH" e2e_find_timeout && printf '%s\n' "${E
 expect_eq 'clean env.txt names the timeout' "$(sed -n 's/^timeout=//p' "$CLEAN_OUT/env.txt" | sed 's|.*/||')" \
     "${expected_timeout##*/}"
 CLEAN_PHYS=$(cd -P "$CLEAN_HOME" && pwd -P)
+expect_text 'initial doctor uses the root CLI' "$CLEAN_OUT/steps/02-doctor-initial.log" './dotfiles doctor --host lab-ubuntu --tsv'
+expect_text 'setup plan uses the root CLI' "$CLEAN_OUT/steps/03-check-nowrite.log" './dotfiles setup --host lab-ubuntu --check'
+payload_log=$(printf '%s\n' "$CLEAN_OUT"/steps/*-payloads.log)
+expect_text 'payloads use the installed CLI' "$payload_log" '.local/bin/dotfiles'
+expect_text 'payloads select sync' "$payload_log" 'payloads\ sync'
+expect_text 'payloads run outside the checkout' "$payload_log" "--- cwd $CLEAN_PHYS, phase setup:payloads"
+[ -x "$CLEAN_HOME/.local/bin/dotfiles" ] && [ ! -L "$CLEAN_HOME/.local/bin/dotfiles" ] ||
+    fail 'clean: the installed CLI is not an executable regular file'
+cmp "$REPO_ROOT/home/dot_local/bin/executable_dotfiles" "$CLEAN_HOME/.local/bin/dotfiles" ||
+    fail 'clean: the installed CLI differs from its source'
 expect_step clean clone pass "at $CLEAN_HOME/dotfiles"
 expect_step clean doctor-initial pass 'exit 1; '
 expect_step clean doctor-initial pass 'no writes'
@@ -1417,7 +1439,7 @@ expect_step clean second-apply pass 'exit 0, nothing applied, HOME untouched'
 expect_step clean check-done pass 'exit 0; nothing left to apply; no writes'
 expect_step clean login-shell pass 'exit 0; silent'
 expect_step clean payloads pass 'exit 0; doctor payloads ok: installed: kit, pymol, skills'
-expect_step clean home-converged pass 'empty diff; 5 managed file(s), all regular'
+expect_step clean home-converged pass 'empty diff; 6 managed file(s), all regular'
 expect_step clean doctor-final pass 'exit 0 from the login shell'
 expect_step clean doctor-smoke pass 'exit 0 from the login shell'
 expect_step clean negative-wsl-refused pass 'exit 2: '
@@ -1486,7 +1508,7 @@ printf 'ok: sandboxed dry run (planted sudo fails the wrappers audit)\n'
 
 run_inside link "$REV_LINK" "$TEST_TMP/home link" E2E_NEGATIVE=
 expect_one_fail link audit-clone-links "$TEST_TMP/home link/.clone-link"
-expect_step link home-converged pass 'empty diff; 5 managed file(s), all regular'
+expect_step link home-converged pass 'empty diff; 6 managed file(s), all regular'
 [ -L "$TEST_TMP/home link/.clone-link" ] || fail 'link: the planted link is missing'
 printf 'ok: sandboxed dry run (a link into the clone fails its audit)\n'
 

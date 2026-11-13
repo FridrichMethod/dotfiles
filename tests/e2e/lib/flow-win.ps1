@@ -57,7 +57,7 @@ function Invoke-E2EApplyLoop {
         $name = "apply-$n"
         Update-E2EPath
         Start-E2EStep $name "setup:$name"
-        $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Yes') -TimeoutSeconds $E2ETimeout['Apply']
+        $code = Invoke-E2EPwsh -Script dotfiles.ps1 -Arguments @('setup', '--host', 'win', '--yes') -TimeoutSeconds $E2ETimeout['Apply']
         $output = @(Get-E2ELines $E2E['StepOut'])
         $stderr = @(Get-E2ELines $E2E['StepErr'])
         $applied = @($output | Where-Object { $_ -match $script:E2EAppliedRe })

@@ -33,11 +33,12 @@ These files are installed on every host, including fresh machines and clusters, 
 
 ## Working commands
 
-- Check a host (read-only, offline): `./doctor.sh --host <host>` (Windows: `.\doctor.ps1`)
-- Day-zero install, plan first: `./setup-host.sh --host <host> --check`, then without `--check` (Windows: `.\setup-host.ps1 -Check`, then `.\setup-host.ps1`)
+- Check a host (read-only, offline): `./dotfiles doctor --host <host>` (Windows: `.\dotfiles.ps1 doctor --host win`)
+- Day-zero install, plan first: `./dotfiles setup --host <host> --check`, then without `--check` (Windows: `.\dotfiles.ps1 setup --host win --check`, then without `--check`)
 - First deployment: follow the H7-deploy/HW-deploy blocks (`docs/bootstrap.md`; a new home takes Fresh home by hand).
-- Install or update the payload repos now: `sync-payloads [ITEM...]`, or `sh scripts/payload-update.sh --now` (Windows: `scripts/payload-update.ps1 -Now`, unelevated)
-- Run checks: `pre-commit run --all-files`
+- Install or update payload repos: `dotfiles payloads sync [ITEM...]` or the interactive `sync-payloads` shortcut. Before deployment/configuration, run `CHECKOUT/dotfiles payloads sync` (Windows: `& CHECKOUT\dotfiles.ps1 payloads sync`, unelevated).
+- Run tests: `./dotfiles dev test --ci`; run checks: `./dotfiles dev check` (formatters may edit files). Compatibility backends keep their existing interfaces: doctor/setup scripts, payload hooks and tests/run.*.
+- Installed launchers use only the validated home's configured sourceDir, including help. Recover missing/invalid configuration through an explicit checkout entrypoint. Windows discovery requires the manual User PATH procedure in `docs/bootstrap.md`; profiles and setup never persist PATH.
 
 ## Verification
 

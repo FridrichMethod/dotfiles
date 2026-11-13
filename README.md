@@ -20,9 +20,9 @@ is a separate check with its own status.
 ```sh
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-./doctor.sh --host mac
-./setup-host.sh --host mac --check
-./setup-host.sh --host mac
+./dotfiles doctor --host mac
+./dotfiles setup --host mac --check
+./dotfiles setup --host mac
 ```
 
 Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
@@ -42,7 +42,7 @@ parent permissions. Prepare only inspected missing directories through the
 [directory-only procedure](docs/bootstrap.md#preparing-missing-parents); plain
 apply can change existing parent modes.
 
-On other Linux, check with `./doctor.sh --platform other` and follow the
+On other Linux, check with `./dotfiles doctor --platform other` and follow the
 [other-Linux procedure](docs/bootstrap.md#x-other-linux-other-linux-distributions);
 its `home_deploy generic` writes `[data].host = "generic"` into the local
 chezmoi config.
@@ -57,9 +57,9 @@ uses the Unix installer.
 ```powershell
 git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
-.\doctor.ps1 -Host win
-.\setup-host.ps1 -Host win -Check
-.\setup-host.ps1 -Host win
+.\dotfiles.ps1 doctor --host win
+.\dotfiles.ps1 setup --host win --check
+.\dotfiles.ps1 setup --host win
 ```
 
 Follow the HW-* HUMAN blocks; HW-deploy points to the first deployment, which a new
@@ -71,6 +71,9 @@ the ordinary user's ACLs on the destination parents before it, since a new
 file inherits its parent's ACL. See
 [the Windows quick start](docs/bootstrap.md#native-windows) and
 [login updates](docs/updates.md).
+After deployment, follow the explicit [User PATH procedure](docs/bootstrap.md#windows-command-discovery)
+for bare `dotfiles` discovery in a fresh PowerShell 7 process, including `-NoProfile`.
+Before that, use `& "$HOME/.local/bin/dotfiles.ps1" doctor --host win`.
 
 ### Bootstrapping with Claude Code or Codex
 
@@ -80,6 +83,52 @@ the playbook, diagnoses and plans before applying, and hands HUMAN blocks to
 you. It never authenticates for you or hides privileged commands in a script.
 For a session outside the clone, use the
 [agent prompt](docs/bootstrap.md#prompt-for-an-agent-started-outside-the-clone).
+
+## Command line
+
+Use `./dotfiles` from a Unix checkout or `.\dotfiles.ps1` from a Windows
+PowerShell 7 checkout, even before a home has chezmoi configuration. An explicit
+path such as `~/dotfiles/dotfiles doctor --host mac` also works outside the clone.
+After deployment, Unix finds `dotfiles` on `~/.local/bin` in its profile PATH;
+Windows uses the manual [User PATH procedure](docs/bootstrap.md#windows-command-discovery).
+Installed launchers select only the checkout named by the validated home
+`~/.config/chezmoi/chezmoi.toml`; they never select from cwd or a fallback.
+If configuration or the dispatcher is unavailable, including for help, recover
+with `CHECKOUT/dotfiles` or `& CHECKOUT\dotfiles.ps1` explicitly.
+
+| Command | Purpose |
+| --- | --- |
+| `doctor` | Check tools; offline and write-free by default |
+| `setup` | Install tools; `--check` plans offline without writes; exit 3 means work remains |
+| `payloads sync [ITEM...]` | Install or update selected payload repositories in the foreground |
+| `dev test [--ci] [--check-prerequisites]` | Run tests, or check their prerequisites |
+| `dev check` | Run `pre-commit run --all-files` from the selected checkout; formatters may edit files and behavior tests run once |
+| `help [COMMAND...]`, `--help`, `-h` | Built-in help; runs no backend or installer |
+
+| Command | Both platforms | Unix only | Windows only |
+| --- | --- | --- | --- |
+| `doctor` | `--host`, `--tier`, `--tsv`, `--quiet`, `--online` | `--platform`, `--smoke`, `--list` | None |
+| `setup` | `--host`, `--tier`, `--check`, `--yes`, `--print-manual` | `--only`, `--skip`, `--keep-going`, `--list` | `--what-if`, `--confirm` |
+| `dev test` | `--ci`, `--check-prerequisites` | None | None |
+
+Every command accepts help. No arguments, bare `payloads`, and bare `dev` show
+help and exit 0. Unknown command paths/options, unsupported platform options,
+and missing/empty values exit 2 before execution. Use exact lowercase command
+and long-option names; values accept `--name VALUE` or `--name=VALUE`. Repeated
+scalar values use the last one; booleans are idempotent; Unix `--only`/`--skip`
+remain repeatable. `--flag=true` is unsupported. Quote comma lists in PowerShell:
+`dotfiles doctor --tier 'core,cli,ai'`. PowerShell arguments must be strings;
+raw arrays and objects are rejected with exit 2.
+
+The entrypoint platform determines the backend; `--host win` on Unix does not
+start Windows execution. The CLI preserves backend streams and exit codes.
+`dev check` accepts no extra pre-commit arguments and does not also run
+`dev test`. Neither developer command installs dependencies. Payload defaults,
+item validation, upstream lock exit 75 handling, retries and download bounds
+remain in the [payload backend](docs/payloads.md); maintenance blocks execution.
+The original `doctor.sh`, `setup-host.sh`, `doctor.ps1`, `setup-host.ps1` and
+`scripts/payload-update.*` interfaces remain supported compatibility entrypoints,
+with their existing native parameters and HUMAN/retry output.
 
 ## Source layout
 
@@ -93,7 +142,7 @@ For a session outside the clone, use the
 chezmoi never deploys a source dot-directory, so `.hosts/` and `.policy/` stay
 inputs. Git overrides use `~/.gitconfig_local`; SSH delegates to
 `~/.ssh/config.d/*.conf`. A target has exactly one source file; native Windows
-deploys 26 regular files and no POSIX shell files. The
+deploys 27 regular files and no POSIX shell files. The
 [dependency guide](docs/dependencies.md) explains required and optional tools;
 `config/bootstrap/` owns installation inventories and versions.
 
@@ -181,7 +230,7 @@ live edit of an owned key stops login updates at that file until it is
 
 ## Payload repos
 
-`sync-payloads` calls each repository's own installer:
+`dotfiles payloads sync` calls each repository's own installer:
 [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit),
 [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) and
 [awesome-skills](https://github.com/FridrichMethod/awesome-skills).
@@ -193,11 +242,12 @@ awesome-skills manages its own copies under `~/.claude/skills/`,
 its roots. Selection and migration stay with that repository's installer.
 
 No login, profile or schedule installs or refreshes the payload repos. A person
-runs `sync-payloads`, which installs absent items and updates installed ones in
-the foreground and keeps no state. It runs the hook of the checkout the
+runs `dotfiles payloads sync` (or `sync-payloads`), which installs absent items
+and updates installed ones in the foreground and keeps no state. The installed
+launcher runs the hook of the checkout the
 validated chezmoi config names and refuses a config the guard refuses; a home
 without that config names no checkout, so run
-`sh <checkout>/scripts/payload-update.sh --now` there. Exit 75 (another run
+`<checkout>/dotfiles payloads sync` explicitly. Exit 75 (another run
 holds the repository's lock) is no failure. Exit 3 for configured
 person-status items requires following the upstream installer's message;
 locally edited PyMOL rc files are preserved.
@@ -208,11 +258,13 @@ from fresh private staging directories, never from a pipe. See the
 usage error any other call gets.
 
 ```sh
-sync-payloads [kit] [pymol] [skills]  # foreground: install or update
+dotfiles payloads sync [kit] [pymol] [skills]  # foreground: install or update
+sync-payloads [kit] [pymol] [skills]            # interactive shortcut
 sync-skills                           # sync-payloads skills
 ```
 
-On native Windows use these profile functions or `scripts/payload-update.ps1 -Now` in an ordinary, unelevated PowerShell. It manages PyMOLScripts and
+On native Windows use `dotfiles payloads sync`, these profile functions, or
+`& CHECKOUT\dotfiles.ps1 payloads sync` in an ordinary, unelevated PowerShell. It manages PyMOLScripts and
 awesome-skills, not the kit.
 The [sherlock-kit](https://github.com/FridrichMethod/sherlock-kit) toolkit is
 separate: consumer projects pin/install their own.
@@ -223,8 +275,8 @@ separate: consumer projects pin/install their own.
 # Install the selected chezmoi test release, or name an already verified binary:
 export DOTFILES_TEST_CHEZMOI=/path/to/chezmoi
 pre-commit install
-./tests/run.sh --ci
-pre-commit run --all-files
+./dotfiles dev test --ci
+./dotfiles dev check
 pre-commit run --hook-stage manual gitleaks-history
 ```
 

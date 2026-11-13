@@ -2,9 +2,14 @@
 
 ## What this is
 
-`./doctor.sh` and `./setup-host.sh` (on native Windows, `.\doctor.ps1` and
-`.\setup-host.ps1`) are the explicit, fail-closed entry points that take a
-fresh machine to the state the dotfiles assume. The doctor is read-only
+The [public CLI](../README.md#command-line) documents commands, platform options,
+exit codes and explicit-checkout recovery. The original doctor/setup scripts
+and payload hooks remain supported compatibility interfaces; their backend
+contracts below retain native parameters and literal output.
+
+`./dotfiles doctor` and `./dotfiles setup` (on native Windows,
+`.\dotfiles.ps1 doctor` and `.\dotfiles.ps1 setup`) are the explicit,
+fail-closed entry points that take a fresh machine to the state the dotfiles assume. The doctor is read-only
 and offline: for every tool it reports `ok`, `missing` or `outdated` and names
 the step below that fixes it. The installer runs pinned, checksummed steps that
 need no root, and prints everything that needs a person (sudo, a browser login,
@@ -61,7 +66,7 @@ By hand on a Linux without an overlay (X-other-linux; glibc 2.34 or later), for
 an absent or regular `~/.local/bin/chezmoi`: `fetch_pinned`
 ([Downloads and clones by hand](#downloads-and-clones-by-hand)) takes the first
 `installers.tsv` row for the architecture, the generic Linux archive, so macOS
-and the clusters run `./setup-host.sh` instead:
+and the clusters run `./dotfiles setup` instead:
 
 ```sh
 f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"
@@ -206,8 +211,8 @@ directories, one at a time, parents first, applies twice and requires an empty
 `home_cz diff --exclude=dirs`. It never forces and never creates
 maintenance. The managed paths come from this repository's own source, so the
 lists are read one path per line. Afterwards
-`./setup-host.sh --host H` exits 0, the next interactive login runs the login
-updater, and `./doctor.sh --host H --smoke` is the gate. Delete the backup
+`./dotfiles setup --host H` exits 0, the next interactive login runs the login
+updater, and `./dotfiles doctor --host H --smoke` is the gate. Delete the backup
 directory once nothing in it is needed. Run any later manual chezmoi command as
 `home_cz ARGS...` from the clone, which passes every path explicitly,
 as the login updater does; a plain `chezmoi` command uses the configured
@@ -297,7 +302,8 @@ uses it.
 
 ### HW-deploy: First apply on Windows
 
-Follow [Fresh Windows home by hand](#fresh-windows-home-by-hand) as the
+Follow [Fresh Windows home by hand](#fresh-windows-home-by-hand) and the manual
+[User PATH procedure](#windows-command-discovery) as the
 ordinary, unelevated user; it checks the actual CurrentUserAllHosts path in
 both shells. Updates write regular files and need no elevation or scheduled task.
 `doctor.ps1`'s `chezmoi-config` row gives the verdicts of
@@ -316,7 +322,8 @@ fresh home. Run it in an ordinary, unelevated PowerShell 7 in the clone, after
 W1-chezmoi: paste both functions, then `Invoke-HomeDeploy -Role win`. Before
 it, review as the ordinary user, with `icacls`, the ACLs of the existing
 parent directories its targets land in, such as `~\Documents` and
-`~\AppData\Local\Packages`: each file it writes inherits its parent's ACL,
+`~\AppData\Local\Packages` and `~\.local\bin` (including the CLI launcher):
+each file it writes inherits its parent's ACL,
 and the function checks none ([New targets](updates.md#new-targets) says what
 a parent broader than its file needs). It requires both PowerShell editions
 to load `~\Documents\PowerShell\profile.ps1` and
@@ -448,6 +455,46 @@ function Invoke-HomeDeploy {
 }
 ```
 
+### Windows command discovery
+
+After [Fresh Windows home by hand](#fresh-windows-home-by-hand), the installed
+launcher is `~/.local/bin/dotfiles.ps1`. Before PATH setup, invoke it explicitly:
+
+```powershell
+& "$HOME/.local/bin/dotfiles.ps1" doctor --host win
+```
+
+For bare `dotfiles`, run this one-time procedure yourself in an ordinary,
+unelevated PowerShell 7. It reads only User PATH, preserves existing entries,
+and adds exactly one home-local bin entry, comparing that entry
+case-insensitively. It never copies combined process/Machine PATH into User PATH.
+Setup, launchers and profiles do not persist this change.
+
+```powershell
+$localBin = [IO.Path]::GetFullPath((Join-Path $HOME '.local/bin'))
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$entries = [Collections.Generic.List[string]]::new()
+if ($null -ne $userPath -and $userPath.Length -gt 0) {
+    foreach ($entry in $userPath.Split(';')) {
+        if (-not [StringComparer]::OrdinalIgnoreCase.Equals($entry.Replace('/', '\').TrimEnd('\'), $localBin.Replace('/', '\').TrimEnd('\'))) {
+            $entries.Add($entry)
+        }
+    }
+}
+$entries.Add($localBin)
+[Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+```
+
+Start a fresh PowerShell 7 from a parent process that has refreshed its
+environment (restart Windows Terminal if necessary). A child of the old shell
+inherits its old process PATH. Bare discovery also works without a profile:
+`pwsh -NoProfile -Command 'dotfiles doctor --host win'`.
+Quote comma lists: `dotfiles doctor --tier 'core,cli,ai'`.
+Keep [HW-execution-policy](#hw-execution-policy-execution-policy)
+as a separate human decision. Before deployment/configuration, use the checkout
+entrypoint `.\dotfiles.ps1 doctor --host win` or an explicit checkout path;
+the installed launcher requires valid home configuration even for help.
+
 ## Quick start
 
 Every platform runs the same sequence: get git (and, if you want an agent to
@@ -460,7 +507,7 @@ nothing guesses it.
 > **Ordering note: oh-my-zsh must exist before the first apply.** The dotfiles
 > put files under `~/.oh-my-zsh/custom/`, and once that directory exists,
 > oh-my-zsh can no longer be cloned into `~/.oh-my-zsh`, so zsh aborts where
-> `.zshrc` sources `oh-my-zsh.sh`. `./setup-host.sh` clones it in
+> `.zshrc` sources `oh-my-zsh.sh`. `./dotfiles setup` clones it in
 > [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones), before
 > [H7-deploy](#h7-deploy-first-apply). If
 > H7-deploy ran first, use the first recipe in
@@ -472,7 +519,7 @@ after the first apply pulls the checkout in the middle of the bootstrap. No shel
 installs the payload repos: they install only when you run the
 [H7-payloads](#h7-payloads-payload-repos) line, whenever you choose.
 
-`./setup-host.sh` exits 3 while work remains: a blocking HUMAN step is pending,
+`./dotfiles setup` exits 3 while work remains: a blocking HUMAN step is pending,
 or automatic steps are still to apply.
 [H7-deploy](#h7-deploy-first-apply) (HW-deploy on
 Windows) blocks, so re-run it after each block until H7-deploy is the only one
@@ -489,15 +536,15 @@ xcode-select --install          # H1-xcode-clt: git comes with the Command Line 
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0
-./doctor.sh --host mac
-./setup-host.sh --host mac --check
-./setup-host.sh --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
-./setup-host.sh --host mac      # again after each block, until only H7-deploy still blocks
+./dotfiles doctor --host mac
+./dotfiles setup --host mac --check
+./dotfiles setup --host mac      # exit 3: run the printed H1-homebrew sudo block yourself
+./dotfiles setup --host mac      # again after each block, until only H7-deploy still blocks
 # H7-deploy: the fresh-home procedure in H7-deploy
-./setup-host.sh --host mac      # exits 0 now
-# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
+./dotfiles setup --host mac      # exits 0 now
+# H7-payloads (optional, any time): ./dotfiles payloads sync
 exec zsh -l
-./doctor.sh --host mac --smoke
+./dotfiles doctor --host mac --smoke
 ```
 
 An agent CLI before Homebrew exists: download Claude Code's installer, read it,
@@ -518,17 +565,17 @@ sudo apt-get install -y git curl
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0
-./doctor.sh --host wsl-ubuntu                 # or lab-ubuntu
-./setup-host.sh --host wsl-ubuntu --check
-./setup-host.sh --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
-./setup-host.sh --host wsl-ubuntu             # again after each block (later the S5-claude inspect block),
+./dotfiles doctor --host wsl-ubuntu                 # or lab-ubuntu
+./dotfiles setup --host wsl-ubuntu --check
+./dotfiles setup --host wsl-ubuntu             # exit 3: sudo blocks H1-apt-core, H1-linuxbrew (and H1-locale)
+./dotfiles setup --host wsl-ubuntu             # again after each block (later the S5-claude inspect block),
                                               # until only H7-deploy still blocks
 # H7-deploy: the fresh-home procedure in H7-deploy
-./setup-host.sh --host wsl-ubuntu             # exits 0 now
+./dotfiles setup --host wsl-ubuntu             # exits 0 now
 chsh -s "$(command -v zsh)"                   # H7-chsh, asks for your password
-# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
+# H7-payloads (optional, any time): ./dotfiles payloads sync
 exec zsh -l
-./doctor.sh --host wsl-ubuntu --smoke
+./dotfiles doctor --host wsl-ubuntu --smoke
 ```
 
 `lab-ubuntu` adds one gui step (H1-fcitx5: `im-config -n fcitx5` as you, then
@@ -550,19 +597,19 @@ cat /etc/os-release; ldd --version | head -n 1     # P0-preflight: record OS and
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0
-./doctor.sh --host sherlock                        # or marlowe
-./setup-host.sh --host sherlock --check
-./setup-host.sh --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
+./dotfiles doctor --host sherlock                        # or marlowe
+./dotfiles setup --host sherlock --check
+./dotfiles setup --host sherlock                    # light steps on the login node; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                  # H2-alloc; Marlowe: an interactive Slurm job
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"  # Marlowe: "/scratch/m000191/.cache/conda/pkgs/$USER"
-./setup-host.sh --host sherlock                    # builds the login env inside the job; exit 3 at H7-deploy
+./dotfiles setup --host sherlock                    # builds the login env inside the job; exit 3 at H7-deploy
 exit                                               # back to the login node
 # H7-deploy: the fresh-home procedure in H7-deploy
-./setup-host.sh --host sherlock                    # exits 0 now
-# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
+./dotfiles setup --host sherlock                    # exits 0 now
+# H7-payloads (optional, any time): ./dotfiles payloads sync
 exec "$HOME/micromamba/envs/login/bin/zsh" -l
-./doctor.sh --host sherlock --smoke
+./dotfiles doctor --host sherlock --smoke
 ```
 
 The `CONDA_PKGS_DIRS` line puts micromamba's package cache where the overlay
@@ -583,25 +630,25 @@ winget install --id Microsoft.PowerShell -e --source winget --installer-type wix
 git clone https://github.com/FridrichMethod/dotfiles.git $HOME\dotfiles
 cd $HOME\dotfiles
 $env:DOTFILES_AUTO_UPDATE = '0'
-.\doctor.ps1 -Host win
-.\setup-host.ps1 -Host win -Check
-.\setup-host.ps1 -Host win      # exit 3 until HW-deploy is done
+.\dotfiles.ps1 doctor --host win
+.\dotfiles.ps1 setup --host win --check
+.\dotfiles.ps1 setup --host win      # exit 3 until HW-deploy is done
 # HW-deploy: the fresh-home procedure in HW-deploy, unelevated
 # open a new terminal, then from $HOME\dotfiles:
-.\setup-host.ps1 -Host win      # exits 0 now; prints the non-blocking HW blocks
-# H7-payloads (optional, any time, unelevated): .\scripts\payload-update.ps1 -Now
-.\doctor.ps1 -Host win
+.\dotfiles.ps1 setup --host win      # exits 0 now; prints the non-blocking HW blocks
+# H7-payloads (optional, any time, unelevated): .\dotfiles.ps1 payloads sync
+.\dotfiles.ps1 doctor --host win
 ```
 
 The remaining Windows steps are HUMAN: execution policy, the ssh-agent
-service, WSL and authentication (`HW-*` below; `.\setup-host.ps1 -PrintManual`
+service, WSL and authentication (`HW-*` below; `.\dotfiles.ps1 setup --host win --print-manual`
 prints them all). An agent CLI first, if wanted:
 `winget install --id Anthropic.ClaudeCode -e`.
 
 ### Other Linux
 
 There is no overlay for Fedora, Arch or an Ubuntu machine other than WSL and
-the lab desktop, and `./setup-host.sh` takes
+the lab desktop, and `./dotfiles setup` takes
 only `--host`. Select the `generic` role, install packages yourself, and do
 the platform-neutral setup steps by hand
 ([X-other-linux](#x-other-linux-other-linux-distributions)). Paste `clone_listed`
@@ -615,7 +662,7 @@ into your shell first.
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0
-./doctor.sh --platform other
+./dotfiles doctor --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
     clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first
 done
@@ -624,9 +671,9 @@ f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &
 mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"
 home_deploy generic    # H7-deploy, Fresh home by hand
-# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
+# H7-payloads (optional, any time): ./dotfiles payloads sync
 exec zsh -l
-./doctor.sh --platform other --smoke
+./dotfiles doctor --platform other --smoke
 ```
 
 ## Contract
@@ -840,7 +887,7 @@ service) is the person's to run, whatever its kind.
 
 ### Guarantees
 
-- `./doctor.sh` without `--online` or `--smoke`, and `./setup-host.sh --check`,
+- `./dotfiles doctor` without `--online` or `--smoke`, and `./dotfiles setup --check`,
   write nothing anywhere and make no network calls. `--online` adds the three
   auth probes, which go online and may write the tools' own state
   (`~/.claude.json`; `~/.codex/tmp` for some codex releases); `--smoke` may
@@ -974,9 +1021,9 @@ short and send the agent here. The rules they follow:
   installs the payload repos unless someone runs the
   [H7-payloads](#h7-payloads-payload-repos) line, so the agent asks the person
   whether to run it.
-- **Plan first.** `./doctor.sh --host H --tsv` and
-  `./setup-host.sh --host H --check`, shown to the person, before any apply.
-  The apply is `./setup-host.sh --host H --yes`, because an agent's shell has
+- **Plan first.** `./dotfiles doctor --host H --tsv` and
+  `./dotfiles setup --host H --check`, shown to the person, before any apply.
+  The apply is `./dotfiles setup --host H --yes`, because an agent's shell has
   no terminal. It writes outside the clone (`~/.oh-my-zsh`, `~/.local`, `~/.nvm`)
   and needs the network, so a sandboxed agent asks to run it with broader
   permissions; approving that one command is expected.
@@ -1013,7 +1060,7 @@ short and send the agent here. The rules they follow:
   `micromamba shell init`, the upstream oh-my-zsh installer, rc-file edits,
   commits or pushes. After each installer, `git -C ~/dotfiles status --porcelain`
   stays empty ([X-rc-protection](#x-rc-protection-rc-file-protection)).
-- **Done** means `./doctor.sh --host H --smoke` exits 0. The agent reports what
+- **Done** means `./dotfiles doctor --host H --smoke` exits 0. The agent reports what
   it installed, which HUMAN blocks remain and any failure with its
   `docs/bootstrap.md <step-id>` reference.
 
@@ -1030,12 +1077,12 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
 2. Read ~/dotfiles/docs/bootstrap.md completely. It is the contract; follow it over your defaults.
 3. Ask me which host this is: mac, wsl-ubuntu, lab-ubuntu, sherlock, marlowe, win,
    or another Linux (then follow X-other-linux). Never guess. On win, use the
-   PowerShell twins in every step below: .\doctor.ps1 -Host win -Tsv,
-   .\setup-host.ps1 -Host win -Check, then -Yes; the first apply is the
-   HW-deploy block, and the finish is .\doctor.ps1 -Host win.
+   PowerShell CLI in every step below: .\dotfiles.ps1 doctor --host win --tsv,
+   .\dotfiles.ps1 setup --host win --check, then --yes; the first apply is the
+   HW-deploy block, and the finish is .\dotfiles.ps1 doctor --host win.
 4. Run every command with DOTFILES_AUTO_UPDATE=0.
-5. Run ./doctor.sh --host H --tsv and ./setup-host.sh --host H --check and show me the plan.
-6. After I agree, run ./setup-host.sh --host H --yes. For each HUMAN block
+5. Run ./dotfiles doctor --host H --tsv and ./dotfiles setup --host H --check and show me the plan.
+6. After I agree, run ./dotfiles setup --host H --yes. For each HUMAN block
    (lines starting with "# " are notes for me; every other line is one
    self-contained command, run in order):
    sudo: show it and wait for my approval, then run each command line as its own
@@ -1053,7 +1100,7 @@ Bootstrap this machine with my dotfiles, https://github.com/FridrichMethod/dotfi
    docs/bootstrap.md ("Fresh Windows home by hand" under HW-deploy on win);
    never improvise chezmoi init --apply or force a whole home. Re-run
    setup-host; it should exit 0.
-8. Finish with ./doctor.sh --host H --smoke, then report what changed, what is
+8. Finish with ./dotfiles doctor --host H --smoke, then report what changed, what is
    still pending, and every failure with its docs/bootstrap.md step id.
 Never run git lfs install, gh auth setup-git, conda init or micromamba shell init,
 never edit rc files, and never commit or push.
@@ -1253,7 +1300,7 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   missing entry: `brew bundle --no-upgrade` on the Brewfile, less the entries
   whose tools the doctor already finds, with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
-- **Verify:** `./doctor.sh --host H` shows the Brewfile rows (`fzf`,
+- **Verify:** `./dotfiles doctor --host H` shows the Brewfile rows (`fzf`,
   `eza`, `fd`, `gh`, ..., and on macOS `python3`) `ok` with their floors.
 - **Human:** no, unless a conflicting formula or cask is installed (judgment,
   below) or you cannot write the Homebrew prefix (sudo, below)
@@ -1505,7 +1552,7 @@ execs `$HOME/micromamba/envs/login/bin/zsh`.
   `SCRATCH`; check `echo "$SCRATCH"` first); Marlowe, whose site sets no
   `SCRATCH` before H7-deploy deploys the overlay, takes the overlay's literal
   value: `export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"`.
-- **Verify:** `./doctor.sh --host sherlock` shows `login-env` and the tool rows `ok`.
+- **Verify:** `./dotfiles doctor --host sherlock` shows `login-env` and the tool rows `ok`.
 - **Human:** no (after H2-alloc)
 
 Never create the env under `$SCRATCH`: scratch is purged (90 days on Sherlock)
@@ -1612,8 +1659,8 @@ A clone with local changes in the way or a diverged history makes its
 `plugins/example`, which oh-my-zsh ships, lies inside the oh-my-zsh checkout,
 so the loop fast-forwards oh-my-zsh as well.
 
-For tmux, run `./setup-host.sh --host H --check --only S3-clones`, then
-`./setup-host.sh --host H --yes --only S3-clones` to install missing plugins.
+For tmux, run `./dotfiles setup --host H --check --only S3-clones`, then
+`./dotfiles setup --host H --yes --only S3-clones` to install missing plugins.
 Keep `DOTFILES_AUTO_UPDATE=0` exported while provisioning. Once `.tmux.conf`
 is in place, reload a running server with `tmux source-file ~/.tmux.conf`;
 otherwise the next tmux start loads it.
@@ -1665,7 +1712,7 @@ a nonempty `NVM_DIR`, then an existing `~/.nvm`, then an existing
 `${XDG_CONFIG_HOME:-$HOME/.config}/nvm`. With no installation, setup targets
 `~/.nvm`; it does not create a second copy beside an existing XDG install.
 
-- **Check:** `./setup-host.sh --host <host> --check --only S4-nvm` (offline; does not source `nvm.sh`).
+- **Check:** `./dotfiles setup --host <host> --check --only S4-nvm` (offline; does not source `nvm.sh`).
 - **Install:** automatic via setup-host.sh with the commit-pinned `nvm` row:
   `NVM_INSTALL_VERSION=<commit> PROFILE=/dev/null bash install.sh`, where
   `<commit>` is the commit in the row's URL. The installer would otherwise
@@ -1889,7 +1936,7 @@ Applies to every Unix host (Windows: HW-auth). Do this before the first
 interactive `claude` or `codex`.
 
 - **Check:** `ssh -T git@github.com; gh auth status; claude auth status; codex login status`
-  (or `./doctor.sh --host H --online`)
+  (or `./dotfiles doctor --host H --online`)
 - **Install:**
   - SSH key: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519` (the dotfiles' ssh config
     uses exactly that file, with `IdentitiesOnly yes`).
@@ -1911,7 +1958,7 @@ interactive `claude` or `codex`.
   - lab-ubuntu: Git Credential Manager with `credentialStore = gpg` needs a gpg
     key and `pass init <gpg-key-id>`. wsl-ubuntu uses the Windows-side Git
     Credential Manager from Git for Windows.
-- **Verify:** `./doctor.sh --host H --online` shows the three auth probes `ok`.
+- **Verify:** `./dotfiles doctor --host H --online` shows the three auth probes `ok`.
   A signed-out tool shows `warn` and does not fail the run, so read the rows
   rather than the exit code.
 - **Human:** yes (auth: browser or device-code logins, passwords and key
@@ -1923,9 +1970,9 @@ Applies to every host. coding-agent-kit (the account launchers and the Claude
 helpers that `settings.json` runs; Unix only, nothing on native Windows),
 PyMOLScripts (`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills
 (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills/awesome-skills`)
-install and update only when a person runs `scripts/payload-update.sh --now`
-(`scripts/payload-update.ps1 -Now`): in the foreground, it installs each
-absent item and updates each installed one through the repository's own
+install and update only when a person runs `dotfiles payloads sync`
+(compatibility: `scripts/payload-update.sh --now` or
+`scripts/payload-update.ps1 -Now`): in the foreground, it installs each absent item and updates each installed one through the repository's own
 installer, named in [`config/payloads.tsv`](../config/payloads.tsv). No login,
 profile or schedule installs or refreshes them, on any home, and the script
 keeps no state of its own. Each run downloads its repository's unpinned `main`
@@ -1938,8 +1985,8 @@ setup-host prints this as a non-blocking judgment block until the doctor's
 `payloads` row points here. `DOTFILES_PAYLOAD_ITEMS` (for example `kit pymol`)
 selects the items a run without arguments installs and the doctor checks.
 
-- **Check:** the doctor's `payloads` row (`./doctor.sh --host H`,
-  `.\doctor.ps1 -Host win`): each selected item passes its probe, and on
+- **Check:** the doctor's `payloads` row (`./dotfiles doctor --host H`,
+  `.\dotfiles.ps1 doctor --host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
   (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
   warns and names what to run. Where the home's chezmoi config resolves, it
@@ -1949,19 +1996,20 @@ selects the items a run without arguments installs and the doctor checks.
   maintenance), it is this checkout's quoted `--now` line
   (`sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
   `& '<clone>\scripts\payload-update.ps1' -Now ITEM`).
-- **Install:** the line the setup-host block prints, which works before the
-  dotfiles are applied too: `sh ~/dotfiles/scripts/payload-update.sh --now [ITEM...]`
+- **Install:** `dotfiles payloads sync [ITEM...]` after deployment, or the
+  explicit checkout command before configuration: `~/dotfiles/dotfiles payloads sync [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
-  `& $HOME\dotfiles\scripts\payload-update.ps1 -Now [ITEM...]`); run it again to
-  update. On a home with a chezmoi config the block names the script of the
+  `& $HOME\dotfiles\dotfiles.ps1 payloads sync [ITEM...]`); run it again to
+  update. The setup-host HUMAN block retains the compatibility hook command.
+  On a home with a chezmoi config the block names the script of the
   checkout the config names (and says so), never the checkout setup-host runs
   from, and only a note under maintenance or while the config does not
   resolve. In an interactive shell with the dotfiles applied,
   `sync-payloads [ITEM...]` does the same and
   `sync-skills` runs only the skills; they run the configured checkout's
   script, refuse a config the guard refuses, and in a home without a config
-  refuse with the `--now` line to run instead. Any call of the script without `--now` first prints a
-  usage line and exits 2. An installer's exit
+  refuse with an explicit checkout CLI recovery path. Any call of the script
+  without `--now` first prints a usage line and exits 2. An installer's exit
   75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
@@ -1975,7 +2023,7 @@ selects the items a run without arguments installs and the doctor checks.
 
 Applies to every host. This is the completion gate.
 
-- **Check:** `./doctor.sh --host H --smoke` (Windows: `.\doctor.ps1 -Host win`)
+- **Check:** `./dotfiles doctor --host H --smoke` (Windows: `.\dotfiles.ps1 doctor --host win`)
 - **Install:** none; follow the step each failing row names, then run it again.
 - **Verify:** exit 0. Add `--online` for the auth probes and `--tier all` to see
   the desktop, contributor and host rows.
@@ -2019,13 +2067,13 @@ Installs the package inventory in
 probes are defined in [tools.tsv](../config/bootstrap/tools.tsv), not in a
 second documentation list.
 
-- **Check:** `winget list --id Git.Git -e` (or `.\doctor.ps1 -Host win`)
+- **Check:** `winget list --id Git.Git -e` (or `.\dotfiles.ps1 doctor --host win`)
 - **Install:** automatic via setup-host.ps1:
   `winget import --import-file config\bootstrap\winget.json --no-upgrade --ignore-unavailable --accept-package-agreements --accept-source-agreements --disable-interactivity`,
   less the packages whose tools the doctor already finds (below).
   Already-installed packages count as success; other failures fail the step.
   Open a new terminal afterwards so the new PATH entries apply.
-- **Verify:** `.\doctor.ps1 -Host win` shows the winget rows `ok`.
+- **Verify:** `.\dotfiles.ps1 doctor --host win` shows the winget rows `ok`.
 - **Human:** no (setup-host.ps1 runs it; a machine-wide installer may still
   raise a UAC prompt for the person to accept)
 
@@ -2084,7 +2132,7 @@ Runs only when oh-my-posh is installed (W1-winget).
 The same commit-pinned `bat-theme` row as S3-bat-theme, in bat's Windows
 config directory.
 
-- **Check:** `.\setup-host.ps1 -Host win -Check` verifies the theme's sha256 pin
+- **Check:** `.\dotfiles.ps1 setup --host win --check` verifies the theme's sha256 pin
   and, when bat is installed, its registration in `bat --list-themes --color=never`.
 - **Install:** automatic via setup-host.ps1: download with the sha256 check to
   `$env:APPDATA\bat\themes\Catppuccin Mocha.tmTheme`, then `bat cache --build`.
@@ -2142,14 +2190,14 @@ one specific physical disk; do not schedule it on another machine.
 ### HW-auth: Windows authentication
 
 - **Check:** `ssh -T git@github.com; gh auth status; claude auth status; codex login status`
-  (or `.\doctor.ps1 -Host win -Online`)
+  (or `.\dotfiles.ps1 doctor --host win --online`)
 - **Install:** `ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519`;
   `gh auth login --git-protocol ssh`; Git Credential Manager comes with Git for
   Windows and `home/.hosts/win/.gitconfig_local` selects it; `claude` once, or
   `claude auth login`; `codex login`. For Sherlock and Marlowe, the terminal
   profiles ssh from inside WSL, so `kinit` there. Skip `gh auth setup-git`:
   it would rewrite `~\.gitconfig`, which the dotfiles manage.
-- **Verify:** `.\doctor.ps1 -Host win -Online` shows the auth probes `ok`.
+- **Verify:** `.\dotfiles.ps1 doctor --host win --online` shows the auth probes `ok`.
 - **Human:** yes (auth: browser logins and key passphrases)
 
 ## Optional and other platforms
@@ -2165,7 +2213,7 @@ what the doctor's `absent` text names. The one exception, micromamba with the
 overlays' `conda initialize` blocks hardcode one machine's prefix; re-aiming
 them is a separate change.
 
-- **Check:** `./doctor.sh --host H --tier host`
+- **Check:** `./dotfiles doctor --host H --tier host`
 - **Install:** each from its vendor or site, at the path the row probes.
 - **Verify:** the doctor row turns `ok`.
 - **Human:** yes (judgment: licensed or site-specific software)
@@ -2176,8 +2224,8 @@ For working on this repository: pre-commit, shfmt (3.13 or newer for the zsh
 dialect), shellcheck and stylua. `pre-commit` provisions its own pinned hook
 environments; the local binaries are for manual runs.
 
-- **Check:** `./doctor.sh --host H --tier contributor`
-- **Install:** mac and Ubuntu: `./setup-host.sh --host H --tier contributor`
+- **Check:** `./dotfiles doctor --host H --tier contributor`
+- **Install:** mac and Ubuntu: `./dotfiles setup --host H --tier contributor`
   (the [contributor Brewfile](../config/bootstrap/brew/contributor.Brewfile));
   hpc: pre-commit, go-shfmt and shellcheck are in the login env, stylua is
   manual; Windows: `uv tool install pre-commit`.
@@ -2190,11 +2238,11 @@ There are only six overlay roles; no `fedora` or `ubuntu` role exists. On any
 other Linux, deploy the `generic` role (the shared targets without a role
 variant) and install the packages yourself. An Ubuntu or Debian machine that is neither WSL nor the
 lab desktop can use `--platform debian` for the doctor's rows.
-`./setup-host.sh` needs a host overlay, so its four platform-neutral steps are
+`./dotfiles setup` needs a host overlay, so its four platform-neutral steps are
 done by hand; the sequence at the end of this section runs them in order (the
 Other Linux quick start repeats it).
 
-- **Check:** `./doctor.sh --platform other` (its apt, Homebrew, Brewfile, nvm
+- **Check:** `./dotfiles doctor --platform other` (its apt, Homebrew, Brewfile, nvm
   and locale references all point here)
 - **Install:** with the distribution's package manager, the equivalents of
   [`apt/common.txt`](../config/bootstrap/apt/common.txt) and the Brewfile tools,
@@ -2218,7 +2266,7 @@ Other Linux quick start repeats it).
   add them, `f=$(fetch_pinned claude)`, read it, then `bash "$f"`
   ([S5-claude](#s5-claude-claude-code)), and the by-hand recipe of
   [S5-codex](#s5-codex-codex-cli).
-- **Verify:** `./doctor.sh --platform other --smoke` exits 0.
+- **Verify:** `./dotfiles doctor --platform other --smoke` exits 0.
 - **Human:** yes (sudo: distribution packages)
 
 The route as one sequence, with `clone_listed` and `fetch_pinned`
@@ -2231,7 +2279,7 @@ and `home_deploy` ([Fresh home by hand](#fresh-home-by-hand)) pasted first:
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles
 export DOTFILES_AUTO_UPDATE=0
-./doctor.sh --platform other
+./dotfiles doctor --platform other
 for id in $(awk -F '\t' '/^#/ { next } !h { h = 1; next } { print $1 }' config/bootstrap/git-clones.tsv); do
     clone_listed "$id" || break                                    # S3-clones, oh-my-zsh first
 done
@@ -2240,9 +2288,9 @@ f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" &
 mkdir -p ~/.vim/undo ~/.vim/tmp                                    # S3-dirs
 f=$(fetch_pinned chezmoi "$(uname -m)") && mkdir -p "$HOME/.local/bin" && tar -xzOf "$f" chezmoi >"$HOME/.local/bin/chezmoi.new" && chmod 755 "$HOME/.local/bin/chezmoi.new" && mv -f "$HOME/.local/bin/chezmoi.new" "$HOME/.local/bin/chezmoi"
 home_deploy generic    # H7-deploy, Fresh home by hand
-# H7-payloads (optional, any time): sh scripts/payload-update.sh --now
+# H7-payloads (optional, any time): ./dotfiles payloads sync
 exec zsh -l
-./doctor.sh --platform other --smoke
+./dotfiles doctor --platform other --smoke
 ```
 
 ## Appendix: rc-file protection
@@ -2285,7 +2333,7 @@ content, so an edit to a file that was already modified still fails. Start from
 a clean checkout; P0-preflight warns when it is not, also because the
 login update does not run from a checkout with uncommitted changes.
 
-- **Check:** the doctor's `rc-pollution` row (`./doctor.sh --host <host> --tsv`)
+- **Check:** the doctor's `rc-pollution` row (`./dotfiles doctor --host <host> --tsv`)
   for the rc files in `$HOME`, and `git -C ~/dotfiles status --porcelain` (must print
   nothing) for the checkout.
 - **Install:** for an rc file in `$HOME`, review the installer's block with the
@@ -2309,7 +2357,7 @@ login update does not run from a checkout with uncommitted changes.
 
 ### X-recovery: Recovery recipes
 
-- **Check:** `./doctor.sh --host H` (the `omz-order`, `rc-pollution` and
+- **Check:** `./dotfiles doctor --host H` (the `omz-order`, `rc-pollution` and
   `nvm-homebrew` checks point here)
 - **Install:** the matching recipe below.
 - **Verify:** the doctor check that pointed here is `ok`.
@@ -2330,7 +2378,7 @@ git -C ~/.oh-my-zsh config oh-my-zsh.remote origin
 git -C ~/.oh-my-zsh config oh-my-zsh.branch master
 ```
 
-Then re-run `./setup-host.sh --host H` for the theme and plugin clones. When S3-clones refuses, setup-host prints this
+Then re-run `./dotfiles setup --host H` for the theme and plugin clones. When S3-clones refuses, setup-host prints this
 recipe with your paths as an X-recovery block, with the clone settings of
 [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones) set before the fetch
 and that rerun line.
@@ -2338,7 +2386,7 @@ and that rerun line.
 **Clone destination that is not a git checkout.** S3-clones fails with
 "DEST exists and is not a git checkout": a plugin or theme directory that was
 copied by hand, or left by another plugin manager. Look at it, move it aside
-(`mv DEST DEST.pre-dotfiles`), then `./setup-host.sh --host H --only S3-clones`
+(`mv DEST DEST.pre-dotfiles`), then `./dotfiles setup --host H --only S3-clones`
 clones it afresh. An existing clone, dirty or not, is never touched; to
 update one, see [S3-clones](#s3-clones-oh-my-zsh-theme-and-plugin-clones). A
 dirty `~/dotfiles` checkout after an installer is
@@ -2354,7 +2402,7 @@ because conflicting formulae are installed" or a cask conflict. Check with
 other package by the path setup-host printed, for example
 `/home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tldr` (tealdeer the
 same way) or `/opt/homebrew/bin/brew uninstall --cask wezterm@nightly`, and run
-`./setup-host.sh --host H --only S2-brew-bundle`; the Brewfile's package then
+`./dotfiles setup --host H --only S2-brew-bundle`; the Brewfile's package then
 takes its place. To keep the other package instead, link it
 (`brew link tldr`): a `tldr` the doctor finds satisfies the entry, so the
 pair is not judged. If brew refuses because another formula depends on
@@ -2382,7 +2430,7 @@ compute its digest (`sha256sum FILE`, macOS `shasum -a 256 FILE`), update its
 `$(brew --prefix nvm)/nvm.sh` lines Homebrew's caveat told you to add (they
 are a local change at which the next login update stops; see
 X-rc-protection). Keep `~/.nvm`, whose
-`versions/` stay usable, then run `./setup-host.sh --host mac --only S4-nvm`;
+`versions/` stay usable, then run `./dotfiles setup --host mac --only S4-nvm`;
 the pinned installer turns `~/.nvm` into its own checkout.
 
 **`~/.zshrc.pre-oh-my-zsh`.** The upstream oh-my-zsh installer ran: it moved
@@ -2514,15 +2562,15 @@ credentials, fresh Windows 11 or untouched macOS behavior. Each run starts
 from a fresh machine, follows the quick start for its platform, and passes
 when all of these hold:
 
-- `./doctor.sh --host H` (Windows `.\doctor.ps1 -Host win`) exits 0 for the
+- `./dotfiles doctor --host H` (Windows `.\dotfiles.ps1 doctor --host win`) exits 0 for the
   default tiers, and `--smoke` exits 0 on Unix.
-- `./setup-host.sh --host H --check` wrote nothing: a
+- `./dotfiles setup --host H --check` wrote nothing: a
   `find "$HOME" -newer <marker>` taken around it is empty.
-- A second `./setup-host.sh --host H` installs nothing and exits 0.
+- A second `./dotfiles setup --host H` installs nothing and exits 0.
 - `git -C ~/dotfiles status --porcelain` is empty after every step.
 - No step ran sudo, `chsh` or an rc edit outside a HUMAN block.
-- The H7-payloads run line (`sh ~/dotfiles/scripts/payload-update.sh --now`,
-  Windows `scripts\payload-update.ps1 -Now`) exits 0, and the doctor's
+- The public payload command (`dotfiles payloads sync`,
+  Windows `& "$HOME/.local/bin/dotfiles.ps1" payloads sync`) exits 0, and the doctor's
   `payloads` row is then `ok`.
 
 | Run | Status | Environment |

@@ -75,6 +75,12 @@ changes. No configuration change migrates or deletes existing Cargo contents.
 
 ## PowerShell profile and prompt
 
+The installed `dotfiles.ps1` command does not depend on interactive profile
+functions. Follow the manual [User PATH procedure](bootstrap.md#windows-command-discovery)
+for bare `dotfiles` in fresh PowerShell 7 processes, including `-NoProfile`.
+Before it, use `& "$HOME/.local/bin/dotfiles.ps1" doctor --host win`.
+Unix discovery uses the existing `~/.local/bin` profile PATH entry.
+
 The PowerShell profile installs nothing. Interactive setup requires console
 stdin/stdout, loaded PSReadLine and a non-agent session. Script invocations,
 redirected output and piped input skip setup and console code-page changes.
@@ -145,7 +151,7 @@ shell there, such as `ssh marlowe-plain tmux ...`, finds `/usr/bin/tmux` 3.2a,
 which rejects the 3.4 options, and a 3.2a server sharing the default socket
 with a 3.6a client can fail to talk to it. Start tmux from an interactive login
 shell. For the same reason a non-interactive doctor there, such as
-`ssh marlowe-plain 'cd ~/dotfiles && ./doctor.sh'`, reports tmux 3.2a as
+`ssh marlowe-plain 'cd ~/dotfiles && ./dotfiles doctor'`, reports tmux 3.2a as
 `outdated` and exits 1: run the doctor from an interactive login shell
 (`ssh marlowe`), where it finds 3.6a.
 
@@ -164,8 +170,8 @@ CPU/RAM jobs forward to tmux-cpu with a private 0700 cache under
 Unsafe, foreign or symlinked cache paths hide the optional metrics without
 changing the shell's TMPDIR or following shared temporary-file symlinks.
 
-Install the missing clones with `./setup-host.sh --host <host> --check --only S3-clones`,
-then `./setup-host.sh --host <host> --yes --only S3-clones`, with
+Install the missing clones with `./dotfiles setup --host <host> --check --only S3-clones`,
+then `./dotfiles setup --host <host> --yes --only S3-clones`, with
 `DOTFILES_AUTO_UPDATE=0` exported. After the dotfiles are applied, reload a running
 server with `tmux source-file ~/.tmux.conf`; new servers load it
 automatically. Plugins live in `~/.tmux/plugins/`, outside this checkout.

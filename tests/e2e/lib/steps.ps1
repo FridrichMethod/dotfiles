@@ -116,13 +116,13 @@ function Invoke-E2EStepHomeDeploy {
 }
 
 function Invoke-E2EStepCheckDone {
-    # After the first apply, setup-host.ps1 -Host win -Check has nothing left:
+    # After the first apply, dotfiles.ps1 setup --host win --check has nothing left:
     # exit 0, no todo line, no step that blocks completion, and no write in
     # TEMP or HOME.
     Update-E2EPath
     Start-E2EStep check-done check:check-done
     Start-E2ENoWrite check-done
-    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Check') `
+    $code = Invoke-E2EPwsh -Script dotfiles.ps1 -Arguments @('setup', '--host', 'win', '--check') `
         -TimeoutSeconds $E2ETimeout['Check'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite check-done
     $output = @(Get-E2ELines $E2E['StepOut'])
@@ -321,11 +321,11 @@ function Invoke-E2EStepWinget {
 }
 
 function Invoke-E2EStepDoctorInitial {
-    # doctor.ps1 -Host win -Tsv on the fresh home exits 1 (the tools and the
+    # dotfiles.ps1 doctor --host win --tsv on the fresh home exits 1 (the tools and the
     # chezmoi config are missing) and writes nothing, in TEMP or HOME.
     Start-E2EStep doctor-initial check:doctor-initial
     Start-E2ENoWrite doctor-initial
-    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') `
+    $code = Invoke-E2EPwsh -Script dotfiles.ps1 -Arguments @('doctor', '--host', 'win', '--tsv') `
         -TimeoutSeconds $E2ETimeout['Check'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite doctor-initial
     $suffix = if ($problems) { "; $problems" } else { '' }
@@ -335,11 +335,11 @@ function Invoke-E2EStepDoctorInitial {
 }
 
 function Invoke-E2EStepCheckNoWrite {
-    # setup-host.ps1 -Host win -Check plans (exit 3 while work remains, 0 when
+    # dotfiles.ps1 setup --host win --check plans (exit 3 while work remains, 0 when
     # nothing is left) and writes nothing.
     Start-E2EStep check-nowrite check:check-nowrite
     Start-E2ENoWrite check-nowrite
-    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Check') `
+    $code = Invoke-E2EPwsh -Script dotfiles.ps1 -Arguments @('setup', '--host', 'win', '--check') `
         -TimeoutSeconds $E2ETimeout['Check'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite check-nowrite
     $output = @(Get-E2ELines $E2E['StepOut'])
@@ -356,13 +356,13 @@ function Invoke-E2EStepCheckNoWrite {
 }
 
 function Invoke-E2EStepSecondApply {
-    # One more setup-host.ps1 -Host win -Yes exits 0, applies nothing (a
+    # One more dotfiles.ps1 setup --host win --yes exits 0, applies nothing (a
     # [step] or installed/present/skipped line would be a step that redid its
     # work) and writes nothing in HOME.
     Update-E2EPath
     Start-E2EStep second-apply setup:second-apply
     Start-E2ENoWrite second-apply
-    $code = Invoke-E2EPwsh -Script setup-host.ps1 -Arguments @('-Host', 'win', '-Yes') `
+    $code = Invoke-E2EPwsh -Script dotfiles.ps1 -Arguments @('setup', '--host', 'win', '--yes') `
         -TimeoutSeconds $E2ETimeout['Apply'] -Environment (Get-E2ENoWriteEnvironment)
     $problems = Stop-E2ENoWrite second-apply
     $output = @(Get-E2ELines $E2E['StepOut'])
@@ -399,7 +399,7 @@ function Invoke-E2EStepLoginShell {
 
 function Invoke-E2EStepPayloads {
     # The Windows run line of docs/bootstrap.md H7-payloads,
-    # scripts\payload-update.ps1 -Now, with the PATH a new terminal reads:
+    # installed dotfiles.ps1 payloads sync, with the PATH a new terminal reads:
     # every payload repo of config/payloads.tsv with a windows-install row
     # (PyMOLScripts and awesome-skills; coding-agent-kit installs nothing on
     # native Windows) installs from the network through its own install.ps1,
@@ -408,7 +408,10 @@ function Invoke-E2EStepPayloads {
     # doctor's payloads row is ok and names what it found installed.
     Update-E2EPath
     Start-E2EStep payloads setup:payloads
-    $code = Invoke-E2EPwsh -Script 'scripts/payload-update.ps1' -Arguments @('-Now') -TimeoutSeconds $E2ETimeout['Block']
+    $launcher = Join-Path $E2E['Home'] '.local/bin/dotfiles.ps1'
+    $code = Invoke-E2EProcess -FilePath $E2E['PowerShell'] `
+        -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $launcher, 'payloads', 'sync') `
+        -WorkingDirectory $E2E['Home'] -OutFile $E2E['StepOut'] -ErrFile $E2E['StepErr'] -TimeoutSeconds $E2ETimeout['Block']
     if ($code -ne 0) {
         # The hook logs one [error] line per failed item, on stdout here, and goes on.
         $detail = @(@(Get-E2ELines $E2E['StepErr']) + @(Get-E2ELines $E2E['StepOut']) |
@@ -417,7 +420,7 @@ function Invoke-E2EStepPayloads {
         Complete-E2EStep fail "exit $code (124 is the $($E2ETimeout['Block'])s timeout): $detail"
         return
     }
-    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win', '-Tsv') -TimeoutSeconds $E2ETimeout['Check']
+    $code = Invoke-E2EPwsh -Script dotfiles.ps1 -Arguments @('doctor', '--host', 'win', '--tsv') -TimeoutSeconds $E2ETimeout['Check']
     if ($code -ne 0) {
         Complete-E2EStep fail "doctor exit $code (124 is the $($E2ETimeout['Check'])s timeout): $(Get-E2ELastLine $E2E['StepErr'])"
         return
@@ -435,10 +438,15 @@ function Invoke-E2EStepPayloads {
 }
 
 function Invoke-E2EStepDoctorFinal {
-    # doctor.ps1 -Host win, with the PATH a new terminal reads, exits 0.
+    # Bare dotfiles in a fresh -NoProfile child outside the clone exits 0.
+    # Supply only process PATH; never mutate the machine or User PATH.
     Update-E2EPath
     Start-E2EStep doctor-final check:doctor-final
-    $code = Invoke-E2EPwsh -Script doctor.ps1 -Arguments @('-Host', 'win') -TimeoutSeconds $E2ETimeout['Check']
-    if ($code -eq 0) { Complete-E2EStep pass 'exit 0 with the registry PATH' }
+    $childPath = (Join-Path $E2E['Home'] '.local/bin') + [IO.Path]::PathSeparator + $env:PATH
+    $code = Invoke-E2EProcess -FilePath $E2E['PowerShell'] `
+        -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'dotfiles doctor --host win; exit $LASTEXITCODE') `
+        -WorkingDirectory $E2E['Home'] -OutFile $E2E['StepOut'] -ErrFile $E2E['StepErr'] `
+        -TimeoutSeconds $E2ETimeout['Check'] -Environment @{ PATH = $childPath }
+    if ($code -eq 0) { Complete-E2EStep pass 'exit 0 through the installed CLI with a controlled child PATH' }
     else { Complete-E2EStep fail "exit ${code}: $(Get-E2EProblemLines $E2E['StepOut'])" }
 }

@@ -77,7 +77,7 @@ variant with `types: [file]`, since identify gives `dot_` names no shell tag.
 The AI suites cover actual portable Claude/Codex transforms, typed
 ownership parity, numeric/Unicode and TOML temporal refusal, CRLF multiline
 semantics, invalid input preservation and complete candidate applies.
-Compatible-role counts are 49/56/55/58/54/54/26 in role order, with exactly the
+Compatible-role counts are 50/57/56/59/55/55/27 in role order, with exactly the
 two AI targets added to the ordinary files. Shared auth/trust/payload siblings
 stay unmanaged. Local temporal refusal tests run on every OS; the Unix
 timezone characterization, which skips on Windows, stays separate from the
@@ -189,6 +189,15 @@ PowerShell is optional in the Unix jobs. When present, the existing shell suite
 runs the PowerShell parser, terminal-output and PowerShell profile/prompt-theme contract tests. The Windows job invokes
 PowerShell behavior tests directly and fails if any assigned suite fails; it
 does not depend on Bash discovering an optional PowerShell executable.
+
+`tests/cli.sh` runs the Unix CLI suite with temporary homes and fake backends,
+checking help without backend probes, strict options, forwarding, exit codes,
+explicit checkout paths and installed config-bound routing. It also runs
+`tests/cli.ps1` when PowerShell 7 is present; `tests/run.ps1` selects that suite
+directly on native Windows. The Windows suite uses real PowerShell processes
+for GNU-style option adaptation, streams, stale status, discovery and caller
+state isolation. Local skips are not native Windows evidence; final CI must
+pass on Windows for the exact candidate.
 
 `tests/powershell-profile.sh` first checks the Windows Terminal
 `settings.json` with Python alone: strict ASCII JSON, the Windows PowerShell
@@ -518,11 +527,11 @@ the `windows-update` field covered.
 Run either entrypoint from any working directory. To check prerequisites only:
 
 ```sh
-./tests/run.sh --ci --check-prerequisites
+./dotfiles dev test --ci --check-prerequisites
 ```
 
 ```powershell
-pwsh -NoProfile -NonInteractive -File ./tests/run.ps1 -CI -CheckPrerequisites
+.\dotfiles.ps1 dev test --ci --check-prerequisites
 ```
 
 `tests/run.ps1` without `-CI` also runs portable PowerShell behavior tests on
@@ -610,8 +619,8 @@ Each image has only what a fresh install of that kind has (Ubuntu and Fedora:
 `git`, `curl`, `sudo` and certificates; the clusters: Lmod, `git`, `curl` and
 the OS utilities), never what the bootstrap installs, and a home made by
 `useradd -m`, so the `/etc/skel` rc files are there for the deployment to keep
-copies of. The setup-host loop is `./setup-host.sh --host H --yes` after
-`./doctor.sh --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
+copies of. The setup-host loop is `./dotfiles setup --host H --yes` after
+`./dotfiles doctor --tsv` and `--check`, as [Running it with an agent](bootstrap.md#running-it-with-an-agent)
 prescribes; the `other` flow installs the distribution packages with `dnf`,
 takes `fetch_pinned` and `clone_listed` from the fenced block of
 [Downloads and clones by hand](bootstrap.md#downloads-and-clones-by-hand) and
@@ -757,8 +766,8 @@ and nothing was applied; any other exit 3 fails as "no progress". Exit 0
 before the deployment fails, since a fresh home cannot have H7-deploy done, and
 exit 1 or 2 fails naming the step.
 
-On `win`, `run.ps1` plays the same agent against `setup-host.ps1 -Host win
--Yes` (again at most eight runs, with the same verdicts and HW-deploy as the
+On `win`, `run.ps1` plays the same agent against `dotfiles.ps1 setup --host win
+--yes` (again at most eight runs, with the same verdicts and HW-deploy as the
 deployment), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the same
 `<id>:<kind>`:
 
@@ -769,10 +778,18 @@ deployment), with the policy of `tests/e2e/lib/blocks.ps1`, keyed on the same
 | `HW-execution-policy`, `HW-wsl` (`judgment`); `HW-ssh-agent` (`sudo`); `HW-auth` (`auth`) | skipped and recorded as `skip`: non-blocking, and the person's, since the harness neither decides a security setting, installs WSL, starts a service nor signs in |
 | any other id or kind | **fail**, with the block's text in the detail |
 
+After deployment, Unix doctor and payload steps invoke the installed launcher
+from the home directory outside the checkout. The fixture deploys the real
+launcher as an executable regular file and verifies its bytes and convergence.
+Windows payload installation uses the explicit installed script path from home;
+the final doctor uses bare `dotfiles` in a fresh `pwsh -NoProfile` child with
+home-local bin in a controlled process PATH. Tests never persist User PATH.
+Legacy backend refusal/compatibility tests remain in the negative paths.
+
 The Windows login-shell step then loads the deployed profile in a child `pwsh`
 started without `-NoProfile`, which must exit 0 and print nothing, with the
 profile a regular file the deployment wrote, the payloads step runs
-`scripts\payload-update.ps1 -Now` (criterion 7), and
+`& "$HOME/.local/bin/dotfiles.ps1" payloads sync` (criterion 7), and
 `E2E_SNAPSHOT_PRUNE` is `;`-separated there, since Windows paths hold drive
 letters and colons.
 
@@ -782,16 +799,16 @@ The eight criteria, and how `inside.sh` asserts each; every failure names its
 step in `summary.tsv`:
 
 1. **The doctor passes.** From a login environment (`bash -lc 'exec zsh -il
-   -c ...'`), `./doctor.sh --host H` exits 0 for the default tiers, then
+   -c ...'`), `"$HOME/.local/bin/dotfiles" doctor --host H` exits 0 for the default tiers, then
    `--smoke` exits 0 (`--platform other` on `other`).
-2. **The read-only modes write nothing.** Around `./doctor.sh --tsv`,
-   `./setup-host.sh --host H --check` and the `--check` after the deployment,
+2. **The read-only modes write nothing.** Around `./dotfiles doctor --tsv`,
+   `./dotfiles setup --host H --check` and the `--check` after the deployment,
    `TMPDIR` is a fresh empty directory that must stay empty with its mtime
    unchanged, and `find "$HOME" -newer <marker>` (pruning `~/dotfiles/.git`)
    must print nothing, with the entry count unchanged.
-3. **A second apply is a no-op.** After the deployment, `./setup-host.sh --host
+3. **A second apply is a no-op.** After the deployment, `./dotfiles setup --host
    H --yes` exits 0, prints no `<id> done applied:` line, and the home
-   snapshot shows nothing newer; `./setup-host.sh --host H --check` then exits
+   snapshot shows nothing newer; `./dotfiles setup --host H --check` then exits
    0 with no `todo` line.
 4. **The checkout stays clean.** `git -C ~/dotfiles status --porcelain` is
    empty after every step; a dirty tree fails that step.
@@ -820,9 +837,9 @@ step in `summary.tsv`:
    any `[oh-my-zsh]`, `[dotfiles]`, `[awesome-skills]`, `not found`,
    `permission denied` or `[error]` line is reported verbatim.
 7. **The payload repos install for real.** After the login-shell check, the
-   `payloads` step (`setup:payloads`) runs the H7-payloads run line from the
-   login environment, `sh ~/dotfiles/scripts/payload-update.sh --now`
-   (`scripts\payload-update.ps1 -Now` on `win`), on every host, whether or
+   `payloads` step (`setup:payloads`) uses the public CLI from the
+   login environment, `"$HOME/.local/bin/dotfiles" payloads sync`
+   (`& "$HOME/.local/bin/dotfiles.ps1" payloads sync` on `win`), on every host, whether or
    not its profile prints the H7-payloads block, which stays a skipped
    reminder where it does: coding-agent-kit (not on `win`, where it installs
    nothing), PyMOLScripts and awesome-skills install from GitHub through each
@@ -924,25 +941,25 @@ RemoteCommand (`ssh sherlock-plain`,
 uname -a; cat /etc/os-release; ldd --version | head -n 1   # record these with the run
 git clone https://github.com/FridrichMethod/dotfiles.git ~/dotfiles
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
-./doctor.sh --host sherlock --tsv                           # or marlowe; exit 1 is expected now
+./dotfiles doctor --host sherlock --tsv                           # or marlowe; exit 1 is expected now
 marker=$(mktemp) && sleep 1
-./setup-host.sh --host sherlock --check                     # exit 3
+./dotfiles setup --host sherlock --check                     # exit 3
 find "$HOME" -path "$HOME/dotfiles/.git" -prune -o -newer "$marker" -print   # must print nothing
-./setup-host.sh --host sherlock                             # light steps; exit 3 at H2-alloc
+./dotfiles setup --host sherlock                             # light steps; exit 3 at H2-alloc
 sh_dev -t 1:00:00                                           # Marlowe: srun --time=1:00:00 --pty bash -l
 cd ~/dotfiles && export DOTFILES_AUTO_UPDATE=0
 echo "$SCRATCH"                                             # Sherlock: the site sets it; Marlowe: empty before the deployment
 export CONDA_PKGS_DIRS="$SCRATCH/.cache/conda/pkgs"         # Sherlock
 # Marlowe: export CONDA_PKGS_DIRS="/scratch/m000191/.cache/conda/pkgs/$USER"   # the overlay's value; no site SCRATCH yet
-./setup-host.sh --host sherlock                             # builds the login env; exit 3 with only H7-deploy left
+./dotfiles setup --host sherlock                             # builds the login env; exit 3 with only H7-deploy left
 exit                                                        # back to the login node
 cd ~/dotfiles && home_deploy sherlock                       # H7-deploy: Fresh home by hand
-./setup-host.sh --host sherlock                             # exits 0 and prints no "done applied:" line
+./dotfiles setup --host sherlock                             # exits 0 and prints no "done applied:" line
 git -C ~/dotfiles status --porcelain                        # empty, here and after every step above
 exec "$HOME/micromamba/envs/login/bin/zsh" -l               # starts without an error line
-sh ~/dotfiles/scripts/payload-update.sh --now               # H7-payloads (criterion 7; no login runs it): exits 0
+"$HOME/.local/bin/dotfiles" payloads sync               # H7-payloads (criterion 7; no login runs it): exits 0
 cd ~/dotfiles && home_cz diff --exclude=dirs                # paste the functions again in this shell; prints nothing
-./doctor.sh --host sherlock && ./doctor.sh --host sherlock --smoke
+./dotfiles doctor --host sherlock && ./dotfiles doctor --host sherlock --smoke
 ```
 
 Nothing but the HUMAN blocks and the deployment changed the home when
