@@ -14,6 +14,7 @@ $powerShell = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' }
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-cli-ps-' + [Guid]::NewGuid().ToString('N'))
 $fixture = Join-Path $temporaryRoot 'checkout with spaces'
 $emptyHome = Join-Path $temporaryRoot 'empty home'
+$runtimeState = Join-Path $temporaryRoot 'powershell state'
 $emptyBin = Join-Path $temporaryRoot 'empty bin'
 $events = Join-Path $temporaryRoot 'events.jsonl'
 $script:Passed = 0
@@ -69,8 +70,13 @@ Set-Variable HOME -Value $env:DOTFILES_TEST_CLI_HOME -Scope Global -Force
     $start.Environment['POWERSHELL_TELEMETRY_OPTOUT'] = '1'
     $start.Environment['POWERSHELL_UPDATECHECK'] = 'Off'
     foreach ($name in @('DOTFILES_TEST_CLI_STATUS', 'DOTFILES_TEST_CLI_BEHAVIOR')) { [void]$start.Environment.Remove($name) }
-    foreach ($name in @('HOME', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME')) {
+    foreach ($name in @('HOME', 'USERPROFILE')) {
         $start.Environment[$name] = $emptyHome
+    }
+    # PowerShell writes startup caches before the driver runs. Keep runtime
+    # state separate so the empty-home assertion measures only CLI effects.
+    foreach ($name in @('LOCALAPPDATA', 'APPDATA', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME')) {
+        $start.Environment[$name] = $runtimeState
     }
     foreach ($name in $Environment.Keys) { $start.Environment[$name] = $Environment[$name] }
     $child = [Diagnostics.Process]::Start($start)
@@ -103,9 +109,13 @@ foreach ($name in $PSBoundParameters.Keys) {
     $value = $PSBoundParameters[$name]
     $bound[$name] = if ($value -is [Management.Automation.SwitchParameter]) { [bool]$value } else { $value }
 }
-@{ Kind = [IO.Path]::GetFileName($PSCommandPath); Bound = $bound; Extra = @($args);
+# Advanced scripts can inherit the caller's $args when all parameters bind.
+# InvocationInfo records this backend's actual unbound arguments.
+$eventJson = @{ Kind = [IO.Path]::GetFileName($PSCommandPath); Bound = $bound; Extra = @($MyInvocation.UnboundArguments);
    Pid = $PID; Location = (Get-Location).ProviderPath } |
-    ConvertTo-Json -Depth 8 -Compress | Add-Content -LiteralPath $env:DOTFILES_TEST_CLI_EVENTS
+    ConvertTo-Json -Depth 8 -Compress
+# Recording is test instrumentation, independent of forwarded WhatIf/Confirm.
+[IO.File]::AppendAllText($env:DOTFILES_TEST_CLI_EVENTS, $eventJson + [Environment]::NewLine)
 switch ($env:DOTFILES_TEST_CLI_BEHAVIOR) {
     'streams' {
         Write-Output ([pscustomobject]@{ Value = 'success-object' })
@@ -140,7 +150,7 @@ param([switch]$Now, [Parameter(Position = 0, ValueFromRemainingArguments)][strin
 '@
 
 try {
-    foreach ($directory in @($fixture, $emptyHome, $emptyBin)) { [void][IO.Directory]::CreateDirectory($directory) }
+    foreach ($directory in @($fixture, $emptyHome, $runtimeState, $emptyBin)) { [void][IO.Directory]::CreateDirectory($directory) }
     Copy-Item -LiteralPath $dispatcher -Destination (Join-Path $fixture 'dotfiles.ps1')
     Write-Fixture (Join-Path $fixture 'doctor.ps1') ($doctorParameters + "`n" + $recordBackend)
     Write-Fixture (Join-Path $fixture 'setup-host.ps1') ($setupParameters + "`n" + $recordBackend)
