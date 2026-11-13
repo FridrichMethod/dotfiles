@@ -102,6 +102,22 @@ function Assert-OneDiagnostic($Result, [string]$Name) {
     Assert-True ($lines.Count -eq 1 -and $lines[0].Contains($Name)) "Expected one diagnostic naming ${Name}: $($Result.Error)"
     Assert-True (@(Get-Events).Count -eq 0) 'A rejected invocation ran a backend.'
 }
+function Assert-HelpHomeUnchanged([string]$SnapshotPath, [string]$Context) {
+    $snapshot = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($SnapshotPath))
+    $before = @{}
+    $after = @{}
+    foreach ($entry in $snapshot.Before) { $before[$entry.Path] = $entry.State }
+    foreach ($entry in $snapshot.After) { $after[$entry.Path] = $entry.State }
+    $changes = @(
+        foreach ($path in @(@($before.Keys) + @($after.Keys) | Sort-Object -Unique)) {
+            if (-not $before.ContainsKey($path)) { "added: $path" }
+            elseif (-not $after.ContainsKey($path)) { "removed: $path" }
+            elseif ($before[$path] -cne $after[$path]) { "changed: $path" }
+        }
+    )
+    Assert-True ($changes.Count -eq 0) "$Context wrote to HOME: $($changes -join '; ')."
+    return $snapshot
+}
 
 $recordBackend = @'
 $bound = @{}
@@ -163,17 +179,57 @@ try {
         Copy-Item -LiteralPath $dispatcher -Destination (Join-Path $helpOnly 'dotfiles.ps1')
         $code = @'
 $arguments = @($env:DOTFILES_TEST_CLI_ARGUMENTS | ConvertFrom-Json)
-& (Join-Path $env:DOTFILES_TEST_CLI_ROOT 'dotfiles.ps1') @arguments
-exit $LASTEXITCODE
+$entrypoint = Join-Path $env:DOTFILES_TEST_CLI_ROOT 'dotfiles.ps1'
+# Prime the fixture's commands before measuring the actual CLI invocation.
+$null = Write-Output ''
+function Get-HelpHomeSnapshot {
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($path in @([IO.Directory]::EnumerateFileSystemEntries($HOME, '*', [IO.SearchOption]::AllDirectories) | Sort-Object)) {
+            $isDirectory = [IO.Directory]::Exists($path)
+            $item = if ($isDirectory) { [IO.DirectoryInfo]::new($path) } else { [IO.FileInfo]::new($path) }
+            $digest = if ($isDirectory) { '' } else { [Convert]::ToBase64String($hash.ComputeHash([IO.File]::ReadAllBytes($path))) }
+            [pscustomobject]@{
+                Path = [IO.Path]::GetRelativePath($HOME, $path)
+                State = "$isDirectory|$($item.Attributes)|$($item.LastWriteTimeUtc.Ticks)|$digest"
+            }
+        }
+    }
+    finally { $hash.Dispose() }
+}
+# PowerShell can initialize home paths before this driver starts, including
+# Windows paths that do not follow redirected APPDATA. Compare in one process.
+$null = @(Get-HelpHomeSnapshot)
+$before = @(Get-HelpHomeSnapshot)
+if ([IO.File]::Exists((Join-Path $HOME '.config/chezmoi/chezmoi.toml'))) { throw 'Help fixture unexpectedly has a configured home.' }
+if ($env:DOTFILES_TEST_CLI_CONTROL -ceq 'startup-only') { $status = 0 }
+else {
+    & $entrypoint @arguments
+    $status = $LASTEXITCODE
+}
+$after = @(Get-HelpHomeSnapshot)
+[IO.File]::WriteAllText($env:DOTFILES_TEST_CLI_SNAPSHOT, (@{ Before = $before; After = $after } | ConvertTo-Json -Depth 5))
+exit $status
 '@
+        $snapshotPath = Join-Path $temporaryRoot 'help-home.json'
+        $result = Invoke-CliChild $code @{
+            DOTFILES_TEST_CLI_ROOT = $helpOnly; DOTFILES_TEST_CLI_ARGUMENTS = '[]'
+            DOTFILES_TEST_CLI_CONTROL = 'startup-only'; DOTFILES_TEST_CLI_SNAPSHOT = $snapshotPath
+        }
+        Assert-True ($result.Out -ceq '' -and $result.Error -ceq '') 'Startup-only control emitted unexpected output.'
+        $startup = Assert-HelpHomeUnchanged $snapshotPath 'Startup-only control'
+        Write-Output "help-startup-home=$(@($startup.Before | ForEach-Object Path) -join ', ')"
         foreach ($arguments in @(@(), @('--help'), @('-h'), @('help'), @('payloads'), @('dev'),
                 @('help', 'doctor'), @('help', 'setup'), @('help', 'payloads', 'sync'),
                 @('help', 'dev', 'test'), @('help', 'dev', 'check'), @('doctor', '--help'),
                 @('setup', '-h'), @('payloads', 'sync', '--help'), @('dev', 'test', '-h'), @('dev', 'check', '--help'))) {
-            $result = Invoke-CliChild $code @{ DOTFILES_TEST_CLI_ROOT = $helpOnly; DOTFILES_TEST_CLI_ARGUMENTS = (ConvertTo-Json -InputObject $arguments -Compress) }
+            $result = Invoke-CliChild $code @{
+                DOTFILES_TEST_CLI_ROOT = $helpOnly; DOTFILES_TEST_CLI_ARGUMENTS = (ConvertTo-Json -InputObject $arguments -Compress)
+                DOTFILES_TEST_CLI_CONTROL = ''; DOTFILES_TEST_CLI_SNAPSHOT = $snapshotPath
+            }
             Assert-True ($result.Error -ceq '' -and $result.Out.Contains('dotfiles')) "Help failed for [$arguments]: $($result.Error)"
+            [void](Assert-HelpHomeUnchanged $snapshotPath "Help [$arguments]")
         }
-        Assert-True (@(Get-ChildItem -LiteralPath $emptyHome -Force).Count -eq 0) 'Help wrote to the empty home.'
     }
     Test-Case 'doctor maps raw long options, last scalar value, and idempotent booleans' {
         $result = Invoke-CliChild @'
