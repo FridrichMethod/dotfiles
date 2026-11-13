@@ -19,14 +19,14 @@
 ![HPC: marlowe](https://img.shields.io/badge/HPC-marlowe-74c7ec?style=for-the-badge&labelColor=1e1e2e)
 ![Windows: win](https://img.shields.io/badge/Windows-win-89b4fa?style=for-the-badge&labelColor=1e1e2e)
 
-**[Highlights](#highlights)** &middot;
-**[Hosts](#supported-hosts)** &middot;
-**[Quick start](#quick-start)** &middot;
-**[How it works](#how-it-works)** &middot;
-**[What's inside](#whats-inside)** &middot;
-**[CLI](#command-line)** &middot;
-**[Docs](#documentation)** &middot;
-**[Contributing](#checks-and-contribution)**
+**[&#x2728; Highlights](#highlights)** &middot;
+**[&#x1F5A5;&#xFE0F; Hosts](#supported-hosts)** &middot;
+**[&#x1F680; Quick start](#quick-start)** &middot;
+**[&#x2699;&#xFE0F; How it works](#how-it-works)** &middot;
+**[&#x1F9F0; What's inside](#whats-inside)** &middot;
+**[&#x2328;&#xFE0F; CLI](#command-line)** &middot;
+**[&#x1F4DA; Docs](#documentation)** &middot;
+**[&#x1F91D; Contributing](#checks-and-contribution)**
 
 </div>
 
@@ -37,43 +37,43 @@
 <table>
 <tr>
 <td width="33%" valign="top">
-<h4>Plain files, one owner each</h4>
+<h4>&#x1F4C4; Plain files, one owner each</h4>
 chezmoi renders <code>home/</code> into regular files: no symlinks, no daemon, no service. Every target has exactly one source file.
 </td>
 <td width="33%" valign="top">
-<h4>Six homes, one source</h4>
+<h4>&#x1F3E0; Six homes, one source</h4>
 <code>mac</code>, <code>lab-ubuntu</code>, <code>wsl-ubuntu</code>, <code>sherlock</code>, <code>marlowe</code> and <code>win</code> layer a role variant over shared files. Any other Linux takes <code>generic</code>.
 </td>
 <td width="33%" valign="top">
-<h4>Look before you leap</h4>
+<h4>&#x1F50D; Look before you leap</h4>
 <code>doctor</code> is offline and write-free, <code>setup --check</code> plans without writing, and the first deployment keeps private copies of what it replaces.
 </td>
 </tr>
 <tr>
 <td width="33%" valign="top">
-<h4>You hold the keys</h4>
+<h4>&#x1F511; You hold the keys</h4>
 Setup never runs sudo, chsh or a login for you. Privileged steps arrive as <b>HUMAN blocks</b> that you read and run yourself.
 </td>
 <td width="33%" valign="top">
-<h4>Nothing extra to install</h4>
+<h4>&#x1FAB6; Nothing extra to install</h4>
 Helpers need only POSIX sh/Bash, the Python 3.11 standard library or PowerShell 7. Setup verifies its installer downloads against pinned SHA256 digests.
 </td>
 <td width="33%" valign="top">
-<h4>Updates that stay out of the way</h4>
+<h4>&#x1F504; Updates that stay out of the way</h4>
 Each interactive login fast-forwards the checkout and applies it. A dirty source or a conflict stops the update with a warning; the shell stays usable.
 </td>
 </tr>
 <tr>
 <td width="33%" valign="top">
-<h4>AI agents built in</h4>
+<h4>&#x1F916; AI agents built in</h4>
 Shared Claude Code and Codex guides, permissions and status lines merge into the live config; credentials and host-local state stay put.
 </td>
 <td width="33%" valign="top">
-<h4>Secrets stay sealed</h4>
+<h4>&#x1F512; Secrets stay sealed</h4>
 Only selected static secrets, age-encrypted and opt-in per home. gitleaks guards commits, and CI scans the whole history.
 </td>
 <td width="33%" valign="top">
-<h4>Tested on three systems</h4>
+<h4>&#x2705; Tested on three systems</h4>
 CI runs on Linux, macOS and native Windows with isolated homes and fake CLIs; fresh-machine bootstrap end-to-end runs weekly and on demand.
 </td>
 </tr>
@@ -87,13 +87,13 @@ update.
 
 | Role | Machine | Notes |
 | --- | --- | --- |
-| `mac` | macOS | Homebrew |
-| `lab-ubuntu` | Ubuntu desktop | Adds fcitx5 input and X session settings |
-| `wsl-ubuntu` | Ubuntu on WSL | Its own clone, separate from `win`'s |
-| `sherlock` | Stanford Sherlock login node | Ships the `tmux-256color` terminfo entry |
-| `marlowe` | Stanford Marlowe login node | Start tmux from an interactive login shell |
-| `win` | Native Windows, PowerShell 7 | 27 regular files and no POSIX shell files |
-| `generic` | Any other Linux | The doctor checks the detected platform without an overlay |
+| `mac` | &#x1F34E; macOS | Homebrew |
+| `lab-ubuntu` | &#x1F52C; Ubuntu desktop | Adds fcitx5 input and X session settings |
+| `wsl-ubuntu` | &#x1F427; Ubuntu on WSL | Its own clone, separate from `win`'s |
+| `sherlock` | &#x1F332; Stanford Sherlock login node | Ships the `tmux-256color` terminfo entry |
+| `marlowe` | &#x26A1; Stanford Marlowe login node | Start tmux from an interactive login shell |
+| `win` | &#x1FA9F; Native Windows, PowerShell 7 | 27 regular files and no POSIX shell files |
+| `generic` | &#x1F310; Any other Linux | The doctor checks the detected platform without an overlay |
 
 The six hosts, their access rules and their known limits are in
 [hosts](docs/hosts.md). The
@@ -116,16 +116,16 @@ cd ~/dotfiles
 
 Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 
-1. **Diagnose.** `doctor` checks each tool against the floor in
+1. &#x1FA7A; **Diagnose.** `doctor` checks each tool against the floor in
    `config/bootstrap/tools.tsv`, offline and without writing.
-2. **Plan.** `setup --check` prints what setup would do, still offline and
+2. &#x1F5FA;&#xFE0F; **Plan.** `setup --check` prints what setup would do, still offline and
    write-free.
-3. **Install.** `setup` installs tools, including verified chezmoi 2.74.0+,
+3. &#x1F4E5; **Install.** `setup` installs tools, including verified chezmoi 2.74.0+,
    and prints **HUMAN blocks** for every command it does not run itself:
    sudo, authentication, Slurm allocations and login-shell changes. The floors
    chezmoi's design depends on, and why they hold, are in
    [dependencies](docs/dependencies.md#version-floors).
-4. **Deploy.** Follow the HUMAN blocks. H7-deploy points to the first
+4. &#x1F6A2; **Deploy.** Follow the HUMAN blocks. H7-deploy points to the first
    deployment, which a new home takes by
    [Fresh home by hand](docs/bootstrap.md#fresh-home-by-hand)
    ([bootstrap playbook](docs/bootstrap.md#h7-deploy-first-apply)): it keeps
@@ -143,7 +143,7 @@ Replace `mac` with `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`.
 > under scratch.
 
 <details>
-<summary><b>Another Linux distribution?</b></summary>
+<summary><b>&#x1F427; Another Linux distribution?</b></summary>
 <br>
 
 Check with `./dotfiles doctor --platform other` and follow the
@@ -166,16 +166,16 @@ cd $HOME\dotfiles
 .\dotfiles.ps1 setup --host win
 ```
 
-- **Deploy.** Follow the HW-* HUMAN blocks. HW-deploy points to the first
+- &#x1F6A2; **Deploy.** Follow the HW-* HUMAN blocks. HW-deploy points to the first
   deployment, which a new home takes by
   [Fresh Windows home by hand](docs/bootstrap.md#fresh-windows-home-by-hand).
   It checks both actual PowerShell profile paths; before it, check the
   ordinary user's ACLs on the destination parents, since a new file inherits
   its parent's ACL.
-- **Update.** Updates write regular files unelevated, without a scheduled task
+- &#x1F504; **Update.** Updates write regular files unelevated, without a scheduled task
   or UAC prompt. See [the Windows quick start](docs/bootstrap.md#native-windows)
   and [login updates](docs/updates.md).
-- **Find the command.** After deployment, follow the explicit
+- &#x1F9ED; **Find the command.** After deployment, follow the explicit
   [User PATH procedure](docs/bootstrap.md#windows-command-discovery) for bare
   `dotfiles` discovery in a fresh PowerShell 7 process, including
   `-NoProfile`. Before that, use
@@ -237,17 +237,17 @@ flowchart LR
 
 | | What you get | Read more |
 | --- | --- | --- |
-| **zsh** | oh-my-zsh with Powerlevel10k, fzf-tab, fast-syntax-highlighting, zsh-autosuggestions, you-should-use and zoxide; fzf previews through eza and bat; one POSIX `~/.profile` owns PATH for sh, Bash and zsh | [Unix startup](docs/shell.md#unix-startup) |
-| **tmux 3.4+** | TPM with resurrect, continuum and tmux-fzf; Catppuccin Mocha, extrakto, yank, a FloaX scratch terminal, a which-key menu, CPU/RAM and battery capsules | [tmux](docs/shell.md#tmux) |
-| **Terminals** | WezTerm, kitty and Windows Terminal in Catppuccin Mocha with CaskaydiaMono Nerd Font | [Shell startup](docs/shell.md) |
-| **PowerShell 7** | PSReadLine predictions; PSFzf on <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>T</kbd> and <kbd>Alt</kbd>+<kbd>C</kbd>; an oh-my-posh prompt, zoxide and lazy conda | [PowerShell profile](docs/shell.md#powershell-profile-and-prompt) |
-| **Git and SSH** | A shared `~/.gitconfig` that includes a per-host `~/.gitconfig_local`; `~/.ssh/config` includes `~/.ssh/config.d/*.conf`, split by concern | [Conventions](AGENTS.md#git-and-ssh-conventions) |
-| **AI agents** | Global Claude Code and Codex guides, portable settings, Codex exec-policy rules and status lines for both | [AI configuration](#ai-assistant-configuration) |
-| **Secrets** | Selected static secrets as builtin-age ciphertext, deployed only to enrolled homes | [Secrets](docs/secrets.md) |
-| **Payloads** | coding-agent-kit, PyMOLScripts and awesome-skills, installed by their own installers when you ask | [Payload repos](#payload-repos) |
+| &#x1F41A; **zsh** | oh-my-zsh with Powerlevel10k, fzf-tab, fast-syntax-highlighting, zsh-autosuggestions, you-should-use and zoxide; fzf previews through eza and bat; one POSIX `~/.profile` owns PATH for sh, Bash and zsh | [Unix startup](docs/shell.md#unix-startup) |
+| &#x1F5C2;&#xFE0F; **tmux 3.4+** | TPM with resurrect, continuum and tmux-fzf; Catppuccin Mocha, extrakto, yank, a FloaX scratch terminal, a which-key menu, CPU/RAM and battery capsules | [tmux](docs/shell.md#tmux) |
+| &#x1F5A5;&#xFE0F; **Terminals** | WezTerm, kitty and Windows Terminal in Catppuccin Mocha with CaskaydiaMono Nerd Font | [Shell startup](docs/shell.md) |
+| &#x1F537; **PowerShell 7** | PSReadLine predictions; PSFzf on <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>T</kbd> and <kbd>Alt</kbd>+<kbd>C</kbd>; an oh-my-posh prompt, zoxide and lazy conda | [PowerShell profile](docs/shell.md#powershell-profile-and-prompt) |
+| &#x1F33F; **Git and SSH** | A shared `~/.gitconfig` that includes a per-host `~/.gitconfig_local`; `~/.ssh/config` includes `~/.ssh/config.d/*.conf`, split by concern | [Conventions](AGENTS.md#git-and-ssh-conventions) |
+| &#x1F916; **AI agents** | Global Claude Code and Codex guides, portable settings, Codex exec-policy rules and status lines for both | [AI configuration](#ai-assistant-configuration) |
+| &#x1F512; **Secrets** | Selected static secrets as builtin-age ciphertext, deployed only to enrolled homes | [Secrets](docs/secrets.md) |
+| &#x1F4E6; **Payloads** | coding-agent-kit, PyMOLScripts and awesome-skills, installed by their own installers when you ask | [Payload repos](#payload-repos) |
 
 <details>
-<summary><b>tmux notes</b></summary>
+<summary><b>&#x1F9E9; tmux notes</b></summary>
 <br>
 
 The shared tmux configuration keeps the <kbd>Ctrl</kbd>+<kbd>b</kbd> prefix;
@@ -292,7 +292,7 @@ in its profile PATH; Windows uses the manual
 > recover with `CHECKOUT/dotfiles` or `& CHECKOUT\dotfiles.ps1` explicitly.
 
 <details>
-<summary><b>Argument rules and backends</b></summary>
+<summary><b>&#x1F9FE; Argument rules and backends</b></summary>
 <br>
 
 Every command accepts help. No arguments, bare `payloads`, and bare `dev` show
@@ -328,10 +328,10 @@ conflict handling. It updates only the checkout that
 `~/.config/chezmoi/chezmoi.toml` names (its `sourceDir`); a home without that
 config runs no updater and prints nothing. See [login updates](docs/updates.md).
 
-- **Refuses** a dirty source, a missing or empty state database and OneDrive
+- &#x1F6AB; **Refuses** a dirty source, a missing or empty state database and OneDrive
   source writes.
-- **Fails soft:** failures warn and leave the shell usable.
-- **Pauses** while a persistent [maintenance marker](docs/updates.md#maintenance)
+- &#x1FA82; **Fails soft:** failures warn and leave the shell usable.
+- &#x23F8;&#xFE0F; **Pauses** while a persistent [maintenance marker](docs/updates.md#maintenance)
   exists, which also blocks explicit payload runs.
 
 | Variable | Effect |
@@ -363,21 +363,21 @@ The repository [AGENTS.md](AGENTS.md) contains project rules for every agent;
 | `home/.policy/codex-config.toml` | Merged into `~/.codex/config.toml` |
 | `home/dot_codex/rules/portable.rules` | An ordinary file beside the untouched host-local `default.rules` |
 
-- **Merged, never overwritten.** Claude settings and Codex config are merged
+- &#x1F500; **Merged, never overwritten.** Claude settings and Codex config are merged
   into mutable regular files with chezmoi's builtin JSON/TOML functions.
   Portable values win while credentials, host-only settings and runtime state
   stay local. Read [AI configuration](docs/ai-config.md) before policy edits.
-- **Models stay local.** Claude model selection remains machine-local; its
+- &#x1F4BB; **Models stay local.** Claude model selection remains machine-local; its
   effort, plugins and permissions are shared. Codex portable model/reasoning
   defaults live in its tracked config; host-local profile settings are
   preserved.
-- **Worktrees.** Both global guides place persistent agent worktrees in the
+- &#x1F333; **Worktrees.** Both global guides place persistent agent worktrees in the
   current project's `.worktrees/` directory; brief disposable work may use
   `/tmp`. Keep unfinished work and handoffs in durable storage. After
   integration and validation, release active users and remove completed
   worktrees and their merged task branches. Git ignores `.worktrees/`;
   OneDrive checkouts retain their independent-clone exception.
-- **Status lines.** Claude's status-line command enables the
+- &#x1F4CA; **Status lines.** Claude's status-line command enables the
   [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit)'s ANSI
   colors for captured output, while preserving an explicit
   `CODING_AGENT_KIT_COLOR` setting; `NO_COLOR` and `TERM=dumb` disable colors.
@@ -389,7 +389,7 @@ The repository [AGENTS.md](AGENTS.md) contains project rules for every agent;
   tracked Codex config to change the shared layout; other TUI preferences
   remain local. A live edit of an owned key stops login updates at that file
   until it is [reconciled](docs/ai-config.md#reconciling-an-owned-key).
-- **coding-agent-kit.** The kit supplies account launchers, completions and
+- &#x1F6E0;&#xFE0F; **coding-agent-kit.** The kit supplies account launchers, completions and
   Claude helpers on Linux, macOS and WSL. Dotfiles holds only their
   configuration; the kit itself lives in its own repository. Native Windows
   does not install/check the kit: the helper commands run no helper there and
@@ -407,9 +407,9 @@ when a person asks:
 
 | Item | Repository | What it brings |
 | --- | --- | --- |
-| `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | Account launchers, completions and Claude helpers (Linux, macOS and WSL) |
-| `pymol` | [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) | PyMOL start-up configuration |
-| `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | The Claude Code and Codex skill library |
+| &#x1F6E0;&#xFE0F; `kit` | [coding-agent-kit](https://github.com/FridrichMethod/coding-agent-kit) | Account launchers, completions and Claude helpers (Linux, macOS and WSL) |
+| &#x1F9EC; `pymol` | [PyMOLScripts](https://github.com/FridrichMethod/PyMOLScripts) | PyMOL start-up configuration |
+| &#x1F9E0; `skills` | [awesome-skills](https://github.com/FridrichMethod/awesome-skills) | The Claude Code and Codex skill library |
 
 ```sh
 dotfiles payloads sync [kit] [pymol] [skills]  # foreground: install or update
@@ -430,7 +430,7 @@ It manages PyMOLScripts and awesome-skills, not the kit. The
 separate: consumer projects pin/install their own.
 
 <details>
-<summary><b>State, exit codes and download safety</b></summary>
+<summary><b>&#x1F6E1;&#xFE0F; State, exit codes and download safety</b></summary>
 <br>
 
 No login, profile or schedule installs or refreshes the payload repos. A
@@ -477,16 +477,16 @@ deploys 27 regular files and no POSIX shell files. The
 
 | Guide | Read it for |
 | --- | --- |
-| [Bootstrap playbook](docs/bootstrap.md) | Setting up a machine phase by phase, the HUMAN blocks and the first deployment |
-| [Hosts](docs/hosts.md) | The six homes, how agents reach them, rollout and known limits |
-| [Login updates](docs/updates.md) | What the login update runs, what it refuses, maintenance and adding files |
-| [Shell startup](docs/shell.md) | zsh, Bash and PowerShell startup, PATH ordering, prompts and tmux |
-| [AI configuration](docs/ai-config.md) | Modify templates, merge ownership and the permission policy |
-| [Payload repos](docs/payloads.md) | How dotfiles calls coding-agent-kit, PyMOLScripts and awesome-skills |
-| [Secrets](docs/secrets.md) | Enrolling hosts and secrets with chezmoi's builtin age |
-| [Dependencies](docs/dependencies.md) | Required and optional tools and the version floors |
-| [Testing](docs/testing.md) | Prerequisites, focused suites, CI and the opt-in bootstrap end-to-end runs |
-| [Coverage matrix](tests/COVERAGE.md) | Which tests cover which source |
+| &#x1F680; [Bootstrap playbook](docs/bootstrap.md) | Setting up a machine phase by phase, the HUMAN blocks and the first deployment |
+| &#x1F5A5;&#xFE0F; [Hosts](docs/hosts.md) | The six homes, how agents reach them, rollout and known limits |
+| &#x1F504; [Login updates](docs/updates.md) | What the login update runs, what it refuses, maintenance and adding files |
+| &#x1F41A; [Shell startup](docs/shell.md) | zsh, Bash and PowerShell startup, PATH ordering, prompts and tmux |
+| &#x1F916; [AI configuration](docs/ai-config.md) | Modify templates, merge ownership and the permission policy |
+| &#x1F4E6; [Payload repos](docs/payloads.md) | How dotfiles calls coding-agent-kit, PyMOLScripts and awesome-skills |
+| &#x1F512; [Secrets](docs/secrets.md) | Enrolling hosts and secrets with chezmoi's builtin age |
+| &#x1F9F1; [Dependencies](docs/dependencies.md) | Required and optional tools and the version floors |
+| &#x1F9EA; [Testing](docs/testing.md) | Prerequisites, focused suites, CI and the opt-in bootstrap end-to-end runs |
+| &#x1F5FA;&#xFE0F; [Coverage matrix](tests/COVERAGE.md) | Which tests cover which source |
 
 ## Checks and contribution
 
@@ -515,7 +515,7 @@ secrets or a host follows [secrets](docs/secrets.md); fixture passes are not
 real-host outcomes ([hosts](docs/hosts.md)).
 
 <details>
-<summary><b>Windows bootstrap E2E and App Installer</b></summary>
+<summary><b>&#x1F9EA; Windows bootstrap E2E and App Installer</b></summary>
 <br>
 
 The hosted Windows bootstrap E2E temporarily pauses only the installed OMP
@@ -556,9 +556,9 @@ code in its shell dialect and documentation in English ASCII. Follow
 
 ## License
 
-[MIT](LICENSE).
+&#x2696;&#xFE0F; [MIT](LICENSE).
 
 <div align="center">
 <br>
-<sub>One source &middot; six homes &middot; plain files &middot; themed in Catppuccin Mocha</sub>
+<sub>&#x1F3E0; One source &middot; six homes &middot; plain files &middot; themed in Catppuccin Mocha &#x1F431;&#x1F49C;</sub>
 </div>
