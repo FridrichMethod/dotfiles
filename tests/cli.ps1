@@ -308,13 +308,19 @@ try {
     Test-Case 'nested backends use their own checkout and default native host from a foreign cwd' {
         foreach ($command in @('doctor', 'setup', 'payloads sync')) {
             [IO.File]::Delete($events)
-            [void](Invoke-CliChild @'
+            $result = Invoke-CliChild @'
+# Observe the child before dispatch: macOS can canonicalize a /var temporary
+# directory to /private/var when starting the process.
+Write-Output (Get-Location).ProviderPath
 $arguments = $env:DOTFILES_TEST_CLI_COMMAND.Split(' ')
 & (Join-Path $env:DOTFILES_TEST_CLI_ROOT 'dotfiles.ps1') @arguments
 exit $LASTEXITCODE
-'@ @{ DOTFILES_TEST_CLI_COMMAND = $command })
+'@ @{ DOTFILES_TEST_CLI_COMMAND = $command }
             $calls = @(Get-Events)
-            Assert-True ($calls.Count -eq 1 -and $calls[0].Root -ceq $fixture -and $calls[0].Location -ceq $emptyHome) "Nested backend selected wrong root or cwd: $command"
+            Assert-True ($calls.Count -eq 1) "Expected one nested backend call for ${command}: $($calls.Count)"
+            Assert-True ($calls[0].Root -ceq $fixture) "Nested backend selected wrong root for ${command}: expected <$fixture>, got <$($calls[0].Root)>"
+            $before = $result.Out.TrimEnd()
+            Assert-True ($before -and $calls[0].Location -ceq $before) "Nested backend changed cwd for ${command}: before <$before>, backend <$($calls[0].Location)>"
             if ($command -cne 'payloads sync') { Assert-True ($calls[0].HostName -ceq 'win') "Native default host changed: $command" }
         }
     }
