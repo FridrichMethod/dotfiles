@@ -43,7 +43,7 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=warning]
-        files: (\.sh$|(^|/)(\.|dot_)bash(rc|_profile|_aliases)$|(^|/)(\.|dot_)(profile|alias|aliases)$)
+        files: (\.sh$|(^|/)(\.|dot_)bash(rc|_profile|_aliases)$|(^|/)(\.|dot_)(profile|alias|aliases)$|^(dotfiles|home/dot_local/bin/executable_dotfiles)$)
         exclude: ^home/dot_local/bin/executable_my-fzf-preview\.sh$
         types: [file]
 
@@ -60,7 +60,7 @@ repos:
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)(\.|dot_)(profile|alias|aliases)$|^(scripts/(chezmoi-update|payload-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
+        files: ((^|/)(\.|dot_)(profile|alias|aliases)$|^(dotfiles|home/dot_local/bin/executable_dotfiles|scripts/(chezmoi-update|payload-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -88,6 +88,12 @@ repos:
         language: script
         pass_filenames: false
         files: ^(\.pre-commit-config\.yaml|\.github/workflows/ci\.yml|tests/[^/]+\.(sh|ps1)|tests/test_environment\.py|tests/lib/environment\.(sh|ps1)|tests/fixtures/chezmoi/targets\.tsv)$
+      - id: cli
+        name: unified CLI dispatch and installed launchers
+        entry: tests/cli.sh
+        language: script
+        pass_filenames: false
+        files: ^(dotfiles(\.ps1)?|home/dot_local/bin/(executable_dotfiles|dotfiles\.ps1)|home/dot_aliases|home/Documents/PowerShell/profile\.ps1|(doctor|setup-host)\.(sh|ps1)|scripts/payload-update\.(sh|ps1)|lib/chezmoi-guard\.(sh|ps1)|tests/(cli\.(sh|ps1)|test_cli_unix\.py|run\.(sh|ps1)|lib/environment\.(sh|ps1)))$
       - id: markdown-links
         name: Markdown links
         entry: tests/markdown-links.sh
@@ -155,7 +161,7 @@ repos:
         entry: tests/powershell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(home/Documents/(PowerShell|WindowsPowerShell)/.*|home/dot_config/oh-my-posh/.*|home/AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/.*|home/dot_zshrc|(doctor|setup-host)\.ps1|lib/(chezmoi-guard|terminal)\.ps1|scripts/(chezmoi-update|payload-update)\.ps1|tests/(powershell-profile\.(sh|ps1)|run\.ps1|terminal\.ps1))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(home/Documents/(PowerShell|WindowsPowerShell)/.*|home/dot_config/oh-my-posh/.*|home/AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/.*|home/dot_zshrc|(dotfiles|doctor|setup-host)\.ps1|home/dot_local/bin/dotfiles\.ps1|lib/(chezmoi-guard|terminal)\.ps1|scripts/(chezmoi-update|payload-update)\.ps1|tests/(powershell-profile\.(sh|ps1)|run\.ps1|terminal\.ps1|cli\.ps1))$|^tests/lib/environment\.(sh|ps1)$
       - id: bootstrap-manifest
         name: bootstrap manifests, playbook and skill parity
         entry: tests/bootstrap-manifest.sh

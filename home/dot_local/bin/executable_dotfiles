@@ -1,0 +1,32 @@
+#!/bin/sh
+# Resolve only the source selected by this home's validated chezmoi config.
+
+fail() {
+    printf '%s\n' 'dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run CHECKOUT/dotfiles explicitly to recover.' >&2
+    exit 1
+}
+
+_df_root=''
+if [ -f "$HOME/.config/chezmoi/chezmoi.toml" ] && [ ! -L "$HOME/.config/chezmoi/chezmoi.toml" ]; then
+    while IFS= read -r _df_line || [ -n "$_df_line" ]; do
+        case ${_df_line#"${_df_line%%[![:blank:]]*}"} in '['*) break ;; esac
+        case $_df_line in
+            'sourceDir = "/'*'"')
+                _df_root=${_df_line#'sourceDir = "'}
+                _df_root=${_df_root%'"'}
+                break
+                ;;
+        esac
+    done <"$HOME/.config/chezmoi/chezmoi.toml"
+fi
+# Keep the case statement outside command substitution for Bash 3.2.
+if ! _df_root=$(
+    [ -n "$_df_root" ] && [ -f "$_df_root/lib/chezmoi-guard.sh" ] && [ -r "$_df_root/lib/chezmoi-guard.sh" ] || exit 1
+    # shellcheck source=/dev/null
+    . "$_df_root/lib/chezmoi-guard.sh"
+    dotfiles_chezmoi_source "$HOME"
+); then
+    fail
+fi
+[ -f "$_df_root/dotfiles" ] && [ -x "$_df_root/dotfiles" ] || fail
+exec "$_df_root/dotfiles" "$@"

@@ -61,7 +61,8 @@
 .zshenv
 .zshrc
 .oh-my-zsh
-.local
+.local/bin/dotfiles
+.local/bin/my-fzf-preview.sh
 .config/aria2
 .config/bash
 .config/sh
@@ -70,6 +71,7 @@
 .config/tmux
 {{ end }}
 {{ if ne .host "win" }}
+.local/bin/dotfiles.ps1
 Documents
 AppData
 .wslconfig

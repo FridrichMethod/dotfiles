@@ -246,55 +246,16 @@ if ($IsInteractive -and -not $IsAgentSession) {
         function global:la { Get-ChildItem -Force @args }
     }
 
-    # Install or update the payload repos now, in the foreground
-    # (scripts/payload-update.ps1): sync-payloads [pymol] [skills], both by
-    # default (coding-agent-kit installs nothing on native Windows);
-    # sync-skills is sync-payloads skills. As at the tail, they run the hook
-    # of the source checkout ~/.config/chezmoi/chezmoi.toml names (its
-    # sourceDir, validated by that checkout's lib/chezmoi-guard.ps1) and
-    # refuse a config it refuses; a home without the config has no source, so
-    # they refuse there and name the -Now line to run from its checkout.
+    # Run payload updates through the installed, config-selected command.
     function global:sync-payloads {
-        try {
-            $config = $null
-            try { $config = Get-Item -LiteralPath (Join-Path $HOME '.config/chezmoi/chezmoi.toml') -Force -ErrorAction Stop }
-            catch [System.Management.Automation.ItemNotFoundException] { }
-            if ($config) {
-                if ($config -isnot [IO.FileInfo] -or ($config.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                    throw 'The chezmoi config must be a regular file.'
-                }
-                $text = [Text.UTF8Encoding]::new($false, $true).GetString([IO.File]::ReadAllBytes($config.FullName))
-                $source = $null
-                foreach ($line in ($text -split "`n")) {
-                    if ($line.TrimStart([char[]]@(' ', "`t")).StartsWith('[', [StringComparison]::Ordinal)) { break }
-                    if ($line -cmatch '\AsourceDir = "([^"\r\n]+)"\z') { $source = $Matches[1]; break }
-                }
-                if (-not $source -or -not [IO.Path]::IsPathFullyQualified($source)) { throw 'The chezmoi config has no absolute top-level sourceDir line.' }
-                $guard = Join-Path $source 'lib/chezmoi-guard.ps1'
-                if (-not (Test-Path -LiteralPath $guard -PathType Leaf)) { throw 'The source checkout has no lib/chezmoi-guard.ps1.' }
-                . $guard
-                $dotfiles = (Get-DotfilesChezmoiPaths -HomePath $HOME).Source
-            }
-            else {
-                [Console]::Error.WriteLine('[dotfiles] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')
-                $global:LASTEXITCODE = 1
-                return
-            }
-        }
-        catch {
-            [Console]::Error.WriteLine('[dotfiles] Payload update refused: ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; review it privately.')
+        $launcher = Join-Path $HOME '.local/bin/dotfiles.ps1'
+        if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+            [Console]::Error.WriteLine('dotfiles: missing ~/.local/bin/dotfiles.ps1; run & CHECKOUT\dotfiles.ps1 payloads sync explicitly to recover.')
             $global:LASTEXITCODE = 1
             return
         }
-        $hook = Join-Path $dotfiles 'scripts/payload-update.ps1'
-        if (-not (Test-Path -LiteralPath $hook -PathType Leaf)) {
-            [Console]::Error.WriteLine('[dotfiles] Payload update unavailable: the dotfiles checkout has no scripts/payload-update.ps1.')
-            $global:LASTEXITCODE = 1
-            return
-        }
-        # The hook's status, not one an earlier command left behind.
         $global:LASTEXITCODE = 0
-        & $hook -Now @args
+        & $launcher payloads sync @args
     }
     function global:sync-skills { sync-payloads skills }
 

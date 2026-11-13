@@ -34,6 +34,8 @@ target	hosts	source	mode	shell
 .gitconfig	all	home/dot_gitconfig	regular	-
 .gitconfig_local	wsl-ubuntu,lab-ubuntu,marlowe,win	home/.hosts/{host}/.gitconfig_local	regular	-
 .gitignore_global	mac	home/dot_gitignore_global	regular	-
+.local/bin/dotfiles	unix	home/dot_local/bin/executable_dotfiles	executable	sh
+.local/bin/dotfiles.ps1	win	home/dot_local/bin/dotfiles.ps1	regular	-
 .local/bin/my-fzf-preview.sh	unix	home/dot_local/bin/executable_my-fzf-preview.sh	executable	bash
 .oh-my-zsh/custom/conda-zsh-completion.zsh	unix	home/dot_oh-my-zsh/custom/conda-zsh-completion.zsh	regular	zsh
 .oh-my-zsh/custom/download.zsh	unix	home/dot_oh-my-zsh/custom/download.zsh	regular	zsh

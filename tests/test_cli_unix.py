@@ -27,7 +27,7 @@ class UnixCLI(unittest.TestCase):
         self.assertTrue((ROOT / "dotfiles").is_file(), "absent dispatcher: dotfiles")
         self.temporary = tempfile.TemporaryDirectory(prefix="dotfiles cli ")
         self.addCleanup(self.temporary.cleanup)
-        self.base = Path(self.temporary.name)
+        self.base = Path(self.temporary.name).resolve()
         self.repo = self.base / "checkout with spaces;literal"
         self.repo.mkdir()
         self.cli = self.repo / "dotfiles"
@@ -240,6 +240,111 @@ while :; do IFS= read -r -p 'waiting:' answer; done
                 os.kill(pid, signal.SIGKILL)
                 os.waitpid(pid, 0)
             os.close(master)
+
+    def install_launcher(self):
+        launcher = ROOT / "home/dot_local/bin/executable_dotfiles"
+        self.assertTrue(launcher.is_file(), "absent installed launcher")
+        self.installed = self.home / ".local/bin/dotfiles"
+        self.installed.parent.mkdir(parents=True)
+        shutil.copy2(launcher, self.installed)
+        (self.repo / ".git").mkdir()
+        self.write(".chezmoiroot", "home\n")
+        self.write("lib/chezmoi-guard.sh", (ROOT / "lib/chezmoi-guard.sh").read_text())
+        self.config = self.home / ".config/chezmoi/chezmoi.toml"
+        self.config.parent.mkdir(parents=True)
+        self.valid_config = f'destDir = "{self.home}"\nsourceDir = "{self.repo}"\n'
+        self.config.write_text(self.valid_config)
+
+    def run_installed(self, *args):
+        return subprocess.run([str(self.installed), *args], env=self.env, cwd=self.home,
+                              text=True, capture_output=True, timeout=10)
+
+    def test_installed_launcher_selects_configured_worktree_with_spaces(self):
+        self.install_launcher()
+        # A linked checkout uses a .git file. Neither cwd nor ~/dotfiles is authoritative.
+        (self.repo / ".git").rmdir()
+        git = shutil.which("git")
+        self.assertIsNotNone(git, "git prerequisite for linked-worktree fixture")
+        git_env = {key: value for key, value in os.environ.items() if not key.upper().startswith("GIT_")}
+        git_env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+
+        def fixture_git(*args):
+            subprocess.run([git, "-c", "core.hooksPath=", "-c", "commit.gpgsign=false",
+                            "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", *args],
+                           cwd=self.repo, env=git_env, check=True, capture_output=True, timeout=15)
+
+        fixture_git("init", "--template=")
+        fixture_git("add", "--", "dotfiles", ".chezmoiroot", "lib/chezmoi-guard.sh", "doctor.sh",
+                    "setup-host.sh", "scripts/payload-update.sh", "tests/run.sh")
+        fixture_git("commit", "-m", "Synthetic CLI source")
+        linked = self.base / "linked worktree with spaces"
+        fixture_git("worktree", "add", "--detach", str(linked))
+        self.config.write_text(self.valid_config.replace(str(self.repo), str(linked)))
+        other = self.home / "dotfiles"
+        other.mkdir()
+        (other / "dotfiles").write_text("exit 91\n")
+        result = self.run_installed("--help")
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertIn("Usage: dotfiles", result.stdout)
+        self.assert_no_backend()
+        self.env["CLI_STATUS"] = "3"
+        result = self.run_installed("setup", "--host", "mac", "--only", "a step;literal")
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (3, "", ""))
+        self.assertEqual(self.argv(), ["--host", "mac", "--only", "a step;literal"])
+
+    def test_installed_launcher_refuses_config_and_missing_source_even_for_help(self):
+        self.install_launcher()
+        cases = {"missing": None, "duplicate": self.valid_config * 2,
+                 "foreign home": self.valid_config.replace(str(self.home), str(self.base)),
+                 "malformed": self.valid_config.replace('sourceDir = ', 'sourceDir='),
+                 "CRLF": self.valid_config.replace("\n", "\r\n")}
+        for name, text in cases.items():
+            with self.subTest(case=name):
+                self.config.unlink(missing_ok=True)
+                if text is not None:
+                    self.config.write_bytes(text.encode())
+                self.assert_installed_refusal()
+        self.config.unlink()
+        linked = self.base / "linked config"
+        linked.write_text(self.valid_config)
+        self.config.symlink_to(linked)
+        self.assert_installed_refusal()
+        self.config.unlink()
+        self.config.write_text(self.valid_config)
+        for target in (self.repo / "lib/chezmoi-guard.sh", self.cli):
+            hidden = target.with_name(target.name + ".hidden")
+            target.rename(hidden)
+            try:
+                self.assert_installed_refusal()
+                target.mkdir()
+                try:
+                    self.assert_installed_refusal()
+                finally:
+                    target.rmdir()
+            finally:
+                hidden.rename(target)
+
+    def assert_installed_refusal(self):
+        result = self.run_installed("--help")
+        self.assertEqual((result.returncode, result.stdout), (1, ""))
+        self.assertEqual(len(result.stderr.splitlines()), 1, result.stderr)
+        self.assertIn("CHECKOUT/dotfiles", result.stderr)
+        self.assert_no_backend()
+
+    def test_legacy_shortcuts_refuse_missing_launcher_without_backend_fallback(self):
+        # A configured home with a working old payload hook must still require the launcher.
+        (self.repo / ".git").mkdir()
+        self.write(".chezmoiroot", "home\n")
+        self.write("lib/chezmoi-guard.sh", (ROOT / "lib/chezmoi-guard.sh").read_text())
+        config = self.home / ".config/chezmoi/chezmoi.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text(f'destDir = "{self.home}"\nsourceDir = "{self.repo}"\n')
+        result = subprocess.run([shutil.which("sh"), "-c", '. "$1"; eval sync-skills',
+                                 "aliases", str(ROOT / "home/dot_aliases")], env=self.env,
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(".local/bin/dotfiles", result.stderr)
+        self.assert_no_backend()
 
 
 if __name__ == "__main__":

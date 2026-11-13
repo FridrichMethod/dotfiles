@@ -224,10 +224,9 @@ class WriterGuardTests(unittest.TestCase):
         # whose guard and hook never run; a home without a config and an
         # invalid config refuse before any hook; maintenance surfaces the
         # configured hook's own refusal before any state.
-        refusal = ("[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a "
-                   "dotfiles checkout; payload update refused.\n")
-        no_config = ("[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run "
-                     "sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.\n")
+        refusal = ("dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available "
+                   "dotfiles checkout; run CHECKOUT/dotfiles explicitly to recover.\n")
+        no_config = refusal
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             home, source = root / "home", root / "configured source"
@@ -240,6 +239,10 @@ class WriterGuardTests(unittest.TestCase):
             for checkout in (source, other, unguarded):
                 (checkout / ".chezmoiroot").write_text("home\n")
             shutil.copyfile(GUARD, source / "lib/chezmoi-guard.sh")
+            shutil.copy2(ROOT / "dotfiles", source / "dotfiles")
+            launcher = home / ".local/bin/dotfiles"
+            launcher.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / "home/dot_local/bin/executable_dotfiles", launcher)
             for checkout, name in ((source, "source"), (other, "other"), (unguarded, "unguarded")):
                 (checkout / "scripts/payload-update.sh").write_text(
                     f'printf "{name} %s\\n" "$*" >>"$TRACE"\nexit 4\n')
@@ -249,7 +252,7 @@ class WriterGuardTests(unittest.TestCase):
             env = {"HOME": str(home), "PATH": os.defpath, "TRACE": str(trace), "XDG_STATE_HOME": str(state)}
             # eval: zsh does not expand an alias defined earlier in one -c string.
             code = ('[ -z "${BASH_VERSION-}" ] || shopt -s expand_aliases; . "$1"; '
-                    'eval "sync-payloads kit pymol"; first=$?; eval sync-skills; '
+                    'eval "sync-payloads kit pymol"; first=$?; eval "sync-skills extra"; '
                     'printf "%s %s\\n" "$first" "$?"')
 
             def run(shell):
@@ -290,7 +293,7 @@ class WriterGuardTests(unittest.TestCase):
                     configure(valid)
                     result, events = run(shell)
                     self.assertEqual((result.stdout, result.stderr), ("4 4\n", ""))
-                    self.assertEqual(events, ["source --now kit pymol", "source --now skills"])
+                    self.assertEqual(events, ["source --now kit pymol", "source --now skills extra"])
                 for name, (content, kind) in invalid.items():
                     with self.subTest(shell=shell, config=name):
                         configure(content, kind)
@@ -298,6 +301,17 @@ class WriterGuardTests(unittest.TestCase):
                         self.assertEqual(events, [])
                         self.assertEqual((result.stdout, result.stderr), ("1 1\n", refusal * 2))
             configure(valid)
+            hidden = launcher.with_name("dotfiles.hidden")
+            launcher.rename(hidden)
+            try:
+                for shell in SHELLS:
+                    with self.subTest(shell=shell, config="missing launcher"):
+                        result, events = run(shell)
+                        self.assertEqual(result.stdout, "1 1\n")
+                        self.assertEqual(events, [])
+                        self.assertEqual(result.stderr.count("missing ~/.local/bin/dotfiles"), 2)
+            finally:
+                hidden.rename(launcher)
             (home / ".config/dotfiles").mkdir()
             (home / ".config/dotfiles/maintenance").touch()
             shutil.copyfile(ROOT / "scripts/payload-update.sh", source / "scripts/payload-update.sh")

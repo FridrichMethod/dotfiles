@@ -117,6 +117,7 @@ switch ($env:DOTFILES_TEST_CLI_BEHAVIOR) {
     }
     'tsv' { Write-Output "status`tid`ttier`tdetail`tfix"; Write-Output "ok`tfixture`tcore`ttext`t-" }
     'read' { $answer = Read-Host 'fixture-question'; Write-Output "answer:$answer" }
+    'nonterminating' { Write-Error 'backend-default-error'; Write-Output 'continued' }
     'throw' { throw 'fixture invocation failed' }
     'native' {
         & $env:DOTFILES_TEST_CLI_PWSH -NoProfile -File (Join-Path $PSScriptRoot 'native-exit.ps1')
@@ -387,6 +388,69 @@ exit $status
                 Assert-True ($result.Out -ceq '' -and @($result.Error.TrimEnd() -split '\r?\n').Count -eq 1 -and $result.Error.Contains('pre-commit fixture failure')) 'dev check invocation failure diagnostic was not concise.'
             }
             else { Assert-True ($result.Out -ceq '' -and $result.Error -ceq '') 'dev check added output.' }
+        }
+    }
+    # Installed entrypoints require a validated fixture config even for help.
+    # Only the child's process PATH changes; the real User PATH is never read or written.
+    $launcher = Join-Path $emptyHome '.local/bin/dotfiles.ps1'
+    Write-Fixture $launcher ([IO.File]::ReadAllText((Join-Path $sourceRoot 'home/dot_local/bin/dotfiles.ps1')))
+    Write-Fixture (Join-Path $fixture 'lib/chezmoi-guard.ps1') ([IO.File]::ReadAllText((Join-Path $sourceRoot 'lib/chezmoi-guard.ps1')))
+    Write-Fixture (Join-Path $fixture '.chezmoiroot') "home`n"
+    # The guard accepts a linked worktree's .git file as well as a clone's directory.
+    Write-Fixture (Join-Path $fixture '.git') "gitdir: unused-fixture`n"
+    $config = Join-Path $emptyHome '.config/chezmoi/chezmoi.toml'
+    $forms = & {
+        . (Join-Path $sourceRoot 'lib/chezmoi-guard.ps1')
+        foreach ($path in @($emptyHome, $fixture, $temporaryRoot)) {
+            (Resolve-DotfilesDirectory $path).Replace('\', '/')
+        }
+    }
+    $valid = 'destDir = "' + $forms[0] + '"' + "`n" + 'sourceDir = "' + $forms[1] + '"' + "`n"
+    Write-Fixture $config $valid
+    Write-Fixture (Join-Path $emptyHome 'dotfiles/dotfiles.ps1') "throw 'Wrong checkout selected.'"
+    Test-Case 'installed help forwards to the selected checkout without running a backend' {
+        $result = Invoke-CliChild "& (Join-Path `$HOME '.local/bin/dotfiles.ps1') --help; exit `$LASTEXITCODE"
+        Assert-True ($result.Error -ceq '' -and $result.Out.Contains('Usage: dotfiles') -and @(Get-Events).Count -eq 0) 'Installed help failed or ran a backend.'
+    }
+    Test-Case 'installed explicit invocation selects configured worktree without PATH or profile' {
+        [void](Invoke-CliChild @'
+& (Join-Path $HOME '.local/bin/dotfiles.ps1') doctor --tier 'core, cli;literal'
+exit $LASTEXITCODE
+'@ @{ DOTFILES_TEST_CLI_STATUS = '3' } -ExpectedExit 3)
+        $calls = @(Get-Events)
+        Assert-True ($calls.Count -eq 1 -and $calls[0].Bound.Tier -ceq 'core, cli;literal') 'Installed launcher lost arguments or chose another checkout.'
+    }
+    Test-Case 'installed bare dotfiles is discovered through controlled process PATH with NoProfile' {
+        [void](Invoke-CliChild 'dotfiles doctor --host win; exit $LASTEXITCODE' @{ PATH = (Split-Path -Parent $launcher) })
+        Assert-True (@(Get-Events).Count -eq 1) 'Bare dotfiles did not invoke the configured dispatcher once.'
+    }
+    Test-Case 'installed invocation preserves the caller error preference for backend side streams' {
+        $result = Invoke-CliChild @'
+$ErrorActionPreference = 'Continue'
+& (Join-Path $HOME '.local/bin/dotfiles.ps1') doctor
+exit $LASTEXITCODE
+'@ @{ DOTFILES_TEST_CLI_BEHAVIOR = 'nonterminating' }
+        Assert-True ($result.Out.Trim() -ceq 'continued' -and $result.Error.Contains('backend-default-error') -and
+            -not $result.Error.Contains('invocation failed')) 'Launcher changed a nonterminating backend error into termination.'
+    }
+    Test-Case 'installed help refuses absent duplicate malformed and foreign configs' {
+        foreach ($text in @($null, ($valid + $valid), $valid.Replace('sourceDir = ', 'sourceDir='),
+                $valid.Replace($forms[0], $forms[2]), $valid.Replace("`n", "`r`n"))) {
+            [IO.File]::Delete($config)
+            if ($null -ne $text) { Write-Fixture $config $text }
+            $result = Invoke-CliChild "& (Join-Path `$HOME '.local/bin/dotfiles.ps1') --help; exit `$LASTEXITCODE" -ExpectedExit 1
+            Assert-OneDiagnostic $result 'CHECKOUT'
+        }
+        Write-Fixture $config $valid
+    }
+    Test-Case 'installed help refuses missing guard or dispatcher' {
+        foreach ($path in @((Join-Path $fixture 'lib/chezmoi-guard.ps1'), (Join-Path $fixture 'dotfiles.ps1'))) {
+            Move-Item -LiteralPath $path -Destination "$path.hidden"
+            try {
+                $result = Invoke-CliChild "& (Join-Path `$HOME '.local/bin/dotfiles.ps1') --help; exit `$LASTEXITCODE" -ExpectedExit 1
+                Assert-OneDiagnostic $result 'CHECKOUT'
+            }
+            finally { Move-Item -LiteralPath "$path.hidden" -Destination $path }
         }
     }
     Write-Output "powershell-cli=PASS ($script:Passed cases)"

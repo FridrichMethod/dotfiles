@@ -12,8 +12,8 @@ from chezmoi_source_support import SourceFixture, expected_entries
 
 
 # Targets with a shell dialect in tests/fixtures/chezmoi/targets.tsv, per role.
-LINTED = {"generic": 21, "mac": 25, "wsl-ubuntu": 25, "lab-ubuntu": 26,
-          "sherlock": 25, "marlowe": 25, "win": 0}
+LINTED = {"generic": 22, "mac": 26, "wsl-ubuntu": 26, "lab-ubuntu": 27,
+          "sherlock": 26, "marlowe": 26, "win": 0}
 
 
 class RenderedSourceTests(unittest.TestCase):

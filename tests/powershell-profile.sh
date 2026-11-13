@@ -129,6 +129,9 @@ fi
 # populate $args. This is the pwsh 7 parser: Windows PowerShell 5.1
 # compatibility needs the Windows job.
 ps_files=(
+    dotfiles.ps1
+    home/dot_local/bin/dotfiles.ps1
+    tests/cli.ps1
     doctor.ps1
     setup-host.ps1
     lib/chezmoi-guard.ps1

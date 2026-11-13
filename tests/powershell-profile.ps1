@@ -724,13 +724,15 @@ try {
     $configured = Join-Path $syncRoot 'configured source'
     $other = Join-Path $syncHome 'dotfiles'
     $syncTrace = Join-Path $syncRoot 'trace'
-    $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $syncHome '.config/chezmoi'),
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $syncHome '.config/chezmoi'), (Join-Path $syncHome '.local/bin'),
         (Join-Path $configured 'scripts'), (Join-Path $configured 'lib'), (Join-Path $configured '.git'), (Join-Path $other 'scripts'), (Join-Path $other 'lib')
     [IO.File]::WriteAllText((Join-Path $configured '.chezmoiroot'), "home`n")
     Copy-Item -LiteralPath (Join-Path $repoRoot 'lib/chezmoi-guard.ps1') -Destination (Join-Path $configured 'lib/chezmoi-guard.ps1')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'dotfiles.ps1') -Destination (Join-Path $configured 'dotfiles.ps1')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'home/dot_local/bin/dotfiles.ps1') -Destination (Join-Path $syncHome '.local/bin/dotfiles.ps1')
     foreach ($checkout in @{ Path = $configured; Name = 'configured' }, @{ Path = $other; Name = 'other' }) {
         [IO.File]::WriteAllText((Join-Path $checkout.Path 'scripts/payload-update.ps1'),
-            "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value ('$($checkout.Name) ' + (`$args -join ' '))`nexit 4`n")
+            "param([switch]`$Now, [string[]]`$Item)`nif (-not `$Now) { throw 'Missing Now.' }`nAdd-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value ('$($checkout.Name) -Now ' + (`$Item -join ' '))`nexit 4`n")
     }
     [IO.File]::WriteAllText((Join-Path $other 'lib/chezmoi-guard.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'other-guard'`n")
     # The form chezmoi init writes: on Windows forward slashes and an
@@ -755,7 +757,7 @@ foreach ($name in 'sync-payloads', 'sync-skills') {
             $n.Name -eq "global:$name" }.GetNewClosure(), $true).Extent.Text
 }
 $global:LASTEXITCODE = 7; sync-payloads pymol; $first = $LASTEXITCODE
-$global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
+$global:LASTEXITCODE = 7; sync-skills ignored; "exit=$first,$LASTEXITCODE"
 '@
     # Invoke-SyncCase PREPARE: a fresh trace and config, PREPARE, one child run.
     function Invoke-SyncCase([scriptblock]$Prepare) {
@@ -769,11 +771,11 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
         $events = if (Test-Path -LiteralPath $syncTrace) { @(Get-Content -LiteralPath $syncTrace) -join '|' } else { '' }
         [pscustomobject]@{ Out = $run.Out; Err = $run.Err; Events = $events; Text = "out=$($run.Out) err=$($run.Err) events=$events" }
     }
-    $refused = '[dotfiles] Payload update refused: ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; review it privately.'
+    $refused = 'dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run & CHECKOUT\dotfiles.ps1 explicitly to recover.'
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) }
     Assert-True ($case.Events -ceq 'configured -Now pymol|configured -Now skills' -and $case.Out -ceq 'exit=4,4' -and -not $case.Err) "a valid config runs its source's hook, not ~\dotfiles's ($($case.Text))"
     $case = Invoke-SyncCase { }
-    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run & CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...] instead.')) "a home without a config refuses and runs no hook, not even ~\dotfiles's ($($case.Text))"
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains($refused)) "a home without a config refuses and runs no hook, not even ~\dotfiles's ($($case.Text))"
     $invalid = [ordered]@{
         'two sourceDir lines' = { [IO.File]::WriteAllText($syncConfig, $valid.Replace($sourceLine, "$sourceLine`n$sourceLine")) }
         'a literal string'    = { [IO.File]::WriteAllText($syncConfig, $valid.Replace($sourceLine, $sourceLine.Replace('"', "'"))) }
@@ -817,8 +819,13 @@ $global:LASTEXITCODE = 7; sync-skills; "exit=$first,$LASTEXITCODE"
     Move-Item -LiteralPath $hookPath -Destination "$hookPath.hidden"
     try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) } }
     finally { Move-Item -LiteralPath "$hookPath.hidden" -Destination $hookPath }
-    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('[dotfiles] Payload update unavailable:') -and
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('payload-update.ps1') -and
         -not $case.Err.Contains('CommandNotFound')) "a configured source without the hook fails with exit 1 ($($case.Text))"
+    $launcherPath = Join-Path $syncHome '.local/bin/dotfiles.ps1'
+    Move-Item -LiteralPath $launcherPath -Destination "$launcherPath.hidden"
+    try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) } }
+    finally { Move-Item -LiteralPath "$launcherPath.hidden" -Destination $launcherPath }
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('missing ~/.local/bin/dotfiles.ps1')) "missing launcher refuses without the old backend fallback ($($case.Text))"
     # A hook that ends without exit leaves no stale exit status behind.
     [IO.File]::WriteAllText((Join-Path $configured 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) }

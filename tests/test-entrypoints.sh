@@ -130,7 +130,7 @@ python3 -I -B -m unittest discover -s "$TEST_DIR" -p 'test_environment.py' -v
 # of its exclude and the top-level one; a shell linter must also declare its
 # types.
 python3 -I -B - "$REPO_ROOT/.pre-commit-config.yaml" "$TEST_DIR/run.sh" "$TEST_DIR/fixtures/chezmoi/targets.tsv" \
-    "$REPO_ROOT/.github/workflows/ci.yml" <<'PY'
+    "$REPO_ROOT/.github/workflows/ci.yml" "$TEST_DIR/run.ps1" "$TEST_DIR/cli.sh" "$TEST_DIR/powershell-profile.sh" <<'PY'
 import re
 import sys
 
@@ -159,6 +159,13 @@ for line in open(sys.argv[1], encoding='utf-8'):
     if match and hook is not None:
         hook['types'] = [tag.strip() for tag in match.group(1).split(',') if tag.strip()]
 need = {
+    'cli': ['dotfiles', 'dotfiles.ps1', 'home/dot_local/bin/executable_dotfiles',
+            'home/dot_local/bin/dotfiles.ps1', 'home/dot_aliases',
+            'home/Documents/PowerShell/profile.ps1', 'tests/cli.sh', 'tests/cli.ps1',
+            'tests/test_cli_unix.py', 'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
+            'doctor.sh', 'doctor.ps1', 'setup-host.sh', 'setup-host.ps1',
+            'scripts/payload-update.sh', 'scripts/payload-update.ps1',
+            'tests/run.sh', 'tests/run.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1'],
     'ai-policy': ['tests/ai-policy.sh', 'tests/test_ai_policy.py', 'home/.policy/claude-settings.json',
                   'home/dot_claude/CLAUDE.md', 'home/dot_codex/AGENTS.md',
                   'home/dot_codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
@@ -203,7 +210,8 @@ need = {
     'terminal-output': ['lib/terminal.sh', 'lib/terminal.ps1', 'tests/terminal.ps1', 'doctor.ps1', 'setup-host.ps1'],
     'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1', 'tests/powershell-profile.sh',
                            'doctor.ps1', 'setup-host.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
-                           'tests/run.ps1', 'tests/terminal.ps1',
+                           'tests/run.ps1', 'tests/terminal.ps1', 'dotfiles.ps1',
+                           'home/dot_local/bin/dotfiles.ps1', 'tests/cli.ps1',
                            'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/'
                            'LocalState/settings.json', 'home/Documents/PowerShell/profile.ps1',
                            'home/Documents/WindowsPowerShell/profile.ps1',
@@ -264,6 +272,8 @@ for name, paths in (('trailing-whitespace', [*UPSTREAM.values(), TERMINAL]), ('e
 # identify gives dot_ names no shell tag, so it would silently skip
 # home/dot_bashrc. Every variant sets `types: [file]` instead.
 for name in ('shellcheck', 'shfmt'):
+    if not any(selects(variant, 'dotfiles') for variant in hooks.get(name, [])):
+        missed.append(f'{name} does not lint the root Unix dispatcher')
     for number, variant in enumerate(hooks.get(name, []), 1):
         if variant.get('types') != ['file']:
             missed.append(f'{name} variant {number} does not set types: [file]')
@@ -281,6 +291,21 @@ for target, hosts, source, _mode, shell in rows:
                 missed.append(f'{name} does not lint {path}')
 runner = open(sys.argv[2], encoding='utf-8').read()
 runner_suites = re.search(r'tests=\(\n(.*?)\n\)', runner, re.S).group(1).split()
+if len(runner_suites) != len(set(runner_suites)) or runner_suites.count('cli.sh') != 1:
+    missed.append('tests/run.sh must select each suite once, including cli.sh')
+# The CLI hook owns the optional Unix PowerShell run. The profile hook parses
+# the files without running the CLI suite a second time in a full check.
+cli_runner = open(sys.argv[6], encoding='utf-8').read()
+windows_runner = open(sys.argv[5], encoding='utf-8').read()
+profile_runner = open(sys.argv[7], encoding='utf-8').read()
+if len(re.findall(r'^python3 .*test_cli_unix[.]py', cli_runner, re.M)) != 1:
+    missed.append('cli.sh must run the Unix CLI suite exactly once')
+if len(re.findall(r'^    pwsh .*cli[.]ps1', cli_runner, re.M)) != 1:
+    missed.append('cli.sh must run the optional PowerShell CLI suite exactly once')
+if len(re.findall(r'^& \$powerShell .*PSScriptRoot \'cli[.]ps1\'', windows_runner, re.M)) != 1:
+    missed.append('run.ps1 must run the native PowerShell CLI suite exactly once')
+if re.search(r'^.*(?:-File|&).*tests/cli[.]ps1', profile_runner, re.M):
+    missed.append('powershell-profile.sh must not duplicate the CLI behavior suite')
 entries = {hook.get('entry') for variants in hooks.values() for hook in variants}
 for suite in runner_suites:
     if 'tests/' + suite not in entries:

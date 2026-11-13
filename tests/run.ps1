@@ -41,6 +41,10 @@ if ($CheckPrerequisites) {
     exit 0
 }
 
+Write-Output '==> cli.ps1'
+& $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'cli.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'PowerShell CLI tests failed.' }
+
 Write-Output '==> chezmoi.ps1'
 & $powerShell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'chezmoi.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'chezmoi fixture tests failed.' }

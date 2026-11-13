@@ -446,6 +446,9 @@ expect_text "$ERR" 'neither curl nor wget is installed'
 # names; sync-skills is sync-payloads skills.
 new_home
 config_home "$FIXTURE"
+cp "$REPO_ROOT/dotfiles" "$FIXTURE/dotfiles"
+mkdir -p "$HOME_DIR/.local/bin"
+cp "$REPO_ROOT/home/dot_local/bin/executable_dotfiles" "$HOME_DIR/.local/bin/dotfiles"
 in_env bash --noprofile --norc -c 'shopt -s expand_aliases; . "$1"
 sync-skills
 sync-payloads pymol' _ "$REPO_ROOT/home/dot_aliases" >"$OUT" 2>"$ERR" || fail 'the aliases failed'

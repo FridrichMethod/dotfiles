@@ -383,9 +383,9 @@ fi
 # without a config and a config the guard refuses run no hook and say so,
 # once per call. Sourcing is silent and leaves no helper variable behind.
 sync_failures=0 sync_home=$TEST_TMP/sync-home
-sync_refusals='[dotfiles] [error] Payload update needs ~/.config/chezmoi/chezmoi.toml; without it run sh CHECKOUT/scripts/payload-update.sh --now [ITEM...] instead.
-[dotfiles] [error] ~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout; payload update refused.'
-mkdir -p "$sync_home/.config/chezmoi"
+sync_refusals='dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run CHECKOUT/dotfiles explicitly to recover.
+dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run CHECKOUT/dotfiles explicitly to recover.'
+mkdir -p "$sync_home/.config/chezmoi" "$sync_home/.local/bin"
 for checkout in "$TEST_TMP/configured" "$sync_home/dotfiles"; do
     mkdir -p "$checkout/scripts" "$checkout/lib"
     printf '%s\n' "printf '${checkout##*/} %s\\n' \"\$*\" >>\"\$SYNC_TRACE\"" 'exit 4' \
@@ -393,6 +393,8 @@ for checkout in "$TEST_TMP/configured" "$sync_home/dotfiles"; do
 done
 printf 'home\n' >"$TEST_TMP/configured/.chezmoiroot"
 cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/configured/lib/"
+cp "$REPO_ROOT/dotfiles" "$TEST_TMP/configured/dotfiles"
+cp "$REPO_ROOT/home/dot_local/bin/executable_dotfiles" "$sync_home/.local/bin/dotfiles"
 # sync_config SOURCE: the config chezmoi init writes, naming SOURCE.
 sync_config() {
     printf 'destDir = "%s"\nsourceDir = "%s"\n\n[data]\n  host = "lab-ubuntu"\n' \
