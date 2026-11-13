@@ -132,12 +132,12 @@ ps_files=(
     dotfiles.ps1
     home/dot_local/bin/dotfiles.ps1
     tests/cli.ps1
-    doctor.ps1
-    setup-host.ps1
+    scripts/commands/doctor.ps1
+    scripts/commands/setup.ps1
     lib/chezmoi-guard.ps1
     lib/terminal.ps1
     scripts/chezmoi-update.ps1
-    scripts/payload-update.ps1
+    scripts/commands/payloads-sync.ps1
     tests/run.ps1
     tests/terminal.ps1
 )

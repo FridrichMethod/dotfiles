@@ -7,7 +7,7 @@ Claude helpers. The cases that run the kit need an installed one:
 DOTFILES_TEST_KIT_HOME names a home it is installed in, as its installer lays
 it out (launchers in .local/bin, zsh completions in
 .local/share/zsh/site-functions, helpers in .claude/coding-agent-kit); CI's
-Unix jobs install the real kit there through scripts/payload-update.sh. The
+Unix jobs install the real kit there through dotfiles payloads sync. The
 kit does not install on native Windows, so there, as anywhere without it,
 those cases skip. The fixtures are the parts of the launcher suites' setUp
 they read; they reach the kit only through its installed paths.

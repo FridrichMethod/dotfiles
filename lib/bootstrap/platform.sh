@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Host, profile and platform detection for doctor.sh and setup-host.sh: the
+# Host, profile and platform detection for scripts/commands/doctor.sh and scripts/commands/setup.sh: the
 # host a configured home's ~/.config/chezmoi/chezmoi.toml selects.
 # Sourced only; defines functions and changes no shell options. Bash 3.2
 # compatible and `set -u` safe; nothing here splits words by the caller's IFS.

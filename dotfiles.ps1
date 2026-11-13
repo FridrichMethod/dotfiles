@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Parse GNU-style arguments before invoking the existing Windows backends.
+# Parse GNU-style arguments before invoking the native Windows command backends.
 # No param block: PowerShell named-parameter binding must not consume $args.
 Set-StrictMode -Version Latest
 $PSNativeCommandUseErrorActionPreference = $false
@@ -171,10 +171,10 @@ if ($helpRequested) { Write-DotfilesCliHelp $command; exit 0 }
 $backend = ''
 $childArguments = @()
 switch -CaseSensitive ($command) {
-    'doctor' { $backend = Join-Path $PSScriptRoot 'doctor.ps1' }
-    'setup' { $backend = Join-Path $PSScriptRoot 'setup-host.ps1' }
+    'doctor' { $backend = Join-Path $PSScriptRoot 'scripts/commands/doctor.ps1' }
+    'setup' { $backend = Join-Path $PSScriptRoot 'scripts/commands/setup.ps1' }
     'payloads sync' {
-        $backend = Join-Path $PSScriptRoot 'scripts/payload-update.ps1'
+        $backend = Join-Path $PSScriptRoot 'scripts/commands/payloads-sync.ps1'
         $parameters = @{ Now = $true }
         if ($items.Count -gt 0) { $parameters.Item = $items.ToArray() }
     }

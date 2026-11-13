@@ -189,7 +189,7 @@ e2e_block_lines() {
 }
 
 # e2e_loop_next RC PENDING ACTIONABLE APPLIED: the apply loop's verdict on
-# one ./setup-host.sh --yes run, as one word, from its exit code RC, the ids
+# one ./dotfiles setup --yes run, as one word, from its exit code RC, the ids
 # of its "HUMAN steps pending:" line, whether a printed block gives the
 # harness something to do (1) and whether a step applied (1). blocks: exit
 # 3 with such a block; rerun: exit 3, nothing to do but a step applied;

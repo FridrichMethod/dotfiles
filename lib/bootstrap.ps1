@@ -1,6 +1,6 @@
 #Requires -Version 7.0
-# Day-zero helpers for doctor.ps1 and setup-host.ps1, the thin Windows twins of
-# doctor.sh and setup-host.sh. Dot-source only: this file defines functions and
+# Day-zero helpers for scripts/commands/doctor.ps1 and setup.ps1, the native
+# Windows twins of scripts/commands/doctor.sh and setup.sh. Dot-source only: this file defines functions and
 # changes no preference, location, variable or environment of its caller.
 # It reads the same config/bootstrap manifests as lib/bootstrap/*.sh with the
 # same rules. tests/test_bootstrap_manifest.py validates them; these readers
@@ -193,7 +193,7 @@ function ConvertFrom-BootstrapVersionText {
 
 function Use-BootstrapToolEnvironment {
     # Run Action with GH_TELEMETRY=0, GH_NO_UPDATE_NOTIFIER=1 and
-    # TLDR_AUTO_UPDATE_DISABLED=1, which doctor.sh and setup-host.sh export:
+    # TLDR_AUTO_UPDATE_DISABLED=1, which scripts/commands/doctor.sh and setup.sh export:
     # recent gh releases write a telemetry device id on any command, --version
     # included, the notifier checks GitHub for a release, and the tldr C
     # client answers even --version by downloading the pages archive once its
@@ -350,7 +350,7 @@ function Test-BootstrapTool {
     $version = ''
     switch -CaseSensitive ($parsed.Kind) {
         'file' {
-            # An executable file (doctor.sh's file: probes) may name a version flag.
+            # An executable file (the Unix doctor's file: probes) may name a version flag.
             $candidate = Expand-BootstrapPath $parsed.Value
             if ([IO.File]::Exists($candidate)) {
                 $path = $candidate
@@ -387,7 +387,7 @@ function Test-BootstrapTool {
 }
 
 function Get-BootstrapToolStatus {
-    # bootstrap_check_tool's verdict on one tools.tsv row, which doctor.ps1
+    # bootstrap_check_tool's verdict on one tools.tsv row, which scripts/commands/doctor.ps1
     # reports and W1-winget's filter trusts: Status is ok, missing, outdated
     # (below the floor) or unknown (found, but no version to hold against the
     # floor); Probe is the Test-BootstrapTool result. The row is probed with

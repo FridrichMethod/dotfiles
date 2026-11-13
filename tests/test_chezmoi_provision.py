@@ -38,14 +38,14 @@ class ProvisionTests(unittest.TestCase):
         )
 
     def test_setup_list_names_chezmoi_steps(self):
-        result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list")
+        result = self.run_script("scripts/commands/setup.sh", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("S4-chezmoi", result.stdout)
         self.assertIn("H7-deploy", result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_unconfigured_home_needs_host(self):
-        expected = {"setup-host.sh": "no host: pass --host", "doctor.sh": "no host given"}
+        expected = {"scripts/commands/setup.sh": "no host: pass --host", "scripts/commands/doctor.sh": "no host given"}
         for script, text in expected.items():
             with self.subTest(script=script):
                 result = self.run_script(script, "--list")
@@ -75,7 +75,7 @@ step_S4_chezmoi_plan
                 self.assertEqual(list(self.home.iterdir()), [])
 
     def test_doctor_list_names_chezmoi_checks(self):
-        result = self.run_script("doctor.sh", "--host", "lab-ubuntu", "--list")
+        result = self.run_script("scripts/commands/doctor.sh", "--host", "lab-ubuntu", "--list")
         self.assertEqual(result.returncode, 0, result.stderr)
         ids = {line.split("\t")[0] for line in result.stdout.splitlines()}
         self.assertIn("chezmoi", ids)
@@ -83,7 +83,7 @@ step_S4_chezmoi_plan
         self.assertEqual(list(self.home.iterdir()), [])
 
     def test_deploy_step_only_prints_reviewed_procedure(self):
-        result = self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--print-manual")
+        result = self.run_script("scripts/commands/setup.sh", "--host", "lab-ubuntu", "--print-manual")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("# Follow Fresh home by hand in docs/bootstrap.md from this checkout.", result.stdout)
         self.assertNotIn("init --apply", result.stdout)
@@ -103,7 +103,7 @@ step_S4_chezmoi_plan
     def test_config_role_selects_host_without_environment(self):
         self.write_config("[data]", "host = 'lab-ubuntu'")
         before = self.home_snapshot()
-        for script, step in (("doctor.sh", "chezmoi-config"), ("setup-host.sh", "H7-deploy")):
+        for script, step in (("scripts/commands/doctor.sh", "chezmoi-config"), ("scripts/commands/setup.sh", "H7-deploy")):
             with self.subTest(script=script):
                 explicit = self.run_script(script, "--host", "lab-ubuntu", "--list")
                 other = self.run_script(script, "--host", "sherlock", "--list")
@@ -119,25 +119,25 @@ step_S4_chezmoi_plan
         os_release.write_text("ID=ubuntu\n")
         self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
         self.write_config("[data]", 'host = "generic"')
-        doctor = self.run_script("doctor.sh", "--list")
+        doctor = self.run_script("scripts/commands/doctor.sh", "--list")
         self.assertEqual(doctor.returncode, 0, doctor.stderr)
         self.assertIn("selects [data].host generic (no host overlay): checking as --platform debian",
                       doctor.stderr)
-        setup = self.run_script("setup-host.sh", "--list")
+        setup = self.run_script("scripts/commands/setup.sh", "--list")
         self.assertEqual(setup.returncode, 2, setup.stderr)
         self.assertIn("selects [data].host generic (no host overlay)", setup.stderr)
         self.assertIn("pass --host HOST", setup.stderr)
-        self.assertEqual(self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--list").returncode, 0)
+        self.assertEqual(self.run_script("scripts/commands/setup.sh", "--host", "lab-ubuntu", "--list").returncode, 0)
 
     def test_configured_home_without_one_role_requires_host(self):
         for lines in (("[git]", "autoAdd = false"), ("[data]", "host = 'fedora'"),
                       ("[data]", "host = 'mac'", "host = 'lab-ubuntu'")):
             with self.subTest(lines=lines):
                 self.write_config(*lines)
-                doctor = self.run_script("doctor.sh", "--list")
+                doctor = self.run_script("scripts/commands/doctor.sh", "--list")
                 self.assertEqual(doctor.returncode, 2, doctor.stderr)
                 self.assertIn("selects no single known [data].host; pass --host HOST", doctor.stderr)
-                setup = self.run_script("setup-host.sh", "--list")
+                setup = self.run_script("scripts/commands/setup.sh", "--list")
                 self.assertEqual(setup.returncode, 2, setup.stderr)
                 self.assertIn("selects no single known [data].host; pass --host HOST", setup.stderr)
 
@@ -146,7 +146,7 @@ step_S4_chezmoi_plan
         os_release = self.base / "os-release"
         os_release.write_text("ID=ubuntu\n")
         self.env["BOOTSTRAP_OS_RELEASE"] = str(os_release)
-        return self.run_script("setup-host.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-deploy")
+        return self.run_script("scripts/commands/setup.sh", "--host", "lab-ubuntu", "--check", "--only", "H7-deploy")
 
     def test_configured_home_reports_h7_deploy_done(self):
         self.write_config("[data]", "host = 'lab-ubuntu'")
@@ -277,7 +277,8 @@ step_S4_chezmoi_check
         shutil.copytree(ROOT / "config", repo / "config")
         (repo / "docs").mkdir()
         shutil.copy2(ROOT / "docs/bootstrap.md", repo / "docs/bootstrap.md")
-        shutil.copy2(ROOT / "doctor.sh", repo / "doctor.sh")
+        (repo / "scripts/commands").mkdir(parents=True)
+        shutil.copy2(ROOT / "scripts/commands/doctor.sh", repo / "scripts/commands/doctor.sh")
         (repo / "config/bootstrap/tools.tsv").write_text(
             "id\ttier\thosts\tprobe\tversion_flag\tfloor\tabsent\tdoc\n"
             "chezmoi\tcore\tall\tchezmoi\t--version\t2.74.0\tchezmoi is missing\tS4-chezmoi\n"
@@ -287,7 +288,7 @@ step_S4_chezmoi_check
         (local / "chezmoi").symlink_to(binary)
         before = sorted(str(path.relative_to(self.home)) for path in self.home.rglob("*"))
         result = subprocess.run(
-            [shutil.which("bash"), str(repo / "doctor.sh"), "--host", "lab-ubuntu", "--tsv"],
+            [shutil.which("bash"), str(repo / "scripts/commands/doctor.sh"), "--host", "lab-ubuntu", "--tsv"],
             env=self.env, text=True, capture_output=True, stdin=subprocess.DEVNULL, check=False,
         )
         self.assertEqual(result.returncode, 1, result.stderr)

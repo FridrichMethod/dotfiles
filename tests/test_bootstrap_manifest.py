@@ -34,7 +34,7 @@ STEP_IDS = (
     "W1-winget", "W1-psresources", "W1-font", "W1-bat-theme", "W1-chezmoi", "HW-deploy", "HW-clone",
     "HW-execution-policy", "HW-ssh-agent", "HW-wsl", "HW-auth",
     "X-host-tools", "X-contributor", "X-other-linux", "X-rc-protection", "X-recovery")
-# Every id a doctor reports besides tools.tsv rows: doctor.sh's structural
+# Every id a doctor reports besides tools.tsv rows: the Unix doctor's structural
 # checks and the --online/--smoke rows.
 RESERVED_IDS = ("locale", "path-order", "rc-pollution", "omz-order", "nvm-homebrew", "payloads",
                 "gh-auth", "claude-auth", "codex-auth", "zsh-smoke", "chezmoi-config")
@@ -101,8 +101,8 @@ PSMODULE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 GITHUB_RE = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$")
 PINNED_URL_RE = re.compile(r"/(?:[0-9a-f]{40}|(?:rust-)?v?[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)/")
 HEADING_RE = re.compile(r"^### ([A-Za-z0-9-]+):")
-# The step lists of setup-host.sh (STEPS_REGISTRY in lib/bootstrap/steps.sh)
-# and setup-host.ps1 (each list assigned once).
+# The step lists of scripts/commands/setup.sh (STEPS_REGISTRY in lib/bootstrap/steps.sh)
+# and scripts/commands/setup.ps1 (each list assigned once).
 REGISTRY_RE = re.compile(r"^STEPS_REGISTRY='([^']*)'", re.M)
 PS_STEP_LIST_RE = re.compile(r"^[ \t]*\$(AutomatedSteps|HumanSteps|BlockingHumanSteps) = @\(([^)\r\n]*)\)", re.M)
 PS_ITEM_RE = re.compile(r"'([^']*)'")
@@ -565,7 +565,7 @@ def check_docs(repo, tools, errors):
 
 
 def check_step_lists(repo, errors):
-    """STEPS_REGISTRY and the setup-host.ps1 lists name only contract ids, and every non-X- id."""
+    """STEPS_REGISTRY and the scripts/commands/setup.ps1 lists name only contract ids, and every non-X- id."""
     named, where = set(), "lib/bootstrap/steps.sh"
     match = REGISTRY_RE.search(read_text(repo / where, where, errors) or "")
     rows = [line.split()[0] for line in (match.group(1).splitlines() if match else []) if line.strip()]
@@ -575,7 +575,7 @@ def check_step_lists(repo, errors):
     for step in sorted(set(rows) - set(STEP_IDS)):
         report(errors, "step-lists", where, f"{step} is not a contract step id")
     named.update(rows)
-    where = "setup-host.ps1"
+    where = "scripts/commands/setup.ps1"
     lists = {"AutomatedSteps": [], "HumanSteps": [], "BlockingHumanSteps": []}
     for name, body in PS_STEP_LIST_RE.findall(read_text(repo / where, where, errors) or ""):
         lists[name].append(PS_ITEM_RE.findall(body))
@@ -671,7 +671,7 @@ class RejectionTests(unittest.TestCase):
         self.config = self.repo / "config/bootstrap"
         shutil.copytree(ROOT / "config/bootstrap", self.config)
         for rel in ("docs/bootstrap.md", "docs/dependencies.md", SKILL_CLAUDE, SKILL_CODEX,
-                    "lib/bootstrap/steps.sh", "setup-host.ps1"):
+                    "lib/bootstrap/steps.sh", "scripts/commands/setup.ps1"):
             (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / rel, self.repo / rel)
         self.assertEqual(self.errors(), [])
@@ -680,7 +680,7 @@ class RejectionTests(unittest.TestCase):
         return validate(self.config, self.repo)
 
     def path(self, rel):
-        return self.repo / rel if str(rel).startswith((".", "docs", "lib", "setup-host")) else self.config / rel
+        return self.repo / rel if str(rel).startswith((".", "docs", "lib", "scripts/commands/")) else self.config / rel
 
     def replace(self, rel, old, new):
         path = self.path(rel)
@@ -781,7 +781,7 @@ class RejectionTests(unittest.TestCase):
         ])
 
     def test_step_lists(self):
-        steps, setup = "lib/bootstrap/steps.sh", "setup-host.ps1"
+        steps, setup = "lib/bootstrap/steps.sh", "scripts/commands/setup.ps1"
         doctor_row = "\nH7-doctor judgment - no macos,debian,hpc'"
         self.check([
             ("step-lists", "unknown registry id",

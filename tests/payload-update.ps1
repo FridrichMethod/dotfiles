@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# scripts/payload-update.ps1 against fake installers served from file:// URIs:
+# scripts/commands/payloads-sync.ps1 against fake installers served from file:// URIs:
 # the real config/payloads.tsv with its raw.githubusercontent.com prefix
 # pointed at a temporary directory. PowerShell's $HOME is the account's
 # profile on Windows whatever HOME says, so the fixture copy of the config
@@ -62,14 +62,14 @@ try {
     $config = $config.TrimEnd() + "`n" +
         "skills`twindows-update`tInvoke-DotfilesPayloadScript (Join-Path `$env:LOCALAPPDATA 'awesome-skills/update.ps1') -Update`n"
     Write-Fixture (Join-Path $fixture 'config/payloads.tsv') $config
-    Write-Fixture (Join-Path $fixture 'scripts/payload-update.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'scripts/payload-update.ps1')))
+    Write-Fixture (Join-Path $fixture 'scripts/commands/payloads-sync.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'scripts/commands/payloads-sync.ps1')))
     Write-Fixture (Join-Path $fixture 'lib/terminal.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'lib/terminal.ps1')))
     # The guard, .git and .chezmoiroot make the fixture a source a chezmoi
     # config can name.
     Write-Fixture (Join-Path $fixture 'lib/chezmoi-guard.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'lib/chezmoi-guard.ps1')))
     Write-Fixture (Join-Path $fixture '.chezmoiroot') "home`n"
     [void][IO.Directory]::CreateDirectory((Join-Path $fixture '.git'))
-    $hook = Join-Path $fixture 'scripts/payload-update.ps1'
+    $hook = Join-Path $fixture 'scripts/commands/payloads-sync.ps1'
     # PyMOLScripts' and awesome-skills' installers read a configs/ or scripts/
     # directory beside themselves as a checkout's, so their fakes record the
     # directory they run from, who may enter it (its mode; on Windows its
@@ -187,10 +187,10 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
         Assert-True ($run.Code -eq 0 -and (Get-Events $case) -ceq 'pymol-install []') "events: $(Get-Events $case); output: $($run.Text)"
     }
     # Where sync-payloads refuses (here: a home without a chezmoi config), the
-    # retry line is this hook's -Now line: & 'HOOK' -Now ITEM.
+    # retry line uses this checkout's public frontend.
     function Test-Rerun([string]$Text, [string]$Before, [string]$After) {
         $at = $Text.IndexOf($Before + "& '")
-        $end = $Text.IndexOf("payload-update.ps1' -Now " + $After, [Math]::Max($at, 0))
+        $end = $Text.IndexOf("dotfiles.ps1' payloads sync " + $After, [Math]::Max($at, 0))
         return $at -ge 0 -and $end -gt $at -and -not $Text.Substring($at, $end - $at).Contains("`n")
     }
     Test-Case '-Now fails for a failed or unknown item and says how to retry; exit 75 is no failure; nothing is recorded' {
@@ -222,18 +222,28 @@ if (`$env:FAKE_SKILLS_STATUS -and `$env:FAKE_SKILLS_STATUS -ne '0') { exit ([int
             Write-Fixture (Join-Path $case.Home '.config/chezmoi/chezmoi.toml') (
                 "destDir = `"$(Resolve-DotfilesDirectory $case.Home)`"`nsourceDir = `"$(Resolve-DotfilesDirectory $fixture)`"`n")
             $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '4' }
+            Assert-True ($run.Code -eq 1 -and (Test-Rerun $run.Text 'pymol: install failed (exit 4); retry with: ' 'pymol')) $run.Text
+            Write-Fixture (Join-Path $case.Home '.local/bin/dotfiles.ps1') ([IO.File]::ReadAllText((Join-Path $repoRoot 'home/dot_local/bin/dotfiles.ps1')))
+            $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '4' }
             Assert-True ($run.Code -eq 1 -and $run.Text.Contains('pymol: install failed (exit 4); retry with: sync-payloads pymol')) $run.Text
+            $foreign = Join-Path $case.Root 'foreign checkout'
+            Write-Fixture (Join-Path $foreign '.chezmoiroot') "home`n"
+            [void][IO.Directory]::CreateDirectory((Join-Path $foreign '.git'))
+            Write-Fixture (Join-Path $case.Home '.config/chezmoi/chezmoi.toml') (
+                "destDir = `"$(Resolve-DotfilesDirectory $case.Home)`"`nsourceDir = `"$(Resolve-DotfilesDirectory $foreign)`"`n")
+            $run = Invoke-Hook $case @('-Now', 'pymol') @{ FAKE_PYMOL_STATUS = '4' }
+            Assert-True ($run.Code -eq 1 -and (Test-Rerun $run.Text 'pymol: install failed (exit 4); retry with: ' 'pymol')) $run.Text
         }
     }
-    Test-Case 'the -Now retry line parses as one command for a checkout path with a typographic quote' {
+    Test-Case 'the public retry line parses as one command for a checkout path with a typographic quote' {
         # PowerShell also ends a single-quoted string at U+2018 to U+201B, so
         # the line escapes those too. The child writes its log to a UTF-8
         # file, which no console code page can mangle.
         $quoted = Join-Path $testRoot "O$([char]0x2019)Neil"
-        foreach ($file in 'config/payloads.tsv', 'scripts/payload-update.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1') {
+        foreach ($file in 'config/payloads.tsv', 'scripts/commands/payloads-sync.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1') {
             Write-Fixture (Join-Path $quoted $file) ([IO.File]::ReadAllText((Join-Path $fixture $file)))
         }
-        $quotedHook = Join-Path $quoted 'scripts/payload-update.ps1'
+        $quotedHook = Join-Path $quoted 'scripts/commands/payloads-sync.ps1'
         $capture = Join-Path $testRoot 'quoted.log'
         $wrapper = Join-Path $testRoot 'capture.ps1'
         Write-Fixture $wrapper @'
@@ -255,8 +265,16 @@ exit $LASTEXITCODE
         $ast = [Management.Automation.Language.Parser]::ParseInput($rerun, [ref]$null, [ref]$errors)
         $command = $ast.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true)
         $elements = @(if ($command) { $command.CommandElements })
-        Assert-True ($errors.Count -eq 0 -and $command.InvocationOperator -eq 'Ampersand' -and $elements.Count -eq 3 -and
-            $elements[0].Value -ceq $quotedHook -and $elements[1].ParameterName -ceq 'Now' -and $elements[2].Value -ceq 'pymol') "retry line: $rerun"
+        Assert-True ($errors.Count -eq 0 -and $command.InvocationOperator -eq 'Ampersand' -and $elements.Count -eq 4 -and
+            $elements[0].Value -ceq (Join-Path $quoted 'dotfiles.ps1') -and $elements[1].Value -ceq 'payloads' -and
+            $elements[2].Value -ceq 'sync' -and $elements[3].Value -ceq 'pymol') "retry line: $rerun"
+        Write-Fixture (Join-Path $quoted 'dotfiles.ps1') @'
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'retry-replay.json'), (ConvertTo-Json -InputObject @($args)))
+exit 0
+'@
+        & ([scriptblock]::Create($rerun))
+        $replayed = @([IO.File]::ReadAllText((Join-Path $quoted 'retry-replay.json')) | ConvertFrom-Json)
+        Assert-True (($replayed -join '|') -ceq 'payloads|sync|pymol') "Retry source or argv changed: $replayed"
     }
     Test-Case 'a download runs alone in a fresh private directory, removed afterwards' {
         # What another user planted in a shared temporary directory is never
@@ -341,14 +359,14 @@ exit $LASTEXITCODE
             $stalled = Join-Path $testRoot 'stalled'
             $port = $listener.LocalEndpoint.Port
             Write-Fixture (Join-Path $stalled 'config/payloads.tsv') ([IO.File]::ReadAllText((Join-Path $fixture 'config/payloads.tsv')).Replace($base, "http://127.0.0.1:$port/"))
-            Write-Fixture (Join-Path $stalled 'scripts/payload-update.ps1') ([IO.File]::ReadAllText($hook))
+            Write-Fixture (Join-Path $stalled 'scripts/commands/payloads-sync.ps1') ([IO.File]::ReadAllText($hook))
             # Every file the hook loads, as in a checkout, so the limit times a real run.
             foreach ($library in 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1') {
                 Write-Fixture (Join-Path $stalled $library) ([IO.File]::ReadAllText((Join-Path $fixture $library)))
             }
             $case = New-Case
             $clock = [Diagnostics.Stopwatch]::StartNew()
-            $run = Invoke-Hook $case @('-Now') @{ DOTFILES_PAYLOAD_TIMEOUT = '3' } (Join-Path $stalled 'scripts/payload-update.ps1')
+            $run = Invoke-Hook $case @('-Now') @{ DOTFILES_PAYLOAD_TIMEOUT = '3' } (Join-Path $stalled 'scripts/commands/payloads-sync.ps1')
             $clock.Stop()
             Assert-True ($clock.Elapsed.TotalSeconds -lt 9) "a stalled download held the run for $($clock.Elapsed.TotalSeconds)s"
             Assert-True ($run.Code -eq 1 -and $run.Text.Contains("cannot run http://127.0.0.1:$port/PyMOLScripts/main/install.ps1")) $run.Text
@@ -358,7 +376,7 @@ exit $LASTEXITCODE
     }
     Test-Case 'a call without -Now, a bare item or an unknown argument included, prints one usage line and exits 2' {
         $case = New-Case
-        $usage = 'dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]'
+        $usage = 'dotfiles: usage: dotfiles.ps1 payloads sync [ITEM...]'
         function Assert-UsageError([string[]]$Arguments, [string]$What) {
             $run = Invoke-Hook $case $Arguments
             Assert-True ($run.Code -eq 2 -and $run.Text -ceq $usage -and (Get-Events $case) -ceq '') "$($What): exit $($run.Code), events $(Get-Events $case), output: $($run.Text)"

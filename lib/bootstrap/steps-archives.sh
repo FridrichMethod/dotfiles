@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# Auto steps of setup-host.sh that unpack pinned release archives:
+# Auto steps of scripts/commands/setup.sh that unpack pinned release archives:
 # S5-codex S6-nerd-font S6-kitty. Each archive is fetched to the scratch dir
 # with its sha256 checked before tar reads it. Sourced only (after steps.sh
 # and steps-common.sh); defines functions and changes no shell options.
@@ -67,7 +67,7 @@ step_S5_codex_check() {
     fi
     have=$(steps_codex_package_version "$bin")
     if [ -z "$have" ]; then
-        STEP_DETAIL="codex at $bin is not a codex-package install; ./doctor.sh reports its version"
+        STEP_DETAIL="codex at $bin is not a codex-package install; $(steps_quote "$STEPS_ROOT/dotfiles") doctor reports its version"
         return 0
     fi
     if [ -n "$pin" ] && bootstrap_version_ge "$have" "$pin"; then

@@ -12,8 +12,8 @@ library of Claude Code and Codex). Each repository owns its installation,
 update, selection and locking, and documents one command that installs it and
 one that updates it. Dotfiles runs those commands only when a person asks:
 `dotfiles payloads sync` (or the interactive `sync-payloads` shortcut) runs the
-payload hook, `scripts/payload-update.sh` (Unix) or
-`scripts/payload-update.ps1` (native Windows), and
+internal payload backend, `scripts/commands/payloads-sync.sh` (Unix) or
+`scripts/commands/payloads-sync.ps1` (native Windows), and
 [`config/payloads.tsv`](../config/payloads.tsv) names them. No login, profile
 or schedule installs or refreshes them.
 
@@ -50,13 +50,13 @@ those below; `tests/payload-update.sh` fails on any other.
 | Field | Meaning |
 | --- | --- |
 | `channel` | `kit` only: the coding-agent-kit `MAJOR.MINOR` channel this configuration is written for |
-| `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the hook runs its install command, after that its update command |
+| `unix-probe`, `windows-probe` | succeeds once the item is installed; until then the backend runs its install command, after that its update command |
 | `unix-install`, `windows-install` | the first-install command; an item without a `windows-install` row (the kit) is not available on native Windows: it is no default item there, and a run that names it says so (exit 0) |
 | `unix-update`, `windows-update` | the update command; without one the install command runs again, which is the update for PyMOLScripts and awesome-skills |
-| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the hook words such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills where it will not go on alone: an interrupted update it cannot undo because a file it would restore was edited since, an update that would remove many installed skills at once, a Codex skill folder that would pass 1,990 entries, or a Codex folder layout it cannot use; its message names the command to run, such as `--restore` |
+| `person-status` | an exit status with which the repo stops for a person, whose message names what to do; the backend words such a failure as one that waits for a person. `3` for both: PyMOLScripts at a locally edited `~/.pymolrc` or `~/.pymolrc.py`, which it leaves alone (see [the hook](#unix)); awesome-skills where it will not go on alone: an interrupted update it cannot undo because a file it would restore was edited since, an update that would remove many installed skills at once, a Codex skill folder that would pass 1,990 entries, or a Codex folder layout it cannot use; its message names the command to run, such as `--restore` |
 
 `unix-*` values are POSIX `sh` and `windows-*` values PowerShell 7, evaluated
-by the hook (the sh one with the kit channel in `$channel`) and with one
+by the backend (the sh one with the kit channel in `$channel`) and with one
 helper:
 
 - `payload_script INTERPRETER SOURCE [ARG...]` (sh) and
@@ -118,9 +118,9 @@ any other URL, so a test can never reach the network.
 
 ### Unix
 
-Only a person runs `dotfiles payloads sync` (compatibility:
-`scripts/payload-update.sh --now`), in the foreground: no login, profile or schedule installs or updates a payload repo (any other call
-is a usage error, see below), and the script keeps no state of its own.
+Only a person runs `dotfiles payloads sync`, in the foreground: no login,
+profile or schedule installs or updates a payload repo. The frontend invokes
+the internal backend directly with `--now`; the backend keeps no state of its own.
 
 ```sh
 sync-payloads [kit] [pymol] [skills]                      # home/dot_aliases; follows the chezmoi config
@@ -140,9 +140,8 @@ and returns 1. The installed launcher validates the home's regular
 and returns 1. It uses only the configured sourceDir, with no cwd fallback.
 Use `CHECKOUT/dotfiles payloads sync [ITEM...]` before deployment or when
 recovering configuration. This selects that explicit checkout; installed
-commands always use the configured checkout. The original
-`sh CHECKOUT/scripts/payload-update.sh --now [ITEM...]` interface remains
-supported. All these paths retain the backend's status and maintenance
+commands always use the configured checkout. Internal backend paths are not
+a public interface. Public commands retain the backend's status and maintenance
 refusal: `dotfiles: payload update refused during maintenance.` and exit 1.
 
 A run takes the items it is given, else those of `DOTFILES_PAYLOAD_ITEMS`
@@ -163,12 +162,12 @@ item with one line:
 - any other status: `kit: install failed (exit 1); retry with: sync-payloads
   kit`.
 
-These lines name `sync-payloads` only where it runs this hook: this home's
-chezmoi config is valid and names this checkout. Anywhere else, where
-`sync-payloads` refuses or runs another checkout's hook, they name this
-hook's own line instead, its path in single quotes:
-`retry with: sh '/path/to/dotfiles/scripts/payload-update.sh' --now kit`
-(Windows: `& 'C:\path\to\dotfiles\scripts\payload-update.ps1' -Now pymol`).
+These lines name `sync-payloads` only when the home's valid chezmoi config
+and available installed launcher route to this checkout. With no config, a
+different configured source or a missing launcher, they name this backend's
+own checkout frontend, with its path quoted:
+`retry with: '/path/to/dotfiles/dotfiles' payloads sync kit`
+(Windows: `& 'C:\path\to\dotfiles\dotfiles.ps1' payloads sync pymol`).
 
 It exits 1 when an item failed, and 0 otherwise. A failed item is retried
 only by a person's next run.
@@ -182,10 +181,10 @@ both files and the installer never touches), or forced with that command (its
 `--force`, `-Force` on Windows, which keeps the edited file as
 `NAME.local-<timestamp>`).
 
-Any call without `--now` first (no arguments, a bare item such as
-`sh .../payload-update.sh kit`, or any other argument) prints
-`dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]` on stderr and
-exits 2 before anything else, under maintenance too.
+The internal backend requires `--now` first; without it, it prints
+`dotfiles: usage: dotfiles payloads sync [ITEM...]` on stderr and exits 2
+before anything else, under maintenance too. The public CLI supplies the
+sentinel itself and rejects user-supplied `--now`.
 
 Sherlock's site rules forbid detached login-node workers, and dotfiles starts
 none: no login starts a run (`tests/test_chezmoi_guard.py` checks bash and sh
@@ -195,7 +194,7 @@ override.
 
 ### Native Windows
 
-`scripts/payload-update.ps1` is the twin, and only a person runs it too: the
+`scripts/commands/payloads-sync.ps1` is the internal Windows backend: the
 tail of `home/Documents/PowerShell/profile.ps1` runs only the update
 hook. Its items are those with a `windows-install` row, PyMOLScripts and
 awesome-skills: the kit has none, since it installs nothing on native
@@ -209,7 +208,7 @@ and 0 otherwise, so `$LASTEXITCODE` is the run's status, not an installer's.
 Under maintenance a `-Now` run warns
 `dotfiles: payload update refused during maintenance.` and exits 1. A call
 without `-Now` prints
-`dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]` on stderr and
+`dotfiles: usage: dotfiles.ps1 payloads sync [ITEM...]` on stderr and
 exits 2, under maintenance too.
 
 Run it and the functions below from an ordinary PowerShell: an installer run
@@ -233,8 +232,8 @@ dispatcher prints
 `dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run & CHECKOUT\dotfiles.ps1 explicitly to recover.`
 and exits 1. The config must be a regular file without a reparse point and
 pass the selected checkout's `lib/chezmoi-guard.ps1`. Installed routing uses
-only its validated sourceDir. Recover with an explicit checkout entrypoint;
-`& CHECKOUT\scripts\payload-update.ps1 -Now [ITEM...]` remains supported.
+only its validated sourceDir. Recover with the explicit public checkout
+command `& 'CHECKOUT\dotfiles.ps1' payloads sync [ITEM...]`.
 Bare `dotfiles payloads sync` works after the manual
 [User PATH procedure](bootstrap.md#windows-command-discovery), including in a
 fresh `-NoProfile` PowerShell 7; the functions keep their interactive placement.
@@ -279,28 +278,29 @@ lock: concurrent runs converge.
   item's probe and, once the kit's passes, checks that the three helpers are
   in `~/.claude/coding-agent-kit/`; `.\dotfiles.ps1 doctor` checks only the items with
   a `windows-install` row, so neither the kit nor its helpers, and names an
-  item the file does not know. Missing items end with what to run: where the
-  home's chezmoi config resolves, `run sync-payloads ITEM`, which on Unix
-  also names, shell-quoted, the hook of the checkout the config names;
-  wherever `sync-payloads` refuses (no config, a config the guard refuses,
-  maintenance), the running clone's line alone, its path quoted
-  (`run sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
-  `run & '<clone>\scripts\payload-update.ps1' -Now ITEM`).
+  item the file does not know. Missing items end with public payload advice.
+  Windows doctor uses `sync-payloads ITEM` only when a valid config and installed
+  launcher reach its own checkout; otherwise it names its own quoted frontend.
+  Unix doctor uses a quoted explicit checkout frontend. Its helper
+  `bootstrap_payload_source ROOT` returns the usable configured checkout,
+  or ROOT when no config exists. Doctor keeps explicit ROOT advice if the
+  helper refuses; the H7-payloads block instead prints notes only.
+  The helper returns a path, never a command string.
   When the kit or one of its helpers is missing, it also says what fails until
   then. All of it is `warn`,
   never `missing`. It only reads paths and files, never a record of an
   earlier run, so the doctor stays read-only.
-- `./setup-host.sh` prints H7-payloads as a non-blocking judgment block until
+- `./dotfiles setup` prints H7-payloads as a non-blocking judgment block until
   the `payloads` row is `ok`. Its run line,
-  `sh '<hook>' --now`, runs the running clone's hook on a home without a
-  chezmoi config and the hook of the checkout the config names otherwise, and
+  `'<checkout>/dotfiles' payloads sync`, uses the running clone on a home
+  without a chezmoi config and the configured checkout otherwise, and
   installs the selected items now and, run again later, updates them, as
   `sync-payloads` does in an interactive shell of a configured home (the
   block of a home without a config names only the line). On a home with a
   chezmoi config, under maintenance or while the config does not resolve
   from this checkout, the block prints no run line and points at the
   doctor's `chezmoi-config` row.
-- `./setup-host.sh`, `setup-host.ps1` and the login update never run an
+- `./dotfiles setup`, `.\dotfiles.ps1 setup` and the login update never run an
   installer of a payload repository.
 
 ## Trust

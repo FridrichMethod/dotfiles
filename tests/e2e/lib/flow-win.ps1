@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# The flow of tests/e2e/run.ps1: the setup-host.ps1 -Host win -Yes loop with
+# The flow of tests/e2e/run.ps1: the dotfiles.ps1 setup --host win --yes loop with
 # its HUMAN blocks up to the HW-deploy step, and the whole sequence:
 # clone, winget, doctor-initial, the no-write -Check, the apply loop, the
 # first apply through docs/bootstrap.md "Fresh Windows home by hand", the second
@@ -41,7 +41,7 @@ function Invoke-E2EBlocks {
 }
 
 function Invoke-E2EApplyLoop {
-    # setup-host.ps1 -Host win -Yes until only the HW-deploy block is
+    # dotfiles.ps1 setup --host win --yes until only the HW-deploy block is
     # left, at most eight runs, each with the PATH a new terminal would read;
     # Get-E2ELoopNext decides on each run, as e2e_loop_next does in
     # inside.sh. blocks: a block the harness must act on (no Windows block

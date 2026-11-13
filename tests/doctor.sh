@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Fixture tests for doctor.sh and lib/bootstrap/checks.sh: tool probes and
+# Fixture tests for scripts/commands/doctor.sh and lib/bootstrap/checks.sh: tool probes and
 # floors, tier selection, exit codes, host resolution, TSV shape, structural
 # checks, --online/--smoke, and the read-only, offline promise. The fixture
 # repo has its own small config/bootstrap/tools.tsv; FAKE_BIN stubs print
@@ -37,16 +37,16 @@ TEST_HOME="$TEST_TMP/home"
 EVENT_LOG="$TEST_TMP/events.log"
 OUT="$TEST_TMP/out"
 SHELL_TMP="$TEST_TMP/tmp"
-mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
+mkdir -p "$FIXTURE/scripts/commands" "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/docs" \
     "$FAKE_BIN" "$BREW_BIN" "$TEST_HOME" "$OUT" "$SHELL_TMP"
-cp "$REPO_ROOT/doctor.sh" "$FIXTURE/doctor.sh"
+cp "$REPO_ROOT/scripts/commands/doctor.sh" "$FIXTURE/scripts/commands/doctor.sh"
 cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 # The real step headings: every doc step a manifest row cites must have one.
 cp "$REPO_ROOT/docs/bootstrap.md" "$FIXTURE/docs/bootstrap.md"
 # The real payload probes, which the payloads check runs.
 cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
-chmod +x "$FIXTURE/doctor.sh"
+chmod +x "$FIXTURE/scripts/commands/doctor.sh"
 : >"$EVENT_LOG"
 ESC=$(printf '\033')
 
@@ -291,7 +291,7 @@ run_doctor() {
     done
     [ "$#" -eq 0 ] || shift
     : >"$EVENT_LOG"
-    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/doctor.sh" "$@" \
+    if env -i "${BASE_ENV[@]}" ${vars[@]+"${vars[@]}"} "$BASH" "$FIXTURE/scripts/commands/doctor.sh" "$@" \
         >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
@@ -368,7 +368,7 @@ assert_tsv_shape() {
 
 run_doctor help -- --help
 assert_rc 0
-assert_out 'Usage: ./doctor.sh'
+assert_out 'Usage: dotfiles doctor'
 assert_out '--online'
 run_doctor help-short -- -h
 assert_rc 0
@@ -388,8 +388,8 @@ expect_usage_error host-and-platform 'mutually exclusive' -- --host lab-ubuntu -
 expect_usage_error unknown-host "unknown host 'nowhere'" -- --host nowhere
 expect_usage_error unknown-platform "unknown platform 'plan9'" -- --platform plan9
 expect_usage_error unknown-tier "unknown tier 'gui'" -- --host lab-ubuntu --tier core,gui
-expect_usage_error win-host 'pwsh -File doctor.ps1 -Host win' -- --host win
-expect_usage_error win-host-equals 'pwsh -File doctor.ps1 -Host win' -- --host=win
+expect_usage_error win-host "dotfiles.ps1' doctor --host win" -- --host win
+expect_usage_error win-host-equals "dotfiles.ps1' doctor --host win" -- --host=win
 expect_usage_error no-host 'mac wsl-ubuntu lab-ubuntu sherlock marlowe win' --
 
 OS_UBUNTU="$TEST_TMP/os-release-ubuntu"
@@ -454,7 +454,7 @@ run_doctor baseline-log -- --host lab-ubuntu
 assert_rc 0
 assert_out '[dotfiles] [step] Checking host lab-ubuntu (debian); required tiers: core,cli,ai'
 assert_out "[dotfiles] [ok] core fzf: 0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
-assert_out '[dotfiles] [info] desktop psfzf: PowerShell module PSFzf; doctor.ps1 checks it'
+assert_out '[dotfiles] [info] desktop psfzf: PowerShell module PSFzf; dotfiles.ps1 doctor checks it'
 assert_err '[dotfiles] [warn] desktop desk-tool: not found; no terminal (docs/bootstrap.md S6-kitty)'
 assert_out '[dotfiles] [info] summary: '
 assert_out ' 0 outdated, 0 missing, 3 warn, 1 skip, 0 human (lab-ubuntu, required tiers: core,cli,ai)'
@@ -759,7 +759,7 @@ assert_row locale ok
 # then, never fails.
 mv "$TEST_HOME/.claude/coding-agent-kit/notify.cjs" "$TEST_TMP/notify.hidden"
 rm "$TEST_HOME/.pymolrc.py"
-SYNC_ADVICE="run sync-payloads ITEM (sh $FIXTURE/scripts/payload-update.sh --now ITEM)"
+SYNC_ADVICE="run $FIXTURE/dotfiles payloads sync ITEM"
 run_doctor payloads-short -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row payloads warn "not installed: ~/.claude/coding-agent-kit/notify.cjs, pymol: $SYNC_ADVICE; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" \
@@ -996,7 +996,7 @@ assert_quiet_events '--list probed tools with the real manifest on --platform ot
 
 # --- the real doctor on this machine keeps the TSV contract -----------------
 
-# The real ./doctor.sh, config/bootstrap and docs probe the tools of the
+# The real $FIXTURE/dotfiles doctor, config/bootstrap and docs probe the tools of the
 # machine running the tests (in CI the runner's) on the caller's PATH, so
 # whatever those tools print, every line keeps the TSV contract: the header,
 # five columns, a known status, and a fix that is - or a docs/bootstrap.md
@@ -1023,7 +1023,7 @@ real_doctor_case() {
     : >"$REAL_MARKER"
     : >"$EVENT_LOG"
     if env -i HOME="$REAL_HOME" PATH="$PATH" TMPDIR="$REAL_TMP" LC_ALL=C TERM=dumb \
-        "$BASH" "$REPO_ROOT/doctor.sh" "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
+        "$BASH" "$REPO_ROOT/scripts/commands/doctor.sh" "$@" >"$OUT/$CASE.out" 2>"$OUT/$CASE.err"; then
         RC=0
     else
         RC=$?
@@ -1146,7 +1146,7 @@ printf 'home\n' >"$ELSEWHERE/.chezmoiroot"
 set_source "$ELSEWHERE"
 run_doctor chezmoi-config-elsewhere -- --host lab-ubuntu --tsv
 assert_rc 0
-assert_row chezmoi-config warn "~/.config/chezmoi/chezmoi.toml names the checkout $ELSEWHERE, not this checkout $FIXTURE; run $ELSEWHERE/doctor.sh for its state" \
+assert_row chezmoi-config warn "~/.config/chezmoi/chezmoi.toml names the checkout $ELSEWHERE, not this checkout $FIXTURE; run $(printf '%q' "$ELSEWHERE/dotfiles") doctor for its state" \
     'docs/bootstrap.md H7-deploy'
 # With a config that resolves, the payloads advice is sync-payloads and the
 # shell-quoted hook of the source the config names, which sync-payloads runs,
@@ -1156,11 +1156,11 @@ mv "$TEST_HOME/.pymolrc.py" "$TEST_TMP/pymolrc.hidden"
 run_doctor payloads-source-elsewhere DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
 assert_rc 0
 assert_row payloads warn '' 'docs/bootstrap.md H7-payloads'
-[ "$(tsv_field payloads 4)" = "not installed: pymol: run sync-payloads ITEM (sh $TEST_TMP/source\\ elsewhere/scripts/payload-update.sh --now ITEM)" ] ||
+[ "$(tsv_field payloads 4)" = "not installed: pymol: run $TEST_TMP/source\\ elsewhere/dotfiles payloads sync ITEM" ] ||
     case_fail "payloads detail [$(tsv_field payloads 4)]"
 set_source "$FIXTURE"
 run_doctor payloads-source-here DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
-[ "$(tsv_field payloads 4)" = "not installed: pymol: run sync-payloads ITEM (sh $FIXTURE/scripts/payload-update.sh --now ITEM)" ] ||
+[ "$(tsv_field payloads 4)" = "not installed: pymol: run $FIXTURE/dotfiles payloads sync ITEM" ] ||
     case_fail "payloads detail [$(tsv_field payloads 4)]"
 for unresolved in maintenance invalid unconfigured; do
     case_name=payloads-source-$unresolved
@@ -1173,7 +1173,7 @@ for unresolved in maintenance invalid unconfigured; do
             ;;
     esac
     run_doctor "$case_name" DOTFILES_PAYLOAD_ITEMS=pymol -- --host lab-ubuntu --tsv
-    [ "$(tsv_field payloads 4)" = "not installed: pymol: run sh $FIXTURE/scripts/payload-update.sh --now ITEM" ] ||
+    [ "$(tsv_field payloads 4)" = "not installed: pymol: run $FIXTURE/dotfiles payloads sync ITEM" ] ||
         case_fail "payloads detail [$(tsv_field payloads 4)]"
     rm -f "$MAINTENANCE_DIR/maintenance"
     set_source "$FIXTURE"
@@ -1285,7 +1285,7 @@ assert_row host-tool warn
 assert_row chezmoi-config human '~/.config/chezmoi/chezmoi.toml does not name this home' 'docs/bootstrap.md H7-deploy'
 set_source "$FIXTURE"
 write_config '[data]' "host = 'win'"
-expect_usage_error config-host-win 'pwsh -File doctor.ps1 -Host win' --
+expect_usage_error config-host-win "dotfiles.ps1' doctor --host win" --
 # generic as the role means the detected platform without an overlay.
 write_config '[data]' "host = 'generic'"
 run_doctor config-host-generic BOOTSTRAP_OS_RELEASE="$OS_UBUNTU" -- --tsv

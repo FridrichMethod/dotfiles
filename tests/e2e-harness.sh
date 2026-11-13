@@ -13,13 +13,13 @@
 # fetch_pinned picks for chezmoi) and the two "Fresh home by hand"
 # functions, run under bash, sh and zsh against a stub chezmoi that accepts
 # only the full explicit argument set. Part two runs inside.sh itself with
-# E2E_SANDBOX_HOME against a fixture clone whose setup-host.sh, doctor.sh
+# E2E_SANDBOX_HOME against a fixture clone whose scripts/commands/setup.sh, scripts/commands/doctor.sh
 # and chezmoi are stubs printing realistic plan lines, blocks and exit codes
 # (an apt sudo block, then an inspect block, then a run that applies the
 # chezmoi binary, then only H7-deploy left), with stub sudo, chsh and apt-get
 # wrappers that write the wrappers.log format; the run deploys the home
 # through the documented functions and must converge. Two more runs at
-# planted fixture commits (a sudo in doctor.sh, a link into the clone) must
+# planted fixture commits (a sudo in scripts/commands/doctor.sh, a link into the clone) must
 # each fail exactly one audit. Every write lands under this test's temp dir;
 # the sandbox home has a space in its name. Runs under the Bash that runs
 # the test, so Bash 3.2 too.
@@ -340,7 +340,7 @@ HUMAN-END
 OUT
 cat >"$UNIT/apply.err" <<'ERR'
 [dotfiles] [warn] uncommitted changes in /home/u/dotfiles: none
-[dotfiles] [warn] HUMAN steps pending: H1-apt-core S5-claude H7-deploy; run the HUMAN blocks above, then rerun ./setup-host.sh --host lab-ubuntu
+[dotfiles] [warn] HUMAN steps pending: H1-apt-core S5-claude H7-deploy; run the HUMAN blocks above, then rerun ./dotfiles setup --host lab-ubuntu
 ERR
 GATE_SPACE="printf '%s  %s\\n' $SHA /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh | sha256sum -c --status - && bash /home/u/My\\ Files/.cache/dotfiles-bootstrap/claude/install.sh"
 
@@ -483,7 +483,7 @@ cat >"$UNIT/inspect.block" <<BLOCK
 # sha256 $SHA, 1234 bytes; delete the file for a fresh copy
 # read it first; the line below runs it only while its sha256 is still the one above
 $GATE
-# ./doctor.sh then checks the installed claude against tools.tsv
+# ./dotfiles doctor then checks the installed claude against tools.tsv
 BLOCK
 expect_eq 'run-gate line' "$(e2e_block_lines run-gate lab-ubuntu "$UNIT/inspect.block")" "$GATE"
 sed 's/sha256sum -c --status -/shasum -a 256 -c --status -/' "$UNIT/inspect.block" >"$UNIT/inspect-mac.block"
@@ -494,7 +494,7 @@ for variant in 's/ --status//' 's/&& bash /\&\& NONINTERACTIVE=1 \/bin\/bash /' 
     '/^printf/s|&& bash .*$|\&\& bash /tmp/other.sh|' \
     '/^printf/s/$/; rm -rf ~/' \
     '/^printf/s/ | sha256sum/ | evil; true | sha256sum/' \
-    '/^printf/s/$/ \&\& .\/doctor.sh/' \
+    '/^printf/s/$/ \&\& .\/dotfiles doctor/' \
     '/^printf/s/$/ /' \
     '/^printf/s/install.sh |/install.sh;x |/' \
     "/^printf/s/$SHA/${SHA}0/" \
@@ -565,7 +565,7 @@ expect_eq 'failure detail fallback' "$(e2e_failure_detail "$UNIT/empty" "$UNIT/u
 # or no phase fails, whatever the tool and its arguments; on a host
 # without sudo any sudo line fails.
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' 1700000000 human:H1-apt-core sudo 42 'bash -c sudo apt-get update' 'apt-get update' \
-    1700000010 negative:root-refused sudo 43 'bash' '-n ./setup-host.sh --host lab-ubuntu --check' \
+    1700000010 negative:root-refused sudo 43 'bash' '-n ./dotfiles setup --host lab-ubuntu --check' \
     1700000015 human:H1-locale sudo 47 'bash -c sudo locale-gen en_US.UTF-8' 'locale-gen en_US.UTF-8' \
     1700000020 human:H7-chsh chsh 44 'bash -c chsh -s /usr/bin/zsh' '-s /usr/bin/zsh' >"$UNIT/wrappers.log"
 bad=$(e2e_audit_wrappers "$UNIT/wrappers.log") || fail "wrappers audit failed a clean log: $bad"
@@ -696,7 +696,7 @@ if date -d @0 +%s >/dev/null 2>&1; then
         printf '%s : tester : TTY=unknown ; PWD=/home/tester ; USER=root ; COMMAND=/usr/bin/apt-get install -y\n' \
             "$(date -d @1700000100 '+%b %e %T %Y')"
         printf '    zsh git\n'
-        printf '%s : tester : TTY=unknown ; PWD=/home/tester/dotfiles ; USER=root ; COMMAND=./setup-host.sh\n' \
+        printf '%s : tester : TTY=unknown ; PWD=/home/tester/dotfiles ; USER=root ; COMMAND=./dotfiles setup\n' \
             "$(date -d @1700000205 '+%b %e %T %Y')"
     } >"$UNIT/sudo.log"
     bad=$(e2e_audit_sudo_log "$UNIT/timeline" "$UNIT/sudo.log") || fail "sudo.log audit failed entries inside the windows: $bad"
@@ -1036,11 +1036,11 @@ printf 'ok: deploy end state and clone links\n'
 # the chezmoi stub S4-chezmoi installs, the clone's own docs/bootstrap.md
 # (home-deploy extracts the Fresh home by hand functions from it) and a
 # .chezmoiroot. Three commits: the clean one, then two plants, each built on
-# the clean files: a sudo in doctor.sh outside any human phase, and a
+# the clean files: a sudo in scripts/commands/doctor.sh outside any human phase, and a
 # chezmoi whose first file apply also links a home path into the clone.
 SRC="$TEST_TMP/src"
 TEST_BIN="$TEST_TMP/bin"
-mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/lib" "$SRC/scripts" "$SRC/tests" "$SRC/home/dot_local/bin" "$TEST_BIN"
+mkdir -p "$SRC/docs" "$SRC/fixture" "$SRC/lib" "$SRC/scripts/commands" "$SRC/tests" "$SRC/home/dot_local/bin" "$TEST_BIN"
 cat >"$TEST_TMP/gitconfig" <<EOF
 [user]
 	name = Fixture
@@ -1058,7 +1058,7 @@ cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$SRC/lib/chezmoi-guard.sh"
 printf 'home\n' >"$SRC/.chezmoiroot"
 write_chezmoi_stub "$SRC/fixture/chezmoi"
 
-# The setup-host.sh stub keeps the real one's shape: no mode flag
+# The scripts/commands/setup.sh stub keeps the real one's shape: no mode flag
 # (an unknown argument is exit 2), the root and WSL
 # refusals (exit 2), plan lines, the HUMAN blocks with the real frames, the
 # pending line on stderr and exit 3 while a blocking step is pending. Its
@@ -1068,9 +1068,9 @@ write_chezmoi_stub "$SRC/fixture/chezmoi"
 # that and leaves only H7-deploy), and the local config the fresh-home step
 # leaves (the clone's guard accepts it as naming this home and the clone).
 # --check writes nothing.
-cat >"$SRC/setup-host.sh" <<'SH'
+cat >"$SRC/scripts/commands/setup.sh" <<'SH'
 #!/bin/bash
-# e2e-harness fixture: a setup-host.sh stand-in (see tests/e2e-harness.sh).
+# e2e-harness fixture: a scripts/commands/setup.sh stand-in (see tests/e2e-harness.sh).
 set -u
 host='' mode=check
 while [ $# -gt 0 ]; do
@@ -1083,7 +1083,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 if [ "$(id -u)" = 0 ] || [ "${E2E_STUB_ROOT:-}" = 1 ]; then
-    printf '%s\n' '[dotfiles] [error] run ./setup-host.sh as your user, not root (no sudo); the sudo steps are printed as HUMAN blocks' >&2
+    printf '%s\n' '[dotfiles] [error] run ./dotfiles setup as your user, not root (no sudo); the sudo steps are printed as HUMAN blocks' >&2
     exit 2
 fi
 if [ -z "$host" ]; then
@@ -1098,7 +1098,7 @@ case $host in
         ;;
     *) printf '[dotfiles] [error] unknown host: %s\n' "$host" >&2; exit 2 ;;
 esac
-root=$(cd "$(dirname "$0")" && pwd -P)
+root=$(cd "$(dirname "$0")/../.." && pwd -P)
 scratch=$HOME/.cache/dotfiles-bootstrap
 installer=$scratch/claude/install.sh
 if command -v sha256sum >/dev/null 2>&1; then
@@ -1170,7 +1170,7 @@ else
     held="$held${held:+ }H7-deploy"
 fi
 printf '%s\n' 'H7-auth human sign in to GitHub, Claude Code and Codex (not checked offline)' \
-    'H7-doctor human the completion gate is ./doctor.sh --host lab-ubuntu'
+    'H7-doctor human the completion gate is ./dotfiles doctor --host lab-ubuntu'
 if [ "$apt_done" = 0 ]; then
     printf '%s\n' 'HUMAN-BEGIN H1-apt-core sudo' '# docs/bootstrap.md H1-apt-core' 'sudo apt-get update' \
         'sudo apt-get install -y --no-install-recommends zsh' 'HUMAN-END'
@@ -1182,9 +1182,9 @@ elif [ "$claude_done" = 0 ]; then
         printf '%s\n' '# read it first; the line below runs it only while its sha256 is still the one above'
         printf "printf '%%s  %%s\\\\n' %s %q | %s && bash %q\\n" "$(digest "$installer")" "$installer" "$verify" "$installer"
     else
-        printf '# ./setup-host.sh --host %s (without --check) downloads https://claude.ai/install.sh (unpinned)\n' "$host"
+        printf '# ./dotfiles setup --host %s (without --check) downloads https://claude.ai/install.sh (unpinned)\n' "$host"
     fi
-    printf '%s\n' '# ./doctor.sh then checks the installed claude against tools.tsv' 'HUMAN-END'
+    printf '%s\n' '# ./dotfiles doctor then checks the installed claude against tools.tsv' 'HUMAN-END'
 fi
 if [ "$deployed" = 0 ]; then
     printf '%s\n' 'HUMAN-BEGIN H7-deploy judgment' '# docs/bootstrap.md H7-deploy' \
@@ -1193,24 +1193,24 @@ if [ "$deployed" = 0 ]; then
 fi
 printf '%s\n' 'HUMAN-BEGIN H7-auth auth' '# docs/bootstrap.md H7-auth' 'ssh-keygen -t ed25519' \
     'gh auth login --git-protocol ssh' 'HUMAN-END' 'HUMAN-BEGIN H7-doctor judgment' '# docs/bootstrap.md H7-doctor'
-printf '%q --host %s\n' "$root/doctor.sh" "$host"
+printf '%q doctor --host %s\n' "$root/dotfiles" "$host"
 printf '%s\n' 'HUMAN-END'
 if [ -n "$held" ]; then
-    printf '[dotfiles] [warn] HUMAN steps pending: %s; run the HUMAN blocks above, then rerun ./setup-host.sh --host %s\n' "$held" "$host" >&2
+    printf '[dotfiles] [warn] HUMAN steps pending: %s; run the HUMAN blocks above, then rerun ./dotfiles setup --host %s\n' "$held" "$host" >&2
     exit 3
 fi
 printf '[dotfiles] [ok] setup-host: nothing blocking remains for %s\n' "$host" >&2
 exit 0
 SH
 
-# doctor.sh: exit 1 until the gated installer ran and the home's chezmoi
+# scripts/commands/doctor.sh: exit 1 until the gated installer ran and the home's chezmoi
 # config names this checkout, 0 after; --tsv prints the five-column report, with a
 # chezmoi-config row and a payloads row that is ok once the
-# payload-update.sh stub ran; --smoke exits like a run. Any other argument
+# payloads-sync.sh stub ran; --smoke exits like a run. Any other argument
 # is exit 2.
-cat >"$SRC/doctor.sh" <<'SH'
+cat >"$SRC/scripts/commands/doctor.sh" <<'SH'
 #!/bin/bash
-# e2e-harness fixture: a doctor.sh stand-in (see tests/e2e-harness.sh).
+# e2e-harness fixture: a scripts/commands/doctor.sh stand-in (see tests/e2e-harness.sh).
 set -u
 tsv=0
 for argument in "$@"; do
@@ -1221,7 +1221,7 @@ for argument in "$@"; do
     esac
 done
 # PLANT
-root=$(cd "$(dirname "$0")" && pwd -P)
+root=$(cd "$(dirname "$0")/../.." && pwd -P)
 claude=missing deployed=human rc=1
 [ ! -x "$HOME/.local/bin/claude" ] || claude=ok
 if [ "$(. "$root/lib/chezmoi-guard.sh" && dotfiles_chezmoi_source "$HOME")" = "$root" ]; then
@@ -1246,11 +1246,11 @@ fi
 exit "$rc"
 SH
 
-# scripts/payload-update.sh: --now leaves the file the doctor stub's
+# scripts/commands/payloads-sync.sh: --now leaves the file the doctor stub's
 # payloads row looks for, as the real installers leave their installs.
-cat >"$SRC/scripts/payload-update.sh" <<'SH'
+cat >"$SRC/scripts/commands/payloads-sync.sh" <<'SH'
 #!/bin/sh
-# e2e-harness fixture: a scripts/payload-update.sh stand-in (see tests/e2e-harness.sh).
+# e2e-harness fixture: a scripts/commands/payloads-sync.sh stand-in (see tests/e2e-harness.sh).
 [ "$*" = --now ] || { printf '[dotfiles] [error] payload-update: unknown arguments: %s\n' "$*" >&2; exit 2; }
 mkdir -p "$HOME/.local/share" && : >"$HOME/.local/share/e2e-payloads" || exit 1
 printf '%s\n' 'payload-update: installed kit, pymol, skills'
@@ -1263,7 +1263,7 @@ set -eu
 "$DOTFILES_TEST_CHEZMOI" --version
 printf 'isolated chezmoi fixture entrypoint stand-in\n'
 SH
-chmod +x "$SRC/setup-host.sh" "$SRC/doctor.sh" "$SRC/scripts/payload-update.sh"
+chmod +x "$SRC/scripts/commands/setup.sh" "$SRC/scripts/commands/doctor.sh" "$SRC/scripts/commands/payloads-sync.sh"
 git -C "$SRC" init -q
 git -C "$SRC" add -A
 git -C "$SRC" commit -q -m 'stubs'
@@ -1272,7 +1272,7 @@ REV_CLEAN=$(git -C "$SRC" rev-parse HEAD)
 # line of FILE that is exactly MARKER replaced by LINE, committed with
 # MESSAGE; prints the new commit.
 plant() {
-    git -C "$SRC" checkout -q "$REV_CLEAN" -- doctor.sh setup-host.sh fixture/chezmoi
+    git -C "$SRC" checkout -q "$REV_CLEAN" -- scripts/commands/doctor.sh scripts/commands/setup.sh fixture/chezmoi
     E2E_PLANT_MARKER=$2 E2E_PLANT_LINE=$3 awk '
         $0 == ENVIRON["E2E_PLANT_MARKER"] { print ENVIRON["E2E_PLANT_LINE"]; found = 1; next }
         { print }
@@ -1283,12 +1283,12 @@ plant() {
     git -C "$SRC" commit -q -a -m "$4"
     git -C "$SRC" rev-parse HEAD
 }
-# The planted sudo runs on its own, in whatever phase doctor.sh is called,
+# The planted sudo runs on its own, in whatever phase scripts/commands/doctor.sh is called,
 # but only through this test's stub (never a real sudo).
-REV_PLANTED=$(plant doctor.sh '# PLANT' "[ \"\$(command -v sudo)\" != '$TEST_BIN/sudo' ] || sudo -n true" 'plant a sudo in doctor.sh')
+REV_PLANTED=$(plant scripts/commands/doctor.sh '# PLANT' "[ \"\$(command -v sudo)\" != '$TEST_BIN/sudo' ] || sudo -n true" 'plant a sudo in doctor.sh')
 # shellcheck disable=SC2016 # the planted line expands in the stub, not here
-REV_LINK=$(plant fixture/chezmoi '        # PLANT-LINK' '        [ -L "$home/.clone-link" ] || ln -s "$src/setup-host.sh" "$home/.clone-link" || exit 1' 'plant a link into the clone')
-if grep -F 'sudo -n true' "$SRC/doctor.sh" >/dev/null; then
+REV_LINK=$(plant fixture/chezmoi '        # PLANT-LINK' '        [ -L "$home/.clone-link" ] || ln -s "$src/scripts/commands/setup.sh" "$home/.clone-link" || exit 1' 'plant a link into the clone')
+if grep -F 'sudo -n true' "$SRC/scripts/commands/doctor.sh" >/dev/null; then
     fail 'the later plants did not restore the clean doctor.sh'
 fi
 [ -z "$(git -C "$SRC" status --porcelain)" ] || fail 'the fixture source is not clean after the plants'
@@ -1460,7 +1460,7 @@ expect_eq 'clean step order' "$(awk -F '\t' '$3 != "note" && $3 != "skip" { prin
 expect_eq 'clean wrappers.log' "$(cut -f 2,3 "$CLEAN_OUT/log/wrappers.log" | tr '\t' ' ')" 'human:H1-apt-core sudo
 human:H1-apt-core sudo
 negative:root-refused sudo'
-expect_text 'clean wrappers.log argv' "$CLEAN_OUT/log/wrappers.log" "${TAB}-n ./setup-host.sh --host lab-ubuntu --check"
+expect_text 'clean wrappers.log argv' "$CLEAN_OUT/log/wrappers.log" "${TAB}-n ./dotfiles setup --host lab-ubuntu --check"
 for phase in human:H1-apt-core human:S5-claude human:H7-deploy negative:wsl-refused negative:root-refused check:doctor-initial setup:apply-1 check:check-done check:home-converged; do
     expect_eq "clean timeline $phase" "$(awk -F '\t' -v p="$phase" '$3 == p { print $2 }' "$CLEAN_OUT/log/timeline" | tr '\n' ' ')" 'begin end '
 done
@@ -1495,7 +1495,7 @@ expect_text 'clean log' "$TEST_TMP/clean.err" 'pass, 0 fail,'
 printf 'ok: sandboxed dry run (clean fixture)\n'
 
 # The planted runs, without negatives: each passes every step but one
-# audit. The sudo doctor.sh made under check:doctor-initial fails the
+# audit. The sudo scripts/commands/doctor.sh made under check:doctor-initial fails the
 # wrappers audit; the link the first file apply made fails the clone-link
 # audit.
 run_inside planted "$REV_PLANTED" "$TEST_TMP/home planted" E2E_NEGATIVE=

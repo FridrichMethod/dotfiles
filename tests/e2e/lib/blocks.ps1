@@ -11,7 +11,7 @@
 # leaves every non-blocking Windows block to the person, since it can neither
 # decide a security setting, start a service, install WSL nor sign in.
 # HW-clone it performed and verified itself (the clone step), so that block
-# pending means setup-host.ps1 did not accept the clone: a finding to fail
+# pending means dotfiles.ps1 setup did not accept the clone: a finding to fail
 # on, never something to work around.
 
 function ConvertFrom-E2EBlocks {
@@ -60,7 +60,7 @@ function Get-E2EBlocksSummary {
 }
 
 function Get-E2EPendingIds {
-    # The ids of the "HUMAN steps pending: <ids>;" line setup-host.ps1 logs
+    # The ids of the "HUMAN steps pending: <ids>;" line dotfiles.ps1 setup logs
     # once per run (on stdout: Write-Host), or ''.
     param([AllowEmptyCollection()][string[]]$Lines = @())
     foreach ($line in $Lines) {
@@ -90,7 +90,7 @@ function Get-E2EBlockPolicy {
     # home by hand. skip: a reminder for the person about a non-blocking step
     # (the execution policy, the ssh-agent service, WSL, sign-in). fail:
     # HW-clone, the blocking step the clone step performed and verified
-    # itself, so pending it means setup-host.ps1 did not accept the clone;
+    # itself, so pending it means dotfiles.ps1 setup did not accept the clone;
     # and every (id, kind) it does not know, a known id with another kind
     # included.
     param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Kind)
@@ -102,7 +102,7 @@ function Get-E2EBlockPolicy {
 }
 
 function Get-E2ELoopNext {
-    # The apply loop's verdict on one setup-host.ps1 -Yes run, the table of
+    # The apply loop's verdict on one dotfiles.ps1 setup --yes run, the table of
     # e2e_loop_next in blocks.sh with HW-deploy as the deploy step: blocks (exit
     # 3 with a block to act on), rerun (exit 3, nothing to act on, a step
     # applied), done (exit 3, nothing to act on, nothing applied, HW-deploy

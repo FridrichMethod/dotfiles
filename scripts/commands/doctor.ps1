@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Read-only day-zero check for the win host - the Windows twin of doctor.sh.
+    Read-only day-zero check for the win host - the Windows twin of scripts/commands/doctor.sh.
 
 .DESCRIPTION
     Probes every config/bootstrap/tools.tsv row whose hosts match win, plus
@@ -11,7 +11,7 @@
       [dotfiles] [<level>] <tier> <id>: <detail> (docs/bootstrap.md <step>)
 
     Statuses are ok, outdated, missing, warn, skip and human, with the same
-    meaning as in doctor.sh: missing, outdated and human are errors, and
+    meaning as in scripts/commands/doctor.sh: missing, outdated and human are errors, and
     outside the selected tiers they are reported as warn. Executables are
     found by probing PATH entries for .exe, .cmd, .bat and .ps1 files (a
     Microsoft Store alias that prints no version does not count);
@@ -23,7 +23,7 @@
 
     The doctor writes nothing and makes no network call: no winget list, no
     module repository query. -Online adds the auth probes gh auth status,
-    claude auth status and codex login status; as in doctor.sh, a tool that
+    claude auth status and codex login status; as in scripts/commands/doctor.sh, a tool that
     is signed out warns and one that is absent is skipped, and the probed
     tools may write their own state (claude rewrites ~/.claude.json).
 
@@ -33,7 +33,7 @@
     or invalid manifest.
 
 .PARAMETER HostName
-    Alias -Host. Only win is accepted; use ./doctor.sh --host <host> on Unix.
+    Alias -Host. Only win is accepted; use ./dotfiles doctor --host <host> on Unix.
 
 .PARAMETER Tier
     all, or a comma list of core, cli, ai, desktop, contributor, host.
@@ -51,10 +51,10 @@
     Also run the network auth probes, which may write the tools' own state.
 
 .EXAMPLE
-    .\doctor.ps1
+    .\dotfiles.ps1 doctor
 
 .EXAMPLE
-    .\doctor.ps1 -Tier all -Tsv
+    .\dotfiles.ps1 doctor --tier all --tsv
 #>
 [CmdletBinding()]
 param(
@@ -70,7 +70,7 @@ param(
 Set-StrictMode -Version Latest
 $PSNativeCommandUseErrorActionPreference = $false
 
-$RepoRoot = $PSScriptRoot
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 function Write-DotfilesLog {
     param([string]$Level, [string]$Message)
     Write-Host "[dotfiles] [$Level] $Message"
@@ -92,7 +92,7 @@ function New-DoctorResult {
 }
 
 $FailingStatuses = @('missing', 'outdated', 'human')
-# Ids the doctors report besides tools.tsv rows (doctor.sh's structural
+# Ids the doctors report besides tools.tsv rows (scripts/commands/doctor.sh's structural
 # checks, the -Online and --smoke rows); tools.tsv never uses them
 # (tests/test_bootstrap_manifest.py RESERVED_IDS).
 $ReservedIds = @('locale', 'path-order', 'rc-pollution', 'omz-order', 'nvm-homebrew', 'payloads',
@@ -122,7 +122,7 @@ function Assert-DoctorToolRow {
 function Get-DoctorToolResult {
     param([Parameter(Mandatory)]$Row, [string]$Selection)
     $step = Get-BootstrapDocRef -Step $Row.doc -ProfileName windows
-    # The same verdict W1-winget's filter in setup-host.ps1 relies on.
+    # The same verdict W1-winget's filter in scripts/commands/setup.ps1 relies on.
     $state = Get-BootstrapToolStatus $Row
     $probe = $state.Probe
     $result = switch -CaseSensitive ($state.Status) {
@@ -140,7 +140,7 @@ function Get-DoctorToolResult {
 }
 
 function Get-DoctorChezmoiConfigResult {
-    # doctor.sh's bootstrap_check_chezmoi_config: this home's chezmoi config,
+    # scripts/commands/doctor.sh's bootstrap_check_chezmoi_config: this home's chezmoi config,
     # named by cause. A config naming another checkout only warns. On Windows
     # a configured home also needs the one chezmoi.exe the login updater runs
     # (a read-only check); Unix updaters use the PATH chezmoi.
@@ -151,12 +151,12 @@ function Get-DoctorChezmoiConfigResult {
             if ($IsWindows -and -not (Test-BootstrapTrustedChezmoi -RepoRoot $RepoRoot -HomePath $HOME)) {
                 return New-DoctorResult human chezmoi-config core ('~/.config/chezmoi/chezmoi.toml names this home and this checkout, but the login updater refuses ~/.local/bin/chezmoi.exe ' +
                     '(missing, a link, under a linked directory, or not private to you, SYSTEM and Administrators) and never uses a PATH chezmoi, ' +
-                    'so login updates do not run; let setup-host.ps1 W1-chezmoi install a private copy') W1-chezmoi
+                    'so login updates do not run; let dotfiles setup install a private copy (W1-chezmoi)') W1-chezmoi
             }
             return New-DoctorResult ok chezmoi-config core '~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff' HW-deploy
         }
         'elsewhere' {
-            return New-DoctorResult warn chezmoi-config core "~/.config/chezmoi/chezmoi.toml names the checkout $($homeState.Source), not this checkout $($homeState.Checkout); run $(Join-Path $homeState.Source 'doctor.ps1') for its state" HW-deploy
+            return New-DoctorResult warn chezmoi-config core "~/.config/chezmoi/chezmoi.toml names the checkout $($homeState.Source), not this checkout $($homeState.Checkout); run & '$([Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $homeState.Source 'dotfiles.ps1')))' doctor for its state" HW-deploy
         }
         'maintenance' { return New-DoctorResult human chezmoi-config core 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md' HW-deploy }
         'config' {
@@ -185,7 +185,7 @@ function Get-DoctorPayloadResult {
     # here passes its windows-probe row. Only a person installs the payload
     # repos, so every shortfall names what to run and only warns:
     # sync-payloads where the chezmoi config resolves, else this checkout's
-    # quoted -Now line (sync-payloads refuses a home without a valid config,
+    # quoted public command (sync-payloads refuses a home without a valid config,
     # and so does every hook under maintenance). An item without a
     # windows-install row (the kit, which installs nothing on native Windows)
     # is not checked, as the hook does not run it.
@@ -222,9 +222,10 @@ function Get-DoctorPayloadResult {
     if ($short.Count) {
         # CodeGeneration doubles U+2018 to U+201B as well as the apostrophe:
         # PowerShell ends a single-quoted string at each.
-        $hook = Join-Path (Join-Path $RepoRoot 'scripts') 'payload-update.ps1'
-        $advice = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($hook) + "' -Now ITEM"
-        if ((Get-BootstrapChezmoiState -RepoRoot $RepoRoot).State -cin @('ok', 'elsewhere')) { $advice = 'sync-payloads ITEM' }
+        $frontend = Join-Path $RepoRoot 'dotfiles.ps1'
+        $advice = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($frontend) + "' payloads sync ITEM"
+        if ((Get-BootstrapChezmoiState -RepoRoot $RepoRoot).State -ceq 'ok' -and
+            (Test-Path -LiteralPath (Join-Path $HOME '.local/bin/dotfiles.ps1') -PathType Leaf)) { $advice = 'sync-payloads ITEM' }
         $issues += "not installed: $($short -join ', '): run $advice"
     }
     if ($issues.Count) { return New-DoctorResult warn payloads ai ($issues -join '; ') $step }
@@ -239,7 +240,7 @@ function Get-DoctorOnlineResults {
         @{ Id = 'codex-auth'; Tier = 'ai'; Tool = 'codex'; Arguments = @('login', 'status') }
     )
     foreach ($probe in $probes) {
-        # doctor.sh's bootstrap_check_auth: absent is skip, signed out is warn.
+        # scripts/commands/doctor.sh's bootstrap_check_auth: absent is skip, signed out is warn.
         $path = Find-BootstrapCommand $probe.Tool
         if (-not $path) {
             New-DoctorResult skip $probe.Id $probe.Tier "$($probe.Tool) not found, auth not checked" HW-auth
@@ -275,7 +276,7 @@ function Invoke-BootstrapDoctor {
     $script:DoctorStatus = 2
     $canonicalHost = $HostName.ToLowerInvariant()
     if ($canonicalHost -cne 'win') {
-        Write-DotfilesLog error "doctor.ps1 checks only the win host, not '$HostName'; use ./doctor.sh --host <host> on Unix."
+        Write-DotfilesLog error "dotfiles doctor checks only the win host, not '$HostName'; use ./dotfiles doctor --host <host> on Unix."
         return
     }
     if (-not (Test-BootstrapTierSelection $Tier)) {
@@ -305,7 +306,7 @@ function Invoke-BootstrapDoctor {
     foreach ($result in $checks) { $results.Add((Limit-DoctorResult $result $Tier)) }
 
     $failed = @($results | Where-Object { $_.Status -cin $FailingStatuses }).Count
-    # As in doctor.sh, -Quiet hides ok and skip rows in both formats.
+    # As in scripts/commands/doctor.sh, -Quiet hides ok and skip rows in both formats.
     $shown = @($results | Where-Object { -not $Quiet -or $_.Status -cnotin @('ok', 'skip') })
     if ($Tsv) {
         "status`tid`ttier`tdetail`tfix"
@@ -332,7 +333,7 @@ if (-not (Test-Path -LiteralPath $libraryPath -PathType Leaf)) {
 $script:DoctorStatus = 1
 try { Invoke-BootstrapDoctor }
 catch {
-    Write-DotfilesLog error "doctor.ps1 failed: $($_.Exception.Message)"
+    Write-DotfilesLog error "dotfiles doctor failed: $($_.Exception.Message)"
     $script:DoctorStatus = 1
 }
 exit $script:DoctorStatus

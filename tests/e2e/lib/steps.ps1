@@ -9,7 +9,7 @@
 # Dot-source only, after common.ps1, snapshot.ps1 and blocks.ps1.
 
 $script:E2EUpstream = 'https://github.com/FridrichMethod/dotfiles.git'
-# Lines of a setup-host.ps1 -Yes run that show a step was applied: the
+# Lines of a dotfiles.ps1 setup --yes run that show a step was applied: the
 # "[step] <id>: ..." line before an apply and the installed, present or
 # skipped result after it (inside.sh reads "<id> done applied:" plan lines).
 $script:E2EAppliedRe = '\[step\] [A-Za-z0-9-]+: |: (installed|present|skipped): '
@@ -404,7 +404,7 @@ function Invoke-E2EStepPayloads {
     # (PyMOLScripts and awesome-skills; coding-agent-kit installs nothing on
     # native Windows) installs from the network through its own install.ps1,
     # under the block limit, since the installs run in a row. It passes when
-    # the installer and doctor.ps1 -Host win -Tsv both exit 0, and the
+    # the installer and dotfiles.ps1 doctor --host win --tsv both exit 0, and the
     # doctor's payloads row is ok and names what it found installed.
     Update-E2EPath
     Start-E2EStep payloads setup:payloads

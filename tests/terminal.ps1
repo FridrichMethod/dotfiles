@@ -183,8 +183,9 @@ catch { Write-DotfilesLog error $_.Exception.Message; exit 17 }
         $libraryDirectory = Join-Path $fixture 'lib'
         [void][IO.Directory]::CreateDirectory($libraryDirectory)
         $logger = Join-Path $libraryDirectory 'terminal.ps1'
-        foreach ($entry in @('doctor.ps1', 'setup-host.ps1')) {
-            Copy-Item -LiteralPath (Join-Path $sourceRoot $entry) -Destination $fixture
+        foreach ($entry in @('scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1')) {
+            [void][IO.Directory]::CreateDirectory((Split-Path -Parent (Join-Path $fixture $entry)))
+            Copy-Item -LiteralPath (Join-Path $sourceRoot $entry) -Destination (Join-Path $fixture $entry)
             foreach ($state in @('missing', 'broken', 'present')) {
                 switch ($state) {
                     'missing' { [IO.File]::Delete($logger) }

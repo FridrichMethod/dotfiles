@@ -111,7 +111,7 @@ class PayloadDownload(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.repo = self.root / "repo"
         self.home = self.root / "home"
-        for directory in ("scripts", "config", "lib"):
+        for directory in ("scripts/commands", "config", "lib"):
             (self.repo / directory).mkdir(parents=True)
         self.home.mkdir()
         self.bin = self.root / "bin"
@@ -129,7 +129,7 @@ class PayloadDownload(unittest.TestCase):
             "POWERSHELL_TELEMETRY_OPTOUT": "1", "POWERSHELL_UPDATECHECK": "Off",
         })
         for suffix in ("sh", "ps1"):
-            shutil.copyfile(ROOT / f"scripts/payload-update.{suffix}", self.repo / f"scripts/payload-update.{suffix}")
+            shutil.copyfile(ROOT / f"scripts/commands/payloads-sync.{suffix}", self.repo / f"scripts/commands/payloads-sync.{suffix}")
             shutil.copyfile(ROOT / f"lib/terminal.{suffix}", self.repo / f"lib/terminal.{suffix}")
 
     def configure(self, kind, first, second=None):
@@ -166,10 +166,10 @@ class PayloadDownload(unittest.TestCase):
     def command(self, kind, both=False):
         items = ["pymol", "skills"] if both else ["pymol"]
         if kind == "sh":
-            return [str(self.bin / "sh"), str(self.repo / "scripts/payload-update.sh"), "--now", *items]
+            return [str(self.bin / "sh"), str(self.repo / "scripts/commands/payloads-sync.sh"), "--now", *items]
         if not PWSH:
             self.skipTest("pwsh unavailable")
-        return [PWSH, "-NoProfile", "-NonInteractive", "-File", str(self.repo / "scripts/payload-update.ps1"), "-Now", *items]
+        return [PWSH, "-NoProfile", "-NonInteractive", "-File", str(self.repo / "scripts/commands/payloads-sync.ps1"), "-Now", *items]
 
     def assert_no_state(self):
         # The hook keeps no state of its own.

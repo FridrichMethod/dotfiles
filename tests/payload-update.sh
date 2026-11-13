@@ -9,7 +9,7 @@ set -euo pipefail
 # Keep fixture Git independent of a commit hook's repository and index.
 dotfiles_test_clear_git_environment
 
-# scripts/payload-update.sh against fake installers served from file:// URLs:
+# scripts/commands/payloads-sync.sh against fake installers served from file:// URLs:
 # the real config/payloads.tsv with its raw.githubusercontent.com prefix
 # pointed at a local directory, and a curl that refuses every other scheme.
 
@@ -42,9 +42,10 @@ REAL_CURL=$(command -v curl) || {
 }
 REMOTE=$TEST_TMP/remote
 FIXTURE=$TEST_TMP/repo
-mkdir -p "$TEST_TMP/bin" "$FIXTURE/scripts" "$FIXTURE/lib" "$FIXTURE/config" \
+mkdir -p "$TEST_TMP/bin" "$FIXTURE/scripts/commands" "$FIXTURE/lib" "$FIXTURE/config" \
     "$REMOTE/coding-agent-kit/main" "$REMOTE/PyMOLScripts/main" "$REMOTE/awesome-skills/main"
-cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/"
+cp "$REPO_ROOT/scripts/commands/payloads-sync.sh" "$FIXTURE/scripts/commands/"
+cp "$REPO_ROOT/dotfiles" "$FIXTURE/dotfiles"
 # The guard and .chezmoiroot make the fixture a source a chezmoi config can name.
 cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
@@ -159,7 +160,7 @@ in_env() {
 # [VAR=VALUE...] now ITEM...: run the hook as sync-payloads does; sets STATUS.
 now() {
     STATUS=0
-    in_env sh "$FIXTURE/scripts/payload-update.sh" --now "$@" >"$OUT" 2>"$ERR" || STATUS=$?
+    in_env sh "$FIXTURE/scripts/commands/payloads-sync.sh" --now "$@" >"$OUT" 2>"$ERR" || STATUS=$?
 }
 
 expect_events() {
@@ -186,7 +187,7 @@ wait_for() {
     fail "timed out waiting for: $*"
 }
 
-USAGE='dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]'
+USAGE='dotfiles: usage: dotfiles payloads sync [ITEM...]'
 
 # Nothing installs a payload repo unless a person runs it. Any call without
 # --now first, a bare item or an unknown argument, is a usage error: one line
@@ -199,7 +200,7 @@ for maintenance in '' 1; do
     for mode in '' kit '--help' '--bogus --now kit' 'kit --now'; do
         STATUS=0
         # shellcheck disable=SC2086 # the mode's words
-        in_env sh "$FIXTURE/scripts/payload-update.sh" $mode >"$OUT" 2>"$ERR" || STATUS=$?
+        in_env sh "$FIXTURE/scripts/commands/payloads-sync.sh" $mode >"$OUT" 2>"$ERR" || STATUS=$?
         [[ "$STATUS" == 2 && ! -s "$OUT" && "$(cat "$ERR")" == "$USAGE" ]] ||
             fail "a call with [$mode]${maintenance:+ under maintenance} was not a usage error (exit $STATUS)"
     done
@@ -274,7 +275,7 @@ FAKE_KIT_STATUS=1 now
 expect_events 'kit-install [--channel 0.7] stdin=[]
 pymol-install []
 skills-install [] bash=yes'
-RERUN="sh '$FIXTURE/scripts/payload-update.sh' --now"
+RERUN="'$FIXTURE/dotfiles' payloads sync"
 expect_text "$ERR" "[dotfiles] [error] kit: install failed (exit 1); retry with: $RERUN kit"
 FAKE_PYMOL_STATUS=75 now pymol
 [[ "$STATUS" == 0 ]] || fail '--now failed on exit 75'
@@ -299,6 +300,10 @@ config_home() {
 # runs this hook; one naming another checkout gets this hook's line.
 config_home "$FIXTURE"
 FAKE_KIT_STATUS=1 now kit
+expect_text "$ERR" "retry with: $RERUN kit"
+mkdir -p "$HOME_DIR/.local/bin"
+cp "$REPO_ROOT/home/dot_local/bin/executable_dotfiles" "$HOME_DIR/.local/bin/dotfiles"
+FAKE_KIT_STATUS=1 now kit
 expect_text "$ERR" '[dotfiles] [error] kit: install failed (exit 1); retry with: sync-payloads kit'
 config_home "$TEST_TMP"
 FAKE_KIT_STATUS=1 now kit
@@ -321,7 +326,7 @@ sed "s#file://$REMOTE/#http://127.0.0.1:$(cat "$TEST_TMP/port")/#g" "$FIXTURE/co
 new_home
 started=$(date +%s)
 STATUS=0
-in_env DOTFILES_PAYLOAD_TIMEOUT=3 sh "$STALLED/scripts/payload-update.sh" --now >"$OUT" 2>"$ERR" || STATUS=$?
+in_env DOTFILES_PAYLOAD_TIMEOUT=3 sh "$STALLED/scripts/commands/payloads-sync.sh" --now >"$OUT" 2>"$ERR" || STATUS=$?
 elapsed=$(($(date +%s) - started))
 [[ "$elapsed" -lt 7 ]] || fail "a stalled download held the run for ${elapsed}s"
 [[ "$STATUS" == 1 ]] || fail 'a stalled download did not fail the run'
@@ -412,7 +417,7 @@ new_home
 mkdir -p "$TEST_TMP/caller/tmp"
 pushd "$TEST_TMP/caller" >/dev/null
 STATUS=0
-in_env TMPDIR=tmp sh "$FIXTURE/scripts/payload-update.sh" --now pymol >"$OUT" 2>"$ERR" || STATUS=$?
+in_env TMPDIR=tmp sh "$FIXTURE/scripts/commands/payloads-sync.sh" --now pymol >"$OUT" 2>"$ERR" || STATUS=$?
 popd >/dev/null
 [[ "$STATUS" == 0 && "$(cat "$EVENTS.pymol-cwd")" == / ]] || fail "a relative TMPDIR run failed or ran in $(cat "$EVENTS.pymol-cwd")"
 read -r here <"$EVENTS.pymol-dir"
@@ -438,7 +443,7 @@ for tool in sh bash date mkdir mktemp mv rm cat dirname; do
 done
 STATUS=0
 env HOME="$HOME_DIR" PATH="$TEST_TMP/bare" EVENTS="$EVENTS" TMPDIR="$TEST_TMP" \
-    "$TEST_TMP/bare/sh" "$FIXTURE/scripts/payload-update.sh" --now pymol >"$OUT" 2>"$ERR" || STATUS=$?
+    "$TEST_TMP/bare/sh" "$FIXTURE/scripts/commands/payloads-sync.sh" --now pymol >"$OUT" 2>"$ERR" || STATUS=$?
 [[ "$STATUS" == 1 ]] || fail 'a run without curl or wget succeeded'
 expect_text "$ERR" 'neither curl nor wget is installed'
 

@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Pinned downloads for setup-host.sh. Sourced only; defines functions and
+# Pinned downloads for scripts/commands/setup.sh. Sourced only; defines functions and
 # changes no shell options. Bash 3.2 compatible and `set -u` safe.
 # Nothing is ever piped into a shell: bootstrap_fetch stages the download in
 # DEST.part, checks its sha256, and only then moves it to DEST.

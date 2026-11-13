@@ -26,7 +26,7 @@ fs.mkdirSync(process.env.GIT_TEMPLATE_DIR);
 
 // The helpers come from an installed coding-agent-kit: DOTFILES_TEST_KIT_HOME
 // names a home it is installed in (CI installs the real kit there, through
-// scripts/payload-update.sh); without one, the helper case skips.
+// dotfiles payloads sync); without one, the helper case skips.
 const kitHome = process.env.DOTFILES_TEST_KIT_HOME;
 const scripts = kitHome ? path.join(kitHome, '.claude', 'coding-agent-kit') : '';
 if (kitHome && !fs.statSync(path.join(scripts, 'statusline.cjs'), { throwIfNoEntry: false })?.isFile()) {

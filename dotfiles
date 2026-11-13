@@ -192,10 +192,10 @@ esac
 repo=$(CDPATH='' cd -P -- "${entry%/*}" 2>/dev/null && pwd -P) || fail 'cannot locate dotfiles checkout'
 
 case $command in
-    doctor) tool=bash backend=$repo/doctor.sh ;;
-    setup) tool=bash backend=$repo/setup-host.sh ;;
+    doctor) tool=bash backend=$repo/scripts/commands/doctor.sh ;;
+    setup) tool=bash backend=$repo/scripts/commands/setup.sh ;;
     'payloads sync')
-        tool=sh backend=$repo/scripts/payload-update.sh
+        tool=sh backend=$repo/scripts/commands/payloads-sync.sh
         set -- --now "$@"
         ;;
     'dev test') tool=bash backend=$repo/tests/run.sh ;;

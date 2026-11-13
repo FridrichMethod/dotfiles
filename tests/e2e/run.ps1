@@ -9,12 +9,12 @@
     drives it: clones the source checkout at E2E_REV into $HOME\dotfiles
     (HW-clone), checks winget answers (W1-winget needs it; a missing one is
     bootstrapped through Microsoft.WinGet.Client and recorded as a
-    deviation), runs doctor.ps1 -Host win -Tsv and setup-host.ps1 -Host win
+    deviation), runs dotfiles.ps1 doctor --host win --tsv and dotfiles.ps1 setup --host win
     -Check and requires that neither wrote in HOME or TEMP, then loops
-    setup-host.ps1 -Host win -Yes (at most eight runs) until HW-deploy is the
+    dotfiles.ps1 setup --host win --yes (at most eight runs) until HW-deploy is the
     only step left, leaving every non-blocking HW block to the person and
     refusing a pending HW-clone (the clone is the harness's own, so that
-    block means setup-host.ps1 did not accept it). It then deploys the home
+    block means dotfiles.ps1 setup did not accept it). It then deploys the home
     with chezmoi through docs/bootstrap.md "Fresh Windows home by hand"
     (Invoke-HomeDeploy -Role win from the clone) and checks the local
     config (sourceDir, destDir, host), the state database and the private
@@ -22,7 +22,7 @@
     -Check to exit 0 with nothing left, the deployed profile (a regular
     file) to load silently, the payload repos to install, an empty
     Invoke-HomeCz diff with every managed target a regular file,
-    doctor.ps1 -Host win to exit 0, tests/chezmoi.ps1 to pass with the provisioned
+    dotfiles.ps1 doctor --host win to exit 0, tests/chezmoi.ps1 to pass with the provisioned
     ~\.local\bin\chezmoi.exe, no task change after the apply loop, and the
     clone to stay clean after every step. Between steps PATH is rebuilt
     from the registry, as a new terminal reads it. tests/e2e/inside.sh is

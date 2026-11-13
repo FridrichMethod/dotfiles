@@ -1,10 +1,10 @@
 # shellcheck shell=bash
-# Doctor checks for doctor.sh; setup-host.sh's S2-brew-bundle judges a
+# Doctor checks for scripts/commands/doctor.sh; scripts/commands/setup.sh's S2-brew-bundle judges a
 # Brewfile entry with bootstrap_check_tool too. Sourced only; defines
 # functions and changes no shell options. Bash 3.2 compatible and `set -u`
 # safe; every split sets its own IFS, and no here-document creates a
 # temporary file (see manifest.sh).
-# Each check prints one line, STATUS<TAB>DETAIL, and returns 0; doctor.sh
+# Each check prints one line, STATUS<TAB>DETAIL, and returns 0; scripts/commands/doctor.sh
 # maps STATUS through the tier selection to a log level.
 #   ok        present (and at or above its floor)
 #   outdated  present below its floor
@@ -16,16 +16,16 @@
 # creates fontconfig caches under ~/.cache and in its prefix. Tools whose
 # version flag writes are presence-only rows in tools.tsv, so they never
 # run: brew (.git/describe-cache), codex (~/.codex/tmp/arg0), nvim (its log)
-# and pre-commit (__pycache__). Only bootstrap_check_auth (doctor.sh --online)
-# may reach the network, and only bootstrap_check_smoke (doctor.sh --smoke)
+# and pre-commit (__pycache__). Only bootstrap_check_auth (scripts/commands/doctor.sh --online)
+# may reach the network, and only bootstrap_check_smoke (scripts/commands/doctor.sh --smoke)
 # starts a shell, which may write shell caches. Test overrides:
 # BOOTSTRAP_NVM_KEG_CANDIDATES, BOOTSTRAP_CLT_SHIMS and
 # BOOTSTRAP_SYSTEM_FONT_DIRS (colon-separated paths).
 
 # Structural checks run after the tools.tsv rows: id, tier, generic doc step
-# (doctor.sh maps the step with bootstrap_doc_ref). These ids are reserved;
+# (scripts/commands/doctor.sh maps the step with bootstrap_doc_ref). These ids are reserved;
 # tools.tsv never uses them.
-# shellcheck disable=SC2034 # read by doctor.sh
+# shellcheck disable=SC2034 # read by scripts/commands/doctor.sh
 BOOTSTRAP_STRUCTURAL_CHECKS='locale core H1-locale
 chezmoi-config core H7-deploy
 path-order core H7-deploy
@@ -79,7 +79,7 @@ bootstrap_check_chezmoi_config() {
             bootstrap_check_result ok '~/.config/chezmoi/chezmoi.toml names this home and this checkout; use a scoped diff to review configuration'
             ;;
         'elsewhere '*)
-            bootstrap_check_result warn "~/.config/chezmoi/chezmoi.toml names the checkout ${state#elsewhere }, not this checkout $(cd "$1" && pwd -P); run ${state#elsewhere }/doctor.sh for its state"
+            bootstrap_check_result warn "~/.config/chezmoi/chezmoi.toml names the checkout ${state#elsewhere }, not this checkout $(cd "$1" && pwd -P); run $(printf '%q' "${state#elsewhere }/dotfiles") doctor for its state"
             ;;
         maintenance)
             bootstrap_check_result human 'maintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md'
@@ -181,7 +181,7 @@ bootstrap_doc_steps() {
 }
 
 # bootstrap_tool_row_valid ROW [STEPS]: 0 when a tools.tsv data row has
-# exactly eight non-empty tab-separated cells and the vocabularies doctor.sh
+# exactly eight non-empty tab-separated cells and the vocabularies scripts/commands/doctor.sh
 # relies on, and, when STEPS (from bootstrap_doc_steps) is non-empty, a doc
 # step that docs/bootstrap.md has a heading for. Prints the reason when not.
 # tests/test_bootstrap_manifest.py is the full validator; this keeps the
@@ -387,7 +387,7 @@ bootstrap_check_tool() {
     local probe=$1 flag=$2 floor=$3 absent=$4 target var rc
     case $probe in
         psmodule:*)
-            bootstrap_check_result skip "PowerShell module ${probe#psmodule:}; doctor.ps1 checks it"
+            bootstrap_check_result skip "PowerShell module ${probe#psmodule:}; dotfiles.ps1 doctor checks it"
             ;;
         env:*)
             var=${probe#env:}
@@ -461,21 +461,19 @@ bootstrap_check_locale() {
 # coding-agent-kit installs.
 BOOTSTRAP_KIT_HELPERS='statusline.cjs notify.cjs check-git-hooks.cjs'
 
-# bootstrap_payload_hook ROOT: the payload hook a person runs by path. On a
-# home with a chezmoi config that is the hook of the source its sourceDir
-# names, which sync-payloads runs, never ROOT's unless the config names ROOT;
-# 1 when the config does not resolve (a link or not a regular file, invalid,
-# maintenance, or no guard in ROOT). Without a config ROOT's.
-bootstrap_payload_hook() {
+# bootstrap_payload_source ROOT: selected checkout path only, never a command.
+# A configured home selects its validated source, or refuses with status 1.
+# Without a config return ROOT before maintenance checks, preserving advice.
+bootstrap_payload_source() {
     local state
     if ! bootstrap_configured_home; then
-        printf '%s\n' "$1/scripts/payload-update.sh"
+        printf '%s\n' "$1"
         return 0
     fi
     state=$(bootstrap_chezmoi_state "$1")
     case $state in
-        ok) printf '%s\n' "$(cd "$1" && pwd -P)/scripts/payload-update.sh" ;;
-        'elsewhere '*) printf '%s\n' "${state#elsewhere }/scripts/payload-update.sh" ;;
+        ok) printf '%s\n' "$(cd "$1" && pwd -P)" ;;
+        'elsewhere '*) printf '%s\n' "${state#elsewhere }" ;;
         *) return 1 ;;
     esac
 }
@@ -484,11 +482,10 @@ bootstrap_payload_hook() {
 # (default kit pymol skills) passes its unix-probe row of
 # ROOT/config/payloads.tsv and an installed kit left the Claude helpers. Only
 # a person installs the payload repos, so every shortfall names what to run
-# and only warns: sync-payloads where the chezmoi config resolves, else this
-# checkout's --now line (sync-payloads refuses a home without a valid config,
-# and so does every hook under maintenance).
+# and only warns. Advice names the selected public frontend, with ROOT
+# retained when source resolution refuses.
 bootstrap_check_payloads() {
-    local config=$1/config/payloads.tsv items item line probe path hook advice
+    local config=$1/config/payloads.tsv items item line probe path source selected advice
     local short='' found='' issues=''
     if [ ! -r "$config" ]; then
         bootstrap_check_result warn "no readable $config"
@@ -524,10 +521,11 @@ bootstrap_check_payloads() {
         fi
     done
     if [ -n "$short" ]; then
-        advice="sh $(printf '%q' "$1/scripts/payload-update.sh") --now ITEM"
-        if bootstrap_configured_home && hook=$(bootstrap_payload_hook "$1"); then
-            advice="sync-payloads ITEM (sh $(printf '%q' "$hook") --now ITEM)"
+        source=$1
+        if selected=$(bootstrap_payload_source "$1"); then
+            source=$selected
         fi
+        advice="$(printf '%q' "$source/dotfiles") payloads sync ITEM"
         issues="$issues; not installed: ${short#, }: run $advice"
         case $short in
             *kit*) issues="$issues; until the kit and its helpers are installed, Claude's status line is blank and its hooks fail without blocking" ;;
@@ -552,7 +550,7 @@ BOOTSTRAP_LOCAL_BIN_TOOLS='claude codex micromamba kitty kitten'
 # conda ahead of it on purpose (they run after ~/.profile), as the sherlock
 # and marlowe overlays do the login env, so only a real shadow, two installs
 # of one tool, is reported; the login env is exempt on hpc. PATH_VALUE is the
-# caller's PATH before doctor.sh prepended anything.
+# caller's PATH before scripts/commands/doctor.sh prepended anything.
 bootstrap_check_path_order() {
     local local_bin=${HOME%/}/.local/bin login=${HOME%/}/micromamba/envs/login/bin
     local rest=$1: entry earlier='' found=0 file name shadows='' count=0 IFS=' ' lines

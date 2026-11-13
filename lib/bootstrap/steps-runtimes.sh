@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# Runtime steps of setup-host.sh: S4-nvm (nvm and Node.js).
+# Runtime steps of scripts/commands/setup.sh: S4-nvm (nvm and Node.js).
 # Checks are read-only and offline; apply functions run in steps_guarded
 # and report each failure explicitly. Sourced only (after steps.sh and
 # steps-common.sh); defines functions and changes no shell options.
@@ -136,11 +136,11 @@ steps_nvm_block() {
     steps_block_begin S4-nvm judgment
     if [ "${4:-}" = manual ]; then
         printf '%s\n' '# applies only when NVM_DIR holds an nvm.sh that is not the pinned, unmodified nvm checkout' \
-            '# and node or the default alias is missing: ./setup-host.sh then never sources it and prints this block'
+            "# and node or the default alias is missing: $(steps_quote "$STEPS_ROOT/dotfiles") setup then never sources it and prints this block"
     fi
     if [ "${4:-}" != manual ] && [ -z "$3" ]; then
         printf '# %s has an nvm.sh but is not a git checkout, so setup-host cannot check it against the pinned commit %s\n' "$1" "$2"
-        printf '%s\n' '# move it aside; the next ./setup-host.sh run installs the pinned nvm there (move versions/ back to keep its node builds)' \
+        printf '%s\n' "# move it aside; the next $(steps_quote "$STEPS_ROOT/dotfiles") setup run installs the pinned nvm there (move versions/ back to keep its node builds)" \
             "$aside"
     elif [ "${4:-}" != manual ] && [ "$3" = "$2" ]; then
         printf '# %s is at the pinned commit, but tracked files changed, so its nvm.sh is not the pinned one\n' "$1"
@@ -152,7 +152,7 @@ steps_nvm_block() {
         printf 'git -C %s fetch --depth=1 https://github.com/nvm-sh/nvm.git %s\n' "$q" "$2"
         printf 'git -C %s -c advice.detachedHead=false checkout --detach %s\n' "$q" "$2"
     fi
-    printf '# then run ./setup-host.sh --host %s again\n' "$STEPS_HOST"
+    printf '# then run %s setup --host %s again\n' "$(steps_quote "$STEPS_ROOT/dotfiles")" "$STEPS_HOST"
     steps_block_end
 }
 

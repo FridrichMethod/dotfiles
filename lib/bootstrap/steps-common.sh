@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # the STEP_* and STEPS_* fields are read by the step files
-# Shared helpers of the setup-host.sh steps: HUMAN block frames, tools.tsv
+# Shared helpers of the scripts/commands/setup.sh steps: HUMAN block frames, tools.tsv
 # probes, installers.tsv rows and pinned downloads, scratch dirs, PATH, the
 # manifest shape check, the platform refusal and P0-preflight. Sourced only
 # (after steps.sh); defines functions and changes no shell options.

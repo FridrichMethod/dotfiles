@@ -1,13 +1,13 @@
 # shellcheck shell=bash
-# Manifest access for doctor.sh and setup-host.sh. Sourced only; defines
+# Manifest access for scripts/commands/doctor.sh and scripts/commands/setup.sh. Sourced only; defines
 # functions and changes no shell options. Bash 3.2 compatible and `set -u`
 # safe. Manifest data is split with parameter expansion and awk, never eval'd:
 # tests/test_bootstrap_manifest.py validates config/bootstrap, and this file
 # trusts what it validated. A caller's IFS (Bash `local` is dynamically
 # scoped) never changes a result: every split sets its own IFS.
 #
-# No here-documents or here-strings, here or in any file doctor.sh and
-# setup-host.sh run: Bash 3.2 (macOS /bin/bash) backs each one with a
+# No here-documents or here-strings, here or in any file scripts/commands/doctor.sh and
+# scripts/commands/setup.sh run: Bash 3.2 (macOS /bin/bash) backs each one with a
 # temporary file, which the read-only modes must not create. Nor process
 # substitution: Bash 3.2 keeps its descriptors open until the outermost
 # function returns. Lines and fields are split with parameter expansion

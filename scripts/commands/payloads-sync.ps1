@@ -2,9 +2,9 @@
 <#
 .SYNOPSIS
     Install or update the payload repos now: the native Windows twin of
-    scripts/payload-update.sh (docs/payloads.md has the whole contract).
+    scripts/commands/payloads-sync.sh (docs/payloads.md has the whole contract).
 .DESCRIPTION
-        & scripts/payload-update.ps1 -Now [ITEM...]
+        & ./dotfiles.ps1 payloads sync [ITEM...]
 
     installs each absent item of config/payloads.tsv and updates each
     installed one through the repo's own install.ps1, in the foreground, and
@@ -31,7 +31,7 @@ param(
 # Only a person's -Now run does anything. Any other call is a usage error,
 # before anything else, maintenance included.
 if (-not $Now) {
-    [Console]::Error.WriteLine('dotfiles: usage: scripts/payload-update.ps1 -Now [ITEM...]')
+    [Console]::Error.WriteLine('dotfiles: usage: dotfiles.ps1 payloads sync [ITEM...]')
     exit 2
 }
 
@@ -41,7 +41,7 @@ if (Get-Item -LiteralPath $MaintenancePath -Force -ErrorAction SilentlyContinue)
     Write-Warning 'dotfiles: payload update refused during maintenance.'
     exit 1
 }
-$Repo = Split-Path -Parent $PSScriptRoot
+$Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 $PayloadFailed = & { try {
     $ErrorActionPreference = 'Continue'
@@ -65,22 +65,23 @@ $PayloadFailed = & { try {
         }
     }
     function Get-PayloadField([string]$Name, [string]$Field) { $rows["$Name`t$Field"] }
-    # What reruns this hook: sync-payloads where it runs this hook (this
-    # home's chezmoi config names this checkout), else this hook's -Now line:
+    # What reruns this backend: sync-payloads when this home's valid config
+    # and installed launcher reach this checkout, else its public frontend:
     # sync-payloads refuses a home without a valid config. CodeGeneration
     # doubles U+2018 to U+201B as well as the apostrophe: PowerShell ends a
     # single-quoted string at each. A missing guard is tested, never
     # dot-sourced: PowerShell would look its path up as a command name,
     # searching every module on PSModulePath.
-    $rerun = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($PSCommandPath) + "' -Now"
+    $rerun = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $Repo 'dotfiles.ps1')) + "' payloads sync"
     $guard = Join-Path $Repo 'lib/chezmoi-guard.ps1'
     if (Test-Path -LiteralPath $guard -PathType Leaf) {
         try {
             . $guard
             $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-            if ((Get-DotfilesChezmoiPaths -HomePath $HOME).Source.Equals((Resolve-DotfilesDirectory $Repo), $comparison)) { $rerun = 'sync-payloads' }
+            if ((Get-DotfilesChezmoiPaths -HomePath $HOME).Source.Equals((Resolve-DotfilesDirectory $Repo), $comparison) -and
+                (Test-Path -LiteralPath (Join-Path $HOME '.local/bin/dotfiles.ps1') -PathType Leaf)) { $rerun = 'sync-payloads' }
         }
-        catch { } # No valid config: the -Now line.
+        catch { } # No valid config: the explicit checkout frontend.
     }
 
     $script:PayloadOffline = $false
@@ -232,7 +233,7 @@ $PayloadFailed = & { try {
 }
 catch {
     # Never a stack trace in a person's console: one line, with where it broke.
-    Write-Host "[dotfiles] [error] payload-update: $($_.Exception.Message) (scripts/payload-update.ps1 line $($_.InvocationInfo.ScriptLineNumber))"
+    Write-Host "[dotfiles] [error] payload-update: $($_.Exception.Message) (scripts/commands/payloads-sync.ps1 line $($_.InvocationInfo.ScriptLineNumber))"
     return $true
 } }
 

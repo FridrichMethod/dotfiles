@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 # HOME and TEMP snapshots of tests/e2e/run.ps1, for the steps that must write
-# nothing (doctor.ps1, setup-host.ps1 -Check, the second -Yes). A snapshot
+# nothing (dotfiles.ps1 doctor, dotfiles.ps1 setup --check, the second -Yes). A snapshot
 # holds every file under HOME with its size and modification time, read from
 # the file's own record (Refresh(): NTFS fills a directory listing from the
 # parent's index, which it updates lazily), every directory by name only (its
@@ -24,7 +24,7 @@
 # token cache. Every process of the runner account writes the first, the
 # Actions agent's own HTTPS traffic included, and Windows' token broker
 # refreshes the second on its own, so a new or changed entry during a step
-# cannot be pinned on the step (setup-host.ps1 -Check reads PATH, files, the
+# cannot be pinned on the step (dotfiles.ps1 setup --check reads PATH, files, the
 # registry and services, nothing networked and no account).
 # A difference there is kept in snapshots\<name>.diff as "noted ..." and does
 # not fail the step; any other difference does.

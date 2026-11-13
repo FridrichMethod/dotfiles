@@ -369,8 +369,9 @@ then remove the marker. Never delete state to clear a conflict.
 ## Not provided
 
 No scheduler, locks, retries within a session, elevation or payload runs.
-The payload repos install only when a person runs `sync-payloads` or
-`scripts/payload-update.sh --now` (`payload-update.ps1 -Now`); see
+The payload repos install only when a person runs `dotfiles payloads sync`
+or `sync-payloads`; the internal command backends are distinct from the stable
+login lifecycle hooks. See
 [payloads.md](payloads.md).
 
 ## Coverage

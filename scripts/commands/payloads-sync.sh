@@ -4,7 +4,7 @@
 # commands of config/payloads.tsv; each repo owns its installation, updates
 # and locking (docs/payloads.md has the whole contract).
 #
-# `sh scripts/payload-update.sh --now [ITEM...]`, which sync-payloads runs,
+# `dotfiles payloads sync [ITEM...]`, which sync-payloads runs,
 # installs each absent item, updates each installed one and exits 1 when one
 # failed. Only a person runs it: no login or schedule does, it starts no
 # background run and it keeps no state of its own. Knobs:
@@ -15,7 +15,7 @@
 # before anything else, maintenance included.
 
 if [ "${1-}" != --now ]; then
-    printf '%s\n' 'dotfiles: usage: sh scripts/payload-update.sh --now [ITEM...]' >&2
+    printf '%s\n' 'dotfiles: usage: dotfiles payloads sync [ITEM...]' >&2
     exit 2
 fi
 # Persistent operator maintenance refuses an explicit run too.
@@ -26,7 +26,7 @@ fi
 
 set -fu
 shift
-repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
+repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
 if [ -r "$repo/lib/terminal.sh" ]; then
     # shellcheck source=lib/terminal.sh
     . "$repo/lib/terminal.sh"
@@ -56,15 +56,16 @@ quote() {
     done
     printf '%s%s%s%s\n' "$_q_mark" "$_q_done" "$_q_rest" "$_q_mark"
 }
-# rerun: what reruns this hook. sync-payloads where it runs this hook (this
-# home's chezmoi config names this checkout), else this hook's --now line:
+# rerun: use sync-payloads only when the installed launcher reaches this
+# checkout; otherwise name this checkout's public frontend:
 # sync-payloads refuses a home without a valid config.
-rerun="sh $(quote "$repo/scripts/payload-update.sh") --now"
+rerun="$(quote "$repo/dotfiles") payloads sync"
 if [ -r "$repo/lib/chezmoi-guard.sh" ]; then
     # shellcheck source=lib/chezmoi-guard.sh
     . "$repo/lib/chezmoi-guard.sh"
     if configured=$(dotfiles_chezmoi_source "$HOME") &&
-        [ "$configured" = "$(CDPATH='' cd -P -- "$repo" && pwd -P)" ]; then
+        [ "$configured" = "$(CDPATH='' cd -P -- "$repo" && pwd -P)" ] &&
+        [ -f "$HOME/.local/bin/dotfiles" ] && [ -x "$HOME/.local/bin/dotfiles" ]; then
         rerun=sync-payloads
     fi
 fi

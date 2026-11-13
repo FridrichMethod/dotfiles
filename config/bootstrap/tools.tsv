@@ -1,4 +1,4 @@
-# Day-zero tool manifest read by doctor.sh, doctor.ps1 and setup-host.*.
+# Day-zero tool manifest read by the native doctor/setup backends in scripts/commands/.
 # pinned 2026-10-09
 # Tab-separated. Lines starting with # are comments; the first other line is
 # the header. "-" means n/a; no cell is empty. Grammar and vocabularies are
@@ -23,7 +23,7 @@
 # open popups and menus ungated).
 id	tier	hosts	probe	version_flag	floor	absent	doc
 git	core	all	git	--version	-	cannot clone or update the dotfiles	P0-preflight
-bash	core	unix	bash	--version	-	doctor.sh and setup-host.sh cannot run	P0-preflight
+bash	core	unix	bash	--version	-	dotfiles doctor and dotfiles setup cannot run	P0-preflight
 zsh	core	unix	zsh	--version	-	no interactive shell for the dotfiles .zshrc	H1-apt-core
 git-lfs	core	unix	git-lfs	--version	-	the required lfs filter in .gitconfig fails on LFS repositories	H1-apt-core
 curl	core	unix	curl	--version	-	setup-host downloads fail, and the payload hook needs wget instead	H1-apt-core
@@ -73,7 +73,7 @@ tmux-continuum	core	unix	file:$HOME/.tmux/plugins/tmux-continuum/continuum.tmux	
 bat-theme	core	all	file:$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme	-	-	BAT_THEME Catppuccin Mocha is unknown to bat	S3-bat-theme
 micromamba	core	sherlock,marlowe	micromamba	--version	-	the login env cannot be created or updated	S2-micromamba
 login-env	core	sherlock,marlowe	file:$HOME/micromamba/envs/login/bin/zsh	-	-	ssh sherlock and ssh marlowe cannot exec the login zsh	S2-login-env
-pwsh	core	win	pwsh	--version	7.0	the PowerShell 7 profile and doctor.ps1 cannot run	W1-winget
+pwsh	core	win	pwsh	--version	7.0	the PowerShell 7 profile and dotfiles.ps1 doctor cannot run	W1-winget
 ripgrep	cli	all	rg	--version	-	rg searches fail	S2-brew-bundle
 git-delta	cli	all	delta	--version	-	fzf-tab git diff and show previews are empty	S2-brew-bundle
 tldr	cli	all	tldr	--version	-	fzf-tab command and tldr previews fall back to man	S2-brew-bundle

@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Day-zero installer for the win host - the thin Windows twin of setup-host.sh.
+    Day-zero installer for the win host - the thin Windows twin of scripts/commands/setup.sh.
 
 .DESCRIPTION
     Provisions the chezmoi configuration tools for the win host.
@@ -27,7 +27,7 @@
     W1-winget leaves out each package whose tool the doctor already reports
     ok in this session, whoever installed it (the package maps to its
     tools.tsv row through the "# alias: TOOL-ID PackageIdentifier" lines, as
-    Brewfile entries do in setup-host.sh), so winget adds no second copy of a
+    Brewfile entries do in scripts/commands/setup.sh), so winget adds no second copy of a
     tool that another installer provides, such as Claude Code's and Codex's
     own installers. Probes see this process's PATH, as the doctor run here
     does; run it from a new terminal after installing tools by hand.
@@ -47,13 +47,13 @@
     non-interactive run without -Yes, or a declined prompt); 3 work remains:
     a blocking HUMAN step is pending (HW-clone or HW-deploy), -WhatIf or a
     No at a -Confirm prompt left a step unapplied, or, under -Check, a step
-    is still to apply. As in setup-host.sh, the other HUMAN
+    is still to apply. As in scripts/commands/setup.sh, the other HUMAN
     steps (HW-execution-policy, HW-ssh-agent, HW-wsl and HW-auth) are
     printed while pending but leave the exit code alone;
-    .\doctor.ps1 -Online then shows whether sign-in is done.
+    .\dotfiles.ps1 doctor --online then shows whether sign-in is done.
 
 .PARAMETER HostName
-    Alias -Host. Only win is accepted; use ./setup-host.sh on Unix.
+    Alias -Host. Only win is accepted; use ./dotfiles setup on Unix.
 
 .PARAMETER Tier
     all, or a comma list of core, cli, ai, desktop, contributor, host.
@@ -62,7 +62,7 @@
 .PARAMETER Check
     Print one plan line per step, "<step-id> <done|todo|human|skip> <detail>",
     and change nothing: no writes and no network. Exits 3 while a step is
-    todo or a blocking HUMAN step is pending, as setup-host.sh --check does.
+    todo or a blocking HUMAN step is pending, as scripts/commands/setup.sh --check does.
 
 .PARAMETER Yes
     Apply without asking. Required when the session is not interactive.
@@ -71,10 +71,10 @@
     Print every HUMAN block and exit 0 without checking or applying anything.
 
 .EXAMPLE
-    .\setup-host.ps1 -Check
+    .\dotfiles.ps1 setup --check
 
 .EXAMPLE
-    .\setup-host.ps1 -Tier all -Yes
+    .\dotfiles.ps1 setup --tier all --yes
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -90,7 +90,8 @@ param(
 Set-StrictMode -Version Latest
 $PSNativeCommandUseErrorActionPreference = $false
 
-$RepoRoot = $PSScriptRoot
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$FrontendLiteral = "& '" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $RepoRoot 'dotfiles.ps1')) + "'"
 function Write-DotfilesLog {
     param([string]$Level, [string]$Message)
     Write-Host "[dotfiles] [$Level] $Message"
@@ -102,7 +103,7 @@ try {
 
 $AutomatedSteps = @('W1-winget', 'W1-psresources', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')
 $HumanSteps = @('HW-clone', 'HW-deploy', 'HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
-# A pending blocking step makes the run exit 3 (setup-host.sh's "blocking").
+# A pending blocking step makes the run exit 3 (scripts/commands/setup.sh's "blocking").
 $BlockingHumanSteps = @('HW-clone', 'HW-deploy')
 
 function New-SetupState {
@@ -131,7 +132,7 @@ function Get-SetupMissingNames {
 
 function Get-SetupWingetToolRow {
     # The win tools.tsv row that the winget package Id installs, through the
-    # "# alias: TOOL-ID Id" lines (steps_brew_tool_id in setup-host.sh): a
+    # "# alias: TOOL-ID Id" lines (steps_brew_tool_id in scripts/commands/setup.sh): a
     # win-only row before a general one. $null when no row maps to it.
     param([Parameter(Mandatory)][string]$Id)
     if (-not $script:ToolAliases.ContainsKey($Id)) { return $null }
@@ -363,7 +364,7 @@ function Get-SetupHumanBlock {
     switch -CaseSensitive ($Id) {
         'HW-clone' {
             return @{ Kind = 'judgment'; Lines = @(
-                    '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.'
+                    '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun dotfiles.ps1 setup from the clone.'
                     '# Git and PowerShell 7 as the MSI in Program Files\PowerShell\7:'
                     'winget install --id Git.Git -e --source winget'
                     'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix'
@@ -405,7 +406,7 @@ function Get-SetupHumanBlock {
         }
         'HW-auth' {
             return @{ Kind = 'auth'; Lines = @(
-                    '# Sign in, then check with .\doctor.ps1 -Online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.'
+                    "# Sign in, then check with $FrontendLiteral doctor --online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage."
                     'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519'
                     'gh auth login --git-protocol ssh'
                     'claude auth login'
@@ -440,7 +441,7 @@ function Invoke-SetupStep {
             Update-BootstrapSessionPath
             $missing = @(Get-SetupMissingNames @(Get-SetupStepRows W1-winget))
             if ($missing.Count) {
-                Write-DotfilesLog warn "W1-winget: not on this session's PATH yet: $($missing -join ', '); open a new shell, then run .\doctor.ps1"
+                Write-DotfilesLog warn "W1-winget: not on this session's PATH yet: $($missing -join ', '); open a new shell, then run $FrontendLiteral doctor"
             }
             return $result
         }
@@ -530,7 +531,7 @@ function Invoke-BootstrapSetup {
     $ErrorActionPreference = 'Stop'
     $script:SetupStatus = 2
     if ($HostName.ToLowerInvariant() -cne 'win') {
-        Write-DotfilesLog error "setup-host.ps1 provisions only the win host, not '$HostName'; use ./setup-host.sh --host <host> on Unix."
+        Write-DotfilesLog error "dotfiles setup provisions only the win host, not '$HostName'; use ./dotfiles setup --host <host> on Unix."
         return
     }
     if (-not (Test-BootstrapTierSelection $Tier)) {
@@ -570,7 +571,7 @@ function Invoke-BootstrapSetup {
     }
 
     if ($Check) {
-        # As setup-host.sh --check: 0 only when nothing is left to apply.
+        # As scripts/commands/setup.sh --check: 0 only when nothing is left to apply.
         foreach ($state in $plan.Values) { "$($state.Id) $($state.Status) $($state.Detail)" }
         $held = @($plan.Values | Where-Object { $_.Status -ceq 'human' -and $_.Id -cin $BlockingHumanSteps }).Count
         $todo = @($plan.Values | Where-Object { $_.Status -ceq 'todo' }).Count
@@ -580,7 +581,7 @@ function Invoke-BootstrapSetup {
 
     if (-not $Yes) {
         foreach ($state in $plan.Values) { "$($state.Id) $($state.Status) $($state.Detail)" }
-        if (-not $PSCmdlet.ShouldContinue('Apply the todo steps listed above?', 'setup-host.ps1')) {
+        if (-not $PSCmdlet.ShouldContinue('Apply the todo steps listed above?', 'dotfiles setup')) {
             Write-DotfilesLog warn 'Declined; nothing was changed.'
             return
         }
@@ -616,10 +617,10 @@ function Invoke-BootstrapSetup {
     $held = @($pending | Where-Object { $_ -cin $BlockingHumanSteps })
     $notApplied = @($script:SetupNotApplied)
     if ($notApplied.Count) {
-        Write-DotfilesLog warn "Steps not applied: $($notApplied -join ' '); rerun .\setup-host.ps1 to apply them"
+        Write-DotfilesLog warn "Steps not applied: $($notApplied -join ' '); rerun $FrontendLiteral setup to apply them"
     }
     if ($held.Count) {
-        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun .\setup-host.ps1"
+        Write-DotfilesLog warn "HUMAN steps pending: $($held -join ' '); run the HUMAN blocks above, then rerun $FrontendLiteral setup"
         $script:SetupStatus = 3
         return
     }
@@ -643,7 +644,7 @@ $script:InstallerRows = @()
 $script:SetupStatus = 1
 try { Invoke-BootstrapSetup }
 catch {
-    Write-DotfilesLog error "setup-host.ps1 failed: $($_.Exception.Message)"
+    Write-DotfilesLog error "dotfiles setup failed: $($_.Exception.Message)"
     $script:SetupStatus = 1
 }
 exit $script:SetupStatus

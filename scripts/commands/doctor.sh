@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-# Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [--tier LIST|all]
+# Usage: dotfiles doctor [--host HOST | --platform PLATFORM] [--tier LIST|all]
 #                    [--tsv] [--quiet] [--online] [--smoke] [--list]
-# Example: ./doctor.sh --host lab-ubuntu
+# Example: dotfiles doctor --host lab-ubuntu
 # Reports which day-zero tools from config/bootstrap/tools.tsv this machine
 # has, plus structural checks (locale, the chezmoi config, PATH order,
 # rc-file pollution, oh-my-zsh order, Homebrew nvm and the payload repos of
@@ -15,13 +15,13 @@ set -euo pipefail
 # [data].host of that config, read as text; nothing else selects one, and it
 # is never guessed. generic as
 # that [data].host means the detected platform, as --platform. The win host
-# is checked by doctor.ps1.
+# is checked by dotfiles.ps1 doctor.
 # Exit: 0 no required-tier row missing, outdated or human; 1 one is (a tool
 # row or a structural check); 2 usage error, invalid manifest, unknown host
 # or win.
 # docs/bootstrap.md explains each step id the report cites.
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [[ -r "$REPO_ROOT/lib/terminal.sh" ]]; then
     # shellcheck source=lib/terminal.sh
     . "$REPO_ROOT/lib/terminal.sh"
@@ -69,7 +69,7 @@ export GIT_OPTIONAL_LOCKS=0 GH_TELEMETRY=0 GH_NO_UPDATE_NOTIFIER=1 TLDR_AUTO_UPD
 
 usage() {
     printf '%s\n' \
-        'Usage: ./doctor.sh [--host HOST | --platform PLATFORM] [options]' \
+        'Usage: dotfiles doctor [--host HOST | --platform PLATFORM] [options]' \
         '' \
         'Read-only, offline check of the day-zero tools in config/bootstrap/tools.tsv' \
         'and of the structural setup (locale, chezmoi-config, path-order, rc-pollution,' \
@@ -78,7 +78,7 @@ usage() {
         'Host selection (default: on a home with ~/.config/chezmoi/chezmoi.toml the' \
         '[data].host of that config):' \
         '  --host HOST         mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe' \
-        '                      (win: pwsh -File doctor.ps1 -Host win)' \
+        '                      (win: dotfiles.ps1 doctor --host win)' \
         '  --platform PLATFORM macos, debian, hpc or other: rows for every host only,' \
         '                      without a host overlay' \
         'generic as that [data].host means the detected platform without an' \
@@ -108,7 +108,7 @@ usage() {
 
 usage_error() {
     dotfiles_log error "$1"
-    dotfiles_log error 'Run ./doctor.sh --help for usage.'
+    dotfiles_log error "Run $(printf '%q' "$REPO_ROOT/dotfiles") doctor --help for usage."
     exit 2
 }
 
@@ -120,7 +120,7 @@ known_hosts_line() {
 
 reject_win() {
     dotfiles_log error "the 'win' host is checked from Windows, not from POSIX."
-    dotfiles_log error 'Run this in PowerShell from the repo root instead: pwsh -File doctor.ps1 -Host win'
+    dotfiles_log error "Run this in PowerShell instead: & '${REPO_ROOT//\'/\'\'}/dotfiles.ps1' doctor --host win"
     exit 2
 }
 

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# Package-manager steps of setup-host.sh: S2-brew-bundle (Brewfiles),
+# Package-manager steps of scripts/commands/setup.sh: S2-brew-bundle (Brewfiles),
 # S2-micromamba and S2-login-env (the hpc login env).
 # Checks are read-only and offline; apply functions run in steps_guarded
 # and report each failure explicitly. Sourced only (after steps.sh and
@@ -89,7 +89,7 @@ steps_brew_tool_id() {
 # floor when the row has one; an unknown version against a floor does not
 # pass). Read-only and offline, as the doctor is: it runs only the row's
 # version flag, none for a presence-only row, under the GH_TELEMETRY=0 and
-# TLDR_AUTO_UPDATE_DISABLED=1 that setup-host.sh exports.
+# TLDR_AUTO_UPDATE_DISABLED=1 that scripts/commands/setup.sh exports.
 steps_brew_entry_provided() {
     local id row probe flag floor absent
     id=$(steps_brew_tool_id "$1") || return 1
@@ -495,7 +495,7 @@ steps_brew_shared_block() {
     steps_block_begin S2-brew-bundle sudo
     if [ "$1" = manual ]; then
         printf '%s\n' '# applies while you cannot write the Homebrew prefix (one shared with other accounts);' \
-            '# ./setup-host.sh then stops S2-brew-bundle before running brew and prints this block for the missing entries'
+            "# $(steps_quote "$STEPS_ROOT/dotfiles") setup then stops S2-brew-bundle before running brew and prints this block for the missing entries"
         what='the entries of one Brewfile that apply here'
     fi
     steps_brew_shared_notes
@@ -528,7 +528,7 @@ steps_brew_conflict_block() {
     steps_block_begin S2-brew-bundle judgment
     if [ "$1" = manual ]; then
         printf '%s\n' '# applies only when a conflicting formula or cask below is installed, the Brewfile one is not, and the doctor does not find its tool;' \
-            '# ./setup-host.sh then stops S2-brew-bundle before running brew and prints this block'
+            "# $(steps_quote "$STEPS_ROOT/dotfiles") setup then stops S2-brew-bundle before running brew and prints this block"
     fi
     [ -z "$STEPS_BREW_LOCKED" ] || steps_brew_shared_notes
     lines=$2$BOOTSTRAP_NL
@@ -541,9 +541,9 @@ steps_brew_conflict_block() {
             "$name" "$file" "$other" "$kind"
     done
     if [ -n "$STEPS_BREW_LOCKED" ]; then
-        printf '%s\n' "# uninstall each conflicting formula or cask below as the owner; the next ./setup-host.sh run then prints the owner's lines that install the Brewfile one"
+        printf '%s\n' "# uninstall each conflicting formula or cask below as the owner; the next $(steps_quote "$STEPS_ROOT/dotfiles") setup run then prints the owner's lines that install the Brewfile one"
     else
-        printf '%s\n' '# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one'
+        printf '%s\n' "# uninstall each conflicting formula or cask below; the next $(steps_quote "$STEPS_ROOT/dotfiles") setup run then bundles the Brewfile one"
     fi
     lines=$2$BOOTSTRAP_NL
     while [ -n "$lines" ]; do

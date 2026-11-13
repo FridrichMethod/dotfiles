@@ -158,19 +158,23 @@ for line in open(sys.argv[1], encoding='utf-8'):
     match = re.match(r'\s+types: \[(.*)\]\s*$', line)
     if match and hook is not None:
         hook['types'] = [tag.strip() for tag in match.group(1).split(',') if tag.strip()]
+        continue
+    match = re.match(r'\s+args: \[(.*)\]\s*$', line)
+    if match and hook is not None:
+        hook['args'] = [arg.strip().strip('\'"') for arg in match.group(1).split(',')]
 need = {
     'cli': ['dotfiles', 'dotfiles.ps1', 'home/dot_local/bin/executable_dotfiles',
             'home/dot_local/bin/dotfiles.ps1', 'home/dot_aliases',
             'home/Documents/PowerShell/profile.ps1', 'tests/cli.sh', 'tests/cli.ps1',
             'tests/test_cli_unix.py', 'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
-            'doctor.sh', 'doctor.ps1', 'setup-host.sh', 'setup-host.ps1',
-            'scripts/payload-update.sh', 'scripts/payload-update.ps1',
+            'scripts/commands/doctor.sh', 'scripts/commands/doctor.ps1', 'scripts/commands/setup.sh', 'scripts/commands/setup.ps1',
+            'scripts/commands/payloads-sync.sh', 'scripts/commands/payloads-sync.ps1',
             'tests/run.sh', 'tests/run.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1'],
     'ai-policy': ['tests/ai-policy.sh', 'tests/test_ai_policy.py', 'home/.policy/claude-settings.json',
                   'home/dot_claude/CLAUDE.md', 'home/dot_codex/AGENTS.md',
                   'home/dot_codex/rules/portable.rules', 'CLAUDE.md', 'AGENTS.md',
                   'tests/lib/environment.sh'],
-    'payload-update': ['scripts/payload-update.sh', 'config/payloads.tsv', 'home/dot_aliases', 'home/dot_profile',
+    'payload-update': ['scripts/commands/payloads-sync.sh', 'config/payloads.tsv', 'home/dot_aliases', 'home/dot_profile',
                        'home/dot_zshrc', 'lib/terminal.sh', 'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                        'tests/payload-update.sh', 'tests/test_payload_download.py'],
     'test-entrypoints': ['.pre-commit-config.yaml', 'tests/test-entrypoints.sh', 'tests/run.sh', 'tests/run.ps1',
@@ -181,7 +185,7 @@ need = {
     'chezmoi': ['tests/chezmoi_support.py', 'tests/test_chezmoi_foundation.py',
                 'lib/chezmoi-guard.sh', 'lib/chezmoi-guard.ps1',
                 'scripts/chezmoi-update.sh', 'scripts/chezmoi-update.ps1',
-                'scripts/payload-update.sh', '.gitignore',
+                'scripts/commands/payloads-sync.sh', '.gitignore',
                 'home/.chezmoidata/codex-policy.json',
                 'home/.policy/claude-settings.json', 'home/.policy/codex-config.toml',
                 'home/dot_claude/modify_private_settings.json',
@@ -201,27 +205,30 @@ need = {
                 'tests/chezmoi.ps1', 'tests/lib/environment.sh', 'tests/lib/environment.ps1',
                 '.github/scripts/install-test-chezmoi.py', 'lib/bootstrap/platform.sh',
                 'lib/bootstrap/checks.sh', 'lib/bootstrap/steps-human.sh',
-                'doctor.sh', 'setup-host.sh'],
+                'scripts/commands/doctor.sh', 'scripts/commands/setup.sh'],
     'e2e-harness': ['tests/e2e-harness.sh', 'tests/e2e/inside.sh', 'tests/e2e/lib/blocks.sh',
                     'tests/e2e/lib/steps.sh', 'docs/bootstrap.md', 'config/bootstrap/installers.tsv',
                     '.chezmoiversion', 'lib/bootstrap/steps-common.sh', 'lib/chezmoi-guard.sh'],
     'shell-profile': ['home/dot_profile', 'home/dot_aliases', 'home/dot_zshrc', 'home/dot_oh-my-zsh/custom/nvm.zsh',
                       'home/dot_oh-my-zsh/custom/fzf-tab.zsh', 'lib/chezmoi-guard.sh'],
-    'terminal-output': ['lib/terminal.sh', 'lib/terminal.ps1', 'tests/terminal.ps1', 'doctor.ps1', 'setup-host.ps1'],
-    'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/payload-update.ps1', 'tests/powershell-profile.sh',
-                           'doctor.ps1', 'setup-host.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
+    'terminal-output': ['lib/terminal.sh', 'lib/terminal.ps1', 'tests/terminal.ps1', 'scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1'],
+    'powershell-profile': ['lib/chezmoi-guard.ps1', 'scripts/commands/payloads-sync.ps1', 'tests/powershell-profile.sh',
+                           'scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1', 'lib/terminal.ps1', 'scripts/chezmoi-update.ps1',
                            'tests/run.ps1', 'tests/terminal.ps1', 'dotfiles.ps1',
                            'home/dot_local/bin/dotfiles.ps1', 'tests/cli.ps1',
                            'home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/'
                            'LocalState/settings.json', 'home/Documents/PowerShell/profile.ps1',
                            'home/Documents/WindowsPowerShell/profile.ps1',
                            'home/dot_config/oh-my-posh/prompt.omp.json', 'home/dot_zshrc'],
-    'doctor': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
-    'setup-host': ['lib/terminal.sh', 'lib/chezmoi-guard.sh'],
-    'bootstrap-windows': ['lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1'],
+    'doctor': ['scripts/commands/doctor.sh', 'lib/terminal.sh', 'lib/chezmoi-guard.sh'],
+    'setup-host': ['scripts/commands/setup.sh', 'lib/terminal.sh', 'lib/chezmoi-guard.sh'],
+    'bootstrap-windows': ['scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1',
+                          'lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1'],
+    'bootstrap-manifest': ['dotfiles', 'scripts/commands/doctor.sh', 'scripts/commands/setup.sh',
+                           'scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1'],
     'e2e-harness-windows': ['tests/e2e-harness-windows.sh', 'tests/e2e-harness.ps1',
                             'tests/e2e/run.ps1', 'tests/e2e/lib/steps.ps1', 'tests/e2e/lib/flow-win.ps1',
-                            'docs/bootstrap.md', 'lib/chezmoi-guard.ps1', 'setup-host.ps1'],
+                            'docs/bootstrap.md', 'lib/chezmoi-guard.ps1', 'scripts/commands/setup.ps1'],
     'tmux-config': ['home/dot_tmux.conf', 'home/dot_config/tmux/metric.py', 'home/dot_config/tmux/modern.conf'],
     'claude-customizations': ['home/.policy/claude-settings.json', 'tests/claude-customizations.cjs'],
     'ai-integration': ['.claude/settings.json', 'home/.policy/claude-settings.json', 'home/dot_zsh_aliases',
@@ -229,6 +236,13 @@ need = {
     'host-overlays': ['home/.hosts/wsl-ubuntu/.config/bash/.bashrc', 'home/.hosts/lab-ubuntu/.config/zsh/.zshrc',
                       'home/.hosts/mac/.config/sh/.profile', 'home/dot_aliases'],
 }
+need['payload-update'].append('scripts/commands/payloads-sync.ps1')
+need['chezmoi'].append('scripts/commands/payloads-sync.ps1')
+need['shell-profile'].extend(['dotfiles', 'scripts/commands/payloads-sync.sh'])
+for hook_id, suffix, frontend in (('e2e-harness', 'sh', 'dotfiles'),
+                                  ('e2e-harness-windows', 'ps1', 'dotfiles.ps1')):
+    need[hook_id].extend([frontend, *(f'scripts/commands/{command}.{suffix}'
+                                    for command in ('doctor', 'setup', 'payloads-sync'))])
 missed = []
 for name, excluded, checked in (
     ('check-json', ['home/dot_claude/modify_private_settings.json',
@@ -263,6 +277,24 @@ RENDERED_ONLY = set(UPSTREAM) | {'.xprofile'}
 def selects(variant, path):
     files, exclude = variant.get('files'), variant.get('exclude')
     return bool((files is None or files.search(path)) and not any(e and e.search(path) for e in (exclude, top_exclude)))
+# Retired production paths must not remain in behavior-hook dispatch maps.
+# Retained tests/doctor.sh and tests/setup-host.sh are distinct valid suites.
+retired = [f'{command}.{suffix}' for command in ('doctor', 'setup-host')
+           for suffix in ('sh', 'ps1')]
+retired += [f'scripts/payload-update.{suffix}' for suffix in ('sh', 'ps1')]
+for name in ('cli', 'chezmoi', 'terminal-output', 'payload-update', 'powershell-profile',
+             'bootstrap-manifest', 'doctor', 'setup-host', 'bootstrap-windows',
+             'e2e-harness', 'e2e-harness-windows'):
+    for path in retired:
+        if any(selects(variant, path) for variant in hooks[name]):
+            missed.append(f'{name} still selects retired production path {path}')
+for path, dialect in (('dotfiles', 'posix'), ('scripts/commands/payloads-sync.sh', 'posix'),
+                      ('scripts/commands/doctor.sh', 'bash'), ('scripts/commands/setup.sh', 'bash')):
+    selected = [variant for variant in hooks['shfmt'] if selects(variant, path)]
+    if len(selected) != 1 or selected[0].get('args', [])[-2:] != ['-ln', dialect]:
+        missed.append(f'{path} must select exactly one shfmt {dialect} variant')
+    if not any(selects(variant, path) for variant in hooks['shellcheck']):
+        missed.append(f'shellcheck does not lint {path}')
 for name, paths in (('trailing-whitespace', [*UPSTREAM.values(), TERMINAL]), ('end-of-file-fixer', [*UPSTREAM.values(), TERMINAL]),
                     ('shellcheck', [UPSTREAM['.local/bin/my-fzf-preview.sh']]), ('shfmt', list(UPSTREAM.values()))):
     for path in paths:

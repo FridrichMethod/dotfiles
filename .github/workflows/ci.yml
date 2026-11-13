@@ -31,7 +31,7 @@ jobs:
       # this step, never in a test. A failed install fails the job.
       - name: Install the real coding-agent-kit
         run: |
-          HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit
+          HOME="$RUNNER_TEMP/kit-home" ./dotfiles payloads sync kit
           echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:
@@ -75,7 +75,7 @@ jobs:
       # As in the Linux job.
       - name: Install the real coding-agent-kit
         run: |
-          HOME="$RUNNER_TEMP/kit-home" sh scripts/payload-update.sh --now kit
+          HOME="$RUNNER_TEMP/kit-home" ./dotfiles payloads sync kit
           echo "DOTFILES_TEST_KIT_HOME=$RUNNER_TEMP/kit-home" >>"$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:

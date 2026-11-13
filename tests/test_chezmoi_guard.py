@@ -180,7 +180,7 @@ class WriterGuardTests(unittest.TestCase):
             home, source = root / "home", root / "source"
             default = home / "dotfiles"
             trace = root / "trace"
-            for path in (home / ".config/chezmoi", home / ".config/sh", source / "scripts",
+            for path in (home / ".config/chezmoi", home / ".config/sh", source / "scripts/commands",
                          source / "lib", default / "scripts"):
                 path.mkdir(parents=True)
             (source / ".chezmoiroot").write_text("home\n")
@@ -233,8 +233,8 @@ class WriterGuardTests(unittest.TestCase):
             other = home / "dotfiles"
             unguarded = root / "unguarded source"
             trace, state = root / "trace", root / "state"
-            for path in (home / ".config/chezmoi", source / "scripts", source / "lib",
-                         other / "scripts", other / "lib", unguarded / "scripts"):
+            for path in (home / ".config/chezmoi", source / "scripts/commands", source / "lib",
+                         other / "scripts/commands", other / "lib", unguarded / "scripts/commands"):
                 path.mkdir(parents=True)
             for checkout in (source, other, unguarded):
                 (checkout / ".chezmoiroot").write_text("home\n")
@@ -244,7 +244,7 @@ class WriterGuardTests(unittest.TestCase):
             launcher.parent.mkdir(parents=True)
             shutil.copy2(ROOT / "home/dot_local/bin/executable_dotfiles", launcher)
             for checkout, name in ((source, "source"), (other, "other"), (unguarded, "unguarded")):
-                (checkout / "scripts/payload-update.sh").write_text(
+                (checkout / "scripts/commands/payloads-sync.sh").write_text(
                     f'printf "{name} %s\\n" "$*" >>"$TRACE"\nexit 4\n')
             (other / "lib/chezmoi-guard.sh").write_text('printf "other-guard\\n" >>"$TRACE"\n')
             config = home / ".config/chezmoi/chezmoi.toml"
@@ -314,7 +314,7 @@ class WriterGuardTests(unittest.TestCase):
                 hidden.rename(launcher)
             (home / ".config/dotfiles").mkdir()
             (home / ".config/dotfiles/maintenance").touch()
-            shutil.copyfile(ROOT / "scripts/payload-update.sh", source / "scripts/payload-update.sh")
+            shutil.copyfile(ROOT / "scripts/commands/payloads-sync.sh", source / "scripts/commands/payloads-sync.sh")
             for shell in SHELLS:
                 with self.subTest(shell=shell, config="maintenance"):
                     result, events = run(shell)
@@ -331,7 +331,7 @@ class WriterGuardTests(unittest.TestCase):
             marker.parent.mkdir(parents=True)
             marker.touch()
             env = {"HOME": str(home), "PATH": os.defpath, "XDG_STATE_HOME": str(home / "state")}
-            result = subprocess.run(["sh", str(ROOT / "scripts/payload-update.sh"), "--now", "not-a-payload"],
+            result = subprocess.run(["sh", str(ROOT / "scripts/commands/payloads-sync.sh"), "--now", "not-a-payload"],
                                     env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stderr, b"dotfiles: payload update refused during maintenance.\n")

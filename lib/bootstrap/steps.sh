@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # the run state (STEP_*, STEPS_*) is shared with the step files
-# Step registry and runner for setup-host.sh. Sourced only; defines functions
+# Step registry and runner for scripts/commands/setup.sh. Sourced only; defines functions
 # and changes no shell options (the runner restores errexit after each step).
 # Helpers live in steps-common.sh, the rc-pollution guard in steps-guard.sh;
 # the steps in steps-human.sh, steps-packages.sh, steps-files.sh,
@@ -381,7 +381,7 @@ steps_run_one() {
 
 # steps_rerun: the command that continues this run.
 steps_rerun() {
-    printf './setup-host.sh --host %s' "$STEPS_HOST"
+    printf '%s setup --host %s' "$(steps_quote "$STEPS_ROOT/dotfiles")" "$STEPS_HOST"
     [ "$STEPS_TIERS" = core,cli,ai ] || printf ' --tier %s' "$STEPS_TIERS"
     printf '\n'
 }
@@ -448,7 +448,7 @@ steps_list() {
 
 # steps_print_manual: every HUMAN block of STEPS_HOST, pending or not. No
 # downloads or writes; the S2-brew-bundle shared-prefix block runs the
-# doctor's read-only tool probes, under the environment setup-host.sh exports.
+# doctor's read-only tool probes, under the environment scripts/commands/setup.sh exports.
 steps_print_manual() {
     local IFS=' ' id fn
     STEPS_MODE=manual

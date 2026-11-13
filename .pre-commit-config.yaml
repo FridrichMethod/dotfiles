@@ -56,11 +56,11 @@ repos:
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, bash]
         files: (\.sh$|(^|/)(\.|dot_)bash(rc|_profile|_aliases)$)
-        exclude: ^(home/dot_local/bin/executable_my-fzf-preview\.sh|scripts/(chezmoi-update|payload-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$
+        exclude: ^(home/dot_local/bin/executable_my-fzf-preview\.sh|scripts/(chezmoi-update|commands/payloads-sync)\.sh|lib/(chezmoi-guard|terminal)\.sh)$
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, posix]
-        files: ((^|/)(\.|dot_)(profile|alias|aliases)$|^(dotfiles|home/dot_local/bin/executable_dotfiles|scripts/(chezmoi-update|payload-update)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
+        files: ((^|/)(\.|dot_)(profile|alias|aliases)$|^(dotfiles|home/dot_local/bin/executable_dotfiles|scripts/(chezmoi-update|commands/payloads-sync)\.sh|lib/(chezmoi-guard|terminal)\.sh)$)
         types: [file]
       - id: shfmt
         args: [-w, -i, "4", -ci, -ln, zsh]
@@ -93,7 +93,7 @@ repos:
         entry: tests/cli.sh
         language: script
         pass_filenames: false
-        files: ^(dotfiles(\.ps1)?|home/dot_local/bin/(executable_dotfiles|dotfiles\.ps1)|home/dot_aliases|home/Documents/PowerShell/profile\.ps1|(doctor|setup-host)\.(sh|ps1)|scripts/payload-update\.(sh|ps1)|lib/chezmoi-guard\.(sh|ps1)|tests/(cli\.(sh|ps1)|test_cli_unix\.py|run\.(sh|ps1)|lib/environment\.(sh|ps1)))$
+        files: ^(dotfiles(\.ps1)?|home/dot_local/bin/(executable_dotfiles|dotfiles\.ps1)|home/dot_aliases|home/Documents/PowerShell/profile\.ps1|scripts/commands/(doctor|setup)\.(sh|ps1)|scripts/commands/payloads-sync\.(sh|ps1)|lib/chezmoi-guard\.(sh|ps1)|tests/(cli\.(sh|ps1)|test_cli_unix\.py|run\.(sh|ps1)|lib/environment\.(sh|ps1)))$
       - id: markdown-links
         name: Markdown links
         entry: tests/markdown-links.sh
@@ -107,19 +107,19 @@ repos:
         entry: tests/chezmoi.sh
         language: script
         pass_filenames: false
-        files: ^(home/.*|[.]chezmoi(root|version)|[.]gitattributes|lib/(chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|(doctor|setup-host)[.]sh|scripts/(chezmoi-update|payload-update)[.](sh|ps1)|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
+        files: ^(home/.*|[.]chezmoi(root|version)|[.]gitattributes|lib/(chezmoi-guard[.](sh|ps1)|bootstrap/(platform|checks|steps-human)[.]sh)|scripts/commands/(doctor|setup)[.]sh|scripts/(chezmoi-update|commands/payloads-sync)[.](sh|ps1)|[.]gitignore|tests/(chezmoi[^/]*[.]py|test_chezmoi[^/]*[.]py|chezmoi[.](sh|ps1)|fixtures/chezmoi/.*|lib/environment[.](sh|ps1))|[.]github/scripts/install-test-chezmoi[.]py)$
       - id: terminal-output
         name: portable terminal output and color controls
         entry: tests/terminal.sh
         language: script
         pass_filenames: false
-        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|(doctor|setup-host)\.ps1)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(lib/terminal\.(sh|ps1)|tests/terminal\.(sh|ps1)|scripts/commands/(doctor|setup)\.ps1)$|^tests/lib/environment\.(sh|ps1)$
       - id: shell-profile
         name: portable shell profile and default manual search
         entry: tests/shell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(home/dot_(profile|aliases|zshrc)|home/dot_oh-my-zsh/custom/(nvm|fzf-tab)\.zsh|lib/chezmoi-guard\.sh|tests/shell-profile\.sh)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(home/dot_(profile|aliases|zshrc)|home/dot_oh-my-zsh/custom/(nvm|fzf-tab)\.zsh|dotfiles|scripts/commands/payloads-sync\.sh|lib/chezmoi-guard\.sh|tests/shell-profile\.sh)$|^tests/lib/environment\.(sh|ps1)$
       - id: tmux-config
         name: tmux plugin bootstrap and offline configuration
         entry: tests/tmux.sh
@@ -155,38 +155,38 @@ repos:
         entry: tests/payload-update.sh
         language: script
         pass_filenames: false
-        files: ^(scripts/payload-update\.(sh|ps1)|config/payloads\.tsv|lib/(terminal\.(sh|ps1)|chezmoi-guard\.(sh|ps1))|home/dot_(profile|aliases|zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(scripts/commands/payloads-sync\.(sh|ps1)|config/payloads\.tsv|lib/(terminal\.(sh|ps1)|chezmoi-guard\.(sh|ps1))|home/dot_(profile|aliases|zshrc)|tests/(payload-update\.(sh|ps1)|test_payload_download\.py))$|^tests/lib/environment\.(sh|ps1)$
       - id: powershell-profile
         name: PowerShell profile contract, prompt theme, parse gate and Terminal settings
         entry: tests/powershell-profile.sh
         language: script
         pass_filenames: false
-        files: ^(home/Documents/(PowerShell|WindowsPowerShell)/.*|home/dot_config/oh-my-posh/.*|home/AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/.*|home/dot_zshrc|(dotfiles|doctor|setup-host)\.ps1|home/dot_local/bin/dotfiles\.ps1|lib/(chezmoi-guard|terminal)\.ps1|scripts/(chezmoi-update|payload-update)\.ps1|tests/(powershell-profile\.(sh|ps1)|run\.ps1|terminal\.ps1|cli\.ps1))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(home/Documents/(PowerShell|WindowsPowerShell)/.*|home/dot_config/oh-my-posh/.*|home/AppData/Local/Packages/Microsoft\.WindowsTerminal_8wekyb3d8bbwe/.*|home/dot_zshrc|(dotfiles|scripts/commands/(doctor|setup))\.ps1|home/dot_local/bin/dotfiles\.ps1|lib/(chezmoi-guard|terminal)\.ps1|scripts/(chezmoi-update|commands/payloads-sync)\.ps1|tests/(powershell-profile\.(sh|ps1)|run\.ps1|terminal\.ps1|cli\.ps1))$|^tests/lib/environment\.(sh|ps1)$
       - id: bootstrap-manifest
         name: bootstrap manifests, playbook and skill parity
         entry: tests/bootstrap-manifest.sh
         language: script
         pass_filenames: false
-        files: ^(config/bootstrap/.*|lib/bootstrap/.*\.sh|lib/bootstrap\.ps1|tests/(bootstrap-manifest\.sh|test_bootstrap_manifest\.py)|docs/(bootstrap|dependencies)\.md|\.claude/skills/dotfiles-bootstrap/SKILL\.md|\.agents/skills/dotfiles-bootstrap/SKILL\.md|(doctor|setup-host)\.(sh|ps1)|README\.md|AGENTS\.md)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(config/bootstrap/.*|lib/bootstrap/.*\.sh|lib/bootstrap\.ps1|tests/(bootstrap-manifest\.sh|test_bootstrap_manifest\.py)|docs/(bootstrap|dependencies)\.md|\.claude/skills/dotfiles-bootstrap/SKILL\.md|\.agents/skills/dotfiles-bootstrap/SKILL\.md|dotfiles|scripts/commands/(doctor|setup)\.(sh|ps1)|README\.md|AGENTS\.md)$|^tests/lib/environment\.(sh|ps1)$
       - id: doctor
         name: read-only day-zero doctor
         entry: tests/doctor.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|docs/bootstrap\.md|tests/doctor\.sh)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(scripts/commands/doctor\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|docs/bootstrap\.md|tests/doctor\.sh)$|^tests/lib/environment\.(sh|ps1)$
         types: []
       - id: setup-host
         name: day-zero installer steps and HUMAN blocks
         entry: tests/setup-host.sh
         language: script
         pass_filenames: false
-        files: ^(setup-host\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(scripts/commands/setup\.sh|lib/bootstrap/.*|config/(bootstrap/.*|payloads\.tsv)|lib/(terminal|chezmoi-guard)\.sh|tests/setup-host\.sh|tests/fixtures/bootstrap/.*)$|^tests/lib/environment\.(sh|ps1)$
       - id: bootstrap-windows
         name: Windows doctor and installer twins
         entry: tests/bootstrap-windows.sh
         language: script
         pass_filenames: false
-        files: ^(doctor\.ps1|setup-host\.ps1|lib/(bootstrap|terminal|chezmoi-guard)\.ps1|config/(bootstrap/.*|payloads\.tsv)|tests/bootstrap(-windows\.sh|\.ps1))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(scripts/commands/(doctor|setup)\.ps1|lib/(bootstrap|terminal|chezmoi-guard)\.ps1|config/(bootstrap/.*|payloads\.tsv)|tests/bootstrap(-windows\.sh|\.ps1))$|^tests/lib/environment\.(sh|ps1)$
       - id: host-overlays
         name: portable host shell profiles and optional tool guards
         entry: tests/host-overlays.sh
@@ -198,10 +198,10 @@ repos:
         entry: tests/e2e-harness.sh
         language: script
         pass_filenames: false
-        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.sh|lib/bootstrap/.*|lib/chezmoi-guard\.sh|config/bootstrap/installers\.tsv|\.chezmoiversion)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|dotfiles|scripts/commands/(doctor|setup|payloads-sync)\.sh|lib/bootstrap/.*|lib/chezmoi-guard\.sh|config/bootstrap/installers\.tsv|\.chezmoiversion)$|^tests/lib/environment\.(sh|ps1)$
       - id: e2e-harness-windows
         name: PowerShell end-to-end harness fixtures
         entry: tests/e2e-harness-windows.sh
         language: script
         pass_filenames: false
-        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|setup-host\.ps1|lib/bootstrap\.ps1|lib/chezmoi-guard\.ps1)$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(tests/e2e(/|[-.]).*|docs/bootstrap\.md|dotfiles\.ps1|scripts/commands/(doctor|setup|payloads-sync)\.ps1|lib/bootstrap\.ps1|lib/chezmoi-guard\.ps1)$|^tests/lib/environment\.(sh|ps1)$

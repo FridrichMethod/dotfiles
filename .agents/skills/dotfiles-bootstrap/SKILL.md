@@ -60,8 +60,9 @@ Never run `git lfs install`, `gh auth setup-git`, `conda init` or
 
 Provisioning installs the verified chezmoi release. Doctor checks the tool and that the local
 chezmoi config names this home and this checkout; a config naming another
-checkout only warns. With a local config the default host is its
-`[data].host`; nothing else selects one. It
+checkout only warns. On Unix, with a local config the default host is its
+`[data].host`; nothing else selects one. Windows doctor/setup default to `win`
+and accept only that host. The doctor
 remains offline and write-free; chezmoi diff and apply are a separate operation.
 
 Root checkout entrypoints work before home configuration exists. Installed
@@ -70,4 +71,7 @@ help; recover with an explicit checkout path when configuration is unavailable.
 On Windows, use `& "$HOME/.local/bin/dotfiles.ps1" doctor --host win` before
 the manual User PATH procedure in `docs/bootstrap.md`; never persist PATH from
 an agent, launcher or profile. Quote comma lists, such as `--tier 'core,cli,ai'`.
-The original doctor/setup scripts remain supported compatibility interfaces.
+The public frontends call internal native backends in `scripts/commands/`
+directly. Shared functions stay in `lib/`; login hooks retain their
+`scripts/chezmoi-update.*` paths. Retired production doctor/setup and
+payload-update paths are absent, with no compatibility shims or fallbacks.

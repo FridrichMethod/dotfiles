@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import pty
 import select
+import shlex
 import shutil
 import signal
 import subprocess
@@ -28,7 +29,7 @@ class UnixCLI(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="dotfiles cli ")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name).resolve()
-        self.repo = self.base / "checkout with spaces;literal"
+        self.repo = self.base / "checkout with spaces'quote;literal"
         self.repo.mkdir()
         self.cli = self.repo / "dotfiles"
         shutil.copy2(ROOT / "dotfiles", self.cli)
@@ -45,7 +46,7 @@ class UnixCLI(unittest.TestCase):
                         CLI_ARGV=str(self.base / "argv"),
                         CLI_CWD=str(self.base / "cwd"), CLI_STDOUT="", CLI_STDERR="",
                         CLI_STATUS="0")
-        for backend in ("doctor.sh", "setup-host.sh", "scripts/payload-update.sh", "tests/run.sh"):
+        for backend in ("scripts/commands/doctor.sh", "scripts/commands/setup.sh", "scripts/commands/payloads-sync.sh", "tests/run.sh"):
             self.write(backend, BACKEND)
         self.write_tool("pre-commit", BACKEND)
 
@@ -72,6 +73,166 @@ class UnixCLI(unittest.TestCase):
 
     def assert_no_backend(self):
         self.assertFalse((self.base / "argv").exists(), "backend ran for a CLI-only request")
+
+    def test_retired_production_paths_absent(self):
+        retired = ("doctor.sh", "setup-host.sh", "scripts/payload-update.sh")
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "--", *retired], cwd=ROOT, text=True)
+        self.assertEqual(tracked, "", "retired paths remain in the staged inventory")
+        for relative in retired:
+            self.assertFalse(os.path.lexists(ROOT / relative), relative)
+
+    def test_missing_backend_never_uses_retired_path(self):
+        for command, backend, retired in (
+                (("doctor",), "scripts/commands/doctor.sh", "doctor.sh"),
+                (("setup",), "scripts/commands/setup.sh", "setup-host.sh"),
+                (("payloads", "sync"), "scripts/commands/payloads-sync.sh", "scripts/payload-update.sh")):
+            with self.subTest(command=command):
+                target = self.repo / backend
+                target.unlink()
+                self.write(retired, BACKEND)
+                result = self.run_cli(*command)
+                self.assertEqual((result.returncode, result.stdout), (1, ""))
+                self.assertEqual(len(result.stderr.splitlines()), 1)
+                self.assertIn(backend, result.stderr)
+                self.assert_no_backend()
+                self.write(backend, BACKEND)
+
+    def test_nested_backends_use_their_own_checkout(self):
+        for directory in ("lib", "config"):
+            shutil.copytree(ROOT / directory, self.repo / directory)
+        for relative in ("scripts/commands/doctor.sh", "scripts/commands/setup.sh",
+                         "scripts/commands/payloads-sync.sh"):
+            shutil.copy2(ROOT / relative, self.repo / relative)
+        for command in ("doctor", "setup"):
+            result = self.run_cli(command, "--host", "lab-ubuntu", "--list",
+                                  env={"PATH": os.environ["PATH"]})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("chezmoi" if command == "doctor" else "H7-deploy", result.stdout)
+        result = self.run_cli("payloads", "sync", "not-a-payload",
+                              env={"PATH": os.environ["PATH"]})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("unknown item", result.stderr)
+        self.assertNotIn("missing", result.stderr)
+
+    def test_payload_source_returns_only_selected_root(self):
+        self.install_launcher()
+        for relative in ("lib/bootstrap/manifest.sh", "lib/bootstrap/platform.sh", "lib/bootstrap/checks.sh"):
+            self.write(relative, (ROOT / relative).read_text())
+        code = (' . "$1/lib/bootstrap/manifest.sh"; . "$1/lib/bootstrap/platform.sh"; '
+                '. "$1/lib/bootstrap/checks.sh"; '
+                'bootstrap_payload_source "$1"')
+
+        def selected(status, root):
+            result = subprocess.run([shutil.which("bash"), "-c", code, "_", str(self.repo)],
+                                    env=self.env, cwd=self.home, text=True, capture_output=True)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (status, "" if root is None else str(root) + "\n", ""))
+
+        selected(0, self.repo)
+        other = self.base / "source with 'quote;literal"
+        other.mkdir()
+        (other / ".chezmoiroot").write_text("home\n")
+        self.config.write_text(self.valid_config.replace(str(self.repo), str(other)))
+        selected(0, other)
+        marker = self.home / ".config/dotfiles/maintenance"
+        marker.parent.mkdir()
+        marker.touch()
+        selected(1, None)
+        self.config.unlink()
+        selected(0, self.repo)  # Existing early return even during maintenance.
+        marker.unlink()
+        self.config.write_text("sourceDir = invalid\n")
+        selected(1, None)
+        self.config.unlink()
+        linked = self.base / "linked config"
+        linked.write_text(self.valid_config)
+        self.config.symlink_to(linked)
+        selected(1, None)
+
+    def test_payload_advice_replays_selected_checkout_with_quotes(self):
+        self.install_launcher()
+        shutil.copytree(ROOT / "lib/bootstrap", self.repo / "lib/bootstrap")
+        self.write("config/payloads.tsv", "example\tunix-probe\tfalse\n")
+        other = self.base / "other checkout 'quote;literal"
+        (other / "scripts/commands").mkdir(parents=True)
+        (other / ".chezmoiroot").write_text("home\n")
+        shutil.copy2(self.cli, other / "dotfiles")
+        (other / "scripts/commands/payloads-sync.sh").write_text(BACKEND)
+        code = ('for lib in manifest platform checks steps-common steps-human; do '
+                '. "$1/lib/bootstrap/$lib.sh"; done; bootstrap_init "$1"; '
+                'STEPS_ROOT=$1; ')
+        for selected in (None, self.repo, other):
+            with self.subTest(source=selected):
+                self.config.unlink(missing_ok=True)
+                if selected is not None:
+                    self.config.write_text(self.valid_config.replace(str(self.repo), str(selected)))
+                env = self.env | {"PATH": os.environ["PATH"], "DOTFILES_PAYLOAD_ITEMS": "example"}
+                for operation in ('bootstrap_check_payloads "$1"', "step_H7_payloads_plan"):
+                    result = subprocess.run([shutil.which("bash"), "-c", code + operation,
+                                             "_", str(self.repo)], env=env, cwd=self.home,
+                                            text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if operation.startswith("bootstrap_check"):
+                        command = result.stdout.split(": run ", 1)[1].strip()
+                        args = shlex.split(command)
+                        self.assertEqual(args[-1], "ITEM")
+                        args.pop()
+                    else:
+                        commands = [line for line in result.stdout.splitlines()
+                                    if not line.startswith(("#", "HUMAN-"))]
+                        self.assertEqual(len(commands), 1, result.stdout)
+                        args = shlex.split(commands[0])
+                    expected = selected or self.repo
+                    self.assertEqual(args, [str(expected / "dotfiles"), "payloads", "sync"])
+                    replay = subprocess.run([*args, "literal;$(touch nope)"], env=env,
+                                            cwd=self.home, text=True, capture_output=True)
+                    self.assertEqual((replay.returncode, replay.stderr), (0, ""))
+                    self.assertEqual(self.argv(), ["--now", "literal;$(touch nope)"])
+
+    def test_payload_human_advice_refuses_launcher_directory(self):
+        self.install_launcher()
+        self.installed.unlink()
+        self.installed.mkdir(mode=0o755)
+        shutil.copytree(ROOT / "lib/bootstrap", self.repo / "lib/bootstrap")
+        code = ('for lib in manifest platform checks steps-common steps-human; do '
+                '. "$1/lib/bootstrap/$lib.sh"; done; bootstrap_init "$1"; '
+                'STEPS_ROOT=$1; step_H7_payloads_plan')
+        result = subprocess.run([shutil.which("bash"), "-c", code, "_", str(self.repo)],
+                                env=self.env, cwd=self.home, text=True, capture_output=True)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertNotIn("(or sync-payloads", result.stdout)
+        commands = [line for line in result.stdout.splitlines()
+                    if not line.startswith(("#", "HUMAN-"))]
+        self.assertEqual(len(commands), 1, result.stdout)
+        self.assertEqual(shlex.split(commands[0]), [str(self.cli), "payloads", "sync"])
+
+    def test_payload_retry_keeps_own_checkout_and_quotes(self):
+        self.install_launcher()
+        shutil.copy2(ROOT / "scripts/commands/payloads-sync.sh",
+                     self.repo / "scripts/commands/payloads-sync.sh")
+        self.write("config/payloads.tsv",
+                   "example\tunix-probe\tfalse\nexample\tunix-install\tfalse\n")
+        other = self.base / "configured elsewhere"
+        other.mkdir()
+        (other / ".chezmoiroot").write_text("home\n")
+        for mode in ("no config", "same", "elsewhere", "missing launcher", "launcher directory"):
+            with self.subTest(mode=mode):
+                self.config.unlink(missing_ok=True)
+                if mode != "no config":
+                    selected = other if mode == "elsewhere" else self.repo
+                    self.config.write_text(self.valid_config.replace(str(self.repo), str(selected)))
+                if mode == "missing launcher":
+                    self.installed.unlink()
+                elif mode == "launcher directory":
+                    self.installed.mkdir(mode=0o755)
+                result = self.run_cli("payloads", "sync", "example",
+                                      env={"PATH": os.environ["PATH"]})
+                self.assertEqual(result.returncode, 1, result.stderr)
+                command = result.stderr.split("retry with: ", 1)[1].strip()
+                expected = (["sync-payloads", "example"] if mode == "same" else
+                            [str(self.cli), "payloads", "sync", "example"])
+                self.assertEqual(shlex.split(command), expected)
 
     def test_help_without_home_config_or_python(self):
         cases = [(), ("--help",), ("-h",), ("help",), ("payloads",), ("dev",)]
@@ -169,9 +330,9 @@ class UnixCLI(unittest.TestCase):
         self.assertEqual((self.base / "cwd").read_text().strip(), str(self.repo))
 
     def test_missing_backend_or_tool_fails_once(self):
-        for arguments, target in ((("doctor",), self.repo / "doctor.sh"),
-                                  (("setup",), self.repo / "setup-host.sh"),
-                                  (("payloads", "sync"), self.repo / "scripts/payload-update.sh"),
+        for arguments, target in ((("doctor",), self.repo / "scripts/commands/doctor.sh"),
+                                  (("setup",), self.repo / "scripts/commands/setup.sh"),
+                                  (("payloads", "sync"), self.repo / "scripts/commands/payloads-sync.sh"),
                                   (("dev", "test"), self.repo / "tests/run.sh"),
                                   (("dev", "check"), self.bin / "pre-commit"),
                                   (("doctor",), self.bin / "bash"),
@@ -189,7 +350,7 @@ class UnixCLI(unittest.TestCase):
                 self.assert_no_backend()
 
     def test_setup_preserves_stdin_tty_and_interrupt(self):
-        self.write("setup-host.sh", r'''#!/bin/bash
+        self.write("scripts/commands/setup.sh", r'''#!/bin/bash
 trap 'printf "interrupted\n"; exit 130' INT
 if [[ -t 0 && -t 1 && -t 2 ]]; then
     printf 'ready:%s\n' "$$"
@@ -274,8 +435,8 @@ while :; do IFS= read -r -p 'waiting:' answer; done
                            cwd=self.repo, env=git_env, check=True, capture_output=True, timeout=15)
 
         fixture_git("init", "--template=")
-        fixture_git("add", "--", "dotfiles", ".chezmoiroot", "lib/chezmoi-guard.sh", "doctor.sh",
-                    "setup-host.sh", "scripts/payload-update.sh", "tests/run.sh")
+        fixture_git("add", "--", "dotfiles", ".chezmoiroot", "lib/chezmoi-guard.sh", "scripts/commands/doctor.sh",
+                    "scripts/commands/setup.sh", "scripts/commands/payloads-sync.sh", "tests/run.sh")
         fixture_git("commit", "-m", "Synthetic CLI source")
         linked = self.base / "linked worktree with spaces"
         fixture_git("worktree", "add", "--detach", str(linked))

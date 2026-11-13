@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# HUMAN steps of setup-host.sh: read-only checks of what a person must do,
+# HUMAN steps of scripts/commands/setup.sh: read-only checks of what a person must do,
 # and the HUMAN blocks that hand it over. Blocks are printed, never run.
 # Sourced only (after steps.sh and steps-common.sh); defines functions and
 # changes no shell options.
@@ -20,7 +20,7 @@ step_H1_xcode_clt_check() {
 step_H1_xcode_clt_plan() {
     steps_block_begin H1-xcode-clt gui
     printf '%s\n' 'xcode-select --install' \
-        "# finish the installer dialog, then run ./setup-host.sh --host $STEPS_HOST again"
+        "# finish the installer dialog, then run $(steps_quote "$STEPS_ROOT/dotfiles") setup --host $STEPS_HOST again"
     steps_block_end
 }
 
@@ -53,7 +53,7 @@ steps_homebrew_block() {
     if [ "$STEPS_MODE" = apply ] && steps_has_digest "$path" "$STEPS_SHA"; then
         printf '# downloaded %s\n# sha256 %s verified\n' "$STEPS_URL" "$STEPS_SHA"
     else
-        printf '# ./setup-host.sh --host %s (without --check) downloads %s\n' "$STEPS_HOST" "$STEPS_URL"
+        printf '# %s setup --host %s (without --check) downloads %s\n' "$(steps_quote "$STEPS_ROOT/dotfiles")" "$STEPS_HOST" "$STEPS_URL"
         printf '# to the path below and verifies sha256 %s first\n' "$STEPS_SHA"
     fi
     printf '%s\n' "# Homebrew's NONINTERACTIVE mode needs a cached sudo credential" 'sudo -v' \
@@ -191,7 +191,7 @@ step_H2_alloc_plan() {
             ;;
     esac
     printf '%s\n' '# then, inside the allocation (export CONDA_PKGS_DIRS first, as docs/bootstrap.md S2-login-env says):'
-    printf '%s --host %s\n' "$(steps_quote "$STEPS_ROOT/setup-host.sh")" "$STEPS_HOST"
+    printf '%s setup --host %s\n' "$(steps_quote "$STEPS_ROOT/dotfiles")" "$STEPS_HOST"
     steps_block_end
 }
 
@@ -264,11 +264,11 @@ step_S5_claude_plan() {
         printf '%s\n' '# read it first; the line below runs it only while its sha256 is still the one above'
         steps_digest_gate "$digest" "$path" "bash $quoted"
     else
-        printf '# ./setup-host.sh --host %s (without --check) downloads %s (unpinned)\n' "$STEPS_HOST" "$STEPS_URL"
+        printf '# %s setup --host %s (without --check) downloads %s (unpinned)\n' "$(steps_quote "$STEPS_ROOT/dotfiles")" "$STEPS_HOST" "$STEPS_URL"
         printf '# to %s once, then prints its sha256, its size and a line\n' "$quoted"
         printf '%s\n' '# that runs it only while that sha256 holds; read the file before you run it'
     fi
-    printf '%s\n' '# ./doctor.sh then checks the installed claude against tools.tsv'
+    printf '# %s doctor then checks the installed claude against tools.tsv\n' "$(steps_quote "$STEPS_ROOT/dotfiles")"
     steps_block_end
 }
 
@@ -361,32 +361,32 @@ step_H7_payloads_check() {
     [ "${result%%"$BOOTSTRAP_TAB"*}" = ok ]
 }
 
-# Nothing installs the payload repos at login: a person runs the --now line,
-# or sync-payloads in an interactive shell of a home with a chezmoi config,
-# to install and later update them. On such a home the line names the hook of
-# the source its sourceDir names (bootstrap_payload_hook), as sync-payloads
-# does; under maintenance or while the config does not resolve from this
-# checkout, only notes. A home without the config has no source, so
-# sync-payloads refuses there and only the line is named.
+# Payload installs are person-run through the helper-selected checkout's
+# public frontend. A configured home may also use its installed launcher.
+# Refused source resolution leaves notes only; no config preserves ROOT.
 step_H7_payloads_plan() {
-    local hook
+    local source
     steps_block_begin H7-payloads judgment
     printf '%s\n' \
         '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them' \
         "# each is an unpinned download of its repo's main install script from raw.githubusercontent.com/FridrichMethod; the kit then follows the newest patch release of channel $(steps_payload_channel)"
-    if ! hook=$(bootstrap_payload_hook "$STEPS_ROOT"); then
-        printf '%s\n' "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+    if ! source=$(bootstrap_payload_source "$STEPS_ROOT"); then
+        printf '%s\n' "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, rerun this setup command"
         steps_block_end
         return 0
     fi
     if bootstrap_configured_home; then
-        printf '# this home'\''s config names the checkout %s: the line below runs its hook, as sync-payloads does\n' \
-            "${hook%/scripts/payload-update.sh}"
-        printf '%s\n' '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+        printf '# this home'\''s config names the checkout %s: the line below runs its public frontend\n' \
+            "$source"
+        if [ -f "$HOME/.local/bin/dotfiles" ] && [ -x "$HOME/.local/bin/dotfiles" ]; then
+            printf '%s\n' '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+        else
+            printf '%s\n' '# rerun the line below to update them later. To install them now, in the foreground:'
+        fi
     else
         printf '%s\n' '# rerun the line below to update them later (sync-payloads needs ~/.config/chezmoi/chezmoi.toml, which this home lacks). To install them now, in the foreground:'
     fi
-    printf 'sh %s --now\n' "$(steps_quote "$hook")"
+    printf '%s payloads sync\n' "$(steps_quote "$source/dotfiles")"
     steps_block_end
 }
 
@@ -411,16 +411,16 @@ steps_payload_channel() {
 # --- H7-doctor (judgment, reminder) ----------------------------------------
 
 step_H7_doctor_check() {
-    STEP_DETAIL="the completion gate is ./doctor.sh --host $STEPS_HOST"
+    STEP_DETAIL="the completion gate is $(steps_quote "$STEPS_ROOT/dotfiles") doctor --host $STEPS_HOST"
     return 1
 }
 
 step_H7_doctor_plan() {
     local doctor
-    doctor=$(steps_quote "$STEPS_ROOT/doctor.sh")
+    doctor=$(steps_quote "$STEPS_ROOT/dotfiles")
     steps_block_begin H7-doctor judgment
-    printf '%s --host %s\n' "$doctor" "$STEPS_HOST"
-    printf '%s --host %s --smoke\n' "$doctor" "$STEPS_HOST"
+    printf '%s doctor --host %s\n' "$doctor" "$STEPS_HOST"
+    printf '%s doctor --host %s --smoke\n' "$doctor" "$STEPS_HOST"
     steps_block_end
 }
 

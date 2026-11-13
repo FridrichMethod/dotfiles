@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-# Usage: ./setup-host.sh --host HOST [--tier LIST|all] [--check] [--yes]
+# Usage: dotfiles setup --host HOST [--tier LIST|all] [--check] [--yes]
 #            [--only ID]... [--skip ID]... [--keep-going] [--list] [--print-manual]
-# Example: ./setup-host.sh --host lab-ubuntu --check
+# Example: dotfiles setup --host lab-ubuntu --check
 # Installs tools for chezmoi configuration, step by step in the order of
 # docs/bootstrap.md, from the pinned sources in config/bootstrap/. It never
 # runs sudo, chsh, conda init, micromamba shell init or git lfs install, and
@@ -17,9 +17,9 @@ set -euo pipefail
 # print), 1 a step failed, 2 usage or refusal (also as root, or on a machine
 # that is not HOST), 3 work remains: a blocking HUMAN step pending, or auto
 # steps left to apply (--check, a declined prompt).
-# The win host uses setup-host.ps1 from PowerShell instead.
+# The win host uses dotfiles.ps1 setup from PowerShell instead.
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 if [[ -r "$REPO_ROOT/lib/terminal.sh" ]]; then
     # shellcheck source=lib/terminal.sh
     . "$REPO_ROOT/lib/terminal.sh"
@@ -34,7 +34,7 @@ fi
 
 usage() {
     printf '%s\n' \
-        'Usage: ./setup-host.sh --host HOST [options]' \
+        'Usage: dotfiles setup --host HOST [options]' \
         '' \
         'Installs the day-zero tools for HOST without sudo, then prints the HUMAN' \
         'blocks (sudo, sign-in, the first apply) that a person runs. See docs/bootstrap.md.' \
@@ -42,7 +42,7 @@ usage() {
         '  --host HOST       mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe; defaults' \
         '                    on a home with ~/.config/chezmoi/chezmoi.toml to its' \
         '                    [data].host; generic there' \
-        '                    needs --host. The win host uses setup-host.ps1.' \
+        '                    needs --host. The win host uses dotfiles.ps1 setup.' \
         '  --tier LIST|all   comma list of core, cli, ai, desktop, contributor, host' \
         '                    (default core,cli,ai)' \
         '  --check           print one plan line per step and the pending HUMAN blocks;' \
@@ -70,7 +70,7 @@ usage() {
 
 usage_error() {
     dotfiles_log error "$1"
-    dotfiles_log error 'run ./setup-host.sh --help for usage'
+    dotfiles_log error "run $(printf '%q' "$REPO_ROOT/dotfiles") setup --help for usage"
     exit 2
 }
 
@@ -205,7 +205,7 @@ done
 # in /root, or leave root-owned files in a home that sudo kept. The sudo
 # steps are HUMAN blocks a person runs.
 if [[ "$(id -u 2>/dev/null || true)" == 0 ]]; then
-    dotfiles_log error 'run ./setup-host.sh as your user, not root (no sudo); the sudo steps are printed as HUMAN blocks'
+    dotfiles_log error "run $(printf '%q' "$REPO_ROOT/dotfiles") setup as your user, not root (no sudo); the sudo steps are printed as HUMAN blocks"
     exit 2
 fi
 
@@ -223,7 +223,7 @@ fi
 [[ -n "$HOST" ]] || usage_error 'no host: pass --host HOST (mac, wsl-ubuntu, lab-ubuntu, sherlock or marlowe)'
 if [[ "$HOST" == win ]]; then
     dotfiles_log error "the 'win' host is set up from Windows, not from POSIX."
-    dotfiles_log error 'Run this in PowerShell from the repo root instead: .\setup-host.ps1'
+    dotfiles_log error "Run this in PowerShell instead: & '${REPO_ROOT//\'/\'\'}/dotfiles.ps1' setup --host win"
     exit 2
 fi
 PROFILE=$(bootstrap_profile_for_host "$HOST") ||
@@ -273,7 +273,7 @@ while [[ -n "$lines" ]]; do
     id=${lines%%"$BOOTSTRAP_NL"*}
     lines=${lines#*"$BOOTSTRAP_NL"}
     [[ -n "$id" ]] || continue
-    steps_has "$id" || usage_error "unknown step for $HOST: '$id' (see ./setup-host.sh --host $HOST --list)"
+    steps_has "$id" || usage_error "unknown step for $HOST: '$id' (see $(printf '%q' "$REPO_ROOT/dotfiles") setup --host $HOST --list)"
 done
 
 # Provisioning never triggers the login updaters, git prompts or Homebrew

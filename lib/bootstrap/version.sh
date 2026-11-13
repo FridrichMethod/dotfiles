@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Version extraction and comparison for doctor.sh and setup-host.sh. Sourced
+# Version extraction and comparison for scripts/commands/doctor.sh and scripts/commands/setup.sh. Sourced
 # only; defines functions and changes no shell options. Bash 3.2 compatible
 # and `set -u` safe; no `sort -V`. Bash `local` is dynamically scoped, so a
 # caller's IFS (a TSV loop's tab, say) reaches these functions: each one that

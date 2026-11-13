@@ -126,14 +126,21 @@ start Windows execution. The CLI preserves backend streams and exit codes.
 `dev test`. Neither developer command installs dependencies. Payload defaults,
 item validation, upstream lock exit 75 handling, retries and download bounds
 remain in the [payload backend](docs/payloads.md); maintenance blocks execution.
-The original `doctor.sh`, `setup-host.sh`, `doctor.ps1`, `setup-host.ps1` and
-`scripts/payload-update.*` interfaces remain supported compatibility entrypoints,
-with their existing native parameters and HUMAN/retry output.
+The frontends call the native implementations in `scripts/commands/` directly.
+Those executable backends are internal; their native parameters serve focused
+tests. Root `doctor.sh`, `doctor.ps1`, `setup-host.sh`, `setup-host.ps1` and
+`scripts/payload-update.sh` / `.ps1` are retired and absent, with no shim or
+fallback. Use the public CLI for every person-run command.
 
 ## Source layout
 
 | Path | Purpose |
 | --- | --- |
+| `dotfiles`, `dotfiles.ps1` | Public native frontends: syntax, help and fixed backend dispatch |
+| `scripts/commands/` | Internal native doctor, setup and payloads-sync implementations |
+| `scripts/chezmoi-update.*` | Stable login lifecycle hooks |
+| `lib/` | Shared sourced/imported code; inventories live in `config/` |
+| `tests/run.*` | Developer test runners called by `dotfiles dev test` |
 | [home](home/) | chezmoi source (`.chezmoiroot`): one file per target under its chezmoi source name (`dot_`, `executable_`, `private_`, `empty_`) |
 | `home/.hosts/<role>/` | Role variants of `~/.config/{sh,bash,zsh}` rc files, `~/.gitconfig_local` and `~/.ssh/config.d/legacy.conf`, read raw by one-line role-keyed templates |
 | `home/.policy/` | Portable Claude and Codex policy, read raw by the two modify templates |

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Fixture tests for setup-host.sh and lib/bootstrap/{fetch,steps*}.sh. Every
+# Fixture tests for scripts/commands/setup.sh and lib/bootstrap/{fetch,steps*}.sh. Every
 # package manager, download and clone remote is a local stub; sudo, chsh,
 # apt-get and git lfs are tripwires; each case runs under `env -i` with its
 # own fixture home, never the real one.
@@ -169,7 +169,7 @@ snapshot() {
 }
 
 # case_command [VAR=VALUE...] -- ARGS...: set CASE_CMD to the fixture
-# setup-host.sh under a clean environment (debian lab-ubuntu defaults, not
+# scripts/commands/setup.sh under a clean environment (debian lab-ubuntu defaults, not
 # WSL, no system or Homebrew font dirs); a VAR=VALUE overrides a default of
 # the same name. setup-host runs under the Bash running this file ($BASH),
 # so `bash-3.2 tests/setup-host.sh` tests it under Bash 3.2 too.
@@ -200,7 +200,7 @@ case_command() {
         BOOTSTRAP_SYSTEM_FONT_DIRS=
         FAKE_DPKG_INSTALLED="$DPKG_ALL"
         ${extra[@]+"${extra[@]}"}
-        "$BASH" "$FIXTURE/setup-host.sh" "$@")
+        "$BASH" "$FIXTURE/scripts/commands/setup.sh" "$@")
 }
 
 # run_case NAME [VAR=VALUE...] -- ARGS...: run case_command with stdin closed.
@@ -649,8 +649,9 @@ SHA_MICROMAMBA=$(sha "$FIXTURES/artifacts/micromamba")
 SHA_MICROMAMBA_BAD=$(sha "$ARTIFACTS/micromamba-bad")
 SHA_CLAUDE=$(sha "$FIXTURES/artifacts/claude-install")
 
-mkdir -p "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/home"
-cp "$REPO_ROOT/setup-host.sh" "$FIXTURE/setup-host.sh"
+mkdir -p "$FIXTURE/scripts/commands" "$FIXTURE/lib/bootstrap" "$FIXTURE/config/bootstrap" "$FIXTURE/home"
+cp "$REPO_ROOT/scripts/commands/setup.sh" "$FIXTURE/scripts/commands/setup.sh"
+cp "$REPO_ROOT/dotfiles" "$FIXTURE/dotfiles"
 cp "$REPO_ROOT/lib/terminal.sh" "$REPO_ROOT/lib/chezmoi-guard.sh" "$FIXTURE/lib/"
 cp "$REPO_ROOT"/lib/bootstrap/*.sh "$FIXTURE/lib/bootstrap/"
 cp -R "$FIXTURES/config/." "$FIXTURE/config/bootstrap/"
@@ -685,10 +686,10 @@ write_clones
 } >"$FIXTURE/config/bootstrap/installers.tsv"
 
 printf '%s\n' '# fixture zshrc' >"$FIXTURE/home/dot_zshrc"
-mkdir -p "$FIXTURE/scripts"
-cp "$REPO_ROOT/scripts/payload-update.sh" "$FIXTURE/scripts/payload-update.sh"
+mkdir -p "$FIXTURE/scripts/commands"
+cp "$REPO_ROOT/scripts/commands/payloads-sync.sh" "$FIXTURE/scripts/commands/payloads-sync.sh"
 cp "$REPO_ROOT/config/payloads.tsv" "$FIXTURE/config/payloads.tsv"
-chmod 755 "$FIXTURE/setup-host.sh"
+chmod 755 "$FIXTURE/scripts/commands/setup.sh"
 # A committed .chezmoiroot, as the real checkout has: the config guard accepts
 # only a sourceDir that holds it.
 printf 'home\n' >"$FIXTURE/.chezmoiroot"
@@ -710,7 +711,7 @@ CLAUDE_SCRATCH_REL=.cache/dotfiles-bootstrap/claude/install.sh
 new_home refusals
 run_case win -- --host win
 expect_rc win 2
-expect_text win err 'setup-host.ps1'
+expect_text win err 'dotfiles.ps1'
 expect_no_events win
 
 run_case no-host -- --check
@@ -751,7 +752,7 @@ expect_no_events unknown-option
 # Never as root: it would install into /root or leave root-owned files.
 run_case root PATH="$ROOT_BIN:$FAKE_BIN:/usr/bin:/bin" -- --host lab-ubuntu --check
 expect_rc root 2
-expect_text root err 'run ./setup-host.sh as your user, not root'
+expect_text root err "run $FIXTURE/dotfiles setup as your user, not root"
 expect_no_text root out 'P0-preflight'
 expect_no_events root
 
@@ -801,7 +802,7 @@ expect_no_text check-missing out 'HUMAN-BEGIN H7-chsh'
 expect_line check-missing 'HUMAN-BEGIN H7-auth auth'
 expect_text check-missing err 'HUMAN steps pending: H1-apt-core H1-linuxbrew'
 expect_text check-missing err 'steps to apply: S2-brew-bundle S3-clones'
-expect_text check-missing err 'after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu without --check'
+expect_text check-missing err "after the HUMAN blocks, rerun $FIXTURE/dotfiles setup --host lab-ubuntu without --check"
 expect_no_events check-missing
 snapshot >"$TEST_TMP/after"
 cmp -s "$TEST_TMP/before" "$TEST_TMP/after" || {
@@ -842,7 +843,7 @@ expect_text check-fresh out 'the kit then follows the newest patch release of ch
 # line is named.
 expect_line check-fresh '# rerun the line below to update them later (sync-payloads needs ~/.config/chezmoi/chezmoi.toml, which this home lacks). To install them now, in the foreground:'
 expect_no_text check-fresh out '(or sync-payloads'
-PAYLOAD_LINE="sh $FIXTURE/scripts/payload-update.sh --now"
+PAYLOAD_LINE="$FIXTURE/dotfiles payloads sync"
 expect_line check-fresh "$PAYLOAD_LINE"
 expect_line check-fresh 'HUMAN-BEGIN H7-doctor judgment'
 expect_text check-fresh out 'H7-deploy human blocked by S3-clones'
@@ -886,34 +887,40 @@ printf 'home\n' >"$TEST_TMP/source elsewhere/.chezmoiroot"
 write_case_config "$TEST_TMP/source elsewhere"
 run_case payloads-source-elsewhere -- --host lab-ubuntu --check --only H7-payloads
 expect_line payloads-source-elsewhere 'HUMAN-BEGIN H7-payloads judgment'
-expect_line payloads-source-elsewhere "# this home's config names the checkout $TEST_TMP/source elsewhere: the line below runs its hook, as sync-payloads does"
-expect_line payloads-source-elsewhere "sh $TEST_TMP/source\\ elsewhere/scripts/payload-update.sh --now"
-expect_no_text payloads-source-elsewhere out "$FIXTURE/scripts/payload-update.sh"
+expect_line payloads-source-elsewhere "# this home's config names the checkout $TEST_TMP/source elsewhere: the line below runs its public frontend"
+expect_line payloads-source-elsewhere "$TEST_TMP/source\\ elsewhere/dotfiles payloads sync"
+expect_no_text payloads-source-elsewhere out "$FIXTURE/scripts/commands/payloads-sync.sh"
 write_case_config "$TEST_TMP/source elsewhere/"
 run_case payloads-config-invalid -- --host lab-ubuntu --check --only H7-payloads
 expect_line payloads-config-invalid 'HUMAN-BEGIN H7-payloads judgment'
-expect_line payloads-config-invalid "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+expect_line payloads-config-invalid "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, rerun this setup command"
 # The block names no hook; the check line names this checkout's --now line,
 # since sync-payloads refuses such a config.
-! grep -Eq 'payload-update\.sh --now$' "$TEST_TMP/payloads-config-invalid.out" ||
+! grep -Eq '^[^#].*dotfiles payloads sync$' "$TEST_TMP/payloads-config-invalid.out" ||
     fail 'payloads-config-invalid: the H7-payloads block names a hook'
 expect_no_text payloads-config-invalid out '# rerun the line below'
-expect_text payloads-config-invalid out "H7-payloads human not installed: kit, pymol, skills: run sh $FIXTURE/scripts/payload-update.sh --now ITEM;"
+expect_text payloads-config-invalid out "H7-payloads human not installed: kit, pymol, skills: run $FIXTURE/dotfiles payloads sync ITEM;"
 # Under maintenance every hook refuses, so a config that resolves leaves the
 # same notes.
 write_case_config "$FIXTURE"
 mkdir -p "$CASE_HOME/.config/dotfiles"
 : >"$CASE_HOME/.config/dotfiles/maintenance"
 run_case payloads-maintenance -- --host lab-ubuntu --check --only H7-payloads
-expect_line payloads-maintenance "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, run sync-payloads [ITEM...] in an interactive shell"
+expect_line payloads-maintenance "# maintenance is active, or this checkout cannot resolve this home's ~/.config/chezmoi/chezmoi.toml (the doctor's chezmoi-config row says which); once neither holds, rerun this setup command"
 expect_no_text payloads-maintenance out '# rerun the line below'
 rm "$CASE_HOME/.config/dotfiles/maintenance"
 # A config naming this checkout runs this checkout's hook.
 write_case_config "$FIXTURE"
 run_case payloads-source-here -- --host lab-ubuntu --check --only H7-payloads
-expect_line payloads-source-here "# this home's config names the checkout $FIXTURE: the line below runs its hook, as sync-payloads does"
-expect_line payloads-source-here "sh $FIXTURE/scripts/payload-update.sh --now"
-expect_line payloads-source-here '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
+expect_line payloads-source-here "# this home's config names the checkout $FIXTURE: the line below runs its public frontend"
+expect_line payloads-source-here "$FIXTURE/dotfiles payloads sync"
+expect_line payloads-source-here '# rerun the line below to update them later. To install them now, in the foreground:'
+expect_no_text payloads-source-here out '(or sync-payloads'
+mkdir -p "$CASE_HOME/.local/bin"
+printf '#!/bin/sh\nexit 0\n' >"$CASE_HOME/.local/bin/dotfiles"
+chmod +x "$CASE_HOME/.local/bin/dotfiles"
+run_case payloads-source-launcher -- --host lab-ubuntu --check --only H7-payloads
+expect_line payloads-source-launcher '# rerun the line below (or sync-payloads [ITEM...] in an interactive shell) to update them later. To install them now, in the foreground:'
 
 # --- debian apply: every step, in phase order --------------------------------
 
@@ -1030,7 +1037,7 @@ expect_no_installs deploy-done
 expect_text deploy-done out 'H7-deploy done ~/.config/chezmoi/chezmoi.toml names this home and this checkout; configuration review remains an operator step'
 expect_no_text deploy-done out 'HUMAN-BEGIN H7-deploy'
 expect_line deploy-done 'HUMAN-BEGIN H7-auth auth'
-expect_line deploy-done "# this home's config names the checkout $FIXTURE: the line below runs its hook, as sync-payloads does"
+expect_line deploy-done "# this home's config names the checkout $FIXTURE: the line below runs its public frontend"
 expect_text deploy-done out 'nothing blocking remains for lab-ubuntu'
 run_case deploy-check-done -- --host lab-ubuntu --check --tier all
 expect_rc deploy-check-done 0
@@ -1049,7 +1056,7 @@ rm -rf "$CASE_HOME/.vim"
 run_case check-todo -- --host lab-ubuntu --check --tier all
 expect_rc check-todo 3
 expect_text check-todo out 'S3-dirs todo'
-expect_text check-todo err 'steps to apply: S3-dirs; rerun ./setup-host.sh --host lab-ubuntu --tier all without --check'
+expect_text check-todo err "steps to apply: S3-dirs; rerun $FIXTURE/dotfiles setup --host lab-ubuntu --tier all without --check"
 expect_no_text check-todo out 'nothing blocking remains'
 expect_no_text check-todo err 'HUMAN steps pending'
 expect_no_events check-todo
@@ -1431,8 +1438,8 @@ else
     expect_rc brew-shared-conflict 3
     expect_line brew-shared-conflict 'HUMAN-BEGIN S2-brew-bundle judgment'
     expect_line brew-shared-conflict "$(owner_line 'uninstall --formula tldr')"
-    expect_line brew-shared-conflict "# uninstall each conflicting formula or cask below as the owner; the next ./setup-host.sh run then prints the owner's lines that install the Brewfile one"
-    expect_no_text brew-shared-conflict out 'the next ./setup-host.sh run then bundles'
+    expect_line brew-shared-conflict "# uninstall each conflicting formula or cask below as the owner; the next $FIXTURE/dotfiles setup run then prints the owner's lines that install the Brewfile one"
+    expect_no_text brew-shared-conflict out "the next $FIXTURE/dotfiles setup run then bundles"
     if grep -Fxq -- "$CASE_BREW/bin/brew uninstall --formula tldr" "$TEST_TMP/brew-shared-conflict.out"; then
         fail 'the shared-prefix conflict block uninstalls as this user'
     fi
@@ -1804,7 +1811,7 @@ expect_no_events nvm-foreign-check
 run_case nvm-foreign -- --host lab-ubuntu --yes --only S4-nvm
 expect_rc nvm-foreign 3
 expect_line nvm-foreign 'HUMAN-BEGIN S4-nvm judgment'
-expect_line nvm-foreign '# then run ./setup-host.sh --host lab-ubuntu again'
+expect_line nvm-foreign "# then run $FIXTURE/dotfiles setup --host lab-ubuntu again"
 expect_no_event 'nvm-sourced'
 expect_no_event 'nvm:'
 expect_no_event "curl:$URL_NVM"
@@ -1907,7 +1914,7 @@ expect_line recovery "git -C $CASE_HOME/.oh-my-zsh checkout -b master origin/mas
 expect_text recovery out 'S3-clones human'
 expect_text recovery out '(the dotfiles were applied before the clone); recover it by hand'
 expect_line recovery "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones."
-expect_line recovery '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
+expect_line recovery "# Turn it into the oh-my-zsh checkout in place, then rerun $FIXTURE/dotfiles setup --host lab-ubuntu:"
 expect_no_events recovery
 [ ! -e "$CASE_HOME/.oh-my-zsh/custom/themes" ] || fail 'recovery case cloned plugins'
 
@@ -1918,7 +1925,7 @@ printf '# deployed\n' >"$CASE_HOME/.oh-my-zsh/custom/fzf.zsh"
 run_case omz-recovery -- --host lab-ubuntu --check --only S3-clones
 expect_rc omz-recovery 3
 expect_line omz-recovery 'HUMAN-BEGIN X-recovery judgment'
-expect_line omz-recovery '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
+expect_line omz-recovery "# Turn it into the oh-my-zsh checkout in place, then rerun $FIXTURE/dotfiles setup --host lab-ubuntu:"
 expect_no_events omz-recovery
 
 # --- rc-pollution guard ------------------------------------------------------
@@ -1995,7 +2002,7 @@ if [ "$HAVE_PTY" = 1 ]; then
     expect_text declined out 'S2-brew-bundle skip declined: brew bundle'
     expect_text declined out 'H7-deploy human blocked by S2-brew-bundle (declined)'
     expect_no_text declined out 'HUMAN-BEGIN H7-deploy'
-    expect_text declined out 'steps not applied: S2-brew-bundle; after the HUMAN blocks, rerun ./setup-host.sh --host lab-ubuntu'
+    expect_text declined out "steps not applied: S2-brew-bundle; after the HUMAN blocks, rerun $FIXTURE/dotfiles setup --host lab-ubuntu"
     expect_no_text declined out 'nothing blocking remains'
     expect_no_installs declined
     [ ! -e "$CASE_BREW/opt" ] || fail 'a declined S2-brew-bundle ran brew bundle'
@@ -2040,7 +2047,7 @@ expect_no_event 'micromamba:create'
 expect_line hpc-login 'HUMAN-BEGIN H2-alloc alloc'
 expect_line hpc-login 'sh_dev -t 1:00:00'
 # Inside the allocation, the rerun stays in the person's mode.
-expect_line hpc-login "$FIXTURE/setup-host.sh --host sherlock"
+expect_line hpc-login "$FIXTURE/dotfiles setup --host sherlock"
 expect_text hpc-login out 'S2-login-env todo blocked by H2-alloc'
 expect_text hpc-login out 'H7-deploy human blocked by S2-login-env'
 expect_line hpc-login 'HUMAN-BEGIN S2-modules judgment'
@@ -2091,7 +2098,7 @@ expect_rc hpc-env-fresh 3
 expect_text hpc-env-fresh out 'H2-alloc human S2-login-env builds its env only inside a Slurm allocation (SLURM_JOB_ID is unset)'
 expect_line hpc-env-fresh 'HUMAN-BEGIN H2-alloc alloc'
 expect_line hpc-env-fresh 'sh_dev -t 1:00:00'
-expect_line hpc-env-fresh "$FIXTURE/setup-host.sh --host sherlock"
+expect_line hpc-env-fresh "$FIXTURE/dotfiles setup --host sherlock"
 expect_text hpc-env-fresh out 'S2-login-env todo blocked by H2-alloc'
 expect_no_events hpc-env-fresh
 run_case hpc-env-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- \
@@ -2231,12 +2238,12 @@ expect_line manual "$CASE_BREW/bin/brew uninstall --formula tealdeer"
 expect_line manual 'HUMAN-BEGIN H7-deploy judgment'
 expect_line manual '# Select local [data].host = lab-ubuntu explicitly; setup-host never initializes or applies configuration.'
 expect_line manual 'HUMAN-BEGIN H7-doctor judgment'
-expect_line manual "$FIXTURE/doctor.sh --host lab-ubuntu"
+expect_line manual "$FIXTURE/dotfiles doctor --host lab-ubuntu"
 expect_line manual '# do not run gh auth setup-git: it rewrites ~/.gitconfig, which the dotfiles manage; .gitconfig_local sets the helper'
 expect_line manual "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones."
-expect_line manual '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host lab-ubuntu:'
-expect_text manual out '# ./setup-host.sh --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)'
-expect_text manual out "# ./setup-host.sh --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
+expect_line manual "# Turn it into the oh-my-zsh checkout in place, then rerun $FIXTURE/dotfiles setup --host lab-ubuntu:"
+expect_text manual out "# $FIXTURE/dotfiles setup --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)"
+expect_text manual out "# $FIXTURE/dotfiles setup --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
 [ "$(grep -c '^HUMAN-BEGIN ' "$TEST_TMP/manual.out")" = "$(grep -c '^HUMAN-END$' "$TEST_TMP/manual.out")" ] ||
     fail 'unbalanced HUMAN blocks'
 expect_no_events manual
@@ -2255,11 +2262,11 @@ for host in lab-ubuntu wsl-ubuntu sherlock marlowe mac; do
 done
 expect_line print-manual-lab-ubuntu '# do not run gh auth setup-git: it rewrites ~/.gitconfig, which the dotfiles manage; .gitconfig_local sets the helper'
 expect_line print-manual-lab-ubuntu "# $CASE_HOME/.oh-my-zsh exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones."
-expect_text print-manual-lab-ubuntu out '# ./setup-host.sh --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)'
-expect_text print-manual-lab-ubuntu out "# ./setup-host.sh --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
-expect_line print-manual-mac '# finish the installer dialog, then run ./setup-host.sh --host mac again'
-expect_text print-manual-mac out "# ./setup-host.sh --host mac (without --check) downloads $URL_HOMEBREW"
-expect_line print-manual-sherlock "$FIXTURE/setup-host.sh --host sherlock"
+expect_text print-manual-lab-ubuntu out "# $FIXTURE/dotfiles setup --host lab-ubuntu (without --check) downloads https://claude.ai/install.sh (unpinned)"
+expect_text print-manual-lab-ubuntu out "# $FIXTURE/dotfiles setup --host lab-ubuntu (without --check) downloads $URL_HOMEBREW"
+expect_line print-manual-mac "# finish the installer dialog, then run $FIXTURE/dotfiles setup --host mac again"
+expect_text print-manual-mac out "# $FIXTURE/dotfiles setup --host mac (without --check) downloads $URL_HOMEBREW"
+expect_line print-manual-sherlock "$FIXTURE/dotfiles setup --host sherlock"
 
 # --- PATH before the first apply ---------------------------------------------
 
@@ -2352,8 +2359,8 @@ done
 # Every block of every host, as --print-manual lists them and as the
 # apply and check runs above printed them.
 run_case manual-mac "${MAC_ENV[@]}" -- --host mac --print-manual
-expect_line manual-mac '# finish the installer dialog, then run ./setup-host.sh --host mac again'
-expect_text manual-mac out "# ./setup-host.sh --host mac (without --check) downloads $URL_HOMEBREW"
+expect_line manual-mac "# finish the installer dialog, then run $FIXTURE/dotfiles setup --host mac again"
+expect_text manual-mac out "# $FIXTURE/dotfiles setup --host mac (without --check) downloads $URL_HOMEBREW"
 for name in manual manual-mac \
     print-manual-lab-ubuntu print-manual-wsl-ubuntu print-manual-sherlock print-manual-marlowe print-manual-mac \
     hpc-env-login hpc-env-fresh omz-recovery deploy-done \

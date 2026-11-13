@@ -382,28 +382,28 @@ e2e_negative_refusal() {
     fi
 }
 
-# e2e_negative_generic: after the generic deployment, ./doctor.sh with
-# no arguments exits 0 and warns about the generic role; ./setup-host.sh
+# e2e_negative_generic: after the generic deployment, ./dotfiles doctor with
+# no arguments exits 0 and warns about the generic role; ./dotfiles setup
 # without --host exits 2 for the same reason.
 e2e_negative_generic() {
     local rc=0
-    e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" ./doctor.sh || rc=$?
+    e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" ./dotfiles doctor || rc=$?
     if [ "$rc" != 0 ]; then
-        e2e_step_end fail "./doctor.sh exited $rc, expected 0: $(e2e_problem_lines "$E2E_STEP_OUT")"
+        e2e_step_end fail "./dotfiles doctor exited $rc, expected 0: $(e2e_problem_lines "$E2E_STEP_OUT")"
         return 0
     fi
     if ! grep -F '[data].host generic' "$E2E_STEP_ERR" >/dev/null 2>&1; then
-        e2e_step_end fail './doctor.sh exited 0 without the generic warning'
+        e2e_step_end fail './dotfiles doctor exited 0 without the generic warning'
         return 0
     fi
     rc=0
-    e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" ./setup-host.sh --check || rc=$?
+    e2e_run "$E2E_STEP_OUT" "$E2E_STEP_ERR" "$E2E_TIMEOUT_CHECK" "$E2E_CLONE" ./dotfiles setup --check || rc=$?
     if [ "$rc" != 2 ]; then
-        e2e_step_end fail "./setup-host.sh --check without --host exited $rc, expected 2: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end fail "./dotfiles setup --check without --host exited $rc, expected 2: $(e2e_last_line "$E2E_STEP_ERR")"
     elif ! grep -F '[data].host generic' "$E2E_STEP_ERR" >/dev/null 2>&1; then
-        e2e_step_end fail "./setup-host.sh --check exited 2 without naming the generic role: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end fail "./dotfiles setup --check exited 2 without naming the generic role: $(e2e_last_line "$E2E_STEP_ERR")"
     else
-        e2e_step_end pass "./doctor.sh exit 0 with the generic warning; ./setup-host.sh --check exit 2: $(e2e_last_line "$E2E_STEP_ERR")"
+        e2e_step_end pass "./dotfiles doctor exit 0 with the generic warning; ./dotfiles setup --check exit 2: $(e2e_last_line "$E2E_STEP_ERR")"
     fi
 }
 
@@ -423,15 +423,15 @@ e2e_negatives() {
         fi
         e2e_step_begin "$name" "negative:$token"
         case $token in
-            wsl-refused) e2e_negative_refusal 2 WSL ./setup-host.sh --host wsl-ubuntu --check ;;
-            lab-refused-in-wsl) e2e_negative_refusal 2 WSL ./setup-host.sh --host lab-ubuntu --check ;;
+            wsl-refused) e2e_negative_refusal 2 WSL ./dotfiles setup --host wsl-ubuntu --check ;;
+            lab-refused-in-wsl) e2e_negative_refusal 2 WSL ./dotfiles setup --host lab-ubuntu --check ;;
             # Lmod's profile.d also exports BASH_ENV=.../init/bash, which every
             # bash script sources on start, re-exporting LMOD_DIR; a machine
             # without Lmod has neither.
-            hpc-no-lmod) e2e_negative_refusal 2 LMOD_DIR env -u LMOD_DIR -u BASH_ENV ./setup-host.sh --host "$host" --check ;;
+            hpc-no-lmod) e2e_negative_refusal 2 LMOD_DIR env -u LMOD_DIR -u BASH_ENV ./dotfiles setup --host "$host" --check ;;
             # setup-host checks for root before it resolves the host, so a
             # stand-in host serves the other-Linux flow too.
-            root-refused) e2e_negative_refusal 2 'not root' sudo -n ./setup-host.sh --host "$host" --check ;;
+            root-refused) e2e_negative_refusal 2 'not root' sudo -n ./dotfiles setup --host "$host" --check ;;
             alloc-first)
                 if [ "$E2E_APPLY1_RC" = 3 ] && grep -Fx 'HUMAN-BEGIN H2-alloc alloc' "$E2E_APPLY1_OUT" >/dev/null 2>&1; then
                     e2e_step_end pass 'the first apply exited 3 with the H2-alloc block'

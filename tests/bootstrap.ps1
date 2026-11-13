@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Behavior tests for lib/bootstrap.ps1, doctor.ps1 and setup-host.ps1.
+# Behavior tests for lib/bootstrap.ps1, scripts/commands/doctor.ps1 and scripts/commands/setup.ps1.
 # Library functions run in this process against fixture PATH, module, font and
 # APPDATA directories. The entry points run as child pwsh -NoProfile
 # -NonInteractive processes on a fixture checkout, with .ps1 shims for winget,
@@ -166,7 +166,7 @@ function New-Fixture {
             $fixture.State, $fixture.Temp, $fixture.PwshState)) {
         [void][IO.Directory]::CreateDirectory($directory)
     }
-    foreach ($file in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1',
+    foreach ($file in @('dotfiles.ps1', 'scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1', 'lib/bootstrap.ps1', 'lib/terminal.ps1', 'lib/chezmoi-guard.ps1',
             'config/payloads.tsv', 'config/bootstrap/tools.tsv', 'config/bootstrap/installers.tsv',
             'config/bootstrap/winget.json')) {
         $target = Join-Path $fixture.Repo $file
@@ -276,7 +276,7 @@ function Test-RealChezmoiMissing {
 }
 
 function Invoke-Fixture {
-    # Run doctor.ps1 or setup-host.ps1 from the fixture checkout in a child.
+    # Run scripts/commands/doctor.ps1 or scripts/commands/setup.ps1 from the fixture checkout in a child.
     param($Fixture, [string]$Script, [hashtable]$Parameters = @{}, [hashtable]$Environment = @{})
     $wrapper = @'
 $ErrorActionPreference = 'Continue'
@@ -482,7 +482,7 @@ function Invoke-WebRequest {
 
 try {
     Test-Case 'entry points and library parse, never elevate and keep preferences scoped' {
-        foreach ($name in @('doctor.ps1', 'setup-host.ps1', 'lib/bootstrap.ps1', 'tests/bootstrap.ps1')) {
+        foreach ($name in @('scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1', 'lib/bootstrap.ps1', 'tests/bootstrap.ps1')) {
             $errors = $null
             $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot $name), [ref]$null, [ref]$errors)
             Assert-True (-not $errors) "$name has parse errors: $($errors -join '; ')"
@@ -502,10 +502,10 @@ try {
                 while ($parent -and $parent -isnot [Management.Automation.Language.FunctionDefinitionAst]) { $parent = $parent.Parent }
                 Assert-True ($null -ne $parent) "$name sets ErrorActionPreference outside a function."
             }
-            if ($name -in @('doctor.ps1', 'setup-host.ps1')) {
+            if ($name -in @('scripts/commands/doctor.ps1', 'scripts/commands/setup.ps1')) {
                 # The exact parameters.
                 $declared = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }) -join ','
-                $expected = if ($name -eq 'doctor.ps1') { 'HostName,Tier,Tsv,Quiet,Online' } else { 'HostName,Tier,Check,Yes,PrintManual' }
+                $expected = if ($name -eq 'scripts/commands/doctor.ps1') { 'HostName,Tier,Tsv,Quiet,Online' } else { 'HostName,Tier,Check,Yes,PrintManual' }
                 Assert-Equal $declared $expected "$name parameters"
             }
             if ($name -eq 'lib/bootstrap.ps1') {
@@ -862,7 +862,7 @@ if ("`$args" -eq '--version') { Write-Output '$($ToolText.gh)' }
 exit 0
 "@
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tier = 'all'; Tsv = $true }
         Assert-Exit $run 0 'healthy doctor'
         Assert-Equal $run.Lines[0] "status`tid`ttier`tdetail`tfix" 'TSV header'
         $ids = foreach ($line in @($run.Lines | Select-Object -Skip 1)) {
@@ -882,11 +882,11 @@ exit 0
         Assert-True (($events -contains 'chezmoi --version') -ne $IsWindows) "chezmoi probe (Windows: $IsWindows): $($events -join '; ')"
         Assert-True (-not @($events | Where-Object { $_ -match '(auth|login) status|Invoke-WebRequest|^winget|PSResource' }).Count) "Offline doctor used the network: $($events -join '; ')"
         $summary = '^\[dotfiles\] \[info\] summary: \d+ ok, 0 outdated, 0 missing, 0 warn, 0 skip, 0 human \(win, required tiers: core,cli,ai\)$'
-        $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true }; Assert-Exit $quiet 0 'quiet doctor'
+        $quiet = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Quiet = $true }; Assert-Exit $quiet 0 'quiet doctor'
         Assert-True ($quiet.Lines.Count -eq 1 -and $quiet.Lines[0] -cmatch $summary) "quiet doctor printed more than the summary: $($quiet.Stdout)"
-        $quietTsv = Invoke-Fixture $fixture doctor.ps1 @{ Quiet = $true; Tsv = $true }; Assert-Exit $quietTsv 0 'quiet TSV doctor'
+        $quietTsv = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Quiet = $true; Tsv = $true }; Assert-Exit $quietTsv 0 'quiet TSV doctor'
         Assert-Equal ($quietTsv.Lines -join '|') "status`tid`ttier`tdetail`tfix" 'quiet TSV printed ok rows'
-        $plain = Invoke-Fixture $fixture doctor.ps1 @{}; Assert-Exit $plain 0 'plain doctor'
+        $plain = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{}; Assert-Exit $plain 0 'plain doctor'
         Assert-Equal $plain.Lines[0] '[dotfiles] [step] Checking host win (windows); required tiers: core,cli,ai' 'header line'
         Assert-True ($plain.Lines -contains '[dotfiles] [ok] core fzf: 0.60.0') 'ok line format'
         Assert-True ($plain.Lines[-1] -cmatch $summary) "summary line: $($plain.Lines[-1])"
@@ -899,14 +899,14 @@ exit 0
         Set-FixtureHealthy $fixture -Except @('wezterm')
         Set-FixtureConfigured $fixture
         New-ToolShim $fixture.Bin 'fzf' '0.44.1'
-        $run = Invoke-Fixture $fixture doctor.ps1 @{}
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{}
         Assert-Exit $run 1 'outdated fzf'
         Assert-True ($run.Lines -contains '[dotfiles] [error] core fzf: 0.44.1 < 0.58.0 (docs/bootstrap.md W1-winget)') "fzf line: $($run.Stdout)"
         Assert-True (@($run.Lines | Where-Object { $_ -like '`[dotfiles`] `[warn`] desktop wezterm: missing: *(tier desktop not selected) (docs/bootstrap.md W1-winget)' }).Count -eq 1) 'wezterm warn line'
         Assert-True (-not $run.Stdout.Contains([string][char]27)) 'NO_COLOR output contains ANSI.'
         New-ToolShim $fixture.Bin 'fzf'
-        Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{}) 0 'desktop gap under default tiers'
-        $all = Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'all'; Tsv = $true }
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{}) 0 'desktop gap under default tiers'
+        $all = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tier = 'all'; Tsv = $true }
         Assert-Exit $all 1 'desktop gap under -Tier all'
         Assert-True (@($all.Lines | Where-Object { $_ -cmatch "^missing`twezterm`tdesktop`tmissing: .+`tdocs/bootstrap.md W1-winget$" }).Count -eq 1) 'wezterm TSV row'
         # The payload repos that install on native Windows (the rows with a
@@ -915,28 +915,31 @@ exit 0
         $pymolPy = Join-Path $fixture.Home '.pymolrc.py'
         # -Force: off Windows a dot file is hidden to PowerShell.
         Remove-Item -LiteralPath $pymolPy -Force
+        $launcher = Join-Path $fixture.Home '.local/bin/dotfiles.ps1'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $launcher))
+        [IO.File]::Copy((Join-Path $sourceRoot 'home/dot_local/bin/dotfiles.ps1'), $launcher)
         $short = 'not installed: pymol: run sync-payloads ITEM'
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tsv = $true }
         Assert-Exit $run 0 'a payload shortfall only warns'
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`t$short`tdocs/bootstrap.md H7-payloads") "payloads row: $($run.Stdout)"
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'skills' }
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tinstalled: skills`t-") "selected payloads row: $($run.Stdout)"
         # The kit installs nothing here, so even a selection that names it
         # checks nothing for it; a name the file does not know is named.
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit' }
         Assert-True ($run.Lines -contains "ok`tpayloads`tai`tDOTFILES_PAYLOAD_ITEMS selects no payload`t-") "kit-only row: $($run.Stdout)"
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit nope skills' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tsv = $true } @{ DOTFILES_PAYLOAD_ITEMS = 'kit nope skills' }
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run sync-payloads ITEM`tdocs/bootstrap.md H7-payloads") "unknown item row: $($run.Stdout)"
         [IO.File]::WriteAllText($pymolPy, '')
     }
 
-    Test-Case 'doctor statuses match doctor.sh: human fails in selected tiers, ok and skip have no fix' {
-        # doctor.ps1 only defines these; evaluate their definitions here.
-        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot 'doctor.ps1'), [ref]$null, [ref]$null)
+    Test-Case 'doctor statuses match scripts/commands/doctor.sh: human fails in selected tiers, ok and skip have no fix' {
+        # scripts/commands/doctor.ps1 only defines these; evaluate their definitions here.
+        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot 'scripts/commands/doctor.ps1'), [ref]$null, [ref]$null)
         $parts = $ast.EndBlock.Statements | Where-Object {
             ($_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -in @('New-DoctorResult', 'Limit-DoctorResult', 'Write-DoctorResult')) -or
             ($_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -eq '$FailingStatuses') }
-        Assert-Equal @($parts).Count 4 'doctor.ps1 definitions'
+        Assert-Equal @($parts).Count 4 'scripts/commands/doctor.ps1 definitions'
         . ([scriptblock]::Create((@($parts) | ForEach-Object { $_.Extent.Text }) -join "`n"))
         $logged = [Collections.Generic.List[string]]::new()
         function Write-DotfilesLog { param([string]$Level, [string]$Message) $logged.Add("$Level $Message") }
@@ -957,36 +960,36 @@ exit 0
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture
         Set-FixtureConfigured $fixture
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Online = $true; Tsv = $true }; Assert-Exit $run 0 'online doctor'
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Online = $true; Tsv = $true }; Assert-Exit $run 0 'online doctor'
         foreach ($expected in @('gh auth status', 'claude auth status', 'codex login status')) { Assert-True ((Get-FixtureEvents $fixture) -contains $expected) "No $expected" }
         Assert-True ($run.Lines -contains "ok`tgh-auth`tcli`tgh is authenticated`t-") 'gh-auth row'
-        # As doctor.sh's bootstrap_check_auth: signed out is warn, never a failure.
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Online = $true; Tsv = $true } @{ FAKE_AUTH_EXIT = '1' }
+        # As scripts/commands/doctor.sh's bootstrap_check_auth: signed out is warn, never a failure.
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Online = $true; Tsv = $true } @{ FAKE_AUTH_EXIT = '1' }
         Assert-Exit $run 0 'signed-out doctor'
         Assert-Equal @($run.Lines | Where-Object { $_ -cmatch "^warn`t(gh|claude|codex)-auth`t(cli|ai)`t.+ is not authenticated .+`tdocs/bootstrap.md HW-auth$" }).Count 3 'warn auth rows'
         Remove-Item -LiteralPath (Join-Path $fixture.Bin 'codex.ps1') -Force
-        $run = Invoke-Fixture $fixture doctor.ps1 @{ Online = $true; Tsv = $true; Tier = 'core,cli' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Online = $true; Tsv = $true; Tier = 'core,cli' }
         Assert-Exit $run 0 'absent codex outside the tiers'
         Assert-True ($run.Lines -contains "skip`tcodex-auth`tai`tcodex not found, auth not checked`t-") "codex-auth skip row: $($run.Stdout)"
-        $quiet = Invoke-Fixture $fixture doctor.ps1 @{ Online = $true; Tsv = $true; Tier = 'core,cli'; Quiet = $true }
+        $quiet = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Online = $true; Tsv = $true; Tier = 'core,cli'; Quiet = $true }
         Assert-Equal (@($quiet.Lines | Select-Object -Skip 1 | ForEach-Object { $_.Split("`t")[1] }) -join ',') 'codex' 'quiet TSV rows'
     }
 
     Test-Case 'doctor rejects other hosts, unknown tiers and malformed manifests with exit 2' {
         $fixture = New-Fixture
-        Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{ HostName = 'mac' }) 2 'mac host'
-        Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{ Tier = 'core,bogus' }) 2 'bogus tier'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ HostName = 'mac' }) 2 'mac host'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{ Tier = 'core,bogus' }) 2 'bogus tier'
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'usage errors probed tools'
         Add-Content -LiteralPath (Join-Path $fixture.Repo 'config/bootstrap/tools.tsv') -Value "broken`tcore`twin"
-        Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{}) 2 'short row'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{}) 2 'short row'
         $tools = Join-Path $fixture.Repo 'config/bootstrap/tools.tsv'
         [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
         Add-Content -LiteralPath $tools -Value "bad`tcore`twin`turl:x`t-`t-`tbroken`tW1-winget"
-        Assert-Exit (Invoke-Fixture $fixture doctor.ps1 @{}) 2 'unknown probe kind'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{}) 2 'unknown probe kind'
         foreach ($case in @(@('payloads', 'is reserved for a doctor check'), @('git', 'repeats id'))) {
             [IO.File]::WriteAllLines($tools, [string[]]@([IO.File]::ReadAllLines($tools) | Select-Object -SkipLast 1))
             Add-Content -LiteralPath $tools -Value "$($case[0])`tcore`twin`tgit`t-`t-`tbroken`tHW-clone"
-            $run = Invoke-Fixture $fixture doctor.ps1 @{}
+            $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 @{}
             Assert-Exit $run 2 "tools.tsv id $($case[0])"
             Assert-True ($run.Stdout.Contains($case[1])) "id $($case[0]) message: $($run.Stdout)"
         }
@@ -1001,12 +1004,12 @@ exit 0
         $fix = 'docs/bootstrap.md HW-deploy'
         $repo = Resolve-DotfilesDirectory $fixture.Repo
         function Get-ChezmoiConfigRow($Run) { return @($Run.Lines | Where-Object { $_ -cmatch "^[a-z]+`tchezmoi-config`t" }) -join '|' }
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 0 'configured home'
         Assert-Equal (Get-ChezmoiConfigRow $run) "ok`tchezmoi-config`tcore`t~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff`t-" 'configured row'
 
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 0 'configured home again'
         Assert-Equal (Get-ChezmoiConfigRow $run) "ok`tchezmoi-config`tcore`t~/.config/chezmoi/chezmoi.toml names this home and this checkout; review configuration with a scoped diff`t-" 'configured row again'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'the chezmoi-config check wrote or removed files'
@@ -1016,16 +1019,16 @@ exit 0
         $maintenance = Join-Path $fixture.Home '.config/dotfiles/maintenance'
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $maintenance))
         [IO.File]::WriteAllText($maintenance, '')
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 1 'maintenance'
         Assert-Equal (Get-ChezmoiConfigRow $run) "human`tchezmoi-config`tcore`tmaintenance is active (~/.config/dotfiles/maintenance): login updates and payload installs stay off until a person removes it; see docs/updates.md`t$fix" 'maintenance row'
         [IO.File]::Delete($maintenance)
         [IO.Directory]::Delete((Split-Path -Parent $maintenance))
 
         # Wherever sync-payloads refuses (a config the guard refuses, no
-        # config), the payload advice is this checkout's quoted -Now line.
-        $hook = Join-Path (Join-Path $fixture.Repo 'scripts') 'payload-update.ps1'
-        $nowAdvice = "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run & '$hook' -Now ITEM`tdocs/bootstrap.md H7-payloads"
+        # config), the payload advice is this checkout's quoted public command.
+        $hook = Join-Path $fixture.Repo 'dotfiles.ps1'
+        $nowAdvice = "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run & '$hook' payloads sync ITEM`tdocs/bootstrap.md H7-payloads"
         $config = Join-Path $fixture.Home '.config/chezmoi/chezmoi.toml'
         $configText = [IO.File]::ReadAllText($config)
         $invalid = "human`tchezmoi-config`tcore`t~/.config/chezmoi/chezmoi.toml does not name this home and a dotfiles checkout in exactly one top-level sourceDir and destDir line as chezmoi init writes them; inspect it and never overwrite it blindly`t$fix"
@@ -1034,30 +1037,35 @@ exit 0
                 @('CRLF', $configText.Replace("`n", "`r`n")),
                 @('a workingTree key', ("workingTree = 'x'`n" + $configText)))) {
             [IO.File]::WriteAllText($config, $variant[1])
-            $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+            $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
             Assert-Exit $run 1 "invalid config: $($variant[0])"
             Assert-Equal (Get-ChezmoiConfigRow $run) $invalid "invalid row: $($variant[0])"
         }
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
         Assert-True ($run.Lines -contains $nowAdvice) "invalid-config payloads row: $($run.Stdout)"
         [IO.File]::Delete($config)
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 1 'no local config'
         Assert-Equal (Get-ChezmoiConfigRow $run) "human`tchezmoi-config`tcore`tthere is no ~/.config/chezmoi/chezmoi.toml; a new home gets one from Fresh Windows home by hand in docs/bootstrap.md`t$fix" 'absent config row'
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
         Assert-True ($run.Lines -contains $nowAdvice) "absent-config payloads row: $($run.Stdout)"
         [void][IO.Directory]::CreateDirectory($config)
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 1 'config directory'
         Assert-Equal (Get-ChezmoiConfigRow $run) "human`tchezmoi-config`tcore`t~/.config/chezmoi/chezmoi.toml is not a regular file; inspect it and never overwrite it blindly`t$fix" 'config directory row'
         [IO.Directory]::Delete($config)
         [IO.File]::WriteAllText($config, $configText)
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        Assert-True ($run.Lines -contains $nowAdvice) "missing-launcher payloads row: $($run.Stdout)"
+        $launcher = Join-Path $fixture.Home '.local/bin/dotfiles.ps1'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $launcher))
+        [IO.File]::Copy((Join-Path $sourceRoot 'home/dot_local/bin/dotfiles.ps1'), $launcher)
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
         Assert-True ($run.Lines -contains "warn`tpayloads`tai`tnot installed: nope (no windows-probe row): run sync-payloads ITEM`tdocs/bootstrap.md H7-payloads") "configured payloads row: $($run.Stdout)"
 
         $guard = Join-Path $fixture.Repo 'lib/chezmoi-guard.ps1'
         [IO.File]::Move($guard, "$guard.hidden")
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 1 'no guard'
         Assert-True ((Get-ChezmoiConfigRow $run) -cmatch "^human`tchezmoi-config`tcore`t.+lib.chezmoi-guard\.ps1 is unreadable, so the chezmoi config cannot be checked; use a complete checkout`t$fix$") "guard row: $($run.Stdout)"
         [IO.File]::Move("$guard.hidden", $guard)
@@ -1067,13 +1075,15 @@ exit 0
         $other = Join-Path $fixture.Root 'other'
         [void][IO.Directory]::CreateDirectory((Join-Path $other '.git'))
         Set-FixtureConfigured $fixture -Source $other
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 0 'another checkout'
         $otherResolved = Resolve-DotfilesDirectory $other
         $row = Get-ChezmoiConfigRow $run
         Assert-True ($row.StartsWith("warn`tchezmoi-config`tcore`t~/.config/chezmoi/chezmoi.toml names the checkout $otherResolved, not this checkout $repo; run ") -and
-            $row.EndsWith("doctor.ps1 for its state`t$fix")) "elsewhere row: $($run.Stdout)"
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+            $row.EndsWith("dotfiles.ps1' doctor for its state`t$fix")) "elsewhere row: $($run.Stdout)"
+        $adviceRun = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv @{ DOTFILES_PAYLOAD_ITEMS = 'nope' }
+        Assert-True ($adviceRun.Lines -contains $nowAdvice) "foreign-source payloads advice: $($adviceRun.Stdout)"
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }
         Assert-True ([bool]($check.Lines -cmatch '^HW-deploy human ')) "HW-deploy for another checkout: $($check.Stdout)"
 
         # The checkout reached through a junction or symlink is the configured
@@ -1085,22 +1095,22 @@ exit 0
         $linked = $fixture.PSObject.Copy()
         $linked.Repo = $link
         foreach ($entry in @(@('checkout', $fixture), @('linked checkout', $linked))) {
-            $run = Invoke-Fixture $entry[1] doctor.ps1 $tsv
+            $run = Invoke-Fixture $entry[1] scripts/commands/doctor.ps1 $tsv
             Assert-Exit $run 0 "$($entry[0]) doctor"
             Assert-True ((Get-ChezmoiConfigRow $run).StartsWith("ok`tchezmoi-config`t")) "$($entry[0]) row: $($run.Stdout)"
-            $check = Invoke-Fixture $entry[1] setup-host.ps1 @{ Check = $true }
+            $check = Invoke-Fixture $entry[1] scripts/commands/setup.ps1 @{ Check = $true }
             Assert-True ([bool]($check.Lines -cmatch '^HW-deploy done ')) "$($entry[0]) HW-deploy: $($check.Stdout)"
         }
     }
 
-    Test-Case 'the -Now payload advice parses as one command for a checkout path with a typographic quote' {
+    Test-Case 'the public payload advice parses as one command for a checkout path with a typographic quote' {
         # PowerShell also ends a single-quoted string at U+2018 to U+201B, so
         # the advice escapes those too. The child writes the rows to a UTF-8
         # file, which no console code page can mangle.
         $fixture = New-Fixture -RepoName "O$([char]0x2019)Neil"
         $capture = Join-Path $fixture.State 'doctor.tsv'
         [IO.File]::WriteAllText((Join-Path $fixture.Repo 'capture-doctor.ps1'), @'
-$rows = @(& (Join-Path $PSScriptRoot 'doctor.ps1') -Tsv *>&1 | ForEach-Object { "$_" })
+$rows = @(& (Join-Path $PSScriptRoot 'scripts/commands/doctor.ps1') -Tsv *>&1 | ForEach-Object { "$_" })
 [IO.File]::WriteAllLines($env:FIXTURE_CAPTURE, [string[]]$rows)
 exit $LASTEXITCODE
 '@)
@@ -1113,9 +1123,17 @@ exit $LASTEXITCODE
         $ast = [Management.Automation.Language.Parser]::ParseInput($advice, [ref]$null, [ref]$errors)
         $command = $ast.Find({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true)
         $elements = @(if ($command) { $command.CommandElements })
-        $hook = Join-Path (Join-Path $fixture.Repo 'scripts') 'payload-update.ps1'
-        Assert-True ($errors.Count -eq 0 -and $command.InvocationOperator -eq 'Ampersand' -and $elements.Count -eq 3 -and
-            $elements[0].Value -ceq $hook -and $elements[1].ParameterName -ceq 'Now' -and $elements[2].Value -ceq 'ITEM') "advice: $advice"
+        $hook = Join-Path $fixture.Repo 'dotfiles.ps1'
+        Assert-True ($errors.Count -eq 0 -and $command.InvocationOperator -eq 'Ampersand' -and $elements.Count -eq 4 -and
+            $elements[0].Value -ceq $hook -and $elements[1].Value -ceq 'payloads' -and $elements[2].Value -ceq 'sync' -and $elements[3].Value -ceq 'ITEM') "advice: $advice"
+        # Replay only against this disposable recording frontend.
+        [IO.File]::WriteAllText($hook, @'
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'advice-replay.json'), (ConvertTo-Json -InputObject @($args)))
+exit 0
+'@)
+        & ([scriptblock]::Create($advice))
+        $replayed = @([IO.File]::ReadAllText((Join-Path $fixture.Repo 'advice-replay.json')) | ConvertFrom-Json)
+        Assert-Equal ($replayed -join '|') 'payloads|sync|ITEM' 'public advice source and argv replay'
     }
 
     Test-Case 'on Windows chezmoi-config and W1-chezmoi flag a ~/.local/bin/chezmoi.exe the login updater refuses' {
@@ -1133,20 +1151,20 @@ exit $LASTEXITCODE
         function Assert-BinaryRefused([string]$Label) {
             # Read-only: the doctor opens the file for reading and closes it.
             $before = Get-Snapshot (Get-FixtureRoots $fixture)
-            $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+            $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
             Assert-Exit $run 1 $Label
             $row = Get-ChezmoiConfigRow $run
             Assert-True ($row -cmatch "^human`tchezmoi-config`tcore`t.*login updater refuses ~/\.local/bin/chezmoi\.exe.*W1-chezmoi.*`tdocs/bootstrap\.md W1-chezmoi$" -and
                 -not $row.Contains('S-1-')) "$Label chezmoi-config: $($run.Stdout)"
             Assert-True ([bool]($run.Lines -cmatch "^ok`tchezmoi`t")) "$Label keeps the chezmoi tool row: $($run.Stdout)"
             Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before "$Label doctor wrote files"
-            $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+            $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }
             Assert-True ([bool]($check.Lines -cmatch '^W1-chezmoi todo .*login updater runs only a private')) "$Label W1-chezmoi: $($check.Stdout)"
         }
-        $run = Invoke-Fixture $fixture doctor.ps1 $tsv
+        $run = Invoke-Fixture $fixture scripts/commands/doctor.ps1 $tsv
         Assert-Exit $run 0 'private copy'
         Assert-True ((Get-ChezmoiConfigRow $run).StartsWith("ok`tchezmoi-config`t")) "private copy row: $($run.Stdout)"
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }
         Assert-True ([bool]($check.Lines -cmatch '^W1-chezmoi done ')) "private copy W1-chezmoi: $($check.Stdout)"
 
         # Only a PATH chezmoi (winget, scoop): refused.
@@ -1271,7 +1289,7 @@ exit $LASTEXITCODE
     Test-Case 'setup-host -Check plans every step, writes nothing and exits 3 while work remains' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'all' }
         Assert-Exit $run 3 'check with HW-deploy pending'
         Assert-Equal (@($run.Lines | ForEach-Object { $_.Split(' ')[0] }) -join ',') (($AutomatedSteps + $HumanSteps) -join ',') 'plan step order'
         foreach ($line in $run.Lines) { Assert-True ($line -cmatch '^(W1|HW)-[a-z-]+ (done|todo|human|skip) \S') "Malformed plan line: $line" }
@@ -1288,7 +1306,7 @@ exit $LASTEXITCODE
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before '-Check wrote files'
         Assert-Equal @(Get-InstallEvents $fixture).Count 0 '-Check installed something'
         Assert-True (-not @(Get-FixtureEvents $fixture | Where-Object { $_ -match 'PSResource|Invoke-WebRequest' }).Count) '-Check queried the network or PSResourceGet'
-        $default = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+        $default = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }
         Assert-True ($default.Lines -contains 'W1-psresources skip no selected tier needs PowerShell modules') 'desktop modules under default tiers'
         Assert-True ($default.Lines -contains 'W1-font skip no selected tier needs the Nerd Font') 'font under default tiers'
         Assert-Exit $default 3 'default-tier check with HW-deploy pending'
@@ -1297,11 +1315,11 @@ exit $LASTEXITCODE
     Test-Case 'setup-host refuses a non-interactive run without -Yes, bad usage and invalid pins' {
         $fixture = New-Fixture
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{}
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{}
         Assert-Exit $run 2 'no -Yes'
         Assert-True ($run.Stdout.Contains('without -Yes')) 'refusal message'
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ HostName = 'lab-ubuntu'; Yes = $true }) 2 'unix host'
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Tier = 'nope'; Yes = $true }) 2 'bad tier'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ HostName = 'lab-ubuntu'; Yes = $true }) 2 'unix host'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Tier = 'nope'; Yes = $true }) 2 'bad tier'
         Assert-Equal @(Get-FixtureEvents $fixture).Count 0 'refused runs probed or installed'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'refused runs wrote files'
         $installers = Join-Path $fixture.Repo 'config/bootstrap/installers.tsv'
@@ -1312,20 +1330,20 @@ exit $LASTEXITCODE
                 $cells = $line.Split("`t"); $cells[$case[0]] = $case[1]; $cells -join "`t"
             }
             [IO.File]::WriteAllLines($installers, [string[]]$lines)
-            $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+            $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }
             Assert-Exit $run 2 "bat-theme $($case[1])"
             Assert-True ($run.Stdout.Contains('Invalid manifest: installers.tsv bat-theme needs an https url')) "pin message: $($run.Stdout)"
         }
         [IO.File]::WriteAllLines($installers, $pinned)
         $wingetFile = Join-Path $fixture.Repo 'config/bootstrap/winget.json'
         [IO.File]::WriteAllText($wingetFile, '{"Sources": []}')
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }) 2 'empty winget.json'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }) 2 'empty winget.json'
         # W1-winget's filter walks every source, so a later broken one is a
         # manifest error too, not a crash during apply.
         $good = '{"Packages": [{"PackageIdentifier": "Git.Git"}], "SourceDetails": {"Name": "winget"}}'
         foreach ($later in @('{"SourceDetails": {"Name": "winget"}}', '{"Packages": [{"Id": "Git.Git"}]}', '{"Packages": []}')) {
             [IO.File]::WriteAllText($wingetFile, "{`"Sources`": [$good, $later]}")
-            $run = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true }
+            $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true }
             Assert-Exit $run 2 "winget.json with a later source $later"
             Assert-True ($run.Stdout.Contains('every source needs packages, each with a PackageIdentifier')) "source message: $($run.Stdout)"
         }
@@ -1334,7 +1352,7 @@ exit $LASTEXITCODE
     Test-Case 'setup-host -PrintManual prints every HUMAN block accurately' {
         # A checkout path with $, a quote and a space, which no HUMAN command may name.
         $fixture = New-Fixture -RepoName "it's `$HOME dir"
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ PrintManual = $true }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ PrintManual = $true }
         Assert-Exit $run 0 'print manual'
         $blocks = Get-HumanBlocks $run.Lines
         Assert-Equal (($blocks | ForEach-Object Id) -join ',') ($HumanSteps -join ',') 'HUMAN ids'
@@ -1355,9 +1373,9 @@ exit $LASTEXITCODE
         Assert-True ($wsl.Contains('# HW-deploy deploys ~\.wslconfig, ~\wsl.conf and ~\mount.vbs into your home.')) "HW-wsl: $wsl"
         $auth = ($blocks | Where-Object Id -eq 'HW-auth').Lines -join "`n"
         Assert-True ($auth.Contains('Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.')) "HW-auth: $auth"
-        Assert-True ($auth.Contains('check with .\doctor.ps1 -Online.')) "HW-auth doctor line: $auth"
+        Assert-True ($auth.Contains("check with & '$([Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $fixture.Repo 'dotfiles.ps1')))' doctor --online.")) "HW-auth doctor line: $auth"
         $clone = ($blocks | Where-Object Id -eq 'HW-clone').Lines -join "`n"
-        Assert-True ($clone.Contains('then rerun setup-host.ps1 from the clone.')) "HW-clone: $clone"
+        Assert-True ($clone.Contains('then rerun dotfiles.ps1 setup from the clone.')) "HW-clone: $clone"
         $commands = @($blocks | ForEach-Object { $_.Lines } | Where-Object { -not $_.StartsWith('#') })
         Assert-True (-not @($commands | Where-Object { $_ -match 'setup-git' }).Count) 'a HUMAN block runs gh auth setup-git'
         # The HUMAN blocks run no checkout script and name no checkout path.
@@ -1397,7 +1415,7 @@ exit $LASTEXITCODE
         New-StoreStub $fixture.StoreAliases 'python3'; New-StoreStub $fixture.StoreAliases 'python'
         $repoBefore = Get-Snapshot @($fixture.Repo)
         $environment = @{ FAKE_PSRESOURCE_INSTALLED = 'CompletionPredictor'; PATH = ($fixture.StoreAliases, $fixture.Bin) -join [IO.Path]::PathSeparator }
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'all' } $environment
         Assert-Exit $run 3 'full apply'
         $url = @([IO.File]::ReadAllLines((Join-Path $fixture.Repo 'config/bootstrap/installers.tsv')) |
                 Where-Object { $_.StartsWith("bat-theme`t") })[0].Split("`t")[2]
@@ -1415,13 +1433,13 @@ exit $LASTEXITCODE
         $ids = @($blocks | ForEach-Object Id)
         Assert-True ($ids -contains 'HW-deploy' -and $ids -contains 'HW-auth') "HUMAN blocks: $($ids -join ',')"
         Assert-True ($ids -notcontains 'HW-clone') 'HW-clone printed although the checkout is a clone'
-        Assert-Equal $run.Lines[-1] '[dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1' 'pending summary'
+        Assert-Equal $run.Lines[-1] "[dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun & '$([Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $fixture.Repo 'dotfiles.ps1')))' setup" 'pending summary'
         Assert-Equal @(Get-ChildItem -LiteralPath $fixture.Temp -Filter 'dotfiles-bootstrap-*').Count 0 'scratch left behind'
         $count = @(Get-FixtureEvents $fixture).Count
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment) 3 'second apply'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'all' } $environment) 3 'second apply'
         $new = @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent })
         Assert-Equal ($new -join '; ') '' 'second apply installed again'
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' } $environment
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'all' } $environment
         foreach ($id in @('W1-winget', 'W1-font', 'W1-bat-theme', 'W1-chezmoi')) { Assert-True (@($check.Lines -like "$id done *").Count -eq 1) "$id not done after apply" }
 
         # Once configured, only non-blocking blocks remain: they print, and the run exits 0.
@@ -1429,12 +1447,12 @@ exit $LASTEXITCODE
         # FAKE_PSRESOURCE_INSTALLED has PSResourceGet report CompletionPredictor
         # without its module directory; give it one, so no step is left todo.
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture.Modules 'CompletionPredictor'))
-        $final = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all' } $environment
+        $final = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'all' } $environment
         Assert-Exit $final 0 'apply with only non-blocking HUMAN steps'
         $finalBlocks = Get-HumanBlocks $final.Lines
         Assert-True (@($finalBlocks | ForEach-Object Id) -contains 'HW-auth') 'HW-auth block missing once configured'
         Assert-Equal $final.Lines[-1] '[dotfiles] [ok] setup-host: nothing blocking remains for win' 'done summary'
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'all' } $environment) 0 'check once only non-blocking steps remain'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'all' } $environment) 0 'check once only non-blocking steps remain'
     }
 
     Test-Case 'setup-host retries a failed bat cache build without downloading the pinned theme again' {
@@ -1443,23 +1461,23 @@ exit $LASTEXITCODE
         Set-FixtureHealthy $fixture
         $theme = Join-Path $fixture.AppData $ThemeFile
         Remove-Item -LiteralPath $theme, $fixture.BatCache -Force
-        $failed = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' } @{ FAKE_BAT_CACHE_EXIT = '1' }
+        $failed = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'core' } @{ FAKE_BAT_CACHE_EXIT = '1' }
         Assert-Exit $failed 1 'failed cache build'
         Assert-True ($failed.Stdout.Contains('bat cache --build exited 1')) 'cache failure was not reported'
         Assert-True ([IO.File]::Exists($theme)) 'the verified theme was not retained after the cache failure'
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'core' }
         Assert-Exit $check 3 'cache repair plan'
         Assert-True (@($check.Lines -like 'W1-bat-theme todo *').Count -eq 1) 'the retained theme hid its missing cache'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'cache repair plan wrote files'
         Assert-True (-not [IO.File]::Exists($fixture.BatCache)) '-Check built the cache'
         $count = @(Get-FixtureEvents $fixture).Count
         $themeBefore = Get-Snapshot @($theme)
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' }) 3 'retry cache build'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'core' }) 3 'retry cache build'
         $new = @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent })
         Assert-Equal ($new -join '|') 'bat cache --build' 'cache repair redownloaded or repeated another installer'
         Assert-Equal (Get-Snapshot @($theme)) $themeBefore 'cache repair replaced the pinned theme'
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'core' }
         Assert-True (@($check.Lines -like 'W1-bat-theme done *').Count -eq 1) 'the successful cache repair remained todo'
     }
 
@@ -1468,13 +1486,13 @@ exit $LASTEXITCODE
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture -Except @('bat')
         Remove-Item -LiteralPath $fixture.BatCache -Force
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'core' }
         Assert-True (@($check.Lines -like 'W1-bat-theme done *').Count -eq 1) 'a valid theme without bat was not accepted'
         New-ToolShim $fixture.Bin bat
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'core' }
         Assert-True (@($check.Lines -like 'W1-bat-theme todo *').Count -eq 1) 'bat became available but its missing cache was ignored'
         $count = @(Get-FixtureEvents $fixture).Count
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' }) 3 'build delayed bat cache'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'core' }) 3 'build delayed bat cache'
         $new = @(Get-FixtureEvents $fixture | Select-Object -Skip $count | Where-Object { $_ -cmatch $InstallEvent })
         Assert-Equal ($new -join '|') 'bat cache --build' 'delayed bat repair did not reuse the existing pinned theme'
     }
@@ -1485,11 +1503,11 @@ exit $LASTEXITCODE
         Set-FixtureHealthy $fixture
         $theme = Join-Path $fixture.AppData $ThemeFile
         [IO.File]::WriteAllText($theme, 'user-owned theme')
-        $check = Invoke-Fixture $fixture setup-host.ps1 @{ Check = $true; Tier = 'core' }
+        $check = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Check = $true; Tier = 'core' }
         Assert-True (@($check.Lines -like 'W1-bat-theme todo *').Count -eq 1) 'an unverified theme passed the readiness check'
         $before = Get-Snapshot @($theme)
         $count = @(Get-FixtureEvents $fixture).Count
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'core' }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'core' }
         Assert-Exit $run 1 'preexisting theme differs from pin'
         Assert-True ($run.Stdout.Contains('differs from the pinned theme')) 'the existing theme failure did not explain its cause'
         Assert-Equal (Get-Snapshot @($theme)) $before 'the unverified preexisting theme was overwritten'
@@ -1500,7 +1518,7 @@ exit $LASTEXITCODE
         $fixture = New-Fixture
         foreach ($name in $ToolText.Keys) { if ($name -ne 'git') { New-ToolShim $fixture.Packages $name } }
         $before = Get-Snapshot (Get-FixtureRoots $fixture)
-        Assert-Exit (Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'all'; WhatIf = $true }) 3 'what-if'
+        Assert-Exit (Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'all'; WhatIf = $true }) 3 'what-if'
         Assert-Equal @(Get-InstallEvents $fixture).Count 0 'what-if installed'
         Assert-Equal (Get-Snapshot (Get-FixtureRoots $fixture)) $before 'what-if wrote files'
     }
@@ -1513,7 +1531,7 @@ exit $LASTEXITCODE
         Set-FixtureHealthy $fixture -Except @('jq')
         Set-FixtureConfigured $fixture
         New-ToolShim $fixture.Packages 'jq'
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; WhatIf = $true }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; WhatIf = $true }
         Assert-Exit $run 3 'what-if on a configured home'
         Assert-Equal @(Get-InstallEvents $fixture).Count 0 'what-if installed'
         Assert-True (@($run.Lines -cmatch '^\[dotfiles\] \[warn\] Steps not applied: (\S+ )*W1-winget( |;)').Count -eq 1) "no not-applied summary: $($run.Stdout)"
@@ -1528,7 +1546,7 @@ exit $LASTEXITCODE
         Set-FixtureHealthy $fixture -Except @('jq')
         New-ToolShim $fixture.Bin 'fzf' '0.44.1 (d4c1a6d)'
         New-ToolShim $fixture.Packages 'jq'
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true }
         Assert-Exit $run 3 'apply with jq missing and fzf outdated'
         Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") 'junegunn.fzf jqlang.jq' 'imported packages'
         $imports = @(Get-FixtureEvents $fixture | Where-Object { $_ -cmatch '^winget import ' })
@@ -1549,7 +1567,7 @@ exit $LASTEXITCODE
         $fixture = New-Fixture
         Set-FixtureHealthy $fixture -Except @('oh-my-posh')
         Remove-Item -LiteralPath (Join-Path $fixture.LocalAppData $FontFile) -Force
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true; Tier = 'desktop' }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true; Tier = 'desktop' }
         Assert-Exit $run 3 'desktop apply without oh-my-posh'
         Assert-True (@(Get-InstallEvents $fixture) -contains (Get-ImportEvent $fixture -Scratch)) 'winget import did not run'
         Assert-Equal ((Get-ImportedPackages $fixture) -join "`n") 'JanDeDobbeleer.OhMyPosh' 'imported more than the missing package'
@@ -1562,7 +1580,7 @@ exit $LASTEXITCODE
         Set-FixtureHealthy $fixture -Except @('chezmoi')
         Remove-Item -LiteralPath (Join-Path $fixture.AppData $ThemeFile) -Force
         [IO.File]::WriteAllText($fixture.Download, 'tampered theme')
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true }
         Assert-Exit $run 1 'digest mismatch'
         Assert-True ($run.Stdout.Contains('sha256 mismatch')) "mismatch message: $($run.Stdout)"
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.AppData $ThemeFile))) 'tampered theme installed'
@@ -1573,7 +1591,7 @@ exit $LASTEXITCODE
         Assert-Equal @(Get-ChildItem -LiteralPath $fixture.Temp -Filter 'dotfiles-bootstrap-*').Count 0 'scratch left behind'
 
         $fixture = New-Fixture
-        $run = Invoke-Fixture $fixture setup-host.ps1 @{ Yes = $true } @{ FAKE_WINGET_EXIT = [string][int]0x8A150046 }
+        $run = Invoke-Fixture $fixture scripts/commands/setup.ps1 @{ Yes = $true } @{ FAKE_WINGET_EXIT = [string][int]0x8A150046 }
         Assert-Exit $run 1 'winget failure'
         Assert-True ($run.Stdout.Contains('winget exited 0x8A150046 (source agreements were not accepted)')) "winget message: $($run.Stdout)"
         Assert-Equal (@(Get-InstallEvents $fixture) -join '; ') (@(Get-InstallEvents $fixture | Select-Object -First 1) -join '; ') 'steps ran after the winget failure'

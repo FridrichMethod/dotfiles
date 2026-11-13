@@ -12,10 +12,10 @@ floor the doctor checks.
 | Unix installation | chezmoi 2.74.0+, Git, shell and ordinary POSIX utilities |
 | Windows installation | chezmoi 2.74.0+, PowerShell 7+, Git; ordinary file updates are unelevated |
 | Claude customization hooks | Node.js 22+ (18 and 20 are end of life); independent of configuration-file merging |
-| Payload repos ([payloads.md](payloads.md)) | `dotfiles payloads sync` (also `sync-payloads`) forwards to `scripts/payload-update.*`: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
+| Payload repos ([payloads.md](payloads.md)) | `dotfiles payloads sync` (also `sync-payloads`) forwards to `scripts/commands/payloads-sync.*`: POSIX `sh` and curl, or wget plus an existing timeout/gtimeout on Unix, PowerShell 7 on Windows; then what each repository's installer needs, which its README lists (Git for the kit's managed install, on Unix only since the kit installs nothing on native Windows, and for awesome-skills) |
 | Contributor checks | pre-commit, Node, Python 3.11+; pinned lint tools; PowerShell required on Windows CI; Docker for the opt-in end-to-end bootstrap suite (`tests/e2e/run.sh`, see [testing.md](testing.md#end-to-end-bootstrap-opt-in)) |
 | CLI dispatch | POSIX `sh` on Unix, PowerShell 7+ on Windows; no Python, Node or added package requirement. Each command retains its backend requirements below |
-| Day-zero bootstrap | `dotfiles doctor`/`dotfiles setup` forward to `doctor.sh`/`setup-host.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `doctor.ps1` and `setup-host.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
+| Day-zero bootstrap | `dotfiles doctor`/`dotfiles setup` forward to `scripts/commands/doctor.sh`/`scripts/commands/setup.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `scripts/commands/doctor.ps1` and `scripts/commands/setup.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
 The configured applications (Zsh, Vim, terminals, Codex, Claude, etc.) are needed
 to use their respective settings, not all to deploy the repository. The
@@ -30,7 +30,7 @@ doctor checks, and some (fzf, gh, shfmt and so on) appear only there.
 | Tool and floor | Why, and where it holds |
 | --- | --- |
 | chezmoi 2.74.0 | Every deployment and update; `.chezmoiversion` and `tools.tsv` require it, and CI provisions exactly v2.74.0. Sherlock's glibc 2.17 cannot load the generic Linux build (it needs glibc 2.34), so S4-chezmoi installs the official static musl build there |
-| Bash 3.2 | macOS `/bin/bash` is 3.2.57, the macOS CI job runs `/bin/bash`, and `setup-host.sh` runs before Homebrew exists. Hence no here-documents, here-strings or process substitution in the Unix bootstrap |
+| Bash 3.2 | macOS `/bin/bash` is 3.2.57, the macOS CI job runs `/bin/bash`, and `scripts/commands/setup.sh` runs before Homebrew exists. Hence no here-documents, here-strings or process substitution in the Unix bootstrap |
 | POSIX sh | `home/dot_profile`, `home/dot_aliases` and the login dispatch run under sh, dash, Bash and zsh |
 | Python 3.11 | The stdlib helpers (`python3 -I -B`) and the tests; Linux CI runs 3.11. Ubuntu 22.04's apt python3 (3.10) is below it |
 | tmux 3.4 | The shared config uses 3.4 popup, menu and style features without version checks; Linux CI runs Ubuntu 24.04's 3.4 and fails if the tmux tests would skip. Marlowe meets it only through its login env |
@@ -44,7 +44,7 @@ doctor checks, and some (fzf, gh, shfmt and so on) appear only there.
 ## Day-zero tools
 
 [`config/bootstrap/tools.tsv`](../config/bootstrap/tools.tsv) is the source of
-truth for what `doctor.sh` and `doctor.ps1` check; the compact tables below describe the
+truth for what `scripts/commands/doctor.sh` and `scripts/commands/doctor.ps1` check; the compact tables below describe the
 impact of missing tools without duplicating provider inventories. Tiers `core`, `cli` and `ai`
 are required by default; `desktop`, `contributor` and `host` are reported only
 (`--tier all` makes them required). [bootstrap.md](bootstrap.md) has the step
@@ -71,7 +71,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | --- | --- | --- |
 | `git` | all | cannot clone or update the dotfiles |
 | `chezmoi` | all | configuration deployment needs 2.74.0+; setup steps S4-chezmoi / W1-chezmoi provision it explicitly |
-| `bash` | unix | doctor.sh and setup-host.sh cannot run |
+| `bash` | unix | dotfiles doctor and dotfiles setup cannot run |
 | `zsh` | unix | no interactive shell for the dotfiles .zshrc |
 | `git-lfs` | unix | the required lfs filter in .gitconfig fails on LFS repositories |
 | `curl` | unix | setup-host downloads fail, and the payload hook needs wget instead |
@@ -111,7 +111,7 @@ of missing them; manifest parity tests require every ID to remain documented.
 | `bat-theme` | all | BAT_THEME Catppuccin Mocha is unknown to bat |
 | `micromamba` | sherlock, marlowe | the login env cannot be created or updated |
 | `login-env` | sherlock, marlowe | ssh sherlock and ssh marlowe cannot exec the login zsh |
-| `pwsh` | win | the PowerShell 7 profile and doctor.ps1 cannot run |
+| `pwsh` | win | the PowerShell 7 profile and dotfiles.ps1 doctor cannot run |
 
 ### CLI tier
 
@@ -204,7 +204,7 @@ executables are probed on `PATH`, PSFzf by looking for a `PSFzf` directory in
 each `PSModulePath` entry, and CompletionPredictor and
 Microsoft.WinGet.CommandNotFound are imported on the first idle tick (a missing
 module is silent; one that is installed but fails to import warns once).
-`setup-host.ps1` installs them explicitly; profiles, automatic updates
+`scripts/commands/setup.ps1` installs them explicitly; profiles, automatic updates
 and the payload hook never install them. Where the Windows profile degrades differently from the
 Unix rows above: without eza, `ll` and `la` fall back to `Get-ChildItem`;
 without bat, `BAT_THEME` is not set; the profile does not use fd; without

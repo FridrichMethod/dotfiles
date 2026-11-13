@@ -725,13 +725,13 @@ try {
     $other = Join-Path $syncHome 'dotfiles'
     $syncTrace = Join-Path $syncRoot 'trace'
     $null = New-Item -ItemType Directory -Force -Path (Join-Path $syncHome '.config/dotfiles'), (Join-Path $syncHome '.config/chezmoi'), (Join-Path $syncHome '.local/bin'),
-        (Join-Path $configured 'scripts'), (Join-Path $configured 'lib'), (Join-Path $configured '.git'), (Join-Path $other 'scripts'), (Join-Path $other 'lib')
+        (Join-Path $configured 'scripts/commands'), (Join-Path $configured 'lib'), (Join-Path $configured '.git'), (Join-Path $other 'scripts/commands'), (Join-Path $other 'lib')
     [IO.File]::WriteAllText((Join-Path $configured '.chezmoiroot'), "home`n")
     Copy-Item -LiteralPath (Join-Path $repoRoot 'lib/chezmoi-guard.ps1') -Destination (Join-Path $configured 'lib/chezmoi-guard.ps1')
     Copy-Item -LiteralPath (Join-Path $repoRoot 'dotfiles.ps1') -Destination (Join-Path $configured 'dotfiles.ps1')
     Copy-Item -LiteralPath (Join-Path $repoRoot 'home/dot_local/bin/dotfiles.ps1') -Destination (Join-Path $syncHome '.local/bin/dotfiles.ps1')
     foreach ($checkout in @{ Path = $configured; Name = 'configured' }, @{ Path = $other; Name = 'other' }) {
-        [IO.File]::WriteAllText((Join-Path $checkout.Path 'scripts/payload-update.ps1'),
+        [IO.File]::WriteAllText((Join-Path $checkout.Path 'scripts/commands/payloads-sync.ps1'),
             "param([switch]`$Now, [string[]]`$Item)`nif (-not `$Now) { throw 'Missing Now.' }`nAdd-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value ('$($checkout.Name) -Now ' + (`$Item -join ' '))`nexit 4`n")
     }
     [IO.File]::WriteAllText((Join-Path $other 'lib/chezmoi-guard.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'other-guard'`n")
@@ -815,11 +815,11 @@ $global:LASTEXITCODE = 7; sync-skills ignored; "exit=$first,$LASTEXITCODE"
     Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains($refused)) "a configured source without its guard refuses without running a hook ($($case.Text))"
     # A configured source without the hook fails with one line and exit 1, not
     # a leftover 0.
-    $hookPath = Join-Path $configured 'scripts/payload-update.ps1'
+    $hookPath = Join-Path $configured 'scripts/commands/payloads-sync.ps1'
     Move-Item -LiteralPath $hookPath -Destination "$hookPath.hidden"
     try { $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) } }
     finally { Move-Item -LiteralPath "$hookPath.hidden" -Destination $hookPath }
-    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('payload-update.ps1') -and
+    Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('payloads-sync.ps1') -and
         -not $case.Err.Contains('CommandNotFound')) "a configured source without the hook fails with exit 1 ($($case.Text))"
     $launcherPath = Join-Path $syncHome '.local/bin/dotfiles.ps1'
     Move-Item -LiteralPath $launcherPath -Destination "$launcherPath.hidden"
@@ -827,11 +827,11 @@ $global:LASTEXITCODE = 7; sync-skills ignored; "exit=$first,$LASTEXITCODE"
     finally { Move-Item -LiteralPath "$launcherPath.hidden" -Destination $launcherPath }
     Assert-True ($case.Events -ceq '' -and $case.Out -ceq 'exit=1,1' -and $case.Err.Contains('missing ~/.local/bin/dotfiles.ps1')) "missing launcher refuses without the old backend fallback ($($case.Text))"
     # A hook that ends without exit leaves no stale exit status behind.
-    [IO.File]::WriteAllText((Join-Path $configured 'scripts/payload-update.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
+    [IO.File]::WriteAllText((Join-Path $configured 'scripts/commands/payloads-sync.ps1'), "Add-Content -LiteralPath `$env:DOTFILES_TEST_TRACE -Value 'quiet'`n")
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid) }
     Assert-True ($case.Events -ceq 'quiet|quiet' -and $case.Out -ceq 'exit=0,0') "a hook without exit reports 0, not the caller's last status ($($case.Text))"
     # The real hook's maintenance refusal.
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/payload-update.ps1') -Destination (Join-Path $configured 'scripts/payload-update.ps1') -Force
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/commands/payloads-sync.ps1') -Destination (Join-Path $configured 'scripts/commands/payloads-sync.ps1') -Force
     $case = Invoke-SyncCase { [IO.File]::WriteAllText($syncConfig, $valid); [IO.File]::WriteAllText((Join-Path $syncHome '.config/dotfiles/maintenance'), '') }
     Assert-True ($case.Events -ceq '' -and $case.Out.EndsWith('exit=1,1') -and ($case.Out + $case.Err).Contains('payload update refused during maintenance')) "maintenance surfaces the configured hook's refusal ($($case.Text))"
     Remove-Item -LiteralPath (Join-Path $syncHome '.config/dotfiles/maintenance') -Force

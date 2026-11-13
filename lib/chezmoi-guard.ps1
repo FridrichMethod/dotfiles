@@ -1,5 +1,5 @@
 # Per-home chezmoi config lookup, maintenance and Windows binary-trust guard. Sourcing has no filesystem effects.
-# Windows PowerShell 5.1 compatible. The PowerShell 7 profile, the login updater, scripts/payload-update.ps1 (its rerun line), doctor.ps1 and setup-host.ps1 (through lib/bootstrap.ps1) load it.
+# Windows PowerShell 5.1 compatible. The PowerShell 7 profile, the login updater, scripts/commands/payloads-sync.ps1 (its rerun line), scripts/commands/doctor.ps1 and scripts/commands/setup.ps1 (through lib/bootstrap.ps1) load it.
 function Test-DotfilesMarkerObject {
     param([Parameter(Mandatory)][string]$Path)
     try { [void][IO.File]::GetAttributes($Path); return $true }
@@ -117,7 +117,7 @@ function Get-DotfilesChezmoiPaths {
 }
 
 # The login updater's binary check (scripts/chezmoi-update.ps1), which
-# doctor.ps1 and setup-host.ps1's W1-chezmoi apply too. Read-only and used on
+# scripts/commands/doctor.ps1 and scripts/commands/setup.ps1's W1-chezmoi apply too. Read-only and used on
 # Windows only; like everything above, it parses under Windows PowerShell 5.1.
 function Test-DotfilesChezmoiPath {
     # True when .local and .local\bin are real directories and chezmoi.exe a

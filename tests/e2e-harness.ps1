@@ -3,7 +3,7 @@
 # tests/e2e/lib/*.ps1: the PowerShell twin of tests/e2e-harness.sh. The
 # libraries are dot-sourced into this process and run unchanged; what would
 # reach the machine is replaced by stubs defined in a case's own scope, where
-# the driver resolves them: each setup-host.ps1 run (realistic -Yes output
+# the driver resolves them: each dotfiles.ps1 setup run (realistic -Yes output
 # with winget's blank progress lines and CRLF endings), each child pwsh the
 # home-deploy and home-converged steps start (the stub writes the
 # config, state database and private copies Fresh Windows home by hand
@@ -12,7 +12,7 @@
 # HOME snapshots of the no-write steps. The clean-clone check and rev-parse
 # run real git on a temp repository standing in for the clone; the clone's
 # lib/chezmoi-guard.ps1 judges the config's sourceDir and destDir for real; Invoke-E2EProcess, the
-# run.ps1 refusals and setup-host.ps1 -PrintManual run as real child pwsh
+# run.ps1 refusals and dotfiles.ps1 setup --print-manual run as real child pwsh
 # processes with their caches kept under the temp dir off Windows; the
 # docs/bootstrap.md fence of Fresh Windows home by hand is parsed and
 # checked, never run (bootstrap-e2e runs it on the windows-2025 runner).
@@ -158,7 +158,7 @@ function Get-SummaryText {
     return '(no summary.tsv)'
 }
 
-# --- setup-host.ps1 -Yes output -------------------------------------------
+# --- dotfiles.ps1 setup --yes output -------------------------------------------
 
 $Reminders = @('HW-execution-policy', 'HW-ssh-agent', 'HW-wsl', 'HW-auth')
 $ReminderSummary = 'HW-execution-policy(judgment) HW-ssh-agent(sudo) HW-wsl(judgment) HW-auth(auth)'
@@ -192,7 +192,7 @@ function Get-WingetLines {
         '   '
         ''
         '[dotfiles] [ok] W1-winget: installed: winget import finished'
-        "[dotfiles] [warn] W1-winget: not on this session's PATH yet: oh-my-posh; open a new shell, then run .\doctor.ps1"
+        "[dotfiles] [warn] W1-winget: not on this session's PATH yet: oh-my-posh; open a new shell, then run & 'CANDIDATE\dotfiles.ps1' doctor"
         '[dotfiles] [step] W1-psresources: Install-PSResource PSFzf, CompletionPredictor -Scope CurrentUser'
         '[dotfiles] [ok] W1-psresources: installed: modules installed for the current user'
         '[dotfiles] [info] W1-font: skip: oh-my-posh is not on PATH, so the font is not installed'
@@ -203,12 +203,12 @@ function Get-WingetLines {
 }
 
 function Get-BlockLines {
-    # One HUMAN block as setup-host.ps1 prints it natively for a clone at
-    # Clone (Get-SetupHumanBlock); no block names the clone's path.
+    # One HUMAN block as dotfiles.ps1 setup prints it natively for a clone at
+    # Clone (Get-SetupHumanBlock); advice uses its escaped frontend path.
     param([string]$Id, [string]$Clone)
     $body = switch -CaseSensitive ($Id) {
         'HW-clone' {
-            'judgment', '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun setup-host.ps1 from the clone.',
+            'judgment', '# This checkout has no .git, so the login updater cannot pull it. Move it aside, clone onto NTFS (not into WSL), then rerun dotfiles.ps1 setup from the clone.',
             '# Git and PowerShell 7 as the MSI in Program Files\PowerShell\7:',
             'winget install --id Git.Git -e --source winget',
             'winget install --id Microsoft.PowerShell -e --source winget --installer-type wix',
@@ -235,7 +235,7 @@ function Get-BlockLines {
             '# ~\mount.vbs mounts one specific physical disk; do not schedule it on another machine.', 'wsl --install -d Ubuntu'
         }
         'HW-auth' {
-            'auth', '# Sign in, then check with .\doctor.ps1 -Online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.',
+            'auth', "# Sign in, then check with & '$([Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $Clone 'dotfiles.ps1')))' doctor --online. Skip gh auth setup-git: it would rewrite ~\.gitconfig, which the dotfiles manage.",
             'ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519', 'gh auth login --git-protocol ssh', 'claude auth login', 'codex login'
         }
         default { throw "No fixture block for $Id" }
@@ -244,7 +244,7 @@ function Get-BlockLines {
 }
 
 function Get-ApplyOutput {
-    # The stdout of a setup-host.ps1 -Host win -Yes run for a clone at Clone:
+    # The stdout of a dotfiles.ps1 setup --host win --yes run for a clone at Clone:
     # the applied steps (winget's progress and the chezmoi binary, or the
     # -Done lines of a run with nothing to apply), the HUMAN blocks of Blocks
     # in order, then the pending line naming Pending, or the closing line of
@@ -253,7 +253,7 @@ function Get-ApplyOutput {
     $lines = [Collections.Generic.List[string]]::new()
     $lines.AddRange([string[]]$(if ($Done) { $DoneLines } else { Get-WingetLines }))
     foreach ($id in $Blocks) { $lines.AddRange([string[]](Get-BlockLines $id $Clone)) }
-    if ($Pending) { $lines.Add("[dotfiles] [warn] HUMAN steps pending: $Pending; run the HUMAN blocks above, then rerun .\setup-host.ps1") }
+    if ($Pending) { $lines.Add("[dotfiles] [warn] HUMAN steps pending: $Pending; run the HUMAN blocks above, then rerun & '$([Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent((Join-Path $Clone 'dotfiles.ps1')))' setup") }
     elseif ($Done) { $lines.Add('[dotfiles] [ok] setup-host: nothing blocking remains for win') }
     return , $lines.ToArray()
 }
@@ -349,7 +349,7 @@ function Write-DeployState {
 }
 
 function Add-Run {
-    # Queue one setup-host.ps1 run: exit code, stdout and stderr lines, and
+    # Queue one dotfiles.ps1 setup run: exit code, stdout and stderr lines, and
     # an Action run before it returns (a file left in TEMP, say).
     param([int]$Code, [string[]]$Out = @(), [string[]]$Err = @(), [scriptblock]$Action = $null)
     $script:Runs.Enqueue(@{ Code = $Code; Out = (ConvertTo-StepText $Out); Err = (ConvertTo-StepText $Err); Action = $Action })
@@ -365,7 +365,7 @@ function Use-DryRun {
     # Run Action with the driver's machine-facing collaborators replaced in
     # this scope: no registry PATH rebuild; the elevation probe answers
     # $script:Elevated and the task list $script:TaskNames; each
-    # setup-host.ps1 run takes the next of $script:Runs; each child process
+    # dotfiles.ps1 setup run takes the next of $script:Runs; each child process
     # plays the next mode of $script:ProcessModes (a deploy variant, or the
     # convergence check's converged, diff or exit-1 with $script:Managed as
     # the managed list); each HOME snapshot takes the next of
@@ -593,20 +593,20 @@ try {
         Assert-Equal $moved['Error'] 'no fenced powershell block after "Fresh Windows home by hand"' 'a moved heading'
     }
 
-    Test-Case 'setup-host.ps1 -PrintManual: the blocks meet their policy rows, and HW-deploy holds notes only' {
+    Test-Case 'dotfiles.ps1 setup --print-manual: the blocks meet their policy rows, and HW-deploy holds notes only' {
         $case = Reset-RunState
         Start-E2EStep print-manual check:print-manual
-        $code = Invoke-Child -Arguments @('-NoProfile', '-NonInteractive', '-File', (Join-Path $sourceRoot 'setup-host.ps1'), '-Host', 'win', '-PrintManual') `
+        $code = Invoke-Child -Arguments @('-NoProfile', '-NonInteractive', '-File', (Join-Path $sourceRoot 'dotfiles.ps1'), 'setup', '--host', 'win', '--print-manual') `
             -WorkingDirectory $case
-        Assert-Equal $code 0 "setup-host.ps1 -PrintManual exit code: $([IO.File]::ReadAllText($E2E['StepErr']))"
+        Assert-Equal $code 0 "dotfiles.ps1 setup --print-manual exit code: $([IO.File]::ReadAllText($E2E['StepErr']))"
         $blocks = @(ConvertFrom-E2EBlocks -Output @(Get-E2ELines $E2E['StepOut']) -Directory (Join-Path $case 'manual.blocks'))
-        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-clone(judgment) HW-deploy(judgment) $ReminderSummary" 'the blocks setup-host.ps1 prints'
+        Assert-Equal (Get-E2EBlocksSummary $blocks) "HW-clone(judgment) HW-deploy(judgment) $ReminderSummary" 'the blocks dotfiles.ps1 setup prints'
         Assert-Equal (@($blocks | ForEach-Object { Get-E2EBlockPolicy -Id $_.Id -Kind $_.Kind }) -join ' ') 'fail deploy skip skip skip skip' 'their policies'
         Assert-Equal @($blocks[1].Lines | Where-Object { $_ -and -not $_.StartsWith('# ') }).Count 0 'HW-deploy holds a command line'
     }
 
     Test-Case 'Get-E2EPendingIds, Get-E2EFailureDetail, Get-E2EBlocksSummary and Get-E2EBlockText on setup-host output' {
-        $pending = '[dotfiles] [warn] HUMAN steps pending: HW-clone HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1'
+        $pending = '[dotfiles] [warn] HUMAN steps pending: HW-clone HW-deploy; run the HUMAN blocks above, then rerun dotfiles.ps1 setup'
         Assert-Equal (Get-E2EPendingIds (@(Get-WingetLines) + @($pending, ''))) 'HW-clone HW-deploy' 'the pending ids'
         Assert-Equal (Get-E2EPendingIds (@(Get-WingetLines) + @('') + @($pending.Replace('HW-clone ', '')))) 'HW-deploy' 'pending on the stderr half of the lines'
         Assert-Equal (Get-E2EPendingIds @(Get-WingetLines)) '' 'nothing pending'
@@ -940,7 +940,7 @@ try {
             '-StartupType Automatic | Start-Service -Name ssh-agent | # Then, as yourself, once HW-auth has created the key: ssh-add $HOME\.ssh\id_ed25519') 'a reminder'
         Assert-Equal "$($E2E['Passes']) $($E2E['Fails']) $($E2E['Skips']) [$($E2E['Broken'])]" '2 0 4 []' 'counters and Broken'
         Assert-Equal (@($script:PwshCalls | ForEach-Object { "$($_.Script) $($_.Arguments) $($_.Timeout)" }) -join '; ') `
-            'dotfiles.ps1 setup --host win --yes 3600; dotfiles.ps1 setup --host win --yes 3600' 'the setup-host.ps1 runs, without a mode flag'
+            'dotfiles.ps1 setup --host win --yes 3600; dotfiles.ps1 setup --host win --yes 3600' 'the dotfiles.ps1 setup runs, without a mode flag'
         Assert-Equal $script:ProcessCalls.Count 0 'no block line runs'
         Assert-Equal "$($E2E['DeployBlock'].Id) $($E2E['DeployBlock'].Kind)" 'HW-deploy judgment' 'the deploy block is kept'
         Assert-Lines @($E2E['DeployBlock'].Lines) @(Get-BlockLines 'HW-deploy' $clone | Select-Object -Skip 1 | Select-Object -SkipLast 1) 'its notes'
@@ -1107,11 +1107,11 @@ try {
 
         [void](New-DryRun)
         Add-Run 3 (@($done | Where-Object { $_ -notlike 'HW-deploy *' }) + @('HW-deploy human judgment step for a person; blocks completion',
-                '[dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1'))
+                '[dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun dotfiles.ps1 setup'))
         $script:Snapshots.Enqueue($before); $script:Snapshots.Enqueue($before)
         Use-DryRun { Invoke-E2EStepCheckDone }
         Assert-Equal "$(@(Get-SummaryRows)[0].Status) $(@(Get-SummaryRows)[0].Detail)" `
-            'fail exit 3, expected 0 after the first apply: [dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun .\setup-host.ps1' 'exit 3'
+            'fail exit 3, expected 0 after the first apply: [dotfiles] [warn] HUMAN steps pending: HW-deploy; run the HUMAN blocks above, then rerun dotfiles.ps1 setup' 'exit 3'
 
         [void](New-DryRun)
         Add-Run 0 (@($done) + @('W1-font todo oh-my-posh font install CascadiaMono'))
@@ -1195,7 +1195,7 @@ try {
         }
     }
 
-    Test-Case 'Invoke-E2EStepPayloads: payload-update.ps1 -Now, then a successful doctor and its payloads row decide' {
+    Test-Case 'Invoke-E2EStepPayloads: dotfiles.ps1 payloads sync, then a successful doctor and its payloads row decide' {
         $header = "status`tid`ttier`tdetail`tfix"
         [void](New-DryRun)
         Add-Run 0 @('[dotfiles] [ok] pymol: install done', '[dotfiles] [ok] skills: install done')

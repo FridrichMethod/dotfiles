@@ -75,8 +75,8 @@ Probes are read-only: chezmoi `status --exclude=dirs` (names only),
 `diff --exclude=dirs,encrypted`, `managed`, `data` and `execute-template`, and
 `cat` of the two AI config targets only, compared without printing them. A
 differing encrypted target is reviewed privately, never in captured output
-([secrets](secrets.md#output-and-failure)). Other probes: the offline doctor
-(`./doctor.sh --host H --tsv`; on win `.\doctor.ps1 -Tsv`), `git status` and
+([secrets](secrets.md#output-and-failure)). Other probes: the offline public doctor
+(`./dotfiles doctor --host H --tsv`; on win `.\dotfiles.ps1 doctor --host win --tsv`), `git status` and
 `git rev-parse`, `codex-as --version` for the kit on Unix, and
 `DOTFILES_AUTO_UPDATE=0 bash -ic true` and
 `DOTFILES_AUTO_UPDATE=0 POWERLEVEL9K_INSTANT_PROMPT=off zsh -ic true` for
@@ -271,7 +271,7 @@ those tests or to the profile and updater they test.
 
 The six existing homes are provisioned through setup-host, after its
 `--check` plan, and through the canonical payload command (`sync-payloads`,
-or `scripts/payload-update.* --now`); S3-clones clones only missing
+or `dotfiles payloads sync`); S3-clones clones only missing
 repositories and leaves existing clones alone. On sherlock and marlowe,
 packages missing from an existing login env are added as described below the
 table. This is existing-host provisioning, separate from

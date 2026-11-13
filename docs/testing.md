@@ -17,7 +17,7 @@ macOS and Windows runners' homes.)
 
 Each Unix job first installs the real coding-agent-kit of the channel that
 `config/payloads.tsv` declares, with the explicit payload command,
-`HOME=$RUNNER_TEMP/kit-home sh scripts/payload-update.sh --now kit`. It then
+`HOME="$RUNNER_TEMP/kit-home" ./dotfiles payloads sync kit`. It then
 exports that home as `DOTFILES_TEST_KIT_HOME`, which the cases that need an
 installed kit read; without it, as in the Windows job (the kit installs
 nothing on native Windows), they skip. The network is used in that step
@@ -175,7 +175,7 @@ suites just to establish environment isolation.
 The entrypoint test also checks pre-commit's files/exclude selection, the inputs
 each named hook must run on (among them the payload scripts,
 `lib/chezmoi-guard.*`, `lib/bootstrap/platform.sh`, `checks.sh` and
-`steps-human.sh` (the H7-deploy verdict), `doctor.sh` and `setup-host.sh`; the
+`steps-human.sh` (the H7-deploy verdict), `scripts/commands/doctor.sh` and `scripts/commands/setup.sh`; the
 markdown-links hook runs on every path), and coverage of the complete
 shell-suite list. The e2e-harness and e2e-harness-windows hooks cover harness
 unit/fixture tests; these hooks do not run Docker or install into the real home.
@@ -203,8 +203,9 @@ pass on Windows for the exact candidate.
 `settings.json` with Python alone: strict ASCII JSON, the Windows PowerShell
 and Command Prompt built-in stubs listed and hidden, and
 `Windows.Terminal.PowershellCore` never disabled. With pwsh it then parses
-`doctor.ps1`, `setup-host.ps1`, `lib/chezmoi-guard.ps1`, `lib/terminal.ps1`,
-`scripts/chezmoi-update.ps1`, `scripts/payload-update.ps1`, `tests/run.ps1`
+`dotfiles.ps1`, the installed launcher, `tests/cli.ps1`,
+`scripts/commands/doctor.ps1`, `scripts/commands/setup.ps1`, `lib/chezmoi-guard.ps1`, `lib/terminal.ps1`,
+`scripts/chezmoi-update.ps1`, `scripts/commands/payloads-sync.ps1`, `tests/run.ps1`
 and `tests/terminal.ps1` in one process before it runs
 `tests/powershell-profile.ps1`. That is the pwsh 7 parser; Windows PowerShell
 5.1 syntax still needs the Windows job.
@@ -214,8 +215,8 @@ stdout/stderr, including forced color, `NO_COLOR`, `TERM=dumb`, literal percent
 signs and silent sourcing. `tests/terminal.ps1` covers the matching PowerShell
 policy, pipeline/stream behavior and preference isolation. When pwsh is present,
 the Unix terminal suite also runs it on a real PTY to cover same-console `*>`
-redirection, even with PowerShell's ANSI rendering preference. doctor.ps1 and
-setup-host.ps1 keep a plain fallback when lib/terminal.ps1 is missing or broken.
+redirection, even with PowerShell's ANSI rendering preference. scripts/commands/doctor.ps1 and
+scripts/commands/setup.ps1 keep a plain fallback when lib/terminal.ps1 is missing or broken.
 
 `tests/powershell-profile.ps1` checks the tracked PowerShell profiles and the
 oh-my-posh theme without loading the live profile. It walks the AST to pin the
@@ -227,7 +228,7 @@ runs no payload hook and reads no environment variable. It runs
 `sync-payloads` and `sync-skills`, lifted into a child with a fake home: a
 valid `~/.config/chezmoi/chezmoi.toml` runs the hook of the checkout it names,
 never the checkout at `~\dotfiles` or its guard; a home without a config
-refuses with the `-Now` line to run instead; seven invalid configs (a second
+refuses with the explicit public payload CLI command to run instead; seven invalid configs (a second
 `sourceDir`, a literal string, CRLF, a relative `sourceDir`, another home, a
 `workingTree` key, a directory), two linked ones (dangling or to a valid
 config, where a symbolic link can be made) and a configured checkout without
@@ -341,13 +342,13 @@ the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs the
 standard-library validator `tests/test_bootstrap_manifest.py`, which checks
 `config/bootstrap/`, the step headings of `docs/bootstrap.md`, the tool table of
 `docs/dependencies.md`, the two identical project skills, and that
-`STEPS_REGISTRY` and the step lists in `setup-host.ps1` name only contract step
+`STEPS_REGISTRY` and the step lists in `scripts/commands/setup.ps1` name only contract step
 ids, with every id but the `X-` ones in some list. `tests/doctor.sh` and
 `tests/setup-host.sh` run the entry points under `env -i` against fixture
 checkouts, homes and Homebrew prefixes with stubbed tools and local clone
 remotes. Network commands outside `--online` fail the doctor suite; `sudo`,
 `chsh`, `apt-get`, `conda` and `git lfs` are tripwires in the installer suite;
-find snapshots prove that the doctor and `setup-host.sh --check` write nothing.
+find snapshots prove that the doctor and `scripts/commands/setup.sh --check` write nothing.
 The doctor writes its
 fixture home's chezmoi config for the fixture checkout once the cases without
 a config have run. The
@@ -360,12 +361,12 @@ malformed one and for a home without a config and without `--host` or
 `--platform`, treats `generic` as no host overlay, names the cause in its
 `chezmoi-config` row (absent, a link, a directory, each invalid form, an
 unreadable guard; only a config naming another checkout merely warns), gives
-the shell-quoted `--now` line wherever `sync-payloads` would refuse, and keeps
+the shell-quoted explicit public payload CLI wherever source resolution refuses, and keeps
 the offline, write-free and no-`TMPDIR` promises. The setup-host cases
 refuse an unknown argument, check each host's exact step order, take `--host` over
 `[data].host`, and let an existing login env satisfy H2-alloc; S6-nerd-font
 counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
-also runs the real `./doctor.sh` with the real manifest against the test
+also runs the real `./dotfiles doctor` with the real manifest against the test
 machine's own tools (`--platform debian` and `--platform other` with `--tsv`, an
 empty temporary `HOME`): every line must keep the TSV contract, the exit code
 must be 0 or 1, and the home, `TMPDIR` and checkout must stay unchanged, so a
@@ -379,7 +380,7 @@ runs `tests/bootstrap.ps1`, the Windows twins against shims, wherever pwsh
 exists and prints a `SKIP:` line otherwise; the Windows job runs that suite and
 the validator from `tests/run.ps1`. Its cases mirror
 the Unix ones (a healthy configured host with gh telemetry off and no writes,
-the `chezmoi-config` causes, the quoted `-Now` payload advice wherever
+the `chezmoi-config` causes, the quoted public payload CLI advice wherever
 `sync-payloads` refuses, also from a checkout whose path holds a typographic
 apostrophe, a checkout reached through a junction or symlink counting as the
 configured one). The healthy fixture puts a chezmoi shim on PATH and,
@@ -478,7 +479,7 @@ check proves it rejects its drift. With Codex on PATH it also asks
 `codex execpolicy check` for the expected decisions; otherwise those cases
 skip.
 
-`tests/payload-update.sh` drives `scripts/payload-update.sh` against fake
+`tests/payload-update.sh` drives `scripts/commands/payloads-sync.sh` against fake
 installers served from `file://` URLs: the real `config/payloads.tsv` with its
 `https://raw.githubusercontent.com/FridrichMethod/` prefix pointed at a local
 directory (a URL anywhere else fails the suite) and a curl that refuses every
@@ -503,7 +504,8 @@ directory an installer starts in; git it runs from elsewhere is its own); a
 failed download, the wget fallback and a host with neither; and the
 `sync-payloads` and `sync-skills` aliases through the fixture's chezmoi
 config; and the retry lines, which name `sync-payloads` only where the
-config names this checkout and the hook's own quoted `--now` line elsewhere. `tests/test_payload_download.py`
+config and installed launcher reach this checkout, and the backend's own quoted
+frontend with `payloads sync` elsewhere. `tests/test_payload_download.py`
 adds loopback deadlines for curl, wget (behind `timeout` or `gtimeout`;
 without either it fails before any request) and PowerShell, and the
 failed-download latch, with no staging or state left behind. The fixture
@@ -720,7 +722,7 @@ approximation:
   with default, unpaused Windows Server App Installer settings. A winget
   that needs `Repair-WinGetPackageManager` first is recorded as a deviation.
   `run.ps1` asserts criteria 1 (without
-  `--smoke`, which `doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
+  `--smoke`, which `scripts/commands/doctor.ps1` does not have), 2, 3, 4, 6, 7 and 8 (the
   doctor, the no-write `-Tsv` and `-Check` runs, a second `-Yes` that applies
   nothing and a `-Check` with nothing left, a clean clone after every step, a
   silent load of the deployed profile, the payload repos, the documented
@@ -784,7 +786,9 @@ launcher as an executable regular file and verifies its bytes and convergence.
 Windows payload installation uses the explicit installed script path from home;
 the final doctor uses bare `dotfiles` in a fresh `pwsh -NoProfile` child with
 home-local bin in a controlled process PATH. Tests never persist User PATH.
-Legacy backend refusal/compatibility tests remain in the negative paths.
+Negative public CLI cases preserve the generic-platform, wrong-host, missing-Lmod
+and root refusals. Formal backend fixtures test native behavior independently;
+retired-path tripwires prove missing backends cannot fall back.
 
 The Windows login-shell step then loads the deployed profile in a child `pwsh`
 started without `-NoProfile`, which must exit 0 and print nothing, with the
@@ -868,10 +872,10 @@ Each host also runs its negative cases as separate steps
 (`negative:<token>`): the platform refusals (`--host wsl-ubuntu --check` in
 the lab container and the reverse, `env -u LMOD_DIR -u BASH_ENV` on a cluster
 (Lmod's profile.d exports `BASH_ENV`, which every bash script sources on start
-and which re-exports `LMOD_DIR`), `sudo -n ./setup-host.sh` as root, each exit
+and which re-exports `LMOD_DIR`), `sudo -n ./dotfiles setup` as root, each exit
 2), `alloc-first` (the first hpc apply exits 3 and prints the `H2-alloc`
-block) and `generic` (after the generic deployment, `./doctor.sh` exits
-0 and warns generic, and `./setup-host.sh --check` without `--host` exits
+block) and `generic` (after the generic deployment, `./dotfiles doctor` exits
+0 and warns generic, and `./dotfiles setup --check` without `--host` exits
 2).
 
 ### Harness code rules

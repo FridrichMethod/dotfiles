@@ -1,7 +1,11 @@
 #Requires -Version 7.0
 # Dispatcher behavior against disposable checkout backends, never real installers.
 [CmdletBinding()]
-param()
+param(
+    [switch]$ConsoleCancellationProbe,
+    [string]$BaselineRoot,
+    [string]$ConsoleEvidenceDirectory
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -12,7 +16,7 @@ $dispatcher = Join-Path $sourceRoot 'dotfiles.ps1'
 if (-not (Test-Path -LiteralPath $dispatcher -PathType Leaf)) { throw "Missing dispatcher: $dispatcher" }
 $powerShell = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-cli-ps-' + [Guid]::NewGuid().ToString('N'))
-$fixture = Join-Path $temporaryRoot 'checkout with spaces'
+$fixture = Join-Path $temporaryRoot "checkout O'Neil [literal] with spaces"
 $emptyHome = Join-Path $temporaryRoot 'empty home'
 $runtimeState = Join-Path $temporaryRoot 'powershell state'
 $emptyBin = Join-Path $temporaryRoot 'empty bin'
@@ -27,6 +31,123 @@ function Write-Fixture([string]$Path, [string]$Text) {
     [void][IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
     [IO.File]::WriteAllText($Path, $Text)
 }
+# Explicit native acceptance mode. Each conhost creates a NEW classic console;
+# the coordinator may attach/send Ctrl+C only to its recorded backend PID.
+# Leave the bundle and markers for comparison and scoped cleanup by its owner.
+if ($ConsoleCancellationProbe) {
+    if (-not $IsWindows -or -not [Environment]::UserInteractive) {
+        throw 'Cancellation acceptance needs an ordinary native Windows interactive session.'
+    }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if (([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Cancellation acceptance refuses an elevated token.'
+    }
+    $consoleHost = Join-Path $env:SystemRoot 'System32/conhost.exe'
+    if (-not [IO.File]::Exists($consoleHost)) { throw 'Cancellation acceptance requires conhost.exe.' }
+    if (-not $BaselineRoot -or -not $ConsoleEvidenceDirectory -or
+        -not [IO.File]::Exists((Join-Path $BaselineRoot 'dotfiles.ps1'))) {
+        throw 'Pass a separately hash-checked baseline bundle and a new evidence directory.'
+    }
+    if (Test-Path -LiteralPath $ConsoleEvidenceDirectory) { throw 'Evidence directory must not already exist.' }
+    [void][IO.Directory]::CreateDirectory($ConsoleEvidenceDirectory)
+    $ConsoleEvidenceDirectory = (Get-Item -LiteralPath $ConsoleEvidenceDirectory).FullName
+    $records = @()
+    $probeProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
+    try {
+        foreach ($variant in @('baseline', 'candidate')) {
+            $root = Join-Path $ConsoleEvidenceDirectory $variant
+            $original = Join-Path $(if ($variant -ceq 'baseline') { $BaselineRoot } else { $sourceRoot }) 'dotfiles.ps1'
+            Write-Fixture (Join-Path $root 'dotfiles.ps1') ([IO.File]::ReadAllText($original))
+            Write-Fixture (Join-Path $root 'sleeper.ps1') @'
+# Harmless native child, interrupted with its backend in the probe console.
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'child-ready.txt'), [string]$PID)
+Start-Sleep -Seconds 300
+'@
+            $stub = @'
+[CmdletBinding(SupportsShouldProcess)]
+param([string]$HostName = 'win', [string]$Tier = 'core,cli,ai', [switch]$Check, [switch]$Yes, [switch]$PrintManual)
+$root = $env:DOTFILES_TEST_CONSOLE_ROOT
+$child = $null
+try {
+    $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'pwsh.exe'))
+    $start.UseShellExecute = $false
+    foreach ($argument in @('-NoProfile', '-File', (Join-Path $root 'sleeper.ps1'))) { $start.ArgumentList.Add($argument) }
+    $child = [Diagnostics.Process]::Start($start)
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    while (-not [IO.File]::Exists((Join-Path $root 'child-ready.txt')) -and -not $child.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not [IO.File]::Exists((Join-Path $root 'child-ready.txt'))) { throw 'Harmless child did not become ready.' }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $ready = @{
+        BackendPid = $PID; SessionId = (Get-Process -Id $PID).SessionId; ChildPid = $child.Id
+        Elevated = ([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        InputRedirected = [Console]::IsInputRedirected; OutputRedirected = [Console]::IsOutputRedirected
+    }
+    # Publish the complete observation before the coordinator reads it.
+    [IO.File]::WriteAllText((Join-Path $root 'ready.tmp'), ($ready | ConvertTo-Json))
+    [IO.File]::Move((Join-Path $root 'ready.tmp'), (Join-Path $root 'ready.json'))
+    # No input capture and no wrapper handler: Ctrl+C retains native propagation.
+    $child.WaitForExit()
+}
+finally {
+    $survived = $false
+    if ($child) {
+        $survived = -not $child.HasExited
+        if ($survived) { $child.Kill($true); $child.WaitForExit() }
+        $child.Dispose()
+    }
+    [IO.File]::WriteAllText((Join-Path $root 'backend-finally.json'), (@{ ChildSurvivedCancellation = $survived; CleanupComplete = $true } | ConvertTo-Json))
+}
+'@
+            $backend = if ($variant -ceq 'baseline') { 'setup-host.ps1' } else { 'scripts/commands/setup.ps1' }
+            Write-Fixture (Join-Path $root $backend) $stub
+            $driver = Join-Path $root 'console.ps1'
+            Write-Fixture $driver @'
+$env:DOTFILES_TEST_CONSOLE_ROOT = $PSScriptRoot
+try {
+    & (Join-Path $PSScriptRoot 'dotfiles.ps1') setup
+}
+finally {
+    [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'console-finally.json'), (@{ Pid = $PID; LastExitCode = $global:LASTEXITCODE } | ConvertTo-Json))
+}
+'@
+            # Explicit conhost bypasses the default Windows Terminal host.
+            # Quote both paths in its single command line and create a new console.
+            $process = Start-Process -FilePath $consoleHost -ArgumentList ('"' + $powerShell + '" -NoProfile -File "' + $driver + '"') -PassThru
+            $probeProcesses.Add($process)
+            $deadline = [DateTime]::UtcNow.AddSeconds(20)
+            while (-not [IO.File]::Exists((Join-Path $root 'ready.json')) -and -not $process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+                Start-Sleep -Milliseconds 100
+            }
+            if (-not [IO.File]::Exists((Join-Path $root 'ready.json'))) {
+                throw "Probe did not become ready: $variant"
+            }
+            $ready = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText((Join-Path $root 'ready.json')))
+            Assert-True (-not $ready.Elevated -and -not $ready.InputRedirected -and -not $ready.OutputRedirected) "Probe backend needs an ordinary token and unredirected stdin/stdout: $variant"
+            Assert-True ($ready.BackendPid -gt 0 -and $ready.BackendPid -ne $process.Id) "Probe did not record a separate backend PowerShell PID: $variant"
+            $records += [pscustomobject]@{
+                Variant = $variant; ConsoleHostPid = $process.Id; ConsoleHostSessionId = $process.SessionId
+                BackendPid = $ready.BackendPid; SessionId = $ready.SessionId; ChildPid = $ready.ChildPid
+                Elevated = $ready.Elevated; InputRedirected = $ready.InputRedirected; OutputRedirected = $ready.OutputRedirected
+                FrontendSha256 = (Get-FileHash -LiteralPath $original -Algorithm SHA256).Hash
+                Ready = Join-Path $root 'ready.json'; BackendFinally = Join-Path $root 'backend-finally.json'
+                ConsoleFinally = Join-Path $root 'console-finally.json'
+            }
+        }
+        $records | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ConsoleEvidenceDirectory 'probes.json')
+        $records
+    }
+    catch {
+        foreach ($probeProcess in $probeProcesses) {
+            if (-not $probeProcess.HasExited) { $probeProcess.Kill($true); $probeProcess.WaitForExit() }
+        }
+        throw
+    }
+    finally { foreach ($probeProcess in $probeProcesses) { $probeProcess.Dispose() } }
+    return
+}
+
 function Test-Case([string]$Name, [scriptblock]$Action) {
     [IO.File]::Delete($events)
     & $Action
@@ -127,14 +248,14 @@ foreach ($name in $PSBoundParameters.Keys) {
 }
 # Advanced scripts can inherit the caller's $args when all parameters bind.
 # InvocationInfo records this backend's actual unbound arguments.
-$eventJson = @{ Kind = [IO.Path]::GetFileName($PSCommandPath); Bound = $bound; Extra = @($MyInvocation.UnboundArguments);
+$eventJson = @{ Root = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)); HostName = $(if (Get-Variable HostName -ErrorAction Ignore) { $HostName } else { '' }); Kind = [IO.Path]::GetFileName($PSCommandPath); Bound = $bound; Extra = @($MyInvocation.UnboundArguments);
    Pid = $PID; Location = (Get-Location).ProviderPath } |
     ConvertTo-Json -Depth 8 -Compress
 # Recording is test instrumentation, independent of forwarded WhatIf/Confirm.
 [IO.File]::AppendAllText($env:DOTFILES_TEST_CLI_EVENTS, $eventJson + [Environment]::NewLine)
 switch ($env:DOTFILES_TEST_CLI_BEHAVIOR) {
     'streams' {
-        Write-Output ([pscustomobject]@{ Value = 'success-object' })
+        Write-Output $global:DotfilesCliSuccessObject
         Write-Information 'backend-information' -InformationAction Continue
         Write-Warning 'backend-warning'
         Write-Verbose 'backend-verbose' -Verbose
@@ -142,11 +263,13 @@ switch ($env:DOTFILES_TEST_CLI_BEHAVIOR) {
         Write-Error 'backend-error' -ErrorAction Continue
     }
     'tsv' { Write-Output "status`tid`ttier`tdetail`tfix"; Write-Output "ok`tfixture`tcore`ttext`t-" }
+    'continue' { if (-not $PSCmdlet.ShouldContinue('Fixture only; no installation.', 'initial consent')) { exit 2 }; exit 0 }
+    'process' { if (-not $PSCmdlet.ShouldProcess('fixture only', 'no installation')) { exit 3 }; exit 0 }
     'read' { $answer = Read-Host 'fixture-question'; Write-Output "answer:$answer" }
     'nonterminating' { Write-Error 'backend-default-error'; Write-Output 'continued' }
     'throw' { throw 'fixture invocation failed' }
     'native' {
-        & $env:DOTFILES_TEST_CLI_PWSH -NoProfile -File (Join-Path $PSScriptRoot 'native-exit.ps1')
+        & $env:DOTFILES_TEST_CLI_PWSH -NoProfile -File (Join-Path $PSScriptRoot '../../native-exit.ps1')
         return
     }
 }
@@ -168,11 +291,47 @@ param([switch]$Now, [Parameter(Position = 0, ValueFromRemainingArguments)][strin
 try {
     foreach ($directory in @($fixture, $emptyHome, $runtimeState, $emptyBin)) { [void][IO.Directory]::CreateDirectory($directory) }
     Copy-Item -LiteralPath $dispatcher -Destination (Join-Path $fixture 'dotfiles.ps1')
-    Write-Fixture (Join-Path $fixture 'doctor.ps1') ($doctorParameters + "`n" + $recordBackend)
-    Write-Fixture (Join-Path $fixture 'setup-host.ps1') ($setupParameters + "`n" + $recordBackend)
-    Write-Fixture (Join-Path $fixture 'scripts/payload-update.ps1') ($payloadParameters + "`n" + $recordBackend)
+    Write-Fixture (Join-Path $fixture 'scripts/commands/doctor.ps1') ($doctorParameters + "`n" + $recordBackend)
+    Write-Fixture (Join-Path $fixture 'scripts/commands/setup.ps1') ($setupParameters + "`n" + $recordBackend)
+    Write-Fixture (Join-Path $fixture 'scripts/commands/payloads-sync.ps1') ($payloadParameters + "`n" + $recordBackend)
     Write-Fixture (Join-Path $fixture 'native-exit.ps1') 'exit 23'
 
+    Test-Case 'retired PowerShell production paths are absent on disk and in the index' {
+        $retired = @('doctor.ps1', 'setup-host.ps1', 'scripts/payload-update.ps1')
+        foreach ($relative in $retired) {
+            # Get-Item sees dangling links as well as ordinary files.
+            Assert-True ($null -eq (Get-Item -LiteralPath (Join-Path $sourceRoot $relative) -Force -ErrorAction SilentlyContinue)) "Retired path remains: $relative"
+        }
+        $tracked = @(& git -C $sourceRoot ls-files -- @retired)
+        Assert-True ($LASTEXITCODE -eq 0 -and $tracked.Count -eq 0) "Retired paths remain tracked: $tracked"
+    }
+    Test-Case 'nested backends use their own checkout and default native host from a foreign cwd' {
+        foreach ($command in @('doctor', 'setup', 'payloads sync')) {
+            [IO.File]::Delete($events)
+            [void](Invoke-CliChild @'
+$arguments = $env:DOTFILES_TEST_CLI_COMMAND.Split(' ')
+& (Join-Path $env:DOTFILES_TEST_CLI_ROOT 'dotfiles.ps1') @arguments
+exit $LASTEXITCODE
+'@ @{ DOTFILES_TEST_CLI_COMMAND = $command })
+            $calls = @(Get-Events)
+            Assert-True ($calls.Count -eq 1 -and $calls[0].Root -ceq $fixture -and $calls[0].Location -ceq $emptyHome) "Nested backend selected wrong root or cwd: $command"
+            if ($command -cne 'payloads sync') { Assert-True ($calls[0].HostName -ceq 'win') "Native default host changed: $command" }
+        }
+    }
+    Test-Case 'missing formal backend never invokes a retired-path tripwire' {
+        $missing = Join-Path $temporaryRoot 'tripwire checkout'
+        Write-Fixture (Join-Path $missing 'dotfiles.ps1') ([IO.File]::ReadAllText($dispatcher))
+        foreach ($entry in @(@('doctor', 'doctor.ps1', 'doctor.ps1'), @('setup', 'setup-host.ps1', 'setup.ps1'),
+                @('payloads sync', 'scripts/payload-update.ps1', 'payloads-sync.ps1'))) {
+            Write-Fixture (Join-Path $missing $entry[1]) "[IO.File]::AppendAllText(`$env:DOTFILES_TEST_CLI_EVENTS, 'tripwire'); exit 0"
+            $result = Invoke-CliChild @'
+$arguments = $env:DOTFILES_TEST_CLI_COMMAND.Split(' ')
+& (Join-Path $env:DOTFILES_TEST_CLI_ROOT 'dotfiles.ps1') @arguments
+exit $LASTEXITCODE
+'@ @{ DOTFILES_TEST_CLI_ROOT = $missing; DOTFILES_TEST_CLI_COMMAND = $entry[0] } -ExpectedExit 1
+            Assert-OneDiagnostic $result ('scripts' + [IO.Path]::DirectorySeparatorChar + 'commands' + [IO.Path]::DirectorySeparatorChar + $entry[2])
+        }
+    }
     Test-Case 'help needs no configured home, Python, backend or PATH tools' {
         $helpOnly = Join-Path $temporaryRoot 'help only'
         [void][IO.Directory]::CreateDirectory($helpOnly)
@@ -305,7 +464,7 @@ exit $LASTEXITCODE
 exit $LASTEXITCODE
 '@ @{ DOTFILES_TEST_CLI_STATUS = '1' } -ExpectedExit 1)
         $calls = @(Get-Events)
-        Assert-True ($calls.Count -eq 1 -and $calls[0].Kind -ceq 'payload-update.ps1') 'Payload backend was not called once.'
+        Assert-True ($calls.Count -eq 1 -and $calls[0].Kind -ceq 'payloads-sync.ps1') 'Payload backend was not called once.'
         Assert-True ($calls[0].Bound.Now -and $calls[0].Extra.Count -eq 0) 'Payload Now mapping failed.'
         Assert-True (($calls[0].Bound.Item -join '|') -ceq 'future item|skills') 'Dispatcher filtered or split item names.'
     }
@@ -338,11 +497,12 @@ exit $observed
     }
     Test-Case 'success objects and all five side streams retain their stream identity' {
         $result = Invoke-CliChild @'
+$global:DotfilesCliSuccessObject = [pscustomobject]@{ Value = 'success-object' }
 $logs = @{}
 foreach ($number in 2..6) { $logs[$number] = Join-Path $env:DOTFILES_TEST_CLI_HOME "stream-$number.log" }
 $success = @(& (Join-Path $env:DOTFILES_TEST_CLI_ROOT 'dotfiles.ps1') doctor 2> $logs[2] 3> $logs[3] 4> $logs[4] 5> $logs[5] 6> $logs[6])
 $status = $LASTEXITCODE
-if ($success.Count -ne 1 -or $success[0].Value -cne 'success-object') { throw 'Success object was converted or mixed with another stream.' }
+if ($success.Count -ne 1 -or -not [object]::ReferenceEquals($success[0], $global:DotfilesCliSuccessObject)) { throw 'Success object was converted or mixed with another stream.' }
 foreach ($pair in @(@(2, 'error'), @(3, 'warning'), @(4, 'verbose'), @(5, 'debug'), @(6, 'information'))) {
     $text = [IO.File]::ReadAllText($logs[$pair[0]])
     if (-not $text.Contains("backend-$($pair[1])")) { throw "Lost stream $($pair[0]): $text" }
@@ -373,6 +533,11 @@ exit $LASTEXITCODE
         $bound = @(Get-Events)[0].Bound
         Assert-True ($result.Out.Contains('answer:fixture answer') -and $result.Error -ceq '') 'Setup could not read inherited input.'
         Assert-True ($null -eq $bound.PSObject.Properties['Yes']) 'Dispatcher added Yes to setup.'
+    }
+    Test-Case 'initial ShouldContinue refusal is 2 while per-step Confirm refusal and WhatIf are 3' {
+        [void](Invoke-CliChild -FileArguments @('setup') -Environment @{ DOTFILES_TEST_CLI_BEHAVIOR = 'continue' } -InputText "n`n" -ExpectedExit 2)
+        [void](Invoke-CliChild -FileArguments @('setup', '--confirm') -Environment @{ DOTFILES_TEST_CLI_BEHAVIOR = 'process' } -InputText "n`n" -ExpectedExit 3)
+        [void](Invoke-CliChild -FileArguments @('setup', '--what-if') -Environment @{ DOTFILES_TEST_CLI_BEHAVIOR = 'process' } -ExpectedExit 3)
     }
     Test-Case 'missing backend and terminating backend failure each produce one diagnostic' {
         $missing = Join-Path $temporaryRoot 'missing backend'

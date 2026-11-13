@@ -3,9 +3,10 @@
 ## What this is
 
 The [public CLI](../README.md#command-line) documents commands, platform options,
-exit codes and explicit-checkout recovery. The original doctor/setup scripts
-and payload hooks remain supported compatibility interfaces; their backend
-contracts below retain native parameters and literal output.
+exit codes and explicit-checkout recovery. The frontends directly call the
+internal native implementations in `scripts/commands/`; shared functions stay
+in `lib/`, and login hooks keep their `scripts/chezmoi-update.*` paths.
+The retired production doctor/setup and payload-update paths have no shims.
 
 `./dotfiles doctor` and `./dotfiles setup` (on native Windows,
 `.\dotfiles.ps1 doctor` and `.\dotfiles.ps1 setup`) are the explicit,
@@ -293,10 +294,10 @@ W1-chezmoi is done only when a chezmoi at or above the floor works and the
 updater would run `~/.local/bin/chezmoi.exe`, by the same read-only check. A
 chezmoi only elsewhere on PATH (winget, scoop), which the updater never runs,
 or a copy that is linked or not private leaves it todo, and on a configured
-home `doctor.ps1`'s `chezmoi-config` row reports `human` naming this section. If the
+home `scripts/commands/doctor.ps1`'s `chezmoi-config` row reports `human` naming this section. If the
 updater warns, inspect `~/.local/bin/chezmoi.exe`; remove a link there, and
 make a linked `.local` or `.local\bin` a real directory; then rerun
-`setup-host.ps1` so W1-chezmoi installs a private copy over a regular file.
+`& 'CHECKOUT\dotfiles.ps1' setup --host win` so W1-chezmoi installs a private copy over a regular file.
 Another chezmoi on PATH may stay: neither the updater nor `Invoke-HomeCz`
 uses it.
 
@@ -306,7 +307,7 @@ Follow [Fresh Windows home by hand](#fresh-windows-home-by-hand) and the manual
 [User PATH procedure](#windows-command-discovery) as the
 ordinary, unelevated user; it checks the actual CurrentUserAllHosts path in
 both shells. Updates write regular files and need no elevation or scheduled task.
-`doctor.ps1`'s `chezmoi-config` row gives the verdicts of
+`scripts/commands/doctor.ps1`'s `chezmoi-config` row gives the verdicts of
 [H7-deploy](#h7-deploy-first-apply), with
 `lib/chezmoi-guard.ps1` as the guard; a junction or symlink path to the
 checkout the config names counts as that checkout. One verdict is Windows
@@ -680,10 +681,13 @@ exec zsh -l
 
 ### doctor.sh
 
+The Unix public command is `dotfiles doctor`; its internal implementation is
+`scripts/commands/doctor.sh`. The root file named by this reference heading is retired.
+
 ```text
-./doctor.sh [--host H | --platform P] [--tier LIST] [--tsv] [--quiet] [--online] [--smoke]
-./doctor.sh [--host H | --platform P] --list
-./doctor.sh --help
+./dotfiles doctor [--host H | --platform P] [--tier LIST] [--tsv] [--quiet] [--online] [--smoke]
+./dotfiles doctor [--host H | --platform P] --list
+./dotfiles doctor --help
 ```
 
 `--list` resolves the host like every other mode, and `--host` or `--platform`
@@ -700,7 +704,7 @@ and warns that it did.
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `doctor.ps1`). Without it: on a home with `~/.config/chezmoi/chezmoi.toml` its `[data].host` (`generic` there: the detected platform without an overlay); elsewhere none, exit 2. Never guessed |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe` (`win` is refused; use `.\dotfiles.ps1 doctor --host win`). Without it: on a home with `~/.config/chezmoi/chezmoi.toml` its `[data].host` (`generic` there: the detected platform without an overlay); elsewhere none, exit 2. Never guessed |
 | `--platform P` | `macos`, `debian`, `hpc` or `other`: no overlay, only rows whose hosts are `all` or `unix` |
 | `--tier LIST` | Comma list of `core`, `cli`, `ai`, `desktop`, `contributor`, `host`, or `all`. Default `core,cli,ai`; rows in unselected tiers report `warn` and never fail the run |
 | `--tsv` | Header `status id tier detail fix`, then 5 tab-separated columns per row; `fix` is `docs/bootstrap.md <step-id>` or `-` |
@@ -720,10 +724,10 @@ Statuses are `ok`, `outdated`, `missing`, `warn`, `skip` and `human`. Besides th
 ([H7-deploy](#h7-deploy-first-apply)). `payloads`
 warns, never fails, while an item of
 `DOTFILES_PAYLOAD_ITEMS` fails its probe in `config/payloads.tsv` or an
-installed kit lacks a Claude helper, and names what to run: `sync-payloads
-ITEM` where the config resolves, or wherever `sync-payloads` refuses (no
-config, a config the guard refuses, maintenance), this checkout's quoted
-`--now` line ([H7-payloads](#h7-payloads-payload-repos)).
+installed kit lacks a Claude helper, and names a quoted explicit checkout
+frontend with `payloads sync ITEM`. On Unix the source helper selects the
+configured checkout when usable, otherwise doctor retains advice for its own
+checkout ([H7-payloads](#h7-payloads-payload-repos)).
 The step it cites is the one that installs the tool on that
 profile: `tools.tsv` names the Ubuntu or macOS step, and on `hpc` the apt and
 Brewfile rows point at S2-login-env, the `node` row at S2-modules and the
@@ -741,16 +745,19 @@ at HW-clone).
 
 ### setup-host.sh
 
+The Unix public command is `dotfiles setup`; its internal implementation is
+`scripts/commands/setup.sh`. The root file named by this reference heading is retired.
+
 ```text
-./setup-host.sh [--host H] [--tier LIST] [--check] [--yes]
+./dotfiles setup [--host H] [--tier LIST] [--check] [--yes]
                 [--only STEP]... [--skip STEP]... [--keep-going]
-./setup-host.sh [--host H] --list | --print-manual
-./setup-host.sh --help
+./dotfiles setup [--host H] --list | --print-manual
+./dotfiles setup --help
 ```
 
 | Flag | Meaning |
 | --- | --- |
-| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (the `[data].host` of the home's `~/.config/chezmoi/chezmoi.toml`); `win` is refused (use `setup-host.ps1`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and `generic` as that `[data].host` exits 2 asking for `--host` |
+| `--host H` | `mac`, `wsl-ubuntu`, `lab-ubuntu`, `sherlock` or `marlowe`, with the same default as the doctor (the `[data].host` of the home's `~/.config/chezmoi/chezmoi.toml`); `win` is refused (use `.\dotfiles.ps1 setup --host win`). There is no `--platform`: another Linux does the setup steps by hand ([X-other-linux](#x-other-linux-other-linux-distributions)), and `generic` as that `[data].host` exits 2 asking for `--host` |
 | `--tier LIST` | As for the doctor; default `core,cli,ai` |
 | `--check` | One plan line per step, `<step-id> <state> <detail>` with state `done`, `todo`, `human`, `skip` or `failed` (a step held back by a prerequisite shows as `todo` or `human`, its detail starting with `blocked by <step-id>` or `waiting:`), then the pending HUMAN blocks; no writes, no network. Exits 3 while any step is `todo` |
 | `--yes` | Apply without asking. Without it, a run in a terminal asks before each automatic step, and a run whose stdin is not a terminal (agents, CI) exits 2 |
@@ -817,25 +824,27 @@ Printed lines that run setup-host or the doctor again (in the H1-xcode-clt,
 H1-homebrew, H1-linuxbrew, H2-alloc, S4-nvm, S5-claude, X-recovery and
 H7-doctor blocks; on Windows in the HW-clone and HW-auth blocks and
 W1-winget's PATH warning) do not repeat a non-default `--tier`; the closing
-rerun warning of `setup-host.sh` does.
+rerun warning of `scripts/commands/setup.sh` does.
 
-The Windows twins take the same ideas as PowerShell parameters:
-`.\doctor.ps1 [-Host win] [-Tier LIST] [-Tsv] [-Quiet] [-Online]` and
-`.\setup-host.ps1 [-Host win] [-Tier LIST] [-Check] [-Yes] [-PrintManual] [-WhatIf]`
-(`-Host` defaults to `win`). Both need PowerShell 7
-and never elevate themselves. `.\doctor.ps1` exits 0 when no selected-tier check is `missing`,
+The Windows public frontend maps lowercase GNU-style options to native
+PowerShell backend parameters:
+`.\dotfiles.ps1 doctor [--host win] [--tier LIST] [--tsv] [--quiet] [--online]` and
+`.\dotfiles.ps1 setup [--host win] [--tier LIST] [--check] [--yes] [--print-manual] [--what-if] [--confirm]`
+(`--host` defaults to `win`). Both need PowerShell 7 and never elevate
+themselves. Quote comma lists, such as `--tier 'core,cli,ai'`.
+`.\dotfiles.ps1 doctor` exits 0 when no selected-tier check is `missing`,
 `outdated` or `human`, 1 when one is, and 2 for a usage error, another host or
-an invalid manifest; its structural checks are `chezmoi-config` and
-`payloads`, and `-Online` reports a signed-out
-tool as `warn`, as on Unix (its auth probes, too, may write the tools' own
-state). `.\setup-host.ps1` exits 3 while HW-clone or HW-deploy is pending,
-or when `-WhatIf` or a No at a `-Confirm` prompt left a step unapplied;
-the other HW blocks are printed but leave the exit code alone. Its `-Check` prints only
-plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN step's detail
-ending in `blocks completion` or `does not block`) and, like the Unix
-`--check`, exits 3 while a step is todo, so a `-Check` that exits 0 has
-nothing left to apply. A declined prompt, like a non-interactive run without
-`-Yes`, exits 2 and changes nothing.
+an invalid manifest. Its structural checks are `chezmoi-config` and
+`payloads`; `--online` reports a signed-out tool as `warn`, as on Unix
+(its auth probes, too, may write the tools' own state).
+`.\dotfiles.ps1 setup` exits 3 while HW-clone or HW-deploy is pending,
+or when `--what-if` or a No at a per-step `--confirm` prompt leaves a step
+unapplied; the other HW blocks leave the exit code alone. Its `--check`
+prints only plan lines (`<step-id> <done|todo|human|skip> <detail>`, a HUMAN
+step's detail ending in `blocks completion` or `does not block`) and exits 3
+while a step is todo. A `--check` that exits 0 has nothing left to apply.
+An initial ShouldContinue refusal, including a non-interactive run without
+`--yes`, exits 2 and changes nothing.
 
 ### HUMAN blocks
 
@@ -1109,7 +1118,7 @@ never edit rc files, and never commit or push.
 ## Phase 0: preflight
 
 Each step below lists a read-only **Check**, the **Install** (exact commands,
-or automatic via setup-host.sh), a **Verify**, and whether a **Human** is needed
+or automatic via scripts/commands/setup.sh), a **Verify**, and whether a **Human** is needed
 and why.
 
 ### P0-preflight: Preflight
@@ -1154,8 +1163,8 @@ macOS baseline (manual rows in `tools.tsv`).
 
 Applies to `mac`. Uses the commit-pinned `homebrew` row in
 [`installers.tsv`](../config/bootstrap/installers.tsv). A fresh Homebrew stays
-off PATH until the dotfiles zsh loads oh-my-zsh's `brew` plugin, so `doctor.sh`
-and `setup-host.sh` prepend the directory of the brew they find to their own
+off PATH until the dotfiles zsh loads oh-my-zsh's `brew` plugin, so `scripts/commands/doctor.sh`
+and `scripts/commands/setup.sh` prepend the directory of the brew they find to their own
 PATH. In a shell before the first apply where you run brew by hand, use
 `eval "$(/opt/homebrew/bin/brew shellenv)"` (Intel: `/usr/local/bin/brew`) in
 that shell only.
@@ -1163,7 +1172,7 @@ that shell only.
 - **Check:** `test -x /opt/homebrew/bin/brew || test -x /usr/local/bin/brew`
   (running `brew --version` can rewrite Homebrew's `.git/describe-cache`, so the
   checks only look for the file)
-- **Install:** `setup-host.sh` downloads and checks the script, then prints a
+- **Install:** `scripts/commands/setup.sh` downloads and checks the script, then prints a
   sudo block with its path. Run its three command lines in order, in one
   terminal: `sudo -v` (non-interactive mode only works with sudo credentials
   already cached); then the digest gate
@@ -1296,7 +1305,7 @@ old formula shows up as `outdated` in the doctor; upgrade it deliberately with
   `brew bundle` otherwise may run `brew update` first, which uses the network
   and writes the Homebrew prefix. Before H7-deploy, put brew on PATH first, as
   H1-homebrew says.
-- **Install:** automatic via setup-host.sh, for each selected tier with a
+- **Install:** automatic via scripts/commands/setup.sh, for each selected tier with a
   missing entry: `brew bundle --no-upgrade` on the Brewfile, less the entries
   whose tools the doctor already finds, with
   `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_BUNDLE_NO_LOCK=1`.
@@ -1386,14 +1395,14 @@ it found, by full path:
 HUMAN-BEGIN S2-brew-bundle judgment
 # docs/bootstrap.md S2-brew-bundle
 # Homebrew does not install tlrc (cli.Brewfile) while the tealdeer formula is installed (conflicts_with), so brew bundle would fail
-# uninstall each conflicting formula or cask below; the next ./setup-host.sh run then bundles the Brewfile one
+# uninstall each conflicting formula or cask below; the next ./dotfiles setup run then bundles the Brewfile one
 /home/linuxbrew/.linuxbrew/bin/brew uninstall --formula tealdeer
 HUMAN-END
 ```
 
 On a prefix you cannot write (a shared Homebrew prefix, below), the line runs
 brew as the prefix's owner and the last note reads "uninstall each
-conflicting formula or cask below as the owner; the next ./setup-host.sh run
+conflicting formula or cask below as the owner; the next ./dotfiles setup run
 then prints the owner's lines that install the Brewfile one", since that run
 stops again at the owner's `sudo` block rather than bundling.
 
@@ -1500,7 +1509,7 @@ Applies to `sherlock` and `marlowe`. The `micromamba` rows in
 executable per architecture. One small download, fine on a login node.
 
 - **Check:** `~/.local/bin/micromamba --version`
-- **Install:** automatic via setup-host.sh (sha256-checked, mode 755). By hand:
+- **Install:** automatic via scripts/commands/setup.sh (sha256-checked, mode 755). By hand:
   `f=$(fetch_pinned micromamba "$(uname -m)") && mkdir -p ~/.local/bin && install -m 0755 "$f" ~/.local/bin/micromamba`
 - **Verify:** `~/.local/bin/micromamba --version` prints the release named in
   `installers.tsv`.
@@ -1539,7 +1548,7 @@ execs `$HOME/micromamba/envs/login/bin/zsh`.
   setup-host's own check only requires `~/micromamba/envs/login/bin/zsh` to
   exist, so it reports an existing env done without showing that every
   package of the yml is present.
-- **Install:** automatic via setup-host.sh:
+- **Install:** automatic via scripts/commands/setup.sh:
   `micromamba create -y -r "$HOME/micromamba" -n login -f config/bootstrap/hpc-login-env.yml`.
   After editing the yml, the same with `install` instead of `create`.
   `CONDA_PKGS_DIRS` is inherited. Once H7-deploy deployed it, the overlay
@@ -1624,7 +1633,7 @@ theme file of S3-bat-theme included. The trade-off: unpinned theme and plugin
 code runs in shell or tmux startup, the same trust model as oh-my-zsh's auto-update.
 
 - **Check:** `test -f ~/.oh-my-zsh/oh-my-zsh.sh && git -C ~/.oh-my-zsh/custom/plugins/fzf-tab log -1 --oneline --decorate`
-- **Install:** automatic via setup-host.sh, only for a clone that is missing.
+- **Install:** automatic via scripts/commands/setup.sh, only for a clone that is missing.
   oh-my-zsh is cloned the way its own installer does:
   `git clone --depth=1 --branch master -c core.eol=lf -c core.autocrlf=false -c fsck.zeroPaddedFilemode=ignore -c fetch.fsck.zeroPaddedFilemode=ignore -c receive.fsck.zeroPaddedFilemode=ignore -c oh-my-zsh.remote=origin -c oh-my-zsh.branch=master https://github.com/ohmyzsh/ohmyzsh.git ~/.oh-my-zsh`.
   Every other row: `git clone --depth=1 --branch REF URL DEST`. By hand:
@@ -1678,7 +1687,7 @@ in [`installers.tsv`](../config/bootstrap/installers.tsv) provides it. Needs bat
 first (S2-brew-bundle or S2-login-env).
 
 - **Check:** `bat --list-themes | grep -x 'Catppuccin Mocha'`
-- **Install:** automatic via setup-host.sh: the file goes to
+- **Install:** automatic via scripts/commands/setup.sh: the file goes to
   `$BAT_CONFIG_DIR/themes/Catppuccin Mocha.tmTheme` (default
   `~/.config/bat/themes`), then `bat cache --build`. By hand:
   `f=$(fetch_pinned bat-theme) && d="$(bat --config-dir)/themes" && mkdir -p "$d" && cp "$f" "$d/Catppuccin Mocha.tmTheme" && bat cache --build`
@@ -1691,7 +1700,7 @@ Applies to every Unix host. `home/dot_vimrc` keeps undo files in
 `~/.vim/undo` and swap and backup files in `~/.vim/tmp`.
 
 - **Check:** `test -d ~/.vim/undo && test -d ~/.vim/tmp && echo ok`
-- **Install:** automatic via setup-host.sh: `mkdir -p ~/.vim/undo ~/.vim/tmp`
+- **Install:** automatic via scripts/commands/setup.sh: `mkdir -p ~/.vim/undo ~/.vim/tmp`
 - **Verify:** the check prints `ok`.
 - **Human:** no
 
@@ -1713,7 +1722,7 @@ a nonempty `NVM_DIR`, then an existing `~/.nvm`, then an existing
 `~/.nvm`; it does not create a second copy beside an existing XDG install.
 
 - **Check:** `./dotfiles setup --host <host> --check --only S4-nvm` (offline; does not source `nvm.sh`).
-- **Install:** automatic via setup-host.sh with the commit-pinned `nvm` row:
+- **Install:** automatic via scripts/commands/setup.sh with the commit-pinned `nvm` row:
   `NVM_INSTALL_VERSION=<commit> PROFILE=/dev/null bash install.sh`, where
   `<commit>` is the commit in the row's URL. The installer would otherwise
   clone its release tag, which can move; with the commit it fetches exactly
@@ -1797,7 +1806,7 @@ Applies to `wsl-ubuntu` and `lab-ubuntu` through the `claude` row of
 pinned by version or digest, so it is an `inspect` step.
 
 - **Check:** `claude --version`
-- **Install:** setup-host.sh downloads `https://claude.ai/install.sh` once to a
+- **Install:** scripts/commands/setup.sh downloads `https://claude.ai/install.sh` once to a
   scratch directory (later runs keep that copy; delete it for a fresh one) and
   prints a `HUMAN-BEGIN S5-claude inspect` block with its sha256, size and
   path. Read it: it should fetch Claude Code from Anthropic into your home
@@ -1824,7 +1833,7 @@ with a relative `codex -> bin/codex` link inside,
 `bubblewrap` is needed. OpenAI's `install.sh` is never run.
 
 - **Check:** `codex --version; readlink ~/.local/bin/codex`
-- **Install:** automatic via setup-host.sh. By hand (version and target come
+- **Install:** automatic via scripts/commands/setup.sh. By hand (version and target come
   from the package's own `codex-package.json`), as one block: the subshell
   stops at the first failing command (`set -eu`) and refuses an empty or
   path-like version or target, so a failed download, unpack or JSON read never
@@ -1883,7 +1892,7 @@ belongs to the Windows terminal, not the distribution.
   (macOS: `ls ~/Library/Fonts /Library/Fonts | grep -i CaskaydiaMono`); the
   doctor's `nerd-font` row looks for the same file names, also under
   Homebrew's `share/fonts`.
-- **Install:** automatic via setup-host.sh: extract into
+- **Install:** automatic via scripts/commands/setup.sh: extract into
   `$XDG_DATA_HOME/fonts/CaskaydiaMonoNerdFont` (default
   `~/.local/share/fonts/...`), then `fc-cache -f`. Like the doctor's row, the
   step counts a file named like `CaskaydiaMonoNerdFont` in the user, system or
@@ -1902,7 +1911,7 @@ Applies to `lab-ubuntu` through the per-architecture `kitty` rows of
 cask. The `.txz` has `bin/`, `lib/` and `share/` at its top level.
 
 - **Check:** `kitty --version; readlink ~/.local/bin/kitty`
-- **Install:** automatic via setup-host.sh. By hand:
+- **Install:** automatic via scripts/commands/setup.sh. By hand:
   `f=$(fetch_pinned kitty "$(uname -m)") && mkdir -p ~/.local/kitty.app ~/.local/bin && tar -C ~/.local/kitty.app -xJof "$f" && ln -sf ~/.local/kitty.app/bin/kitty ~/.local/kitty.app/bin/kitten ~/.local/bin/`
 - **Verify:** `kitty --version` and `kitten --version` both run.
 - **Human:** no (a desktop launcher is optional: copy
@@ -1970,9 +1979,8 @@ Applies to every host. coding-agent-kit (the account launchers and the Claude
 helpers that `settings.json` runs; Unix only, nothing on native Windows),
 PyMOLScripts (`~/.pymolrc`, `~/.pymolrc.py`) and awesome-skills
 (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills/awesome-skills`)
-install and update only when a person runs `dotfiles payloads sync`
-(compatibility: `scripts/payload-update.sh --now` or
-`scripts/payload-update.ps1 -Now`): in the foreground, it installs each absent item and updates each installed one through the repository's own
+install and update only when a person runs `dotfiles payloads sync`: in the
+foreground, it installs each absent item and updates each installed one through the repository's own
 installer, named in [`config/payloads.tsv`](../config/payloads.tsv). No login,
 profile or schedule installs or refreshes them, on any home, and the script
 keeps no state of its own. Each run downloads its repository's unpinned `main`
@@ -1981,35 +1989,37 @@ the newest patch release of the channel the file declares.
 [payloads.md](payloads.md) is the contract.
 
 setup-host prints this as a non-blocking judgment block until the doctor's
-`payloads` row is `ok`; `setup-host.ps1` prints no block, and `doctor.ps1`'s
+`payloads` row is `ok`; `scripts/commands/setup.ps1` prints no block, and `scripts/commands/doctor.ps1`'s
 `payloads` row points here. `DOTFILES_PAYLOAD_ITEMS` (for example `kit pymol`)
 selects the items a run without arguments installs and the doctor checks.
 
 - **Check:** the doctor's `payloads` row (`./dotfiles doctor --host H`,
   `.\dotfiles.ps1 doctor --host win`): each selected item passes its probe, and on
   Unix an installed kit has its three helpers in `~/.claude/coding-agent-kit/`
-  (`doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
-  warns and names what to run. Where the home's chezmoi config resolves, it
-  is `sync-payloads ITEM` and, on Unix, the `--now` line of the hook of the
-  checkout the config names, never the checkout the doctor runs from.
-  Wherever `sync-payloads` refuses (no config, a config the guard refuses,
-  maintenance), it is this checkout's quoted `--now` line
-  (`sh <clone>/scripts/payload-update.sh --now ITEM`; Windows:
-  `& '<clone>\scripts\payload-update.ps1' -Now ITEM`).
+  (`scripts/commands/doctor.ps1` checks only PyMOLScripts and awesome-skills). A shortfall only
+  warns and names public payload advice. Unix doctor prints a quoted explicit
+  checkout frontend with `payloads sync ITEM`; the source helper selects the
+  configured checkout when usable, and doctor retains its own checkout if
+  resolution refuses. Windows doctor uses `sync-payloads ITEM` only when the
+  valid config and installed launcher reach its own checkout, otherwise its
+  own quoted explicit frontend. Executing payload backends use
+  `sync-payloads ITEM` only when a valid home config and installed launcher
+  reach their own checkout; otherwise they print their own explicit frontend.
 - **Install:** `dotfiles payloads sync [ITEM...]` after deployment, or the
   explicit checkout command before configuration: `~/dotfiles/dotfiles payloads sync [ITEM...]`
   (Windows, from an ordinary unelevated PowerShell 7:
   `& $HOME\dotfiles\dotfiles.ps1 payloads sync [ITEM...]`); run it again to
-  update. The setup-host HUMAN block retains the compatibility hook command.
-  On a home with a chezmoi config the block names the script of the
+  update. The Unix setup HUMAN block prints the public CLI command.
+  On a home with a chezmoi config the block names the frontend of the
   checkout the config names (and says so), never the checkout setup-host runs
   from, and only a note under maintenance or while the config does not
   resolve. In an interactive shell with the dotfiles applied,
   `sync-payloads [ITEM...]` does the same and
   `sync-skills` runs only the skills; they run the configured checkout's
-  script, refuse a config the guard refuses, and in a home without a config
-  refuse with an explicit checkout CLI recovery path. Any call of the script
-  without `--now` first prints a usage line and exits 2. An installer's exit
+  frontend, refuse a config the guard refuses, and in a home without a config
+  refuse with an explicit checkout CLI recovery path. The frontend supplies
+  the internal foreground sentinel; a backend call without it prints public
+  usage and exits 2 before maintenance checks or downloads. An installer's exit
   75 (its own lock is busy) is no failure; any other failure makes the run exit 1
   and names what to run next. Active maintenance refuses a run. It needs `sh`
   and curl, or wget with an existing timeout/gtimeout (Windows: PowerShell 7),
@@ -2057,7 +2067,7 @@ extracted archive.
   Clone onto NTFS, never into a WSL distribution.
 - **Verify:** `Test-Path` prints `True` and the status is empty.
 - **Human:** yes (judgment: the person installs Git and PowerShell 7 and
-  clones before `setup-host.ps1` can run from the clone; it blocks on this
+  clones before `scripts/commands/setup.ps1` can run from the clone; it blocks on this
   step only in a checkout that is not a git clone)
 
 ### W1-winget: winget import
@@ -2068,13 +2078,13 @@ probes are defined in [tools.tsv](../config/bootstrap/tools.tsv), not in a
 second documentation list.
 
 - **Check:** `winget list --id Git.Git -e` (or `.\dotfiles.ps1 doctor --host win`)
-- **Install:** automatic via setup-host.ps1:
+- **Install:** automatic via scripts/commands/setup.ps1:
   `winget import --import-file config\bootstrap\winget.json --no-upgrade --ignore-unavailable --accept-package-agreements --accept-source-agreements --disable-interactivity`,
   less the packages whose tools the doctor already finds (below).
   Already-installed packages count as success; other failures fail the step.
   Open a new terminal afterwards so the new PATH entries apply.
 - **Verify:** `.\dotfiles.ps1 doctor --host win` shows the winget rows `ok`.
-- **Human:** no (setup-host.ps1 runs it; a machine-wide installer may still
+- **Human:** no (scripts/commands/setup.ps1 runs it; a machine-wide installer may still
   raise a UAC prompt for the person to accept)
 
 **Tools that another installer already provides.** As in S2-brew-bundle, the
@@ -2082,7 +2092,7 @@ goal is a green doctor, not a winget copy of every tool: winget sees only the
 installs it made, so `--no-upgrade` alone would add a second Claude Code or
 Codex next to the one from its own installer. Each package maps to the win
 `tools.tsv` row that a `# alias: TOOL-ID PackageIdentifier` line names (a
-win-only row first). setup-host.ps1 leaves the package out of the import when
+win-only row first). scripts/commands/setup.ps1 leaves the package out of the import when
 the doctor's own verdict on that row (`Get-BootstrapToolStatus` in
 `lib/bootstrap.ps1`) is `ok`: the tool is on PATH, whoever installed it, and
 at or above the row's floor. A row with a version flag must print a version,
@@ -2097,7 +2107,7 @@ in the doctor and keeps its package in the import only when another tool
 starts the step (`--no-upgrade` never upgrades a winget install). Probes see
 this process's PATH: a tool installed by hand after the terminal opened is
 not seen, and one from an activated venv or conda environment counts, so run
-setup-host.ps1 from a new terminal with no environment activated. The running
+`& 'CHECKOUT\dotfiles.ps1' setup --host win` from a new terminal with no environment activated. The running
 PowerShell 7 always counts for `Microsoft.PowerShell`, which HW-clone installs
 before the clone.
 
@@ -2107,7 +2117,7 @@ PSFzf, CompletionPredictor and Microsoft.WinGet.CommandNotFound, which the
 PowerShell 7 profile uses only when present.
 
 - **Check:** `Get-InstalledPSResource PSFzf, CompletionPredictor, Microsoft.WinGet.CommandNotFound`
-- **Install:** automatic via setup-host.ps1, only for the missing ones, one at
+- **Install:** automatic via scripts/commands/setup.ps1, only for the missing ones, one at
   a time with `Install-PSResource -Name <module> -Scope CurrentUser -TrustRepository -AcceptLicense`:
   the current PSGallery version, not a pin (see [Guarantees](#guarantees)).
   By hand:
@@ -2121,7 +2131,7 @@ PowerShell 7 profile uses only when present.
 Runs only when oh-my-posh is installed (W1-winget).
 
 - **Check:** `Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Windows\Fonts", "$env:WINDIR\Fonts" -Filter 'CaskaydiaMono*' -ErrorAction Ignore`
-- **Install:** automatic via setup-host.ps1: `oh-my-posh font install CascadiaMono`,
+- **Install:** automatic via scripts/commands/setup.ps1: `oh-my-posh font install CascadiaMono`,
   which fetches the current Nerd Fonts release, unpinned (see
   [Guarantees](#guarantees)).
 - **Verify:** the check lists the font files; restart Windows Terminal and WezTerm.
@@ -2134,11 +2144,11 @@ config directory.
 
 - **Check:** `.\dotfiles.ps1 setup --host win --check` verifies the theme's sha256 pin
   and, when bat is installed, its registration in `bat --list-themes --color=never`.
-- **Install:** automatic via setup-host.ps1: download with the sha256 check to
+- **Install:** automatic via scripts/commands/setup.ps1: download with the sha256 check to
   `$env:APPDATA\bat\themes\Catppuccin Mocha.tmTheme`, then `bat cache --build`.
   A rerun reuses the matching file and repairs a missing cache, including after
   a failed build or when bat was installed later. A file whose bytes differ from
-  the pin is preserved and fails apply: move it aside, then rerun setup-host.ps1.
+  the pin is preserved and fails apply: move it aside, then rerun `& 'CHECKOUT\dotfiles.ps1' setup --host win`.
 - **Verify:** `bat --list-themes | Select-String -SimpleMatch 'Catppuccin Mocha'`
 - **Human:** no
 

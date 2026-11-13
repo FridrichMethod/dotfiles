@@ -629,8 +629,8 @@ setup_git_offenders() {
 # it, below, whatever directory runs this test, and a file that is missing
 # (or a glob that matches nothing) is an offender, so the scan cannot pass
 # by checking nothing.
-SETUP_GIT_FILES=(README.md AGENTS.md docs/bootstrap.md docs/dependencies.md doctor.sh setup-host.sh
-    doctor.ps1 setup-host.ps1 lib/bootstrap.ps1
+SETUP_GIT_FILES=(README.md AGENTS.md docs/bootstrap.md docs/dependencies.md dotfiles scripts/commands/doctor.sh scripts/commands/setup.sh
+    dotfiles.ps1 scripts/commands/doctor.ps1 scripts/commands/setup.ps1 lib/bootstrap.ps1
     .claude/skills/dotfiles-bootstrap/SKILL.md .agents/skills/dotfiles-bootstrap/SKILL.md)
 offenders=$(cd "$REPO_ROOT" && setup_git_offenders "${SETUP_GIT_FILES[@]}" lib/bootstrap/*.sh)
 [ -z "$offenders" ] || fail "gh auth setup-git outside a warning: $offenders"
@@ -647,9 +647,9 @@ assert_eq "$(cd "$TEST_TMP" && setup_git_offenders lib/bootstrap/*.sh)" 'lib/boo
 echo '==> no here-document, here-string or process substitution in the Unix bootstrap'
 # Bash 3.2 (macOS /bin/bash) backs every here-document and here-string with a
 # temporary file in the C library's P_tmpdir (/tmp with glibc) whatever
-# TMPDIR says, so ./doctor.sh and ./setup-host.sh --check would write, and its
+# TMPDIR says, so dotfiles doctor and dotfiles setup --check would write, and its
 # process substitution keeps each descriptor open until the outermost
-# function returns. The dynamic TMPDIR checks in doctor.sh and setup-host.sh
+# function returns. The dynamic TMPDIR checks in tests/doctor.sh and tests/setup-host.sh
 # cannot see P_tmpdir, so this scan is the guard. It covers apply-only code
 # too (there is no allowlist) and skips comment lines.
 heredoc_offenders() {
@@ -663,7 +663,10 @@ heredoc_offenders() {
     done
 }
 # The glob expands inside the checkout, so an empty match cannot pass.
-offenders=$(cd "$REPO_ROOT" && heredoc_offenders doctor.sh setup-host.sh lib/terminal.sh lib/bootstrap/*.sh)
+bootstrap_heredoc_offenders() {
+    heredoc_offenders dotfiles scripts/commands/doctor.sh scripts/commands/setup.sh lib/terminal.sh lib/bootstrap/*.sh
+}
+offenders=$(cd "$REPO_ROOT" && bootstrap_heredoc_offenders)
 [ -z "$offenders" ] || fail "here-document, here-string or process substitution in the Unix bootstrap: $offenders"
 [ "$(cd "$REPO_ROOT" && printf '%s\n' lib/bootstrap/*.sh | grep -c '^lib/bootstrap/steps')" -ge 8 ] ||
     fail 'the here-document scan found too few lib/bootstrap/steps*.sh files'
@@ -673,6 +676,24 @@ assert_eq "$(heredoc_offenders "$TEST_TMP/heredoc.sh" | cut -d: -f2 | tr '\n' ' 
     'the here-document scan finds each form and skips comments and pipes'
 assert_eq "$(heredoc_offenders "$TEST_TMP/absent.sh")" "$TEST_TMP/absent.sh: missing" \
     'the here-document scan reports a missing file'
+
+# Mutate each relocated entrypoint in the same scanned layout, so a future
+# omission from the production scan cannot leave the generic parser test green.
+SYNTAX_FIXTURE="$TEST_TMP/bootstrap-syntax"
+mkdir -p "$SYNTAX_FIXTURE/scripts/commands" "$SYNTAX_FIXTURE/lib/bootstrap"
+cp "$REPO_ROOT/dotfiles" "$SYNTAX_FIXTURE/"
+cp "$REPO_ROOT/scripts/commands/doctor.sh" "$REPO_ROOT/scripts/commands/setup.sh" "$SYNTAX_FIXTURE/scripts/commands/"
+cp "$REPO_ROOT/lib/terminal.sh" "$SYNTAX_FIXTURE/lib/"
+cp "$REPO_ROOT"/lib/bootstrap/*.sh "$SYNTAX_FIXTURE/lib/bootstrap/"
+for mutated in dotfiles scripts/commands/doctor.sh scripts/commands/setup.sh; do
+    printf '\ncat <<EOF\n' >>"$SYNTAX_FIXTURE/$mutated"
+    offenders=$(cd "$SYNTAX_FIXTURE" && bootstrap_heredoc_offenders)
+    case $offenders in
+        "$mutated":*) ;;
+        *) fail "the bootstrap syntax scan missed the mutation in $mutated: $offenders" ;;
+    esac
+    cp "$REPO_ROOT/$mutated" "$SYNTAX_FIXTURE/$mutated"
+done
 
 # ----------------------------------------------- manual nvm verification
 echo '==> the manual nvm block fails closed when Git status cannot verify it'

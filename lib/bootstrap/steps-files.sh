@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # STEP_DETAIL and the STEPS_* fields are read by steps.sh
-# Home-file steps of setup-host.sh: S3-clones (git clones of default branches),
+# Home-file steps of scripts/commands/setup.sh: S3-clones (git clones of default branches),
 # S3-bat-theme and S3-dirs.
 # Checks are read-only and offline; apply functions run in steps_guarded
 # and report each failure explicitly. Sourced only (after steps.sh and
@@ -133,7 +133,7 @@ steps_omz_recovery_block() {
     q=$(steps_quote "$dest")
     steps_block_begin X-recovery judgment
     printf '# %s exists without oh-my-zsh.sh: the dotfiles were applied before S3-clones.\n' "$dest"
-    printf '# Turn it into the oh-my-zsh checkout in place, then rerun ./setup-host.sh --host %s:\n' "$STEPS_HOST"
+    printf '# Turn it into the oh-my-zsh checkout in place, then rerun %s setup --host %s:\n' "$(steps_quote "$STEPS_ROOT/dotfiles")" "$STEPS_HOST"
     printf 'git -C %s init\n' "$q"
     for key in core.eol=lf core.autocrlf=false fsck.zeroPaddedFilemode=ignore \
         fetch.fsck.zeroPaddedFilemode=ignore receive.fsck.zeroPaddedFilemode=ignore \

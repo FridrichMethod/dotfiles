@@ -1,6 +1,6 @@
 # The first-party payload repos that the payload hooks install and update when
-# a person runs them (sync-payloads): scripts/payload-update.sh on Unix,
-# scripts/payload-update.ps1 on native Windows (docs/payloads.md). This file
+# a person runs them (sync-payloads): scripts/commands/payloads-sync.sh on Unix,
+# scripts/commands/payloads-sync.ps1 on native Windows (docs/payloads.md). This file
 # is the one place that names their URLs, install paths and commands, and the
 # coding-agent-kit channel this configuration is written for; each command is
 # the repo's own documented install or update interface.

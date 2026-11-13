@@ -387,9 +387,9 @@ sync_refusals='dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and 
 dotfiles: ~/.config/chezmoi/chezmoi.toml must name this home and an available dotfiles checkout; run CHECKOUT/dotfiles explicitly to recover.'
 mkdir -p "$sync_home/.config/chezmoi" "$sync_home/.local/bin"
 for checkout in "$TEST_TMP/configured" "$sync_home/dotfiles"; do
-    mkdir -p "$checkout/scripts" "$checkout/lib"
+    mkdir -p "$checkout/scripts/commands" "$checkout/lib"
     printf '%s\n' "printf '${checkout##*/} %s\\n' \"\$*\" >>\"\$SYNC_TRACE\"" 'exit 4' \
-        >"$checkout/scripts/payload-update.sh"
+        >"$checkout/scripts/commands/payloads-sync.sh"
 done
 printf 'home\n' >"$TEST_TMP/configured/.chezmoiroot"
 cp "$REPO_ROOT/lib/chezmoi-guard.sh" "$TEST_TMP/configured/lib/"
