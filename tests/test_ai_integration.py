@@ -113,6 +113,13 @@ class CodexAs(IsolatedHome):
 
 
 PREVIEW = ROOT / "home/dot_oh-my-zsh/custom/fzf-tab.zsh"
+
+
+def sgr(style, text):
+    """TEXT in the SGR STYLE the kit's --info paints its own words with."""
+    return f"\x1b[{style}m{text}\x1b[0m"
+
+
 # fzf-tab runs the preview with the description of each candidate and these.
 FAKE_FZF = r"""
 import os, subprocess, sys
@@ -160,17 +167,25 @@ class Enrollment(IsolatedHome):
         # completions call _describe without _arguments, so it has no tag.
         command = ('source "$1"; zstyle -s :fzf-tab:complete:"$2": fzf-preview preview; word=$3; group=$4; '
                    'realpath="$HOME/.secrets/codex-$word.json"; my-fzf-preview.sh() { print LEAK; }; eval "$preview"')
-        cases = (("codex-as", "A", "[Codex accounts]", "A (Codex)\nemail   alice@example.com\nplan    plus\n"
-                  "usage   not recorded yet\n"),
-                 ("claude-as", "work", "[Claude accounts]", "work (Claude)\nlabel   Work: billing\nusage   not recorded yet\n"),
-                 ("codex-as", "exec", "[Codex arguments]", "exec\n"),
-                 ("claude-as", "--print", "[Claude arguments]", "--print\n"),
+        # The preview is a pipe, so it asks the kit for colour; the caller's NO_COLOR still wins.
+        env = {name: value for name, value in self.env.items() if name != "NO_COLOR"} | {"TERM": "xterm-256color"}
+        missing = sgr(33, "not recorded yet")
+        cases = (("codex-as", "A", "[Codex accounts]", f"{sgr(36, 'A (Codex)')}\nemail   alice@example.com\n"
+                  f"plan    plus\nusage   {missing}\n", env),
+                 ("claude-as", "work", "[Claude accounts]",
+                  f"{sgr(36, 'work (Claude)')}\nlabel   Work: billing\nusage   {missing}\n", env),
+                 ("codex-as", "A", "[Codex accounts]", "A (Codex)\nemail   alice@example.com\nplan    plus\n"
+                  "usage   not recorded yet\n", env | {"NO_COLOR": "1"}),
+                 ("claude-as", "work", "[Claude accounts]", "work (Claude)\nlabel   Work: billing\nusage   not recorded yet\n",
+                  env | {"TERM": "dumb"}),
+                 ("codex-as", "exec", "[Codex arguments]", "exec\n", env),
+                 ("claude-as", "--print", "[Claude arguments]", "--print\n", env),
                  # Not an account (a renamed file, a stale completion): the word itself.
-                 ("codex-as", "gone", "[Codex accounts]", "gone\n"))
-        for tool, word, group, expected in cases:
-            with self.subTest(tool=tool, word=word):
+                 ("codex-as", "gone", "[Codex accounts]", "gone\n", env))
+        for tool, word, group, expected, case_env in cases:
+            with self.subTest(tool=tool, word=word, no_color=case_env.get("NO_COLOR"), term=case_env["TERM"]):
                 result = subprocess.run([zsh, "-f", "-c", command, "preview", str(PREVIEW), tool, word, group],
-                                        cwd=self.cwd, env=self.env, text=True, capture_output=True)
+                                        cwd=self.cwd, env=case_env, text=True, capture_output=True)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected, ""))
 
     @needs_kit
@@ -210,15 +225,18 @@ class Enrollment(IsolatedHome):
             f"zstyle ':fzf-tab:*' fzf-command '{fake}'\nzstyle ':fzf-tab:*' fzf-flags --ansi\nPS1='READY> '\n")
         # The caller's PATH behind the launchers, as in every other case: they
         # need Python 3.11+, which /usr/bin does not have on a macOS runner.
-        env = self.env | {"ZDOTDIR": str(rc), "SHELL": zsh, "TERM": "xterm-256color", "FAKE_FZF_LOG": str(log),
-                          "TMPPREFIX": str(self.base / "zsh")}
-        for line, expected in ((b"codex-as \t", ["=== A  -- alice@example.com", "A (Codex)", "email   alice@example.com",
-                                                 "plan    plus", "usage   not recorded yet",
-                                                 "=== B", "B (Codex)", "email   not recorded yet",
-                                                 "plan    not recorded yet", "usage   not recorded yet"]),
-                               (b"claude-as \t", ["=== play", "play (Claude)", "label   not set (claude-as --label play LABEL)",
-                                                  "usage   not recorded yet", "=== work  -- Work: billing", "work (Claude)",
-                                                  "label   Work: billing", "usage   not recorded yet"])):
+        env = {name: value for name, value in self.env.items() if name != "NO_COLOR"} | {
+            "ZDOTDIR": str(rc), "SHELL": zsh, "TERM": "xterm-256color", "FAKE_FZF_LOG": str(log),
+            "TMPPREFIX": str(self.base / "zsh")}
+        missing = sgr(33, "not recorded yet")
+        for line, expected in ((b"codex-as \t", ["=== A  -- alice@example.com", sgr(36, "A (Codex)"),
+                                                 "email   alice@example.com", "plan    plus", f"usage   {missing}",
+                                                 "=== B", sgr(36, "B (Codex)"), f"email   {missing}",
+                                                 f"plan    {missing}", f"usage   {missing}"]),
+                               (b"claude-as \t", ["=== play", sgr(36, "play (Claude)"),
+                                                  f"label   {sgr(33, 'not set (claude-as --label play LABEL)')}",
+                                                  f"usage   {missing}", "=== work  -- Work: billing", sgr(36, "work (Claude)"),
+                                                  "label   Work: billing", f"usage   {missing}"])):
             with self.subTest(line=line):
                 log.unlink(missing_ok=True)
                 complete = Path(str(log) + ".done")

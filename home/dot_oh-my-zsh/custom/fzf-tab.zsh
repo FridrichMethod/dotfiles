@@ -51,13 +51,15 @@ zstyle ':fzf-tab:complete:*' fzf-preview '[[ -e "$realpath" ]] && my-fzf-preview
 
 # Account launchers: never hand a credential path to the generic file preview.
 # An account shows the kit's offline --info (last-seen email or label
-# and usage; it opens no credential), any other word only itself. fzf-tab keys
-# this context on the command alone, so the group, the [%d] description of
-# the completion, tells an account from an argument.
+# and usage; it opens no credential), any other word only itself. The preview
+# is a pipe, so CODING_AGENT_KIT_COLOR=always asks for the kit's colours (a
+# nonempty NO_COLOR or TERM=dumb still turns them off). fzf-tab keys this
+# context on the command alone, so the group, the [%d] description of the
+# completion, tells an account from an argument.
 zstyle ':fzf-tab:complete:(codex-as|claude-as):*' fzf-preview \
     'case $group in
-    ("[Codex accounts]") codex-as --info "$word" 2>/dev/null || printf "%s\n" "$word" ;;
-    ("[Claude accounts]") claude-as --info "$word" 2>/dev/null || printf "%s\n" "$word" ;;
+    ("[Codex accounts]") CODING_AGENT_KIT_COLOR=always codex-as --info "$word" 2>/dev/null || printf "%s\n" "$word" ;;
+    ("[Claude accounts]") CODING_AGENT_KIT_COLOR=always claude-as --info "$word" 2>/dev/null || printf "%s\n" "$word" ;;
     (*) printf "%s\n" "$word" ;;
     esac'
 
