@@ -1828,9 +1828,12 @@ Windows `OpenAI.Codex`. The tarball is laid out the way OpenAI's installer does
 it: extracted to `~/.codex/packages/standalone/releases/<version>-<target>/`
 with a relative `codex -> bin/codex` link inside,
 `~/.codex/packages/standalone/current` linked to that release, and
-`~/.local/bin/codex` linked to `current/bin/codex`. The package bundles its own
-`bwrap` (`codex-resources/bwrap`), `rg` and `codex-code-mode-host`, so no apt
-`bubblewrap` is needed. OpenAI's `install.sh` is never run.
+`~/.local/bin/codex` linked to `current/bin/codex`. The package bundles
+`bwrap` (`codex-resources/bwrap`), `rg` and `codex-code-mode-host`. Codex runs
+the first `bwrap` on `PATH` and falls back to the bundled copy only when there
+is none; under Ubuntu's AppArmor user namespace restriction only the apt
+`bubblewrap` works (see the sandbox note at the end of this step). OpenAI's
+`install.sh` is never run.
 
 - **Check:** `codex --version; readlink ~/.local/bin/codex`
 - **Install:** automatic via scripts/commands/setup.sh. By hand (version and target come
@@ -1872,9 +1875,37 @@ with a relative `codex -> bin/codex` link inside,
 - **Verify:** `codex --version` reports the release named in `installers.tsv`.
 - **Human:** no
 
-On Ubuntu 24.04, AppArmor may restrict the unprivileged user namespaces that
-bwrap needs. If Codex reports a sandbox failure, that is a judgment step: read
-OpenAI's Linux sandbox documentation and decide on the AppArmor change yourself.
+Codex's Linux sandbox needs unprivileged user namespaces. Ubuntu 24.04 and
+later restrict them (`kernel.apparmor_restrict_unprivileged_userns = 1`):
+without an AppArmor profile for the `bwrap` that Codex runs, every sandboxed
+command fails with `bwrap: loopback: Failed RTM_NEWADDR: Operation not
+permitted`, and `journalctl -k` shows the process confined by the
+`unprivileged_userns` profile. lab-ubuntu has this restriction; the WSL2
+kernel of wsl-ubuntu runs without AppArmor, so the sandbox works there
+unchanged. The fix follows OpenAI's Linux sandbox documentation. It needs
+sudo, so it remains a judgment step that a person runs:
+
+```sh
+sudo apt install bubblewrap apparmor-profiles apparmor-utils
+sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+Ubuntu's packaged `bwrap-userns-restrict` profile attaches by path to
+`/usr/bin/bwrap`. It lets bwrap create the namespace and stacks the
+`unpriv_bwrap` profile, which denies every capability, onto the sandboxed
+children. Because it attaches by path, Codex must find the apt `bwrap` on
+`PATH`: the bundled copy is not covered and keeps failing. Newer Ubuntu
+releases, 26.04 among them, ship the same profile in the `apparmor` package,
+so it stays in place across an upgrade.
+
+Verify with `codex sandbox -P :workspace -- cat /proc/self/attr/current`: it
+exits 0 and prints `bwrap//&unpriv_bwrap (enforce)`. Avoid the two common
+shortcuts. A hand-written profile that marks `/usr/bin/bwrap`
+`flags=(unconfined)` lets every local user bypass the restriction through
+bwrap, and it collides with the packaged profile on releases that ship one.
+Setting the sysctl to 0 lifts the restriction for every program and user,
+which does not suit a shared machine such as lab-ubuntu.
 
 ## Phase 6: desktop
 
