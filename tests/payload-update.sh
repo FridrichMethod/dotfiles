@@ -222,7 +222,7 @@ expect_no_state 'a login'
 new_home
 now
 [[ "$STATUS" == 0 ]] || fail '--now failed'
-expect_events "kit-install [--channel 0.7] stdin=[]
+expect_events "kit-install [--channel 0.9] stdin=[]
 pymol-install []
 skills-install [] bash=yes"
 expect_line "$OUT" '[dotfiles] [step] kit: installing'
@@ -230,7 +230,7 @@ expect_line "$OUT" '[dotfiles] [ok] skills: install done'
 [[ -z "$(find "$TEST_TMP" -maxdepth 1 -name 'dotfiles-payload.*')" ]] || fail 'a download was left behind'
 : >"$EVENTS"
 now
-expect_events 'kit-update [--update --channel 0.7]
+expect_events 'kit-update [--update --channel 0.9]
 pymol-install []
 skills-install [] bash=yes'
 expect_line "$OUT" '[dotfiles] [step] kit: updating'
@@ -249,7 +249,7 @@ FAKE_PYMOL_DELAY=1 now pymol
 new_home
 DOTFILES_PAYLOAD_ITEMS='skills kit' now
 expect_events 'skills-install [] bash=yes
-kit-install [--channel 0.7] stdin=[]'
+kit-install [--channel 0.9] stdin=[]'
 : >"$EVENTS"
 DOTFILES_PAYLOAD_ITEMS='' now
 [[ "$STATUS" == 0 ]] || fail 'an empty selection failed'
@@ -272,7 +272,7 @@ expect_events ''
 new_home
 FAKE_KIT_STATUS=1 now
 [[ "$STATUS" == 1 ]] || fail '--now did not fail for a failed item'
-expect_events 'kit-install [--channel 0.7] stdin=[]
+expect_events 'kit-install [--channel 0.9] stdin=[]
 pymol-install []
 skills-install [] bash=yes'
 RERUN="'$FIXTURE/dotfiles' payloads sync"

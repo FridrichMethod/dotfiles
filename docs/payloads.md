@@ -19,13 +19,13 @@ or schedule installs or refreshes them.
 
 There is no submodule, no bump workflow and no pin on the dotfiles side. The
 kit follows the newest patch release of the `MAJOR.MINOR` channel that
-`config/payloads.tsv` declares (`0.7`); PyMOLScripts and awesome-skills
+`config/payloads.tsv` declares (`0.9`); PyMOLScripts and awesome-skills
 install from their `main`. What each repository installs, its options and its
 own state are in its README; this file covers only how dotfiles calls them.
 
 | Item | Repository | Unix | Native Windows |
 | --- | --- | --- | --- |
-| `kit` | coding-agent-kit | a managed install of channel `0.7`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows) |
+| `kit` | coding-agent-kit | a managed install of channel `0.9`: `codex-as` and `claude-as` in `~/.local/bin`, their Bash completions in bash-completion's user directory and their zsh completions in `~/.local/share/zsh/site-functions`, and the three helpers in `~/.claude/coding-agent-kit/` | nothing: the kit is not available there (it has no `windows-*` rows) |
 | `pymol` | PyMOLScripts | `~/.pymolrc` and `~/.pymolrc.py` | the same two files in `$HOME` |
 | `skills` | awesome-skills | its skill copies under `~/.claude/skills/`, `~/.codex/skills/` and `~/.agents/skills/awesome-skills/`, with selection and visibility managed by its installer | the same, through its `install.ps1` |
 

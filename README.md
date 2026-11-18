@@ -418,7 +418,7 @@ sync-skills                                    # sync-payloads skills
 ```
 
 `config/payloads.tsv` owns platform selection and the kit channel (currently
-0.7). There are no submodules or consumer-side source pins. awesome-skills
+0.9). There are no submodules or consumer-side source pins. awesome-skills
 manages its own copies under `~/.claude/skills/`, `~/.codex/skills/` and
 `~/.agents/skills/awesome-skills/`; Codex reads both of its roots. Selection
 and migration stay with that repository's installer.

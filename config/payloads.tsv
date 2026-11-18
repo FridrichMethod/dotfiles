@@ -34,7 +34,7 @@
 # it into a shell, run it with ARG in / (PowerShell: in $PSHOME; never in
 # the caller's directory or the download's) and return its exit status (75:
 # another run holds that repo's lock).
-kit	channel	0.7
+kit	channel	0.9
 kit	unix-probe	test -f "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh"
 kit	unix-install	payload_script sh https://raw.githubusercontent.com/FridrichMethod/coding-agent-kit/main/install.sh --channel "$channel"
 kit	unix-update	payload_script sh "${XDG_DATA_HOME:-$HOME/.local/share}/coding-agent-kit/current/install.sh" --update --channel "$channel"

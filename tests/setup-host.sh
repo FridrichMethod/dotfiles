@@ -838,7 +838,7 @@ expect_line check-fresh 'HUMAN-BEGIN H1-fcitx5 gui'
 expect_line check-fresh 'HUMAN-BEGIN H7-chsh chsh'
 expect_line check-fresh 'HUMAN-BEGIN H7-payloads judgment'
 expect_text check-fresh out '# coding-agent-kit, PyMOLScripts and awesome-skills install and update only when a person runs them, through their own installers (config/payloads.tsv); no login installs or refreshes them'
-expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.7'
+expect_text check-fresh out 'the kit then follows the newest patch release of channel 0.9'
 # A home without a chezmoi config: sync-payloads refuses there, so only the
 # line is named.
 expect_line check-fresh '# rerun the line below to update them later (sync-payloads needs ~/.config/chezmoi/chezmoi.toml, which this home lacks). To install them now, in the foreground:'
