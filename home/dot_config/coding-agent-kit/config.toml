@@ -1,0 +1,19 @@
+[usage_reserve]
+five_hour = 10
+weekly = 10
+
+[usage_reserve.claude_accounts.personal]
+five_hour = "off"
+weekly = "off"
+
+[usage_reserve.claude_accounts.stanford]
+five_hour = "off"
+weekly = "off"
+
+[usage_reserve.codex_accounts.personal]
+five_hour = "off"
+weekly = "off"
+
+[usage_reserve.codex_accounts.stanford]
+five_hour = "off"
+weekly = "off"

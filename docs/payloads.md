@@ -377,11 +377,23 @@ dotfiles adds:
 - The Claude and Codex settings and their modify templates
   ([ai-config.md](ai-config.md)) stay in this repository; the kit needs
   none of them.
-- Dotfiles ships no `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml`,
-  so the kit's defaults apply (`codex-as --show-config` prints them). If a host
-  ever needs one, let one source file own the whole target, never a shared
-  file plus a host copy, and set `codex_home` and `secrets_dir`
-  before the first enrolment there, because account links are absolute.
+- Dotfiles ships `${XDG_CONFIG_HOME:-~/.config}/coding-agent-kit/config.toml`
+  on every Unix role (win ignores it) from one plain source file,
+  `home/dot_config/coding-agent-kit/config.toml`, that owns the whole target:
+  usage reserves of 10% of every account's 5-hour and weekly limits, with both
+  windows `"off"` for the Claude and Codex accounts `personal` and `stanford`
+  (a flag such as `--reserve-weekly 10` turns one on for a launch). It sets
+  nothing else, so the kit's defaults for `codex_home` and `secrets_dir` apply
+  (`codex-as --show-config` prints them); never add a host copy beside it, and
+  set those two before the first enrolment on a host if one ever needs them,
+  because account links are absolute. For an account with a reserve the kit
+  refuses headless Claude forms (`claude-as NAME -p`), a guarded Claude session
+  cannot move to the background, and a headless `codex-as` run is refused until
+  an interactive launch on that host, after you trust the guard's hooks, has
+  run the guard's tool hook; the kit's documentation describes the reserve
+  guard. The kit refuses a configuration
+  file whose directories up to the home are writable by another group or carry
+  an access list, and that refusal stops every launcher on the host.
 - The fzf-tab preview in `home/dot_oh-my-zsh/custom/fzf-tab.zsh` shows
   the kit's `--info NAME` for an account, offline and without opening a
   credential, so emails and labels show in previews, screen shares and agent

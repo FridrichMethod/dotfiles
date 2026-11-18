@@ -115,7 +115,7 @@ in tracked Markdown resolving.
   - `home/dot_codex/AGENTS.md`
   - `home/.policy/codex-config.toml` (read by `home/dot_codex/modify_private_config.toml`)
   - `home/dot_codex/rules/portable.rules`
-- coding-agent-kit owns Unix launchers, completions and Claude Node helpers under `~/.claude/coding-agent-kit/`; dotfiles ships no kit config. Linux/macOS/WSL only: no Windows install/check rows. Native Windows runs no helper and the commands exit 0; Unix missing helpers fail visibly. Preserve these platform guards.
+- coding-agent-kit owns Unix launchers, completions and Claude Node helpers under `~/.claude/coding-agent-kit/`; dotfiles ships only the kit's configuration file, `home/dot_config/coding-agent-kit/config.toml` (usage reserves, every Unix role), one plain source owning the whole target. Linux/macOS/WSL only: no Windows install/check rows. Native Windows runs no helper and the commands exit 0; Unix missing helpers fail visibly. Preserve these platform guards.
 - Keep the global `CLAUDE.md` and `AGENTS.md` aligned unless a tool-specific semantic difference requires divergence.
 - The repository root `CLAUDE.md` is only an `@AGENTS.md` import stub for Claude Code; `AGENTS.md` is the single repository guide for every agent. Add or change repository policy in `AGENTS.md`, never in the stub.
 - Set Project instructions to `claude-md-and-agents-md` under both pluginConfigs IDs, agents-md@builtin and cc-plugin-agents-md@builtin (pre-2.1.285 clients use the former; newer clients accept either). Keep native ancestor loading and the CLAUDE.md stub for old clients.

@@ -391,7 +391,8 @@ The repository [AGENTS.md](AGENTS.md) contains project rules for every agent;
   until it is [reconciled](docs/ai-config.md#reconciling-an-owned-key).
 - &#x1F6E0;&#xFE0F; **coding-agent-kit.** The kit supplies account launchers, completions and
   Claude helpers on Linux, macOS and WSL. Dotfiles holds only their
-  configuration; the kit itself lives in its own repository. Native Windows
+  configuration, the kit's own configuration file with the usage reserves
+  included; the kit itself lives in its own repository. Native Windows
   does not install/check the kit: the helper commands run no helper there and
   exit 0; missing Unix helpers fail visibly. Launcher/account operation
   belongs to the kit's own documentation.

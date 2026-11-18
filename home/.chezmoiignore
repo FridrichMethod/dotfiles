@@ -69,6 +69,7 @@
 .config/zsh
 .config/kitty
 .config/tmux
+.config/coding-agent-kit
 {{ end }}
 {{ if ne .host "win" }}
 .local/bin/dotfiles.ps1

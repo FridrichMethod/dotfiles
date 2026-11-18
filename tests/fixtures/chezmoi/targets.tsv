@@ -19,6 +19,7 @@ target	hosts	source	mode	shell
 .config/bash/.bashrc	mac,wsl-ubuntu,lab-ubuntu,sherlock,marlowe	home/.hosts/{host}/.config/bash/.bashrc	regular	bash
 .config/bash/download.sh	unix	home/dot_config/bash/download.sh	regular	bash
 .config/bash/upload.sh	unix	home/dot_config/bash/upload.sh	regular	bash
+.config/coding-agent-kit/config.toml	unix	home/dot_config/coding-agent-kit/config.toml	regular	-
 .config/fcitx5/config	lab-ubuntu	home/dot_config/fcitx5/config	regular	-
 .config/fcitx5/profile	lab-ubuntu	home/dot_config/fcitx5/private_profile	private	-
 .config/kitty/current-theme.conf	unix	home/dot_config/kitty/current-theme.conf	regular	-
