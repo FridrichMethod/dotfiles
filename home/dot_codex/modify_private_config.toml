@@ -44,6 +44,8 @@
     {{- $valid = typeIs "string" $value -}}
   {{- else if eq $owned.type "bool" -}}
     {{- $valid = typeIs "bool" $value -}}
+  {{- else if eq $owned.type "positive-integer" -}}
+    {{- if typeIs "int64" $value -}}{{- $valid = gt $value 0 -}}{{- end -}}
   {{- else if eq $owned.type "string-array" -}}
     {{- $valid = kindIs "slice" $value -}}
     {{- if $valid -}}

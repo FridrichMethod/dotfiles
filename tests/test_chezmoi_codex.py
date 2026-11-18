@@ -23,6 +23,7 @@ POLICY = (
     (("features", "network_proxy"), "bool"),
     (("features", "multi_agent"), "bool"),
     (("features", "memories"), "bool"),
+    (("features", "multi_agent_v2", "max_concurrent_threads_per_session"), "positive-integer"),
     (("permissions", "workspace-net", "description"), "string"),
     (("permissions", "workspace-net", "extends"), "string"),
     (("permissions", "workspace-net", "network", "enabled"), "bool"),
@@ -35,8 +36,10 @@ POLICY = (
 TYPE_CHECKS = {
     "string": lambda value: type(value) is str,
     "bool": lambda value: type(value) is bool,
+    "positive-integer": lambda value: type(value) is int and value > 0,
     "string-array": lambda value: type(value) is list and all(type(item) is str for item in value),
 }
+THREAD_CAP = ("features", "multi_agent_v2", "max_concurrent_threads_per_session")
 PORTABLE = ROOT / "home/.policy/codex-config.toml"
 MANIFEST = ROOT / "home/.chezmoidata/codex-policy.json"
 HOST = "win" if os.name == "nt" else "generic"
@@ -76,7 +79,7 @@ class CodexPolicyMetadataTests(unittest.TestCase):
             "owned": [{"path": list(path), "type": kind} for path, kind in POLICY],
         }}
         self.assertEqual(json.loads(MANIFEST.read_text(encoding="utf-8")), expected)
-        self.assertEqual(len(POLICY), 19)
+        self.assertEqual(len(POLICY), 20)
 
     def test_portable_leaves_are_exactly_the_owned_paths_with_their_types(self):
         # An unowned portable key would never deploy (unknown portable fields
@@ -245,7 +248,8 @@ local_model = 4
 
     def test_owned_type_changes_are_not_formatting_noops(self):
         cases = (policy_text({("model",): 1}),
-                 policy_text({("features", "multi_agent"): 1}))
+                 policy_text({("features", "multi_agent"): 1}),
+                 policy_text({THREAD_CAP: float(at_path(tomllib.loads(PORTABLE.read_text()), THREAD_CAP))}))
         for live in cases:
             with self.subTest(live=live), SourceFixture(HOST) as fixture:
                 target = self.prepare(fixture)
@@ -301,7 +305,8 @@ local_model = 4
 
     def test_every_required_policy_path_is_present_and_typed(self):
         for path, kind in POLICY:
-            invalid = {"string-array": [False, 1], "string": False, "bool": "true"}[kind]
+            invalid = {"string-array": [False, 1], "string": False, "bool": "true",
+                       "positive-integer": "16"}[kind]
             for name, portable in (("missing", policy_text(missing=path)),
                                    ("wrong-type", policy_text({path: invalid}))):
                 with self.subTest(path=path, case=name), SourceFixture(HOST) as fixture:
@@ -319,6 +324,17 @@ local_model = 4
         with SourceFixture(HOST) as fixture:
             target = self.prepare(fixture, None, policy_text({path: []}))
             self.assertEqual(self.apply(fixture, target)[path[0]], [])
+
+    def test_positive_integers_reject_zero_negative_float_and_bool(self):
+        # Codex refuses a zero thread cap, so the portable value must not deploy one.
+        for invalid in (0, -1, 16.0, True):
+            with self.subTest(invalid=invalid), SourceFixture(HOST) as fixture:
+                target = self.prepare(fixture, 'unknown = "keep"\n', policy_text({THREAD_CAP: invalid}))
+                self.assert_refused(fixture, target)
+        for valid in (1, 9223372036854775807):
+            with self.subTest(valid=valid), SourceFixture(HOST) as fixture:
+                target = self.prepare(fixture, None, policy_text({THREAD_CAP: valid}))
+                self.assertEqual(at_path(self.apply(fixture, target), THREAD_CAP), valid)
 
     def test_each_live_ancestor_collision_is_refused_before_assignment(self):
         ancestors = {path[:depth] for path, _kind in POLICY for depth in range(1, len(path))}

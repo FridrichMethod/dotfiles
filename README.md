@@ -369,8 +369,8 @@ The repository [AGENTS.md](AGENTS.md) contains project rules for every agent;
   stay local. Read [AI configuration](docs/ai-config.md) before policy edits.
 - &#x1F4BB; **Models stay local.** Claude model selection remains machine-local; its
   effort, plugins and permissions are shared. Codex portable model/reasoning
-  defaults live in its tracked config; host-local profile settings are
-  preserved.
+  defaults and the per-session agent thread cap live in its tracked config;
+  host-local profile settings are preserved.
 - &#x1F333; **Worktrees.** Both global guides place persistent agent worktrees in the
   current project's `.worktrees/` directory; brief disposable work may use
   `/tmp`. Keep unfinished work and handoffs in durable storage. After

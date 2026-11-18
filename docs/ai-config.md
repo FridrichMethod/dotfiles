@@ -29,7 +29,7 @@ non-object JSON fails.
 
 Codex applies only the typed owned paths listed below.
 `home/.chezmoidata/codex-policy.json` contains paths/types only;
-`tests/test_chezmoi_codex.py` pins it to a frozen list (19 owned paths with
+`tests/test_chezmoi_codex.py` pins it to a frozen list (20 owned paths with
 types) and requires the portable TOML's leaves to be exactly the owned paths
 with those types. The template reads
 that manifest literally; local template data cannot expand ownership. Unknown
@@ -105,6 +105,7 @@ Codex ownership and required types live in
 | --- | --- |
 | Top level | `model`, `model_reasoning_effort`, `plan_mode_reasoning_effort`, `personality`, `default_permissions`, `approval_policy`, `approvals_reviewer`, `project_doc_fallback_filenames` |
 | `features` | `network_proxy`, `multi_agent`, `memories` |
+| `features.multi_agent_v2` | `max_concurrent_threads_per_session` (positive integer) |
 | `permissions.workspace-net` | `description`, `extends` |
 | `permissions.workspace-net.network` | `enabled`, `allow_local_binding` |
 | `permissions.workspace-net.network.domains` | `"*"` |
@@ -119,6 +120,18 @@ settings, including colors, theme and onboarding state, remain local.
 `/statusline` edits the live layout. A live edit of any owned key stops the
 nonforce login update at `~/.codex/config.toml` until it is
 [reconciled](#reconciling-an-owned-key).
+
+`features.multi_agent_v2.max_concurrent_threads_per_session` caps the agent
+threads open at once in one Codex session, the root agent included; Codex's
+own default is 4. The owned type is a positive integer because Codex refuses
+a configuration with 0. This key takes precedence over
+`agents.max_concurrent_threads_per_session`, which counts subagents only and
+stays local. When Ultra reasoning is selected with a cap of 8 or more, the
+Codex TUI warns that the concurrent subagents can increase usage quickly. The
+feature flag itself stays local and belongs inside this table as `enabled`;
+the bare boolean form `features.multi_agent_v2 = true` makes an owned ancestor
+a non-table, so the template refuses it and leaves the target unchanged until
+the flag moves into the table.
 
 Portable values replace these paths only; other live keys and tables are
 retained, with the serialization described above. Unknown portable keys
