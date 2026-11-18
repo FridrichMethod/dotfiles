@@ -23,8 +23,9 @@ micromamba	binary	https://github.com/mamba-org/micromamba-releases/releases/down
 # openai/codex tag rust-v0.161.0 (peeled 979011409de0a60b52f179721948e65531d26144), the stable
 # release this lab-ubuntu host has run since 2026-10-06 (its x86_64 bin/codex is byte-identical).
 # The codex-package tarball is flat (no top-level dir): bin/codex, bin/codex-code-mode-host,
-# codex-package.json, codex-path/rg and codex-resources/ (bwrap, zsh, plus voice on x86_64), so
-# the Linux sandbox uses the bundled bwrap. Lay it out the way OpenAI's installer does: extract
+# codex-package.json, codex-path/rg and codex-resources/ (bwrap, zsh, plus voice on x86_64).
+# Codex runs a bwrap on PATH first and the bundled one only as a fallback (S5-codex in
+# docs/bootstrap.md covers the AppArmor case). Lay it out the way OpenAI's installer does: extract
 # into a fresh temp dir under dest, read version and target from its codex-package.json, add the
 # relative link codex -> bin/codex inside it, move it to dest/releases/<version>-<target>,
 # ln -sfn dest/current to that release dir (absolute target), then ln -sfn
