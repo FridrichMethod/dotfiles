@@ -14,7 +14,7 @@ memories = true
 
 [features.multi_agent_v2]
 # Agents open at once in one session, the root agent included.
-max_concurrent_threads_per_session = 16
+max_concurrent_threads_per_session = 12
 
 [permissions.workspace-net]
 description = "Workspace editing with unrestricted public network access."

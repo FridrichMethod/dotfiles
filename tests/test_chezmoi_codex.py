@@ -133,6 +133,9 @@ escaped = "first\\r\\nsecond"
 [features]
 local = true
 unknown = false
+[features.multi_agent_v2]
+enabled = true
+max_concurrent_threads_per_session = 16
 [projects."/tmp/synthetic.project"]
 trust_level = "trusted"
 [unknown."literal.dot"]
