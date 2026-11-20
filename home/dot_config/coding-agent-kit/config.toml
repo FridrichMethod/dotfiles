@@ -2,7 +2,15 @@
 five_hour = 10
 weekly = 10
 
+[usage_reserve.claude_accounts.lc1113]
+five_hour = "off"
+weekly = "off"
+
 [usage_reserve.claude_accounts.personal]
+five_hour = "off"
+weekly = "off"
+
+[usage_reserve.claude_accounts.sinlee93]
 five_hour = "off"
 weekly = "off"
 
@@ -10,10 +18,14 @@ weekly = "off"
 five_hour = "off"
 weekly = "off"
 
-[usage_reserve.codex_accounts.personal]
+[usage_reserve.claude_accounts.szdai]
 five_hour = "off"
 weekly = "off"
 
-[usage_reserve.codex_accounts.stanford]
+[usage_reserve.claude_accounts.yh828]
+five_hour = "off"
+weekly = "off"
+
+[usage_reserve.claude_accounts.zihanz]
 five_hour = "off"
 weekly = "off"

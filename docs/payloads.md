@@ -381,8 +381,10 @@ dotfiles adds:
   on every Unix role (win ignores it) from one plain source file,
   `home/dot_config/coding-agent-kit/config.toml`, that owns the whole target:
   usage reserves of 10% of every account's 5-hour and weekly limits, with both
-  windows `"off"` for the Claude and Codex accounts `personal` and `stanford`
-  (a flag such as `--reserve-weekly 10` turns one on for a launch). It sets
+  windows `"off"` for each Claude account it names, which are all the Claude
+  accounts enrolled on the hosts, so every Codex account keeps the 10% and a
+  Claude account enrolled later starts with it until a table of its own turns
+  it off (a flag such as `--reserve-weekly 10` turns one on for a launch). It sets
   nothing else, so the kit's defaults for `codex_home` and `secrets_dir` apply
   (`codex-as --show-config` prints them); never add a host copy beside it, and
   set those two before the first enrolment on a host if one ever needs them,
