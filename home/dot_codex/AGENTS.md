@@ -141,4 +141,12 @@ test -z "$(git -C "$CLONE" log --oneline --branches --not main)" &&
 - Before Sherlock work, and again after a summary or context compaction, read `/etc/agents/AGENTS.md` and the task's topic files (`storage.md`, `slurm.md`, `software.md`, `policy.md` beside it). Their numbered site rules take precedence. On Sherlock, read them locally. From a workstation, check the user's existing control master with the project's `shk doctor`; once usable, read with `ssh -oBatchMode=yes -oProxyCommand=false sherlock-plain cat /etc/agents/AGENTS.md`, then read the topic files through the same master. Never log in or authenticate for the user.
 - Use the current project's own pinned sherlock-kit (`shk`) for jobs, status and transfers. If it has none, ask before adding `sherlock-kit @ git+https://github.com/FridrichMethod/sherlock-kit@<latest release tag>` to its environment. Preserve existing project pins; never use a global, another project's or a development copy, or fall back to `ssh ... sbatch`.
 - Read that install's `shk rules workstation` (on Sherlock: `shk rules cluster`). `shk install-skill --project DIR --rules workstation|cluster` copies the skill and requested Claude rules; Codex gets a hint to append the rules output to the project's `AGENTS.md` and must read the rules directly if they are not loaded.
-- Inside Sherlock jobs, invoke the project's pinned install on Sherlock by absolute path from an environment in `$GROUP_HOME`, or use the skill's `sha256sum` one-liner for manifests. Build environments only inside a Slurm allocation.
+- Inside Sherlock jobs, invoke the project's pinned install on Sherlock by absolute path from an environment in `$GROUP_HOME`, or use the skill's `sha256sum` one-liner for manifests.
+- On a Sherlock login node, small installs and checks that end in seconds are fine; compile, run heavy installs and anything on GPUs or sustained inside an allocation (`sh_dev` or `srun --partition=dev` for quick ones).
+
+## Stanford Marlowe
+
+- Marlowe has no `/etc/agents`; its documentation is the policy. Before Marlowe work, read the project's `shk --site marlowe rules workstation` (on a Marlowe login node: `shk --site marlowe rules cluster`).
+- Use only the user's existing `marlowe-plain` master and write every command as `shk --site marlowe ...`, with a Marlowe configuration (`site = "marlowe"`, `account`). Never log in or authenticate for the user.
+- Usage is billed: a job that runs needs the user's authorization of a stated upper bound. Dry runs, `--preflight` and held jobs are free.
+- A `--preflight` or test-only start time is not a wait prediction on Marlowe; never relay it as one.
