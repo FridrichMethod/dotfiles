@@ -13,6 +13,14 @@
 - Prefer concrete evidence, exact file paths, commands, equations, tensor shapes, residue identifiers, and test results over generic advice.
 - Distinguish confirmed facts, inferences, hypotheses, and open questions.
 
+## Written language
+
+- Everything written into a repository defaults to American English (color, center, gray, behavior, -ize, labeled) and ASCII characters only: code, identifiers, comments, docstrings, user-facing messages, documentation, commit messages and pull request text.
+- When a program's output needs a non-ASCII character (a Greek letter or a unit in a figure label, a test fixture), write it in the source as an escape such as `"\u00c5"`, so the file stays ASCII.
+- An exception applies only where the repository's own instructions or the user declare it, such as emoji in a README, a bilingual Chinese and English documentation site, or temporary plan and handoff notes in Chinese. Without a declaration, the default applies.
+- This governs written artifacts, not conversation: replies still match the language of the user's request.
+- Third-party, vendored and generated files, quoted text, proper names and data keep their original spelling and characters.
+
 ## Autonomy and scope
 
 - Work autonomously on clearly scoped, reversible local tasks: inspect the relevant context, implement the change, and validate it without unnecessary confirmation.
