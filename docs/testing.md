@@ -511,8 +511,10 @@ without either it fails before any request) and PowerShell, and the
 failed-download latch, with no staging or state left behind. The fixture
 completes a direct HTTP readiness exchange before starting a downloader's
 deadline; a delayed-server regression keeps fixture startup outside the
-one-second download budget. Body deadlines and failed-download assertions
-remain unchanged.
+one-second download budget. curl and wget run under a one-second
+`DOTFILES_PAYLOAD_TIMEOUT`, PowerShell under three seconds: `HttpClient`'s
+timeout bounds the whole request, including its first use in a new `pwsh`
+process, and both stay below the stalled and the trickled body.
 `tests/payload-update.ps1` covers the PowerShell twin the same way, with the
 items that have a `windows-install` row (PyMOLScripts and awesome-skills): a
 call without `-Now` (none, a bare item or an unknown argument) prints one

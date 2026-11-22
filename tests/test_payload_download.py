@@ -17,6 +17,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 PWSH = shutil.which("pwsh")
 BODY = b"# a slowly delivered installer\nexit 0\n"
+# DOTFILES_PAYLOAD_TIMEOUT per backend. HttpClient's timeout bounds the whole
+# request, including its first use in a new pwsh process, which can take more
+# than a second on a loaded runner before the request reaches the server.
+# Both stay below the stalled and the trickled body (5s and 4.5s).
+DEADLINE = {"sh": 1, "ps1": 3}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -63,7 +68,7 @@ def server():
     worker.start()
     try:
         # Binding/listening does not mean the worker can handle a request yet.
-        # Complete a direct loopback exchange before starting the 1s download
+        # Complete a direct loopback exchange before starting the download
         # deadline; stdlib HTTPConnection does not consult proxy settings.
         with contextlib.closing(http.client.HTTPConnection("127.0.0.1", httpd.server_port,
                                                           timeout=5)) as client:
@@ -125,7 +130,7 @@ class PayloadDownload(unittest.TestCase):
             "TMPDIR": str(self.root), "TMP": str(self.root), "TEMP": str(self.root),
             "XDG_CACHE_HOME": str(self.home / "cache"), "XDG_CONFIG_HOME": str(self.home / "config"),
             "XDG_DATA_HOME": str(self.home / "share"), "XDG_STATE_HOME": str(self.home / "state"),
-            "DOTFILES_PAYLOAD_TIMEOUT": "1", "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1",
+            "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1",
             "POWERSHELL_TELEMETRY_OPTOUT": "1", "POWERSHELL_UPDATECHECK": "Off",
         })
         for suffix in ("sh", "ps1"):
@@ -177,6 +182,7 @@ class PayloadDownload(unittest.TestCase):
         self.assertFalse((self.home / "data/dotfiles").exists())
 
     def run_hook(self, kind, both=False):
+        self.env["DOTFILES_PAYLOAD_TIMEOUT"] = str(DEADLINE[kind])
         start = time.monotonic()
         result = subprocess.run(self.command(kind, both), env=self.env, cwd=self.root,
                                 capture_output=True, text=True, timeout=15)
@@ -195,7 +201,8 @@ class PayloadDownload(unittest.TestCase):
             # from real headers, while run_hook retains an overall hang cap.
             self.assertTrue(httpd.headers_sent, f"no subject HTTP response headers\n{diagnostics}")
             elapsed = time.monotonic() - httpd.headers_sent[0]
-            self.assertLess(elapsed, 4, f"body exceeded the 1s deadline: {elapsed:.2f}s\n{diagnostics}")
+            self.assertLess(elapsed, DEADLINE[kind] + 3,
+                            f"body exceeded the {DEADLINE[kind]}s deadline: {elapsed:.2f}s\n{diagnostics}")
             self.assertEqual(httpd.requests, [path], diagnostics)
             self.assertIn("already failed", result.stdout + result.stderr, diagnostics)
             self.assert_no_state()
