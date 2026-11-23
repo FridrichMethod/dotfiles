@@ -17,7 +17,7 @@ floor the doctor checks.
 | CLI dispatch | POSIX `sh` on Unix, PowerShell 7+ on Windows; no Python, Node or added package requirement. Each command retains its backend requirements below |
 | Day-zero bootstrap | `dotfiles doctor`/`dotfiles setup` forward to `scripts/commands/doctor.sh`/`scripts/commands/setup.sh`: Bash 3.2+, git, curl and ordinary POSIX utilities; `scripts/commands/doctor.ps1` and `scripts/commands/setup.ps1`: PowerShell 7+ and winget. Everything they install is listed in `config/bootstrap/`, downloads sha256-pinned and clones on their upstream default branch (see [Day-zero tools](#day-zero-tools) and [bootstrap.md](bootstrap.md)); the manifest validator under `tests/` also needs Python 3 |
 
-The configured applications (Zsh, Vim, terminals, Codex, Claude, etc.) are needed
+The configured applications (Zsh, Vim, Neovim, terminals, Codex, Claude, etc.) are needed
 to use their respective settings, not all to deploy the repository. The
 Claude and Codex merges run inside chezmoi and need no other tool.
 
@@ -35,9 +35,10 @@ doctor checks, and some (fzf, gh, shfmt and so on) appear only there.
 | Python 3.11 | The stdlib helpers (`python3 -I -B`) and the tests; Linux CI runs 3.11. Ubuntu 22.04's apt python3 (3.10) is below it |
 | tmux 3.4 | The shared config uses 3.4 popup, menu and style features without version checks; Linux CI runs Ubuntu 24.04's 3.4 and fails if the tmux tests would skip. Marlowe meets it only through its login env |
 | Node.js 22 | The Claude helpers the kit installs; 18 and 20 are end of life |
+| Neovim 0.11.2 | LazyVim's own floor for the shipped `~/.config/nvim` ([Neovim](shell.md#neovim)), with LuaJIT; below it LazyVim prints its version message and `nvim`, so also the `vi` alias, quits. Its plugins also need Git 2.19 or newer (lazy.nvim's partial clones) and a C compiler (nvim-treesitter's parsers; mason supplies `tree-sitter-cli`). No check enforces these: the `nvim` row in `tools.tsv` is presence-only, because `nvim --version` writes `~/.local/state/nvim/nvim.log` |
 | PowerShell 7.0 | Every Windows entry point and every library under `lib/` and `tests/e2e/lib/` except `lib/chezmoi-guard.ps1` (5.1, below) declares `#Requires -Version 7.0`. Features of 7.2 (`$PSStyle`, the PSReadLine 2.2 list prediction view) sit behind guards in the PowerShell 7 profile, so 7.0 and 7.1 load it without them |
 | Windows PowerShell 5.1 | Its profile, `home/Documents/WindowsPowerShell/profile.ps1`, is 5.1 syntax and ASCII; `lib/chezmoi-guard.ps1` parses and runs under 5.1, which `tests/test_chezmoi_update_windows.py` checks |
-| Git | Any version that clones and fast-forwards |
+| Git | Any version that clones and fast-forwards; the Neovim plugins need 2.19 or newer |
 | Claude Code | No client floor: the portable settings set Project instructions under both pluginConfigs IDs, `agents-md@builtin` for clients before 2.1.285 and `cc-plugin-agents-md@builtin`, while any host runs a client older than 2.1.285; the root `CLAUDE.md` stays an `@AGENTS.md` import stub for such clients |
 | Codex | The portable config's `project_doc_fallback_filenames` lets Codex read other repositories' `CLAUDE.md` files |
 

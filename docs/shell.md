@@ -282,3 +282,58 @@ upstream's new/rename dialogs use fixed `/tmp` pipe names that can collide.
 CopyQ is not required or installed; if already available on PATH, upstream
 tmux-fzf starts it on plugin load even with this reduced menu. Upstream
 plugins do not reliably support installation paths containing spaces.
+
+## Neovim
+
+Every Unix role receives the [LazyVim](https://www.lazyvim.org/) starter
+configuration under `~/.config/nvim` as plain regular files: `init.lua`,
+`stylua.toml`, `lua/config/lazy.lua`, `lua/config/options.lua`,
+`lua/config/keymaps.lua`, `lua/config/autocmds.lua` and
+`lua/plugins/example.lua`. The example is the starter's own file; it returns an
+empty spec, so the `{ import = "plugins" }` spec finds a module instead of
+failing with "No specs found". `win` is excluded, because Neovim on native
+Windows reads `%LOCALAPPDATA%\nvim`, not `~/.config/nvim`.
+
+The extras every host shares are imports in `lua/config/lazy.lua`:
+`test.core`, `ai.copilot`, `coding.yanky`, `editor.dial`, `editor.inc-rename`,
+`util.dot` and `util.mini-hipatterns`, all under `lazyvim.plugins.extras`. They
+sit after LazyVim's own `lazyvim.plugins` import and before `plugins`, the
+order LazyVim checks when it starts. They change only through the source:
+`:LazyExtras` cannot turn them off, and what it toggles is per-host state.
+`lazy.lua` sets `vim.g.lazyvim_json` before lazy.nvim starts, so LazyVim keeps
+that state (news and `:LazyExtras` toggles) in
+`stdpath("state")/lazyvim.json`, by default
+`~/.local/state/nvim/lazyvim.json`, and never rewrites a managed file; a
+`lazyvim.json` inside `~/.config/nvim` is not read.
+lazy.nvim's `lazy-lock.json` stays untracked and per host: lazy.nvim rewrites
+it in `~/.config/nvim` on every install, update and clean, so each host's
+plugin revisions float from its own installs and `:Lazy update`.
+
+The first start of `nvim`, which a person runs, clones lazy.nvim and the
+plugins from GitHub into `~/.local/share/nvim/lazy/`, and the plugins then
+fetch their own tools: mason installs language servers and formatters into
+`~/.local/share/nvim/mason/` (`bash-language-server`, for `util.dot`, needs
+`npm`), blink.cmp downloads its prebuilt binary, copilot.lua downloads the
+Copilot language server, and nvim-treesitter compiles its parsers with a C
+compiler. The `ai.copilot` extra stays signed out until a person runs
+`:Copilot auth` once per host; its token lives in `~/.config/github-copilot`,
+outside the managed tree. On the Sherlock and Marlowe login nodes the parser
+builds are compile work, which the site rules place inside an allocation.
+Profiles and the login update install nothing.
+
+LazyVim requires Neovim 0.11.2 or newer built with LuaJIT. An older `nvim`
+first on PATH, such as Ubuntu's 0.9 package in `/usr/bin`, prints LazyVim's
+version message and quits without opening the file, and the doctor checks only
+that `nvim` is present ([version floors](dependencies.md#version-floors)).
+`lua/config/autocmds.lua` adds a `VimLeavePre` autocmd that sets a
+vertical-bar cursor before exit. Neovim's own exit sequence then resets the
+cursor to the terminal's configured default, which is a bar in every
+configured terminal (kitty `cursor_shape beam`, WezTerm `BlinkingBar`, Windows
+Terminal `"cursorShape": "bar"`), so the autocmd matters only where that reset
+is missing.
+`stylua.toml` keeps LazyVim's 2-space Lua style for the StyLua pre-commit hook
+and the rendered-output test; `.wezterm.lua` keeps StyLua's defaults.
+
+Editing a deployed file in `~/.config/nvim` is destination drift like any
+target: the next login update stops at it until the change is committed to the
+source or reconciled ([editing and adding files](updates.md#editing-and-adding-files)).

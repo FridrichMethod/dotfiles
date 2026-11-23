@@ -70,6 +70,7 @@
 .config/kitty
 .config/tmux
 .config/coding-agent-kit
+.config/nvim
 {{ end }}
 {{ if ne .host "win" }}
 .local/bin/dotfiles.ps1

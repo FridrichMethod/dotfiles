@@ -12,7 +12,7 @@ from chezmoi_support import ChezmoiFixture
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("generic", "mac", "wsl-ubuntu", "lab-ubuntu", "sherlock", "marlowe", "win")
-COUNTS = dict(zip(ROLES, (52, 58, 58, 61, 57, 57, 28)))
+COUNTS = dict(zip(ROLES, (59, 65, 65, 68, 64, 64, 28)))
 AI_MUTABLE = {".claude/settings.json", ".codex/config.toml"}
 TARGETS = ROOT / "tests/fixtures/chezmoi/targets.tsv"
 HEADER = ["target", "hosts", "source", "mode", "shell"]

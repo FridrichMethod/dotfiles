@@ -421,6 +421,31 @@ class SourceContractTests(unittest.TestCase):
         self.assertTrue((ROOT / "home/dot_codex/pets/tom/pet.json").is_file())
         self.assertFalse((ROOT / "home/dot_codex/pets/tom/pet.json.tmpl").exists())
 
+    def test_lazyvim_imports_keep_their_order_and_state_stays_outside_the_config(self):
+        # LazyVim warns at VeryLazy unless its own plugins come first, then any
+        # extras, then the user's plugins. It reads vim.g.lazyvim_json when its
+        # config module loads during spec import, so the state path must be set
+        # before lazy.nvim starts; otherwise LazyVim rewrites a managed file.
+        lines = [line.strip() for line in
+                 (ROOT / "home/dot_config/nvim/lua/config/lazy.lua").read_text(encoding="utf-8").splitlines()]
+        code = [(number, line) for number, line in enumerate(lines) if line and not line.startswith("--")]
+        setup = [number for number, line in code if line == 'require("lazy").setup({']
+        state = [number for number, line in code if line.startswith("vim.g.lazyvim_json")]
+        self.assertEqual(len(setup), 1)
+        self.assertEqual([lines[number] for number in state],
+                         ['vim.g.lazyvim_json = vim.fn.stdpath("state") .. "/lazyvim.json"'])
+        self.assertLess(state[0], setup[0])
+        imports = [(number, match.group(1)) for number, line in code
+                   for match in [re.search(r'\bimport = "([^"]+)"', line)] if match]
+        self.assertTrue(all(number > setup[0] for number, _module in imports))
+        modules = [module for _number, module in imports]
+        self.assertEqual(lines[imports[0][0]], '{ "LazyVim/LazyVim", import = "lazyvim.plugins" },')
+        self.assertEqual((modules[0], modules[-1]), ("lazyvim.plugins", "plugins"))
+        extras = modules[1:-1]
+        self.assertTrue(extras)
+        self.assertEqual(len(extras), len(set(extras)))
+        self.assertTrue(all(module.startswith("lazyvim.plugins.extras.") for module in extras), extras)
+
     def test_crlf_and_zero_byte_contracts_are_real_test_inputs(self):
         windows = ("home/dot_wslconfig", "home/mount.vbs")
         for path in windows:

@@ -1715,9 +1715,11 @@ Applies to every Unix host. `home/dot_vimrc` keeps undo files in
 - **Verify:** the check prints `ok`.
 - **Human:** no
 
-Editor note: the `vi` alias runs `nvim`, which the `cli` tier installs, but the
-repository ships no `~/.config/nvim`; Neovim does not read `.vimrc`, so it starts
-with its defaults.
+Editor note: the `vi` alias runs `nvim`, which the `cli` tier installs. Every
+Unix role receives the LazyVim configuration under `~/.config/nvim`; Neovim does
+not read `.vimrc`. Its first start, run by a person, clones lazy.nvim and the
+plugins from GitHub, and the plugins fetch and build their own tools; no
+setup-host step installs them ([Neovim](shell.md#neovim)).
 
 ## Phase 4: runtimes
 

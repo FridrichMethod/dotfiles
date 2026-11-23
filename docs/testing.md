@@ -77,7 +77,7 @@ variant with `types: [file]`, since identify gives `dot_` names no shell tag.
 The AI suites cover actual portable Claude/Codex transforms, typed
 ownership parity, numeric/Unicode and TOML temporal refusal, CRLF multiline
 semantics, invalid input preservation and complete candidate applies.
-Compatible-role counts are 52/58/58/61/57/57/28 in role order, with exactly the
+Compatible-role counts are 59/65/65/68/64/64/28 in role order, with exactly the
 two AI targets added to the ordinary files. Shared auth/trust/payload siblings
 stay unmanaged. Local temporal refusal tests run on every OS; the Unix
 timezone characterization, which skips on Windows, stays separate from the
@@ -96,6 +96,9 @@ at it and so turns off Git's XDG `~/.config/git/ignore`, and that Git, with
 only that file as its excludes file in a fresh repository, ignores
 `.claude/settings.local.json` at the root and in a subdirectory but not
 `.claude/settings.json` or an ordinary file.
+The same suite parses `home/dot_config/nvim/lua/config/lazy.lua` in process:
+LazyVim's state path is set before lazy.nvim starts, and the spec imports
+LazyVim's plugins first, the shared extras next and the local `plugins` last.
 `test_chezmoi_update_config.py` requires the template, and so
 init, to write `persistentState` as
 `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash form (Unix and Windows
