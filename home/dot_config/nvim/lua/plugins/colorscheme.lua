@@ -13,7 +13,7 @@ return {
   {
     "LazyVim/LazyVim",
     -- Neovim 0.12 ships its own "catppuccin", a Vim port that ignores these
-    -- opts; "catppuccin-nvim" is the plugin's name for itself.
-    opts = { colorscheme = "catppuccin-nvim" },
+    -- opts; "catppuccin-mocha" exists in every version of the plugin.
+    opts = { colorscheme = "catppuccin-mocha" },
   },
 }
