@@ -778,11 +778,17 @@ and the export keeps that gh, and any a tool it starts may run, from writing
 its device id, and a tldr C client from refreshing its page cache over the
 network ([Guarantees](#guarantees)).
 Before probing anything, both scripts prepend to their own PATH, when they
-exist, the bin directory of the Homebrew they find (`/opt/homebrew`,
-`/usr/local`, `/home/linuxbrew/.linuxbrew` or `~/.linuxbrew`), then
-`~/.local/bin` (micromamba, codex, claude, kitty), then on hpc
-`~/micromamba/envs/login/bin`, so the login env comes first on hpc, as in the
-dotfiles' shells, and elsewhere what setup-host linked into `~/.local/bin` wins.
+exist and are not on it yet, the bin directory of the Homebrew they find
+(`/opt/homebrew`, `/usr/local`, `/home/linuxbrew/.linuxbrew` or
+`~/.linuxbrew`), then `~/.local/bin` (micromamba, codex, claude, kitty), then
+on hpc `~/micromamba/envs/login/bin`. The hpc profile discovers no Homebrew,
+because the clusters' tools come from the login env and a Homebrew prefix on a
+shared login node belongs to other users: on hpc neither script looks for a
+prefix or puts one on its PATH, and the doctor's `nvm-homebrew` check reports
+`skip`. From a PATH that holds none of these directories, the login env thus
+comes first on hpc, as in the dotfiles' shells, and elsewhere what setup-host
+linked into `~/.local/bin` wins over Homebrew; a directory already on PATH
+keeps its place.
 (The dotfiles' workstation shells run `brew shellenv` and the conda hook after
 `~/.profile`, so there Homebrew and conda come before `~/.local/bin`.) A run
 before the dotfiles are applied thus sees what earlier steps installed;
@@ -1165,7 +1171,10 @@ Applies to `mac`. Uses the commit-pinned `homebrew` row in
 [`installers.tsv`](../config/bootstrap/installers.tsv). A fresh Homebrew stays
 off PATH until the dotfiles zsh loads oh-my-zsh's `brew` plugin, so `scripts/commands/doctor.sh`
 and `scripts/commands/setup.sh` prepend the directory of the brew they find to their own
-PATH. In a shell before the first apply where you run brew by hand, use
+PATH. They do so on every profile but `hpc`, which discovers no Homebrew
+because the clusters use the login env and a prefix on a shared login node
+belongs to other users ([setup-host.sh](#setup-hostsh)). In a shell before
+the first apply where you run brew by hand, use
 `eval "$(/opt/homebrew/bin/brew shellenv)"` (Intel: `/usr/local/bin/brew`) in
 that shell only.
 

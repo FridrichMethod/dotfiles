@@ -37,6 +37,8 @@ tmux	core	unix	tmux	-V	3.4	tmux hostname-scoped recovery configuration and sessi
 # doctor and setup-host first prepend the directory of bootstrap_brew_bin
 # (lib/bootstrap/platform.sh: /opt/homebrew, /usr/local, /home/linuxbrew) to
 # their own PATH; the brew probe and every Brewfile tool probe rely on that.
+# The hpc profile discovers no Homebrew: there the login env provides these
+# tools, and a prefix on a shared login node belongs to other users.
 # The brew probe is presence-only: `brew --version` can rewrite
 # $HOMEBREW_REPOSITORY/.git/describe-cache, and the doctor writes nothing.
 homebrew	core	mac	brew	-	-	Brewfile bundles cannot run	H1-homebrew

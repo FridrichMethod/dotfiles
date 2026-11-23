@@ -269,12 +269,17 @@ ROWS=$(bootstrap_tool_rows "$HOST") || invalid_manifest 'unreadable'
 # this file alone (a pre-commit run without the libraries) sees them.
 probe='' flag='' floor='' absent='' doc=''
 
-# A fresh Homebrew's bin, ~/.local/bin (micromamba, codex, claude, kitty)
-# and, on hpc, the login env's bin stay off PATH until the dotfiles rc files
-# add them, so prepend each one that exists to find what setup-host put
-# there before the dotfiles are applied. The order is the dotfiles shells':
-# ~/.local/bin before Homebrew, and on hpc the login env first. This changes
-# only this process's PATH; path-order judges the caller's PATH.
+# ~/.local/bin (micromamba, codex, claude, kitty), on hpc the login env's
+# bin, and elsewhere a fresh Homebrew's bin stay off PATH until the dotfiles
+# rc files add them, so prepend each one that exists to find what setup-host
+# put there before the dotfiles are applied. The hpc profile discovers no
+# Homebrew: the clusters' tools come from the login env, and a Homebrew prefix
+# on a shared login node belongs to other users. Each directory not yet on
+# PATH goes first, so from a PATH without any of them the order is, on hpc,
+# the login env, then ~/.local/bin, as in the dotfiles shells there, and
+# elsewhere ~/.local/bin, then Homebrew, so what setup-host linked wins. A
+# directory already on PATH keeps its place. This changes only this
+# process's PATH; path-order judges the caller's PATH.
 ORIG_PATH=$PATH
 prepend_path() {
     case ":$PATH:" in
@@ -282,7 +287,7 @@ prepend_path() {
         *) PATH=$1:$PATH ;;
     esac
 }
-if brew_bin=$(bootstrap_brew_bin); then
+if [[ $PROFILE != hpc ]] && brew_bin=$(bootstrap_brew_bin); then
     prepend_path "${brew_bin%/brew}"
 fi
 if [[ -d "$HOME/.local/bin" ]]; then

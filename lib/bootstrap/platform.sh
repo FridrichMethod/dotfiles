@@ -135,8 +135,12 @@ bootstrap_glibc_version() {
 # PATH, else the first executable among Homebrew's default prefixes. A fresh
 # install stays off PATH until `brew shellenv` runs, which only the dotfiles rc
 # files do, so callers prepend the printed file's directory to their own PATH
-# before probing or bundling. BOOTSTRAP_BREW_CANDIDATES (colon-separated paths)
-# replaces the prefix list for tests. Returns 1 when there is none.
+# before probing or bundling. The hpc profile discovers no Homebrew, so
+# doctor.sh and steps_extend_path skip this there; its other callers serve
+# rows and steps the hpc profile does not have (the font probes of tools.tsv,
+# H1-homebrew, H1-linuxbrew and S2-brew-bundle). BOOTSTRAP_BREW_CANDIDATES
+# (colon-separated paths) replaces the prefix list for tests. Returns 1 when
+# there is none.
 bootstrap_brew_bin() {
     local found rest candidate
     found=$(command -v brew 2>/dev/null) || found=

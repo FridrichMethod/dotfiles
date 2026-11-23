@@ -569,19 +569,72 @@ assert_row bat-theme missing
 
 # --- hpc: login env PATH, env probes, doc mapping ---------------------------
 
+# The hpc profile discovers no Homebrew. On a cluster login node a Homebrew
+# prefix belongs to other users (Marlowe's /home/linuxbrew/.linuxbrew), so
+# with such a prefix as the candidate and a login shell's PATH that already
+# starts with the login env and ~/.local/bin, every row resolves to the login
+# env or the system tools, the nvm-homebrew check reads no keg, and nothing
+# in the prefix runs: its brew, zsh and fzf only record that they ran.
+HPC_BREW="$TEST_TMP/hpc-brew"
+HPC_BREW_LOG="$TEST_TMP/hpc-brew.log"
+LOGIN_BIN="$TEST_HOME/micromamba/envs/login/bin"
+mkdir -p "$HPC_BREW/bin" "$HPC_BREW/opt/nvm" "$LOGIN_BIN"
+for tool in brew zsh fzf; do
+    write_fake "$HPC_BREW/bin/$tool" <<SH
+#!/bin/sh
+printf '%s %s\n' $tool "\$*" >>'$HPC_BREW_LOG'
+printf '%s 99.0 (another user)\n' $tool
+SH
+done
+write_fake "$LOGIN_BIN/zsh" <<'SH'
+#!/bin/sh
+printf 'zsh 5.9.2 (login env)\n'
+SH
+: >"$HPC_BREW_LOG"
+# hpc_no_brew_case CASE DOCTOR_ARGS...: the doctor from that login shell.
+hpc_no_brew_case() {
+    local name=$1
+    shift
+    run_doctor "$name" "PATH=$LOGIN_BIN:$BASE_PATH" "BOOTSTRAP_BREW_CANDIDATES=$HPC_BREW/bin/brew" \
+        "BOOTSTRAP_NVM_KEG_CANDIDATES=$HPC_BREW/opt/nvm" -- "$@" --tsv
+    assert_tsv_shape
+    assert_row zsh ok "5.9.2 at $LOGIN_BIN/zsh"
+    assert_row fzf ok "0.60.0 >= 0.58.0 at $FAKE_BIN/fzf"
+    assert_row brew-only missing 'not found; brew tool missing'
+    assert_row nvm-homebrew skip 'no Homebrew on the hpc profile' -
+    assert_not_in "$OUT/$CASE.out" "$HPC_BREW"
+    [ ! -s "$HPC_BREW_LOG" ] || case_fail "the doctor ran the Homebrew prefix on hpc: $(cat "$HPC_BREW_LOG")"
+}
+hpc_no_brew_case hpc-no-brew-marlowe --host marlowe
+hpc_no_brew_case hpc-no-brew-sherlock --host sherlock
+hpc_no_brew_case hpc-no-brew-platform --platform hpc
+# The same prefix and keg still count on a workstation profile.
+run_doctor hpc-no-brew-debian "BOOTSTRAP_BREW_CANDIDATES=$HPC_BREW/bin/brew" \
+    "BOOTSTRAP_NVM_KEG_CANDIDATES=$HPC_BREW/opt/nvm" -- --host lab-ubuntu --tsv
+assert_row zsh ok "99.0 at $HPC_BREW/bin/zsh"
+assert_row nvm-homebrew warn "Homebrew nvm at $HPC_BREW/opt/nvm is unsupported"
+rm -r "$HPC_BREW" "$HPC_BREW_LOG" "$LOGIN_BIN/zsh"
+
 run_doctor hpc-no-login-env -- --host sherlock --tsv
 assert_rc 1
 assert_row login-tool missing '' 'docs/bootstrap.md S2-login-env'
 assert_row lmod warn
 assert_no_row nerd-font
-mkdir -p "$TEST_HOME/micromamba/envs/login/bin"
-write_fake "$TEST_HOME/micromamba/envs/login/bin/doctor-login" <<'SH'
+# BASE_ENV's Homebrew prefix stays off PATH on hpc as well.
+assert_row brew-only missing 'not found; brew tool missing'
+write_fake "$LOGIN_BIN/doctor-login" <<'SH'
 #!/bin/sh
 printf 'doctor-login 1.0\n'
+SH
+# On hpc the login env provides what the Brewfiles provide elsewhere.
+write_fake "$LOGIN_BIN/doctor-brew-only" <<'SH'
+#!/bin/sh
+printf 'doctor-brew-only 5.0\n'
 SH
 run_doctor hpc-login-env -- --host sherlock --tsv
 assert_rc 0
 assert_row login-tool ok "$TEST_HOME/micromamba/envs/login/bin/doctor-login"
+assert_row brew-only ok "5.0 at $LOGIN_BIN/doctor-brew-only"
 # On hpc the login env stays ahead of ~/.local/bin, as the overlay puts it.
 write_fake "$TEST_HOME/.local/bin/doctor-login" <<'SH'
 #!/bin/sh
@@ -601,6 +654,7 @@ mv "$FAKE_BIN/claude" "$TEST_TMP/claude.hidden"
 run_doctor hpc-doc-map-claude -- --host sherlock --tsv
 assert_row claude missing '' 'docs/bootstrap.md S2-modules'
 mv "$TEST_TMP/claude.hidden" "$FAKE_BIN/claude"
+rm "$LOGIN_BIN/doctor-brew-only"
 
 # --- platform mode, --list, --quiet, color -----------------------------------
 

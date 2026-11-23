@@ -640,11 +640,17 @@ bootstrap_check_omz_order() {
     fi
 }
 
-# bootstrap_check_nvm_homebrew: a Homebrew nvm keg, which this repo does not
-# support (only ~/.nvm or $XDG_CONFIG_HOME/nvm from the official installer).
+# bootstrap_check_nvm_homebrew PROFILE: a Homebrew nvm keg, which this repo
+# does not support (only ~/.nvm or $XDG_CONFIG_HOME/nvm from the official
+# installer). Skipped on hpc, which discovers no Homebrew: a prefix on a
+# shared login node belongs to other users, so no keg there is read.
 bootstrap_check_nvm_homebrew() {
     local rest=${BOOTSTRAP_NVM_KEG_CANDIDATES-/opt/homebrew/opt/nvm:/usr/local/opt/nvm:/home/linuxbrew/.linuxbrew/opt/nvm}
     local keg
+    if [ "$1" = hpc ]; then
+        bootstrap_check_result skip 'no Homebrew on the hpc profile; the login env provides its tools'
+        return 0
+    fi
     while [ -n "$rest" ]; do
         keg=${rest%%:*}
         case $rest in
@@ -668,7 +674,7 @@ bootstrap_check_structural() {
         path-order) bootstrap_check_path_order "$4" "$3" ;;
         rc-pollution) bootstrap_check_rc_pollution ;;
         omz-order) bootstrap_check_omz_order ;;
-        nvm-homebrew) bootstrap_check_nvm_homebrew ;;
+        nvm-homebrew) bootstrap_check_nvm_homebrew "$3" ;;
         payloads) bootstrap_check_payloads "$2" ;;
         *) bootstrap_check_result warn "unknown structural check $1" ;;
     esac

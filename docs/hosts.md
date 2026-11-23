@@ -258,7 +258,11 @@ those tests or to the profile and updater they test.
 - The marlowe zsh does not load the oh-my-zsh `brew` plugin. The only
   Homebrew prefix on the host, `/home/linuxbrew/.linuxbrew`, belongs to other
   users; loading it would run their `brew shellenv` at every interactive
-  start and put that prefix ahead of the login env.
+  start and put that prefix ahead of the login env. For the same reason the
+  doctor and setup-host discover no Homebrew on the hpc profile: they never
+  add that prefix to their PATH, run its tools or read its kegs, so the
+  doctor reports the login env's tools, not that prefix's
+  ([setup-host.sh](bootstrap.md#setup-hostsh)).
 - Slurm and the default compiler come from the site's default Lmod modules,
   which the site names only for an interactive bash
   (`LMOD_SYSTEM_DEFAULT_MODULES` in `/etc/bash.bashrc`). `ssh marlowe-plain`

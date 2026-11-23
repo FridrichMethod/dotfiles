@@ -198,6 +198,7 @@ steps_resolve() {
 # steps_brew_default: the brew executable a HUMAN block names: the one this
 # run found, else the profile's default Homebrew (Linux, Intel macOS or Apple
 # Silicon). Only the dotfiles rc files put it on PATH, so blocks name it by path.
+# Only S2-brew-bundle, a macos and debian step, prints such a block.
 steps_brew_default() {
     local brew
     if brew=$(bootstrap_brew_bin); then
@@ -221,11 +222,16 @@ steps_path_prepend() {
 }
 
 # steps_extend_path: let this run see what the installers put on disk before
-# the dotfiles rc files are applied, in their order: on hpc the login env,
-# then ~/.local/bin, then Homebrew. Nothing is written to an rc file.
+# the dotfiles rc files are applied. Each existing directory not yet on PATH
+# goes first, so from a PATH without any of them the order is, on hpc, the
+# login env, then ~/.local/bin, as in the dotfiles shells there, and
+# elsewhere ~/.local/bin, then Homebrew's bin and sbin. A directory already
+# on PATH keeps its place. The hpc profile discovers no Homebrew: the
+# clusters' tools come from the login env, and a Homebrew prefix on a shared
+# login node belongs to other users. Nothing is written to an rc file.
 steps_extend_path() {
     local brew dir
-    if brew=$(bootstrap_brew_bin); then
+    if [ "$STEPS_PROFILE" != hpc ] && brew=$(bootstrap_brew_bin); then
         dir=${brew%/brew}
         steps_path_prepend "${dir%/bin}/sbin"
         steps_path_prepend "$dir"

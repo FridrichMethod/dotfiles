@@ -362,10 +362,20 @@ malformed one and for a home without a config and without `--host` or
 `chezmoi-config` row (absent, a link, a directory, each invalid form, an
 unreadable guard; only a config naming another checkout merely warns), gives
 the shell-quoted explicit public payload CLI wherever source resolution refuses, and keeps
-the offline, write-free and no-`TMPDIR` promises. The setup-host cases
+the offline, write-free and no-`TMPDIR` promises. On the hpc profile it
+discovers no Homebrew: with a candidate prefix whose brew, zsh and fzf only
+record that they ran, and a PATH that already starts with the login env, as a
+cluster login shell's does, every row names the login env or the system
+tools, `nvm-homebrew` is `skip`, and the recorders stay empty under
+`--host marlowe`, `--host sherlock` and `--platform hpc`, while lab-ubuntu
+still finds that prefix. The setup-host cases
 refuse an unknown argument, check each host's exact step order, take `--host` over
 `[data].host`, and let an existing login env satisfy H2-alloc; S6-nerd-font
-counts a Nerd Font in a system font directory as installed. `tests/doctor.sh`
+counts a Nerd Font in a system font directory as installed. Before the first
+apply, setup-host's own PATH puts `~/.local/bin` before Homebrew on debian and
+macos and, on hpc, the login env before `~/.local/bin` with no Homebrew at
+all, so an hpc `--check` neither finds nor runs a chezmoi in a candidate
+Homebrew prefix that a lab-ubuntu `--check` accepts. `tests/doctor.sh`
 also runs the real `./dotfiles doctor` with the real manifest against the test
 machine's own tools (`--platform debian` and `--platform other` with `--tsv`, an
 empty temporary `HOME`): every line must keep the TSV contract, the exit code

@@ -96,6 +96,7 @@ in tracked Markdown resolving.
 - Provisioning shells export DOTFILES_AUTO_UPDATE=0. Test entrypoints use tests/lib/environment.sh/.ps1 to clear inherited DOTFILES_, _DOTFILES_, AWESOME_SKILLS_, _AWESOME_SKILLS_, CODING_AGENT_KIT_ and _CODING_AGENT_KIT_ prefixes plus XDG_STATE_HOME/XDG_DATA_HOME; preserve DOTFILES_TEST_* inputs. Fixture Git must drop repository/index overrides before mutation. Keep focused linked-worktree isolation and hook-selection tests; do not scan upstream implementation or mirror every variable in every entrypoint.
 - On Unix, without `--host` (or the doctor's `--platform`), the host is the `[data]` `host` line of the home's `~/.config/chezmoi/chezmoi.toml`, read as text (malformed: exit 2 asking for `--host`); nothing else selects one, and a home without that config exits 2. `generic` there means: the doctor checks the detected platform without an overlay and warns; setup-host exits 2 asking for `--host`. Windows doctor/setup default to `win` and accept only that host; they do not infer it from home configuration.
 - HPC environments are built only inside a Slurm allocation, never under `$SCRATCH`.
+- The hpc profile discovers no Homebrew: there the doctor and setup-host never add, run or read a Homebrew prefix, and the marlowe zsh loads no `brew` plugin. A prefix on a shared login node belongs to other users.
 
 ## Git and SSH conventions
 

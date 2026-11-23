@@ -2106,6 +2106,30 @@ run_case hpc-env-alloc "${HPC_ENV[@]}" SLURM_JOB_ID=1 -- \
 expect_text hpc-env-alloc out 'H2-alloc done inside Slurm job 1'
 expect_no_events hpc-env-alloc
 
+# --- hpc: no Homebrew --------------------------------------------------------
+
+# The hpc profile discovers no Homebrew: a prefix on a cluster login node
+# belongs to other users (Marlowe's /home/linuxbrew/.linuxbrew), so it stays
+# off this run's PATH and nothing in it runs, not even a chezmoi above the
+# floor that S4-chezmoi would accept from PATH. A workstation run still
+# finds it.
+new_home hpc-brew
+cat >"$CASE_BREW/bin/chezmoi" <<'SH'
+#!/bin/sh
+printf 'brew-prefix chezmoi %s\n' "$*" >>"$EVENT_LOG"
+echo 'chezmoi version v2.99.0, commit other, built at 2026-11-02T00:00:00Z, built by other'
+SH
+chmod 755 "$CASE_BREW/bin/chezmoi"
+run_case hpc-brew "${HPC_ENV[@]}" -- --host marlowe --check --only S4-chezmoi
+expect_rc hpc-brew 3
+expect_text hpc-brew out "S4-chezmoi todo chezmoi >= 2.74.0 is missing; install the verified release into $CASE_HOME/.local/bin/chezmoi"
+expect_no_text hpc-brew out "$CASE_BREW"
+expect_no_events hpc-brew
+run_case hpc-brew-debian -- --host lab-ubuntu --check --only S4-chezmoi
+expect_rc hpc-brew-debian 0
+expect_text hpc-brew-debian out "S4-chezmoi done chezmoi 2.99.0 at $CASE_BREW/bin/chezmoi"
+expect_event 'brew-prefix chezmoi --version'
+
 # --- digest mismatch ---------------------------------------------------------
 
 new_home mismatch
@@ -2281,13 +2305,17 @@ path_case() {
 }
 new_home path
 mkdir -p "$CASE_BREW/sbin" "$CASE_HOME/.local/bin" "$CASE_HOME/micromamba/envs/login/bin"
-# The dotfiles shells' order: ~/.local/bin before Homebrew; on hpc the login
-# env before both.
+# ~/.local/bin before Homebrew; on hpc the login env before ~/.local/bin, as
+# in the dotfiles shells there, and no Homebrew at all: the hpc profile
+# discovers none, since a prefix on a cluster login node belongs to other
+# users.
 PATH_DEBIAN=$(path_case debian)
 [ "$PATH_DEBIAN" = "$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
     fail "debian PATH before the first apply: $PATH_DEBIAN"
+PATH_MACOS=$(path_case macos)
+[ "$PATH_MACOS" = "$PATH_DEBIAN" ] || fail "macos PATH before the first apply: $PATH_MACOS"
 PATH_HPC=$(path_case hpc)
-[ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:$CASE_BREW/bin:$CASE_BREW/sbin:/usr/bin:/bin" ] ||
+[ "$PATH_HPC" = "$CASE_HOME/micromamba/envs/login/bin:$CASE_HOME/.local/bin:/usr/bin:/bin" ] ||
     fail "hpc PATH before the first apply: $PATH_HPC"
 
 # --- HUMAN block lines stand alone -------------------------------------------
