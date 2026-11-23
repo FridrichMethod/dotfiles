@@ -293,10 +293,9 @@ Every Unix role receives a [LazyVim](https://www.lazyvim.org/) configuration
 under `~/.config/nvim` as plain regular files: `init.lua`, `stylua.toml`,
 `lua/config/lazy.lua`, `lua/config/options.lua`, `lua/config/keymaps.lua`,
 `lua/config/autocmds.lua`, and under `lua/plugins/` the files
-`colorscheme.lua`, `copilot.lua`, `example.lua`, `formatting.lua`, `hpc.lua`,
-`markdown.lua` and `python.lua`. `example.lua` is the starter's example spec
-and returns an empty spec. `win` is excluded, because Neovim on native Windows
-reads `%LOCALAPPDATA%\nvim`, not `~/.config/nvim`.
+`colorscheme.lua`, `copilot.lua`, `formatting.lua`, `hpc.lua`, `markdown.lua`
+and `python.lua`. `win` is excluded, because Neovim on native Windows reads
+`%LOCALAPPDATA%\nvim`, not `~/.config/nvim`.
 
 The extras every host shares are imports in `lua/config/lazy.lua`:
 `test.core`, `ai.copilot`, `coding.mini-surround`, `coding.yanky`,
@@ -396,12 +395,14 @@ builds and installs parsers only on a compute node, inside a job step where
 slurmd sets `SLURMD_NODENAME`, and only with a `tree-sitter` CLI on PATH that
 is not mason's: the site rules place compile work inside an allocation, and
 mason's prebuilt `tree-sitter-cli` is built against glibc 2.39. The login
-environments provide no `tree-sitter` CLI, so these homes have Treesitter
-parsers only where a person has put one (0.26.1 or newer) on PATH; then
-`:TSInstall` or `:TSUpdate` inside an allocation adds or rebuilds them,
-including after a `:Lazy update` that moves nvim-treesitter. Elsewhere Neovim
-keeps the parsers already built and uses regex syntax highlighting for the
-rest. Where `node` cannot run, as on the Marlowe login nodes
+environment provides that CLI: `hpc-login-env.yml` includes conda-forge's
+`tree-sitter-cli` 0.26.1 or newer, which runs on glibc 2.17, and an existing
+env gains it through the selective package plan in
+[Provisioning state](hosts.md#provisioning-state). The first `nvim` started on
+a compute node then builds the missing parsers, and `:TSInstall` or
+`:TSUpdate` there adds or rebuilds them, including after a `:Lazy update`
+that moves nvim-treesitter. On a login node Neovim keeps the parsers already
+built and uses regex syntax highlighting for the rest. Where `node` cannot run, as on the Marlowe login nodes
 ([Marlowe](hosts.md#marlowe)), the node-based servers, tools and linters above
 are disabled instead of failing at every start; on a compute node the probe is
 skipped.

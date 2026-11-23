@@ -9,7 +9,11 @@
 #   tealdeer provides tldr (brew and winget use tlrc).
 #   nodejs provides node (>= 22 for the Claude hooks); on sherlock the
 #   overlay's later `ml nodejs/24.13.0` puts the Lmod node first on PATH.
-# Floors mirror tools.tsv.
+#   tree-sitter-cli provides tree-sitter, which Neovim's nvim-treesitter needs
+#   (>= 0.26.1) to build parsers on a compute node; mason's build needs glibc
+#   2.39, conda-forge's 2.17.
+# Floors mirror tools.tsv; tree-sitter-cli's is nvim-treesitter's, with no
+# doctor row.
 name: login
 channels:
   - conda-forge
@@ -40,3 +44,4 @@ dependencies:
   - shellcheck
   - pre-commit
   - nodejs>=22.0
+  - tree-sitter-cli>=0.26.1

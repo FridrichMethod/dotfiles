@@ -31,7 +31,6 @@ target	hosts	source	mode	shell
 .config/nvim/lua/config/options.lua	unix	home/dot_config/nvim/lua/config/options.lua	regular	-
 .config/nvim/lua/plugins/colorscheme.lua	unix	home/dot_config/nvim/lua/plugins/colorscheme.lua	regular	-
 .config/nvim/lua/plugins/copilot.lua	unix	home/dot_config/nvim/lua/plugins/copilot.lua	regular	-
-.config/nvim/lua/plugins/example.lua	unix	home/dot_config/nvim/lua/plugins/example.lua	regular	-
 .config/nvim/lua/plugins/formatting.lua	unix	home/dot_config/nvim/lua/plugins/formatting.lua	regular	-
 .config/nvim/lua/plugins/hpc.lua	sherlock,marlowe	home/dot_config/nvim/lua/plugins/hpc.lua	regular	-
 .config/nvim/lua/plugins/markdown.lua	unix	home/dot_config/nvim/lua/plugins/markdown.lua	regular	-
