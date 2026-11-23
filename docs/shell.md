@@ -65,6 +65,10 @@ The mac profile initializes an existing /opt/homebrew or /usr/local brew for
 fresh Bash sessions, retaining nvm priority and repeated-source stability.
 Ubuntu rc files use selected brew on PATH, then the shared Linuxbrew prefix,
 then ~/.linuxbrew. They run native shellenv only for an available executable.
+The marlowe zsh rc removes oh-my-zsh's `brew` plugin from the plugin list: the
+only Homebrew prefix there, `/home/linuxbrew/.linuxbrew`, belongs to other
+users, and the plugin would run its `brew shellenv` at every interactive start
+and put that prefix ahead of the login env.
 Marlowe preserves explicit CARGO_HOME or Cargo's durable HOME default; it does
 not relocate Cargo config, credentials and installed binaries into scratch.
 HF_HOME is on project scratch there, so HF_TOKEN_PATH (unless already set)

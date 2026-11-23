@@ -255,6 +255,10 @@ those tests or to the profile and updater they test.
   env `login`) first. Non-interactive shells, such as `ssh marlowe-plain
   CMD`, see the system tools: `/usr/bin/tmux` there is below the 3.4 floor,
   so start tmux and run the doctor from an interactive login shell.
+- The marlowe zsh does not load the oh-my-zsh `brew` plugin. The only
+  Homebrew prefix on the host, `/home/linuxbrew/.linuxbrew`, belongs to other
+  users; loading it would run their `brew shellenv` at every interactive
+  start and put that prefix ahead of the login env.
 - Slurm and the default compiler come from the site's default Lmod modules,
   which the site names only for an interactive bash
   (`LMOD_SYSTEM_DEFAULT_MODULES` in `/etc/bash.bashrc`). `ssh marlowe-plain`

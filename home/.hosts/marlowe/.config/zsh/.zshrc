@@ -73,6 +73,12 @@ fi
 
 typeset -ga plugins
 
+# No oh-my-zsh brew plugin: the only Homebrew prefix on Marlowe
+# (/home/linuxbrew/.linuxbrew) belongs to other users, and the plugin would
+# run its `brew shellenv` at every interactive start and put that prefix
+# first on PATH, ahead of the login env.
+plugins=("${(@)plugins:#brew}")
+
 plugins+=(
     snap
     ubuntu

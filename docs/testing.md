@@ -408,11 +408,17 @@ regressions cover HOME paths containing spaces for conda/mamba/micromamba,
 failed-hook fallback aliases preserving executable/argument quoting, conditional
 vi=nvim, Juliaup idempotence, macOS supported-prefix Homebrew with nvm ordering,
 Ubuntu PATH-selected/custom and per-user Linuxbrew, Marlowe's durable
-CARGO_HOME without eager Cargo directory creation, and the marlowe zsh rc's
-site default modules. That case replaces Lmod's init file with one that
+CARGO_HOME without eager Cargo directory creation, the marlowe zsh rc's
+site default modules, and its plugin list without oh-my-zsh's `brew` plugin.
+The modules case replaces Lmod's init file with one that
 defines a recording `module` and `/etc/bash.bashrc` with a fixture that
-returns early without PS1; it needs zsh, so it runs in the macOS job and
-skips in the Linux job. No live rc, installer, Lmod or user credentials are
+returns early without PS1. The plugin case runs the shared `home/dot_zshrc`
+as an interactive zsh in a temporary home, with the marlowe rc as the role rc
+and a fake `oh-my-zsh.sh` that prints the plugin list: against an empty role
+rc's list, only `brew` is gone, the rest keeps its order, and `snap` and
+`ubuntu` come before the plugins the shared rc appends after the role rc.
+Both need zsh, so they run in the macOS job and skip in the Linux job. No
+live rc, installer, Lmod, oh-my-zsh or user credentials are
 used. Sherlock cache placement remains subject to site
 rules; these local shell tests do not establish cluster policy.
 

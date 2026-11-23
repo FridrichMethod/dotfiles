@@ -167,6 +167,36 @@ class PortableShellTests(unittest.TestCase):
         self.assertEqual((calls, got[:2]), (restore, ["unset", "slurm,gcc/13.1.0"]))
         self.assertIn(str(self.home / "micromamba/envs/login/bin"), got[2].split(":"))
 
+    @unittest.skipUnless(shutil.which("zsh"), "zsh unavailable")
+    def test_marlowe_zsh_drops_the_brew_plugin(self):
+        # The shared rc, interactive, with a role rc and a fake oh-my-zsh that
+        # prints the plugin list it would load. Without a terminal, only stty
+        # may complain.
+        (self.home / ".config/zsh").mkdir(parents=True)
+        (self.home / ".oh-my-zsh").mkdir()
+        (self.home / ".profile").write_text((ROOT / "home/dot_profile").read_text())
+        (self.home / ".oh-my-zsh/oh-my-zsh.sh").write_text('print -rl -- "${plugins[@]}"\n')
+        marlowe = (ROOT / "home/.hosts/marlowe/.config/zsh/.zshrc").read_text()
+        for site_path in ["/usr/share/lmod/lmod/init/zsh", "/etc/bash.bashrc"]:
+            marlowe = marlowe.replace(site_path, str(Path(self.temp.name) / "absent"))
+
+        def plugins(role_rc):
+            (self.home / ".config/zsh/.zshrc").write_text(role_rc)
+            result = subprocess.run([shutil.which("zsh"), "-f", "-i", "-c", '. "$1"', "zsh", str(ROOT / "home/dot_zshrc")],
+                                    env=dict(self.env, TERM="dumb"), stdin=subprocess.DEVNULL, text=True,
+                                    capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual([line for line in result.stderr.splitlines() if not line.startswith("stty: ")], [])
+            return result.stdout.split()
+
+        shared = plugins("")
+        self.assertIn("brew", shared)
+        # The rest keeps its order; the role's snap and ubuntu come before
+        # fzf, which the shared rc appends after the role rc.
+        want = [plugin for plugin in shared if plugin != "brew"]
+        want[want.index("fzf"):want.index("fzf")] = ["snap", "ubuntu"]
+        self.assertEqual(plugins(marlowe), want)
+
     def test_linuxbrew_home_and_path_discovery(self):
         prefix = self.home / ".linuxbrew"
         brew = prefix / "bin/brew"

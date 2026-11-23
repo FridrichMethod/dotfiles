@@ -192,7 +192,7 @@ repos:
         entry: tests/host-overlays.sh
         language: script
         pass_filenames: false
-        files: ^(home/\.hosts/(mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe)/\.config/(sh/\.profile|zsh/\.zshrc|bash/\.bashrc)|home/dot_aliases|tests/(host-overlays\.sh|test_portable_shell\.py))$|^tests/lib/environment\.(sh|ps1)$
+        files: ^(home/\.hosts/(mac|wsl-ubuntu|lab-ubuntu|sherlock|marlowe)/\.config/(sh/\.profile|zsh/\.zshrc|bash/\.bashrc)|home/dot_(aliases|profile|zshrc)|tests/(host-overlays\.sh|test_portable_shell\.py))$|^tests/lib/environment\.(sh|ps1)$
       - id: e2e-harness
         name: Unix end-to-end harness fixtures
         entry: tests/e2e-harness.sh
