@@ -168,14 +168,14 @@ extrakto, yank, FloaX, which-key, CPU/RAM and battery plugins add appearance
 and interaction where the host supports them. No full config framework or
 Oh My Tmux is needed.
 
-On Marlowe only the login env's tmux (3.6a) meets the floor. A non-interactive
+On Marlowe only the login env's tmux (3.8) meets the floor. A non-interactive
 shell there, such as `ssh marlowe-plain tmux ...`, finds `/usr/bin/tmux` 3.2a,
 which rejects the 3.4 options, and a 3.2a server sharing the default socket
-with a 3.6a client can fail to talk to it. Start tmux from an interactive login
+with a 3.8 client can fail to talk to it. Start tmux from an interactive login
 shell. For the same reason a non-interactive doctor there, such as
 `ssh marlowe-plain 'cd ~/dotfiles && ./dotfiles doctor'`, reports tmux 3.2a as
 `outdated` and exits 1: run the doctor from an interactive login shell
-(`ssh marlowe`), where it finds 3.6a.
+(`ssh marlowe`), where it finds 3.8.
 
 Without any plugin, the native settings use Catppuccin's Mocha colors:
 transparent status background, mauve active pane borders, centered windows,
