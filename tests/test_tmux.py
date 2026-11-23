@@ -211,6 +211,9 @@ class TmuxConfiguration(unittest.TestCase):
         self.assertIn("COPY", self.option("status-left"))
         self.assertIn("ZOOM", self.option("status-left"))
         self.assertEqual(self.option("set-clipboard"), "on")
+        # Neovim reads Esc promptly and receives focus events.
+        self.assertEqual(self.tmux("show-options", "-sqv", "escape-time"), "10")
+        self.assertEqual(self.tmux("show-options", "-sqv", "focus-events"), "on")
         # Reload must preserve every native pane and the ordinary previous-window key.
         before = self.tmux("list-panes", "-a", "-F", "#{pane_id}")
         self.source()

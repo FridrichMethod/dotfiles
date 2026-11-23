@@ -93,6 +93,9 @@ wsl.conf
 {{ if ne .host "sherlock" }}
 .terminfo
 {{ end }}
+{{ if not (has .host (list "sherlock" "marlowe")) }}
+.config/nvim/lua/plugins/hpc.lua
+{{ end }}
 {{ if ne .host "mac" }}
 .ssh/config.d/mac.conf
 {{ end }}

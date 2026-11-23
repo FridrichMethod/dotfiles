@@ -192,6 +192,10 @@ CPU/RAM jobs forward to tmux-cpu with a private 0700 cache under
 Unsafe, foreign or symlinked cache paths hide the optional metrics without
 changing the shell's TMPDIR or following shared temporary-file symlinks.
 
+The Escape delay is 10 ms and focus events reach the programs in a pane, so
+Neovim reads Esc followed by a key as two keys, not as Alt+key, and reloads
+files that changed while its pane had no focus.
+
 Install the missing clones with `./dotfiles setup --host <host> --check --only S3-clones`,
 then `./dotfiles setup --host <host> --yes --only S3-clones`, with
 `DOTFILES_AUTO_UPDATE=0` exported. After the dotfiles are applied, reload a running
@@ -285,21 +289,26 @@ plugins do not reliably support installation paths containing spaces.
 
 ## Neovim
 
-Every Unix role receives the [LazyVim](https://www.lazyvim.org/) starter
-configuration under `~/.config/nvim` as plain regular files: `init.lua`,
-`stylua.toml`, `lua/config/lazy.lua`, `lua/config/options.lua`,
-`lua/config/keymaps.lua`, `lua/config/autocmds.lua` and
-`lua/plugins/example.lua`. The example is the starter's own file; it returns an
-empty spec, so the `{ import = "plugins" }` spec finds a module instead of
-failing with "No specs found". `win` is excluded, because Neovim on native
-Windows reads `%LOCALAPPDATA%\nvim`, not `~/.config/nvim`.
+Every Unix role receives a [LazyVim](https://www.lazyvim.org/) configuration
+under `~/.config/nvim` as plain regular files: `init.lua`, `stylua.toml`,
+`lua/config/lazy.lua`, `lua/config/options.lua`, `lua/config/keymaps.lua`,
+`lua/config/autocmds.lua`, and under `lua/plugins/` the files
+`colorscheme.lua`, `copilot.lua`, `example.lua`, `formatting.lua`, `hpc.lua`,
+`markdown.lua` and `python.lua`. `example.lua` is the starter's example spec
+and returns an empty spec. `win` is excluded, because Neovim on native Windows
+reads `%LOCALAPPDATA%\nvim`, not `~/.config/nvim`.
 
 The extras every host shares are imports in `lua/config/lazy.lua`:
-`test.core`, `ai.copilot`, `coding.yanky`, `editor.dial`, `editor.inc-rename`,
-`util.dot` and `util.mini-hipatterns`, all under `lazyvim.plugins.extras`. They
-sit after LazyVim's own `lazyvim.plugins` import and before `plugins`, the
-order LazyVim checks when it starts. They change only through the source:
-`:LazyExtras` cannot turn them off, and what it toggles is per-host state.
+`test.core`, `ai.copilot`, `coding.mini-surround`, `coding.yanky`,
+`editor.dial`, `editor.inc-rename`, `lang.json`, `lang.markdown`,
+`lang.python`, `lang.toml`, `lang.yaml`, `util.dot` and
+`util.mini-hipatterns`, all under `lazyvim.plugins.extras`. They sit after
+LazyVim's own `lazyvim.plugins` import and before `plugins`, the order LazyVim
+checks when it starts. They change only through the source: `:LazyExtras`
+cannot turn them off, and what it toggles is per-host state. Extras that only
+some hosts need, such as `lang.tex`, `lang.docker` or `dap.core`, are enabled
+per host with `:LazyExtras`, which also flags the ones LazyVim recommends for
+the files it sees.
 `lazy.lua` sets `vim.g.lazyvim_json` before lazy.nvim starts, so LazyVim keeps
 that state (news and `:LazyExtras` toggles) in
 `stdpath("state")/lazyvim.json`, by default
@@ -307,19 +316,95 @@ that state (news and `:LazyExtras` toggles) in
 `lazyvim.json` inside `~/.config/nvim` is not read.
 lazy.nvim's `lazy-lock.json` stays untracked and per host: lazy.nvim rewrites
 it in `~/.config/nvim` on every install, update and clean, so each host's
-plugin revisions float from its own installs and `:Lazy update`.
+plugin revisions float from its own installs and `:Lazy update`. Its update
+checker fetches at most once a day.
+
+The colorscheme is Catppuccin Mocha with its terminal colors, the theme of
+kitty, WezTerm, Windows Terminal, tmux and bat; the flavor is fixed
+(`flavour = "mocha"`), so background detection through tmux or SSH never
+selects latte. Over SSH (`SSH_CONNECTION` set) Snacks animations, smooth
+scrolling included, are off; `<leader>ua` turns them on for the session. Spell checking and wrapping, which
+LazyVim turns on for Markdown, text, plain TeX, Typst and commit messages and
+these files add for LaTeX, use American English for spelling, skip CJK text
+and check the parts of camelCase words.
+
+Filetype rules in `options.lua`: inside a chezmoi source tree, a source path
+containing `dot_`, such as `dot_tmux.conf` or `private_dot_ssh/config`, gets
+the filetype of its target path (`*.tmpl` and `modify_` files excepted); a
+`modify_` file whose first line holds `chezmoi:modify-template` is Go template
+(`gotmpl`), so no JSON or TOML server attaches to it or formats it;
+`.gitconfig_local` and `.gitignore_global` are gitconfig and gitignore; `*.pdb`
+is Protein Data Bank coordinates, not Prolog; `tmux/*.conf` is tmux and Codex
+`.codex/rules/*.rules` files are Starlark.
+
+Python uses the `lang.python` extra with ty for types, navigation and hover
+and ruff for lint and format; `options.lua` selects ty through
+`vim.g.lazyvim_python_lsp`. `lang.python` disables pyright and basedpyright,
+and `python.lua` disables pyrefly, zuban, pylsp, jedi-language-server, pylyzer
+and pyre, so one type server attaches even when mason has several installed.
+venv-selector (`<leader>cv`) lists the interpreters of every environment in
+`~/.conda/environments.txt` and of the active conda or micromamba root,
+`~/micromamba`, `~/miniforge3`, `~/miniconda3` and `~/.conda` with their
+`envs/`, and searches the project at most four levels deep. In Python, Julia
+and shell buffers vim-slime sends code to a REPL in another tmux pane, such as
+IPython in an allocation, under the local leader `\`: `\c` the `# %%` cell,
+`\l` the line, `\p` the paragraph, `\r` the selection and `\v` chooses the
+pane. The first send from a buffer asks for the tmux socket and pane,
+defaulting to the current socket and the previous pane. In a buffer without
+`# %%` markers, `\c` sends the whole file.
+
+Format on save, LazyVim's default, follows these rules. Shell buffers (sh,
+bash, zsh) indent by 4. sh and bash scripts are formatted with shfmt
+`-i 4 -ci`, the pre-commit style, unless an `.editorconfig` applies, in which
+case shfmt reads that file instead; zsh buffers have no formatter. JSON, YAML,
+TOML and Markdown are not reformatted on save; `<leader>cf` formats them on
+demand and `<leader>uF` turns format-on-save on for one buffer. markdownlint
+runs only in projects that configure it, from the directory holding that
+configuration, and the browser Markdown preview is disabled. Copilot does not
+attach to files that commonly hold credentials or keys, such as `~/.ssh/`,
+`.env` files, `*.pem`, `~/.config/chezmoi/age/`, `~/.netrc` and the Hugging
+Face token, nor to `*.pdb` files.
+
+`autocmds.lua` reloads the current file, when it has no unsaved changes, on
+BufEnter and CursorHold if it changed on disk, for example by Claude Code,
+Codex or git while Neovim kept focus; a modified buffer gets Neovim's prompt
+instead. tmux passes focus events, so LazyVim's own FocusGained check works in
+a pane too. Over SSH, LazyVim leaves `clipboard` empty, and yanks, not deletes
+or named registers, are copied to `"+` when a clipboard provider exists. On a
+Linux host that is tmux or Neovim's OSC 52 provider, which forward to the
+local terminal, unless a forwarded `DISPLAY` or `WAYLAND_DISPLAY` selects
+xclip, xsel or wl-copy first; on macOS it is pbcopy, the remote Mac's own
+clipboard. `p` still pastes Neovim's own register.
 
 The first start of `nvim`, which a person runs, clones lazy.nvim and the
 plugins from GitHub into `~/.local/share/nvim/lazy/`, and the plugins then
 fetch their own tools: mason installs language servers and formatters into
-`~/.local/share/nvim/mason/` (`bash-language-server`, for `util.dot`, needs
-`npm`), blink.cmp downloads its prebuilt binary, copilot.lua downloads the
-Copilot language server, and nvim-treesitter compiles its parsers with a C
-compiler. The `ai.copilot` extra stays signed out until a person runs
-`:Copilot auth` once per host; its token lives in `~/.config/github-copilot`,
-outside the managed tree. On the Sherlock and Marlowe login nodes the parser
-builds are compile work, which the site rules place inside an allocation.
-Profiles and the login update install nothing.
+`~/.local/share/nvim/mason/` (ty from PyPI needs `python3` with `venv`;
+`bash-language-server`, `json-lsp`, `yaml-language-server`,
+`markdownlint-cli2` and `markdown-toc` need `npm` and `node`), blink.cmp
+downloads its prebuilt binary, copilot.lua downloads the Copilot language
+server, and nvim-treesitter compiles its parsers with a C compiler. The
+`ai.copilot` extra stays signed out until a person runs `:Copilot auth` once
+per host; its token lives in `~/.config/github-copilot`, outside the managed
+tree. Profiles and the login update install nothing.
+
+`hpc.lua` deploys only to the `sherlock` and `marlowe` roles and applies on
+their login nodes and compute nodes alike. There mason's bin directory is
+appended to PATH, so the login environment's tools win over mason's prebuilt
+binaries, which can need a newer glibc than the cluster has. nvim-treesitter
+builds and installs parsers only on a compute node, inside a job step where
+slurmd sets `SLURMD_NODENAME`, and only with a `tree-sitter` CLI on PATH that
+is not mason's: the site rules place compile work inside an allocation, and
+mason's prebuilt `tree-sitter-cli` is built against glibc 2.39. The login
+environments provide no `tree-sitter` CLI, so these homes have Treesitter
+parsers only where a person has put one (0.26.1 or newer) on PATH; then
+`:TSInstall` or `:TSUpdate` inside an allocation adds or rebuilds them,
+including after a `:Lazy update` that moves nvim-treesitter. Elsewhere Neovim
+keeps the parsers already built and uses regex syntax highlighting for the
+rest. Where `node` cannot run, as on the Marlowe login nodes
+([Marlowe](hosts.md#marlowe)), the node-based servers, tools and linters above
+are disabled instead of failing at every start; on a compute node the probe is
+skipped.
 
 LazyVim requires Neovim 0.11.2 or newer built with LuaJIT. An older `nvim`
 first on PATH, such as Ubuntu's 0.9 package in `/usr/bin`, prints LazyVim's

@@ -239,7 +239,7 @@ flowchart LR
 | --- | --- | --- |
 | &#x1F41A; **zsh** | oh-my-zsh with Powerlevel10k, fzf-tab, fast-syntax-highlighting, zsh-autosuggestions, you-should-use and zoxide; fzf previews through eza and bat; one POSIX `~/.profile` owns PATH for sh, Bash and zsh | [Unix startup](docs/shell.md#unix-startup) |
 | &#x1F5C2;&#xFE0F; **tmux 3.4+** | TPM with resurrect, continuum and tmux-fzf; Catppuccin Mocha, extrakto, yank, a FloaX scratch terminal, a which-key menu, CPU/RAM and battery capsules | [tmux](docs/shell.md#tmux) |
-| &#x1F4DD; **Neovim** | The LazyVim starter with seven shared extras on every Unix role; plugins install on the first start, and LazyVim's state stays outside `~/.config/nvim` | [Neovim](docs/shell.md#neovim) |
+| &#x1F4DD; **Neovim** | LazyVim with Catppuccin Mocha and thirteen shared extras (Python with ty and ruff, Markdown, JSON, YAML, TOML) on every Unix role; plugins install on the first start, and LazyVim's state stays outside `~/.config/nvim` | [Neovim](docs/shell.md#neovim) |
 | &#x1F5A5;&#xFE0F; **Terminals** | WezTerm, kitty and Windows Terminal in Catppuccin Mocha with CaskaydiaMono Nerd Font | [Shell startup](docs/shell.md) |
 | &#x1F537; **PowerShell 7** | PSReadLine predictions; PSFzf on <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>T</kbd> and <kbd>Alt</kbd>+<kbd>C</kbd>; an oh-my-posh prompt, zoxide and lazy conda | [PowerShell profile](docs/shell.md#powershell-profile-and-prompt) |
 | &#x1F33F; **Git and SSH** | A shared `~/.gitconfig` that includes a per-host `~/.gitconfig_local` and reads the global ignore `~/.gitignore_global`; `~/.ssh/config` includes `~/.ssh/config.d/*.conf`, split by concern | [Conventions](AGENTS.md#git-and-ssh-conventions) |

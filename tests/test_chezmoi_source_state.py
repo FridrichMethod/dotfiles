@@ -446,6 +446,19 @@ class SourceContractTests(unittest.TestCase):
         self.assertEqual(len(extras), len(set(extras)))
         self.assertTrue(all(module.startswith("lazyvim.plugins.extras.") for module in extras), extras)
 
+    def test_python_lsp_choice_is_set_before_lang_python_reads_it(self):
+        # lang.python reads vim.g.lazyvim_python_lsp once, when its module loads.
+        # Only options.lua, which LazyVim loads during the lazyvim.plugins import,
+        # runs before the extras; an assignment anywhere else would leave
+        # pyright, which needs Node, as the Python server.
+        nvim = ROOT / "home/dot_config/nvim"
+        assignment = re.compile(r"""vim\.g(?:\.lazyvim_python_lsp|\[["']lazyvim_python_lsp["']\])\s*=(?!=)""")
+        found = [(path.relative_to(nvim).as_posix(), line.strip())
+                 for path in sorted(nvim.rglob("*.lua"))
+                 for line in path.read_text(encoding="utf-8").splitlines()
+                 if not line.strip().startswith("--") and assignment.search(line)]
+        self.assertEqual(found, [("lua/config/options.lua", 'vim.g.lazyvim_python_lsp = "ty"')])
+
     def test_crlf_and_zero_byte_contracts_are_real_test_inputs(self):
         windows = ("home/dot_wslconfig", "home/mount.vbs")
         for path in windows:

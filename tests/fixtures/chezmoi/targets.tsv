@@ -29,7 +29,13 @@ target	hosts	source	mode	shell
 .config/nvim/lua/config/keymaps.lua	unix	home/dot_config/nvim/lua/config/keymaps.lua	regular	-
 .config/nvim/lua/config/lazy.lua	unix	home/dot_config/nvim/lua/config/lazy.lua	regular	-
 .config/nvim/lua/config/options.lua	unix	home/dot_config/nvim/lua/config/options.lua	regular	-
+.config/nvim/lua/plugins/colorscheme.lua	unix	home/dot_config/nvim/lua/plugins/colorscheme.lua	regular	-
+.config/nvim/lua/plugins/copilot.lua	unix	home/dot_config/nvim/lua/plugins/copilot.lua	regular	-
 .config/nvim/lua/plugins/example.lua	unix	home/dot_config/nvim/lua/plugins/example.lua	regular	-
+.config/nvim/lua/plugins/formatting.lua	unix	home/dot_config/nvim/lua/plugins/formatting.lua	regular	-
+.config/nvim/lua/plugins/hpc.lua	sherlock,marlowe	home/dot_config/nvim/lua/plugins/hpc.lua	regular	-
+.config/nvim/lua/plugins/markdown.lua	unix	home/dot_config/nvim/lua/plugins/markdown.lua	regular	-
+.config/nvim/lua/plugins/python.lua	unix	home/dot_config/nvim/lua/plugins/python.lua	regular	-
 .config/nvim/stylua.toml	unix	home/dot_config/nvim/stylua.toml	regular	-
 .config/oh-my-posh/prompt.omp.json	win	home/dot_config/oh-my-posh/prompt.omp.json	regular	-
 .config/sh/.aliases	mac,wsl-ubuntu,lab-ubuntu,sherlock,marlowe	home/.hosts/{host}/.config/sh/.aliases	regular	sh
