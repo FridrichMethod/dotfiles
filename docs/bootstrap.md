@@ -1571,11 +1571,13 @@ and would take the login shell with it. A package cache there is fine.
 
 Applies to `sherlock` and `marlowe`, and is where the doctor points for
 `node` on hpc. There is no installer for this step: the cluster provides Lmod.
-Sherlock's overlay zsh rc pins the modules it loads; Marlowe's only
-initialises Lmod and loads none. Claude Code and Codex come only from optional
-site modules here, so `tools.tsv` does not check them on hpc and the
-completion gate does not depend on them; setup-host prints this block while
-they are not on PATH, and H7-auth names them only once they are.
+Sherlock's overlay zsh rc pins the modules it loads; Marlowe's initializes
+Lmod and loads the site's default modules as an interactive bash does (the
+list `/etc/bash.bashrc` names; see [Unix startup](shell.md#unix-startup)); it
+pins none. Claude Code and Codex come only from optional site modules here, so
+`tools.tsv` does not check them on hpc and the completion gate does not depend
+on them; setup-host prints this block while they are not on PATH, and H7-auth
+names them only once they are.
 
 - **Check:** `echo "$LMOD_DIR"; ml spider claude-code codex pi-coding-agent; node --version`
 - **Install:** none; `ml <module>` in your own session, or the overlay line for
@@ -1595,7 +1597,7 @@ on hpc.
 
 **Lmod pins.** The `ml ...` line in `home/.hosts/sherlock/.config/zsh/.zshrc` names
 exact module versions (`ml spider <name>` lists what exists); a bump is a
-reviewed change. Marlowe's overlay loads no modules.
+reviewed change. Marlowe's overlay pins no modules.
 
 **Agent CLIs** are manual rows. Look for site modules with
 `ml spider claude-code codex pi-coding-agent` and verify on the host what is

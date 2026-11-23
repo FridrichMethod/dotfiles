@@ -234,7 +234,8 @@ need = {
     'ai-integration': ['.claude/settings.json', 'home/.policy/claude-settings.json', 'home/dot_zsh_aliases',
                        'home/dot_bash_aliases', 'home/dot_oh-my-zsh/custom/fzf-tab.zsh'],
     'host-overlays': ['home/.hosts/wsl-ubuntu/.config/bash/.bashrc', 'home/.hosts/lab-ubuntu/.config/zsh/.zshrc',
-                      'home/.hosts/mac/.config/sh/.profile', 'home/dot_aliases'],
+                      'home/.hosts/mac/.config/sh/.profile', 'home/dot_aliases',
+                      'home/.hosts/marlowe/.config/zsh/.zshrc'],
 }
 need['payload-update'].append('scripts/commands/payloads-sync.ps1')
 need['chezmoi'].append('scripts/commands/payloads-sync.ps1')

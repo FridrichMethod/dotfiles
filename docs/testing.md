@@ -407,9 +407,13 @@ under isolated Bash and zsh. Its standard-library `test_portable_shell.py`
 regressions cover HOME paths containing spaces for conda/mamba/micromamba,
 failed-hook fallback aliases preserving executable/argument quoting, conditional
 vi=nvim, Juliaup idempotence, macOS supported-prefix Homebrew with nvm ordering,
-Ubuntu PATH-selected/custom and per-user Linuxbrew, and Marlowe's durable
-CARGO_HOME without eager Cargo directory creation. No live rc, installer or
-user credentials are used. Sherlock cache placement remains subject to site
+Ubuntu PATH-selected/custom and per-user Linuxbrew, Marlowe's durable
+CARGO_HOME without eager Cargo directory creation, and the marlowe zsh rc's
+site default modules. That case replaces Lmod's init file with one that
+defines a recording `module` and `/etc/bash.bashrc` with a fixture that
+returns early without PS1; it needs zsh, so it runs in the macOS job and
+skips in the Linux job. No live rc, installer, Lmod or user credentials are
+used. Sherlock cache placement remains subject to site
 rules; these local shell tests do not establish cluster policy.
 
 `tests/tmux.sh` runs `tests/test_tmux.py`. Its static cases match the plugin
@@ -671,7 +675,9 @@ approximation:
   `/scratch/m000191`, which the image creates writable, so `E2E_ALLOC_ENV`
   names that path literally; the `S2-modules` block (`ml nodejs/24.13.0`, the
   AI CLI modules) is skipped, and there is no Kerberos. The login env is built
-  for real, from conda-forge, inside the container.
+  for real, from conda-forge, inside the container. The marlowe image keeps
+  Ubuntu's stock `/etc/bash.bashrc`, which names no default modules, so the
+  marlowe zsh rc loads none there.
 - `mac` runs on a GitHub runner that already has the Xcode Command Line Tools,
   Homebrew and many formulae, so `H1-xcode-clt` and `H1-homebrew` are found
   done and never exercised, and S2-brew-bundle installs less than on a blank

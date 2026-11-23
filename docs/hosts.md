@@ -110,7 +110,9 @@ no-terminal job-control notice), HEAD at `main` and a clean status. Per host:
 - marlowe: inside the micromamba login env, from its interactive login zsh
   (`$HOME/micromamba/envs/login/bin/zsh -il`, reached through `marlowe-plain`
   or `ssh -o RemoteCommand=none marlowe`), with that outer shell's updater
-  off; a bare `marlowe-plain` command sees the system tools.
+  off. Start that zsh from a login Bash (`bash -lc`), which sets Lmod's
+  `MODULEPATH`, so that it loads the site's default modules; a bare
+  `marlowe-plain` command sees the system tools and no module.
 - win: a one-off limited-token task ([win](#win)) checks that the PowerShell
   7 and Windows PowerShell 5.1 profiles parse and load. For a noninteractive
   updater check, dot-source the configured source's `lib/chezmoi-guard.ps1`
@@ -253,6 +255,14 @@ those tests or to the profile and updater they test.
   env `login`) first. Non-interactive shells, such as `ssh marlowe-plain
   CMD`, see the system tools: `/usr/bin/tmux` there is below the 3.4 floor,
   so start tmux and run the doctor from an interactive login shell.
+- Slurm and the default compiler come from the site's default Lmod modules,
+  which the site names only for an interactive bash
+  (`LMOD_SYSTEM_DEFAULT_MODULES` in `/etc/bash.bashrc`). `ssh marlowe-plain`
+  gets them from the site. The login env's zsh, which `ssh marlowe` starts
+  from a non-interactive bash, loads them itself at startup
+  ([Unix startup](shell.md#unix-startup)), so both have `sbatch` and
+  `squeue`. Non-interactive shells load no module: run Slurm commands there
+  as `bash -lc 'module load slurm; squeue ...'`.
 - The site AppArmor profile `block-node` denies `node` (and some IDE and agent
   binaries) on login nodes; never work around it. The three Claude Code
   commands that run the kit's Node helpers (the Git hook check, Notification

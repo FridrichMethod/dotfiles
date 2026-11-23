@@ -17,7 +17,7 @@ class PortableShellTests(unittest.TestCase):
         self.home.mkdir()
         self.env = {"HOME": str(self.home), "PATH": "/usr/bin:/bin"}
 
-    def run_shell(self, source, command, shell="bash", extra=None):
+    def run_shell(self, source, command, shell="bash", extra=None, stderr=""):
         copy = Path(self.temp.name) / "source"
         copy.write_text(source)
         env = dict(self.env, **(extra or {}))
@@ -26,7 +26,7 @@ class PortableShellTests(unittest.TestCase):
                                  ('shopt -s expand_aliases; ' if shell == 'bash' else '') + '. "$1"; ' + command, shell, str(copy)],
                                 env=env, text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.stderr, stderr)
         return result.stdout.strip()
 
     def test_vi_keeps_native_editor_without_neovim(self):
@@ -104,6 +104,68 @@ class PortableShellTests(unittest.TestCase):
         for extra, want in [({}, str(self.home / ".config/huggingface/token")), ({"HF_TOKEN_PATH": explicit}, explicit)]:
             self.assertEqual(self.run_shell(source, 'printf "%s" "$HF_TOKEN_PATH"', extra=extra), want)
         self.assertFalse((self.home / ".config/huggingface").exists(), "shell startup created the token directory")
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh unavailable")
+    def test_marlowe_zsh_loads_site_default_modules(self):
+        # Site paths become fixtures: Lmod's init file defines a recording
+        # `module`, and /etc/bash.bashrc is a file that, like the site's,
+        # returns early without PS1.
+        root = Path(self.temp.name)
+        init = root / "lmod-init.zsh"
+        init.write_text("""module() {
+    print -r -- "$* [$(/bin/sh -c 'printf %s "${LMOD_SYSTEM_DEFAULT_MODULES-unset}"')]" >>"$MODULE_LOG"
+    if [[ -n ${MODULE_FAIL-} ]]; then
+        print -ru2 -- "Lmod has detected the following error: fixture"
+        return 1
+    fi
+    export LOADEDMODULES=slurm/slurm/25.05.2:gcc/13.1.0 PATH="$MODULE_BIN:$PATH"
+}
+""")
+        site = root / "site-bashrc"
+        site.write_text('[ -z "$PS1" ] && return\nexport LMOD_SYSTEM_DEFAULT_MODULES=slurm,gcc/13.1.0\n')
+        stock = root / "stock-bashrc"
+        stock.write_text('[ -z "$PS1" ] && return\nshopt -s checkwinsize\n')
+        noisy = root / "bash-env"
+        noisy.write_text("echo BASH_ENV-NOISE\n")
+        log = root / "module.log"
+        base = {"MODULEPATH": str(root / "modulefiles"), "MODULE_LOG": str(log), "MODULE_BIN": str(root / "slurm/bin")}
+        report = ('print -r -- "${LOADEDMODULES-unset}"; '
+                  "/bin/sh -c 'printf \"%s\\n\" \"${LMOD_SYSTEM_DEFAULT_MODULES-unset}\"'; print -r -- \"$PATH\"")
+        restore = "--initial_load restore [slurm,gcc/13.1.0]\n"
+
+        def start(site_file, extra=None, stderr=""):
+            log.unlink(missing_ok=True)
+            source = (ROOT / "home/.hosts/marlowe/.config/zsh/.zshrc").read_text()
+            for site_path, fixture in [("/usr/share/lmod/lmod/init/zsh", init), ("/etc/bash.bashrc", site_file)]:
+                self.assertIn(site_path, source)
+                source = source.replace(site_path, str(fixture))
+            got = self.run_shell(source, report, "zsh", dict(base, **(extra or {})), stderr).split("\n")
+            return got, log.read_text() if log.exists() else ""
+
+        # BASH_ENV, which /etc/profile points at Lmod's bash init, must not
+        # reach the list a throwaway bash prints.
+        for name, extra in [("site defaults", {}), ("noisy BASH_ENV", {"BASH_ENV": str(noisy)})]:
+            with self.subTest(name):
+                (loaded, exported, path), calls = start(site, extra)
+                self.assertEqual(calls, restore)
+                self.assertEqual((loaded, exported), ("slurm/slurm/25.05.2:gcc/13.1.0", "slurm,gcc/13.1.0"))
+                entries = path.split(":")
+                self.assertLess(entries.index(str(self.home / "micromamba/envs/login/bin")),
+                                entries.index(base["MODULE_BIN"]))
+        for name, site_file, extra, want in [
+                ("modules already loaded", site, {"LOADEDMODULES": "gcc/13.1.0"}, "slurm,gcc/13.1.0"),
+                ("list already exported", site, {"LMOD_SYSTEM_DEFAULT_MODULES": "slurm"}, "slurm"),
+                ("no MODULEPATH", site, {"MODULEPATH": ""}, "unset"),
+                ("site file names no default", stock, {}, "unset"),
+                ("no site file", root / "absent-bashrc", {}, "unset")]:
+            with self.subTest(name):
+                got, calls = start(site_file, extra)
+                self.assertEqual((calls, got[1]), ("", want))
+        # A failed load is Lmod's to report; the list stays exported, so a
+        # nested shell does not retry, and the rest of the rc file runs.
+        got, calls = start(site, {"MODULE_FAIL": "1"}, "Lmod has detected the following error: fixture\n")
+        self.assertEqual((calls, got[:2]), (restore, ["unset", "slurm,gcc/13.1.0"]))
+        self.assertIn(str(self.home / "micromamba/envs/login/bin"), got[2].split(":"))
 
     def test_linuxbrew_home_and_path_discovery(self):
         prefix = self.home / ".linuxbrew"

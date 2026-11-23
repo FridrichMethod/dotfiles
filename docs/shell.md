@@ -73,6 +73,24 @@ keeps the Hugging Face token, and stored_tokens beside it, in
 Sherlock's remaining cache placement requires current site-rule review before
 changes. No configuration change migrates or deletes existing Cargo contents.
 
+Marlowe names its default Lmod modules (Slurm and the default compiler) in
+`/etc/bash.bashrc`, which `/etc/profile` reads only for an interactive bash,
+so a zsh started from a non-interactive bash (the workstation ssh
+RemoteCommand, `bash -lc`) inherits Lmod's `MODULEPATH` with nothing loaded.
+The marlowe zsh rc then reads the list from that file through a throwaway
+bash (with PS1 set and BASH_ENV empty, as for an interactive bash) and
+exports `LMOD_SYSTEM_DEFAULT_MODULES`; when no module is loaded yet, it runs
+`module --initial_load restore`, as the site's profile does for bash, so a
+saved default collection wins, as there. It does so before conda and the
+login env go on PATH, which keeps the login env first; the module
+directories land ahead of `~/bin` and `~/.local/bin` there, which bash, where
+the site loads the modules before the profile runs, puts first. It runs only
+when the `module` function exists, `MODULEPATH` is set and the list is not
+exported yet: a nested zsh, or one started from an interactive bash, loads
+nothing, so `module purge` holds in subshells, and a zsh without `MODULEPATH`
+stays without modules. Startup prints nothing unless the load fails; Lmod then
+reports it once for that login.
+
 ## PowerShell profile and prompt
 
 The installed `dotfiles.ps1` command does not depend on interactive profile
