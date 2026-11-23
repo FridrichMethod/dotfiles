@@ -77,7 +77,7 @@ variant with `types: [file]`, since identify gives `dot_` names no shell tag.
 The AI suites cover actual portable Claude/Codex transforms, typed
 ownership parity, numeric/Unicode and TOML temporal refusal, CRLF multiline
 semantics, invalid input preservation and complete candidate applies.
-Compatible-role counts are 50/57/56/59/55/55/27 in role order, with exactly the
+Compatible-role counts are 52/58/58/61/57/57/28 in role order, with exactly the
 two AI targets added to the ordinary files. Shared auth/trust/payload siblings
 stay unmanaged. Local temporal refusal tests run on every OS; the Unix
 timezone characterization, which skips on Windows, stays separate from the
@@ -90,7 +90,12 @@ a tracked gitlink, and requires that the checkout's own `.gitignore` (not a
 personal exclude: `core.excludesFile` is disabled and the match must come from
 `.gitignore`) hides Claude Code's machine-local `.claude/settings.local.json`
 at the root while `.claude/settings.json` stays tracked (the login updater
-refuses an untracked file).
+refuses an untracked file). It also requires that `home/dot_gitignore_global`
+reaches every role, since the shared `.gitconfig` points `core.excludesFile`
+at it and so turns off Git's XDG `~/.config/git/ignore`, and that Git, with
+only that file as its excludes file in a fresh repository, ignores
+`.claude/settings.local.json` at the root and in a subdirectory but not
+`.claude/settings.json` or an ordinary file.
 `test_chezmoi_update_config.py` requires the template, and so
 init, to write `persistentState` as
 `<destDir>/.local/state/chezmoi/chezmoi.boltdb` in slash form (Unix and Windows

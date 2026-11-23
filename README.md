@@ -92,7 +92,7 @@ update.
 | `wsl-ubuntu` | &#x1F427; Ubuntu on WSL | Its own clone, separate from `win`'s |
 | `sherlock` | &#x1F332; Stanford Sherlock login node | Ships the `tmux-256color` terminfo entry |
 | `marlowe` | &#x26A1; Stanford Marlowe login node | Start tmux from an interactive login shell |
-| `win` | &#x1FA9F; Native Windows, PowerShell 7 | 27 regular files and no POSIX shell files |
+| `win` | &#x1FA9F; Native Windows, PowerShell 7 | 28 regular files and no POSIX shell files |
 | `generic` | &#x1F310; Any other Linux | The doctor checks the detected platform without an overlay |
 
 The six hosts, their access rules and their known limits are in
@@ -241,7 +241,7 @@ flowchart LR
 | &#x1F5C2;&#xFE0F; **tmux 3.4+** | TPM with resurrect, continuum and tmux-fzf; Catppuccin Mocha, extrakto, yank, a FloaX scratch terminal, a which-key menu, CPU/RAM and battery capsules | [tmux](docs/shell.md#tmux) |
 | &#x1F5A5;&#xFE0F; **Terminals** | WezTerm, kitty and Windows Terminal in Catppuccin Mocha with CaskaydiaMono Nerd Font | [Shell startup](docs/shell.md) |
 | &#x1F537; **PowerShell 7** | PSReadLine predictions; PSFzf on <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>T</kbd> and <kbd>Alt</kbd>+<kbd>C</kbd>; an oh-my-posh prompt, zoxide and lazy conda | [PowerShell profile](docs/shell.md#powershell-profile-and-prompt) |
-| &#x1F33F; **Git and SSH** | A shared `~/.gitconfig` that includes a per-host `~/.gitconfig_local`; `~/.ssh/config` includes `~/.ssh/config.d/*.conf`, split by concern | [Conventions](AGENTS.md#git-and-ssh-conventions) |
+| &#x1F33F; **Git and SSH** | A shared `~/.gitconfig` that includes a per-host `~/.gitconfig_local` and reads the global ignore `~/.gitignore_global`; `~/.ssh/config` includes `~/.ssh/config.d/*.conf`, split by concern | [Conventions](AGENTS.md#git-and-ssh-conventions) |
 | &#x1F916; **AI agents** | Global Claude Code and Codex guides, portable settings, Codex exec-policy rules and status lines for both | [AI configuration](#ai-assistant-configuration) |
 | &#x1F512; **Secrets** | Selected static secrets as builtin-age ciphertext, deployed only to enrolled homes | [Secrets](docs/secrets.md) |
 | &#x1F4E6; **Payloads** | coding-agent-kit, PyMOLScripts and awesome-skills, installed by their own installers when you ask | [Payload repos](#payload-repos) |
@@ -470,7 +470,7 @@ usage error any other call gets.
 chezmoi never deploys a source dot-directory, so `.hosts/` and `.policy/` stay
 inputs. Git overrides use `~/.gitconfig_local`; SSH delegates to
 `~/.ssh/config.d/*.conf`. A target has exactly one source file; native Windows
-deploys 27 regular files and no POSIX shell files. The
+deploys 28 regular files and no POSIX shell files. The
 [dependency guide](docs/dependencies.md) explains required and optional tools;
 `config/bootstrap/` owns installation inventories and versions.
 

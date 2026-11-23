@@ -93,7 +93,6 @@ wsl.conf
 .terminfo
 {{ end }}
 {{ if ne .host "mac" }}
-.gitignore_global
 .ssh/config.d/mac.conf
 {{ end }}
 {{ if not (has .host (list "wsl-ubuntu" "lab-ubuntu" "marlowe" "win")) }}

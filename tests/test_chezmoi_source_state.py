@@ -8,6 +8,7 @@ import platform
 import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
 import unittest
 
@@ -209,6 +210,43 @@ class SourceContractTests(unittest.TestCase):
         tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", ".claude/settings.json"],
                                  check=True, capture_output=True, timeout=30, env=fixture_git_env()).stdout
         self.assertEqual(tracked, b".claude/settings.json\0")
+
+    def test_global_ignore_reaches_every_role_and_hides_claude_local_settings(self):
+        # The shared .gitconfig sets core.excludesFile on every role, which
+        # turns off Git's XDG ~/.config/git/ignore, so the deployed
+        # ~/.gitignore_global is each home's only global ignore. It must reach
+        # every role and hide Claude Code's machine-local settings at any depth
+        # of any repository, while the shared settings and ordinary files stay
+        # visible.
+        self.assertIn("\texcludesfile = ~/.gitignore_global\n",
+                      (ROOT / "home/dot_gitconfig").read_text(encoding="utf-8"))
+        for role in ROLES:
+            with self.subTest(role=role):
+                self.assertEqual(expected_entries(role)[".gitignore_global"].source, "home/dot_gitignore_global")
+        excludes = (ROOT / "home/dot_gitignore_global").as_posix()
+        paths = ("x/.claude/settings.local.json", ".claude/settings.local.json",
+                 "x/.claude/settings.json", "x/notes.txt")
+        with tempfile.TemporaryDirectory(prefix="dotfiles global ignore ") as name:
+            repository = Path(name).resolve()
+            env = fixture_git_env()
+            git_in(repository, env, "init", "--template=")
+            # NUL-separated bytes: text mode on Windows would send CRLF.
+            result = subprocess.run(["git", "-C", str(repository), "-c", f"core.excludesFile={excludes}",
+                                     "check-ignore", "--no-index", "--verbose", "--non-matching", "-z", "--stdin"],
+                                    input=b"".join(p.encode() + b"\0" for p in paths),
+                                    capture_output=True, timeout=30, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fields = [field.decode() for field in result.stdout.split(b"\0")[:-1]]
+        # Each path yields source, line number, pattern and path.
+        records = {fields[i + 3]: (fields[i], fields[i + 1], fields[i + 2]) for i in range(0, len(fields), 4)}
+        self.assertEqual(set(records), set(paths), result.stderr)
+        for path in paths[:2]:
+            source, line, pattern = records[path]
+            self.assertEqual(Path(source), Path(excludes), path)
+            self.assertTrue(line, path)
+            self.assertEqual(pattern, "**/.claude/settings.local.json", path)
+        for path in paths[2:]:
+            self.assertEqual(records[path], ("", "", ""), path)
 
     def test_unselected_invalid_and_incompatible_hosts_fail_before_writing(self):
         compatible = {

@@ -103,6 +103,7 @@ in tracked Markdown resolving.
 - Keep shared Git config in `home/dot_gitconfig`.
 - Keep host-local Git overrides in `home/.hosts/*/.gitconfig_local`.
 - Preserve include chain: `[include] path = ~/.gitconfig_local`.
+- Keep global ignore patterns in `home/dot_gitignore_global`, deployed to every role; `home/dot_gitconfig` points `core.excludesfile` at it, which disables Git's XDG `~/.config/git/ignore`.
 - Keep SSH root config minimal in `home/dot_ssh/config`:
   - `Include ~/.ssh/config.d/*.conf`
 - Keep SSH targets split by concern in `.ssh/config.d/*.conf`.
