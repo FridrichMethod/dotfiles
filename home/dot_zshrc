@@ -289,9 +289,37 @@ _dotfiles_reset_term_modes() {
         print -rn -- $'\e[<99u\e[?1049l\e[<99u'
     fi
 }
+# The resets stop new reports, not those the terminal sent before it read
+# them (a burst sent while ssh, its connection already gone, read nothing):
+# they wait in the tty input, and zle, which binds nothing to ESC [ <,
+# would insert the rest of each as typed text. This widget, bound to
+# ESC [ <, discards a complete SGR report (digits and semicolons, then M or
+# m) after any exit status and gives back as keys whatever else it read, so
+# type-ahead and pastes stay as typed; it stops after a 0.1 s pause or 32
+# characters. Only SGR (1006) reports, which Claude Code, Codex and tmux
+# turn on, are recognized: urxvt's (1015) start like keys such as Delete
+# (ESC [ 3 ~). docs/shell.md lists the limits.
+_dotfiles_discard_mouse_report() {
+    local c report
+    while ((${#report} < 32)) && read -k 1 -t 0.1 c; do
+        case $c in
+            [0-9\;]) report+=$c ;;
+            [Mm]) return 0 ;;
+            *)
+                zle -U -- "$report$c"
+                return 0
+                ;;
+        esac
+    done
+    zle -U -- "$report"
+}
 if ! _is_agent_session; then
     autoload -Uz add-zsh-hook
     add-zsh-hook precmd _dotfiles_reset_term_modes
+    zle -N _dotfiles_discard_mouse_report
+    bindkey -M emacs '\e[<' _dotfiles_discard_mouse_report
+    bindkey -M viins '\e[<' _dotfiles_discard_mouse_report
+    bindkey -M vicmd '\e[<' _dotfiles_discard_mouse_report
 fi
 
 # Shared login update dispatch (~/.profile), after ssh-agent/env is ready.

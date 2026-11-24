@@ -599,6 +599,161 @@ if mode_zsh=$(command -v zsh) && script --version 2>/dev/null | grep -q util-lin
     fi
 fi
 
+# home/dot_zshrc has zle discard the SGR mouse reports a terminal sent
+# before the prompt hook's resets reached it. They wait in the tty input
+# once the client exits, as ssh does with status 255 when its connection is
+# gone or a client killed by a signal does, and zle would otherwise insert
+# them as typed text. A python3 pty driver runs an interactive zsh with
+# these dotfiles and a stand-in client that, like ssh, switches the tty to
+# raw mode and stops reading until FIONREAD shows the driver's bytes queued.
+# It then restores the saved settings (TCSADRAIN) and exits, or in the
+# killed case sends itself SIGKILL first and leaves zsh to restore its
+# frozen tty settings; no case depends on timing. The command lines zsh
+# then runs (a preexec log) must be exactly those typed: press, release and
+# motion reports vanish whatever the exit status, type-ahead among them
+# still runs, and what follows ESC [ < when it is no report is given back
+# as keys (an ESC among them starts the next report), past the widget's
+# 32-character bound too. The binding is in the emacs, viins and vicmd
+# keymaps, and an agent session has none. zsh only, so the macOS job runs
+# these cases and ubuntu-24.04 skips them.
+if [ -n "$ZSH_BIN" ]; then
+    queue_home=$TEST_TMP/queue-home
+    mkdir -p "$queue_home/.oh-my-zsh"
+    : >"$queue_home/.oh-my-zsh/oh-my-zsh.sh"
+    ln -s "$REPO_ROOT/home/dot_profile" "$queue_home/.profile"
+    ln -s "$REPO_ROOT/home/dot_zshrc" "$queue_home/.zshrc-under-test"
+    # shellcheck disable=SC2016
+    printf '%s\n' 'source ~/.zshrc-under-test' "PS1='rc%?> '" \
+        '_queue_log() { print -r -- "$1" >>$QUEUE_LOG; }' 'preexec_functions+=(_queue_log)' >"$queue_home/.zshrc"
+    for queue_agent in '' 1; do
+        queue_bound='"^[[<" _dotfiles_discard_mouse_report'
+        [ -z "$queue_agent" ] || queue_bound='"^[[<" undefined-key'
+        # shellcheck disable=SC2016
+        out=$(env -i HOME="$queue_home" PATH=/usr/bin:/bin TERM=xterm-256color CURSOR_AGENT="$queue_agent" \
+            "$ZSH_BIN" -d -i -c 'for m in emacs viins vicmd; do bindkey -M $m "\e[<"; done' \
+            </dev/null 2>/dev/null) || out="exit $?: $out"
+        if [ "$out" != "$queue_bound"$'\n'"$queue_bound"$'\n'"$queue_bound" ]; then
+            printf 'FAIL mouse report binding (agent=%s): got [%s], expected [%s] in each keymap\n' \
+                "${queue_agent:-0}" "$out" "$queue_bound" >&2
+            mode_failures=$((mode_failures + 1))
+        fi
+    done
+    cat >"$TEST_TMP/queue-client.py" <<'PY'
+import fcntl, os, signal, struct, sys, termios, time, tty
+
+status, queued = int(sys.argv[1]), int(sys.argv[2])
+saved = termios.tcgetattr(0)
+tty.setraw(0, termios.TCSADRAIN)
+os.write(1, b"\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[?1004hQREADY\r\n")
+deadline = time.monotonic() + 10
+while (seen := struct.unpack("i", fcntl.ioctl(0, termios.FIONREAD, b"\0" * 4))[0]) < queued:
+    if time.monotonic() > deadline:
+        os.write(1, b"QSHORT %d/%d\r\n" % (seen, queued))
+        break
+    time.sleep(0.01)
+os.write(1, b"QEXIT\r\n")
+if status < 0:
+    os.kill(os.getpid(), -status)
+termios.tcsetattr(0, termios.TCSADRAIN, saved)
+sys.exit(status)
+PY
+    cat >"$TEST_TMP/queue-driver.py" <<'PY'
+import fcntl, os, pty, re, select, signal, struct, sys, termios, time
+
+zsh, home, client, case = sys.argv[1:5]
+motion = [b"\x1b[<35;%d;10M" % x for x in range(1, 21)]
+ahead = b"print -r -- AHEAD_$((6*7))"
+click = b"\x1b[<0;12;5M\x1b[<0;12;5m"  # press and release
+digits = b"1" * 40  # past the widget's 32-character bound
+pushed = b"print -r -- P12 " + digits + b"M"
+if case == "lost":  # ssh lost its connection: 255, reports and a focus-in queued
+    status, payload, typed = 255, b"".join(motion) + click + b"\x1b[<66;125;2M\x1b[I", []
+elif case == "killed":  # SIGKILL: reports inside type-ahead, which still runs
+    status, typed = -9, [ahead]
+    payload = b"print -r -- AH" + b"".join(motion[:2]) + b"EAD_$((6*7))" + b"".join(motion[2:]) + b"\r"
+else:  # pushback, typed at the prompt: ESC [ < that starts no report
+    status, typed = None, [pushed]
+    payload = b"print -r -- P\x1b[<12" + motion[0] + b" \x1b[<" + digits + b"M\r"
+run = b'"$QUEUE_PY" -I -B "$QUEUE_CLIENT" %d %d' % (status or 0, len(payload))
+marker = b"print -r -- MARK_$((6*7))"
+expected = ([run] if status is not None else []) + typed + [marker, b"exit"]
+log = os.path.join(home, "ran")
+env = {"HOME": home, "PATH": "/usr/bin:/bin", "TERM": "xterm-256color",
+       "QUEUE_PY": sys.executable, "QUEUE_CLIENT": client, "QUEUE_LOG": log}
+pid, fd = pty.fork()
+if pid == 0:
+    try:
+        os.chdir(home)
+        os.execve(zsh, [zsh, "-d", "-i"], env)
+    finally:
+        os._exit(127)
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 200, 0, 0))
+out = b""
+prompt = rb"rc\d+> "
+
+
+def expect(pattern, start, timeout=10):
+    global out
+    deadline = time.monotonic() + timeout
+    while not (match := re.compile(pattern).search(out, start)):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError(pattern)
+        if select.select([fd], [], [], left)[0]:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:  # Linux: EIO once zsh has exited
+                chunk = b""
+            if not chunk:
+                raise EOFError(pattern)
+            out += chunk
+    return match.end()
+
+
+error = None
+try:
+    at = expect(rb"rc0> ", 0)
+    if status is None:
+        os.write(fd, payload)
+    else:
+        os.write(fd, run + b"\r")
+        at = expect(rb"QREADY", at)
+        os.write(fd, payload)
+        at = expect(rb"QEXIT", at, timeout=20)  # past the client's 10 s wait
+        if b"QSHORT" in out:
+            raise RuntimeError("client saw too few queued bytes")
+    for _ in typed or [None]:
+        at = expect(prompt, at)
+    os.write(fd, marker + b"\r")
+    at = expect(prompt, at)
+    os.write(fd, b"exit\r")
+    try:
+        expect(rb"(?!)", at)  # matches nothing: read on until zsh exits
+    except EOFError:
+        pass
+except Exception as caught:
+    error = repr(caught)
+    os.kill(pid, signal.SIGKILL)
+os.waitpid(pid, 0)
+try:
+    with open(log, "rb") as handle:
+        ran = handle.read().splitlines()
+except OSError:
+    ran = []
+if error or ran != expected:
+    print("error=%s ran=%r expected=%r terminal tail=%r" % (error, ran, expected, out[-600:]))
+    sys.exit(1)
+PY
+    for queue_case in lost killed pushback; do
+        rm -f "$queue_home/ran"
+        if ! out=$(python3 -I -B "$TEST_TMP/queue-driver.py" "$ZSH_BIN" "$queue_home" \
+            "$TEST_TMP/queue-client.py" "$queue_case" 2>&1); then
+            printf 'FAIL queued mouse reports at the prompt (%s): %s\n' "$queue_case" "$out" >&2
+            mode_failures=$((mode_failures + 1))
+        fi
+    done
+fi
+
 # home/dot_zshenv and home/dot_zprofile undo macOS path_helper, which
 # /etc/zprofile runs between them in every login zsh. Neither file can make
 # zsh read a fake /etc/zprofile, so each case sources both in a login zsh

@@ -45,6 +45,27 @@ screen: `reset` leaves it. The PowerShell 7 prompt wrapper writes the same
 mouse, focus and cursor resets
 ([PowerShell profile and prompt](#powershell-profile-and-prompt)).
 
+The resets stop new reports but cannot take back those the terminal sent
+before it read them, such as a trackpad burst sent while ssh, its connection
+already gone, reads no input: they wait in the tty input, where the line
+editor would insert them as typed text. Outside an agent session zle
+therefore binds `ESC [ <` in the emacs, viins and vicmd keymaps to a widget
+that discards a complete SGR mouse report (up to 32 digits and semicolons,
+then `M` or `m`) after any exit status and gives back as keys anything else
+it read, so type-ahead and pastes edit the line as typed. The PowerShell
+wrapper discards no queued reports. Limits:
+
+- A report that pauses for more than 0.1 s after `ESC [ <`, X10 and urxvt
+  (1015) reports, and a report that completes an unfinished key sequence
+  still reach the command line. After a lone ESC, for example, oh-my-zsh's
+  sudo plugin runs sudo-command-line on ESC ESC, and the rest is inserted.
+- A discarded report counts as zle's last widget, so it breaks a chain such
+  as repeated Up/Down prefix search or yank-pop, and vi `.` replays keys
+  given back during an insert twice.
+- Reports that arrive before the line editor starts can be echoed by the tty
+  driver as `^[[<35;97;7M` above the prompt; under kitty that echo usually
+  lands on the stuck alternate screen and leaves with it.
+
 zsh also freezes the tty settings (`ttyctl -f`, after `stty -ixon`). A
 program killed by a signal, such as `kill -9` of a hung ssh, cannot undo its
 raw mode, and zsh would otherwise keep `-opost -isig`: output steps down
@@ -135,8 +156,9 @@ with or without zoxide, preserves LASTEXITCODE, which zoxide's directory
 tracking can reset. After the inner prompt, where the host supports VT output,
 it also writes the terminal mode resets of the zsh prompt hook above (mouse
 tracking, focus reports, a hidden cursor; no kitty keyboard pop), so a TUI
-killed by a dropped ssh session in Windows Terminal or WezTerm leaves no
-mouse reports typed at the prompt. The tracked theme
+killed by a dropped ssh session in Windows Terminal or WezTerm leaves no new
+mouse reports typed at the prompt; unlike zsh, it discards none already
+queued. The tracked theme
 lives in home/dot_config/oh-my-posh, uses a release-tagged schema and ASCII
 glyph escapes, and supports shell integration/transient prompts. Re-render it
 after upgrades.
