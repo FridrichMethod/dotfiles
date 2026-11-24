@@ -11,7 +11,7 @@ macOS and Windows runners' homes.)
 
 | Job | Mandatory checks | Provisioning |
 | --- | --- | --- |
-| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, tmux from apt, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
+| `ubuntu-24.04` | `./tests/run.sh --ci --check-prerequisites`, full `pre-commit run --all-files` once (all shell suites plus Node), then the `gitleaks-history` secret scan of every ref | Python 3.11, Node 24, tmux and zsh from apt, verified chezmoi v2.74.0; full-depth checkout; the real coding-agent-kit, installed into a home of its own; pre-commit installs its pinned hooks |
 | `macos-15` | `/bin/bash ./tests/run.sh --ci` | Python 3.12, Node 24, verified chezmoi v2.74.0; the real coding-agent-kit, as on Linux; fzf-tab cloned from its `config/bootstrap/git-clones.tsv` row into the runner's temp directory as `FZF_TAB_TEST_DIR`; retain system Bash and BSD utilities |
 | `windows-2025` | `./tests/run.ps1 -CI` in native PowerShell | Python 3.12, Node 24 and verified chezmoi v2.74.0; no coding-agent-kit, which installs nothing on native Windows; Git and PowerShell come from the runner and are checked explicitly |
 
@@ -342,8 +342,8 @@ and az-Latn-AZ accepts the init layout and refuses `SOURCEDIR`, `sourceDIR`,
 `~/.oh-my-zsh/custom/plugins/fzf-tab`) it also drives real fzf-tab in an
 interactive zsh with a fake fzf. Without that variable the second case skips.
 CI's macOS job clones fzf-tab from its `config/bootstrap/git-clones.tsv` row
-and sets the variable, so both cases run there; the `ubuntu-24.04` runner has
-no zsh, so both skip in the Linux job.
+and sets the variable, so both cases run there; the Linux job has zsh but no
+fzf-tab checkout, so only the first case runs there.
 
 The day-zero bootstrap has four suites. `tests/bootstrap-manifest.sh` unit-tests
 the sourced `lib/bootstrap/{manifest,platform,version}.sh` and runs the
@@ -435,7 +435,7 @@ as an interactive zsh in a temporary home, with the marlowe rc as the role rc
 and a fake `oh-my-zsh.sh` that prints the plugin list: against an empty role
 rc's list, only `brew` is gone, the rest keeps its order, and `snap` and
 `ubuntu` come before the plugins the shared rc appends after the role rc.
-Both need zsh, so they run in the macOS job and skip in the Linux job. No
+Both need zsh, so they run in the Linux and macOS jobs. No
 live rc, installer, Lmod, oh-my-zsh or user credentials are
 used. Sherlock cache placement remains subject to site
 rules; these local shell tests do not establish cluster policy.

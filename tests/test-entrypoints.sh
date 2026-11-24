@@ -344,15 +344,17 @@ for suite in runner_suites:
     if 'tests/' + suite not in entries:
         missed.append(f'Linux pre-commit behavior pass omits {suite}')
 # The Linux job alone has a real tmux, from apt, and requires it, so its
-# cases fail instead of skipping.
+# cases fail instead of skipping. Its zsh comes from apt too: without it the
+# zsh cases skip there, and those that need util-linux script run in no job.
 # Comments are dropped and backslash continuations joined before matching.
 workflow = re.sub(r'\\\n\s*', ' ', re.sub(r'(?m)^\s*#.*\n|\s+#.*$', '', open(sys.argv[4], encoding='utf-8').read()))
 linux = re.search(r'\n  linux:\n(.*?)\n  [a-z]+:\n', workflow, re.S)
 linux = linux.group(1) if linux else ''
 if 'DOTFILES_TEST_REQUIRE_TMUX: "1"' not in linux:
     missed.append('ci.yml: the Linux job does not set DOTFILES_TEST_REQUIRE_TMUX: "1"')
-if not re.search(r'\bapt(?:-get)?\b[^\n]*\binstall\b[^\n]*\btmux\b', linux):
-    missed.append('ci.yml: the Linux job does not apt-get install tmux')
+for package in ('tmux', 'zsh'):
+    if not re.search(r'\bapt(?:-get)?\b[^\n]*\binstall\b[^\n]*\b' + package + r'\b', linux):
+        missed.append(f'ci.yml: the Linux job does not apt-get install {package}')
 if missed:
     sys.exit('ERROR: ' + '; '.join(missed))
 PY

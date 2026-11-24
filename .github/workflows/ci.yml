@@ -40,10 +40,12 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      # zsh for the zsh cases, which skip unseen without it. No other job runs
+      # the ones that also need util-linux script (tests/shell-profile.sh).
       - name: Install Unix test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes tmux
+          sudo apt-get install --yes tmux zsh
       - name: Provision the verified chezmoi test binary
         run: python .github/scripts/install-test-chezmoi.py
       - name: Check required CI prerequisites
@@ -85,7 +87,7 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       # fzf-tab as the bootstrap clones it, for the real fzf-tab preview case
-      # of tests/test_ai_integration.py (this runner has zsh; ubuntu-24.04 has none).
+      # of tests/test_ai_integration.py (the Linux job has no checkout and skips it).
       - name: Check out fzf-tab for the real fzf-tab preview test
         run: |
           read -r url ref < <(awk -F '\t' '$1 == "fzf-tab" { print $3, $4 }' config/bootstrap/git-clones.tsv)

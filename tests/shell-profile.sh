@@ -614,8 +614,8 @@ fi
 # still runs, and what follows ESC [ < when it is no report is given back
 # as keys (an ESC among them starts the next report), past the widget's
 # 32-character bound too. The binding is in the emacs, viins and vicmd
-# keymaps, and an agent session has none. zsh only, so the macOS job runs
-# these cases and ubuntu-24.04 skips them.
+# keymaps, and an agent session has none. zsh only, so the Linux and macOS
+# jobs run these cases.
 if [ -n "$ZSH_BIN" ]; then
     queue_home=$TEST_TMP/queue-home
     mkdir -p "$queue_home/.oh-my-zsh"
